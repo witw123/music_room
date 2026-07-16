@@ -53,10 +53,22 @@ function formatMetric(value: number | null | undefined, unit: string) {
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
+function formatTelemetryMetric(value: number | null | undefined, unit: string) {
+  return formatMetric(value, unit) ?? "暂无";
+}
+
 function formatSampleAge(sampleAgeMs: number | null) {
   if (sampleAgeMs === null) return null;
   const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
   return sampleAgeMs > realtimeMediaSampleWindowMs ? `样本过期 · ${seconds}s前` : `样本 ${seconds}s前`;
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "暂无";
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime())
+    ? value
+    : timestamp.toLocaleTimeString("zh-CN", { hour12: false });
 }
 
 function getPresence(member: RoomMember) {
@@ -154,8 +166,58 @@ function MemberMetrics({
   if (sampleLabel) metrics.push(sampleLabel);
 
   return (
-    <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-      {metrics.length > 0 ? metrics.map((metric) => <span key={metric}>{metric}</span>) : <span>暂无实时样本</span>}
+    <>
+      <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
+        {metrics.length > 0 ? metrics.map((metric) => <span key={metric}>{metric}</span>) : <span>暂无实时样本</span>}
+      </div>
+      <MemberTelemetry
+        diagnostic={diagnostic}
+        isLocal={isLocal}
+        localMemberState={localMemberState}
+      />
+    </>
+  );
+}
+
+function MemberTelemetry({
+  diagnostic,
+  isLocal,
+  localMemberState
+}: {
+  diagnostic: PeerDiagnosticsSnapshot | undefined;
+  isLocal: boolean;
+  localMemberState: LocalMemberPanelState | null;
+}) {
+  const playback = diagnostic?.segmentedPlaybackStatus;
+  const receiveRate = isLocal
+    ? localMemberState?.mediaSummary?.receiveRateKbps ?? null
+    : diagnostic?.mediaReceiveBitrateKbps ?? null;
+  const sendRate = isLocal
+    ? localMemberState?.mediaSummary?.sendRateKbps ?? null
+    : diagnostic?.mediaSendBitrateKbps ?? null;
+  const telemetry = isLocal
+    ? [
+        `播放 ${playback?.listenerPlaybackState ?? localMemberState?.playbackStatus.badgeText ?? "暂无"}`,
+        `AudioContext ${playback?.audioContextState ?? "暂无"}`,
+        `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
+        `观测 ${formatTimestamp(diagnostic?.updatedAt)}`
+      ]
+    : [
+        `数据 ${diagnostic?.dataConnectionState ?? "暂无"} / ${diagnostic?.dataChannelState ?? "暂无"}`,
+        `媒体 ${diagnostic?.mediaConnectionState ?? "暂无"} / ICE ${diagnostic?.mediaIceState ?? "暂无"}`,
+        `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
+        `RTT ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, "ms")} · 丢包 ${formatTelemetryMetric(diagnostic?.packetLossRate, "%")} · jitter ${formatTelemetryMetric(diagnostic?.jitterMs, "ms")}`,
+        `观测 ${formatTimestamp(diagnostic?.updatedAt)}`
+      ];
+
+  return (
+    <div className="mt-2 rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-[10px] leading-4 text-foreground-muted">
+      <div className="mb-0.5 font-medium text-foreground/70">
+        {isLocal ? "本机真实状态" : "本机对该成员的实时观测"}
+      </div>
+      <div className="grid gap-x-3 sm:grid-cols-2">
+        {telemetry.map((item) => <span key={item} className="min-w-0 break-words">{item}</span>)}
+      </div>
     </div>
   );
 }
@@ -191,7 +253,11 @@ function MembersPanelBase({
         <div className="divide-y divide-surface-border border-y border-surface-border">
           {normalizedMembers.map((member) => {
             const isLocal = localMemberState?.memberId === member.id;
-            const diagnostic = member.peerId ? diagnosticsByPeerId.get(member.peerId) : undefined;
+            const diagnostic = isLocal
+              ? diagnosticsByPeerId.get("system")
+              : member.peerId
+                ? diagnosticsByPeerId.get(member.peerId)
+                : undefined;
             const isCurrentSource = member.peerId !== null && member.peerId === sourcePeerId;
             const status = isLocal
               ? localMemberState.playbackStatus

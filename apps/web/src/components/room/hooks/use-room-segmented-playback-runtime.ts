@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
@@ -25,7 +25,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     receiverRtpActive?: boolean;
     remoteStream: MediaStream | null;
     remoteTrackId?: string | null;
-  } | null;
+    } | null;
+  restartMediaPeer: (peerId: string) => Promise<unknown>;
   onPlaybackEnded: () => void | Promise<void>;
   setMediaConnectionState: Dispatch<SetStateAction<"idle" | "connecting" | "live" | "buffering" | "reconnecting" | "failed">>;
   setSourceStartState: Dispatch<SetStateAction<"idle" | "awaiting-unlock" | "starting" | "live" | "failed">>;
@@ -46,6 +47,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const { audioRef, isCurrentSource, peerId: runtimePeerId } = input;
   const audioUnlocked = input.audioUnlocked;
   const missingMediaSinceRef = useRef<number | null>(null);
+  const mediaEnsureKeyRef = useRef<string | null>(null);
+  const lastMediaEnsureAtRef = useRef(0);
   const boundMediaKeyRef = useRef<string | null>(null);
   const lastSourceHealthRef = useRef<SegmentedPlaybackSnapshot["sourceHealth"]>(undefined);
   const receiverAudioHealthRef = useRef({
@@ -66,6 +69,43 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     audioContextState: null,
     lastError: null
   }));
+
+  const ensureListenerMediaConnection = useCallback((input: {
+    runtime: typeof runtimeInputRef.current;
+    sourcePeerId: string;
+    trackId: string;
+    mediaEpoch: number;
+  }) => {
+    const recoveryKey = `${input.sourcePeerId}:${input.trackId}:${input.mediaEpoch}`;
+    if (mediaEnsureKeyRef.current !== recoveryKey) {
+      mediaEnsureKeyRef.current = recoveryKey;
+      lastMediaEnsureAtRef.current = 0;
+    }
+    const now = Date.now();
+    if (now - lastMediaEnsureAtRef.current < 2_000) {
+      return;
+    }
+    lastMediaEnsureAtRef.current = now;
+    input.runtime.setMediaConnectionState("reconnecting");
+    input.runtime.recordPeerDiagnostic({
+      peerId: input.sourcePeerId,
+      channelKind: "media",
+      direction: "local",
+      event: "listener-media-ensure",
+      summary: `监听端媒体连接或接收轨道缺失，确保媒体连接（${input.trackId}）`,
+      level: "warning"
+    });
+    void input.runtime.restartMediaPeer(input.sourcePeerId).catch((error) => {
+      input.runtime.recordPeerDiagnostic({
+        peerId: input.sourcePeerId,
+        channelKind: "media",
+        direction: "local",
+        event: "listener-media-ensure-failed",
+        summary: `监听端媒体连接确保失败：${String(error)}`,
+        level: "error"
+      });
+    });
+  }, []);
 
   const playback = useSegmentedOpusPlayback({
     roomSnapshot: input.roomSnapshot,
@@ -175,6 +215,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
       if (runtime.isCurrentSource) {
         missingMediaSinceRef.current = null;
+        mediaEnsureKeyRef.current = null;
         boundMediaKeyRef.current = null;
         const sourceStream = runtime.currentTrack?.playbackAsset && roomPlayback?.currentTrackId
           ? roomAudioOutput.getBroadcastDestination()?.stream ?? null
@@ -216,6 +257,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
       if (!hasActiveTimeline) {
         missingMediaSinceRef.current = null;
+        mediaEnsureKeyRef.current = null;
         if (audio) {
           audio.pause();
           audio.srcObject = null;
@@ -233,6 +275,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
       if (roomPlayback?.status !== "playing" && !remote?.remoteStream) {
         missingMediaSinceRef.current = null;
+        mediaEnsureKeyRef.current = null;
         setMediaPlayback({
           state: "paused",
           bufferedMs: 0,
@@ -244,7 +287,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         return;
       }
       if (remote?.remoteStream && remote.receiverTrackState === "live" && audio) {
-        missingMediaSinceRef.current = null;
+        const now = Date.now();
+        if (roomPlayback?.status === "playing" && !remote.receiverRtpActive) {
+          missingMediaSinceRef.current ??= now;
+        } else {
+          missingMediaSinceRef.current = null;
+          mediaEnsureKeyRef.current = null;
+        }
         const health = receiverAudioHealthRef.current;
         if (audio.srcObject !== remote.remoteStream) {
           audio.srcObject = remote.remoteStream;
@@ -314,17 +363,24 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
 
       if (!cancelled) {
-        const now = Date.now();
-        missingMediaSinceRef.current ??= now;
-        const timedOut = roomPlayback?.status === "playing" &&
-          now - missingMediaSinceRef.current >= 8_000;
+        const isPlayingWithoutMedia = roomPlayback?.status === "playing" &&
+          !!sourcePeerId &&
+          !!roomPlayback.currentTrackId;
+        if (isPlayingWithoutMedia && sourcePeerId && roomPlayback.currentTrackId) {
+          ensureListenerMediaConnection({
+            runtime,
+            sourcePeerId,
+            trackId: roomPlayback.currentTrackId,
+            mediaEpoch: roomPlayback.mediaEpoch
+          });
+        }
         setMediaPlayback({
-          state: timedOut ? "unavailable" : roomPlayback?.status === "playing" ? "buffering" : "idle",
+          state: isPlayingWithoutMedia ? "buffering" : "idle",
           bufferedMs: 0,
           ownedUnitCount: 0,
           totalUnitCount,
           audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-          lastError: timedOut ? "当前播放源的 WebRTC 音频轨道未建立。" : null
+          lastError: null
         });
       }
     };
@@ -371,12 +427,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         lastRecoveryAtMs: 0,
         recoveryCount: 0
       };
+      mediaEnsureKeyRef.current = null;
+      lastMediaEnsureAtRef.current = 0;
       localMediaBindingRef.current = null;
     };
   }, [
     audioRef,
     isCurrentSource,
-    roomId
+    roomId,
+    ensureListenerMediaConnection
   ]);
 
   useEffect(() => {

@@ -233,8 +233,10 @@ export class PeerConnectionLifecycleManager {
       if (dataEntry) {
         this.schedulePeerWatchdog(peerId, dataEntry);
       }
-      const mediaEntry = this.peerConnections.get(peerId, "media") ??
-        (await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media"));
+      // Always pass media peers through ensurePeer. Unlike the data path, this
+      // used to reuse a failed/closed media entry and leave a new listener
+      // with a permanently missing receiver track.
+      const mediaEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
       this.scheduleMediaWatchdog(peerId, mediaEntry);
       void this.enqueueMediaOperation(peerId, mediaEntry);
     }
@@ -349,7 +351,7 @@ export class PeerConnectionLifecycleManager {
   async restartMediaPeer(peerId: string) {
     const entry = this.peerConnections.get(peerId, "media");
     if (!entry || entry.releasing) {
-      return null;
+      return this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
     }
 
     const staleSignal = Date.now() - entry.lastSignalProgressAtMs >= 8_000;
@@ -360,9 +362,20 @@ export class PeerConnectionLifecycleManager {
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
-      const nextEntry = await this.ensurePeer(peerId, true, "media");
+      const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
       nextEntry.reconnectAttempts = reconnectAttempts + 1;
       return nextEntry;
+    }
+
+    // Let the initial offer/answer exchange finish before creating another
+    // offer. The media watchdog will retry if the track still does not arrive.
+    if (
+      this.hasExpectedRemoteAudioTrack(peerId) &&
+      entry.receiverTrackState !== "live" &&
+      Date.now() - entry.lastSignalProgressAtMs < mediaTrackWatchdogGraceMs
+    ) {
+      this.scheduleMediaWatchdog(peerId, entry);
+      return entry;
     }
 
     return enqueuePeerOperation(entry, async () => {

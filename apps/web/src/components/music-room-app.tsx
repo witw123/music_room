@@ -165,6 +165,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setAudioUnlocked: pageState.setAudioUnlocked,
     setLocalAudioStream: roomRuntime.setLocalAudioStream,
     getPeerMediaState: roomRuntime.getPeerMediaState,
+    restartMediaPeer: roomRuntime.restartMediaPeer,
     onPlaybackEnded: roomActions.nextTrack,
     setMediaConnectionState: pageState.setMediaConnectionState,
     setSourceStartState: pageState.setSourceStartState,
