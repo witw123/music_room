@@ -13,7 +13,7 @@ import {
   linkTrackAssets,
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type UploadedTrack } from "./audio-utils";
 import { prepareAudioAssets } from "./audio-asset-builder";
 import {
@@ -345,6 +345,7 @@ async function importProviderTrack(input: {
         deleteLocalTrackDataForTracks([registeredTrackId])
       ]);
     }
+    setStatusMessage(`导入失败：${toProviderImportErrorMessage(error)}`);
     throw error;
   } finally {
     inFlightUploadHashesRef.current.delete(importLock);
@@ -380,4 +381,25 @@ function normalizeImportedMimeType(value: string) {
 
 function sanitizeFileName(value: string, sourceType: TrackSourceType) {
   return value.replace(/[\\/:*?"<>|]+/g, " ").trim() || `${sourceType}-track`;
+}
+
+function toProviderImportErrorMessage(error: unknown) {
+  if (error instanceof MusicRoomApiError) {
+    if (error.code === "METING_TRACK_NOT_FOUND") {
+      return "该歌曲没有可用的公开音频，可能受付费、VIP 或版权限制。";
+    }
+    if (error.code === "METING_AUDIO_UNSUPPORTED") {
+      return "平台返回了当前播放器不支持的音频格式。";
+    }
+    if (error.code === "METING_IMPORT_TOO_LARGE") {
+      return "歌曲文件过大，无法导入。";
+    }
+    if (error.code === "METING_UNAVAILABLE") {
+      return "平台接口暂时不可用，请稍后重试或切换平台。";
+    }
+    if (error.code === "RATE_LIMITED") {
+      return "请求过于频繁，请稍后再试。";
+    }
+  }
+  return error instanceof Error ? error.message : "音乐平台导入失败，请稍后重试。";
 }

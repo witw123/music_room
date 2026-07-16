@@ -40,6 +40,7 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
   const [results, setResults] = useState<MetingTrackCandidate[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   if (!activeSession || enabledProviders.length === 0) return null;
 
@@ -52,6 +53,7 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
     try {
       const response = await musicRoomApi.searchMetingTracks(provider, query);
       setResults(response.items);
+      setHasSearched(true);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error));
     } finally {
@@ -63,6 +65,7 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
     if (pendingAction || nextProvider === provider) return;
     setProvider(nextProvider);
     setResults([]);
+    setHasSearched(false);
     setErrorMessage(null);
   };
 
@@ -74,6 +77,7 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
       await onImportTrack(track);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error));
+      setHasSearched(true);
     } finally {
       setPendingAction(null);
     }
@@ -173,6 +177,12 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
         </div>
       ) : null}
 
+      {hasSearched && !pendingAction && results.length === 0 && !errorMessage ? (
+        <p className="rounded-lg border border-surface-border bg-background/40 px-3 py-2 text-xs text-foreground-muted">
+          没有返回可导入的公开歌曲，请更换关键词或平台。
+        </p>
+      ) : null}
+
       {errorMessage ? (
         <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">
           {errorMessage}
@@ -185,10 +195,10 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
 function toProviderErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
     if (error.code === "METING_DISABLED") return "该音乐平台当前未启用。";
-    if (error.code === "METING_TRACK_NOT_FOUND") return "歌曲没有可用的公开音频。";
+    if (error.code === "METING_TRACK_NOT_FOUND") return "这首歌没有可用的公开音频，可能受付费、VIP 或版权限制。";
     if (error.code === "METING_AUDIO_UNSUPPORTED") return "平台返回了当前播放器不支持的音频格式。";
     if (error.code === "METING_IMPORT_TOO_LARGE") return "歌曲文件过大，无法导入。";
-    if (error.code === "METING_UNAVAILABLE") return "平台暂时不可用，请稍后重试。";
+    if (error.code === "METING_UNAVAILABLE") return "平台接口暂时不可用，请稍后重试或切换平台。";
     if (error.code === "RATE_LIMITED") return "请求过于频繁，请稍后再试。";
     return error.message;
   }
