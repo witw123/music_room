@@ -83,6 +83,19 @@ export type TranscodeJobRecord = {
   updatedAt: string;
 };
 
+export type LocalAudioDirectoryRecord = {
+  id: "default";
+  handle: FileSystemDirectoryHandle;
+  name: string;
+  updatedAt: string;
+};
+
+export type LocalAudioFileRecord = {
+  fileHash: string;
+  fileName: string;
+  savedAt: string;
+};
+
 export class MusicRoomDatabase extends Dexie {
   cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
@@ -90,6 +103,8 @@ export class MusicRoomDatabase extends Dexie {
   assetUnits!: Table<AudioAssetUnitRecord, string>;
   trackAssetLinks!: Table<TrackAssetLinkRecord, string>;
   transcodeJobs!: Table<TranscodeJobRecord, string>;
+  localAudioDirectory!: Table<LocalAudioDirectoryRecord, string>;
+  localAudioFiles!: Table<LocalAudioFileRecord, string>;
 
   constructor() {
     super("music-room");
@@ -266,6 +281,16 @@ export class MusicRoomDatabase extends Dexie {
       assetUnits: "&unitId, assetId, kind, unitIndex, [assetId+unitIndex], lastAccessedAt, protectedUntil",
       trackAssetLinks: "&trackId, originalAssetId, playbackAssetId, linkedAt",
       transcodeJobs: "&sourceFileHash, kind, status, updatedAt"
+    });
+    this.version(13).stores({
+      cachedTrackLibrary: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+      cachedTrackLibraryMetadata: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+      assetManifests: "&assetId, kind, sourceFileHash, complete, lastAccessedAt",
+      assetUnits: "&unitId, assetId, kind, unitIndex, [assetId+unitIndex], lastAccessedAt, protectedUntil",
+      trackAssetLinks: "&trackId, originalAssetId, playbackAssetId, linkedAt",
+      transcodeJobs: "&sourceFileHash, kind, status, updatedAt",
+      localAudioDirectory: "&id",
+      localAudioFiles: "&fileHash, savedAt"
     });
   }
 }
@@ -461,6 +486,13 @@ export async function getTrackAssetLink(trackId: string) {
   return (await musicRoomDatabase.trackAssetLinks.get(trackId)) ?? null;
 }
 
+export async function deleteOriginalAssetForTrack(trackId: string) {
+  const link = await getTrackAssetLink(trackId);
+  if (link?.originalAssetId) {
+    await deleteAudioAsset(link.originalAssetId);
+  }
+}
+
 export async function upsertTranscodeJob(
   input: Omit<TranscodeJobRecord, "updatedAt">
 ) {
@@ -522,6 +554,10 @@ export async function getCachedLibraryTrack(fileHash: string) {
   return musicRoomDatabase.cachedTrackLibrary.get(fileHash);
 }
 
+export async function deleteCachedLibraryTrackFile(fileHash: string) {
+  await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
+}
+
 export async function getCachedLibraryTrackSummary(fileHash: string) {
   const summary = await musicRoomDatabase.cachedTrackLibraryMetadata.get(fileHash);
   if (summary) {
@@ -560,6 +596,39 @@ export async function deleteCachedLibraryTrack(fileHash: string) {
     }
   );
   return record;
+}
+
+export async function getLocalAudioDirectory() {
+  return (await musicRoomDatabase.localAudioDirectory.get("default")) ?? null;
+}
+
+export async function saveLocalAudioDirectory(input: {
+  handle: FileSystemDirectoryHandle;
+  name: string;
+}) {
+  await musicRoomDatabase.localAudioDirectory.put({
+    id: "default",
+    handle: input.handle,
+    name: input.name,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+export async function listLocalAudioFiles() {
+  return musicRoomDatabase.localAudioFiles.orderBy("savedAt").reverse().toArray();
+}
+
+export async function getLocalAudioFileRecord(fileHash: string) {
+  return (await musicRoomDatabase.localAudioFiles.get(fileHash)) ?? null;
+}
+
+export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord, "savedAt"> & {
+  savedAt?: string;
+}) {
+  await musicRoomDatabase.localAudioFiles.put({
+    ...input,
+    savedAt: input.savedAt ?? new Date().toISOString()
+  });
 }
 
 export async function deleteLocalTrackDataForTracks(trackIds: readonly string[]) {

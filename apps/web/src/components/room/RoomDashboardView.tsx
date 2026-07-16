@@ -36,6 +36,8 @@ type RoomDashboardViewProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
+  onChooseLocalFolder: () => Promise<void>;
+  onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -119,6 +121,8 @@ function RoomDashboardViewBase({
   uploadedTracks,
   localStorageSummary,
   onCleanLocalStorage,
+  onChooseLocalFolder,
+  onSaveTrackToLocal,
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
@@ -300,6 +304,8 @@ function RoomDashboardViewBase({
               uploadedTracks={uploadedTracks}
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
+              onChooseLocalFolder={onChooseLocalFolder}
+              onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}

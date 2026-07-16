@@ -28,6 +28,7 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
   getCachedLibraryTrack: (
     fileHash: string
   ) => Promise<CachedLibraryTrackRecord | null | undefined>;
+  getLocalAudioFile?: (fileHash: string) => Promise<File | null | undefined>;
   createObjectUrl: (file: File) => string;
 }): Promise<{
   uploads: Record<string, UploadedTrack>;
@@ -56,16 +57,18 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
     })
       ? cachedRecord
       : null;
-    if (!usableCachedRecord) {
+    const cachedFile = usableCachedRecord
+      ? toCachedLibraryFile({
+          file: usableCachedRecord.file,
+          title: usableCachedRecord.title,
+          mimeType: usableCachedRecord.mimeType,
+          fileHash: usableCachedRecord.fileHash
+        })
+      : await input.getLocalAudioFile?.(track.fileHash);
+    if (!cachedFile) {
       continue;
     }
 
-    const cachedFile = toCachedLibraryFile({
-      file: usableCachedRecord.file,
-      title: usableCachedRecord.title,
-      mimeType: usableCachedRecord.mimeType,
-      fileHash: usableCachedRecord.fileHash
-    });
     const objectUrl = input.createObjectUrl(cachedFile);
     createdObjectUrls.push(objectUrl);
     uploads[track.id] = {

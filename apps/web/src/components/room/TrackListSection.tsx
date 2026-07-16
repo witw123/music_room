@@ -9,10 +9,12 @@ import type { UploadedTrack } from "@/features/upload/audio-utils";
 type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
+  localSavedFileHashes: string[];
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
+  onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
 };
@@ -20,10 +22,12 @@ type TrackListSectionProps = {
 function TrackListSectionBase({
   tracks,
   uploadedTracks,
+  localSavedFileHashes,
   canControlPlayback,
   activeSession,
   onFilesSelected,
   onAddToQueue,
+  onSaveTrackToLocal,
   onDeleteTrack,
   onPlayTrack
 }: TrackListSectionProps) {
@@ -79,6 +83,8 @@ function TrackListSectionBase({
               });
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
+              const isSavedLocally = localSavedFileHashes.includes(track.fileHash);
+              const canSaveLocalTrack = track.ownerSessionId === activeSession?.userId || isSavedLocally;
 
               return (
                 <article
@@ -100,8 +106,10 @@ function TrackListSectionBase({
                             : "bg-blue-500"
                         }`}
                       />
-                      {isUploadedLocally
-                        ? "本地上传源可直接播放"
+                      {isSavedLocally
+                        ? "已保存到本地文件夹"
+                        : isUploadedLocally
+                          ? "浏览器已缓存源文件"
                         : "房间可用"}{" "}
                       {track.ownerNickname} 上传
                     </p>
@@ -132,6 +140,20 @@ function TrackListSectionBase({
                         type="button"
                       >
                         删除
+                      </Button>
+                    ) : null}
+
+                    {canSaveLocalTrack ? (
+                      <Button
+                        data-testid="track-save-local-button"
+                        data-track-id={track.id}
+                        variant={isSavedLocally ? "ghost" : "outline"}
+                        className="h-9 shrink-0 whitespace-nowrap px-3"
+                        disabled={pendingAction !== null}
+                        onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
+                        type="button"
+                      >
+                        {isSavedLocally ? "已保存" : "保存到本地"}
                       </Button>
                     ) : null}
 

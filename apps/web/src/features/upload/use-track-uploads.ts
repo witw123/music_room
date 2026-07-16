@@ -1,11 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
-import type { GuestSession, NeteaseTrackCandidate, RoomSnapshot } from "@music-room/shared";
+import type {
+  GuestSession,
+  NeteaseTrackCandidate,
+  RoomSnapshot,
+  TrackMeta
+} from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   cleanupOrphanedLocalAudioStorage,
   deleteLocalTrackDataForTracks,
+  getCachedLibraryTrack,
   listCachedLibraryTrackSummaries
 } from "@/lib/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
@@ -13,8 +19,18 @@ import {
   buildCachedLibraryTrackUpsertRecord,
   createInFlightCachedLibraryTrackFileLoader,
   hasUsableCachedLibraryFileForRoomTrack,
-  loadCacheLibrarySnapshot
+  loadCacheLibrarySnapshot,
+  toCachedLibraryFile
 } from "./cache-library";
+import {
+  buildLocalAudioFileName,
+  chooseLocalAudioDirectory,
+  downloadAudioFile,
+  getLocalAudioFile,
+  getLocalAudioStorageState,
+  saveAudioFileToLocalDirectory,
+  supportsLocalAudioDirectory
+} from "./local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
 
@@ -22,6 +38,9 @@ export type LocalStorageSummary = {
   usageBytes: number | null;
   quotaBytes: number | null;
   cachedTrackCount: number;
+  localFolderName: string | null;
+  localSavedFileHashes: string[];
+  supportsLocalFolder: boolean;
 };
 
 export {
@@ -55,7 +74,10 @@ export function useTrackUploads(options: {
   const [localStorageSummary, setLocalStorageSummary] = useState<LocalStorageSummary>({
     usageBytes: null,
     quotaBytes: null,
-    cachedTrackCount: 0
+    cachedTrackCount: 0,
+    localFolderName: null,
+    localSavedFileHashes: [],
+    supportsLocalFolder: false
   });
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
@@ -65,9 +87,10 @@ export function useTrackUploads(options: {
     .join("|");
 
   const refreshCacheLibrary = useCallback(async () => {
-    const snapshot = await loadCacheLibrarySnapshot({
-      listCachedLibraryTrackSummaries
-    });
+    const [snapshot, localStorageState] = await Promise.all([
+      loadCacheLibrarySnapshot({ listCachedLibraryTrackSummaries }),
+      getLocalAudioStorageState()
+    ]);
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
     setCacheLibraryVersion((current) => current + 1);
     let estimate: StorageEstimate | null = null;
@@ -81,7 +104,10 @@ export function useTrackUploads(options: {
     setLocalStorageSummary({
       usageBytes: estimate?.usage ?? null,
       quotaBytes: estimate?.quota ?? null,
-      cachedTrackCount: snapshot.tracks.length
+      cachedTrackCount: snapshot.tracks.length,
+      localFolderName: localStorageState.directoryName,
+      localSavedFileHashes: localStorageState.savedFileHashes,
+      supportsLocalFolder: localStorageState.supported
     });
   }, []);
 
@@ -134,6 +160,70 @@ export function useTrackUploads(options: {
     await refreshCacheLibrary();
   }, [refreshCacheLibrary]);
 
+  const chooseLocalFolder = useCallback(async () => {
+    try {
+      const folderName = await chooseLocalAudioDirectory();
+      await refreshCacheLibrary();
+      setStatusMessage(`本地音频文件夹已设置为“${folderName}”。`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error && error.name === "AbortError"
+        ? "已取消选择本地音频文件夹。"
+        : toLocalAudioErrorMessage(error));
+    }
+  }, [refreshCacheLibrary, setStatusMessage]);
+
+  const saveTrackToLocal = useCallback(async (track: TrackMeta) => {
+    try {
+      let file = uploadedTracks[track.id]?.file ?? null;
+      if (!file) {
+        const cachedRecord = await getCachedLibraryTrack(track.fileHash);
+        if (cachedRecord) {
+          file = toCachedLibraryFile({
+            file: cachedRecord.file,
+            title: cachedRecord.title,
+            mimeType: cachedRecord.mimeType,
+            fileHash: cachedRecord.fileHash
+          });
+        }
+      }
+      if (!file) {
+        const localFile = await getLocalAudioFile(track.fileHash);
+        if (localFile) {
+          file = localFile;
+        }
+      }
+      if (!file) {
+        throw new Error("当前浏览器没有这首歌的源文件，只有歌曲所有者可以保存原始音频。");
+      }
+
+      const mimeType = track.mimeType ?? file.type;
+      if (supportsLocalAudioDirectory()) {
+        await saveAudioFileToLocalDirectory({
+          file,
+          fileHash: track.fileHash,
+          title: track.title,
+          mimeType,
+          trackId: track.id
+        });
+        await refreshCacheLibrary();
+        setStatusMessage(`《${track.title}》已保存到本地文件夹，浏览器缓存中的源文件已释放。`);
+        return;
+      }
+
+      downloadAudioFile(
+        file,
+        buildLocalAudioFileName({
+          title: track.title,
+          mimeType,
+          fileHash: track.fileHash
+        })
+      );
+      setStatusMessage(`《${track.title}》已开始下载。当前浏览器不支持自动选择文件夹。`);
+    } catch (error) {
+      setStatusMessage(toLocalAudioErrorMessage(error));
+    }
+  }, [refreshCacheLibrary, setStatusMessage, uploadedTracks]);
+
   const cleanLocalStorage = useCallback(async () => {
     try {
       const preserveTrackIds = roomSnapshot?.tracks.map((track) => track.id) ?? [];
@@ -171,6 +261,8 @@ export function useTrackUploads(options: {
     refreshCacheLibrary,
     localStorageSummary,
     cleanLocalStorage,
+    chooseLocalFolder,
+    saveTrackToLocal,
     handleFilesSelected,
     handleNeteaseTrackImport: (candidate: NeteaseTrackCandidate) =>
       handleNeteaseTrackImport(candidate),
@@ -181,4 +273,8 @@ export function useTrackUploads(options: {
     createInFlightCachedLibraryTrackFileLoader,
     buildCachedLibraryTrackUpsertRecord
   };
+}
+
+function toLocalAudioErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "本地音频保存失败，请重试。";
 }

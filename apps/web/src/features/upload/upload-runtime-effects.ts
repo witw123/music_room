@@ -4,6 +4,7 @@ import {
   getCachedLibraryTrack,
   getCachedLibraryTrackSummary
 } from "@/lib/indexeddb";
+import { getLocalAudioFile } from "./local-audio-storage";
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
   applyOwnedUploadRehydrationResult,
@@ -96,6 +97,7 @@ export function useUploadRuntimeEffects({
         cachedLibraryTracksByHash: cacheLibraryTracksRef.current,
         getCachedLibraryTrackSummary,
         getCachedLibraryTrack,
+        getLocalAudioFile,
         createObjectUrl: (file) => URL.createObjectURL(file)
       });
 

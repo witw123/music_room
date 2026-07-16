@@ -73,6 +73,8 @@ export function RoomAppShell({
         uploadedTracks={uploads.uploadedTracks}
         localStorageSummary={uploads.localStorageSummary}
         onCleanLocalStorage={uploads.cleanLocalStorage}
+        onChooseLocalFolder={uploads.chooseLocalFolder}
+        onSaveTrackToLocal={uploads.saveTrackToLocal}
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}

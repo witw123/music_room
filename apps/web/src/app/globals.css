@@ -48,5 +48,24 @@
   }
   .netease-results-scroll {
     scrollbar-gutter: stable;
+    scrollbar-color: rgba(148, 163, 184, 0.48) rgba(255, 255, 255, 0.04);
+    scrollbar-width: thin;
+  }
+  .netease-results-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  .netease-results-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 999px;
+  }
+  .netease-results-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.48);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  .netease-results-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 165, 250, 0.72);
+    background-clip: content-box;
   }
 }

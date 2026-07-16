@@ -30,6 +30,8 @@ type RoomWorkspaceProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
+  onChooseLocalFolder: () => Promise<void>;
+  onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -76,6 +78,8 @@ function RoomWorkspaceBase({
   uploadedTracks,
   localStorageSummary,
   onCleanLocalStorage,
+  onChooseLocalFolder,
+  onSaveTrackToLocal,
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
@@ -156,6 +160,8 @@ function RoomWorkspaceBase({
               uploadedTracks={uploadedTracks}
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
+              onChooseLocalFolder={onChooseLocalFolder}
+              onSaveTrackToLocal={onSaveTrackToLocal}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}
