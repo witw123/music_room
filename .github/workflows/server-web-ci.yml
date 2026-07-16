@@ -88,6 +88,7 @@ jobs:
           push: true
           build-args: |
             NEXT_PUBLIC_NETEASE_ENABLED=true
+            NEXT_PUBLIC_SPOTIFY_ENABLED=true
           tags: ${{ steps.web-meta.outputs.tags }}
           labels: ${{ steps.web-meta.outputs.labels }}
 

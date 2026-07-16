@@ -51,6 +51,59 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml up -d
 ```
 
+## Spotify / Zotify 部署
+
+Spotify 完整导入使用 server 镜像内置的 Python、FFmpeg 和 Zotify。推送包含 Spotify 改动的 `main` 后，等待 GitHub Actions 完成镜像发布，再使用该次提交对应的完整 `sha-<40 位 commit SHA>` 作为 `RELEASE_TAG`；不要使用旧镜像或 `latest`。
+
+首次部署前：
+
+1. 在 Spotify Developer Dashboard 创建应用，填写 `SPOTIFY_CLIENT_ID` 和 `SPOTIFY_CLIENT_SECRET`。
+2. 将 `SPOTIFY_ENABLED=true`、`NEXT_PUBLIC_SPOTIFY_ENABLED=true` 写入 `deploy/linux/.env.production`。
+3. 创建数据目录并限制权限：
+
+```bash
+mkdir -p deploy/linux/data/spotify
+chmod 700 deploy/linux/data/spotify
+```
+
+4. 准备 Zotify 的 `/data/spotify/credentials.json`，并设置：
+
+```dotenv
+SPOTIFY_CREDENTIALS_PATH=/data/spotify/credentials.json
+SPOTIFY_DOWNLOAD_DIR=/data/spotify/downloads
+SPOTIFY_DATA_DIR=./data/spotify
+SPOTIFY_ZOTIFY_BIN=zotify
+SPOTIFY_DOWNLOAD_FORMAT=mp3
+SPOTIFY_DEFAULT_QUALITY=high
+```
+
+可以用一次性 server 容器完成 Zotify 的首次登录初始化。该命令需要交互式终端，并会把凭证写入已挂载的数据卷：
+
+```bash
+docker compose --env-file deploy/linux/.env.production \
+  -f deploy/linux/docker-compose.prod.yml run --rm -it \
+  --entrypoint zotify server \
+  --credentials-location /data/spotify/credentials.json \
+  --root-path /data/spotify/bootstrap \
+  --no-splash
+```
+
+按 Zotify 提示完成登录后，用下面命令确认文件存在，再启动正式服务：
+
+```bash
+test -s deploy/linux/data/spotify/credentials.json
+docker compose --env-file deploy/linux/.env.production \
+  -f deploy/linux/docker-compose.prod.yml up -d
+docker compose --env-file deploy/linux/.env.production \
+  -f deploy/linux/docker-compose.prod.yml exec server zotify --help
+```
+
+`NEXT_PUBLIC_SPOTIFY_ENABLED` 是 Next.js 构建期变量。官方 CI 镜像已默认编译启用 Spotify；如果自行构建 `Dockerfile.web`，必须传入 `--build-arg NEXT_PUBLIC_SPOTIFY_ENABLED=true`，仅修改运行时环境变量不会改变已经生成的前端 bundle。
+
+查看 Spotify 服务状态：登录后请求 `GET /v1/providers/spotify/account`，或直接打开「第三方」Tab。状态必须同时显示 Web API 凭证、Zotify 和下载凭证就绪。
+
+注意：Spotify 下载缓存位于 `deploy/linux/data/spotify/downloads`，不要删除该目录；`credentials.json` 含登录凭证，不要提交 Git 或通过公开日志输出。
+
 ## 发布前检查
 
 ```bash
