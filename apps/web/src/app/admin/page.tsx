@@ -1,11 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary } from "@music-room/shared";
 import { adminApi, AdminApiError } from "@/lib/admin-api";
+import styles from "./admin.module.css";
 
 type Tab = "overview" | "rooms" | "users" | "incidents" | "audit" | "system";
 type AuditRow = { id: string; action: string; targetType: string; targetId: string | null; reason: string | null; result: string; createdAt: string };
+
+const tabs: Array<{ id: Tab; label: string; icon: IconName }> = [
+  { id: "overview", label: "系统总览", icon: "grid" },
+  { id: "rooms", label: "房间监测", icon: "radio" },
+  { id: "users", label: "用户目录", icon: "users" },
+  { id: "incidents", label: "异常事件", icon: "alert" },
+  { id: "audit", label: "管理审计", icon: "file" },
+  { id: "system", label: "系统依赖", icon: "server" }
+];
+
+type IconName = "grid" | "radio" | "users" | "alert" | "file" | "server" | "refresh" | "logout" | "arrow";
+
+function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
+  const paths: Record<IconName, ReactNode> = {
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+    radio: <><circle cx="12" cy="12" r="2" /><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.7 4.7a10.3 10.3 0 0 0 0 14.6M19.3 4.7a10.3 10.3 0 0 1 0 14.6" /></>,
+    users: <><path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20" /><circle cx="9.5" cy="7" r="3.5" /><path d="M17 11a3.5 3.5 0 1 0-1-6.8M21 20v-1.5a4 4 0 0 0-3-3.87" /></>,
+    alert: <><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v4M12 17h.01" /></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></>,
+    server: <><rect x="3" y="3" width="18" height="7" rx="1" /><rect x="3" y="14" width="18" height="7" rx="1" /><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6" /></>,
+    refresh: <><path d="M20 11a8.1 8.1 0 0 0-14.8-3L3 11" /><path d="M3 5v6h6M4 13a8.1 8.1 0 0 0 14.8 3L21 13" /><path d="M21 19v-6h-6" /></>,
+    logout: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M21 19V5a2 2 0 0 0-2-2h-6" /></>,
+    arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>
+  };
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -20,33 +47,36 @@ export default function AdminPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const loadingRef = useRef(false);
-  const refreshQueuedRef = useRef(false);
+  const queuedRef = useRef(false);
   const latestLoadRef = useRef<(() => Promise<void>) | null>(null);
-  const requestSequenceRef = useRef(0);
+
   const load = useCallback(async () => {
-    const requestSequence = ++requestSequenceRef.current;
-    if (loadingRef.current) {
-      refreshQueuedRef.current = true;
-      return;
-    }
+    if (loadingRef.current) { queuedRef.current = true; return; }
     loadingRef.current = true;
     setRefreshing(true);
     try {
-      setError(""); const current = session ?? await adminApi.session(); setSession(current);
-      const [overviewData, roomData, userData, incidentData, auditData] = await Promise.all([adminApi.overview(), adminApi.rooms(query), adminApi.users(query), adminApi.incidents(), adminApi.audit()]);
-      if (requestSequence !== requestSequenceRef.current) return;
-      setOverview(overviewData); setRooms(roomData.data); setUsers(userData.data); setIncidents(incidentData.data); setAudit(auditData.data);
+      setError("");
+      const current = session ?? await adminApi.session();
+      setSession(current);
+      const [overviewData, roomData, userData, incidentData, auditData] = await Promise.all([
+        adminApi.overview(), adminApi.rooms(query), adminApi.users(query), adminApi.incidents(), adminApi.audit()
+      ]);
+      setOverview(overviewData);
+      setRooms(roomData.data);
+      setUsers(userData.data);
+      setIncidents(incidentData.data);
+      setAudit(auditData.data);
       setLastUpdatedAt(overviewData.generatedAt);
-    } catch (cause) { if (cause instanceof AdminApiError && (cause.status === 401 || cause.status === 403)) { window.location.assign("/admin/login"); return; } if (requestSequence === requestSequenceRef.current) setError(cause instanceof Error ? cause.message : "管理数据加载失败。"); }
-    finally {
+    } catch (cause) {
+      if (cause instanceof AdminApiError && (cause.status === 401 || cause.status === 403)) { window.location.assign("/admin/login"); return; }
+      setError(cause instanceof Error ? cause.message : "管理数据加载失败。");
+    } finally {
       loadingRef.current = false;
-      if (requestSequence === requestSequenceRef.current) setRefreshing(false);
-      if (refreshQueuedRef.current) {
-        refreshQueuedRef.current = false;
-        void latestLoadRef.current?.();
-      }
+      setRefreshing(false);
+      if (queuedRef.current) { queuedRef.current = false; void latestLoadRef.current?.(); }
     }
   }, [query, session]);
+
   latestLoadRef.current = load;
   useEffect(() => {
     void load();
@@ -54,26 +84,77 @@ export default function AdminPage() {
     const timer = window.setInterval(refreshIfVisible, tab === "overview" ? 5000 : 10000);
     window.addEventListener("focus", refreshIfVisible);
     document.addEventListener("visibilitychange", refreshIfVisible);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
-    };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refreshIfVisible); document.removeEventListener("visibilitychange", refreshIfVisible); };
   }, [load, tab]);
-  async function logout() { await adminApi.logout().catch(() => undefined); window.sessionStorage.removeItem("music-room-admin-csrf"); window.location.assign("/admin/login"); }
-  const labels: Record<Tab, string> = { overview: "系统总览", rooms: "房间", users: "用户", incidents: "异常", audit: "审计", system: "系统" };
-  const tabs: Tab[] = ["overview", "rooms", "users", "incidents", "audit", "system"];
-  return <div className="min-h-screen bg-[#07080b] text-white"><header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#07080b]/95"><div className="flex h-16 items-center justify-between px-4 lg:px-8"><div><div className="font-semibold">Music Room / Admin</div><div className="text-[11px] text-white/40">运营观测台</div></div><div className="flex items-center gap-3 text-sm text-white/60"><span>{session?.nickname ?? "管理员"}</span><span className="hidden font-mono text-[10px] text-white/35 sm:inline">{refreshing ? "刷新中..." : lastUpdatedAt ? `更新于 ${new Date(lastUpdatedAt).toLocaleTimeString()}` : "等待数据"}</span><button onClick={() => void load()} disabled={refreshing} className="border border-white/10 px-3 py-1.5 text-xs hover:bg-white/10 disabled:cursor-wait disabled:opacity-50">{refreshing ? "刷新中" : "刷新"}</button><button onClick={() => void logout()} className="border border-white/10 px-3 py-1.5 text-xs hover:bg-white/10">退出</button></div></div></header><div className="mx-auto flex max-w-[1500px] flex-col lg:flex-row"><nav className="flex gap-1 overflow-x-auto border-b border-white/[0.08] p-3 lg:w-52 lg:flex-col lg:border-b-0 lg:border-r lg:pt-8">{tabs.map(id => <button key={id} onClick={() => setTab(id)} className={"whitespace-nowrap px-3 py-2 text-left text-sm " + (tab === id ? "bg-[#0070f3] text-white" : "text-white/55 hover:bg-white/5")}>{labels[id]}</button>)}</nav><main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] tracking-[0.2em] text-[#60a5fa]">CONTROL PLANE</p><h1 className="mt-2 text-3xl font-semibold">{labels[tab]}</h1></div>{tab === "rooms" || tab === "users" ? <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索 ID、用户名或昵称" className="w-full border border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#0070f3] sm:w-72" /> : null}</div>{error ? <div className="mt-5 border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error} <button onClick={() => void load()} className="ml-3 underline">重试</button></div> : null}{tab === "overview" ? <Overview overview={overview} /> : tab === "rooms" ? <Rooms rooms={rooms} refresh={load} /> : tab === "users" ? <Users users={users} refresh={load} /> : tab === "incidents" ? <Incidents rows={incidents} /> : tab === "audit" ? <Audit rows={audit} /> : <System overview={overview} />}</main></div></div>;
+
+  async function logout() {
+    await adminApi.logout().catch(() => undefined);
+    window.sessionStorage.removeItem("music-room-admin-csrf");
+    window.location.assign("/admin/login");
+  }
+
+  const activeTab = tabs.find((item) => item.id === tab) ?? tabs[0];
+  const incidentCount = overview?.openIncidents ?? incidents.filter((item) => item.status === "OPEN").length;
+
+  return <div className={styles.shell}>
+    <div className={styles.appFrame}>
+      <aside className={styles.sidebar}>
+        <div className={styles.brand}><div className={styles.brandMark}>MR</div><div><div className={styles.brandName}>音乐房间</div><div className={styles.brandSub}>管理控制台</div></div></div>
+        <div className={styles.navLabel}>运维中心</div>
+        <nav className={styles.nav} aria-label="管理台导航">
+          {tabs.map((item) => <button key={item.id} className={`${styles.navButton} ${tab === item.id ? styles.navButtonActive : ""}`} onClick={() => setTab(item.id)}><span className={styles.navIcon}><Icon name={item.icon} size={15} /></span><span className={styles.navText}>{item.label}</span>{item.id === "incidents" && incidentCount > 0 ? <span className={styles.navCount}>{incidentCount}</span> : null}</button>)}
+        </nav>
+        <div className={styles.sidebarFooter}><div className={styles.operator}><span className={styles.operatorDot} /><div><div className={styles.operatorName}>{session?.nickname ?? "管理员"}</div><div className={styles.operatorRole}>管理员</div></div></div></div>
+      </aside>
+      <div className={styles.main}>
+        <header className={styles.topbar}><div className={styles.crumb}>音乐房间 <span aria-hidden="true">/</span> <strong>{activeTab.label}</strong></div><div className={styles.topActions}><span className={styles.liveState}><span className={styles.liveDot} />实时数据</span><button className={styles.topButton} onClick={() => void load()} disabled={refreshing}><Icon name="refresh" size={13} />{refreshing ? "刷新中" : "刷新"}</button><button className={styles.topButton} onClick={() => void logout()}><Icon name="logout" size={13} />退出</button></div></header>
+        <main className={styles.content}>
+          <div className={styles.pageHeader}><div><div className={styles.eyebrow}>运维中心 / {activeTab.label}</div><h1 className={styles.title}>{activeTab.label}</h1><p className={styles.subtitle}>{refreshing ? "正在同步最新状态" : lastUpdatedAt ? `最近采样 ${new Date(lastUpdatedAt).toLocaleTimeString()}` : "等待首次采样"}</p></div>{tab === "rooms" || tab === "users" ? <div className={styles.headerTools}><input className={styles.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "rooms" ? "搜索房间 ID 或房间码" : "搜索用户名或昵称"} aria-label="搜索" /></div> : null}</div>
+          {error ? <div className={styles.error}>{error}<button onClick={() => void load()}>重新尝试</button></div> : null}
+          {tab === "overview" ? <Overview overview={overview} rooms={rooms} incidents={incidents} audit={audit} onRooms={() => setTab("rooms")} /> : tab === "rooms" ? <Rooms rooms={rooms} refresh={load} /> : tab === "users" ? <Users users={users} refresh={load} /> : tab === "incidents" ? <Incidents rows={incidents} /> : tab === "audit" ? <Audit rows={audit} /> : <System overview={overview} />}
+        </main>
+      </div>
+    </div>
+  </div>;
 }
-function Overview({ overview }: { overview: AdminOverview | null }) { return <><div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="在线用户" value={overview?.users.online ?? 0} /><Metric label="活跃房间" value={overview?.rooms.active ?? 0} /><Metric label="正在播放" value={overview?.playback.active ?? 0} /><Metric label="打开异常" value={overview?.openIncidents ?? 0} /></div><section className="mt-8 border border-white/[0.08] p-5"><h2 className="text-sm font-medium">依赖状态</h2><div className="mt-4 grid gap-3 sm:grid-cols-3"><Status label="PostgreSQL" value={overview?.dependencies.prisma} /><Status label="Redis" value={overview?.dependencies.redis} /><Status label="实例" value={String(overview?.instances ?? 0)} /></div></section></>; }
-function Rooms({ rooms, refresh }: { rooms: AdminRoomSummary[]; refresh: () => Promise<void> }) { return <Table><thead><tr><Th>房间</Th><Th>健康</Th><Th>成员</Th><Th>播放</Th><Th>操作</Th></tr></thead><tbody>{rooms.map(room => <tr key={room.id}><Td><a href={"/admin/rooms/" + encodeURIComponent(room.id)} className="font-mono text-xs text-[#60a5fa] underline">{room.id}</a><div className="text-xs text-white/40">{room.joinCode}</div></Td><Td><Badge value={room.health} /></Td><Td>{room.onlineMemberCount}/{room.memberCount}</Td><Td>{room.playbackStatus}</Td><Td><button className="text-xs text-red-300 underline" onClick={async () => { const code = window.prompt("输入当前房间码"); const reason = window.prompt("终止原因（至少 8 字）"); if (code && reason && window.confirm("确认永久结束此房间？")) { await adminApi.terminateRoom(room.id, code, reason); await refresh(); } }}>永久结束</button></Td></tr>)}</tbody></Table>; }
-function Users({ users, refresh }: { users: AdminUserSummary[]; refresh: () => Promise<void> }) { return <Table><thead><tr><Th>用户</Th><Th>状态</Th><Th>会话</Th><Th>最近登录</Th><Th>操作</Th></tr></thead><tbody>{users.map(user => <tr key={user.id}><Td><div>{user.nickname}</div><div className="text-xs text-white/40">{user.username}</div></Td><Td><Badge value={user.status.toLowerCase()} /></Td><Td>{user.activeSessionCount}</Td><Td className="text-xs text-white/50">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "未登录"}</Td><Td>{user.role === "USER" ? <div className="flex gap-3 text-xs"><button className="underline" onClick={async () => { const reason = window.prompt("操作原因（至少 8 字）"); if (reason && window.confirm("确认修改账号状态？")) { await adminApi.setUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", reason); await refresh(); } }}>{user.status === "ACTIVE" ? "禁用" : "启用"}</button><button className="text-amber-200 underline" onClick={async () => { const reason = window.prompt("撤销原因（至少 8 字）"); if (reason && window.confirm("确认撤销全部普通会话？")) { await adminApi.revokeSessions(user.id, reason); await refresh(); } }}>撤销会话</button></div> : <span className="text-xs text-white/30">管理员</span>}</Td></tr>)}</tbody></Table>; }
-function Incidents({ rows }: { rows: AdminIncident[] }) { return <Table><thead><tr><Th>级别</Th><Th>类型</Th><Th>范围</Th><Th>状态</Th><Th>最近发生</Th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><Td><Badge value={row.severity.toLowerCase()} /></Td><Td>{row.type}</Td><Td className="font-mono text-xs">{row.scopeType}:{row.scopeId ?? "-"}</Td><Td>{row.status}</Td><Td className="text-xs text-white/50">{new Date(row.lastSeenAt).toLocaleString()}</Td></tr>)}</tbody></Table>; }
-function Audit({ rows }: { rows: AuditRow[] }) { return <Table><thead><tr><Th>时间</Th><Th>动作</Th><Th>目标</Th><Th>结果</Th><Th>原因</Th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><Td className="text-xs text-white/50">{new Date(row.createdAt).toLocaleString()}</Td><Td>{row.action}</Td><Td className="font-mono text-xs">{row.targetType}:{row.targetId ?? "-"}</Td><Td>{row.result}</Td><Td className="max-w-md text-xs text-white/50">{row.reason ?? "-"}</Td></tr>)}</tbody></Table>; }
-function System({ overview }: { overview: AdminOverview | null }) { return <div className="mt-8 grid gap-4 md:grid-cols-2"><Status label="PostgreSQL" value={overview?.dependencies.prisma} /><Status label="Redis" value={overview ? overview.dependencies.redis + " (" + overview.dependencies.redisMode + ")" : undefined} /><Status label="实例" value={String(overview?.instances ?? 0)} /><Status label="生成时间" value={overview?.generatedAt ? new Date(overview.generatedAt).toLocaleString() : undefined} /></div>; }
-function Metric({ label, value }: { label: string; value: number }) { return <div className="border-l border-white/10 px-4 py-3"><p className="text-xs text-white/45">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p></div>; }
-function Status({ label, value }: { label: string; value?: string }) { return <div className="flex items-center justify-between border border-white/[0.08] px-4 py-3"><span className="text-sm text-white/70">{label}</span><span className="font-mono text-xs text-white/50">{value ?? "unknown"}</span></div>; }
-function Badge({ value }: { value: string }) { const color = value.includes("critical") || value.includes("disabled") ? "text-red-300" : value.includes("degraded") ? "text-amber-300" : "text-emerald-300"; return <span className={"font-mono text-xs uppercase " + color}>{value}</span>; }
-function Table({ children }: { children: ReactNode }) { return <div className="mt-8 overflow-x-auto border border-white/[0.08]"><table className="w-full min-w-[760px] text-left text-sm">{children}</table></div>; }
-function Th({ children }: { children: ReactNode }) { return <th className="border-b border-white/[0.08] px-4 py-3 text-xs font-medium text-white/45">{children}</th>; }
-function Td({ children, className = "" }: { children: ReactNode; className?: string }) { return <td className={"border-b border-white/[0.06] px-4 py-3 " + className}>{children}</td>; }
+
+function Overview({ overview, rooms, incidents, audit, onRooms }: { overview: AdminOverview | null; rooms: AdminRoomSummary[]; incidents: AdminIncident[]; audit: AuditRow[]; onRooms: () => void }) {
+  const activeRooms = rooms.filter((room) => room.onlineMemberCount > 0).slice(0, 6);
+  return <>
+    <section className={styles.metricGrid} aria-label="关键指标">
+      <Metric label="在线用户" value={overview?.users.online ?? 0} meta={`注册用户 ${overview?.users.total ?? 0} 人`} color="var(--admin-blue)" width={`${Math.min(100, Math.max(10, ((overview?.users.online ?? 0) / Math.max(1, overview?.users.total ?? 1)) * 100))}%`} />
+      <Metric label="活跃房间" value={overview?.rooms.active ?? 0} meta={`房间总数 ${overview?.rooms.total ?? 0}`} color="var(--admin-green)" width={`${Math.min(100, Math.max(10, ((overview?.rooms.active ?? 0) / Math.max(1, overview?.rooms.total ?? 1)) * 100))}%`} />
+      <Metric label="正在播放" value={overview?.playback.active ?? 0} meta={`已暂停 ${overview?.playback.paused ?? 0}`} color="var(--admin-amber)" width={`${Math.min(100, Math.max(10, ((overview?.playback.active ?? 0) / Math.max(1, overview?.rooms.total ?? 1)) * 100))}%`} />
+      <Metric label="未处理异常" value={overview?.openIncidents ?? 0} meta={overview?.rooms.critical ? `严重房间 ${overview.rooms.critical} 个` : "暂无严重房间"} color="var(--admin-red)" width={`${overview?.openIncidents ? 72 : 14}%`} />
+    </section>
+    <section className={styles.sectionGrid}>
+      <div className={styles.panel}><PanelHeader title="活跃房间" hint={`显示 ${activeRooms.length} 个`} action={<button className={styles.panelLink} onClick={onRooms}>查看全部 <Icon name="arrow" size={12} /></button>} /><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>房间</th><th>健康度</th><th>成员</th><th>播放</th><th>更新时间</th></tr></thead><tbody>{activeRooms.length ? activeRooms.map((room) => <RoomRow key={room.id} room={room} />) : <tr><td colSpan={5}><div className={styles.empty}>最近采样中暂无活跃房间。</div></td></tr>}</tbody></table></div></div>
+      <SystemHealth overview={overview} />
+    </section>
+    <section className={styles.sectionGridBottom}><IncidentPanel rows={incidents.slice(0, 4)} /><AuditPanel rows={audit.slice(0, 4)} /></section>
+  </>;
+}
+
+function Metric({ label, value, meta, color, width }: { label: string; value: number; meta: string; color: string; width: string }) { return <div className={styles.metric} style={{ "--metric-color": color, "--metric-width": width } as CSSProperties}><div className={styles.metricLabel}>{label}</div><div className={styles.metricRow}><strong className={styles.metricValue}>{value}</strong><span className={styles.metricMeta}>{meta}</span></div><div className={styles.metricLine}><span /></div></div>; }
+function PanelHeader({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) { return <div className={styles.panelHeader}><div><div className={styles.panelTitle}>{title}</div>{hint ? <div className={styles.panelHint}>{hint}</div> : null}</div>{action}</div>; }
+function RoomCell({ room }: { room: AdminRoomSummary }) { const healthClass = room.health === "critical" ? styles.roomSignalCritical : room.health === "degraded" ? styles.roomSignalDegraded : ""; return <div className={styles.roomCell}><span className={`${styles.roomSignal} ${healthClass}`} /><div><a className={styles.linkButton} href={`/admin/rooms/${encodeURIComponent(room.id)}`}>{room.id}</a><div className={styles.roomJoin}>{room.joinCode}</div></div></div>; }
+function RoomRow({ room }: { room: AdminRoomSummary }) { return <tr><td><RoomCell room={room} /></td><td><HealthText value={room.health} /></td><td className={styles.mono}>{room.onlineMemberCount}/{room.memberCount}</td><td className={styles.mono}>{translatePlayback(room.playbackStatus)}</td><td className={styles.mono}>{formatTime(room.updatedAt)}</td></tr>; }
+
+function SystemHealth({ overview }: { overview: AdminOverview | null }) { return <div className={styles.panel}><PanelHeader title="系统健康" hint="依赖状态" /><div className={styles.healthList}><HealthRow label="PostgreSQL 数据库" value={overview?.dependencies.prisma === "up" ? "正常" : "降级"} width={overview?.dependencies.prisma === "up" ? "98%" : "38%"} color={overview?.dependencies.prisma === "up" ? "var(--admin-green)" : "var(--admin-red)"} /><HealthRow label="Redis / 在线状态" value={overview?.dependencies.redis === "up" ? "正常" : "降级"} width={overview?.dependencies.redis === "up" ? "94%" : "30%"} color={overview?.dependencies.redis === "up" ? "var(--admin-green)" : "var(--admin-red)"} /><HealthRow label="应用实例" value={`${overview?.instances ?? 0} 个实例上报`} width={overview?.instances ? "88%" : "25%"} color="var(--admin-blue)" /></div><p className={styles.systemNote}>数据来自控制台心跳与最近一次 Redis 在线状态采样。</p></div>; }
+function HealthRow({ label, value, width, color }: { label: string; value: string; width: string; color: string }) { return <div className={styles.healthRow} style={{ "--health-width": width, "--health-color": color } as CSSProperties}><span className={styles.healthLabel}>{label}</span><span className={styles.healthValue}>{value}</span><div className={styles.healthBar}><span /></div></div>; }
+function IncidentPanel({ rows }: { rows: AdminIncident[] }) { return <div className={styles.panel}><PanelHeader title="异常队列" hint={rows.length ? `最近 ${rows.length} 条` : "暂无异常"} /><div className={styles.incidentList}>{rows.length ? rows.map((row) => <div className={styles.incidentItem} key={row.id}><span className={`${styles.incidentDot} ${row.severity === "CRITICAL" ? styles.incidentDotCritical : ""}`} /><div><div className={styles.incidentType}>{row.type}</div><div className={styles.incidentScope}>{translateScope(row.scopeType)}：{row.scopeId ?? "全局"}</div></div><span className={styles.incidentTime}>{formatTime(row.lastSeenAt)}</span></div>) : <div className={styles.empty}>暂无未处理异常。</div>}</div></div>; }
+function AuditPanel({ rows }: { rows: AuditRow[] }) { return <div className={styles.panel}><PanelHeader title="最近管理活动" hint="审计记录" /><div className={styles.auditList}>{rows.length ? rows.map((row) => <div className={styles.auditItem} key={row.id}><span className={styles.auditTime}>{formatTime(row.createdAt)}</span><div><div className={styles.auditAction}>{translateAction(row.action)}</div><div className={styles.auditTarget}>{translateScope(row.targetType)}：{row.targetId ?? "-"} · {translateResult(row.result)}</div></div></div>) : <div className={styles.empty}>暂无管理活动。</div>}</div></div>; }
+
+function Rooms({ rooms, refresh }: { rooms: AdminRoomSummary[]; refresh: () => Promise<void> }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>房间目录</div><div className={styles.toolbarMeta}>权威数据：PostgreSQL + Redis 在线状态</div></div><span className={styles.toolbarMeta}>{rooms.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>房间</th><th>健康度</th><th>成员</th><th>覆盖率</th><th>播放</th><th>操作</th></tr></thead><tbody>{rooms.length ? rooms.map((room) => <tr key={room.id}><td><RoomCell room={room} /></td><td><HealthText value={room.health} /></td><td className={styles.mono}>{room.onlineMemberCount}/{room.memberCount}</td><td className={styles.mono}>{room.telemetryCoverage.reported}/{room.telemetryCoverage.total || 0}</td><td className={styles.mono}>{translatePlayback(room.playbackStatus)}</td><td><button className={styles.actionButton} onClick={async () => { const code = window.prompt("输入当前房间码"); const reason = window.prompt("终止原因（至少 8 字）"); if (code && reason && window.confirm("确认永久结束此房间？")) { await adminApi.terminateRoom(room.id, code, reason); await refresh(); } }}>终止</button></td></tr>) : <tr><td colSpan={6}><div className={styles.empty}>没有符合筛选条件的房间。</div></td></tr>}</tbody></table></div></div></>; }
+function Users({ users, refresh }: { users: AdminUserSummary[]; refresh: () => Promise<void> }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>用户目录</div><div className={styles.toolbarMeta}>会话与账号状态</div></div><span className={styles.toolbarMeta}>{users.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>用户</th><th>状态</th><th>会话</th><th>在线房间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{users.length ? users.map((user) => <tr key={user.id}><td><div className={styles.roomId}>{user.nickname}</div><div className={styles.roomJoin}>{user.username}</div></td><td><HealthText value={user.status.toLowerCase()} /></td><td className={styles.mono}>{user.activeSessionCount}</td><td className={styles.mono}>{user.onlineRoomCount}</td><td className={styles.mono}>{user.lastLoginAt ? formatTime(user.lastLoginAt) : "从未登录"}</td><td>{user.role === "USER" ? <div className={styles.userActions}><button className={styles.actionButton} onClick={async () => { const reason = window.prompt("操作原因（至少 8 字）"); if (reason && window.confirm("确认修改账号状态？")) { await adminApi.setUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", reason); await refresh(); } }}>{user.status === "ACTIVE" ? "禁用" : "启用"}</button><button className={`${styles.actionButton} ${styles.actionButtonAmber}`} onClick={async () => { const reason = window.prompt("撤销原因（至少 8 字）"); if (reason && window.confirm("确认撤销全部普通会话？")) { await adminApi.revokeSessions(user.id, reason); await refresh(); } }}>撤销</button></div> : <span className={styles.mono}>管理员</span>}</td></tr>) : <tr><td colSpan={6}><div className={styles.empty}>没有符合筛选条件的用户。</div></td></tr>}</tbody></table></div></div></>; }
+function Incidents({ rows }: { rows: AdminIncident[] }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>异常队列</div><div className={styles.toolbarMeta}>未处理与已恢复的异常</div></div><span className={styles.toolbarMeta}>{rows.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>级别</th><th>类型</th><th>范围</th><th>状态</th><th>最近发现</th></tr></thead><tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td><HealthText value={row.severity.toLowerCase()} /></td><td className={styles.mono}>{row.type}</td><td className={styles.mono}>{translateScope(row.scopeType)}：{row.scopeId ?? "全局"}</td><td><HealthText value={row.status.toLowerCase()} /></td><td className={styles.mono}>{formatTime(row.lastSeenAt)}</td></tr>) : <tr><td colSpan={5}><div className={styles.empty}>暂无异常记录。</div></td></tr>}</tbody></table></div></div></>; }
+function Audit({ rows }: { rows: AuditRow[] }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>管理审计</div><div className={styles.toolbarMeta}>操作历史与执行结果</div></div><span className={styles.toolbarMeta}>{rows.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>时间</th><th>动作</th><th>目标</th><th>结果</th><th>原因</th></tr></thead><tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td className={styles.mono}>{formatTime(row.createdAt)}</td><td className={styles.mono}>{translateAction(row.action)}</td><td className={styles.mono}>{translateScope(row.targetType)}：{row.targetId ?? "-"}</td><td><HealthText value={row.result.toLowerCase()} /></td><td className={styles.mono}>{row.reason ?? "-"}</td></tr>) : <tr><td colSpan={5}><div className={styles.empty}>暂无审计记录。</div></td></tr>}</tbody></table></div></div></>; }
+function System({ overview }: { overview: AdminOverview | null }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>系统依赖</div><div className={styles.toolbarMeta}>运行状态与实例心跳</div></div></div><div className={`${styles.sectionGrid} ${styles.fullPanel}`}><SystemHealth overview={overview} /><div className={styles.panel}><PanelHeader title="运行快照" hint="当前管理控制台" /><div className={styles.healthList}><HealthRow label="Redis 模式" value={overview?.dependencies.redisMode ? translateRedisMode(overview.dependencies.redisMode) : "未知"} width="78%" color="var(--admin-blue)" /><HealthRow label="房间健康度" value={`${overview?.rooms.healthy ?? 0} 个健康房间`} width={`${overview?.rooms.total ? Math.round((overview.rooms.healthy / overview.rooms.total) * 100) : 10}%`} color="var(--admin-green)" /><HealthRow label="诊断状态" value={`${overview?.rooms.unknown ?? 0} 个未知`} width={`${overview?.rooms.total ? Math.round(((overview.rooms.total - overview.rooms.unknown) / overview.rooms.total) * 100) : 10}%`} color="var(--admin-amber)" /></div></div></div></>; }
+function HealthText({ value }: { value: string }) { const normalized = value.toLowerCase(); const className = normalized.includes("critical") || normalized.includes("disabled") || normalized.includes("failed") ? styles.statusTextRed : normalized.includes("degraded") || normalized.includes("open") || normalized.includes("reconnecting") ? styles.statusTextAmber : normalized.includes("unknown") || normalized.includes("offline") || normalized.includes("recovered") ? styles.statusTextMuted : styles.statusText; return <span className={className}><span aria-hidden="true">●</span>{translateStatus(value)}</span>; }
+function translateStatus(value: string) { const labels: Record<string, string> = { active: "正常", healthy: "健康", degraded: "降级", critical: "严重", disabled: "已禁用", failed: "失败", open: "未处理", recovered: "已恢复", unknown: "未知", offline: "离线", online: "在线", reconnecting: "重连中", succeeded: "成功", pending: "处理中" }; return labels[value.toLowerCase()] ?? value; }
+function translatePlayback(value: string) { const labels: Record<string, string> = { playing: "播放中", paused: "已暂停", stopped: "已停止", idle: "空闲", conflict: "冲突" }; return labels[value.toLowerCase()] ?? value; }
+function translateScope(value: string) { const labels: Record<string, string> = { room: "房间", user: "用户", system: "系统", global: "全局" }; return labels[value.toLowerCase()] ?? value; }
+function translateAction(value: string) { const labels: Record<string, string> = { terminate_room: "结束房间", disable_user: "禁用用户", enable_user: "启用用户", revoke_sessions: "撤销会话", login: "登录", logout: "退出登录" }; return labels[value.toLowerCase()] ?? value; }
+function translateResult(value: string) { return translateStatus(value); }
+function translateRedisMode(value: string) { const labels: Record<string, string> = { pubsub: "发布订阅", polling: "轮询", degraded: "降级", unknown: "未知" }; return labels[value.toLowerCase()] ?? value; }
+function formatTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "-" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }

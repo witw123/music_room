@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { adminApi, AdminApiError } from "@/lib/admin-api";
-type RoomDetail = { id: string; health: string; onlineMemberCount: number; memberCount: number; playbackStatus: string; members: unknown };
+import styles from "../../admin.module.css";
+
+type RoomMember = { id?: string; nickname?: string; peerId?: string | null; presenceState?: string; role?: string };
+type RoomDetail = { id: string; joinCode?: string; health: string; onlineMemberCount: number; memberCount: number; playbackStatus: string; telemetryCoverage?: { reported: number; total: number }; members: unknown };
 
 export default function AdminRoomDetailPage() {
   const params = useParams<{ roomId: string }>();
@@ -27,19 +30,30 @@ export default function AdminRoomDetailPage() {
       setRefreshing(false);
     }
   }, [params.roomId, router]);
+
   useEffect(() => {
     void load();
     const refreshIfVisible = () => { if (document.visibilityState === "visible") void load(); };
     const timer = window.setInterval(refreshIfVisible, 3000);
     window.addEventListener("focus", refreshIfVisible);
     document.addEventListener("visibilitychange", refreshIfVisible);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
-    };
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refreshIfVisible); document.removeEventListener("visibilitychange", refreshIfVisible); };
   }, [load]);
-  if (error) return <main className="min-h-screen bg-[#07080b] p-8 text-red-200">{error}<button className="ml-3 underline" onClick={() => void load()}>重试</button></main>;
-  if (!room) return <main className="min-h-screen bg-[#07080b] p-8 text-white">加载中...</main>;
-  return <main className="min-h-screen bg-[#07080b] p-4 text-white sm:p-8"><div className="flex items-center justify-between"><button onClick={() => router.back()} className="text-sm text-[#60a5fa] underline">返回房间列表</button><span className="font-mono text-[10px] text-white/35">{refreshing ? "刷新中..." : "每 3 秒更新"}</span></div><h1 className="mt-6 text-2xl font-semibold">房间 {room.id}</h1><div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="border border-white/10 p-4">健康：{room.health}</div><div className="border border-white/10 p-4">成员：{room.onlineMemberCount}/{room.memberCount}</div><div className="border border-white/10 p-4">播放：{room.playbackStatus}</div></div><section className="mt-6 border border-white/10 p-4"><h2 className="text-sm text-white/60">成员诊断</h2><pre className="mt-3 overflow-auto text-xs text-white/60">{JSON.stringify(room.members, null, 2)}</pre></section></main>;
+
+  if (error) return <main className={styles.shell}><div className={styles.content}><div className={styles.error}>{error}<button onClick={() => void load()}>重新尝试</button></div></div></main>;
+  if (!room) return <main className={styles.shell}><div className={styles.content}><div className={styles.empty}>正在加载房间监测数据...</div></div></main>;
+  const members = Array.isArray(room.members) ? room.members as RoomMember[] : [];
+  return <main className={styles.shell}><div className={styles.main}>
+    <header className={styles.topbar}><button className={styles.topButton} onClick={() => router.back()}>← 返回房间列表</button><div className={styles.topActions}><span className={styles.liveState}><span className={styles.liveDot} />{refreshing ? "同步中" : "实时数据"}</span><button className={styles.topButton} onClick={() => void load()} disabled={refreshing}>刷新</button></div></header>
+    <div className={styles.content}>
+      <div className={styles.pageHeader}><div><div className={styles.eyebrow}>房间 / 详情</div><h1 className={styles.title}>{room.id}</h1><p className={styles.subtitle}>房间码：{room.joinCode ?? "-"} · 每 3 秒采样一次在线状态</p></div></div>
+      <section className={styles.metricGrid}><Metric label="健康度" value={translateStatus(room.health)} /><Metric label="在线成员" value={`${room.onlineMemberCount}/${room.memberCount}`} /><Metric label="诊断覆盖" value={`${room.telemetryCoverage?.reported ?? 0}/${room.telemetryCoverage?.total ?? 0}`} /><Metric label="播放状态" value={translatePlayback(room.playbackStatus)} /></section>
+      <section className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.panelHeader}><div><div className={styles.panelTitle}>成员诊断</div><div className={styles.panelHint}>Redis 在线状态 + 客户端报告</div></div></div><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>成员</th><th>状态</th><th>对等端</th><th>角色</th></tr></thead><tbody>{members.length ? members.map((member) => <tr key={member.id}><td><div className={styles.roomId}>{member.nickname ?? member.id ?? "未知"}</div><div className={styles.roomJoin}>{member.id ?? "-"}</div></td><td><State value={member.presenceState ?? "offline"} /></td><td className={styles.mono}>{member.peerId ?? "-"}</td><td className={styles.mono}>{member.role === "owner" ? "房主" : "成员"}</td></tr>) : <tr><td colSpan={4}><div className={styles.empty}>暂无成员数据。</div></td></tr>}</tbody></table></div></section>
+    </div>
+  </div></main>;
 }
+
+function Metric({ label, value }: { label: string; value: string }) { return <div className={styles.metric}><div className={styles.metricLabel}>{label}</div><div className={styles.metricRow}><strong className={styles.metricValue}>{value}</strong></div></div>; }
+function State({ value }: { value: string }) { const normalized = value.toLowerCase(); const className = normalized === "online" ? styles.statusText : normalized === "reconnecting" ? styles.statusTextAmber : styles.statusTextMuted; const labels: Record<string, string> = { online: "在线", offline: "离线", reconnecting: "重连中" }; return <span className={className}><span aria-hidden="true">●</span>{labels[normalized] ?? value}</span>; }
+function translateStatus(value: string) { const labels: Record<string, string> = { active: "正常", healthy: "健康", degraded: "降级", critical: "严重", unknown: "未知", offline: "离线", online: "在线", reconnecting: "重连中" }; return labels[value.toLowerCase()] ?? value; }
+function translatePlayback(value: string) { const labels: Record<string, string> = { playing: "播放中", paused: "已暂停", stopped: "已停止", idle: "空闲", conflict: "冲突" }; return labels[value.toLowerCase()] ?? value; }

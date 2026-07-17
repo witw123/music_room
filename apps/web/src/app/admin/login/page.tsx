@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { adminApi } from "@/lib/admin-api";
+import styles from "../admin.module.css";
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
@@ -23,16 +24,11 @@ export default function AdminLoginPage() {
     }
   }
 
-  return <main className="flex min-h-screen items-center justify-center bg-[#07080b] px-4 text-white">
-    <section className="w-full max-w-md rounded-xl border border-white/[0.1] bg-white/[0.03] p-6 shadow-2xl sm:p-8">
-      <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0070f3] text-sm font-semibold">MR</div><div><p className="font-semibold">Music Room</p><p className="text-xs text-white/40">管理员入口</p></div></div>
-      <div className="mt-8 flex items-center gap-2 text-sm text-white/65"><span className="text-[#60a5fa]">[secure]</span> 仅限管理员账号访问</div>
-      <form className="mt-6 space-y-4" onSubmit={submit}>
-        <label className="block text-sm text-white/65">用户名<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none focus:border-[#0070f3]" required /></label>
-        <label className="block text-sm text-white/65">密码<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none focus:border-[#0070f3]" required /></label>
-        {error ? <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
-        <button type="submit" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0070f3] text-sm font-medium transition hover:bg-[#3291ff] disabled:opacity-50">{busy ? "登录中…" : "进入管理台"} -&gt;</button>
-      </form>
+  return <main className={styles.loginShell}>
+    <section className={styles.loginAside}>
+      <div className={styles.loginHero}><div className={styles.eyebrow}>运维中心 / 安全入口</div><h1 className={styles.loginHeroTitle}>看见信号，<br />不靠猜测。</h1><p className={styles.loginHeroCopy}>集中查看房间、在线状态、播放质量与运营事件。</p><div className={styles.loginSignal} aria-hidden="true">{Array.from({ length: 32 }, (_, index) => <span key={index} />)}</div></div>
+      <div className={styles.loginAsideFoot}>音乐房间 / 管理控制台 / 01</div>
     </section>
+    <section className={styles.loginPanel}><form className={styles.loginForm} onSubmit={submit}><div className={styles.eyebrow}>管理员登录</div><h2 className={styles.loginTitle}>登录管理控制台</h2><p className={styles.loginHint}>请使用已启用的管理员账号访问控制台。</p><div className={styles.loginFields}><label className={styles.loginLabel}>用户名<input className={styles.loginInput} value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></label><label className={styles.loginLabel}>密码<input className={styles.loginInput} value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required /></label></div>{error ? <p className={styles.loginError}>{error}</p> : null}<button className={styles.loginSubmit} type="submit" disabled={busy}>{busy ? "登录中..." : "进入管理控制台"}<span aria-hidden="true">→</span></button></form></section>
   </main>;
 }
