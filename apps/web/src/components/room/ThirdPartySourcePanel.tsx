@@ -36,7 +36,9 @@ export function ThirdPartySourcePanel({
     process.env.NEXT_PUBLIC_QQMUSIC_ENABLED,
     process.env.NEXT_PUBLIC_KUGOU_ENABLED,
     process.env.NEXT_PUBLIC_KUWO_ENABLED,
-    process.env.NEXT_PUBLIC_BAIDU_ENABLED
+    process.env.NEXT_PUBLIC_BAIDU_ENABLED,
+    process.env.NEXT_PUBLIC_TAIHE_ENABLED,
+    process.env.NEXT_PUBLIC_MIGU_ENABLED
   ].some((value) => value === "true");
 
   return (
@@ -61,7 +63,7 @@ export function ThirdPartySourcePanel({
             role="tab"
             type="button"
           >
-            QQ / 酷狗 / 酷我 / 百度
+            QQ / 酷狗 / 酷我 / 千千 / 咪咕
           </button>
         ) : null}
       </div>

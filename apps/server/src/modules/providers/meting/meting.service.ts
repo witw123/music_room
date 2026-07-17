@@ -162,24 +162,37 @@ export class MetingService {
     const record = asRecord(value);
     if (!record) return null;
     const providerTrackId = readString(
-      record.id ?? record.url_id ?? record.songmid ?? record.mid ?? record.hash ?? record.rid ?? record.song_id
+      record._providerTrackId ??
+      record.id ??
+      record.url_id ??
+      record.songmid ??
+      record.mid ??
+      record.hash ??
+      record.FileHash ??
+      record.rid ??
+      record.song_id
     );
-    const title = readString(record.name ?? record.title);
+    const title = readString(record.name ?? record.title ?? record.SongName ?? record.songName);
     if (!providerTrackId || !title) return null;
 
-    const artist = Array.isArray(record.artist)
-      ? record.artist.map(readString).filter((value): value is string => !!value).join(" / ")
-      : readString(record.artist ?? record.author);
-    const artworkUrl = readUrl(record.artworkUrl ?? record.picUrl ?? record.pic);
+    const artistValues = record.artist ?? record.singer ?? record.singerList ?? record.Singers;
+    const artist = Array.isArray(artistValues)
+      ? artistValues
+          .map((value) => typeof value === "object" ? asRecord(value)?.name : value)
+          .map(readString)
+          .filter((value): value is string => !!value)
+          .join(" / ")
+      : readString(artistValues ?? record.author ?? record.SingerName);
+    const artworkUrl = artworkUrlForProvider(provider, record);
     return {
       provider,
       providerTrackId,
-      access: "unknown",
-      quality: null,
+      access: readAccess(provider, record),
+      quality: readQuality(provider, record),
       title,
       artist: artist || "未知歌手",
-      album: readString(record.album ?? record.album_title),
-      durationMs: readDurationMs(record.duration ?? record.interval),
+      album: readString(record.album ?? record.album_title ?? record.AlbumName),
+      durationMs: readDurationMs(record.duration ?? record.interval ?? record.Duration),
       artworkUrl
     };
   }
@@ -277,6 +290,8 @@ function enabledEnvName(provider: MetingProvider) {
     qqmusic: "QQMUSIC_ENABLED",
     kugou: "KUGOU_ENABLED",
     kuwo: "KUWO_ENABLED",
+    taihe: "TAIHE_ENABLED",
+    migu: "MIGU_ENABLED",
     baidu: "BAIDU_ENABLED"
   }[provider];
 }
@@ -314,6 +329,84 @@ function readUrl(value: unknown) {
   }
 }
 
+function readArtworkUrl(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return readUrl(value.replace("{size}", "300").replace(/^http:/, "https:"));
+}
+
+function artworkUrlForProvider(provider: MetingProvider, record: Record<string, unknown>) {
+  if (provider === "qqmusic") {
+    const albumMid = readString(record.albummid);
+    if (albumMid) {
+      return `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg`;
+    }
+  }
+  return readArtworkUrl(
+    record.artworkUrl ?? record.picUrl ?? record.pic ?? record.Image ?? record.img3 ?? record.img2 ?? record.img1
+  );
+}
+
+function readAccess(provider: MetingProvider, record: Record<string, unknown>) {
+  if (provider === "qqmusic") {
+    const pay = asRecord(record.pay);
+    const payPlay = Number(pay?.payplay);
+    return payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown";
+  }
+
+  if (provider === "kugou") {
+    const payType = Number(record.PayType ?? record.HQPayType);
+    return payType === 0 ? "free" : Number.isFinite(payType) ? "paid" : "unknown";
+  }
+
+  if (provider === "migu") {
+    const tags = [...readStringArray(record.downloadTags), ...readStringArray(record.showTags)]
+      .map((value) => value.toLowerCase());
+    if (tags.includes("vip")) return "vip";
+    if (tags.includes("pay") || Number(record.restrictType) === 1) return "paid";
+    return "free";
+  }
+
+  return Number(record.vip ?? record.isVip) === 1 ? "vip" : "unknown";
+}
+
+function readQuality(provider: MetingProvider, record: Record<string, unknown>) {
+  if (provider === "qqmusic") {
+    if (positiveNumber(record.sizeflac)) return "lossless";
+    if (positiveNumber(record.size320)) return "high";
+    return positiveNumber(record.size128) ? "standard" : null;
+  }
+
+  if (provider === "kugou") {
+    if (readString(record.SQFileHash)) return "lossless";
+    if (readString(record.HQFileHash)) return "high";
+    return readString(record.FileHash) ? "standard" : null;
+  }
+
+  if (provider === "migu") {
+    const formats = Array.isArray(record.audioFormats) ? record.audioFormats : [];
+    const formatNames = formats
+      .map((value) => asRecord(value)?.formatType)
+      .map(readString)
+      .filter((value): value is string => !!value);
+    if (formatNames.some((value) => /^SQ|ZQ|Z3D/.test(value))) return "lossless";
+    if (formatNames.includes("HQ")) return "high";
+    return formatNames.includes("PQ") ? "standard" : null;
+  }
+
+  return null;
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(readString).filter((item): item is string => !!item)
+    : [];
+}
+
+function positiveNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0;
+}
+
 function resolveAudioMimeType(contentType: string | null, sourceUrl: string) {
   const type = `${contentType ?? ""} ${sourceUrl}`.toLowerCase();
   if (type.includes("flac")) return "audio/flac";
@@ -330,7 +423,9 @@ function isAllowedAudioUrl(provider: MetingProvider, value: string) {
       qqmusic: ["qq.com", "gtimg.cn"],
       kugou: ["kugou.com", "kugoucdn.com"],
       kuwo: ["kuwo.cn", "kuwo.com"],
-      baidu: ["baidu.com", "baidustatic.com", "taihe.com"]
+      taihe: ["baidu.com", "baidustatic.com", "taihe.com", "dmhmusic.com"],
+      migu: ["migu.cn", "migu.com"],
+      baidu: ["baidu.com", "baidustatic.com", "taihe.com", "dmhmusic.com"]
     }[provider];
     return suffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
   } catch {

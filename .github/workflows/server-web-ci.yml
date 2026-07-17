@@ -91,7 +91,9 @@ jobs:
             NEXT_PUBLIC_QQMUSIC_ENABLED=true
             NEXT_PUBLIC_KUGOU_ENABLED=true
             NEXT_PUBLIC_KUWO_ENABLED=true
-            NEXT_PUBLIC_BAIDU_ENABLED=true
+            NEXT_PUBLIC_TAIHE_ENABLED=true
+            NEXT_PUBLIC_MIGU_ENABLED=true
+            NEXT_PUBLIC_BAIDU_ENABLED=false
           tags: ${{ steps.web-meta.outputs.tags }}
           labels: ${{ steps.web-meta.outputs.labels }}
 

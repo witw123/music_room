@@ -8,7 +8,14 @@ export const neteaseTrackSourceRefSchema = z
   })
   .strict();
 
-export const metingProviderSchema = z.enum(["qqmusic", "kugou", "kuwo", "baidu"]);
+export const metingProviderSchema = z.enum([
+  "qqmusic",
+  "kugou",
+  "kuwo",
+  "taihe",
+  "migu",
+  "baidu"
+]);
 
 export const metingTrackSourceRefSchema = z
   .object({
@@ -28,6 +35,8 @@ export const trackSourceTypeSchema = z.enum([
   "qqmusic",
   "kugou",
   "kuwo",
+  "taihe",
+  "migu",
   "baidu"
 ]);
 

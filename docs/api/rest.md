@@ -52,11 +52,11 @@
 
 ## Meting 国内音乐 provider
 
-Meting provider 默认关闭。支持的 provider 为 `qqmusic`、`kugou`、`kuwo` 和 `baidu`，首期只使用公开资源，不保存用户账号或平台 Cookie。QQ 音乐在 Meting 内部映射为 `tencent`，对外仍使用 `qqmusic`。
+国内音乐 provider 默认关闭。支持的 provider 为 `qqmusic`、`kugou`、`kuwo`、`taihe` 和 `migu`；`baidu` 仅作为旧曲库数据的兼容别名映射到千千音乐。首期只使用公开资源，不保存用户账号或平台 Cookie。QQ 和酷狗使用平台公开网页接口，千千和咪咕使用各自的公开接口，酷我保留 Meting 及旧接口回退。
 
 ### `GET /v1/providers/{provider}/search`
 
-`provider` 必须是 `qqmusic|kugou|kuwo|baidu`。查询参数与网易云一致：`keywords`、`limit`、`offset`。服务端把结果转换为统一的候选歌曲结构。
+`provider` 必须是 `qqmusic|kugou|kuwo|taihe|migu|baidu`。查询参数与网易云一致：`keywords`、`limit`、`offset`。服务端把结果转换为统一的候选歌曲结构。
 
 ### `GET /v1/providers/{provider}/tracks/{trackId}`
 
@@ -64,7 +64,7 @@ Meting provider 默认关闭。支持的 provider 为 `qqmusic`、`kugou`、`kuw
 
 ### `GET /v1/providers/{provider}/tracks/{trackId}/audio`
 
-服务端调用 Meting 解析临时播放地址，然后校验 CDN、抓取并流式转发音频。支持 `quality=standard|high|exhigh` 和 `Range`，不向浏览器暴露上游地址。首期只接受 MP3/FLAC，返回 M4A/AAC 时会返回 `METING_AUDIO_UNSUPPORTED`。
+服务端解析临时播放地址，然后校验 CDN、抓取并流式转发音频。支持 `quality=standard|high|exhigh` 和 `Range`，不向浏览器暴露上游地址。首期只接受 MP3/FLAC，返回 M4A/AAC 时会返回 `METING_AUDIO_UNSUPPORTED`。平台接口、CDN 和版权状态可能变化；会员、付费或受限歌曲不保证可用。
 
 ## 标准错误码
 

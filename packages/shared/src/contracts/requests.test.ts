@@ -114,6 +114,26 @@ describe("request contracts", () => {
       sourceType: "qqmusic",
       sourceRef: { provider: "qqmusic", trackId: "003abc" }
     });
+    expect(
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "migu",
+        sourceRef: { provider: "migu", trackId: "69078806413__600929000003357675" }
+      })
+    ).toMatchObject({
+      sourceType: "migu",
+      sourceRef: { provider: "migu", trackId: "69078806413__600929000003357675" }
+    });
+    expect(
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "taihe",
+        sourceRef: { provider: "taihe", trackId: "T10063295046" }
+      })
+    ).toMatchObject({
+      sourceType: "taihe",
+      sourceRef: { provider: "taihe", trackId: "T10063295046" }
+    });
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,

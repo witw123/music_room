@@ -13,5 +13,7 @@ export const metingPlatformMap: Record<MetingPlatform, string> = {
   qqmusic: "tencent",
   kugou: "kugou",
   kuwo: "kuwo",
+  taihe: "baidu",
+  migu: "migu",
   baidu: "baidu"
 };

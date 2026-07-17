@@ -14,15 +14,19 @@ const providerLabels: Record<MetingProvider, string> = {
   qqmusic: "QQ音乐",
   kugou: "酷狗音乐",
   kuwo: "酷我音乐",
+  taihe: "千千音乐",
+  migu: "咪咕音乐",
   baidu: "百度音乐"
 };
 
-const providers: MetingProvider[] = ["qqmusic", "kugou", "kuwo", "baidu"];
+const providers: MetingProvider[] = ["qqmusic", "kugou", "kuwo", "taihe", "migu"];
 const enabledByProvider: Record<MetingProvider, boolean> = {
   qqmusic: process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true",
   kugou: process.env.NEXT_PUBLIC_KUGOU_ENABLED === "true",
   kuwo: process.env.NEXT_PUBLIC_KUWO_ENABLED === "true",
-  baidu: process.env.NEXT_PUBLIC_BAIDU_ENABLED === "true"
+  taihe: process.env.NEXT_PUBLIC_TAIHE_ENABLED === "true" || process.env.NEXT_PUBLIC_BAIDU_ENABLED === "true",
+  migu: process.env.NEXT_PUBLIC_MIGU_ENABLED === "true",
+  baidu: false
 };
 
 type MetingSourcePanelProps = {
@@ -91,7 +95,7 @@ export function MetingSourcePanel({ activeSession, onImportTrack }: MetingSource
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">国内音乐平台</h2>
-          <p className="mt-1 text-xs text-foreground-muted">服务器解析公开资源，无需单独登录。</p>
+          <p className="mt-1 text-xs text-foreground-muted">服务器解析公开资源，会员或受限歌曲会按平台实际状态失败。</p>
         </div>
         <span className="rounded bg-accent/10 px-2 py-1 text-[10px] font-medium text-accent">公开资源</span>
       </div>

@@ -367,6 +367,8 @@ function sourceTypeLabel(sourceType: Exclude<TrackSourceType, "local_upload">) {
     qqmusic: "QQ音乐",
     kugou: "酷狗音乐",
     kuwo: "酷我音乐",
+    taihe: "千千音乐",
+    migu: "咪咕音乐",
     baidu: "百度音乐"
   }[sourceType];
 }

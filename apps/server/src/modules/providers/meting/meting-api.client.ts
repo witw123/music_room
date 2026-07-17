@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type Meting from "@meting/core";
 import type { MetingPlatform, MetingQuality, MetingSearchQuery } from "./meting.types";
 import { metingPlatformMap } from "./meting.types";
+import { isDirectMetingProvider, MetingPlatformApiClient } from "./meting-platform.client";
 
 export type MetingApiErrorKind = "unavailable" | "invalid-response";
 
@@ -14,7 +15,13 @@ export class MetingApiError extends Error {
 
 @Injectable()
 export class MetingApiClient {
+  private readonly platformApi = new MetingPlatformApiClient();
+
   async searchTracks(provider: MetingPlatform, query: MetingSearchQuery) {
+    if (isDirectMetingProvider(provider)) {
+      return (await this.platformApi.searchTracks(provider, query)) ?? [];
+    }
+
     try {
       const records = await this.call(async () => {
         const meting = await this.create(provider);
@@ -36,14 +43,26 @@ export class MetingApiClient {
   }
 
   async getTrack(provider: MetingPlatform, trackId: string) {
+    if (isDirectMetingProvider(provider)) {
+      return (await this.platformApi.getTrack(provider, trackId)) ?? [];
+    }
+
     return this.call(async () => parseJsonValue(await (await this.create(provider)).song(trackId)));
   }
 
   async getTrackArtwork(provider: MetingPlatform, trackId: string) {
+    if (isDirectMetingProvider(provider)) {
+      return await this.platformApi.getTrackArtwork(provider, trackId);
+    }
+
     return this.call(async () => parseJsonValue(await (await this.create(provider)).pic(trackId, 300)));
   }
 
   async getAudioUrl(provider: MetingPlatform, trackId: string, quality: MetingQuality) {
+    if (isDirectMetingProvider(provider)) {
+      return (await this.platformApi.getAudioUrl(provider, trackId, quality)) ?? { url: "" };
+    }
+
     try {
       const parsed = await this.call(async () => {
         const raw = await (await this.create(provider)).url(trackId, bitrateForQuality(quality));
