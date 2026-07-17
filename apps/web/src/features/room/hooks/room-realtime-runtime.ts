@@ -564,6 +564,15 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }
   });
 
+  socket.on("session.revoked", () => {
+    // Server-side account invalidation must stop reconnect loops before the
+    // regular auth hook clears localStorage and redirects the user.
+    input.activeSessionRef.current = null;
+    window.localStorage.removeItem("music-room-session");
+    window.dispatchEvent(new CustomEvent("music-room-auth-expired", { detail: { reason: "session-revoked" } }));
+    input.exitCurrentRoom("登录已被管理员撤销，请重新登录。");
+  });
+
   socket.on("room.deleted", ({ roomId, trackIds }) => {
     if (roomId !== input.roomId) {
       return;

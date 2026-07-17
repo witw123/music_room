@@ -1,0 +1,23 @@
+groups:
+  - name: music-room
+    rules:
+      - alert: MusicRoomServerDown
+        expr: up{job="music-room-server"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "Music Room server is down" }
+      - alert: MusicRoomDependencyDegraded
+        expr: music_room_prisma_available == 0 or music_room_redis_available == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "Music Room dependency is unavailable" }
+      - alert: MusicRoomRealtimeFailures
+        expr: increase(music_room_realtime_failures_total[5m]) > 5
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "Realtime failures increased" }
+      - alert: MusicRoomDiagnosticsRateLimited
+        expr: rate(music_room_diagnostics_rate_limited_total[5m]) > 0.01
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Diagnostics reports are being rate limited" }

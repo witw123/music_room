@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { usePeerDiagnostics } from "@/features/p2p";
 import { RoomAppShell } from "@/components/room/RoomAppShell";
 import { useRouter } from "next/navigation";
@@ -80,6 +80,54 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
         pageState.isDiagnosticsPanelOpen,
       highFrequencyFlushDelayMs: 200
     });
+
+  const lastTelemetrySentAtRef = useRef(0);
+  const lastTelemetryHealthKeyRef = useRef("");
+  const telemetryDiagnosticsRef = useRef(peerDiagnostics);
+  telemetryDiagnosticsRef.current = peerDiagnostics;
+  useEffect(() => {
+    const currentRoomId = roomSnapshot?.room.id;
+    const currentUserId = activeSession?.userId;
+    if (!currentRoomId || !currentUserId || !peerId || process.env.NEXT_PUBLIC_CLIENT_TELEMETRY_ENABLED === "false") return;
+    const sendTelemetry = () => {
+      const socket = appRefs.socketRef.current;
+      if (!socket?.connected) return;
+      const now = Date.now();
+      if (now - lastTelemetrySentAtRef.current < 5_000) return;
+      const peers = telemetryDiagnosticsRef.current.slice(0, 32).map((peer) => ({
+        peerId: peer.peerId,
+        updatedAt: peer.updatedAt,
+        dataConnectionState: peer.dataConnectionState,
+        mediaConnectionState: peer.mediaConnectionState,
+        mediaIceState: peer.mediaIceState,
+        dataIceState: peer.dataIceState,
+        mediaCandidateType: peer.mediaCandidateType,
+        mediaProtocol: peer.mediaProtocol,
+        rttMs: peer.currentRoundTripTimeMs,
+        sendBitrateKbps: peer.reportedSendRateKbps ?? peer.mediaSendBitrateKbps,
+        receiveBitrateKbps: peer.reportedReceiveRateKbps ?? peer.mediaReceiveBitrateKbps,
+        packetLossRate: peer.packetLossRate ?? null,
+        jitterMs: peer.receiverJitterTargetMs ?? null,
+        mediaTrackState: peer.remoteTrackStatus?.trackReadyState === "live" ? "live" as const : peer.remoteTrackStatus?.trackReadyState === "ended" ? "ended" as const : "none" as const,
+        bufferedAheadMs: peer.segmentedPlaybackStatus?.bufferedAheadMs ?? null,
+        scheduledAheadMs: peer.segmentedPlaybackStatus?.scheduledAheadMs ?? null,
+        underrunCount: peer.segmentedPlaybackStatus?.underrunCount ?? null,
+        playbackBitrateKbps: peer.targetAudioBitrateKbps ?? null,
+        sourcePeerId: peer.segmentedPlaybackStatus?.sourcePeerId ?? null,
+        playbackState: peer.segmentedPlaybackStatus?.listenerPlaybackState ?? null,
+        errorCode: peer.transportHealth === "failed" ? "media_failed" : null
+      }));
+      const payload = { protocolVersion: 1 as const, roomId: currentRoomId, sessionId: currentUserId, peerId, reportedAt: new Date().toISOString(), peers };
+      try { socket.emit("diagnostics.report", payload); lastTelemetrySentAtRef.current = now; } catch { /* telemetry is best effort */ }
+    };
+    const intervalMs = document.visibilityState === "hidden" ? 30_000 : 15_000;
+    const interval = window.setInterval(sendTelemetry, intervalMs);
+    const healthKey = telemetryDiagnosticsRef.current.map((peer) => `${peer.peerId}:${peer.transportHealth}:${peer.mediaConnectionState}`).join("|");
+    if (healthKey !== lastTelemetryHealthKeyRef.current) { lastTelemetryHealthKeyRef.current = healthKey; sendTelemetry(); }
+    const onVisibility = () => { if (document.visibilityState === "visible") sendTelemetry(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisibility); };
+  }, [activeSession?.userId, appRefs.socketRef, peerId, roomSnapshot?.room.id]);
   const uploads = useTrackUploads({
     activeSession,
     roomSnapshot,

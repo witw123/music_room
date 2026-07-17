@@ -39,6 +39,7 @@ import {
   roomSnapshotSchema,
   roomUnsubscribePayloadSchema
 } from "@music-room/shared";
+import { diagnosticsReportPayloadSchema } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -105,6 +106,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private readonly recoveryGenerationByRoomSession = new Map<string, number>();
   private readonly recoveryGenerationByRoomPeer = new Map<string, Map<string, number>>();
   private readonly pendingPeerSignalsByRoomPeer = new Map<string, PendingPeerSignal[]>();
+  private readonly telemetryLastReportAt = new Map<string, number>();
 
   constructor(
     private readonly redisService: RedisService,
@@ -176,6 +178,16 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   afterInit() {
     this.roomRealtimeBroadcaster.setServer(this.server);
+    void this.redisService.subscribe("music-room:auth:user-invalidated", (payload) => {
+      const userId = (payload as { userId?: unknown }).userId;
+      if (typeof userId !== "string") return;
+      for (const socket of this.server.sockets.sockets.values()) {
+        if (socket.data.sessionId === userId) {
+          socket.emit("session.revoked");
+          socket.disconnect(true);
+        }
+      }
+    }).then((unsubscribe) => this.redisUnsubscribers.push(unsubscribe));
     void this.redisService
       .subscribe(roomSnapshotChannel, (payload) => {
         const message = payload as {
@@ -369,6 +381,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.peerSocketsByRoom.clear();
     this.activeSessionsByRoom.clear();
     this.pendingPeerSignalsByRoomPeer.clear();
+    this.telemetryLastReportAt.clear();
     this.recoveryGenerationByRoomSession.clear();
     this.recoveryGenerationByRoomPeer.clear();
   }
@@ -405,6 +418,32 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       payload: nextPayload
     });
     return nextPayload;
+  }
+
+  @SubscribeMessage("diagnostics.report")
+  async handleDiagnosticsReport(@ConnectedSocket() client: Socket, @MessageBody() payload: unknown) {
+    const parsed = diagnosticsReportPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException("Invalid diagnostics report.", errorCodes.validationFailed, parsed.error.flatten());
+    }
+    const report = parsed.data;
+    this.assertRealtimeClient(client, report.roomId);
+    await this.assertUserStillActive(client.data.sessionId as string);
+    await this.assertSessionLease(client);
+    if (client.data.sessionId !== report.sessionId || client.data.peerId !== report.peerId) {
+      throw new WsException("Diagnostics identity mismatch.");
+    }
+    const rateKey = `${report.roomId}:${report.peerId}`;
+    const now = Date.now();
+    if (now - (this.telemetryLastReportAt.get(rateKey) ?? 0) < 5_000) { this.metrics.incrementDiagnosticsRateLimited(); return { ok: false, rateLimited: true }; }
+    this.telemetryLastReportAt.set(rateKey, now);
+    if (this.redisService.isAvailable()) {
+      await this.redisService.setJson(`music-room:admin:telemetry:peer:${report.roomId}:${report.peerId}`, report, 45);
+      await this.redisService.addSortedSetScore(`music-room:admin:telemetry:room-peers:${report.roomId}`, now, report.peerId);
+      await this.redisService.addSortedSetScore("music-room:admin:telemetry:active-rooms", now, report.roomId);
+    }
+    this.metrics.incrementDiagnosticsReport();
+    return { ok: true };
   }
 
   @SubscribeMessage("room.chat")
@@ -604,6 +643,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.ensureBroadcasterServer();
     this.assertRealtimeClient(client, message.roomId);
+    await this.assertUserStillActive(client.data.sessionId as string);
     await this.assertSessionLease(client);
     await this.renewSessionLease(client);
 
@@ -1079,6 +1119,17 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         throw error;
       }
       // Redis failure must not take down an otherwise healthy local socket.
+    }
+  }
+
+  private async assertUserStillActive(sessionId: string) {
+    if (!sessionId) throw new WsException("Unauthorized realtime request.");
+    try {
+      const user = await this.authService.getUserOrThrow(sessionId) as { status?: string };
+      if (user.status === "DISABLED") throw new WsException("Account is disabled.");
+    } catch (error) {
+      if (error instanceof WsException) throw error;
+      throw new WsException("Unauthorized realtime request.");
     }
   }
 

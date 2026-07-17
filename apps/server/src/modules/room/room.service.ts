@@ -194,6 +194,9 @@ export class RoomService {
   }
 
   async getRecoverableRoomSnapshot(roomId: string, sessionId: string): Promise<RoomSnapshot | null> {
+    const tombstoneModel = (this.prisma as PrismaService & { roomTombstone?: { findUnique: (args: unknown) => Promise<{ status?: string } | null> } }).roomTombstone;
+    const tombstone = tombstoneModel ? await tombstoneModel.findUnique({ where: { roomId } }).catch(() => null) : null;
+    if (tombstone?.status === "SUCCEEDED") return null;
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
 
     if (
@@ -235,6 +238,13 @@ export class RoomService {
       )
     );
 
+    return { ok: true };
+  }
+
+  async deleteRoomByAdmin(roomId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    await this.roomRecordRepository.deleteRecord(record);
+    await Promise.all(record.room.members.map((member) => this.roomRecordRepository.clearRecentRoomForSessionIfMatching(member.id, roomId)));
     return { ok: true };
   }
 

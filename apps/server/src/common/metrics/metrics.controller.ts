@@ -1,4 +1,4 @@
-import { Controller, Get, Header } from "@nestjs/common";
+import { Controller, Get, Header, UnauthorizedException, Headers } from "@nestjs/common";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { MetricsService } from "./metrics.service";
@@ -13,7 +13,17 @@ export class MetricsController {
 
   @Get("metrics")
   @Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-  getMetrics() {
+  getMetrics(@Headers("authorization") authorization?: string) {
+    const configuredToken = process.env.METRICS_TOKEN?.trim();
+    if (process.env.NODE_ENV === "production" && !configuredToken) {
+      throw new UnauthorizedException("Metrics authentication is not configured.");
+    }
+    if (process.env.NODE_ENV === "production" && configuredToken) {
+      const expected = `Bearer ${configuredToken}`;
+      if (authorization !== expected) {
+        throw new UnauthorizedException("Metrics authentication required.");
+      }
+    }
     return this.metrics.renderPrometheus({
       prismaAvailable: this.prisma.isAvailable(),
       redisAvailable: this.redis.isAvailable()

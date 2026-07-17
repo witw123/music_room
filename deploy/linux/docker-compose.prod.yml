@@ -69,6 +69,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_DB: ${REDIS_DB}
       JWT_SECRET: ${JWT_SECRET}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET}
+      METRICS_TOKEN: ${METRICS_TOKEN}
+      ADMIN_PANEL_ENABLED: ${ADMIN_PANEL_ENABLED:-true}
+      ADMIN_MUTATIONS_ENABLED: ${ADMIN_MUTATIONS_ENABLED:-false}
+      CLIENT_TELEMETRY_ENABLED: ${CLIENT_TELEMETRY_ENABLED:-true}
       CORS_ORIGINS: ${CORS_ORIGINS}
       TURN_ENABLED: ${TURN_ENABLED}
       TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST}
@@ -123,6 +128,7 @@ services:
       NEXT_PUBLIC_TURN_USERNAME: ${NEXT_PUBLIC_TURN_USERNAME}
       NEXT_PUBLIC_TURN_CREDENTIAL: ${NEXT_PUBLIC_TURN_CREDENTIAL}
       NEXT_PUBLIC_WEBRTC_ICE_SERVERS: ${NEXT_PUBLIC_WEBRTC_ICE_SERVERS}
+      NEXT_PUBLIC_CLIENT_TELEMETRY_ENABLED: ${NEXT_PUBLIC_CLIENT_TELEMETRY_ENABLED:-true}
       NEXT_PUBLIC_NETEASE_ENABLED: ${NEXT_PUBLIC_NETEASE_ENABLED:-false}
       NEXT_PUBLIC_QQMUSIC_ENABLED: ${NEXT_PUBLIC_QQMUSIC_ENABLED:-false}
       NEXT_PUBLIC_KUGOU_ENABLED: ${NEXT_PUBLIC_KUGOU_ENABLED:-false}
@@ -149,7 +155,49 @@ services:
       - ./nginx/music-room.routes.conf:/etc/nginx/conf.d/music-room.routes.conf:ro
       - certbot_certs:/etc/letsencrypt:ro
 
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    volumes:
+      - ./observability-rendered/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: https://${APP_DOMAIN}/ops/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  alertmanager:
+    profiles: [observability]
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
+    volumes:
+      - ./observability-rendered/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+
 volumes:
   postgres_data:
   redis_data:
   certbot_certs:
+  prometheus_data:
+  grafana_data:

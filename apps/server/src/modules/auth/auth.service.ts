@@ -11,6 +11,11 @@ type StoredUser = UserProfile & {
   passwordHash: string;
   createdAt: string;
   updatedAt: string;
+  role: "USER" | "ADMIN";
+  status: "ACTIVE" | "DISABLED";
+  disabledAt?: string | null;
+  disabledReason?: string | null;
+  lastLoginAt?: string | null;
   persistence: PersistenceMode;
 };
 
@@ -81,6 +86,8 @@ export class AuthService {
       passwordHash: hashPassword(password),
       createdAt: now,
       updatedAt: now,
+      role: "USER",
+      status: "ACTIVE",
       persistence
     };
 
@@ -93,6 +100,11 @@ export class AuthService {
           username: user.username,
           passwordHash: user.passwordHash,
           nickname: user.nickname,
+          role: user.role,
+          status: user.status,
+          disabledAt: user.disabledAt ? new Date(user.disabledAt) : null,
+          disabledReason: user.disabledReason ?? null,
+          lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt) : null,
           createdAt: new Date(user.createdAt),
           updatedAt: new Date(user.updatedAt)
         }
@@ -132,11 +144,37 @@ export class AuthService {
 
     await this.ensureAuthLookupAvailableOrThrow();
     const user = await this.getUserByUsernameOrThrow(username);
+    if (user.status === "DISABLED") {
+      throw new Error("Account is disabled.");
+    }
     if (!verifyPassword(password, user.passwordHash)) {
       throw new Error("Invalid username or password.");
     }
 
-    return this.createSessionForUser(user);
+    const session = await this.createSessionForUser(user);
+    if (user.persistence === "database" && (await this.prisma.ensureAvailable())) {
+      await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    }
+    return session;
+  }
+
+  async authenticateCredentials(input: { username: string; password: string }) {
+    const username = input.username.trim().toLowerCase();
+    if (!username || !input.password) {
+      throw new Error("Username and password are required.");
+    }
+    await this.ensureAuthLookupAvailableOrThrow();
+    const user = await this.getUserByUsernameOrThrow(username);
+    if (!verifyPassword(input.password, user.passwordHash)) {
+      throw new Error("Invalid username or password.");
+    }
+    return {
+      id: user.id,
+      username: user.username,
+      nickname: user.nickname,
+      role: user.role ?? "USER",
+      status: user.status ?? "ACTIVE"
+    };
   }
 
   async logout(token?: string) {
@@ -195,6 +233,9 @@ export class AuthService {
     }
 
     const user = await this.getUserOrThrow(storedSession.userId);
+    if ((user as UserProfile & { status?: string }).status === "DISABLED") {
+      throw new Error("Account is disabled.");
+    }
     return this.toAuthSession(user, storedSession);
   }
 
@@ -213,6 +254,15 @@ export class AuthService {
 
     const cached = this.usersById.get(userId);
     if (cached) {
+      if (cached.persistence === "database" && (await this.prisma.ensureAvailable())) {
+        const persisted = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!persisted) throw new Error(`Unknown user: ${userId}`);
+        cached.role = persisted.role;
+        cached.status = persisted.status;
+        cached.disabledAt = persisted.disabledAt?.toISOString() ?? null;
+        cached.disabledReason = persisted.disabledReason ?? null;
+        cached.lastLoginAt = persisted.lastLoginAt?.toISOString() ?? null;
+      }
       return toUserProfile(cached);
     }
 
@@ -226,6 +276,11 @@ export class AuthService {
           id: persisted.id,
           username: persisted.username,
           nickname: persisted.nickname,
+          role: persisted.role,
+          status: persisted.status,
+          disabledAt: persisted.disabledAt?.toISOString() ?? null,
+          disabledReason: persisted.disabledReason ?? null,
+          lastLoginAt: persisted.lastLoginAt?.toISOString() ?? null,
           passwordHash: persisted.passwordHash,
           createdAt: persisted.createdAt.toISOString(),
           updatedAt: persisted.updatedAt.toISOString(),
@@ -246,6 +301,16 @@ export class AuthService {
     if (cachedUserId) {
       const cached = this.usersById.get(cachedUserId);
       if (cached) {
+        if (cached.persistence === "database" && (await this.prisma.ensureAvailable())) {
+          const persisted = await this.prisma.user.findUnique({ where: { id: cached.id } });
+          if (persisted) {
+            cached.role = persisted.role;
+            cached.status = persisted.status;
+            cached.disabledAt = persisted.disabledAt?.toISOString() ?? null;
+            cached.disabledReason = persisted.disabledReason ?? null;
+            cached.lastLoginAt = persisted.lastLoginAt?.toISOString() ?? null;
+          }
+        }
         return cached;
       }
     }
@@ -260,6 +325,11 @@ export class AuthService {
           id: persisted.id,
           username: persisted.username,
           nickname: persisted.nickname,
+          role: persisted.role,
+          status: persisted.status,
+          disabledAt: persisted.disabledAt?.toISOString() ?? null,
+          disabledReason: persisted.disabledReason ?? null,
+          lastLoginAt: persisted.lastLoginAt?.toISOString() ?? null,
           passwordHash: persisted.passwordHash,
           createdAt: persisted.createdAt.toISOString(),
           updatedAt: persisted.updatedAt.toISOString(),
@@ -461,7 +531,9 @@ function toUserProfile(user: StoredUser): UserProfile {
   return {
     id: user.id,
     username: user.username,
-    nickname: user.nickname
+    nickname: user.nickname,
+    role: user.role,
+    status: user.status
   };
 }
 

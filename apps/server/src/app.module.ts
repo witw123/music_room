@@ -15,6 +15,7 @@ import { RedisModule } from "./infra/redis/redis.module";
 import { MetricsModule } from "./common/metrics/metrics.module";
 import { NeteaseModule } from "./modules/providers/netease/netease.module";
 import { MetingModule } from "./modules/providers/meting/meting.module";
+import { AdminModule } from "./modules/admin/admin.module";
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { MetingModule } from "./modules/providers/meting/meting.module";
     SignalingModule,
     TrackModule,
     NeteaseModule,
-    MetingModule
+    MetingModule,
+    AdminModule
   ]
 })
 export class AppModule {}
