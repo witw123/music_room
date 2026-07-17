@@ -131,34 +131,58 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async overview() {
     const now = new Date();
-    const [users, rooms, incidents] = await Promise.all([this.prisma.user.findMany({ select: { status: true } }), this.prisma.roomState.findMany({ select: { members: true, playback: true } }), this.prisma.operationalIncident.count({ where: { status: "OPEN" } })]);
-    const activeRooms = rooms.filter((room) => Array.isArray(room.members) && (room.members as unknown[]).some((member) => (member as { presenceState?: string }).presenceState === "online"));
-    const playbackActive = rooms.filter((room) => (room.playback as { status?: string } | null)?.status === "playing").length;
+    const [users, rooms, incidents] = await Promise.all([this.prisma.user.findMany({ select: { status: true } }), this.prisma.roomState.findMany({ orderBy: { updatedAt: "desc" } }), this.prisma.operationalIncident.count({ where: { status: "OPEN" } })]);
+    const summaries = await Promise.all(rooms.map((room) => this.roomSummary(room)));
+    const activeRooms = summaries.filter((room) => room.onlineMemberCount > 0);
+    const playbackActive = summaries.filter((room) => room.playbackStatus === "playing").length;
     let instances = 1;
     if (this.redis.isAvailable()) {
-      const stale = await this.redis.getSortedSetMembersByScore("music-room:admin:instances", "-inf", Date.now() - 30_000).catch(() => []);
-      instances = Math.max(1, stale.length);
+      const active = await this.redis.getSortedSetMembersByScore("music-room:admin:instances", Date.now() - 30_000, "+inf").catch(() => []);
+      instances = Math.max(1, active.length);
     }
-    return { generatedAt: now.toISOString(), dependencies: { prisma: this.prisma.isAvailable() ? "up" : "down", redis: this.redis.isAvailable() ? "up" : "down", redisMode: this.redis.getMode() }, users: { total: users.length, online: 0, disabled: users.filter((user) => user.status === "DISABLED").length }, rooms: { total: rooms.length, active: activeRooms.length, healthy: 0, degraded: 0, critical: 0, unknown: rooms.length }, playback: { active: playbackActive, paused: Math.max(0, rooms.length - playbackActive) }, openIncidents: incidents, instances };
+    const healthy = summaries.filter((room) => room.health === "healthy").length;
+    const degraded = summaries.filter((room) => room.health === "degraded").length;
+    const critical = summaries.filter((room) => room.health === "critical").length;
+    const unknown = summaries.filter((room) => room.health === "unknown").length;
+    return { generatedAt: now.toISOString(), dependencies: { prisma: this.prisma.isAvailable() ? "up" : "down", redis: this.redis.isAvailable() ? "up" : "down", redisMode: this.redis.getMode() }, users: { total: users.length, online: new Set(summaries.flatMap((room) => room.onlineUserIds)).size, disabled: users.filter((user) => user.status === "DISABLED").length }, rooms: { total: rooms.length, active: activeRooms.length, healthy, degraded, critical, unknown }, playback: { active: playbackActive, paused: Math.max(0, rooms.length - playbackActive) }, openIncidents: incidents, instances };
   }
 
   async listRooms(query: { q?: string; limit?: number }) {
     const rows = await this.prisma.roomState.findMany({ orderBy: { updatedAt: "desc" }, take: Math.min(query.limit ?? 50, 100) });
     const q = query.q?.trim().toLowerCase();
-    const data = rows.filter((row) => !q || row.id.toLowerCase().includes(q) || row.joinCode.toLowerCase().includes(q)).map((row) => this.roomSummary(row));
+    const data = await Promise.all(rows.filter((row) => !q || row.id.toLowerCase().includes(q) || row.joinCode.toLowerCase().includes(q)).map((row) => this.roomSummary(row)));
     return { data, nextCursor: null, generatedAt: new Date().toISOString() };
   }
 
   async roomDetail(roomId: string) {
     const row = await this.prisma.roomState.findUnique({ where: { id: roomId } });
     if (!row) throw new NotFoundException("房间不存在。");
-    return { ...this.roomSummary(row), playback: row.playback, queue: row.queue, tracks: row.tracks, members: row.members };
+    const summary = await this.roomSummary(row);
+    const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; peerId?: string | null; presenceState?: string; [key: string]: unknown }> : [];
+    const livePresence = await this.readLivePresence(row.id, members);
+    const liveMembers = members.map((member) => {
+      if (!member.id) return member;
+      const live = livePresence.get(member.id);
+      return live ? { ...member, peerId: live.peerId, presenceState: live.presenceState } : { ...member, peerId: null, presenceState: "offline" };
+    });
+    return { ...summary, playback: row.playback, queue: row.queue, tracks: row.tracks, members: liveMembers };
   }
 
   async listUsers(query: { q?: string; limit?: number }) {
-    const rows = await this.prisma.user.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(query.limit ?? 50, 100), include: { _count: { select: { userSessions: true } }, userSessions: { where: { expiresAt: { gt: new Date() } }, select: { id: true } } } });
+    const [rows, rooms] = await Promise.all([
+      this.prisma.user.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(query.limit ?? 50, 100), include: { _count: { select: { userSessions: true } }, userSessions: { where: { expiresAt: { gt: new Date() } }, select: { id: true } } } }),
+      this.prisma.roomState.findMany({ select: { id: true, members: true } })
+    ]);
+    const onlineRoomCounts = new Map<string, number>();
+    await Promise.all(rooms.map(async (room) => {
+      const members = Array.isArray(room.members) ? room.members as Array<{ id?: string; peerId?: string | null; presenceState?: string }> : [];
+      const livePresence = await this.readLivePresence(room.id, members);
+      for (const member of members) {
+        if (member.id && livePresence.get(member.id)?.presenceState === "online") onlineRoomCounts.set(member.id, (onlineRoomCounts.get(member.id) ?? 0) + 1);
+      }
+    }));
     const q = query.q?.trim().toLowerCase();
-    const data = rows.filter((row) => !q || row.username.includes(q) || row.nickname.toLowerCase().includes(q)).map((row) => ({ id: row.id, username: row.username, nickname: row.nickname, role: row.role, status: row.status, createdAt: row.createdAt.toISOString(), lastLoginAt: row.lastLoginAt?.toISOString() ?? null, activeSessionCount: row.userSessions.length, onlineRoomCount: 0 }));
+    const data = rows.filter((row) => !q || row.username.includes(q) || row.nickname.toLowerCase().includes(q)).map((row) => ({ id: row.id, username: row.username, nickname: row.nickname, role: row.role, status: row.status, createdAt: row.createdAt.toISOString(), lastLoginAt: row.lastLoginAt?.toISOString() ?? null, activeSessionCount: row.userSessions.length, onlineRoomCount: onlineRoomCounts.get(row.id) ?? 0 }));
     return { data, nextCursor: null, generatedAt: new Date().toISOString() };
   }
 
@@ -217,10 +241,61 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async listIncidents(limit = 50) { return { data: await this.prisma.operationalIncident.findMany({ orderBy: { lastSeenAt: "desc" }, take: Math.min(limit, 100) }), nextCursor: null, generatedAt: new Date().toISOString() }; }
   async listAudit(limit = 50) { return { data: await this.prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(limit, 100), select: { id: true, actorUserId: true, action: true, targetType: true, targetId: true, reason: true, result: true, createdAt: true } }), nextCursor: null, generatedAt: new Date().toISOString() }; }
 
-  private roomSummary(row: { id: string; joinCode: string; visibility: string; hostId: string; members: unknown; playback: unknown; updatedAt: Date }) {
-    const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; nickname?: string; presenceState?: string }> : [];
+  private async roomSummary(row: { id: string; joinCode: string; visibility: string; hostId: string; members: unknown; playback: unknown; updatedAt: Date }) {
+    const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; nickname?: string; presenceState?: string; peerId?: string | null }> : [];
     const playback = (row.playback ?? {}) as { status?: string; currentTrackId?: string };
-    return { id: row.id, joinCode: row.joinCode, visibility: row.visibility, hostId: row.hostId, hostNickname: members.find((member) => member.id === row.hostId)?.nickname ?? null, memberCount: members.length, onlineMemberCount: members.filter((member) => member.presenceState === "online").length, playbackStatus: playback.status ?? "idle", currentTrackTitle: null, health: "unknown" as const, telemetryCoverage: { reported: 0, total: members.length }, updatedAt: row.updatedAt.toISOString() };
+    const livePresence = await this.readLivePresence(row.id, members);
+    const onlineMembers = members.filter((member) => member.id && livePresence.get(member.id)?.presenceState === "online");
+    const reportedPeerIds = await this.readReportedPeerIds(row.id);
+    const reported = onlineMembers.filter((member) => { const peerId = livePresence.get(member.id!)?.peerId; return !!peerId && reportedPeerIds.has(peerId); }).length;
+    const health = await this.resolveRoomHealth(row.id, onlineMembers, livePresence, reportedPeerIds);
+    return { id: row.id, joinCode: row.joinCode, visibility: row.visibility, hostId: row.hostId, hostNickname: members.find((member) => member.id === row.hostId)?.nickname ?? null, memberCount: members.length, onlineMemberCount: onlineMembers.length, onlineUserIds: onlineMembers.map((member) => member.id!), playbackStatus: playback.status ?? "idle", currentTrackTitle: null, health, telemetryCoverage: { reported, total: onlineMembers.length }, updatedAt: row.updatedAt.toISOString() };
+  }
+
+  private async resolveRoomHealth(roomId: string, onlineMembers: Array<{ id?: string }>, livePresence: Map<string, { peerId: string | null; presenceState: string }>, reportedPeerIds: Set<string>) {
+    if (onlineMembers.length === 0) return "unknown" as const;
+    if (!this.redis.isAvailable() || reportedPeerIds.size === 0) return "unknown" as const;
+    const peerIds = onlineMembers.map((member) => member.id ? livePresence.get(member.id)?.peerId : null).filter((peerId): peerId is string => !!peerId && reportedPeerIds.has(peerId));
+    if (peerIds.length < onlineMembers.length) return "degraded" as const;
+    let rawReports: Array<string | null>;
+    try {
+      rawReports = await this.redis.getStrings(peerIds.map((peerId) => "music-room:admin:telemetry:peer:" + roomId + ":" + peerId));
+    } catch {
+      return "unknown" as const;
+    }
+    let hasDegraded = false;
+    let missingReport = false;
+    for (const raw of rawReports) {
+      if (!raw) { missingReport = true; continue; }
+      try {
+        const report = JSON.parse(raw) as { peers?: Array<{ mediaConnectionState?: string | null; mediaTrackState?: string | null; packetLossRate?: number | null; jitterMs?: number | null; rttMs?: number | null }> };
+        for (const peer of report.peers ?? []) {
+          if (peer.mediaConnectionState === "failed" || peer.mediaTrackState === "failed" || (peer.packetLossRate ?? 0) >= 0.05 || (peer.jitterMs ?? 0) >= 50 || (peer.rttMs ?? 0) >= 500) return "critical" as const;
+          if ((peer.mediaConnectionState && !["connected", "completed", "new"].includes(peer.mediaConnectionState)) || (peer.packetLossRate ?? 0) >= 0.03 || (peer.jitterMs ?? 0) >= 30 || (peer.rttMs ?? 0) >= 250 || peer.mediaTrackState === "ended") hasDegraded = true;
+        }
+      } catch { hasDegraded = true; }
+    }
+    return missingReport || hasDegraded ? "degraded" as const : "healthy" as const;
+  }
+
+  private async readLivePresence(roomId: string, members: Array<{ id?: string; peerId?: string | null; presenceState?: string }>) {
+    const result = new Map<string, { peerId: string | null; presenceState: string }>();
+    const fallback = () => { members.forEach((member) => { if (member.id && member.presenceState === "online") result.set(member.id, { peerId: member.peerId ?? null, presenceState: "online" }); }); };
+    if (!this.redis.isAvailable() || members.length === 0) { fallback(); return result; }
+    let values: Array<string | null>;
+    try {
+      values = await this.redis.getStrings(members.map((member) => "music-room:presence:" + roomId + ":" + member.id));
+    } catch {
+      return result;
+    }
+    values.forEach((raw, index) => { const member = members[index]; if (!raw || !member?.id) return; try { const parsed = JSON.parse(raw) as { peerId?: string | null; presenceState?: string }; result.set(member.id, { peerId: parsed.peerId ?? null, presenceState: parsed.presenceState ?? "offline" }); } catch { /* ignore malformed presence */ } });
+    return result;
+  }
+
+  private async readReportedPeerIds(roomId: string) {
+    if (!this.redis.isAvailable()) return new Set<string>();
+    const members = await this.redis.getSortedSetMembersByScore(`music-room:admin:telemetry:room-peers:${roomId}`, Date.now() - 45_000, "+inf").catch(() => []);
+    return new Set(members);
   }
 
   private async publishUserInvalidated(userId: string) {

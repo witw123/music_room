@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary } from "@music-room/shared";
 import { adminApi, AdminApiError } from "@/lib/admin-api";
 
@@ -17,18 +17,53 @@ export default function AdminPage() {
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const loadingRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
+  const latestLoadRef = useRef<(() => Promise<void>) | null>(null);
+  const requestSequenceRef = useRef(0);
   const load = useCallback(async () => {
+    const requestSequence = ++requestSequenceRef.current;
+    if (loadingRef.current) {
+      refreshQueuedRef.current = true;
+      return;
+    }
+    loadingRef.current = true;
+    setRefreshing(true);
     try {
       setError(""); const current = session ?? await adminApi.session(); setSession(current);
       const [overviewData, roomData, userData, incidentData, auditData] = await Promise.all([adminApi.overview(), adminApi.rooms(query), adminApi.users(query), adminApi.incidents(), adminApi.audit()]);
+      if (requestSequence !== requestSequenceRef.current) return;
       setOverview(overviewData); setRooms(roomData.data); setUsers(userData.data); setIncidents(incidentData.data); setAudit(auditData.data);
-    } catch (cause) { if (cause instanceof AdminApiError && (cause.status === 401 || cause.status === 403)) { window.location.assign("/admin/login"); return; } setError(cause instanceof Error ? cause.message : "管理数据加载失败。"); }
+      setLastUpdatedAt(overviewData.generatedAt);
+    } catch (cause) { if (cause instanceof AdminApiError && (cause.status === 401 || cause.status === 403)) { window.location.assign("/admin/login"); return; } if (requestSequence === requestSequenceRef.current) setError(cause instanceof Error ? cause.message : "管理数据加载失败。"); }
+    finally {
+      loadingRef.current = false;
+      if (requestSequence === requestSequenceRef.current) setRefreshing(false);
+      if (refreshQueuedRef.current) {
+        refreshQueuedRef.current = false;
+        void latestLoadRef.current?.();
+      }
+    }
   }, [query, session]);
-  useEffect(() => { void load(); const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, tab === "overview" ? 5000 : 10000); return () => window.clearInterval(timer); }, [load, tab]);
+  latestLoadRef.current = load;
+  useEffect(() => {
+    void load();
+    const refreshIfVisible = () => { if (document.visibilityState === "visible") void load(); };
+    const timer = window.setInterval(refreshIfVisible, tab === "overview" ? 5000 : 10000);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [load, tab]);
   async function logout() { await adminApi.logout().catch(() => undefined); window.sessionStorage.removeItem("music-room-admin-csrf"); window.location.assign("/admin/login"); }
   const labels: Record<Tab, string> = { overview: "系统总览", rooms: "房间", users: "用户", incidents: "异常", audit: "审计", system: "系统" };
   const tabs: Tab[] = ["overview", "rooms", "users", "incidents", "audit", "system"];
-  return <div className="min-h-screen bg-[#07080b] text-white"><header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#07080b]/95"><div className="flex h-16 items-center justify-between px-4 lg:px-8"><div><div className="font-semibold">Music Room / Admin</div><div className="text-[11px] text-white/40">运营观测台</div></div><div className="flex items-center gap-3 text-sm text-white/60"><span>{session?.nickname ?? "管理员"}</span><button onClick={() => void load()} className="border border-white/10 px-3 py-1.5 text-xs hover:bg-white/10">刷新</button><button onClick={() => void logout()} className="border border-white/10 px-3 py-1.5 text-xs hover:bg-white/10">退出</button></div></div></header><div className="mx-auto flex max-w-[1500px] flex-col lg:flex-row"><nav className="flex gap-1 overflow-x-auto border-b border-white/[0.08] p-3 lg:w-52 lg:flex-col lg:border-b-0 lg:border-r lg:pt-8">{tabs.map(id => <button key={id} onClick={() => setTab(id)} className={"whitespace-nowrap px-3 py-2 text-left text-sm " + (tab === id ? "bg-[#0070f3] text-white" : "text-white/55 hover:bg-white/5")}>{labels[id]}</button>)}</nav><main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] tracking-[0.2em] text-[#60a5fa]">CONTROL PLANE</p><h1 className="mt-2 text-3xl font-semibold">{labels[tab]}</h1></div>{tab === "rooms" || tab === "users" ? <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索 ID、用户名或昵称" className="w-full border border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#0070f3] sm:w-72" /> : null}</div>{error ? <div className="mt-5 border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error} <button onClick={() => void load()} className="ml-3 underline">重试</button></div> : null}{tab === "overview" ? <Overview overview={overview} /> : tab === "rooms" ? <Rooms rooms={rooms} refresh={load} /> : tab === "users" ? <Users users={users} refresh={load} /> : tab === "incidents" ? <Incidents rows={incidents} /> : tab === "audit" ? <Audit rows={audit} /> : <System overview={overview} />}</main></div></div>;
+  return <div className="min-h-screen bg-[#07080b] text-white"><header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#07080b]/95"><div className="flex h-16 items-center justify-between px-4 lg:px-8"><div><div className="font-semibold">Music Room / Admin</div><div className="text-[11px] text-white/40">运营观测台</div></div><div className="flex items-center gap-3 text-sm text-white/60"><span>{session?.nickname ?? "管理员"}</span><span className="hidden font-mono text-[10px] text-white/35 sm:inline">{refreshing ? "刷新中..." : lastUpdatedAt ? `更新于 ${new Date(lastUpdatedAt).toLocaleTimeString()}` : "等待数据"}</span><button onClick={() => void load()} disabled={refreshing} className="border border-white/10 px-3 py-1.5 text-xs hover:bg-white/10 disabled:cursor-wait disabled:opacity-50">{refreshing ? "刷新中" : "刷新"}</button><button onClick={() => void logout()} className="border border-white/10 px-3 py-1.5 text-xs hover:bg-white/10">退出</button></div></div></header><div className="mx-auto flex max-w-[1500px] flex-col lg:flex-row"><nav className="flex gap-1 overflow-x-auto border-b border-white/[0.08] p-3 lg:w-52 lg:flex-col lg:border-b-0 lg:border-r lg:pt-8">{tabs.map(id => <button key={id} onClick={() => setTab(id)} className={"whitespace-nowrap px-3 py-2 text-left text-sm " + (tab === id ? "bg-[#0070f3] text-white" : "text-white/55 hover:bg-white/5")}>{labels[id]}</button>)}</nav><main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] tracking-[0.2em] text-[#60a5fa]">CONTROL PLANE</p><h1 className="mt-2 text-3xl font-semibold">{labels[tab]}</h1></div>{tab === "rooms" || tab === "users" ? <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索 ID、用户名或昵称" className="w-full border border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#0070f3] sm:w-72" /> : null}</div>{error ? <div className="mt-5 border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error} <button onClick={() => void load()} className="ml-3 underline">重试</button></div> : null}{tab === "overview" ? <Overview overview={overview} /> : tab === "rooms" ? <Rooms rooms={rooms} refresh={load} /> : tab === "users" ? <Users users={users} refresh={load} /> : tab === "incidents" ? <Incidents rows={incidents} /> : tab === "audit" ? <Audit rows={audit} /> : <System overview={overview} />}</main></div></div>;
 }
 function Overview({ overview }: { overview: AdminOverview | null }) { return <><div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="在线用户" value={overview?.users.online ?? 0} /><Metric label="活跃房间" value={overview?.rooms.active ?? 0} /><Metric label="正在播放" value={overview?.playback.active ?? 0} /><Metric label="打开异常" value={overview?.openIncidents ?? 0} /></div><section className="mt-8 border border-white/[0.08] p-5"><h2 className="text-sm font-medium">依赖状态</h2><div className="mt-4 grid gap-3 sm:grid-cols-3"><Status label="PostgreSQL" value={overview?.dependencies.prisma} /><Status label="Redis" value={overview?.dependencies.redis} /><Status label="实例" value={String(overview?.instances ?? 0)} /></div></section></>; }
 function Rooms({ rooms, refresh }: { rooms: AdminRoomSummary[]; refresh: () => Promise<void> }) { return <Table><thead><tr><Th>房间</Th><Th>健康</Th><Th>成员</Th><Th>播放</Th><Th>操作</Th></tr></thead><tbody>{rooms.map(room => <tr key={room.id}><Td><a href={"/admin/rooms/" + encodeURIComponent(room.id)} className="font-mono text-xs text-[#60a5fa] underline">{room.id}</a><div className="text-xs text-white/40">{room.joinCode}</div></Td><Td><Badge value={room.health} /></Td><Td>{room.onlineMemberCount}/{room.memberCount}</Td><Td>{room.playbackStatus}</Td><Td><button className="text-xs text-red-300 underline" onClick={async () => { const code = window.prompt("输入当前房间码"); const reason = window.prompt("终止原因（至少 8 字）"); if (code && reason && window.confirm("确认永久结束此房间？")) { await adminApi.terminateRoom(room.id, code, reason); await refresh(); } }}>永久结束</button></Td></tr>)}</tbody></Table>; }
