@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "./api-client";
+import { importBandwidthGovernor } from "./import-bandwidth-governor";
 import {
   errorCodes,
   type ApiErrorResponse,
@@ -154,10 +155,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return rawBody as T;
 }
 
-async function requestBlob(path: string, init?: RequestInit) {
+async function requestBlob(path: string, init?: RequestInit, options?: { throttleImport?: boolean }) {
   const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
+    ...(options?.throttleImport ? { priority: "low" as const } : {}),
     headers: {
       ...(sessionToken ? { "x-session-token": sessionToken } : {}),
       ...(init?.headers ?? {})
@@ -189,7 +191,9 @@ async function requestBlob(path: string, init?: RequestInit) {
   }
 
   return {
-    blob: await response.blob(),
+    blob: options?.throttleImport
+      ? await importBandwidthGovernor.readResponse(response, init?.signal ?? undefined)
+      : await response.blob(),
     contentType: response.headers.get("content-type") ?? "application/octet-stream"
   };
 }
@@ -305,7 +309,8 @@ export const musicRoomApi = {
   ) =>
     requestBlob(
       `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
-      { signal }
+      { signal },
+      { throttleImport: true }
     ),
   searchMetingTracks: (
     provider: MetingProvider,
@@ -333,7 +338,8 @@ export const musicRoomApi = {
   ) =>
     requestBlob(
       `/v1/providers/${encodeURIComponent(provider)}/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
-      { signal }
+      { signal },
+      { throttleImport: true }
     ),
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),

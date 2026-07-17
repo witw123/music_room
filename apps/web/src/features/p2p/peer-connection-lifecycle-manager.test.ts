@@ -339,6 +339,40 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaOffers).toHaveLength(1);
   });
 
+  it("recreates a wedged source media peer after consecutive zero outbound samples", async () => {
+    const { manager } = createManager();
+    const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+
+    const initialMediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    initialMediaPeer.signalingState = "stable";
+    await vi.advanceTimersByTimeAsync(0);
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    const sample = {
+      mediaReceiveBitrateKbps: null,
+      mediaSendBitrateKbps: 0,
+      packetLossRate: null,
+      jitterMs: null
+    } as PeerConnectionStatsSample;
+
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(initialMediaPeer.connectionState).toBe("closed");
+    expect(manager.getPeerEntry("peer_b", "media")).not.toBe(mediaEntry);
+    expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(2);
+  });
+
   it("restarts a connected listener media peer when its remote track never arrives", async () => {
     const { manager, sendSignal } = createManager();
 

@@ -18,7 +18,7 @@ export type DataMeshBridge = {
     options?: { forceReconnectDegraded?: boolean }
   ): Promise<boolean>;
   restartPeer(peerId: string): Promise<unknown>;
-  restartMediaPeer?(peerId: string): Promise<unknown>;
+  restartMediaPeer?(peerId: string, options?: { forceRecreate?: boolean }): Promise<unknown>;
   getConnectedPeerIds(): string[];
   isReady(): boolean;
 };

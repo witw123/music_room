@@ -125,7 +125,7 @@ type UseRoomRuntimeResult = {
     maxBitrateKbps?: number | null
   ) => void;
   getPeerMediaState: (peerId: string) => ReturnType<P2PMesh["getPeerMediaState"]>;
-  restartMediaPeer: (peerId: string) => Promise<unknown>;
+  restartMediaPeer: (peerId: string, options?: { forceRecreate?: boolean }) => Promise<unknown>;
 };
 
 export function shouldStartRoomRealtimeRuntime(input: {
@@ -600,7 +600,8 @@ export function useRoomRuntime({
     [meshRef]
   );
   const restartMediaPeer = useCallback(
-    (remotePeerId: string) => meshRef.current?.restartMediaPeer(remotePeerId) ?? Promise.resolve(null),
+    (remotePeerId: string, options?: { forceRecreate?: boolean }) =>
+      meshRef.current?.restartMediaPeer(remotePeerId, options) ?? Promise.resolve(null),
     [meshRef]
   );
 

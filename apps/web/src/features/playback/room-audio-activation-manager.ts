@@ -24,6 +24,8 @@ export type PrimeRoomAudioOutputsResult = {
 export class RoomAudioActivationManager {
   private sharedContext: AudioContext | null = null;
   private activated = false;
+  private lifecycleListenersInstalled = false;
+  private resumeInFlight: Promise<boolean> | null = null;
   private readonly playedElementSourceKeys = new WeakMap<HTMLAudioElement, string>();
   private readonly sourceObjectIds = new WeakMap<object, number>();
   private nextSourceObjectId = 1;
@@ -194,16 +196,49 @@ export class RoomAudioActivationManager {
 
   private async resumeSharedContext() {
     const context = this.getOrCreateSharedContext();
+    this.installLifecycleListeners(context);
     if (!context || context.state !== "suspended") {
       return context !== null;
     }
 
-    try {
-      await context.resume();
-      return true;
-    } catch {
-      return false;
+    if (this.resumeInFlight) {
+      return this.resumeInFlight;
     }
+
+    const resume = context.resume().then(
+      () => context.state === "running",
+      () => false
+    );
+    this.resumeInFlight = resume;
+    try {
+      return await resume;
+    } finally {
+      if (this.resumeInFlight === resume) {
+        this.resumeInFlight = null;
+      }
+    }
+  }
+
+  private installLifecycleListeners(context: AudioContext | null) {
+    if (
+      !context ||
+      this.lifecycleListenersInstalled ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    this.lifecycleListenersInstalled = true;
+    const resume = () => {
+      if (this.activated && context.state === "suspended") {
+        void this.resumeSharedContext();
+      }
+    };
+    window.addEventListener("pageshow", resume);
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", resume);
+    }
+    context.addEventListener?.("statechange", resume);
   }
 
   private getOrCreateSharedContext() {

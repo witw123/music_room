@@ -354,7 +354,7 @@ export class PeerConnectionLifecycleManager {
     });
   }
 
-  async restartMediaPeer(peerId: string) {
+  async restartMediaPeer(peerId: string, options?: { forceRecreate?: boolean }) {
     const entry = this.peerConnections.get(peerId, "media");
     if (!entry || entry.releasing) {
       // A recovery-created media peer must actively announce itself. The
@@ -369,11 +369,16 @@ export class PeerConnectionLifecycleManager {
     const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live" &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
+    const missingReceiverPackets = this.hasExpectedRemoteAudioTrack(peerId) &&
+      entry.receiverTrackState === "live" &&
+      entry.receiverRtpActive === false &&
+      now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
     if (
+      options?.forceRecreate ||
       entry.connection.connectionState === "failed" ||
       entry.connection.connectionState === "closed" ||
       (entry.connection.signalingState !== "stable" && staleSignal) ||
-      (entry.connection.signalingState === "stable" && missingExpectedTrack)
+      (entry.connection.signalingState === "stable" && (missingExpectedTrack || missingReceiverPackets))
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
@@ -923,7 +928,7 @@ export class PeerConnectionLifecycleManager {
     state.highJitterWindows = jitter >= 30 ? state.highJitterWindows + 1 : 0;
     const reason = (
       (noReceivePackets && state.noPacketWindows >= 2) ||
-      (!localSourceIsActive && noSendPackets && state.noSendPacketWindows >= 2)
+      (noSendPackets && state.noSendPacketWindows >= 3)
     )
       ? "no-packets" as const
       : state.highLossWindows >= 3
@@ -1086,7 +1091,12 @@ export class PeerConnectionLifecycleManager {
       reason: shouldReportFailure ? "connection-failed" : reason,
       restartCount
     });
-    void this.restartMediaPeer(peerId);
+    void this.restartMediaPeer(peerId, {
+      // A sender can remain "live" while its RTP pipeline is wedged. In that
+      // state replaceTrack is a no-op, so recreate only this media peer after
+      // several consecutive zero-rate samples.
+      forceRecreate: reason === "no-packets"
+    });
   }
 
   private markMediaRecovered(peerId: string) {

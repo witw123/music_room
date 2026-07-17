@@ -40,8 +40,8 @@ export function createDataMeshBridge(
     restartPeer(peerId) {
       return meshRef.current?.restartPeer(peerId) ?? Promise.resolve(null);
     },
-    restartMediaPeer(peerId) {
-      return meshRef.current?.restartMediaPeer?.(peerId) ?? Promise.resolve(null);
+    restartMediaPeer(peerId, options) {
+      return meshRef.current?.restartMediaPeer?.(peerId, options) ?? Promise.resolve(null);
     },
     getConnectedPeerIds() {
       return meshRef.current?.getConnectedPeerIds() ?? [];

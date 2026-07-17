@@ -39,6 +39,7 @@ const targetBufferedAheadMs = 12_000;
 const scheduleAheadMs = 20_000;
 const underrunGuardMs = 1_000;
 const fadeDurationSeconds = 0.02;
+const assetOperationTimeoutMs = 5_000;
 
 export class SegmentedOpusEngine {
   private timelineKey: string | null = null;
@@ -180,7 +181,11 @@ export class SegmentedOpusEngine {
       if (cached) {
         return cached;
       }
-      const loaded = await input.getUnit(unitIndex);
+      const loaded = await withTimeout(
+        input.getUnit(unitIndex),
+        assetOperationTimeoutMs,
+        "Audio asset read timed out."
+      );
       if (loaded) {
         this.unitRecords.set(unitIndex, loaded);
       }
@@ -448,10 +453,18 @@ export class SegmentedOpusEngine {
   ) {
     let decoded: AudioBuffer;
     try {
-      decoded = await context.decodeAudioData(unit.payload.slice(0));
+      decoded = await withTimeout(
+        context.decodeAudioData(unit.payload.slice(0)),
+        assetOperationTimeoutMs,
+        "Audio asset decode timed out."
+      );
     } catch {
       const decoder = await this.getWasmDecoder();
-      const result = await decoder.decodeFile(new Uint8Array(unit.payload));
+      const result = await withTimeout(
+        decoder.decodeFile(new Uint8Array(unit.payload)),
+        assetOperationTimeoutMs,
+        "WASM audio asset decode timed out."
+      );
       decoded = context.createBuffer(
         result.channelData.length,
         result.samplesDecoded,
@@ -721,4 +734,20 @@ function rampAudioParam(param: AudioParam, value: number, context: AudioContext 
   const now = context?.currentTime ?? 0;
   setAudioParamValueAt(param, param.value, now);
   rampAudioParamTo(param, value, now + fadeDurationSeconds);
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }

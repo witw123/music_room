@@ -27,7 +27,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     remoteStream: MediaStream | null;
     remoteTrackId?: string | null;
     } | null;
-  restartMediaPeer: (peerId: string) => Promise<unknown>;
+  restartMediaPeer: (peerId: string, options?: { forceRecreate?: boolean }) => Promise<unknown>;
   onPlaybackEnded: () => void | Promise<void>;
   setMediaConnectionState: Dispatch<SetStateAction<"idle" | "connecting" | "live" | "buffering" | "reconnecting" | "failed">>;
   setSourceStartState: Dispatch<SetStateAction<"idle" | "awaiting-unlock" | "starting" | "live" | "failed">>;
@@ -76,6 +76,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     sourcePeerId: string;
     trackId: string;
     mediaEpoch: number;
+    forceRecreate?: boolean;
   }) => {
     const recoveryKey = `${input.sourcePeerId}:${input.trackId}:${input.mediaEpoch}`;
     if (mediaEnsureKeyRef.current !== recoveryKey) {
@@ -96,7 +97,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       summary: `监听端媒体连接或接收轨道缺失，确保媒体连接（${input.trackId}）`,
       level: "warning"
     });
-    void input.runtime.restartMediaPeer(input.sourcePeerId).catch((error) => {
+    void input.runtime.restartMediaPeer(input.sourcePeerId, {
+      forceRecreate: input.forceRecreate
+    }).catch((error) => {
       input.runtime.recordPeerDiagnostic({
         peerId: input.sourcePeerId,
         channelKind: "media",
@@ -296,6 +299,19 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           mediaEnsureKeyRef.current = null;
         }
         const health = receiverAudioHealthRef.current;
+        const receiverPacketsMissing = roomPlayback?.status === "playing" &&
+          remote.receiverRtpActive === false &&
+          missingMediaSinceRef.current !== null &&
+          now - missingMediaSinceRef.current >= 3_000;
+        if (receiverPacketsMissing && sourcePeerId && roomPlayback?.currentTrackId) {
+          ensureListenerMediaConnection({
+            runtime,
+            sourcePeerId,
+            trackId: roomPlayback.currentTrackId,
+            mediaEpoch: roomPlayback.mediaEpoch,
+            forceRecreate: true
+          });
+        }
         if (audio.srcObject !== remote.remoteStream) {
           audio.srcObject = remote.remoteStream;
           health.boundAtMs = Date.now();
