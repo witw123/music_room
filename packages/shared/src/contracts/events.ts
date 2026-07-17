@@ -4,6 +4,7 @@ import { p2pProtocolVersion, segmentedOpusCapability } from "../p2p/asset-models
 import { roomSnapshotSchema } from "../room/models";
 import { playbackSnapshotSchema } from "../playback/models";
 import { queueItemSchema, trackMetaSchema } from "../playlist/models";
+import { telemetryReportSchema, type TelemetryReport } from "./telemetry";
 
 export const websocketEventSchema = z.union([
   z.literal("room.subscribe"),
@@ -18,8 +19,12 @@ export const websocketEventSchema = z.union([
   z.literal("room.library.patch"),
   z.literal("room.session.replaced"),
   z.literal("peer.signal"),
-  z.literal("room.chat")
+  z.literal("room.chat"),
+  z.literal("diagnostics.report"),
+  z.literal("session.revoked")
 ]);
+
+export const diagnosticsReportPayloadSchema = telemetryReportSchema;
 
 export const roomSubscribePayloadSchema = z.object({
   roomId: z.string(),
@@ -192,6 +197,7 @@ export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSc
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
+export type DiagnosticsReportPayload = TelemetryReport;
 
 export type ServerToClientEvents = {
   "room.snapshot": (snapshot: z.infer<typeof roomSnapshotSchema>) => void;
@@ -204,6 +210,7 @@ export type ServerToClientEvents = {
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
+  "session.revoked": () => void;
   connect: () => void;
   disconnect: () => void;
 };
@@ -217,4 +224,5 @@ export type ClientToServerEvents = {
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatInputPayload) => void;
+  "diagnostics.report": (payload: DiagnosticsReportPayload) => void;
 };

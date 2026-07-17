@@ -204,6 +204,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.smembers(key);
   }
 
+  async addSortedSetScore(key: string, score: number, member: string) {
+    this.assertReady(this.client, "publisher");
+    await this.client.zadd(key, score, member);
+  }
+
+  async getSortedSetMembersByScore(key: string, min: number | string, max: number | string) {
+    this.assertReady(this.client, "publisher");
+    return this.client.zrangebyscore(key, min, max);
+  }
+
+  async removeSortedSetMembers(key: string, members: string[]) {
+    this.assertReady(this.client, "publisher");
+    if (members.length) await this.client.zrem(key, ...members);
+  }
+
   async incrementWithTtlMs(key: string, ttlMs: number) {
     this.assertReady(this.client, "publisher");
 

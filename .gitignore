@@ -15,6 +15,7 @@ coverage/
 **/*.tsbuildinfo
 apps/server/prisma/dev.db
 apps/server/src/generated/prisma/
+deploy/linux/observability-rendered/
 
 .gstack/
 .codex-tmp-tauri/

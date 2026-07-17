@@ -3,7 +3,9 @@ import { z } from "zod";
 export const userProfileSchema = z.object({
   id: z.string(),
   username: z.string(),
-  nickname: z.string()
+  nickname: z.string(),
+  role: z.enum(["USER", "ADMIN"]).optional(),
+  status: z.enum(["ACTIVE", "DISABLED"]).optional()
 });
 
 export const authSessionSchema = z.object({

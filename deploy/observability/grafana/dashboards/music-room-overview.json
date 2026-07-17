@@ -1,0 +1,11 @@
+{
+  "title": "Music Room Overview",
+  "uid": "music-room-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    { "type": "stat", "title": "HTTP requests", "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 }, "targets": [{ "expr": "sum(rate(music_room_http_requests_total[5m]))" }] },
+    { "type": "stat", "title": "Open incidents", "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 }, "targets": [{ "expr": "sum(music_room_open_incidents)" }] },
+    { "type": "timeseries", "title": "Diagnostics reports", "gridPos": { "h": 8, "w": 16, "x": 0, "y": 4 }, "targets": [{ "expr": "rate(music_room_diagnostics_reports_total[5m])" }] }
+  ]
+}

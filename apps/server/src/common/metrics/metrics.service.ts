@@ -3,7 +3,9 @@ import { Injectable } from "@nestjs/common";
 type CounterName =
   | "realtimeFailures"
   | "playbackConflicts"
-  | "iceFailures";
+  | "iceFailures"
+  | "diagnosticsReports"
+  | "diagnosticsRateLimited";
 
 @Injectable()
 export class MetricsService {
@@ -12,7 +14,9 @@ export class MetricsService {
   private readonly counters: Record<CounterName, number> = {
     realtimeFailures: 0,
     playbackConflicts: 0,
-    iceFailures: 0
+    iceFailures: 0,
+    diagnosticsReports: 0,
+    diagnosticsRateLimited: 0
   };
 
   bindRealtimeSocket(socketId: string, roomId: string) {
@@ -61,6 +65,9 @@ export class MetricsService {
     this.counters.iceFailures += 1;
   }
 
+  incrementDiagnosticsReport() { this.counters.diagnosticsReports += 1; }
+  incrementDiagnosticsRateLimited() { this.counters.diagnosticsRateLimited += 1; }
+
   snapshot() {
     return {
       wsConnections: this.socketRooms.size,
@@ -96,6 +103,12 @@ export class MetricsService {
       "# HELP music_room_redis_available Redis availability, 1 for up and 0 for down.",
       "# TYPE music_room_redis_available gauge",
       `music_room_redis_available ${input.redisAvailable ? 1 : 0}`,
+      "# HELP music_room_diagnostics_reports_total Accepted client diagnostics reports.",
+      "# TYPE music_room_diagnostics_reports_total counter",
+      `music_room_diagnostics_reports_total ${snapshot.diagnosticsReports}`,
+      "# HELP music_room_diagnostics_rate_limited_total Client diagnostics reports rejected by rate limit.",
+      "# TYPE music_room_diagnostics_rate_limited_total counter",
+      `music_room_diagnostics_rate_limited_total ${snapshot.diagnosticsRateLimited}`,
       ""
     ].join("\n");
   }
