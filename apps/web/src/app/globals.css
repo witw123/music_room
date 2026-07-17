@@ -15,6 +15,7 @@
   }
 
   body {
+    margin: 0;
     background-color: #000000;
     color: var(--foreground);
     min-height: 100vh;
