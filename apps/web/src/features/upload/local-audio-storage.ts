@@ -69,7 +69,7 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   let permission: PermissionState | null = null;
   if (directory) {
     permission = await asPermissionedHandle(directory.handle)
-      .queryPermission({ mode: "read" })
+      .queryPermission({ mode: "readwrite" })
       .catch(() => null);
   }
   return {
@@ -79,6 +79,10 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
     cachedFileHashes: cachedFiles.map((file) => file.fileHash),
     permission
   };
+}
+
+export async function ensureLocalAudioDirectoryWriteAccess() {
+  return !!(await getWritableLocalAudioDirectory());
 }
 
 export async function getLocalAudioFile(fileHash: string) {
@@ -138,17 +142,9 @@ export async function saveAudioFileToLocalDirectory(input: {
   mimeType: string;
   trackId?: string;
 }) {
-  const directory = await getLocalAudioDirectory();
+  const directory = await getWritableLocalAudioDirectory();
   if (!directory) {
     throw new Error("请先选择本地音频文件夹。 ");
-  }
-
-  const permission = await requestDirectoryPermission(
-    asPermissionedHandle(directory.handle),
-    "readwrite"
-  );
-  if (!permission) {
-    throw new Error("没有获得本地文件夹写入权限。 ");
   }
 
   const fileName = buildLocalAudioFileName(input);
@@ -173,17 +169,9 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   title: string;
   mimeType: string;
 }) {
-  const directory = await getLocalAudioDirectory();
+  const directory = await getWritableLocalAudioDirectory();
   if (!directory) {
-    throw new Error("请先选择 Music Room 本地存储文件夹。 ");
-  }
-
-  const permission = await requestDirectoryPermission(
-    asPermissionedHandle(directory.handle),
-    "readwrite"
-  );
-  if (!permission) {
-    throw new Error("没有获得 Music Room 本地存储文件夹写入权限。 ");
+    return null;
   }
 
   const fileName = buildLocalAudioFileName(input);
@@ -296,6 +284,22 @@ async function requestDirectoryPermission(
   }
   const requested = await handle.requestPermission({ mode }).catch(() => "denied" as PermissionState);
   return requested === "granted";
+}
+
+async function getWritableLocalAudioDirectory() {
+  const directory = await getLocalAudioDirectory();
+  if (!directory) {
+    return null;
+  }
+
+  const permission = await requestDirectoryPermission(
+    asPermissionedHandle(directory.handle),
+    "readwrite"
+  );
+  if (!permission) {
+    throw new Error("没有获得 Music Room 本地存储文件夹写入权限，请重新选择根文件夹。 ");
+  }
+  return directory;
 }
 
 function asPermissionedHandle(handle: FileSystemDirectoryHandle) {

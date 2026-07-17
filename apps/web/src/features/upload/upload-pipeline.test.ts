@@ -60,7 +60,7 @@ describe("processSelectedTrackFiles", () => {
         return registeredTrack;
       },
       persistTrackIntoLibrary: async ({ track, roomId }) => {
-        expect(readyTracks).toEqual(["track_new"]);
+        expect(readyTracks).toEqual([]);
         persistedTracks.push(`${roomId}:${track.id}`);
       },
       onTrackReady: (trackId) => {
@@ -81,6 +81,44 @@ describe("processSelectedTrackFiles", () => {
     expect(readyTracks).toEqual(["track_new"]);
     expect(revokedUrls).toEqual(["blob:existing.flac", "blob:busy.flac"]);
     expect([...inFlightUploadHashes]).toEqual(["user_1:hash_busy"]);
+  });
+
+  it("rolls back the registered track when local persistence fails", async () => {
+    const file = new File(["new"], "new.flac", { type: "audio/flac" });
+    const registeredTrack = buildTrack("track_new", "hash_new");
+    const deletedTracks: string[] = [];
+    const deletedLocalTrackIds: string[][] = [];
+    const readyTracks: string[] = [];
+
+    await expect(processSelectedTrackFiles({
+      files: [file],
+      activeSession: { userId: "user_1", nickname: "Host" },
+      roomId: "room_1",
+      roomTracks: [],
+      inFlightUploadHashes: new Set(),
+      createObjectUrl: () => "blob:new.flac",
+      revokeObjectUrl: () => undefined,
+      buildTrackMeta: async () => registeredTrack,
+      buildRegisterTrackPayload: () => ({}),
+      registerTrack: async () => registeredTrack,
+      persistTrackIntoLibrary: async () => {
+        throw new Error("local storage failed");
+      },
+      deleteTrack: async (_roomId, trackId) => {
+        deletedTracks.push(trackId);
+      },
+      deleteLocalTrackData: async (trackIds) => {
+        deletedLocalTrackIds.push([...trackIds]);
+      },
+      cleanupLocalTrackData: async () => undefined,
+      onTrackReady: (trackId) => {
+        readyTracks.push(trackId);
+      }
+    })).rejects.toThrow("local storage failed");
+
+    expect(deletedTracks).toEqual(["track_new"]);
+    expect(deletedLocalTrackIds).toEqual([["track_new"]]);
+    expect(readyTracks).toEqual([]);
   });
 
   it("revokes the object URL when audio preparation fails", async () => {

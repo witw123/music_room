@@ -22,7 +22,11 @@ import {
   processSelectedTrackFiles
 } from "./upload-pipeline";
 import { buildCachedLibraryTrackUpsertRecord } from "./cache-library";
-import { saveCachedAudioFileToLocalDirectory } from "./local-audio-storage";
+import {
+  cleanupLocalAudioCacheFiles,
+  ensureLocalAudioDirectoryWriteAccess,
+  saveCachedAudioFileToLocalDirectory
+} from "./local-audio-storage";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -78,16 +82,12 @@ export function useUploadPipelineActions({
       file: File | Blob;
     }) => {
       await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord(input));
-      try {
-        await saveCachedAudioFileToLocalDirectory({
-          file: input.file,
-          fileHash: input.track.fileHash,
-          title: input.track.title,
-          mimeType: input.track.mimeType || input.file.type || "audio/mpeg"
-        });
-      } catch {
-        // IndexedDB remains the fallback when the selected folder is unavailable.
-      }
+      await saveCachedAudioFileToLocalDirectory({
+        file: input.file,
+        fileHash: input.track.fileHash,
+        title: input.track.title,
+        mimeType: input.track.mimeType || input.file.type || "audio/mpeg"
+      });
       await refreshCacheLibrary();
     },
     [refreshCacheLibrary]
@@ -100,6 +100,12 @@ export function useUploadPipelineActions({
       }
 
       const roomId = roomSnapshot.room.id;
+      try {
+        await ensureLocalAudioDirectoryWriteAccess();
+      } catch (error) {
+        setStatusMessage(toLocalAudioStorageErrorMessage(error));
+        return;
+      }
       const result = await processSelectedTrackFiles({
         files: Array.from(files),
         activeSession,
@@ -132,6 +138,10 @@ export function useUploadPipelineActions({
             registerRoomId,
             payload as Parameters<typeof musicRoomApi.registerTrack>[1]
           ),
+        deleteTrack: (registerRoomId, trackId) =>
+          musicRoomApi.deleteTrack(registerRoomId, trackId),
+        deleteLocalTrackData: deleteLocalTrackDataForTracks,
+        cleanupLocalTrackData: cleanupLocalAudioCacheFiles,
         persistTrackIntoLibrary,
         onTrackReady: (trackId, upload, registeredTrack) => {
           setUploadedTracks((current) => ({
@@ -276,6 +286,7 @@ async function importProviderTrack(input: {
   let registeredTrackId: string | null = null;
   let shouldRollbackRegisteredTrack = false;
   try {
+    await ensureLocalAudioDirectoryWriteAccess();
     setStatusMessage(`正在获取《${candidate.title}》音频…`);
     const source = await download();
     const mimeType = normalizeImportedMimeType(source.contentType);
@@ -344,6 +355,7 @@ async function importProviderTrack(input: {
         musicRoomApi.deleteTrack(roomSnapshot.room.id, registeredTrackId),
         deleteLocalTrackDataForTracks([registeredTrackId])
       ]);
+      await cleanupLocalAudioCacheFiles();
     }
     setStatusMessage(`导入失败：${toProviderImportErrorMessage(error)}`);
     throw error;
@@ -404,4 +416,8 @@ function toProviderImportErrorMessage(error: unknown) {
     }
   }
   return error instanceof Error ? error.message : "音乐平台导入失败，请稍后重试。";
+}
+
+function toLocalAudioStorageErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "本地音频存储不可用，请重新选择根文件夹。";
 }
