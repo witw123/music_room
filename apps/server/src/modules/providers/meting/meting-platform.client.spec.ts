@@ -16,10 +16,30 @@ describe("MetingPlatformApiClient", () => {
         }
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        req_1: {
+        data: [{
+          mid: "003abc",
+          type: 0,
+          file: {
+            media_mid: "003media",
+            size_128mp3: 1234,
+            size_320mp3: 4567,
+            size_flac: 7890
+          }
+        }]
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        req_0: {
           data: {
             sip: ["https://sjy6.stream.qqmusic.qq.com/"],
-            midurlinfo: [{ purl: "M500003abc003abc.mp3?guid=10000" }]
+            midurlinfo: [
+              {},
+              {},
+              {},
+              { purl: "M500003media.mp3?guid=10000", vkey: "test-vkey" },
+              {},
+              {},
+              {}
+            ]
           }
         }
       }), { status: 200 }));
@@ -31,9 +51,12 @@ describe("MetingPlatformApiClient", () => {
     })).resolves.toEqual([{ songmid: "003abc", songname: "歌曲" }]);
     await expect(client.getAudioUrl("qqmusic", "003abc", "standard"))
       .resolves.toMatchObject({
-        url: "https://sjy6.stream.qqmusic.qq.com/M500003abc003abc.mp3?guid=10000"
+        url: "https://sjy6.stream.qqmusic.qq.com/M500003media.mp3?guid=10000",
+        size: 1234,
+        br: 128
       });
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: "GET" });
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("003media");
   });
 
   it("resolves Kugou playback from the public playInfo endpoint", async () => {

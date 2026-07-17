@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import type { MetingPlatform, MetingQuality, MetingSearchQuery } from "./meting.types";
 
 const userAgent = "Mozilla/5.0 (compatible; MusicRoom/1.0)";
@@ -106,39 +106,35 @@ export class MetingPlatformApiClient {
   }
 
   private async getQqMusicAudioUrl(trackId: string, quality: MetingQuality) {
-    const prefix = quality === "standard" ? "M500" : "M800";
-    const filename = `${prefix}${trackId}${trackId}.mp3`;
-    const payload = await this.getJson("https://u.y.qq.com/cgi-bin/musicu.fcg", {
-      method: "POST",
-      referer: "https://y.qq.com/",
-      body: JSON.stringify({
-        req_1: {
-          module: "vkey.GetVkeyServer",
-          method: "CgiGetVkey",
-          param: {
-            filename: [filename],
-            guid: "10000",
-            songmid: [trackId],
-            songtype: [0],
-            uin: "0",
-            loginflag: 1,
-            platform: "20"
-          }
-        },
-        loginUin: "0",
-        comm: { uin: "0", format: "json", ct: 24, cv: 0 }
-      })
+    const track = asRecord((await this.getQqMusicTrack(trackId))[0]);
+    const file = asRecord(track?.file);
+    const mediaMid = readString(file?.media_mid);
+    if (!mediaMid) return { url: "", size: 0, br: 0 };
+
+    const formats = qqAudioFormats();
+    const payload = await this.getJson(buildQqMusicVkeyUrl(trackId, mediaMid, formats, track), {
+      referer: "https://y.qq.com/"
     });
-    const item = asRecord(asRecord(asRecord(payload)?.req_1)?.data);
-    const midUrlInfo = Array.isArray(item?.midurlinfo) ? item.midurlinfo[0] : null;
-    const record = asRecord(midUrlInfo);
-    const purl = readString(record?.purl);
+    const item = asRecord(asRecord(asRecord(payload)?.req_0)?.data);
+    const midUrlInfo = Array.isArray(item?.midurlinfo) ? item.midurlinfo : [];
     const sip = Array.isArray(item?.sip) ? readString(item.sip[0]) : null;
-    return {
-      url: purl && sip ? new URL(purl, sip).toString() : "",
-      size: readNumber(record?.size),
-      br: quality === "standard" ? 128 : 320
-    };
+
+    for (const format of preferredQqAudioFormats(quality)) {
+      const index = formats.findIndex((candidate) => candidate.sizeKey === format.sizeKey);
+      const record = asRecord(midUrlInfo[index]);
+      const purl = readString(record?.purl);
+      const vkey = readString(record?.vkey);
+      const fileSize = readNumber(file?.[format.sizeKey]);
+      if (purl && vkey && sip && fileSize > 0) {
+        return {
+          url: new URL(purl, sip).toString(),
+          size: fileSize,
+          br: format.bitrate
+        };
+      }
+    }
+
+    return { url: "", size: 0, br: 0 };
   }
 
   private async searchKugou(query: MetingSearchQuery) {
@@ -228,9 +224,10 @@ export class MetingPlatformApiClient {
       uid: "1234"
     });
     const data = asRecord(asRecord(payload)?.data);
+    const song = asRecord(data?.song);
     return {
-      url: readString(data?.url) ?? "",
-      size: readNumber(data?.size ?? data?.fileSize),
+      url: readString(data?.url ?? data?.playUrl ?? song?.url) ?? "",
+      size: readNumber(data?.size ?? data?.fileSize ?? song?.fileSize),
       br: toneFlag === "PQ" ? 128 : 320
     };
   }
@@ -327,6 +324,67 @@ function splitMiguTrackId(value: string) {
 
 function miguCopyrightId(value: string) {
   return splitMiguTrackId(value)[0];
+}
+
+type QqAudioFormat = {
+  sizeKey: string;
+  bitrate: number;
+  prefix: string;
+  extension: string;
+};
+
+function qqAudioFormats(): QqAudioFormat[] {
+  return [
+    { sizeKey: "size_flac", bitrate: 999, prefix: "F000", extension: "flac" },
+    { sizeKey: "size_320mp3", bitrate: 320, prefix: "M800", extension: "mp3" },
+    { sizeKey: "size_192aac", bitrate: 192, prefix: "C600", extension: "m4a" },
+    { sizeKey: "size_128mp3", bitrate: 128, prefix: "M500", extension: "mp3" },
+    { sizeKey: "size_96aac", bitrate: 96, prefix: "C400", extension: "m4a" },
+    { sizeKey: "size_48aac", bitrate: 48, prefix: "C200", extension: "m4a" },
+    { sizeKey: "size_24aac", bitrate: 24, prefix: "C100", extension: "m4a" }
+  ];
+}
+
+function preferredQqAudioFormats(quality: MetingQuality) {
+  const formats = qqAudioFormats();
+  if (quality === "standard") {
+    return formats.filter((format) => format.sizeKey === "size_128mp3");
+  }
+  if (quality === "high") {
+    return formats.filter((format) => ["size_320mp3", "size_128mp3"].includes(format.sizeKey));
+  }
+  return formats.filter((format) => ["size_flac", "size_320mp3", "size_128mp3"].includes(format.sizeKey));
+}
+
+function buildQqMusicVkeyUrl(
+  trackId: string,
+  mediaMid: string,
+  formats: QqAudioFormat[],
+  track: Record<string, unknown> | null
+) {
+  const request = {
+    req_0: {
+      module: "vkey.GetVkeyServer",
+      method: "CgiGetVkey",
+      param: {
+        guid: String(randomInt(0, 10_000_000_000)),
+        songmid: formats.map(() => trackId),
+        filename: formats.map((format) => `${format.prefix}${mediaMid}.${format.extension}`),
+        songtype: formats.map(() => typeof track?.type === "number" ? track.type : 0),
+        uin: "0",
+        loginflag: 1,
+        platform: "20"
+      }
+    }
+  };
+  const url = new URL("https://u.y.qq.com/cgi-bin/musicu.fcg");
+  url.search = new URLSearchParams({
+    format: "json",
+    platform: "yqq.json",
+    needNewCode: "0",
+    data: JSON.stringify(request)
+  }).toString();
+  return url;
 }
 
 function buildTaiheUrl(path: string, input: Record<string, string>) {

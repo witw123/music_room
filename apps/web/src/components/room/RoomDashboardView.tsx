@@ -76,7 +76,9 @@ const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" || [
   process.env.NEXT_PUBLIC_QQMUSIC_ENABLED,
   process.env.NEXT_PUBLIC_KUGOU_ENABLED,
   process.env.NEXT_PUBLIC_KUWO_ENABLED,
-  process.env.NEXT_PUBLIC_BAIDU_ENABLED
+  process.env.NEXT_PUBLIC_BAIDU_ENABLED,
+  process.env.NEXT_PUBLIC_TAIHE_ENABLED,
+  process.env.NEXT_PUBLIC_MIGU_ENABLED
 ].some((value) => value === "true")
   ? ["queue", "library", "netease", "members"]
   : ["queue", "library", "members"];

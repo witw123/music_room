@@ -172,7 +172,9 @@ export class MetingService {
       record.rid ??
       record.song_id
     );
-    const title = readString(record.name ?? record.title ?? record.SongName ?? record.songName);
+    const title = readString(
+      record.name ?? record.title ?? record.SongName ?? record.songName ?? record.songname
+    );
     if (!providerTrackId || !title) return null;
 
     const artistValues = record.artist ?? record.singer ?? record.singerList ?? record.Singers;
@@ -182,7 +184,7 @@ export class MetingService {
           .map(readString)
           .filter((value): value is string => !!value)
           .join(" / ")
-      : readString(artistValues ?? record.author ?? record.SingerName);
+      : readString(artistValues ?? record.author ?? record.SingerName ?? record.singerName);
     const artworkUrl = artworkUrlForProvider(provider, record);
     return {
       provider,
@@ -191,7 +193,9 @@ export class MetingService {
       quality: readQuality(provider, record),
       title,
       artist: artist || "未知歌手",
-      album: readString(record.album ?? record.album_title ?? record.AlbumName),
+      album: readString(
+        record.album ?? record.album_title ?? record.albumname ?? record.albumTitle ?? record.AlbumName ?? record.albumName
+      ),
       durationMs: readDurationMs(record.duration ?? record.interval ?? record.Duration),
       artworkUrl
     };
@@ -342,19 +346,20 @@ function artworkUrlForProvider(provider: MetingProvider, record: Record<string, 
     }
   }
   return readArtworkUrl(
-    record.artworkUrl ?? record.picUrl ?? record.pic ?? record.Image ?? record.img3 ?? record.img2 ?? record.img1
+    record.artworkUrl ?? record.picUrl ?? record.pic ?? record.Image ?? record.imgUrl ?? record.album_img ??
+    record.img3 ?? record.img2 ?? record.img1
   );
 }
 
 function readAccess(provider: MetingProvider, record: Record<string, unknown>) {
   if (provider === "qqmusic") {
     const pay = asRecord(record.pay);
-    const payPlay = Number(pay?.payplay);
+    const payPlay = Number(pay?.payplay ?? pay?.pay_play);
     return payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown";
   }
 
   if (provider === "kugou") {
-    const payType = Number(record.PayType ?? record.HQPayType);
+    const payType = Number(record.PayType ?? record.HQPayType ?? record.pay_type);
     return payType === 0 ? "free" : Number.isFinite(payType) ? "paid" : "unknown";
   }
 
@@ -371,9 +376,10 @@ function readAccess(provider: MetingProvider, record: Record<string, unknown>) {
 
 function readQuality(provider: MetingProvider, record: Record<string, unknown>) {
   if (provider === "qqmusic") {
-    if (positiveNumber(record.sizeflac)) return "lossless";
-    if (positiveNumber(record.size320)) return "high";
-    return positiveNumber(record.size128) ? "standard" : null;
+    const file = asRecord(record.file);
+    if (positiveNumber(record.sizeflac ?? file?.size_flac)) return "lossless";
+    if (positiveNumber(record.size320 ?? file?.size_320mp3)) return "high";
+    return positiveNumber(record.size128 ?? file?.size_128mp3) ? "standard" : null;
   }
 
   if (provider === "kugou") {

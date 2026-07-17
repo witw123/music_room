@@ -8,7 +8,9 @@ describe("MetingService", () => {
     qqmusic: process.env.QQMUSIC_ENABLED,
     kugou: process.env.KUGOU_ENABLED,
     kuwo: process.env.KUWO_ENABLED,
-    baidu: process.env.BAIDU_ENABLED
+    baidu: process.env.BAIDU_ENABLED,
+    taihe: process.env.TAIHE_ENABLED,
+    migu: process.env.MIGU_ENABLED
   };
 
   afterEach(() => {
@@ -68,6 +70,81 @@ describe("MetingService", () => {
       }],
       limit: 20,
       offset: 0
+    });
+  });
+
+  it("normalizes live QQ, Qianqian, and Migu field names", async () => {
+    const api = {
+      searchTracks: jest.fn()
+    };
+    const service = new MetingService(api as never, { isAvailable: () => false } as never);
+
+    process.env.QQMUSIC_ENABLED = "true";
+    api.searchTracks.mockResolvedValueOnce([{
+      songmid: "003abc",
+      songname: "QQ歌曲",
+      albumname: "QQ专辑",
+      albummid: "003album",
+      singer: [{ name: "QQ歌手" }],
+      interval: 200,
+      size128: 100,
+      pay: { payplay: 0 }
+    }]);
+    await expect(service.searchTracks("qqmusic", "qq-user", {
+      keywords: "QQ歌曲",
+      limit: 20,
+      offset: 0
+    })).resolves.toMatchObject({
+      items: [{
+        providerTrackId: "003abc",
+        title: "QQ歌曲",
+        artist: "QQ歌手",
+        album: "QQ专辑",
+        access: "free",
+        quality: "standard"
+      }]
+    });
+
+    process.env.TAIHE_ENABLED = "true";
+    api.searchTracks.mockResolvedValueOnce([{
+      id: "T123",
+      title: "千千歌曲",
+      albumTitle: "千千专辑",
+      artist: [{ name: "千千歌手" }],
+      duration: 180
+    }]);
+    await expect(service.searchTracks("taihe", "taihe-user", {
+      keywords: "千千歌曲",
+      limit: 20,
+      offset: 0
+    })).resolves.toMatchObject({
+      items: [{
+        providerTrackId: "T123",
+        title: "千千歌曲",
+        artist: "千千歌手",
+        album: "千千专辑"
+      }]
+    });
+
+    process.env.MIGU_ENABLED = "true";
+    api.searchTracks.mockResolvedValueOnce([{
+      _providerTrackId: "C123__M123",
+      songName: "咪咕歌曲",
+      album: "咪咕专辑",
+      singerList: [{ name: "咪咕歌手" }],
+      duration: 210
+    }]);
+    await expect(service.searchTracks("migu", "migu-user", {
+      keywords: "咪咕歌曲",
+      limit: 20,
+      offset: 0
+    })).resolves.toMatchObject({
+      items: [{
+        providerTrackId: "C123__M123",
+        title: "咪咕歌曲",
+        artist: "咪咕歌手",
+        album: "咪咕专辑"
+      }]
     });
   });
 
