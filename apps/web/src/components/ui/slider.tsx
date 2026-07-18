@@ -4,14 +4,15 @@ export interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputEle
   value: number
   max: number
   min?: number
+  containerStyle?: React.CSSProperties
 }
 
 export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
-  ({ className = "", value, max, min = 0, ...props }, ref) => {
+  ({ className = "", containerStyle, value, max, min = 0, ...props }, ref) => {
     const percentage = max > min ? ((value - min) / (max - min)) * 100 : 0
     
     return (
-      <div className={`relative flex items-center w-full h-4 group cursor-pointer ${className}`}>
+      <div style={containerStyle} className={`relative flex items-center w-full h-4 group cursor-pointer ${className}`}>
         {/* Track background */}
         <div className="absolute inset-x-0 h-1.5 bg-white/10 rounded-full overflow-hidden">
           {/* Fill indicator */}
