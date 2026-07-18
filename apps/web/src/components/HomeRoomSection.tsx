@@ -101,7 +101,7 @@ export function HomeRoomSection() {
 
   async function handleCreateRoom(visibility: "public" | "private") {
     try {
-      const snapshot = await musicRoomApi.createRoom(visibility);
+      const snapshot = await musicRoomApi.createRoom({ visibility });
       storeRoomSnapshotHandoff(snapshot);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
       router.push(buildRoomHref(snapshot.room.id) as Route);

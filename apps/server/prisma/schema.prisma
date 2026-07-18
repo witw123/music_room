@@ -41,6 +41,7 @@ model User {
   disabledReason String?
   lastLoginAt    DateTime?
   neteaseAccount NeteaseAccount?
+  qqMusicAccount QqMusicAccount?
   adminSessions  AdminSession[]
   userSessions   UserSession[]
   auditLogs      AdminAuditLog[]
@@ -74,6 +75,20 @@ model NeteaseAccount {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model QqMusicAccount {
+  id              String    @id
+  userId          String    @unique
+  qqMusicUserId   String?
+  nickname        String?
+  avatarUrl       String?
+  encryptedCookie String
+  lastValidatedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model UserSession {
   id        String   @id
   userId    String
@@ -89,6 +104,9 @@ model RoomState {
   id               String   @id
   hostId           String
   joinCode         String   @unique
+  name             String   @default("未命名房间")
+  description      String?
+  passwordHash     String?
   visibility       String
   roomRevision     Int      @default(0)
   presenceRevision Int      @default(0)

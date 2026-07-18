@@ -4,12 +4,14 @@ import { z } from "zod";
 
 export type RoomRecord = {
   room: Room;
+  passwordHash?: string | null;
   tracks: TrackMeta[];
   queue: QueueItem[];
 };
 
 export const roomRecordSchema = z.object({
   room: roomSchema,
+  passwordHash: z.string().nullable().optional(),
   tracks: z.array(trackMetaSchema),
   queue: z.array(queueItemSchema)
 });
@@ -18,6 +20,9 @@ export type PersistedRoomRecord = {
   id: string;
   hostId: string;
   joinCode: string;
+  name?: string;
+  description?: string | null;
+  passwordHash?: string | null;
   visibility: string;
   presenceRevision?: number;
   roomRevision?: number;
@@ -52,6 +57,9 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       id: persisted.id,
       hostId: persisted.hostId,
       joinCode: persisted.joinCode,
+      name: persisted.name?.trim() || "未命名房间",
+      description: persisted.description ?? null,
+      hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
       members: persistedMembers.map((member) => ({
         id: member.id ?? "",
@@ -79,6 +87,7 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       presenceRevision: resolvePresenceRevision(persisted, persistedPlayback),
       roomRevision: resolveRoomRevision(persisted, persistedPlayback)
     },
+    passwordHash: persisted.passwordHash ?? null,
     tracks: persisted.tracks as TrackMeta[],
     queue: persisted.queue as QueueItem[]
   };

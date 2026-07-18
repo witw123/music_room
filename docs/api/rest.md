@@ -50,21 +50,21 @@
 
 服务端解析网易云临时地址并流式转发音频，支持 `quality=standard|high|exhigh` 和 `Range`。音频不写入服务端持久化存储，响应设置为 `Cache-Control: no-store`。
 
-## Meting 国内音乐 provider
+## QQ 音乐 provider
 
-国内音乐 provider 默认关闭。支持的 provider 为 `qqmusic`、`kugou`、`kuwo`、`taihe` 和 `migu`；`baidu` 仅作为旧曲库数据的兼容别名映射到千千音乐。首期只使用公开资源，不保存用户账号或平台 Cookie。QQ 和酷狗使用平台公开网页接口，千千和咪咕使用各自的公开接口，酷我保留 Meting 及旧接口回退。
+QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，Cookie 仅以加密形式保存；搜索和导入结果统一为候选歌曲结构。
 
-### `GET /v1/providers/{provider}/search`
+### `GET /v1/providers/qqmusic/search`
 
-`provider` 必须是 `qqmusic|kugou|kuwo|taihe|migu|baidu`。查询参数与网易云一致：`keywords`、`limit`、`offset`。服务端把结果转换为统一的候选歌曲结构。
+查询参数与网易云一致：`keywords`、`limit`、`offset`。
 
-### `GET /v1/providers/{provider}/tracks/{trackId}`
+### `GET /v1/providers/qqmusic/tracks/{trackId}`
 
 读取指定平台歌曲详情。封面地址为可选字段，平台无法提供时返回 `null`。
 
-### `GET /v1/providers/{provider}/tracks/{trackId}/audio`
+### `GET /v1/providers/qqmusic/tracks/{trackId}/audio`
 
-服务端解析临时播放地址，然后校验 CDN、抓取并流式转发音频。支持 `quality=standard|high|exhigh` 和 `Range`，不向浏览器暴露上游地址。首期只接受 MP3/FLAC，返回 M4A/AAC 时会返回 `METING_AUDIO_UNSUPPORTED`。平台接口、CDN 和版权状态可能变化；会员、付费或受限歌曲不保证可用。
+服务端解析临时播放地址，然后校验 CDN、抓取并流式转发音频。支持 `quality=standard|high|exhigh` 和 `Range`，不向浏览器暴露上游地址。首期只接受 MP3/FLAC，返回其他格式时会返回 `QQMUSIC_AUDIO_UNSUPPORTED`。
 
 ## 标准错误码
 
@@ -86,11 +86,14 @@
 - `NETEASE_AUDIO_UNSUPPORTED`
 - `NETEASE_IMPORT_TOO_LARGE`
 - `NETEASE_UNAVAILABLE`
-- `METING_DISABLED`
-- `METING_TRACK_NOT_FOUND`
-- `METING_AUDIO_UNSUPPORTED`
-- `METING_IMPORT_TOO_LARGE`
-- `METING_UNAVAILABLE`
+- `QQMUSIC_DISABLED`
+- `QQMUSIC_ACCOUNT_REQUIRED`
+- `QQMUSIC_AUTH_EXPIRED`
+- `QQMUSIC_QR_EXPIRED`
+- `QQMUSIC_TRACK_NOT_FOUND`
+- `QQMUSIC_AUDIO_UNSUPPORTED`
+- `QQMUSIC_IMPORT_TOO_LARGE`
+- `QQMUSIC_UNAVAILABLE`
 
 ## 认证
 
@@ -263,7 +266,10 @@
 
 ```json
 {
-  "visibility": "public"
+  "visibility": "public",
+  "name": "周五夜听",
+  "description": "可选的房间简介",
+  "password": "可选，至少 4 位"
 }
 ```
 
@@ -277,13 +283,13 @@
 
 ### `GET /v1/rooms`
 
-- 用途：列出当前用户可访问房间，加上有在线成员的公开房间
+- 用途：列出所有未删除房间的大厅摘要
 - 认证：是
 - 成功响应：`200`，返回 `RoomSnapshot[]`
 - 常见失败：
   - `401`：登录态无效
 - 副作用：无
-- 测试要点：列表会对“我可恢复的房间”和“公开房间”去重
+- 说明：响应中的 `tracks`、`queue`、`playlists` 为空，房间详情需在确认进入后读取
 
 ### `GET /v1/rooms/recent/active`
 
@@ -333,13 +339,15 @@ null
 
 ```json
 {
-  "joinCode": "ABC123"
+  "joinCode": "ABC123",
+  "password": "有密码房间必填"
 }
 ```
 
 - 成功响应：`200`，返回最新 `RoomSnapshot`
 - 常见失败：
   - `401`：登录态无效
+  - `400`：房间密码错误或缺少密码
   - 其他未包装业务错误：房间码不存在、昵称冲突等
 - 副作用：
   - 变更房间成员
@@ -352,7 +360,7 @@ null
 - 用途：按房间 ID 加入房间
 - 认证：是
 - 路径参数：`roomId`
-- 请求体：无
+- 请求体：可选 `{ "password": "..." }`
 - 成功响应：`200`，返回最新 `RoomSnapshot`
 - 常见失败：
   - `401`：登录态无效

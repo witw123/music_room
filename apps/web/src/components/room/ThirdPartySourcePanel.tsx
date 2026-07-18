@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import type {
   AuthSession,
-  MetingTrackCandidate,
+  QqMusicTrackCandidate,
   NeteaseTrackCandidate
 } from "@music-room/shared";
 
@@ -13,33 +13,26 @@ const NeteaseSourcePanel = dynamic(
   { loading: () => <PanelLoading label="正在加载网易云…" /> }
 );
 
-const MetingSourcePanel = dynamic(
-  () => import("./MetingSourcePanel").then((mod) => mod.MetingSourcePanel),
-  { loading: () => <PanelLoading label="正在加载国内音乐平台…" /> }
+const QqMusicSourcePanel = dynamic(
+  () => import("./QqMusicSourcePanel").then((mod) => mod.QqMusicSourcePanel),
+  { loading: () => <PanelLoading label="正在加载 QQ 音乐…" /> }
 );
 
 type ThirdPartySourcePanelProps = {
   activeSession: AuthSession | null;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
-  onImportMetingTrack: (track: MetingTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
 };
 
 export function ThirdPartySourcePanel({
   activeSession,
   onImportNeteaseTrack,
-  onImportMetingTrack
+  onImportQqMusicTrack
 }: ThirdPartySourcePanelProps) {
-  const [source, setSource] = useState<"netease" | "meting">(
-    process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? "netease" : "meting"
+  const [source, setSource] = useState<"netease" | "qqmusic">(
+    process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? "netease" : "qqmusic"
   );
-  const metingEnabled = [
-    process.env.NEXT_PUBLIC_QQMUSIC_ENABLED,
-    process.env.NEXT_PUBLIC_KUGOU_ENABLED,
-    process.env.NEXT_PUBLIC_KUWO_ENABLED,
-    process.env.NEXT_PUBLIC_BAIDU_ENABLED,
-    process.env.NEXT_PUBLIC_TAIHE_ENABLED,
-    process.env.NEXT_PUBLIC_MIGU_ENABLED
-  ].some((value) => value === "true");
+  const qqMusicEnabled = process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true";
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -55,15 +48,15 @@ export function ThirdPartySourcePanel({
             网易云
           </button>
         ) : null}
-        {metingEnabled ? (
+        {qqMusicEnabled ? (
           <button
-            aria-selected={source === "meting"}
-            className={source === "meting" ? activeTabClass : inactiveTabClass}
-            onClick={() => setSource("meting")}
+            aria-selected={source === "qqmusic"}
+            className={source === "qqmusic" ? activeTabClass : inactiveTabClass}
+            onClick={() => setSource("qqmusic")}
             role="tab"
             type="button"
           >
-            QQ / 酷狗 / 酷我 / 千千 / 咪咕
+            QQ 音乐
           </button>
         ) : null}
       </div>
@@ -71,7 +64,7 @@ export function ThirdPartySourcePanel({
       {source === "netease" ? (
         <NeteaseSourcePanel activeSession={activeSession} onImportTrack={onImportNeteaseTrack} />
       ) : (
-        <MetingSourcePanel activeSession={activeSession} onImportTrack={onImportMetingTrack} />
+        <QqMusicSourcePanel activeSession={activeSession} onImportTrack={onImportQqMusicTrack} />
       )}
     </div>
   );

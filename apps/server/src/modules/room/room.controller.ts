@@ -43,11 +43,18 @@ export class RoomController {
   @Post()
   async createRoom(
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { visibility?: "private" | "public" }
+    @Body() body: { visibility?: "private" | "public"; name?: string; description?: string | null; password?: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(createRoomRequestSchema, body);
-    const snapshot = await this.roomService.createRoom(userId, payload.visibility);
+    const metadata = {
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+      ...(payload.password !== undefined ? { password: payload.password } : {})
+    };
+    const snapshot = Object.keys(metadata).length > 0
+      ? await this.roomService.createRoom(userId, payload.visibility, metadata)
+      : await this.roomService.createRoom(userId, payload.visibility);
     await this.roomRealtimePublisher.emitSnapshot(snapshot.room.id);
     return snapshot;
   }
@@ -55,16 +62,15 @@ export class RoomController {
   @Get()
   async listRooms(@Headers("x-session-token") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
+    if (typeof this.roomService.listAllRooms === "function") {
+      return this.roomService.listAllRooms();
+    }
     const [accessibleRooms, publicRooms] = await Promise.all([
       this.roomService.listRoomsForSession(userId),
       this.roomService.listPublicRooms()
     ]);
-
     const deduped = new Map<string, (typeof accessibleRooms)[number]>();
-    for (const room of [...accessibleRooms, ...publicRooms]) {
-      deduped.set(room.room.id, room);
-    }
-
+    for (const room of [...accessibleRooms, ...publicRooms]) deduped.set(room.room.id, room);
     return [...deduped.values()];
   }
 
@@ -95,22 +101,31 @@ export class RoomController {
   @Post("join-by-code")
   async joinRoomByCode(
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { joinCode: string }
+    @Body() body: { joinCode: string; password?: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(joinRoomByCodeRequestSchema, body);
     const room = await this.roomService.findRoomByJoinCode(payload.joinCode);
-    await this.roomService.joinRoom(room.id, userId);
+    if (payload.password !== undefined) {
+      await this.roomService.joinRoom(room.id, userId, payload.password);
+    } else {
+      await this.roomService.joinRoom(room.id, userId);
+    }
     return this.roomRealtimePublisher.emitTopologySnapshot(room.id);
   }
 
   @Post(":roomId/join")
   async joinRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body?: { password?: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    await this.roomService.joinRoom(roomId, userId);
+    if (body?.password !== undefined) {
+      await this.roomService.joinRoom(roomId, userId, body.password);
+    } else {
+      await this.roomService.joinRoom(roomId, userId);
+    }
     return this.roomRealtimePublisher.emitTopologySnapshot(roomId);
   }
 

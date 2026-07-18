@@ -11,5 +11,5 @@ export * from "./p2p/asset-models";
 export * from "./playback/models";
 export * from "./playlist/models";
 export * from "./providers/netease";
-export * from "./providers/meting";
+export * from "./providers/qqmusic";
 export * from "./room/models";

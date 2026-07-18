@@ -1,5 +1,5 @@
-import { Injectable, Optional } from "@nestjs/common";
-import { randomBytes, randomUUID } from "node:crypto";
+import { BadRequestException, Injectable, Optional } from "@nestjs/common";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type {
   PlaybackSnapshot,
   Playlist,
@@ -77,13 +77,20 @@ export class RoomService {
 
   async createRoom(
     hostSessionId: string,
-    visibility: Room["visibility"] = "public"
+    visibility: Room["visibility"] = "public",
+    metadata?: { name?: string; description?: string | null; password?: string }
   ) {
     const hostSession = await this.authService.getUserOrThrow(hostSessionId);
+    const name = metadata?.name?.trim() || "未命名房间";
+    const description = metadata?.description?.trim() || null;
+    const password = metadata?.password?.trim() || null;
     const room: Room = {
       id: `room_${randomUUID()}`,
       hostId: hostSession.id,
       joinCode: this.buildJoinCode(),
+      name,
+      description,
+      hasPassword: !!password,
       visibility,
       members: [this.buildMember(hostSession, "host")],
       presenceRevision: 0,
@@ -107,6 +114,7 @@ export class RoomService {
 
     const record: RoomRecord = {
       room,
+      passwordHash: password ? hashRoomPassword(password) : null,
       tracks: [],
       queue: []
     };
@@ -162,6 +170,19 @@ export class RoomService {
     );
   }
 
+  async listAllRooms(): Promise<RoomSnapshot[]> {
+    const records = await this.roomRecordRepository.listRecoverableRecords();
+    const snapshots = await Promise.all(
+      records.map((record: RoomRecord) => this.roomSnapshotService.buildSnapshot(record, []))
+    );
+    return snapshots.map((snapshot) => ({
+      ...snapshot,
+      tracks: [],
+      queue: [],
+      playlists: []
+    }));
+  }
+
   async listPublicRooms(): Promise<RoomSnapshot[]> {
     const records = await this.roomRecordRepository.listRecoverableRecords();
     const publicRecords = records.filter((record) => record.room.visibility === "public");
@@ -210,9 +231,12 @@ export class RoomService {
     return this.roomSnapshotService.buildSnapshot(record, []);
   }
 
-  async joinRoom(roomId: string, sessionId: string) {
+  async joinRoom(roomId: string, sessionId: string, password?: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     const session = await this.authService.getUserOrThrow(sessionId);
+    if (record.passwordHash && !verifyRoomPassword(password ?? "", record.passwordHash)) {
+      throw new BadRequestException(password ? "房间密码错误。" : "请输入房间密码。");
+    }
     this.assertUniqueNickname(record, session.id, session.nickname);
 
     if (!record.room.members.some((member) => member.id === session.id)) {
@@ -795,5 +819,23 @@ export class RoomService {
 
   private incrementRoomRevision(room: Room) {
     room.roomRevision = (room.roomRevision ?? 0) + 1;
+  }
+}
+
+function hashRoomPassword(password: string) {
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, 64);
+  return `v1:${salt.toString("base64url")}:${derived.toString("base64url")}`;
+}
+
+function verifyRoomPassword(password: string, encoded: string) {
+  const [version, saltValue, hashValue] = encoded.split(":");
+  if (version !== "v1" || !saltValue || !hashValue) return false;
+  try {
+    const expected = Buffer.from(hashValue, "base64url");
+    const actual = scryptSync(password, Buffer.from(saltValue, "base64url"), expected.length);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  } catch {
+    return false;
   }
 }

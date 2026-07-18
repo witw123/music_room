@@ -5,14 +5,16 @@ import {
   type ApiErrorResponse,
   type AuthSession,
   type IceConfigResponse,
-  type MetingProvider,
-  type MetingSearchResponse,
-  type MetingTrackCandidate,
   type NeteaseAccountStatus,
   type NeteaseQrStartResponse,
   type NeteaseQrStatusResponse,
   type NeteaseSearchResponse,
   type NeteaseTrackCandidate,
+  type QqMusicAccountStatus,
+  type QqMusicQrStartResponse,
+  type QqMusicQrStatusResponse,
+  type QqMusicSearchResponse,
+  type QqMusicTrackCandidate,
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
@@ -214,19 +216,24 @@ export const musicRoomApi = {
       method: "POST"
     }),
   me: () => request<AuthSession>("/v1/auth/me"),
-  createRoom: (visibility?: "private" | "public") =>
+  createRoom: (input?: {
+    visibility?: "private" | "public";
+    name?: string;
+    description?: string | null;
+    password?: string;
+  }) =>
     request<RoomSnapshot>("/v1/rooms", {
       method: "POST",
-      body: JSON.stringify({ visibility })
+      body: JSON.stringify(input ?? {})
     }),
   getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
   listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
-  joinRoomByCode: (joinCode: string) =>
+  joinRoomByCode: (joinCode: string, password?: string) =>
     request<RoomSnapshot>("/v1/rooms/join-by-code", {
       method: "POST",
-      body: JSON.stringify({ joinCode })
+      body: JSON.stringify({ joinCode, ...(password ? { password } : {}) })
     }),
   getRoom: (roomId: string) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}`),
@@ -312,32 +319,26 @@ export const musicRoomApi = {
       { signal },
       { throttleImport: true }
     ),
-  searchMetingTracks: (
-    provider: MetingProvider,
-    keywords: string,
-    options?: { limit?: number; offset?: number }
-  ) => {
+  getQqMusicAccount: () => request<QqMusicAccountStatus>("/v1/providers/qqmusic/account"),
+  startQqMusicQrLogin: () => request<QqMusicQrStartResponse>("/v1/providers/qqmusic/account/qr/start", { method: "POST" }),
+  getQqMusicQrStatus: (attemptId: string) => request<QqMusicQrStatusResponse>(`/v1/providers/qqmusic/account/qr/${encodeURIComponent(attemptId)}/status`),
+  disconnectQqMusicAccount: () => request<{ ok: boolean }>("/v1/providers/qqmusic/account", { method: "DELETE" }),
+  searchQqMusicTracks: (keywords: string, options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       keywords,
       limit: String(options?.limit ?? 20),
       offset: String(options?.offset ?? 0)
     });
-    return request<MetingSearchResponse>(
-      `/v1/providers/${encodeURIComponent(provider)}/search?${params.toString()}`
-    );
+    return request<QqMusicSearchResponse>(`/v1/providers/qqmusic/search?${params.toString()}`);
   },
-  getMetingTrack: (provider: MetingProvider, trackId: string) =>
-    request<MetingTrackCandidate>(
-      `/v1/providers/${encodeURIComponent(provider)}/tracks/${encodeURIComponent(trackId)}`
-    ),
-  downloadMetingTrack: (
-    provider: MetingProvider,
+  getQqMusicTrack: (trackId: string) => request<QqMusicTrackCandidate>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}`),
+  downloadQqMusicTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",
     signal?: AbortSignal
   ) =>
     requestBlob(
-      `/v1/providers/${encodeURIComponent(provider)}/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
+      `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
       { signal },
       { throttleImport: true }
     ),

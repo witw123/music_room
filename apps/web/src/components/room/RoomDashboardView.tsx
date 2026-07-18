@@ -12,7 +12,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import type { NeteaseTrackCandidate } from "@music-room/shared";
-import type { MetingTrackCandidate } from "@music-room/shared";
+import type { QqMusicTrackCandidate } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState } from "./MembersPanel";
@@ -53,7 +53,7 @@ type RoomDashboardViewProps = {
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
-  onImportMetingTrack: (track: MetingTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
@@ -73,12 +73,7 @@ const tabLabels: Record<TabId, string> = {
 };
 
 const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" || [
-  process.env.NEXT_PUBLIC_QQMUSIC_ENABLED,
-  process.env.NEXT_PUBLIC_KUGOU_ENABLED,
-  process.env.NEXT_PUBLIC_KUWO_ENABLED,
-  process.env.NEXT_PUBLIC_BAIDU_ENABLED,
-  process.env.NEXT_PUBLIC_TAIHE_ENABLED,
-  process.env.NEXT_PUBLIC_MIGU_ENABLED
+  process.env.NEXT_PUBLIC_QQMUSIC_ENABLED
 ].some((value) => value === "true")
   ? ["queue", "library", "netease", "members"]
   : ["queue", "library", "members"];
@@ -146,7 +141,7 @@ function RoomDashboardViewBase({
   onDeleteRoom,
   onFilesSelected,
   onImportNeteaseTrack,
-  onImportMetingTrack,
+  onImportQqMusicTrack,
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
@@ -340,7 +335,7 @@ function RoomDashboardViewBase({
             <ThirdPartyTabPanel
               activeSession={activeSession}
               onImportNeteaseTrack={onImportNeteaseTrack}
-              onImportMetingTrack={onImportMetingTrack}
+              onImportQqMusicTrack={onImportQqMusicTrack}
             />
           ) : null}
 

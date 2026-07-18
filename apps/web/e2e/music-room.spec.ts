@@ -18,6 +18,8 @@ async function register(page: Page, nicknamePrefix: string) {
 
 async function createRoom(page: Page) {
   await page.getByTestId("create-public-room").click();
+  await page.getByPlaceholder("例如：周五夜听").fill("E2E 房间");
+  await page.getByTestId("create-room-submit").click();
   await expect(page).toHaveURL(/\/room\/room_/, { timeout: 45_000 });
   const codeButton = page.getByTestId("room-code-button");
   await expect(codeButton).toContainText(/[A-Z0-9]{6}/);
@@ -31,6 +33,7 @@ async function createRoom(page: Page) {
 async function joinRoom(page: Page, joinCode: string) {
   await page.getByTestId("join-code-input").fill(joinCode);
   await page.getByTestId("join-code-submit").click();
+  await page.getByTestId("room-entry-confirm").click();
   await expect(page).toHaveURL(/\/room\/room_/, { timeout: 45_000 });
   await expect(page.getByTestId("room-code-button")).toContainText(joinCode);
 }

@@ -22,11 +22,14 @@ export const errorCodes = {
   neteaseAudioUnsupported: "NETEASE_AUDIO_UNSUPPORTED",
   neteaseImportTooLarge: "NETEASE_IMPORT_TOO_LARGE",
   neteaseUnavailable: "NETEASE_UNAVAILABLE",
-  metingDisabled: "METING_DISABLED",
-  metingTrackNotFound: "METING_TRACK_NOT_FOUND",
-  metingAudioUnsupported: "METING_AUDIO_UNSUPPORTED",
-  metingImportTooLarge: "METING_IMPORT_TOO_LARGE",
-  metingUnavailable: "METING_UNAVAILABLE"
+  qqMusicDisabled: "QQMUSIC_DISABLED",
+  qqMusicAccountRequired: "QQMUSIC_ACCOUNT_REQUIRED",
+  qqMusicAuthExpired: "QQMUSIC_AUTH_EXPIRED",
+  qqMusicQrExpired: "QQMUSIC_QR_EXPIRED",
+  qqMusicTrackNotFound: "QQMUSIC_TRACK_NOT_FOUND",
+  qqMusicAudioUnsupported: "QQMUSIC_AUDIO_UNSUPPORTED",
+  qqMusicImportTooLarge: "QQMUSIC_IMPORT_TOO_LARGE",
+  qqMusicUnavailable: "QQMUSIC_UNAVAILABLE"
 } as const;
 
 export const apiErrorResponseSchema = z.object({
@@ -52,11 +55,14 @@ export const apiErrorResponseSchema = z.object({
     errorCodes.neteaseAudioUnsupported,
     errorCodes.neteaseImportTooLarge,
     errorCodes.neteaseUnavailable,
-    errorCodes.metingDisabled,
-    errorCodes.metingTrackNotFound,
-    errorCodes.metingAudioUnsupported,
-    errorCodes.metingImportTooLarge,
-    errorCodes.metingUnavailable
+    errorCodes.qqMusicDisabled,
+    errorCodes.qqMusicAccountRequired,
+    errorCodes.qqMusicAuthExpired,
+    errorCodes.qqMusicQrExpired,
+    errorCodes.qqMusicTrackNotFound,
+    errorCodes.qqMusicAudioUnsupported,
+    errorCodes.qqMusicImportTooLarge,
+    errorCodes.qqMusicUnavailable
   ]),
   message: z.string(),
   details: z.unknown().optional()

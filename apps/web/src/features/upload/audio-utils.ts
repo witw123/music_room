@@ -2,8 +2,8 @@
 
 import type {
   GuestSession,
-  MetingTrackCandidate,
   NeteaseTrackCandidate,
+  QqMusicTrackCandidate,
   RemoteTrackSourceRef,
   TrackSourceType
 } from "@music-room/shared";
@@ -21,7 +21,7 @@ const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 export type UploadedTrack = {
   file: File;
   objectUrl: string;
-  origin: "live-upload" | "netease-import" | "meting-import";
+  origin: "live-upload" | "netease-import" | "qqmusic-import";
 };
 
 export type CachedLibraryTrack = {
@@ -53,7 +53,7 @@ export async function buildTrackMeta(
   source?: {
     type: TrackSourceType;
     metadata?: Pick<
-      NeteaseTrackCandidate | MetingTrackCandidate,
+      NeteaseTrackCandidate | QqMusicTrackCandidate,
       "title" | "artist" | "album" | "artworkUrl"
     >;
     sourceRef?: RemoteTrackSourceRef;

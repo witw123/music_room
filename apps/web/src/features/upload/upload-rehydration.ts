@@ -80,7 +80,7 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
         ? "netease-import"
         : track.sourceType === "local_upload"
           ? "live-upload"
-          : "meting-import"
+          : "qqmusic-import"
     };
   }
 

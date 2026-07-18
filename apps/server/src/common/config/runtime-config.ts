@@ -23,6 +23,12 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     );
   }
 
+  if (env.QQMUSIC_ENABLED === "true" && !isValidQqMusicEncryptionKey(env.QQMUSIC_COOKIE_ENCRYPTION_KEY)) {
+    throw new Error(
+      "QQMUSIC_COOKIE_ENCRYPTION_KEY must be a 32-byte hex or base64 key when QQ Music is enabled."
+    );
+  }
+
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
   if (insecureJwtSecrets.has(jwtSecret.toLowerCase())) {
     throw new Error("Invalid JWT_SECRET for production startup.");
@@ -127,6 +133,8 @@ export function isValidNeteaseEncryptionKey(value: string | undefined) {
     return false;
   }
 }
+
+export const isValidQqMusicEncryptionKey = isValidNeteaseEncryptionKey;
 
 function hasUnsupportedStaticTurnProtocol(env: NodeJS.ProcessEnv) {
   const values: string[] = [env.NEXT_PUBLIC_TURN_URL?.trim() ?? ""];

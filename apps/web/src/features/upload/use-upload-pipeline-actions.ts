@@ -1,8 +1,8 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type {
   GuestSession,
-  MetingTrackCandidate,
   NeteaseTrackCandidate,
+  QqMusicTrackCandidate,
   RemoteTrackSourceRef,
   RoomSnapshot,
   TrackSourceType
@@ -202,13 +202,13 @@ export function useUploadPipelineActions({
     ]
   );
 
-  const handleMetingTrackImport = useCallback(
-    (candidate: MetingTrackCandidate) => importProviderTrack({
+  const handleQqMusicTrackImport = useCallback(
+    (candidate: QqMusicTrackCandidate) => importProviderTrack({
       activeSession,
       candidate,
-      download: () => musicRoomApi.downloadMetingTrack(candidate.provider, candidate.providerTrackId, "exhigh"),
+      download: () => musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh"),
       inFlightUploadHashesRef,
-      origin: "meting-import",
+      origin: "qqmusic-import",
       persistTrackIntoLibrary,
       roomSnapshot,
       setStatusMessage,
@@ -232,11 +232,11 @@ export function useUploadPipelineActions({
     persistTrackIntoLibrary,
     handleFilesSelected,
     handleNeteaseTrackImport,
-    handleMetingTrackImport
+    handleQqMusicTrackImport
   };
 }
 
-type ProviderTrackCandidate = NeteaseTrackCandidate | MetingTrackCandidate;
+type ProviderTrackCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
 async function importProviderTrack(input: {
   activeSession: GuestSession | null;
@@ -376,12 +376,7 @@ function buildProviderSourceRef(
 function sourceTypeLabel(sourceType: Exclude<TrackSourceType, "local_upload">) {
   return {
     netease: "网易云",
-    qqmusic: "QQ音乐",
-    kugou: "酷狗音乐",
-    kuwo: "酷我音乐",
-    taihe: "千千音乐",
-    migu: "咪咕音乐",
-    baidu: "百度音乐"
+    qqmusic: "QQ 音乐"
   }[sourceType];
 }
 
@@ -399,16 +394,16 @@ function sanitizeFileName(value: string, sourceType: TrackSourceType) {
 
 function toProviderImportErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
-    if (error.code === "METING_TRACK_NOT_FOUND") {
+    if (error.code === "QQMUSIC_TRACK_NOT_FOUND") {
       return "该歌曲没有可用的公开音频，可能受付费、VIP 或版权限制。";
     }
-    if (error.code === "METING_AUDIO_UNSUPPORTED") {
+    if (error.code === "QQMUSIC_AUDIO_UNSUPPORTED") {
       return "平台返回了当前播放器不支持的音频格式。";
     }
-    if (error.code === "METING_IMPORT_TOO_LARGE") {
+    if (error.code === "QQMUSIC_IMPORT_TOO_LARGE") {
       return "歌曲文件过大，无法导入。";
     }
-    if (error.code === "METING_UNAVAILABLE") {
+    if (error.code === "QQMUSIC_UNAVAILABLE") {
       return "平台接口暂时不可用，请稍后重试或切换平台。";
     }
     if (error.code === "RATE_LIMITED") {

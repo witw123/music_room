@@ -73,6 +73,12 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
   if (message.includes("NetEase")) {
     return errorCodes.neteaseUnavailable;
   }
+  if (message.includes("QQ Music integration is disabled")) return errorCodes.qqMusicDisabled;
+  if (message.includes("QQ Music account is required")) return errorCodes.qqMusicAccountRequired;
+  if (message.includes("QQ Music account") && message.includes("bound again")) return errorCodes.qqMusicAuthExpired;
+  if (message.includes("QQ Music audio") && message.includes("too large")) return errorCodes.qqMusicImportTooLarge;
+  if (message.includes("QQ Music") && message.includes("unsupported audio")) return errorCodes.qqMusicAudioUnsupported;
+  if (message.includes("QQ Music")) return errorCodes.qqMusicUnavailable;
 
   if (message.includes("Realtime sync unavailable") || message.includes("Redis unavailable")) {
     return errorCodes.realtimeUnavailable;
@@ -182,15 +188,19 @@ export function mapErrorStatus(code: ErrorCode): number {
       return HttpStatus.UNSUPPORTED_MEDIA_TYPE;
     case errorCodes.neteaseImportTooLarge:
       return HttpStatus.PAYLOAD_TOO_LARGE;
-    case errorCodes.metingUnavailable:
+    case errorCodes.qqMusicUnavailable:
       return HttpStatus.BAD_GATEWAY;
-    case errorCodes.metingDisabled:
+    case errorCodes.qqMusicDisabled:
       return HttpStatus.SERVICE_UNAVAILABLE;
-    case errorCodes.metingTrackNotFound:
+    case errorCodes.qqMusicAccountRequired:
+    case errorCodes.qqMusicAuthExpired:
+    case errorCodes.qqMusicQrExpired:
+      return HttpStatus.CONFLICT;
+    case errorCodes.qqMusicTrackNotFound:
       return HttpStatus.NOT_FOUND;
-    case errorCodes.metingAudioUnsupported:
+    case errorCodes.qqMusicAudioUnsupported:
       return HttpStatus.UNSUPPORTED_MEDIA_TYPE;
-    case errorCodes.metingImportTooLarge:
+    case errorCodes.qqMusicImportTooLarge:
       return HttpStatus.PAYLOAD_TOO_LARGE;
     default:
       return HttpStatus.INTERNAL_SERVER_ERROR;

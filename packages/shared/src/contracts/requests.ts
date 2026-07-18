@@ -38,13 +38,17 @@ export const loginRequestSchema = z
 
 export const createRoomRequestSchema = z
   .object({
-    visibility: z.enum(["private", "public"]).optional()
+    visibility: z.enum(["private", "public"]).optional(),
+    name: trimmedString(120).optional(),
+    description: optionalNullableText(500),
+    password: z.string().trim().min(4).max(128).optional()
   })
   .strict();
 
 export const joinRoomByCodeRequestSchema = z
   .object({
-    joinCode: trimmedString(16).transform((value) => value.toUpperCase())
+    joinCode: trimmedString(16).transform((value) => value.toUpperCase()),
+    password: z.string().trim().max(128).optional()
   })
   .strict();
 

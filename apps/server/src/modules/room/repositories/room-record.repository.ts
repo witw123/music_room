@@ -236,6 +236,9 @@ export class RoomRecordRepository {
     const payload = {
       hostId: record.room.hostId,
       joinCode: record.room.joinCode,
+      name: record.room.name ?? "未命名房间",
+      description: record.room.description ?? null,
+      passwordHash: record.passwordHash ?? null,
       visibility: record.room.visibility,
       roomRevision: record.room.roomRevision ?? 0,
       presenceRevision: record.room.presenceRevision,

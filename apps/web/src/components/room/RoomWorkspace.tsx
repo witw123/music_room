@@ -10,7 +10,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import type { NeteaseTrackCandidate } from "@music-room/shared";
-import type { MetingTrackCandidate } from "@music-room/shared";
+import type { QqMusicTrackCandidate } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
@@ -54,7 +54,7 @@ type RoomWorkspaceProps = {
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
-  onImportMetingTrack: (track: MetingTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
@@ -102,7 +102,7 @@ function RoomWorkspaceBase({
   onDeleteRoom,
   onFilesSelected,
   onImportNeteaseTrack,
-  onImportMetingTrack,
+  onImportQqMusicTrack,
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
@@ -178,7 +178,7 @@ function RoomWorkspaceBase({
               onDeleteRoom={onDeleteRoom}
               onFilesSelected={onFilesSelected}
               onImportNeteaseTrack={onImportNeteaseTrack}
-              onImportMetingTrack={onImportMetingTrack}
+              onImportQqMusicTrack={onImportQqMusicTrack}
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}

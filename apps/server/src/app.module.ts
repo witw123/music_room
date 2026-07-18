@@ -14,7 +14,7 @@ import { PrismaModule } from "./infra/prisma/prisma.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { MetricsModule } from "./common/metrics/metrics.module";
 import { NeteaseModule } from "./modules/providers/netease/netease.module";
-import { MetingModule } from "./modules/providers/meting/meting.module";
+import { QqMusicModule } from "./modules/providers/qqmusic/qqmusic.module";
 import { AdminModule } from "./modules/admin/admin.module";
 
 @Module({
@@ -34,7 +34,7 @@ import { AdminModule } from "./modules/admin/admin.module";
     SignalingModule,
     TrackModule,
     NeteaseModule,
-    MetingModule,
+    QqMusicModule,
     AdminModule
   ]
 })

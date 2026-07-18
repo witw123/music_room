@@ -32,8 +32,20 @@ describe("request contracts", () => {
   });
 
   it("validates room creation and join code payloads", () => {
-    expect(createRoomRequestSchema.parse({ visibility: "private" })).toEqual({
-      visibility: "private"
+    expect(createRoomRequestSchema.parse({
+      visibility: "private",
+      name: "  Study Room ",
+      description: "  For late night listening  ",
+      password: "secret"
+    })).toEqual({
+      visibility: "private",
+      name: "Study Room",
+      description: "For late night listening",
+      password: "secret"
+    });
+    expect(joinRoomByCodeRequestSchema.parse({ joinCode: "abc123", password: "secret" })).toEqual({
+      joinCode: "ABC123",
+      password: "secret"
     });
     expect(joinRoomByCodeRequestSchema.parse({ joinCode: "abc123" })).toEqual({
       joinCode: "ABC123"
@@ -114,26 +126,6 @@ describe("request contracts", () => {
       sourceType: "qqmusic",
       sourceRef: { provider: "qqmusic", trackId: "003abc" }
     });
-    expect(
-      registerTrackRequestSchema.parse({
-        ...validTrack,
-        sourceType: "migu",
-        sourceRef: { provider: "migu", trackId: "69078806413__600929000003357675" }
-      })
-    ).toMatchObject({
-      sourceType: "migu",
-      sourceRef: { provider: "migu", trackId: "69078806413__600929000003357675" }
-    });
-    expect(
-      registerTrackRequestSchema.parse({
-        ...validTrack,
-        sourceType: "taihe",
-        sourceRef: { provider: "taihe", trackId: "T10063295046" }
-      })
-    ).toMatchObject({
-      sourceType: "taihe",
-      sourceRef: { provider: "taihe", trackId: "T10063295046" }
-    });
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,
@@ -155,15 +147,15 @@ describe("request contracts", () => {
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,
-        sourceType: "kugou",
-        sourceRef: { provider: "kuwo", trackId: "123" }
+        sourceType: "qqmusic",
+        sourceRef: { provider: "netease", trackId: "123" }
       })
     ).toThrow();
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,
         sourceType: "local_upload",
-        sourceRef: { provider: "baidu", trackId: "123" }
+        sourceRef: { provider: "qqmusic", trackId: "123" }
       })
     ).toThrow();
   });

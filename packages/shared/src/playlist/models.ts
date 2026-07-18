@@ -8,36 +8,22 @@ export const neteaseTrackSourceRefSchema = z
   })
   .strict();
 
-export const metingProviderSchema = z.enum([
-  "qqmusic",
-  "kugou",
-  "kuwo",
-  "taihe",
-  "migu",
-  "baidu"
-]);
-
-export const metingTrackSourceRefSchema = z
+export const qqMusicTrackSourceRefSchema = z
   .object({
-    provider: metingProviderSchema,
+    provider: z.literal("qqmusic"),
     trackId: z.string().trim().min(1).max(128)
   })
   .strict();
 
 export const remoteTrackSourceRefSchema = z.union([
   neteaseTrackSourceRefSchema,
-  metingTrackSourceRefSchema
+  qqMusicTrackSourceRefSchema
 ]);
 
 export const trackSourceTypeSchema = z.enum([
   "local_upload",
   "netease",
-  "qqmusic",
-  "kugou",
-  "kuwo",
-  "taihe",
-  "migu",
-  "baidu"
+  "qqmusic"
 ]);
 
 export const trackMetaSchema = z.object({
@@ -115,7 +101,6 @@ export type QueueItem = z.infer<typeof queueItemSchema>;
 export type Playlist = z.infer<typeof playlistSchema>;
 
 export type NeteaseTrackSourceRef = z.infer<typeof neteaseTrackSourceRefSchema>;
-export type MetingProvider = z.infer<typeof metingProviderSchema>;
-export type MetingTrackSourceRef = z.infer<typeof metingTrackSourceRefSchema>;
+export type QqMusicTrackSourceRef = z.infer<typeof qqMusicTrackSourceRefSchema>;
 export type RemoteTrackSourceRef = z.infer<typeof remoteTrackSourceRefSchema>;
 export type TrackSourceType = z.infer<typeof trackSourceTypeSchema>;

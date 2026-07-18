@@ -30,6 +30,7 @@
 `Room` 关键字段：
 
 - `id`、`hostId`、`joinCode`
+- `name`、`description`、`hasPassword`
 - `visibility`: `private | public`
 - `members`、`playback`
 - `presenceRevision`、`roomRevision`
