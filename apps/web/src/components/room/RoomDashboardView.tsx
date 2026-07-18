@@ -14,7 +14,6 @@ import type {
 import type { NeteaseTrackCandidate } from "@music-room/shared";
 import type { QqMusicTrackCandidate } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
-import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
@@ -33,7 +32,6 @@ type RoomDashboardViewProps = {
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
   canDisbandRoom: boolean;
-  canReorderQueue: boolean;
   currentSourceOwnerNickname: string | null;
   uploadedTracks: Record<string, UploadedTrack>;
   localStorageSummary: LocalStorageSummary;
@@ -58,9 +56,6 @@ type RoomDashboardViewProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
-  onPlayQueueItem: (queueItemId: string) => Promise<void>;
-  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
-  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   socket: RoomSocket | null;
   onTabChange?: (tab: TabId) => void;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
@@ -133,7 +128,6 @@ function RoomDashboardViewBase({
   canControlPlayback,
   canDeleteRoom,
   canDisbandRoom,
-  canReorderQueue,
   currentSourceOwnerNickname,
   uploadedTracks,
   localStorageSummary,
@@ -158,9 +152,6 @@ function RoomDashboardViewBase({
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
-  onPlayQueueItem,
-  onRemoveQueueItem,
-  onReorderQueue,
   socket,
   onTabChange,
   onDiagnosticsVisibilityChange
@@ -220,27 +211,6 @@ function RoomDashboardViewBase({
             onDeleteRoom={onDeleteRoom}
             socket={socket}
           />
-        </div>
-
-        <div className="hidden lg:flex lg:flex-[1] lg:min-h-[120px] flex-col border-t border-white/[0.06] overflow-hidden">
-            <div className="shrink-0 flex items-center justify-between px-6 py-3 xl:px-8">
-              <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">播放队列</h3>
-              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-white/30">{roomSnapshot.queue.length} 首</span>
-            </div>
-            <div className="hide-scrollbar flex-1 min-h-0 overflow-y-auto px-5 pb-4 xl:px-7">
-              <QueuePanel
-                queue={roomSnapshot.queue}
-                tracks={roomSnapshot.tracks}
-                currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
-                activeSession={activeSession}
-                canControlPlayback={canControlPlayback}
-                canReorderQueue={canReorderQueue}
-                onPlayQueueItem={onPlayQueueItem}
-                onRemoveQueueItem={onRemoveQueueItem}
-                onReorderQueue={onReorderQueue}
-                onAddToQueue={onAddToQueue}
-              />
-            </div>
         </div>
 
       </div>

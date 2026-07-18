@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import type { QueueItem, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
+import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
 
 type LayoutProps = {
   isPlaying: boolean;
@@ -22,6 +24,8 @@ type LayoutProps = {
   onPrev: () => void;
   onNext: () => void;
   onTogglePlay: () => void;
+  playbackMode: PlaybackMode;
+  onCyclePlaybackMode: () => void;
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
@@ -69,6 +73,152 @@ export function VinylBadge({
   );
 }
 
+function PlaybackModeIcon({ mode }: { mode: PlaybackMode }) {
+  if (mode === "shuffle") {
+    return (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 7h3.5c3.5 0 4.5 10 9 10H20" />
+        <path d="m17 14 3 3-3 3" />
+        <path d="M4 17h3c1.4 0 2.4-1.1 3.1-2.4" />
+        <path d="M14 9.4C14.8 8 15.8 7 17.2 7H20" />
+        <path d="m17 4 3 3-3 3" />
+      </svg>
+    );
+  }
+
+  if (mode === "single") {
+    return (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M17 2l4 4-4 4" />
+        <path d="M3 11V9a3 3 0 0 1 3-3h15" />
+        <path d="m7 22-4-4 4-4" />
+        <path d="M21 13v2a3 3 0 0 1-3 3H3" />
+        <path d="M12 10v4" />
+        <path d="M10.5 10h1.5a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-1.5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h12" />
+      <path d="m13 4 3 3-3 3" />
+      <path d="M20 17H8" />
+      <path d="m11 14-3 3 3 3" />
+    </svg>
+  );
+}
+
+const playbackModeLabels: Record<PlaybackMode, string> = {
+  sequence: "顺序播放",
+  shuffle: "随机播放",
+  single: "单曲循环"
+};
+
+export function PlaybackModeButton({
+  mode,
+  onCycle
+}: {
+  mode: PlaybackMode;
+  onCycle: () => void;
+}) {
+  const label = playbackModeLabels[mode];
+  const nextMode = getNextPlaybackMode(mode);
+
+  return (
+    <button
+      type="button"
+      data-testid="playback-mode-button"
+      data-playback-mode={mode}
+      aria-label={`当前为${label}，点击切换到${playbackModeLabels[nextMode]}`}
+      title={`当前：${label}，点击切换`}
+      onClick={onCycle}
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      <PlaybackModeIcon mode={mode} />
+      <span className="sr-only">{label}</span>
+    </button>
+  );
+}
+
+function VolumeIcon({ volume }: { volume: number }) {
+  if (volume <= 0.01) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+        <path d="m19 9-5 6" />
+        <path d="m14 9 5 6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+    </svg>
+  );
+}
+
+function VolumeControl({ volume, onChange }: { volume: number; onChange: (value: number) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const percentage = Math.round(Math.max(0, Math.min(1, volume)) * 100);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      {isOpen ? (
+        <div className="absolute bottom-full right-0 z-[60] mb-3 flex h-36 w-14 items-center justify-center rounded-xl border border-white/10 bg-[#252832] px-2 py-2 shadow-[0_14px_36px_rgba(0,0,0,0.55)]">
+          <div className="relative flex h-full w-full items-center justify-center">
+            <Slider
+              aria-label="音量"
+              className="h-4 w-28 -rotate-90 [&>div:nth-child(2)]:scale-100 [&>div:nth-child(2)]:opacity-100"
+              max={1}
+              min={0}
+              step={0.01}
+              value={volume}
+              onChange={(event) => onChange(Number(event.target.value))}
+              onInput={(event) => onChange(Number((event.target as HTMLInputElement).value))}
+            />
+          </div>
+        </div>
+      ) : null}
+      <button
+        type="button"
+        data-testid="player-volume-button"
+        aria-expanded={isOpen}
+        aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
+        title={`音量 ${percentage}%`}
+        onClick={() => setIsOpen((current) => !current)}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+      >
+        <VolumeIcon volume={volume} />
+      </button>
+    </div>
+  );
+}
+
 export function MobileBottomPlayerLayout({
   isPlaying,
   canControlPlayback,
@@ -85,6 +235,8 @@ export function MobileBottomPlayerLayout({
   onPrev,
   onNext,
   onTogglePlay,
+  playbackMode,
+  onCyclePlaybackMode,
   queue,
   tracks,
   currentQueueItemId,
@@ -134,23 +286,12 @@ export function MobileBottomPlayerLayout({
           </span>
         </div>
 
-        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="flex justify-start">
-            <PlayerQueueDrawer
-              queue={queue}
-              tracks={tracks}
-              currentQueueItemId={currentQueueItemId}
-              activeSessionId={activeSessionId}
-              canControlPlayback={canControlPlayback}
-              canReorderQueue={canReorderQueue}
-              onPlayQueueItem={onPlayQueueItem}
-              onRemoveQueueItem={onRemoveQueueItem}
-              onReorderQueue={onReorderQueue}
-              mode="order"
-            />
+        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 justify-start">
+            <PlaybackModeButton mode={playbackMode} onCycle={onCyclePlaybackMode} />
           </div>
 
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex min-w-0 items-center justify-center gap-0 sm:gap-1">
             <Button
               data-testid="player-prev-button"
               variant="ghost"
@@ -158,16 +299,16 @@ export function MobileBottomPlayerLayout({
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onPrev}
               title="上一首"
-              className="h-9 w-9 shrink-0"
+              className="h-8 w-8 shrink-0 sm:h-9 sm:w-9"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
               </svg>
             </Button>
 
             <button
               data-testid="player-toggle-button"
-              className={`inline-grid h-10 w-10 shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow,background-color,color] duration-200 will-change-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+              className={`inline-grid h-9 w-9 shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow,background-color,color] duration-200 will-change-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-10 sm:w-10 ${
                 canControlPlayback
                   ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
                   : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
@@ -195,15 +336,15 @@ export function MobileBottomPlayerLayout({
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onNext}
               title="下一首"
-              className="h-9 w-9 shrink-0"
+              className="h-8 w-8 shrink-0 sm:h-9 sm:w-9"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
               </svg>
             </Button>
           </div>
 
-          <div className="flex min-w-[104px] items-center justify-end gap-2">
+          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1 sm:min-w-[104px] sm:gap-2">
             <PlayerQueueDrawer
               queue={queue}
               tracks={tracks}
@@ -215,22 +356,7 @@ export function MobileBottomPlayerLayout({
               onRemoveQueueItem={onRemoveQueueItem}
               onReorderQueue={onReorderQueue}
             />
-            <span className="text-foreground-muted">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
-              </svg>
-            </span>
-            <Slider
-              className="w-[72px]"
-              value={volume}
-              max={1}
-              min={0}
-              step={0.01}
-              onChange={(event) => applyVolume(Number(event.target.value))}
-              onInput={(event) =>
-                applyVolume(Number((event.target as HTMLInputElement).value))
-              }
-            />
+            <VolumeControl volume={volume} onChange={applyVolume} />
           </div>
         </div>
       </div>
@@ -254,6 +380,8 @@ export function DesktopBottomPlayerLayout({
   onPrev,
   onNext,
   onTogglePlay,
+  playbackMode,
+  onCyclePlaybackMode,
   queue,
   tracks,
   currentQueueItemId,
@@ -283,18 +411,7 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="flex items-center justify-center gap-3">
-        <PlayerQueueDrawer
-          queue={queue}
-          tracks={tracks}
-          currentQueueItemId={currentQueueItemId}
-          activeSessionId={activeSessionId}
-          canControlPlayback={canControlPlayback}
-          canReorderQueue={canReorderQueue}
-          onPlayQueueItem={onPlayQueueItem}
-          onRemoveQueueItem={onRemoveQueueItem}
-          onReorderQueue={onReorderQueue}
-          mode="order"
-        />
+        <PlaybackModeButton mode={playbackMode} onCycle={onCyclePlaybackMode} />
         <Button
           data-testid="player-prev-button"
           variant="ghost"
@@ -378,22 +495,7 @@ export function DesktopBottomPlayerLayout({
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />
-          <span className="text-foreground-muted">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
-            </svg>
-          </span>
-          <Slider
-            className="w-full max-w-[124px]"
-            value={volume}
-            max={1}
-            min={0}
-            step={0.01}
-            onChange={(event) => applyVolume(Number(event.target.value))}
-            onInput={(event) =>
-              applyVolume(Number((event.target as HTMLInputElement).value))
-            }
-          />
+          <VolumeControl volume={volume} onChange={applyVolume} />
         </div>
       </div>
     </div>

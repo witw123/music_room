@@ -17,6 +17,7 @@ import {
   type PendingSeek
 } from "@/components/bottom-player/seek-state";
 import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
+import { getNextPlaybackMode, type PlaybackMode } from "@/components/bottom-player/playback-mode";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -97,6 +98,7 @@ function BottomPlayerBase({
   const seekRequestIdRef = useRef(0);
   const [pendingSeek, setPendingSeek] = useState<PendingSeek | null>(null);
   const [isImmersiveOpen, setIsImmersiveOpen] = useState(false);
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("sequence");
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
@@ -284,9 +286,13 @@ function BottomPlayerBase({
     void onNext();
   }, [onNext]);
 
+  const cyclePlaybackMode = useCallback(() => {
+    setPlaybackMode((current) => getNextPlaybackMode(current));
+  }, []);
+
   return (
     <>
-    <footer className="fixed bottom-0 left-0 right-0 z-50 flex flex-col justify-center min-h-[6.5rem] border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:min-h-[4.5rem] lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3">
+    <footer className="fixed bottom-3 left-3 right-3 z-50 flex min-h-[6.5rem] flex-col justify-center rounded-2xl border border-surface-border bg-background-secondary/95 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:bottom-0 lg:left-0 lg:right-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3">
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5 z-10" aria-hidden="true">
         <div
           className="h-full bg-gradient-to-r from-accent to-blue-400 shadow-[0_0_10px_rgba(0,112,243,0.6)] transition-[width] duration-150 ease-linear"
@@ -311,6 +317,8 @@ function BottomPlayerBase({
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
+        playbackMode={playbackMode}
+        onCyclePlaybackMode={cyclePlaybackMode}
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}
@@ -337,6 +345,8 @@ function BottomPlayerBase({
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
+        playbackMode={playbackMode}
+        onCyclePlaybackMode={cyclePlaybackMode}
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}

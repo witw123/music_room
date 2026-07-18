@@ -69,7 +69,6 @@ export function RoomAppShell({
         canControlPlayback={canControlPlayback}
         canDeleteRoom={canDeleteRoom}
         canDisbandRoom={workspaceViewModel.canDisbandRoom}
-        canReorderQueue={canReorderQueue}
         uploadedTracks={uploads.uploadedTracks}
         localStorageSummary={uploads.localStorageSummary}
         onCleanLocalStorage={uploads.cleanLocalStorage}
@@ -101,9 +100,6 @@ export function RoomAppShell({
         onAddToQueue={roomActions.addToQueue}
         onDeleteTrack={roomActions.deleteTrack}
         onPlayTrack={playbackActions.handlePlayTrack}
-        onPlayQueueItem={playbackActions.handlePlayQueueItem}
-        onRemoveQueueItem={roomActions.removeQueueItem}
-        onReorderQueue={roomActions.reorderQueue}
         onTabChange={pageState.setActiveDashboardTab}
         onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
         socket={socket}

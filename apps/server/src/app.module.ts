@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { resolve } from "node:path";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
 import { PlaybackModule } from "./modules/playback/playback.module";
@@ -19,7 +20,13 @@ import { AdminModule } from "./modules/admin/admin.module";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // The server is usually launched from apps/server in the workspace. Load
+    // the workspace .env explicitly so Prisma, Redis and admin flags are
+    // available before their providers are constructed.
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [resolve(process.cwd(), "../../.env"), resolve(process.cwd(), ".env")]
+    }),
     ConfigFactoryModule,
     PrismaModule,
     RedisModule,

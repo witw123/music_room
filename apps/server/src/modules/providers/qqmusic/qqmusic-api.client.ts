@@ -20,9 +20,11 @@ export class QqMusicApiClient {
   async checkQrCode(input: { qrsig: string; ptqrtoken: string }) {
     return this.call(async () => {
       const response = await checkQQLoginQr({ params: input }) as ApiResponse;
-      const item = response.body?.response;
+      const body = response.body;
+      const item = body?.response && typeof body.response === "object" ? body.response : body;
       if (!item || typeof item !== "object") throw new QqMusicApiError("invalid-response");
       if (item.refresh) return { status: "expired" as const, session: null };
+      if (typeof item.isOk !== "boolean") throw new QqMusicApiError("invalid-response");
       if (!item.isOk) return { status: "pending" as const, session: null, message: item.message ? String(item.message) : undefined };
       const session = item.session;
       const cookie = readCookie(session);

@@ -67,6 +67,10 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 npx pnpm deploy:check
 ```
 
+## 管理台写操作
+
+生产模板默认启用 `ADMIN_MUTATIONS_ENABLED=true`，管理员登录后可以结束房间、禁用或启用普通账号，以及撤销普通用户会话。发生故障需要立即冻结管理写操作时，将该变量改为 `false` 并重启 `server`；只读目录和观测接口不会受影响。
+
 ## QQ 音乐 provider
 
 QQ 音乐默认关闭，按需在生产环境设置：

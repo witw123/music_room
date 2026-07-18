@@ -15,7 +15,6 @@ type PlayerQueueDrawerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  mode?: "queue" | "order";
 };
 
 export function PlayerQueueDrawer({
@@ -27,8 +26,7 @@ export function PlayerQueueDrawer({
   canReorderQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
-  onReorderQueue,
-  mode = "queue"
+  onReorderQueue
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
@@ -71,16 +69,12 @@ export function PlayerQueueDrawer({
       <Button
         variant="ghost"
         size="icon"
-        className={`relative ${isOpen ? 'bg-accent/20 text-accent' : 'text-foreground-muted hover:text-foreground'}`}
+        className={`relative h-8 w-8 sm:h-10 sm:w-10 ${isOpen ? 'bg-accent/20 text-accent' : 'text-foreground-muted hover:text-foreground'}`}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
-        title={mode === "order" ? "调整播放顺序" : "播放队列"}
+        title="播放队列"
       >
-        {mode === "order" ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h11" /><path d="m12 4 3 3-3 3" /><path d="M20 17H9" /><path d="m12 14-3 3 3 3" /></svg>
-        ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-        )}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
         {queue.length > 0 && (
           <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center">
             {queue.length}
@@ -89,18 +83,18 @@ export function PlayerQueueDrawer({
       </Button>
 
       {isOpen ? (
-        <aside className="absolute bottom-full right-0 mb-4 w-[360px] max-h-[60vh] flex flex-col glass-panel rounded-2xl border border-surface-border shadow-2xl z-50 overflow-hidden animate-slide-up origin-bottom-right">
-          <div className="flex items-center justify-between p-4 border-b border-surface-border bg-surface/50">
+        <aside className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(360px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right">
+          <div className="flex items-center justify-between border-b border-white/15 bg-[#202228] p-4">
             <div>
-               <p className="text-[10px] font-bold text-foreground-muted tracking-[0.2em] uppercase mb-0.5">{mode === "order" ? "ORDER" : "QUEUE"}</p>
-               <h3 className="text-base font-semibold text-foreground">{mode === "order" ? "调整播放顺序" : "当前播放队列"}</h3>
+               <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-300">QUEUE</p>
+               <h3 className="text-base font-semibold text-white">当前播放队列</h3>
             </div>
-            <Button variant="ghost" size="sm" onClick={toggleDrawer} className="h-8 text-xs">
+            <Button variant="ghost" size="sm" onClick={toggleDrawer} className="h-8 text-xs text-zinc-200 hover:bg-white/10 hover:text-white">
               关闭
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto hide-scrollbar p-2 flex flex-col gap-1 relative">
+          <div className="relative flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar">
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = !!activeSessionId && canReorderQueue;
@@ -109,8 +103,8 @@ export function PlayerQueueDrawer({
                 return (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-3 p-3 rounded-xl group transition-all ${
-                      isCurrent ? "bg-accent/10 border border-accent/20" : "hover:bg-surface border border-transparent"
+                    className={`group flex items-center gap-3 rounded-xl border p-3 transition-all ${
+                      isCurrent ? "border-accent/50 bg-accent/20" : "border-transparent hover:border-white/10 hover:bg-white/[0.07]"
                     } ${draggingQueueItemId === item.id ? "opacity-50 scale-95" : ""}`}
                     draggable={canReorderQueue}
                     onDragStart={() => setDraggingQueueItemId(item.id)}
@@ -125,22 +119,22 @@ export function PlayerQueueDrawer({
                     }}
                     onDragEnd={() => setDraggingQueueItemId(null)}
                   >
-                    <span className={`text-xs font-mono font-bold w-4 text-center ${isCurrent ? "text-accent" : "text-foreground-muted/50"}`}>
+                    <span className={`w-4 text-center font-mono text-xs font-bold ${isCurrent ? "text-sky-300" : "text-zinc-400"}`}>
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <div className="flex-1 min-w-0 pr-2">
-                       <strong className={`block truncate text-sm font-semibold ${isCurrent ? "text-accent" : "text-foreground"}`}>
+                       <strong className={`block truncate text-sm font-semibold ${isCurrent ? "text-sky-200" : "text-white"}`}>
                          {track?.title ?? "未知曲目"}
                        </strong>
-                       <p className="block truncate text-xs text-foreground-muted">
+                       <p className="block truncate text-xs text-zinc-300">
                          {track?.artist ?? "本地上传"} · {formatDuration(track?.durationMs ?? 0)}
                        </p>
                     </div>
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1 shrink-0">
+                    <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="w-8 h-8 hover:text-accent"
+                        className="h-8 w-8 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
                         disabled={!canControlPlayback || isCurrent}
                         onClick={() => void onPlayQueueItem(item.id)}
                         title="播放"
@@ -150,7 +144,7 @@ export function PlayerQueueDrawer({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="w-8 h-8 text-foreground-muted hover:text-red-400 hover:bg-red-500/10"
+                        className="h-8 w-8 text-zinc-300 hover:bg-red-500/15 hover:text-red-300"
                         disabled={!canRemove}
                         onClick={() => startTransition(() => void onRemoveQueueItem(item.id))}
                         title="移除"
@@ -162,14 +156,14 @@ export function PlayerQueueDrawer({
                 );
               })
             ) : (
-              <div className="py-10 text-center text-sm text-foreground-muted">
+              <div className="py-10 text-center text-sm text-zinc-300">
                  队列空空如也。
               </div>
             )}
             
             {isPending ? (
-              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-10">
-                 <div className="bg-surface border border-surface-border rounded-full px-4 py-1.5 flex items-center gap-2 shadow-lg">
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#111216]/90 backdrop-blur-sm">
+                 <div className="flex items-center gap-2 rounded-full border border-white/15 bg-[#252832] px-4 py-1.5 shadow-lg">
                     <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
                     <span className="text-xs text-foreground">更新队列中...</span>
                  </div>

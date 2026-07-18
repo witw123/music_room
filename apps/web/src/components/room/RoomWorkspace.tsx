@@ -27,7 +27,6 @@ type RoomWorkspaceProps = {
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
   canDisbandRoom: boolean;
-  canReorderQueue: boolean;
   uploadedTracks: Record<string, UploadedTrack>;
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
@@ -59,9 +58,6 @@ type RoomWorkspaceProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
-  onPlayQueueItem: (queueItemId: string) => Promise<void>;
-  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
-  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onTabChange: (tab: "library" | "local" | "netease" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
@@ -77,7 +73,6 @@ function RoomWorkspaceBase({
   canControlPlayback,
   canDeleteRoom,
   canDisbandRoom,
-  canReorderQueue,
   uploadedTracks,
   localStorageSummary,
   onCleanLocalStorage,
@@ -108,9 +103,6 @@ function RoomWorkspaceBase({
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
-  onPlayQueueItem,
-  onRemoveQueueItem,
-  onReorderQueue,
   onTabChange,
   onDiagnosticsVisibilityChange,
   socket,
@@ -124,7 +116,7 @@ function RoomWorkspaceBase({
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-background pb-32">
+    <main className="relative flex min-h-screen flex-col bg-background pb-40 lg:pb-32">
 
 
       {roomSnapshot && statusMessage ? (
@@ -160,7 +152,6 @@ function RoomWorkspaceBase({
               canControlPlayback={canControlPlayback}
               canDeleteRoom={canDeleteRoom}
               canDisbandRoom={canDisbandRoom}
-              canReorderQueue={canReorderQueue}
               currentSourceOwnerNickname={currentSourceOwnerNickname}
               uploadedTracks={uploadedTracks}
               localStorageSummary={localStorageSummary}
@@ -185,9 +176,6 @@ function RoomWorkspaceBase({
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
-              onPlayQueueItem={onPlayQueueItem}
-              onRemoveQueueItem={onRemoveQueueItem}
-              onReorderQueue={onReorderQueue}
               socket={socket}
               onTabChange={onTabChange}
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
