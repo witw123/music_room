@@ -56,15 +56,30 @@ export class RoomPresenceService {
       }
     }
 
+    // The local cache is the same source used by the realtime gateway on this
+    // instance. Keep it when Redis is unavailable instead of turning a
+    // transient dependency failure into an empty presence snapshot.
+    const redisWithAvailability = this.redis as RedisService & {
+      isAvailable?: () => boolean;
+    };
+    if (typeof redisWithAvailability.isAvailable === "function" && !redisWithAvailability.isAvailable()) {
+      return presence;
+    }
+
     const presenceKeys = members.map((member) =>
       this.realtimePresenceKey(roomId, member.id)
     );
     const redisWithBatchRead = this.redis as RedisService & {
       getStrings?: (keys: string[]) => Promise<Array<string | null>>;
     };
-    const rawValues = redisWithBatchRead.getStrings
-      ? await redisWithBatchRead.getStrings(presenceKeys)
-      : await Promise.all(presenceKeys.map((key) => this.redis.getString(key)));
+    let rawValues: Array<string | null>;
+    try {
+      rawValues = redisWithBatchRead.getStrings
+        ? await redisWithBatchRead.getStrings(presenceKeys)
+        : await Promise.all(presenceKeys.map((key) => this.redis.getString(key)));
+    } catch {
+      return presence;
+    }
     const redisPresence = members.map((member, index) => ({
       memberId: member.id,
       rawValue: rawValues[index] ?? null

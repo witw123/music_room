@@ -2,10 +2,12 @@ import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundExcep
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema } from "@music-room/shared";
+import type { RoomMember } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomService } from "../room/room.service";
+import { RoomPresenceService } from "../room/services/room-presence.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 
@@ -25,6 +27,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly redis: RedisService,
     private readonly auth: AuthService,
     private readonly roomService: RoomService,
+    private readonly roomPresence: RoomPresenceService,
     private readonly playlistService: PlaylistService,
     private readonly roomPublisher: RoomRealtimePublisher
   ) {}
@@ -148,18 +151,29 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listRooms(query: { q?: string; limit?: number }) {
-    const rows = await this.prisma.roomState.findMany({ orderBy: { updatedAt: "desc" }, take: Math.min(query.limit ?? 50, 100) });
-    const q = query.q?.trim().toLowerCase();
-    const data = await Promise.all(rows.filter((row) => !q || row.id.toLowerCase().includes(q) || row.joinCode.toLowerCase().includes(q)).map((row) => this.roomSummary(row)));
+    const q = query.q?.trim();
+    const rows = await this.prisma.roomState.findMany({
+      where: q
+        ? {
+            OR: [
+              { id: { contains: q, mode: "insensitive" } },
+              { joinCode: { contains: q, mode: "insensitive" } }
+            ]
+          }
+        : undefined,
+      orderBy: { updatedAt: "desc" },
+      take: Math.min(query.limit ?? 50, 100)
+    });
+    const data = await Promise.all(rows.map((row) => this.roomSummary(row)));
     return { data, nextCursor: null, generatedAt: new Date().toISOString() };
   }
 
   async roomDetail(roomId: string) {
     const row = await this.prisma.roomState.findUnique({ where: { id: roomId } });
     if (!row) throw new NotFoundException("房间不存在。");
-    const summary = await this.roomSummary(row);
     const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; peerId?: string | null; presenceState?: string; [key: string]: unknown }> : [];
-    const livePresence = await this.readLivePresence(row.id, members);
+    const livePresence = await this.roomPresence.getPresenceSnapshot(row.id, members as RoomMember[]);
+    const summary = await this.roomSummary(row, livePresence);
     const liveMembers = members.map((member) => {
       if (!member.id) return member;
       const live = livePresence.get(member.id);
@@ -169,20 +183,32 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listUsers(query: { q?: string; limit?: number }) {
+    const q = query.q?.trim();
     const [rows, rooms] = await Promise.all([
-      this.prisma.user.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(query.limit ?? 50, 100), include: { _count: { select: { userSessions: true } }, userSessions: { where: { expiresAt: { gt: new Date() } }, select: { id: true } } } }),
+      this.prisma.user.findMany({
+        where: q
+          ? {
+              OR: [
+                { username: { contains: q, mode: "insensitive" } },
+                { nickname: { contains: q, mode: "insensitive" } }
+              ]
+            }
+          : undefined,
+        orderBy: { createdAt: "desc" },
+        take: Math.min(query.limit ?? 50, 100),
+        include: { userSessions: { where: { expiresAt: { gt: new Date() } }, select: { id: true } } }
+      }),
       this.prisma.roomState.findMany({ select: { id: true, members: true } })
     ]);
     const onlineRoomCounts = new Map<string, number>();
     await Promise.all(rooms.map(async (room) => {
       const members = Array.isArray(room.members) ? room.members as Array<{ id?: string; peerId?: string | null; presenceState?: string }> : [];
-      const livePresence = await this.readLivePresence(room.id, members);
+      const livePresence = await this.roomPresence.getPresenceSnapshot(room.id, members as RoomMember[]);
       for (const member of members) {
         if (member.id && livePresence.get(member.id)?.presenceState === "online") onlineRoomCounts.set(member.id, (onlineRoomCounts.get(member.id) ?? 0) + 1);
       }
     }));
-    const q = query.q?.trim().toLowerCase();
-    const data = rows.filter((row) => !q || row.username.includes(q) || row.nickname.toLowerCase().includes(q)).map((row) => ({ id: row.id, username: row.username, nickname: row.nickname, role: row.role, status: row.status, createdAt: row.createdAt.toISOString(), lastLoginAt: row.lastLoginAt?.toISOString() ?? null, activeSessionCount: row.userSessions.length, onlineRoomCount: onlineRoomCounts.get(row.id) ?? 0 }));
+    const data = rows.map((row) => ({ id: row.id, username: row.username, nickname: row.nickname, role: row.role, status: row.status, createdAt: row.createdAt.toISOString(), lastLoginAt: row.lastLoginAt?.toISOString() ?? null, activeSessionCount: row.userSessions.length, onlineRoomCount: onlineRoomCounts.get(row.id) ?? 0 }));
     return { data, nextCursor: null, generatedAt: new Date().toISOString() };
   }
 
@@ -241,14 +267,14 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async listIncidents(limit = 50) { return { data: await this.prisma.operationalIncident.findMany({ orderBy: { lastSeenAt: "desc" }, take: Math.min(limit, 100) }), nextCursor: null, generatedAt: new Date().toISOString() }; }
   async listAudit(limit = 50) { return { data: await this.prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(limit, 100), select: { id: true, actorUserId: true, action: true, targetType: true, targetId: true, reason: true, result: true, createdAt: true } }), nextCursor: null, generatedAt: new Date().toISOString() }; }
 
-  private async roomSummary(row: { id: string; joinCode: string; visibility: string; hostId: string; members: unknown; playback: unknown; updatedAt: Date }) {
+  private async roomSummary(row: { id: string; joinCode: string; visibility: string; hostId: string; members: unknown; playback: unknown; updatedAt: Date }, livePresence?: Map<string, { peerId: string | null; presenceState: string }>) {
     const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; nickname?: string; presenceState?: string; peerId?: string | null }> : [];
     const playback = (row.playback ?? {}) as { status?: string; currentTrackId?: string };
-    const livePresence = await this.readLivePresence(row.id, members);
-    const onlineMembers = members.filter((member) => member.id && livePresence.get(member.id)?.presenceState === "online");
+    const presence = livePresence ?? await this.roomPresence.getPresenceSnapshot(row.id, members as RoomMember[]);
+    const onlineMembers = members.filter((member) => member.id && presence.get(member.id)?.presenceState === "online");
     const reportedPeerIds = await this.readReportedPeerIds(row.id);
-    const reported = onlineMembers.filter((member) => { const peerId = livePresence.get(member.id!)?.peerId; return !!peerId && reportedPeerIds.has(peerId); }).length;
-    const health = await this.resolveRoomHealth(row.id, onlineMembers, livePresence, reportedPeerIds);
+    const reported = onlineMembers.filter((member) => { const peerId = presence.get(member.id!)?.peerId; return !!peerId && reportedPeerIds.has(peerId); }).length;
+    const health = await this.resolveRoomHealth(row.id, onlineMembers, presence, reportedPeerIds);
     return { id: row.id, joinCode: row.joinCode, visibility: row.visibility, hostId: row.hostId, hostNickname: members.find((member) => member.id === row.hostId)?.nickname ?? null, memberCount: members.length, onlineMemberCount: onlineMembers.length, onlineUserIds: onlineMembers.map((member) => member.id!), playbackStatus: playback.status ?? "idle", currentTrackTitle: null, health, telemetryCoverage: { reported, total: onlineMembers.length }, updatedAt: row.updatedAt.toISOString() };
   }
 
@@ -276,20 +302,6 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       } catch { hasDegraded = true; }
     }
     return missingReport || hasDegraded ? "degraded" as const : "healthy" as const;
-  }
-
-  private async readLivePresence(roomId: string, members: Array<{ id?: string; peerId?: string | null; presenceState?: string }>) {
-    const result = new Map<string, { peerId: string | null; presenceState: string }>();
-    const fallback = () => { members.forEach((member) => { if (member.id && member.presenceState === "online") result.set(member.id, { peerId: member.peerId ?? null, presenceState: "online" }); }); };
-    if (!this.redis.isAvailable() || members.length === 0) { fallback(); return result; }
-    let values: Array<string | null>;
-    try {
-      values = await this.redis.getStrings(members.map((member) => "music-room:presence:" + roomId + ":" + member.id));
-    } catch {
-      return result;
-    }
-    values.forEach((raw, index) => { const member = members[index]; if (!raw || !member?.id) return; try { const parsed = JSON.parse(raw) as { peerId?: string | null; presenceState?: string }; result.set(member.id, { peerId: parsed.peerId ?? null, presenceState: parsed.presenceState ?? "offline" }); } catch { /* ignore malformed presence */ } });
-    return result;
   }
 
   private async readReportedPeerIds(roomId: string) {

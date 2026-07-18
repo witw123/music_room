@@ -69,6 +69,7 @@ type RoomPresenceStore = Map<
   ],
   exports: [
     RoomService,
+    RoomPresenceService,
     RoomRealtimePublisher,
     RoomRealtimeBroadcaster
   ]
