@@ -52,7 +52,7 @@ export function PlaylistPanel({
         <span className="text-xs font-semibold text-foreground-muted">新歌单名称</span>
         <div className="flex gap-2">
           <input
-            className="flex-1 rounded-lg border border-surface-border bg-black/40 px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+            className="flex-1 rounded-lg border border-surface-border bg-black/40 px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 transition-[background-color,border-color,box-shadow,color] duration-150 ease-out focus:outline-none focus:ring-1 focus:ring-accent"
             value={playlistTitle}
             onChange={(event) => setPlaylistTitle(event.target.value)}
             placeholder="例如：Tonight Selects"
@@ -86,7 +86,7 @@ export function PlaylistPanel({
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-foreground-muted">重命名歌单</span>
                     <input
-                      className="w-full rounded-md border border-surface-border bg-black/40 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                      className="w-full rounded-md border border-surface-border bg-black/40 px-3 py-2 text-sm text-foreground transition-[background-color,border-color,box-shadow,color] duration-150 ease-out focus:outline-none focus:ring-1 focus:ring-accent"
                       value={playlistEditTitle}
                       onChange={(event) => setPlaylistEditTitle(event.target.value)}
                     />

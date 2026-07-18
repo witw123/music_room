@@ -141,7 +141,7 @@ export function RoomChatOverlay({
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="分享你的感受..."
-          className={`relative flex-1 rounded-full border border-white/10 bg-black/40 text-white placeholder:text-white/20 transition-all focus:outline-none focus:ring-1 focus:ring-accent/40 backdrop-blur-3xl ${
+          className={`relative flex-1 rounded-full border border-white/10 bg-black/40 text-white placeholder:text-white/20 transition-[background-color,border-color,box-shadow,color] duration-150 ease-out focus:outline-none focus:ring-1 focus:ring-accent/40 backdrop-blur-3xl ${
             ultraCompact
               ? "px-3.5 py-1.5 text-[12px]"
               : compact
@@ -153,7 +153,7 @@ export function RoomChatOverlay({
             size="icon" 
             onClick={handleSend}
             disabled={!inputValue.trim()}
-            className={`relative shrink-0 rounded-full bg-accent/90 text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent active:scale-90 disabled:grayscale disabled:opacity-30 ${
+            className={`relative shrink-0 rounded-full bg-accent/90 text-white shadow-lg shadow-accent/20 transition-[background-color,box-shadow,transform,opacity,filter] duration-150 ease-out hover:bg-accent active:scale-[0.97] disabled:grayscale disabled:opacity-30 ${
               compact ? "h-8 w-8" : "h-9 w-9"
             }`}
         >

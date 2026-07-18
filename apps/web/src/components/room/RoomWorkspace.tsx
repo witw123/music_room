@@ -132,7 +132,7 @@ function RoomWorkspaceBase({
         >
           <div
             data-testid="room-status-message"
-            className={`pointer-events-auto rounded-full px-5 py-2.5 text-sm font-medium shadow-xl backdrop-blur-md transition-all duration-300 animate-slide-up ${
+            className={`pointer-events-auto rounded-full px-5 py-2.5 text-sm font-medium shadow-xl backdrop-blur-md transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-out animate-slide-up ${
               statusTone === "warning"
                 ? "border border-red-500/20 bg-red-500/10 text-red-400"
                 : statusTone === "success"

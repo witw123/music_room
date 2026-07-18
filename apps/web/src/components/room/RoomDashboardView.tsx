@@ -240,8 +240,8 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ RIGHT: Management Panel ══════ */}
-      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl lg:min-h-0 lg:flex-[2] lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
-        <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/72 px-4 pb-3 pt-3 sm:px-6 sm:pt-5">
+      <div className="material-surface relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:flex-[2] lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.08] rounded-t-[24px] px-4 pb-3 pt-3 sm:px-6 sm:pt-5 lg:rounded-none">
           <div className="mb-3 hidden grid-cols-3 gap-2 text-[10px] font-medium text-foreground-muted lg:grid">
             <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
               <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">Audio</span>
@@ -263,7 +263,15 @@ function RoomDashboardViewBase({
             </div>
           </div>
 
-          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-white/5 p-1" role="tablist">
+          <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-1 rounded-[9px] bg-white/[0.12] shadow-[0_1px_2px_rgba(0,0,0,0.24)] transition-[transform,width] duration-200 ease-out"
+              style={{
+                transform: `translateX(${tabIds.indexOf(activeTab) * 100}%)`,
+                width: `${100 / tabIds.length}%`
+              }}
+            />
             {tabIds.map((tab) => (
               <button
                 key={tab}
@@ -275,10 +283,10 @@ function RoomDashboardViewBase({
                 onKeyDown={(event) => handleTabKeyDown(event, tab)}
                 role="tab"
                 tabIndex={activeTab === tab ? 0 : -1}
-                className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
+                className={`relative z-10 flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-[color,opacity] duration-150 ease-out sm:text-sm ${
                   activeTab === tab
-                    ? "bg-white/10 text-white shadow-sm"
-                    : "text-white/50 hover:bg-white/5 hover:text-white/80"
+                    ? "text-white"
+                    : "text-white/50 hover:text-white/80"
                 }`}
                 type="button"
               >

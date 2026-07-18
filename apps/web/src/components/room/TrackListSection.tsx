@@ -19,6 +19,22 @@ type TrackListSectionProps = {
   onPlayTrack: (trackId: string) => Promise<void>;
 };
 
+export type LibraryTrackFilter = "all" | "mine" | "others";
+
+export function filterLibraryTracks<T extends Pick<TrackMeta, "ownerSessionId">>(
+  tracks: T[],
+  activeSessionUserId: string | null | undefined,
+  filter: LibraryTrackFilter
+) {
+  if (filter === "all") return tracks;
+
+  return tracks.filter((track) =>
+    filter === "mine"
+      ? track.ownerSessionId === activeSessionUserId
+      : track.ownerSessionId !== activeSessionUserId
+  );
+}
+
 function TrackListSectionBase({
   tracks,
   uploadedTracks,
@@ -32,6 +48,11 @@ function TrackListSectionBase({
   onPlayTrack
 }: TrackListSectionProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [trackFilter, setTrackFilter] = useState<LibraryTrackFilter>("all");
+  const activeSessionUserId = activeSession?.userId;
+  const ownTrackCount = tracks.filter((track) => track.ownerSessionId === activeSessionUserId).length;
+  const otherTrackCount = tracks.length - ownTrackCount;
+  const visibleTracks = filterLibraryTracks(tracks, activeSessionUserId, trackFilter);
   const runAction = async (key: string, action: () => Promise<void>) => {
     if (pendingAction) return;
     setPendingAction(key);
@@ -43,8 +64,8 @@ function TrackListSectionBase({
   };
   return (
     <section className="relative flex w-full flex-col gap-8">
-      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-8 text-center transition-all hover:border-accent/40 hover:bg-accent/10 sm:p-12">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent group-hover:text-white">
+      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-8 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out hover:border-accent/40 hover:bg-accent/10 sm:p-12">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
           <svg
             width="28"
             height="28"
@@ -73,10 +94,50 @@ function TrackListSectionBase({
         />
       </label>
 
+      <div className="flex flex-col gap-3 border-b border-surface-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-foreground">曲库来源</p>
+          <p className="mt-1 text-[10px] text-foreground-muted">按上传成员筛选房间里的歌曲</p>
+        </div>
+        <div
+          aria-label="曲库来源筛选"
+          className="grid grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1 sm:min-w-[330px]"
+          role="group"
+        >
+          {[
+            { value: "all" as const, label: "全部歌曲", count: tracks.length },
+            { value: "mine" as const, label: "本人上传", count: ownTrackCount },
+            { value: "others" as const, label: "其他成员", count: otherTrackCount }
+          ].map((option) => (
+            <button
+              key={option.value}
+              aria-pressed={trackFilter === option.value}
+              data-testid={`library-filter-${option.value}`}
+              className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[11px] font-semibold transition-colors sm:px-3 ${
+                trackFilter === option.value
+                  ? "bg-accent text-white shadow-sm"
+                  : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+              }`}
+              onClick={() => setTrackFilter(option.value)}
+              type="button"
+            >
+              <span className="truncate">{option.label}</span>
+              <span
+                className={`font-mono text-[10px] ${
+                  trackFilter === option.value ? "text-white/75" : "text-foreground-muted/70"
+                }`}
+              >
+                {option.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-4 flex flex-col gap-2">
-        {tracks.length > 0 ? (
+        {visibleTracks.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
-            {tracks.map((track) => {
+            {visibleTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
                 activeSessionUserId: activeSession?.userId
@@ -200,7 +261,12 @@ function TrackListSectionBase({
         ) : (
           <div className="rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center">
             <p className="mx-auto max-w-sm text-sm text-foreground-muted">
-              还没有曲目。先导入本地音乐，之后就可以在队列里协作播放。
+              {tracks.length === 0
+                ? "还没有曲目。先导入本地音乐，之后就可以在队列里协作播放。"
+                : trackFilter === "mine"
+                  ? "你还没有上传歌曲。导入本地音乐后，它会出现在这里。"
+                  : "暂无其他成员上传的歌曲。"
+              }
             </p>
           </div>
         )}

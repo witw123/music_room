@@ -130,11 +130,11 @@ function QueuePanelBase({
                 key={item.id}
                 data-testid="queue-item"
                 data-queue-item-id={item.id}
-                className={`flex flex-col gap-4 rounded-2xl border p-4 transition-all sm:flex-row sm:items-center ${
+                className={`flex flex-col gap-4 rounded-2xl border p-4 transition-[transform,opacity,background-color,border-color,box-shadow] duration-150 ease-out sm:flex-row sm:items-center ${
                   isCurrent
                     ? "border-accent/30 bg-accent/10 shadow-[0_0_15px_rgba(139,92,246,0.1)]"
                     : "border-surface-border bg-surface/50 hover:border-surface-hover hover:bg-surface"
-                } ${draggingQueueItemId === item.id ? "scale-95 opacity-40" : ""} ${
+                } ${draggingQueueItemId === item.id ? "scale-[1.01] opacity-100 shadow-2xl ring-1 ring-accent/30" : ""} ${
                   isDropTarget ? "border-accent/60 ring-1 ring-accent/40" : ""
                 }`}
                 draggable={canReorderQueue && pendingAction === null}

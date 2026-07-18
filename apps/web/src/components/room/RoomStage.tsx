@@ -115,7 +115,7 @@ function RoomStageBase({
         ultraCompactStage ? "py-2" : compactStage ? "py-3" : "py-4 sm:py-5 md:py-6"
       }`}
     >
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-accent/5 to-transparent blur-[120px]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-accent/[0.035] blur-[110px]" />
 
       <div
         className={`relative z-30 flex w-full shrink-0 items-start justify-between gap-3 ${
@@ -181,7 +181,7 @@ function RoomStageBase({
             data-testid="room-settings-button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-all hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
+            className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
             onClick={() => setShowSettings((value) => !value)}
             type="button"
           >
@@ -237,7 +237,7 @@ function RoomStageBase({
         </div>
       </div>
 
-      <div className="relative z-20 min-h-0 overflow-visible">
+      <div className="relative z-20 min-h-0 overflow-x-clip overflow-y-visible">
         <div
           className={`pointer-events-none flex h-full items-center justify-center ${
             ultraCompactStage ? "-translate-y-8" : compactStage ? "-translate-y-4" : ""
@@ -247,7 +247,7 @@ function RoomStageBase({
             <VinylAuraVisualizer isPlaying={isPlaying} />
 
             <div
-              className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-all duration-1000 ${
+              className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out ${
                 ultraCompactStage
                   ? "h-[clamp(7.5rem,20vh,9.5rem)] w-[clamp(7.5rem,20vh,9.5rem)]"
                   : compactStage
@@ -270,7 +270,7 @@ function RoomStageBase({
             </div>
 
             <div
-              className={`absolute right-[clamp(-2.4rem,-5vh,-1rem)] top-[clamp(0.5rem,1.8vh,0.75rem)] flex h-[clamp(7rem,21vh,12rem)] w-[clamp(1.75rem,4.2vh,2rem)] origin-[14px_14px] flex-col items-center transition-transform duration-[800ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+              className={`absolute right-[clamp(-2.4rem,-5vh,-1rem)] top-[clamp(0.5rem,1.8vh,0.75rem)] flex h-[clamp(7rem,21vh,12rem)] w-[clamp(1.75rem,4.2vh,2rem)] origin-[14px_14px] flex-col items-center transition-transform duration-500 ease-out ${
                 isPlaying ? "rotate-[20deg]" : "-rotate-[15deg]"
               }`}
               style={{ zIndex: 30 }}
@@ -285,7 +285,7 @@ function RoomStageBase({
             </div>
 
             <div
-              className={`absolute bottom-[clamp(-2.5rem,-5vh,-2rem)] left-1/2 h-[clamp(2rem,5vh,2.5rem)] w-[72%] -translate-x-1/2 bg-accent/20 blur-[45px] transition-all duration-1000 sm:w-[80%] ${
+              className={`absolute bottom-[clamp(-2.5rem,-5vh,-2rem)] left-1/2 h-[clamp(2rem,5vh,2.5rem)] w-[72%] -translate-x-1/2 bg-accent/20 blur-[45px] transition-[opacity,transform] duration-700 ease-out sm:w-[80%] ${
                 isPlaying ? "scale-110 opacity-100" : "scale-90 opacity-30"
               }`}
             />
