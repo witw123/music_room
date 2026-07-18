@@ -21,3 +21,5 @@ deploy/linux/observability-rendered/
 .codex-tmp-tauri/
 outputs/
 .claude/
+.tmp/
+apps/server/.tmp/

@@ -71,13 +71,7 @@ export function useRoomDerivedState({
   );
   const canDisbandRoom =
     !!roomSnapshot &&
-    canDeleteRoom &&
-    (() => {
-      const uploaderIds = new Set(roomSnapshot.tracks.map((track) => track.ownerSessionId));
-      return !roomMembers?.some(
-        (member) => uploaderIds.has(member.id) && member.presenceState !== "online"
-      );
-    })();
+    canDeleteRoom;
 
   const visiblePeerDiagnostics = useMemo(() => {
     return filterVisiblePeerDiagnostics(

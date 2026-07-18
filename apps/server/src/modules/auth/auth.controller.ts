@@ -11,13 +11,16 @@ import {
   Optional,
   Post,
   Req,
+  Res,
   ServiceUnavailableException,
   UnauthorizedException
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
-import { loginRequestSchema, registerRequestSchema } from "@music-room/shared";
+import { loginRequestSchema, registerRequestSchema, type AuthSession } from "@music-room/shared";
+import type { Response } from "express";
 import { RedisService } from "../../infra/redis/redis.service";
 import { parseRequestBody } from "../../common/validation/zod-validation";
+import { userSessionCookieName } from "./auth.cookies";
 import { AuthService } from "./auth.service";
 
 type AuthRateLimitBucket = {
@@ -45,7 +48,8 @@ export class AuthController {
       headers?: Record<string, string | string[] | undefined>;
       socket?: { remoteAddress?: string };
     },
-    @Ip() ipAddress?: string
+    @Ip() ipAddress?: string,
+    @Res({ passthrough: true }) response?: Response
   ) {
     const payload = parseRequestBody(registerRequestSchema, body);
     const username = payload.username;
@@ -61,7 +65,8 @@ export class AuthController {
       this.logger.log(
         this.buildAuthLog("register.accepted", clientIp, username, HttpStatus.CREATED)
       );
-      return session;
+      setUserSessionCookie(response, session.token);
+      return toPublicAuthSession(session);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid payload.";
       this.logger.warn(
@@ -86,7 +91,8 @@ export class AuthController {
       headers?: Record<string, string | string[] | undefined>;
       socket?: { remoteAddress?: string };
     },
-    @Ip() ipAddress?: string
+    @Ip() ipAddress?: string,
+    @Res({ passthrough: true }) response?: Response
   ) {
     const payload = parseRequestBody(loginRequestSchema, body);
     const username = payload.username;
@@ -99,7 +105,8 @@ export class AuthController {
         password: payload.password
       });
       this.logger.log(this.buildAuthLog("login.accepted", clientIp, username, HttpStatus.OK));
-      return session;
+      setUserSessionCookie(response, session.token);
+      return toPublicAuthSession(session);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unauthorized.";
       this.logger.warn(
@@ -113,14 +120,20 @@ export class AuthController {
   }
 
   @Post("logout")
-  async logout(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.authService.logout(sessionToken);
+  async logout(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Res({ passthrough: true }) response?: Response
+  ) {
+    const result = await this.authService.logout(sessionToken);
+    response?.clearCookie(userSessionCookieName, { path: "/" });
+    return result;
   }
 
   @Get("me")
   async me(@Headers("x-session-token") sessionToken: string | undefined) {
     try {
-      return await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      return toPublicAuthSession(session);
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }
@@ -261,6 +274,20 @@ export class AuthController {
       timestamp: new Date().toISOString()
     });
   }
+}
+
+function setUserSessionCookie(response: Response | undefined, token: string) {
+  response?.cookie(userSessionCookieName, token, {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: "/"
+  });
+}
+
+function toPublicAuthSession(session: AuthSession): AuthSession {
+  return { ...session, token: "" };
 }
 
 function resolveClientIp(

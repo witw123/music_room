@@ -10,6 +10,7 @@ import { RoomService } from "../room/room.service";
 import { RoomPresenceService } from "../room/services/room-presence.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
+import { getCorsOrigins } from "../../common/cors/get-cors-origins";
 
 export const adminSessionCookie = "music_room_admin_session";
 export const adminCsrfCookie = "music_room_admin_csrf";
@@ -118,7 +119,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       const csrfCookie = cookies[adminCsrfCookie];
       if (!csrfHeader || !csrfCookie || !safeEqual(hashToken(String(csrfHeader)), row.csrfHash) || !safeEqual(hashToken(csrfCookie), row.csrfHash)) throw new UnauthorizedException("CSRF 校验失败。");
       const origin = request.headers.origin;
-      const allowedOrigins = (process.env.CORS_ORIGINS ?? `${request.protocol}://${request.get("host")}`).split(",").map((value) => value.trim()).filter(Boolean);
+      const allowedOrigins = getCorsOrigins();
       if (!origin || !allowedOrigins.includes(origin)) throw new UnauthorizedException("Origin 校验失败。");
     }
     if (now - row.lastActiveAt.getTime() > 5 * 60 * 1000) void this.prisma.adminSession.update({ where: { id: row.id }, data: { lastActiveAt: new Date() } });
@@ -179,7 +180,18 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       const live = livePresence.get(member.id);
       return live ? { ...member, peerId: live.peerId, presenceState: live.presenceState } : { ...member, peerId: null, presenceState: "offline" };
     });
-    return { ...summary, playback: row.playback, queue: row.queue, tracks: row.tracks, members: liveMembers };
+    return {
+      ...summary,
+      name: row.name,
+      description: row.description,
+      visibility: row.visibility,
+      hostId: row.hostId,
+      createdAt: row.createdAt.toISOString(),
+      playback: row.playback,
+      queue: row.queue,
+      tracks: row.tracks,
+      members: liveMembers
+    };
   }
 
   async listUsers(query: { q?: string; limit?: number }) {
@@ -213,10 +225,23 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async userDetail(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, username: true, nickname: true, role: true, status: true, createdAt: true, lastLoginAt: true, disabledAt: true, disabledReason: true, userSessions: { where: { expiresAt: { gt: new Date() } }, select: { id: true, createdAt: true, expiresAt: true } } } });
+    const [user, roomRows] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, username: true, nickname: true, role: true, status: true, createdAt: true, lastLoginAt: true, disabledAt: true, disabledReason: true, userSessions: { where: { expiresAt: { gt: new Date() } }, select: { id: true, createdAt: true, expiresAt: true } } } }),
+      this.prisma.roomState.findMany({ select: { id: true, joinCode: true, name: true, visibility: true, hostId: true, members: true, updatedAt: true } })
+    ]);
     if (!user) throw new NotFoundException("用户不存在。");
     const audits = await this.prisma.adminAuditLog.findMany({ where: { targetType: "user", targetId: userId }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, reason: true, result: true, createdAt: true } });
-    return { ...user, createdAt: user.createdAt.toISOString(), lastLoginAt: user.lastLoginAt?.toISOString() ?? null, disabledAt: user.disabledAt?.toISOString() ?? null, sessions: user.userSessions.map((session) => ({ ...session, createdAt: session.createdAt.toISOString(), expiresAt: session.expiresAt.toISOString() })), audits: audits.map((audit) => ({ ...audit, createdAt: audit.createdAt.toISOString() })) };
+    const rooms = roomRows
+      .filter((room) => room.hostId === userId || (Array.isArray(room.members) && room.members.some((member) => (member as { id?: string }).id === userId)))
+      .map((room) => ({
+        id: room.id,
+        joinCode: room.joinCode,
+        name: room.name,
+        visibility: room.visibility,
+        role: room.hostId === userId ? "host" : "member",
+        updatedAt: room.updatedAt.toISOString()
+      }));
+    return { ...user, createdAt: user.createdAt.toISOString(), lastLoginAt: user.lastLoginAt?.toISOString() ?? null, disabledAt: user.disabledAt?.toISOString() ?? null, sessions: user.userSessions.map((session) => ({ ...session, createdAt: session.createdAt.toISOString(), expiresAt: session.expiresAt.toISOString() })), rooms, audits: audits.map((audit) => ({ ...audit, createdAt: audit.createdAt.toISOString() })) };
   }
 
   async setUserStatus(actor: AdminPrincipal, userId: string, statusInput: unknown, request: Request) {
@@ -267,15 +292,16 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async listIncidents(limit = 50) { return { data: await this.prisma.operationalIncident.findMany({ orderBy: { lastSeenAt: "desc" }, take: Math.min(limit, 100) }), nextCursor: null, generatedAt: new Date().toISOString() }; }
   async listAudit(limit = 50) { return { data: await this.prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(limit, 100), select: { id: true, actorUserId: true, action: true, targetType: true, targetId: true, reason: true, result: true, createdAt: true } }), nextCursor: null, generatedAt: new Date().toISOString() }; }
 
-  private async roomSummary(row: { id: string; joinCode: string; visibility: string; hostId: string; members: unknown; playback: unknown; updatedAt: Date }, livePresence?: Map<string, { peerId: string | null; presenceState: string }>) {
+  private async roomSummary(row: { id: string; joinCode: string; name?: string | null; description?: string | null; createdAt?: Date; visibility: string; hostId: string; members: unknown; tracks?: unknown; playback: unknown; updatedAt: Date }, livePresence?: Map<string, { peerId: string | null; presenceState: string }>) {
     const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; nickname?: string; presenceState?: string; peerId?: string | null }> : [];
     const playback = (row.playback ?? {}) as { status?: string; currentTrackId?: string };
+    const tracks = Array.isArray(row.tracks) ? row.tracks as Array<{ id?: string; title?: string }> : [];
     const presence = livePresence ?? await this.roomPresence.getPresenceSnapshot(row.id, members as RoomMember[]);
     const onlineMembers = members.filter((member) => member.id && presence.get(member.id)?.presenceState === "online");
     const reportedPeerIds = await this.readReportedPeerIds(row.id);
     const reported = onlineMembers.filter((member) => { const peerId = presence.get(member.id!)?.peerId; return !!peerId && reportedPeerIds.has(peerId); }).length;
     const health = await this.resolveRoomHealth(row.id, onlineMembers, presence, reportedPeerIds);
-    return { id: row.id, joinCode: row.joinCode, visibility: row.visibility, hostId: row.hostId, hostNickname: members.find((member) => member.id === row.hostId)?.nickname ?? null, memberCount: members.length, onlineMemberCount: onlineMembers.length, onlineUserIds: onlineMembers.map((member) => member.id!), playbackStatus: playback.status ?? "idle", currentTrackTitle: null, health, telemetryCoverage: { reported, total: onlineMembers.length }, updatedAt: row.updatedAt.toISOString() };
+    return { id: row.id, joinCode: row.joinCode, name: row.name ?? null, description: row.description ?? null, createdAt: row.createdAt?.toISOString() ?? null, visibility: row.visibility, hostId: row.hostId, hostNickname: members.find((member) => member.id === row.hostId)?.nickname ?? null, memberCount: members.length, onlineMemberCount: onlineMembers.length, onlineUserIds: onlineMembers.map((member) => member.id!), playbackStatus: playback.status ?? "idle", currentTrackTitle: tracks.find((track) => track.id === playback.currentTrackId)?.title ?? null, health, telemetryCoverage: { reported, total: onlineMembers.length }, updatedAt: row.updatedAt.toISOString() };
   }
 
   private async resolveRoomHealth(roomId: string, onlineMembers: Array<{ id?: string }>, livePresence: Map<string, { peerId: string | null; presenceState: string }>, reportedPeerIds: Set<string>) {

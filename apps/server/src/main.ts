@@ -1,10 +1,12 @@
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";
 import { validateRuntimeConfig } from "./common/config/runtime-config";
 import { getCorsOrigins } from "./common/cors/get-cors-origins";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
+import { readUserSessionCookie } from "./modules/auth/auth.cookies";
 
 async function bootstrap() {
   validateRuntimeConfig();
@@ -16,6 +18,15 @@ async function bootstrap() {
     };
     expressApp.set?.("trust proxy", trustProxy);
   }
+  app.use((request: Request, _response: Response, next: NextFunction) => {
+    if (!request.headers["x-session-token"]) {
+      const token = readUserSessionCookie(request.headers.cookie);
+      if (token) {
+        request.headers["x-session-token"] = token;
+      }
+    }
+    next();
+  });
   app.useGlobalFilters(new ApiExceptionFilter());
   app.enableCors({
     origin: getCorsOrigins(),

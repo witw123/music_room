@@ -22,8 +22,6 @@ import {
   type TrackMeta
 } from "@music-room/shared";
 
-const sessionStorageKey = "music-room-session";
-
 export class MusicRoomApiError extends Error {
   constructor(
     message: string,
@@ -38,24 +36,6 @@ export type QueueMutationResponse = {
   queue: QueueItem[];
   playback: PlaybackSnapshot;
 };
-
-function getSessionToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.localStorage.getItem(sessionStorageKey);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const session = JSON.parse(raw) as AuthSession;
-    return session.token ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export function extractApiErrorMessage(rawBody: string) {
   const trimmed = rawBody.trim();
@@ -106,14 +86,13 @@ export function extractApiError(rawBody: string): ApiErrorResponse | null {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(sessionToken ? { "x-session-token": sessionToken } : {}),
       ...(init?.headers ?? {})
     },
+    credentials: "include",
     cache: "no-store"
   });
 
@@ -126,7 +105,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       apiError?.code === errorCodes.unauthorized &&
       typeof window !== "undefined";
     if (shouldExpireSession) {
-      window.localStorage.removeItem(sessionStorageKey);
       window.dispatchEvent(
         new CustomEvent("music-room-auth-expired", {
           detail: { message }
@@ -158,14 +136,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestBlob(path: string, init?: RequestInit, options?: { throttleImport?: boolean }) {
-  const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     ...(options?.throttleImport ? { priority: "low" as const } : {}),
     headers: {
-      ...(sessionToken ? { "x-session-token": sessionToken } : {}),
       ...(init?.headers ?? {})
     },
+    credentials: "include",
     cache: "no-store"
   });
 
@@ -178,7 +155,6 @@ async function requestBlob(path: string, init?: RequestInit, options?: { throttl
       apiError?.code === errorCodes.unauthorized &&
       typeof window !== "undefined"
     ) {
-      window.localStorage.removeItem(sessionStorageKey);
       window.dispatchEvent(
         new CustomEvent("music-room-auth-expired", {
           detail: { message }
@@ -227,6 +203,7 @@ export const musicRoomApi = {
       body: JSON.stringify(input ?? {})
     }),
   getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
+  getRecentRooms: () => request<RoomSnapshot[]>("/v1/rooms/recent"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
   listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),

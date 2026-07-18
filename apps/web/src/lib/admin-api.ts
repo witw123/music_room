@@ -7,6 +7,24 @@ export class AdminApiError extends Error {
   constructor(message: string, public readonly status: number) { super(message); }
 }
 
+export type AdminRoomDetail = AdminRoomSummary & {
+  name?: string | null;
+  description?: string | null;
+  createdAt?: string | null;
+  playback: Record<string, unknown>;
+  queue: unknown[];
+  tracks: unknown[];
+  members: unknown[];
+};
+
+export type AdminUserDetail = AdminUserSummary & {
+  disabledAt: string | null;
+  disabledReason: string | null;
+  sessions: Array<{ id: string; createdAt: string; expiresAt: string }>;
+  rooms: Array<{ id: string; joinCode: string; name: string; visibility: string; role: "host" | "member"; updatedAt: string }>;
+  audits: Array<{ id: string; action: string; reason: string | null; result: string; createdAt: string }>;
+};
+
 function getCsrfToken() {
   if (typeof window === "undefined") return null;
   return window.sessionStorage.getItem(csrfStorageKey);
@@ -43,10 +61,10 @@ export const adminApi = {
   session: () => request<AdminSession>("/v1/admin/session"),
   overview: () => request<AdminOverview>("/v1/admin/overview"),
   rooms: (query = "") => request<{ data: AdminRoomSummary[]; nextCursor: string | null; generatedAt: string }>(`/v1/admin/rooms${query ? `?q=${encodeURIComponent(query)}` : ""}`),
-  room: (roomId: string) => request<AdminRoomSummary & { playback: unknown; queue: unknown; tracks: unknown; members: unknown }>(`/v1/admin/rooms/${encodeURIComponent(roomId)}`),
+  room: (roomId: string) => request<AdminRoomDetail>(`/v1/admin/rooms/${encodeURIComponent(roomId)}`),
   terminateRoom: (roomId: string, expectedJoinCode: string, reason: string) => request<{ ok: boolean; alreadyTerminated: boolean }>(`/v1/admin/rooms/${encodeURIComponent(roomId)}/terminate`, { method: "POST", body: JSON.stringify({ expectedJoinCode, reason }) }),
   users: (query = "") => request<{ data: AdminUserSummary[]; nextCursor: string | null; generatedAt: string }>(`/v1/admin/users${query ? `?q=${encodeURIComponent(query)}` : ""}`),
-  user: (userId: string) => request(`/v1/admin/users/${encodeURIComponent(userId)}`),
+  user: (userId: string) => request<AdminUserDetail>(`/v1/admin/users/${encodeURIComponent(userId)}`),
   setUserStatus: (userId: string, status: "ACTIVE" | "DISABLED", reason: string) => request<{ ok: boolean; status: string }>(`/v1/admin/users/${encodeURIComponent(userId)}/status`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
   revokeSessions: (userId: string, reason: string) => request<{ ok: boolean }>(`/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
   incidents: () => request<{ data: AdminIncident[]; nextCursor: string | null; generatedAt: string }>("/v1/admin/incidents"),

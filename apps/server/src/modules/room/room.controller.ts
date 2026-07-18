@@ -62,9 +62,6 @@ export class RoomController {
   @Get()
   async listRooms(@Headers("x-session-token") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
-    if (typeof this.roomService.listAllRooms === "function") {
-      return this.roomService.listAllRooms();
-    }
     const [accessibleRooms, publicRooms] = await Promise.all([
       this.roomService.listRoomsForSession(userId),
       this.roomService.listPublicRooms()
@@ -78,6 +75,12 @@ export class RoomController {
   async getRecentRoom(@Headers("x-session-token") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getRecentRoomSnapshotForSession(userId);
+  }
+
+  @Get("recent")
+  async listRecentRooms(@Headers("x-session-token") sessionToken: string | undefined) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.listRecentRoomSnapshotsForSession(userId);
   }
 
   @Get(":roomId/recover")

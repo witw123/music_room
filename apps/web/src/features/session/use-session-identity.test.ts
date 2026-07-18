@@ -16,13 +16,13 @@ describe("session identity helpers", () => {
     expect(isStoredAuthSession(baseSession)).toBe(true);
   });
 
-  it("rejects incomplete stored auth sessions", () => {
+  it("accepts a refreshed auth session without exposing a browser token", () => {
     expect(
       isStoredAuthSession({
         ...baseSession,
         token: ""
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("treats equivalent refreshed sessions as unchanged", () => {

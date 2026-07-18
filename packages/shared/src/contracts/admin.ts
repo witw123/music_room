@@ -43,6 +43,9 @@ export const adminUserSummarySchema = z.object({
 export const adminRoomSummarySchema = z.object({
   id: z.string(),
   joinCode: z.string(),
+  name: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  createdAt: z.string().datetime().nullable().optional(),
   visibility: z.string(),
   hostId: z.string(),
   hostNickname: z.string().nullable(),

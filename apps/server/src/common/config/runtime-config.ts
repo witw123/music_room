@@ -17,6 +17,14 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     return;
   }
 
+  if (env.AUTH_FAKE_PERSISTENCE?.trim().toLowerCase() === "true") {
+    throw new Error("AUTH_FAKE_PERSISTENCE must be false in production startup.");
+  }
+
+  if (env.TRUST_PROXY?.trim().toLowerCase() === "true") {
+    throw new Error("TRUST_PROXY=true is not allowed in production startup.");
+  }
+
   if (env.NETEASE_ENABLED === "true" && !isValidNeteaseEncryptionKey(env.NETEASE_COOKIE_ENCRYPTION_KEY)) {
     throw new Error(
       "NETEASE_COOKIE_ENCRYPTION_KEY must be a 32-byte hex or base64 key when NetEase is enabled."
@@ -55,8 +63,17 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
 
   const turnPublicHost = env.TURN_PUBLIC_HOST?.trim() ?? "";
   const appDomain = env.APP_DOMAIN?.trim() ?? "";
+  const requestHostAllowlist = (env.TURN_REQUEST_HOST_ALLOWLIST ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
   const turnSecret = env.TURN_SHARED_SECRET?.trim() ?? "";
   const useRequestHostForTurn = env.TURN_PUBLIC_HOST_USE_REQUEST_HOST === "1";
+  if (useRequestHostForTurn && !turnPublicHost && !appDomain && requestHostAllowlist.length === 0) {
+    throw new Error(
+      "TURN request-host mode requires TURN_PUBLIC_HOST, APP_DOMAIN, or TURN_REQUEST_HOST_ALLOWLIST."
+    );
+  }
   const hasTurnHostSource = !!turnPublicHost || !!appDomain || useRequestHostForTurn;
   if (turnPublicHost && !useRequestHostForTurn && isLocalHost(turnPublicHost)) {
     throw new Error("TURN_PUBLIC_HOST cannot be localhost in production startup.");

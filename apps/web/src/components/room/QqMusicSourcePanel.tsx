@@ -329,6 +329,7 @@ function toProviderErrorMessage(error: unknown) {
     if (error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "请先绑定 QQ 音乐账号。";
     if (error.code === "QQMUSIC_AUTH_EXPIRED") return "QQ 音乐登录已失效，请重新绑定。";
     if (error.code === "QQMUSIC_DISABLED") return "QQ 音乐功能当前未启用。";
+    if (error.code === "QQMUSIC_UNAVAILABLE") return "QQ 音乐服务暂时不可用，请稍后重试。";
     if (error.code === "RATE_LIMITED") return "二维码请求过于频繁，请一分钟后再试。";
     if (error.code === "QQMUSIC_IMPORT_TOO_LARGE") return "歌曲文件过大，无法导入。";
     if (error.code === "QQMUSIC_AUDIO_UNSUPPORTED") return "QQ 音乐返回了当前播放器不支持的音频格式。";

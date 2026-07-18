@@ -24,6 +24,7 @@ import type {
   RoomSnapshot,
   RoomUnsubscribePayload
 } from "@music-room/shared";
+import { readUserSessionCookie } from "../auth/auth.cookies";
 import {
   errorCodes,
   peerSignalMessageSchema,
@@ -776,7 +777,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
 
     const headerToken = client.handshake.headers["x-session-token"];
-    return typeof headerToken === "string" ? headerToken : undefined;
+    if (typeof headerToken === "string") {
+      return headerToken;
+    }
+
+    return readUserSessionCookie(client.handshake.headers.cookie);
   }
 
   private assertRealtimeClient(client: Socket, roomId: string) {

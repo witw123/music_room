@@ -11,6 +11,7 @@ import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -37,7 +38,7 @@ export function RoomsHomePage() {
   });
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [recentRoom, setRecentRoom] = useState<RoomSnapshot | null>(null);
+  const [recentRooms, setRecentRooms] = useState<RoomSnapshot[]>([]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
   const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
@@ -69,18 +70,18 @@ export function RoomsHomePage() {
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(rooms);
+      setAvailableRooms(filterOpenPublicRooms(rooms));
     } catch {
       setAvailableRooms([]);
     }
   }, []);
 
-  const refreshRecentRoom = useCallback(async () => {
+  const refreshRecentRooms = useCallback(async () => {
     try {
-      const room = await musicRoomApi.getRecentRoom();
-      setRecentRoom(room);
+      const rooms = await musicRoomApi.getRecentRooms();
+      setRecentRooms(filterOpenPublicRooms(rooms));
     } catch {
-      setRecentRoom(null);
+      setRecentRooms([]);
     }
   }, []);
 
@@ -91,8 +92,8 @@ export function RoomsHomePage() {
 
     void refreshSession();
     void refreshAvailableRooms();
-    void refreshRecentRoom();
-  }, [activeSession, refreshSession, refreshAvailableRooms, refreshRecentRoom]);
+    void refreshRecentRooms();
+  }, [activeSession, refreshSession, refreshAvailableRooms, refreshRecentRooms]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -101,7 +102,7 @@ export function RoomsHomePage() {
 
     const refresh = () => {
       void refreshAvailableRooms();
-      void refreshRecentRoom();
+      void refreshRecentRooms();
     };
 
     const intervalId = window.setInterval(refresh, 10000);
@@ -113,7 +114,7 @@ export function RoomsHomePage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [activeSession, refreshAvailableRooms, refreshRecentRoom]);
+  }, [activeSession, refreshAvailableRooms, refreshRecentRooms]);
 
   function openCreateRoom(visibility: "public" | "private") {
     setCreateForm({ ...emptyCreateRoomForm, visibility });
@@ -186,14 +187,14 @@ export function RoomsHomePage() {
     }
   }
 
-  async function handleReturnToRecentRoom() {
-    if (!recentRoom) {
+  async function handleReturnToRecentRoom(room: RoomSnapshot) {
+    if (!room) {
       return;
     }
 
     primeRoomAudioFromUserGesture();
     try {
-      const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
+      const recovered = await musicRoomApi.recoverRoom(room.room.id);
       if (recovered) {
         storeRoomSnapshotHandoff(recovered);
         window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
@@ -201,7 +202,7 @@ export function RoomsHomePage() {
         return;
       }
 
-      const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
+      const joined = await musicRoomApi.joinRoomByCode(room.room.joinCode);
       storeRoomSnapshotHandoff(joined);
       window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
       router.push(buildRoomHref(joined.room.id) as Route);
@@ -320,57 +321,26 @@ export function RoomsHomePage() {
         <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[320px]">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
-              Recent room
+              Recent rooms
             </p>
-            <h2 className="text-xl font-bold text-foreground">最近一次协作</h2>
+            <h2 className="text-xl font-bold text-foreground">最近加入的房间</h2>
           </div>
 
-          <div className="glass-panel group relative flex h-full min-h-[220px] flex-col justify-between overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all hover:border-accent/30">
-            <div className="pointer-events-none absolute -left-10 -top-10 z-0 h-32 w-32 rounded-full bg-accent/10 blur-[50px] transition-all group-hover:bg-accent/20" />
-            <div className="relative z-10 flex h-full flex-col">
-            {recentRoom ? (
-              <div className="flex h-full flex-col gap-5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-surface-border bg-gradient-to-br from-surface to-surface-hover text-accent shadow-inner">
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-3">
-                    <span className="font-mono text-lg font-bold text-foreground">
-                      {recentRoom.room.joinCode}
-                    </span>
-                    <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                      {getOnlineMemberCount(recentRoom.room.members)} 在线
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-foreground-muted">
-                    如果你刚离开不久，可以直接返回这个房间继续听歌、改队列和协作控制。
-                  </p>
-                </div>
-                <div className="mt-auto pt-2">
-                  <Button
-                    variant="glass"
-                    className="w-full border-accent/20 hover:border-accent hover:bg-accent/10"
-                    onClick={() => startTransition(() => void handleReturnToRecentRoom())}
-                    type="button"
-                  >
-                    回到最近房间
-                  </Button>
-                </div>
+          <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
+            {recentRooms.length ? (
+              <div className="grid grid-cols-1 gap-4">
+                {recentRooms.map((item) => (
+                  <RoomDirectoryCard
+                    key={item.room.id}
+                    room={item}
+                    onOpen={() => {
+                      startTransition(() => void handleReturnToRecentRoom(item));
+                    }}
+                  />
+                ))}
               </div>
             ) : (
-              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+              <div className="flex h-full flex-col items-center justify-center py-14 text-center opacity-85">
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted opacity-60">
                   <svg
                     width="20"
@@ -386,12 +356,12 @@ export function RoomsHomePage() {
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
                 </div>
-                <p className="text-sm text-foreground-muted opacity-80">
-                  还没有历史房间记录。创建一个房间后，这里会成为你的快速返回列表。
+                <h3 className="mb-2 font-semibold text-foreground">还没有最近加入的房间</h3>
+                <p className="max-w-sm text-sm text-foreground-muted">
+                  创建或加入房间后，最近加入的房间会显示在这里。
                 </p>
               </div>
             )}
-            </div>
           </div>
         </div>
 
@@ -421,52 +391,13 @@ export function RoomsHomePage() {
           <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
             {visibleRooms.length ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {visibleRooms.map((item) => {
-                  const host =
-                    item.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
-
-                  return (
-                    <article
-                      key={item.room.id}
-                      className="group flex cursor-pointer flex-col gap-4 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
-                      onClick={() => openRoomDetails(item)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          openRoomDetails(item);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 font-mono font-bold text-accent">
-                            {item.room.name ?? "未命名房间"}
-                          </span>
-                          {item.room.hasPassword ? (
-                            <span className="shrink-0 rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
-                              有密码
-                            </span>
-                          ) : null}
-                        </div>
-                        <span className="rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
-                          {getOnlineMemberCount(item.room.members)} 人在线
-                        </span>
-                      </div>
-                      <div className="mt-1">
-                        <h3 className="truncate font-semibold text-foreground">{item.room.name ?? `${host} 的房间`}</h3>
-                        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-                          {item.room.description?.trim() || `房主 ${host} · 房间码 ${item.room.joinCode}`}
-                        </p>
-                      </div>
-                      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
-                        <span>{item.room.visibility === "private" ? "私密房间" : "公开房间"}</span>
-                        <span className="font-mono text-foreground/70">{item.room.joinCode}</span>
-                      </div>
-                    </article>
-                  );
-                })}
+                {visibleRooms.map((item) => (
+                  <RoomDirectoryCard
+                    key={item.room.id}
+                    room={item}
+                    onOpen={() => openRoomDetails(item)}
+                  />
+                ))}
               </div>
             ) : (
               <div className="flex h-full flex-col items-center justify-center py-14 text-center opacity-85">
@@ -527,7 +458,7 @@ export function RoomsHomePage() {
               房间名称
               <input
                 autoFocus
-                className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
                 maxLength={120}
                 onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
                 placeholder="例如：周五夜听"
@@ -538,7 +469,7 @@ export function RoomsHomePage() {
             <label className="flex flex-col gap-2 text-sm text-foreground">
               房间简介 <span className="text-xs text-foreground-muted">可选</span>
               <textarea
-                className="min-h-20 resize-y rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="min-h-20 resize-y rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
                 maxLength={500}
                 onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
                 placeholder="告诉大家这个房间适合做什么"
@@ -548,7 +479,7 @@ export function RoomsHomePage() {
             <label className="flex flex-col gap-2 text-sm text-foreground">
               房间密码 <span className="text-xs text-foreground-muted">可选，至少 4 位</span>
               <input
-                className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
                 maxLength={128}
                 minLength={4}
                 onChange={(event) => setCreateForm((current) => ({ ...current, password: event.target.value }))}
@@ -586,7 +517,7 @@ export function RoomsHomePage() {
                 房间密码
                 <input
                   autoFocus
-                  className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                  className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
                   onChange={(event) => setJoinPassword(event.target.value)}
                   placeholder="请输入房间密码"
                   type="password"
@@ -605,6 +536,54 @@ export function RoomsHomePage() {
         </RoomDialog>
       ) : null}
     </main>
+  );
+}
+
+function RoomDirectoryCard({
+  room,
+  onOpen
+}: {
+  room: RoomSnapshot;
+  onOpen: () => void;
+}) {
+  const host = room.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
+
+  return (
+    <article
+      className="group flex cursor-pointer flex-col gap-4 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {room.room.hasPassword ? (
+            <span className="shrink-0 rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+              有密码
+            </span>
+          ) : null}
+        </div>
+        <span className="rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
+          {getOnlineMemberCount(room.room.members)} 人在线
+        </span>
+      </div>
+      <div className="mt-1">
+        <h3 className="truncate font-semibold text-foreground">{room.room.name ?? "未命名房间"}</h3>
+        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
+          {room.room.description?.trim() || `房主 ${host}`}
+        </p>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
+        <span>{room.room.visibility === "private" ? "私密房间" : "公开房间"}</span>
+        <span className="font-mono text-foreground/70">{room.room.joinCode}</span>
+      </div>
+    </article>
   );
 }
 

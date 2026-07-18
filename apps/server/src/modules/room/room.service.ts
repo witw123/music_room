@@ -170,17 +170,13 @@ export class RoomService {
     );
   }
 
-  async listAllRooms(): Promise<RoomSnapshot[]> {
-    const records = await this.roomRecordRepository.listRecoverableRecords();
-    const snapshots = await Promise.all(
-      records.map((record: RoomRecord) => this.roomSnapshotService.buildSnapshot(record, []))
-    );
-    return snapshots.map((snapshot) => ({
-      ...snapshot,
-      tracks: [],
-      queue: [],
-      playlists: []
-    }));
+  async listRecentRoomSnapshotsForSession(sessionId: string): Promise<RoomSnapshot[]> {
+    const rooms = await this.listRoomsForSession(sessionId);
+    return rooms.sort((left, right) => {
+      const leftJoinedAt = left.room.members.find((member) => member.id === sessionId)?.joinedAt ?? "";
+      const rightJoinedAt = right.room.members.find((member) => member.id === sessionId)?.joinedAt ?? "";
+      return new Date(rightJoinedAt).getTime() - new Date(leftJoinedAt).getTime();
+    });
   }
 
   async listPublicRooms(): Promise<RoomSnapshot[]> {
@@ -280,19 +276,6 @@ export class RoomService {
   private async assertCanDeleteRoomRecord(record: RoomRecord, sessionId: string) {
     if (record.room.hostId !== sessionId) {
       throw new Error("Only the host can delete this room.");
-    }
-
-    const uploaderIds = new Set(record.tracks.map((t) => t.ownerSessionId));
-    const activePresence = await this.roomPresenceService.getActivePresence(
-      record.room.id,
-      record.room.members
-    );
-    if (
-      record.room.members.some(
-        (member) => uploaderIds.has(member.id) && !activePresence.has(member.id)
-      )
-    ) {
-      throw new Error("All track uploaders must be online before deleting the room.");
     }
   }
 
@@ -689,6 +672,11 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
     return record.queue;
+  }
+
+  async assertRoomMember(roomId: string, sessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
   }
 
   private buildJoinCode() {

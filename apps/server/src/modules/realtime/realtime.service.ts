@@ -149,7 +149,8 @@ function resolveTurnHost(requestHost?: string | null) {
   if (
     process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST === "1" &&
     requestHostCandidate &&
-    isAllowedTurnHost(requestHostCandidate)
+    isAllowedTurnHost(requestHostCandidate) &&
+    isAllowedRequestTurnHost(requestHostCandidate)
   ) {
     return requestHostCandidate;
   }
@@ -173,7 +174,11 @@ function resolveTurnHost(requestHost?: string | null) {
   // Use the request's Host header as a last-resort fallback.
   // This handles cases where neither TURN_PUBLIC_HOST nor APP_DOMAIN is set
   // but the ICE endpoint is reached via a known public hostname.
-  if (requestHostCandidate && isAllowedTurnHost(requestHostCandidate)) {
+  if (
+    requestHostCandidate &&
+    isAllowedTurnHost(requestHostCandidate) &&
+    isAllowedRequestTurnHost(requestHostCandidate)
+  ) {
     return requestHostCandidate;
   }
 
@@ -228,6 +233,23 @@ function normalizeHostHeader(value?: string | null) {
 
 function isAllowedTurnHost(host: string) {
   return process.env.NODE_ENV !== "production" || !isLocalTurnHost(host);
+}
+
+function isAllowedRequestTurnHost(host: string) {
+  if (process.env.NODE_ENV !== "production") {
+    return true;
+  }
+
+  const allowlist = [
+    process.env.TURN_REQUEST_HOST_ALLOWLIST,
+    process.env.APP_DOMAIN,
+    process.env.TURN_PUBLIC_HOST
+  ]
+    .flatMap((value) => (value ?? "").split(","))
+    .map((value) => normalizeHostHeader(value))
+    .filter((value): value is string => !!value);
+
+  return allowlist.includes(host);
 }
 
 function isLocalTurnHost(host: string) {

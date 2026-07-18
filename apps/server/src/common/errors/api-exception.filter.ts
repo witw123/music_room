@@ -3,7 +3,8 @@ import {
   Catch,
   ExceptionFilter,
   HttpException,
-  HttpStatus
+  HttpStatus,
+  Logger
 } from "@nestjs/common";
 import {
   createApiErrorResponse,
@@ -14,6 +15,8 @@ import {
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ApiExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     if (host.getType() !== "http") {
       throw exception;
@@ -22,6 +25,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const context = host.switchToHttp();
     const response = context.getResponse();
     const { status, body } = toHttpApiError(exception);
+
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(exception instanceof Error ? exception.stack ?? exception.message : String(exception));
+    }
 
     response.status(status).json(body);
   }
@@ -34,9 +41,15 @@ export function toHttpApiError(exception: unknown): {
   if (exception instanceof HttpException) {
     const status = exception.getStatus();
     const response = exception.getResponse();
-    const message = getExceptionMessage(response, exception.message);
-    const code = getApiErrorCode(response) ?? mapErrorCode(message, status);
-    const details = typeof response === "object" && response !== null && "details" in response
+    const rawMessage = getExceptionMessage(response, exception.message);
+    const code = getApiErrorCode(response) ?? mapErrorCode(rawMessage, status);
+    const message = publicErrorMessage(
+      rawMessage,
+      code
+    );
+    const details = process.env.NODE_ENV === "production" && code === errorCodes.internal
+      ? undefined
+      : typeof response === "object" && response !== null && "details" in response
       ? (response as { details?: unknown }).details
       : undefined;
 
@@ -46,12 +59,19 @@ export function toHttpApiError(exception: unknown): {
     };
   }
 
-  const message = exception instanceof Error ? exception.message : "Internal server error.";
-  const code = mapErrorCode(message, HttpStatus.INTERNAL_SERVER_ERROR);
+  const rawMessage = exception instanceof Error ? exception.message : "Internal server error.";
+  const code = mapErrorCode(rawMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+  const message = publicErrorMessage(rawMessage, code);
   return {
     status: mapErrorStatus(code),
     body: createApiErrorResponse(code, message)
   };
+}
+
+function publicErrorMessage(message: string, code: ErrorCode) {
+  return process.env.NODE_ENV === "production" && code === errorCodes.internal
+    ? "Internal server error."
+    : message || "Internal server error.";
 }
 
 export function mapErrorCode(message: string, status?: number): ErrorCode {

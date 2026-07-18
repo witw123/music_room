@@ -131,6 +131,7 @@ export class PlaylistController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(createPlaylistFromRoomRequestSchema, body);
+    await this.roomService.assertRoomMember(payload.roomId, userId);
     const playlist = await this.playlistService.createPlaylistFromRoom({
       ...payload,
       ownerId: userId

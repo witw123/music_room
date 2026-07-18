@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { AuthSession, UserProfile } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 
@@ -23,6 +23,7 @@ type StoredUserSession = {
   id: string;
   userId: string;
   token: string;
+  tokenHash: string;
   createdAt: string;
   expiresAt: string;
   persistence: PersistenceMode;
@@ -33,7 +34,7 @@ type FallbackAuthStore = {
     Omit<StoredUser, "persistence">
   >;
   sessions: Array<
-    Omit<StoredUserSession, "persistence">
+    Omit<StoredUserSession, "persistence" | "token">
   >;
 };
 
@@ -45,6 +46,7 @@ export class AuthService {
   private readonly usersById = new Map<string, StoredUser>();
   private readonly userIdByUsername = new Map<string, string>();
   private readonly sessionsByToken = new Map<string, StoredUserSession>();
+  private readonly sessionsByTokenHash = new Map<string, StoredUserSession>();
   private readonly allowFallbackPersistence = resolveAllowFallbackPersistence();
   private readonly fallbackStorePath = resolve(
     process.cwd(),
@@ -190,11 +192,12 @@ export class AuthService {
     }
 
     this.sessionsByToken.delete(token);
+    this.sessionsByTokenHash.delete(session.tokenHash);
 
     if (session.persistence === "database") {
       if (await this.prisma.ensureAvailable()) {
         await this.prisma.userSession.deleteMany({
-          where: { token }
+          where: { tokenHash: session.tokenHash }
         });
       }
       return { ok: true };
@@ -220,10 +223,11 @@ export class AuthService {
 
     if (new Date(storedSession.expiresAt).getTime() <= Date.now()) {
       this.sessionsByToken.delete(token);
+      this.sessionsByTokenHash.delete(storedSession.tokenHash);
       if (storedSession.persistence === "database") {
         if (await this.prisma.ensureAvailable()) {
           await this.prisma.userSession.deleteMany({
-            where: { token }
+            where: { tokenHash: storedSession.tokenHash }
           });
         }
       } else {
@@ -355,23 +359,26 @@ export class AuthService {
       );
     }
 
+    const token = randomBytes(32).toString("base64url");
     const storedSession: StoredUserSession = {
       id: `session_${randomUUID()}`,
       userId: user.id,
-      token: randomBytes(32).toString("base64url"),
+      token,
+      tokenHash: hashSessionToken(token),
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
       persistence
     };
 
     this.sessionsByToken.set(storedSession.token, storedSession);
+    this.sessionsByTokenHash.set(storedSession.tokenHash, storedSession);
 
     if (persistence === "database") {
       await this.prisma.userSession.create({
         data: {
           id: storedSession.id,
           userId: storedSession.userId,
-          token: storedSession.token,
+          tokenHash: storedSession.tokenHash,
           createdAt: new Date(storedSession.createdAt),
           expiresAt: new Date(storedSession.expiresAt)
         }
@@ -417,21 +424,30 @@ export class AuthService {
 
     if (await this.prisma.ensureAvailable()) {
       const persisted = await this.prisma.userSession.findUnique({
-        where: { token }
+        where: { tokenHash: hashSessionToken(token) }
       });
 
       if (persisted) {
         const session: StoredUserSession = {
           id: persisted.id,
           userId: persisted.userId,
-          token: persisted.token,
+          token,
+          tokenHash: persisted.tokenHash,
           createdAt: persisted.createdAt.toISOString(),
           expiresAt: persisted.expiresAt.toISOString(),
           persistence: "database"
         };
         this.sessionsByToken.set(session.token, session);
+        this.sessionsByTokenHash.set(session.tokenHash, session);
         return session;
       }
+    }
+
+    const fallbackSession = this.sessionsByTokenHash.get(hashSessionToken(token));
+    if (fallbackSession) {
+      fallbackSession.token = token;
+      this.sessionsByToken.set(token, fallbackSession);
+      return fallbackSession;
     }
 
     return null;
@@ -492,10 +508,27 @@ export class AuthService {
       }
 
       for (const session of parsed.sessions ?? []) {
-        this.sessionsByToken.set(session.token, {
+        const legacyTokenValue = (session as { token?: unknown }).token;
+        const legacyToken = typeof legacyTokenValue === "string" ? legacyTokenValue : undefined;
+        const tokenHash = typeof session.tokenHash === "string"
+          ? session.tokenHash
+          : legacyToken
+            ? hashSessionToken(legacyToken)
+            : null;
+        if (!tokenHash) {
+          continue;
+        }
+
+        const restoredSession = {
           ...session,
-          persistence: "fallback"
-        });
+          token: legacyToken ?? "",
+          tokenHash,
+          persistence: "fallback" as const
+        };
+        this.sessionsByTokenHash.set(tokenHash, restoredSession);
+        if (legacyToken) {
+          this.sessionsByToken.set(legacyToken, restoredSession);
+        }
       }
     } catch (error) {
       const code =
@@ -517,14 +550,19 @@ export class AuthService {
       users: Array.from(this.usersById.values())
         .filter((user) => user.persistence === "fallback")
         .map(({ persistence: _persistence, ...user }) => user),
-      sessions: Array.from(this.sessionsByToken.values())
+      sessions: Array.from(this.sessionsByTokenHash.values())
         .filter((session) => session.persistence === "fallback")
-        .map(({ persistence: _persistence, ...session }) => session)
+        .filter((session, index, sessions) => sessions.findIndex((item) => item.id === session.id) === index)
+        .map(({ persistence: _persistence, token: _token, ...session }) => session)
     };
 
     await mkdir(dirname(this.fallbackStorePath), { recursive: true });
     await writeFile(this.fallbackStorePath, JSON.stringify(payload, null, 2), "utf8");
   }
+}
+
+function hashSessionToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 function toUserProfile(user: StoredUser): UserProfile {
@@ -560,6 +598,10 @@ function verifyPassword(password: string, storedHash: string) {
 }
 
 function resolveAllowFallbackPersistence() {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+
   const configured = process.env.AUTH_FAKE_PERSISTENCE?.trim().toLowerCase();
   if (configured === "true") {
     return true;
@@ -569,5 +611,5 @@ function resolveAllowFallbackPersistence() {
     return false;
   }
 
-  return process.env.NODE_ENV !== "production";
+  return true;
 }

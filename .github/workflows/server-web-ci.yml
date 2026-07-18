@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   validate-and-test:
@@ -27,6 +26,7 @@ jobs:
 
       - run: node scripts/check-toolchain.mjs
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level high
       - run: node scripts/check-env-sync.mjs
       - run: pnpm lint
       - run: pnpm --filter @audio/opus-encode test
@@ -43,6 +43,9 @@ jobs:
     needs:
       - validate-and-test
       - e2e
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

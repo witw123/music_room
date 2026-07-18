@@ -87,6 +87,7 @@ services:
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP}
       TURN_PUBLIC_HOST_USE_APP_DOMAIN: ${TURN_PUBLIC_HOST_USE_APP_DOMAIN:-0}
       TURN_PUBLIC_HOST_USE_REQUEST_HOST: ${TURN_PUBLIC_HOST_USE_REQUEST_HOST:-0}
+      TURN_REQUEST_HOST_ALLOWLIST: ${TURN_REQUEST_HOST_ALLOWLIST:-}
       NETEASE_ENABLED: ${NETEASE_ENABLED:-false}
       NETEASE_COOKIE_ENCRYPTION_KEY: ${NETEASE_COOKIE_ENCRYPTION_KEY:-}
       NETEASE_DEFAULT_QUALITY: ${NETEASE_DEFAULT_QUALITY:-exhigh}
@@ -142,6 +143,8 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
     depends_on:
       web:
         condition: service_started
@@ -151,7 +154,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/music-room.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/music-room.conf:/etc/nginx/templates/default.conf.template:ro
       - ./nginx/music-room.routes.conf:/etc/nginx/conf.d/music-room.routes.conf:ro
       - certbot_certs:/etc/letsencrypt:ro
 

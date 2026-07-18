@@ -92,7 +92,7 @@ model QqMusicAccount {
 model UserSession {
   id        String   @id
   userId    String
-  token     String   @unique
+  tokenHash  String   @unique
   createdAt DateTime @default(now())
   expiresAt DateTime
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

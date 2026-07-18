@@ -15,7 +15,6 @@ export function isStoredAuthSession(value: unknown): value is AuthSession {
       session.userId &&
       session.username &&
       session.nickname &&
-      session.token &&
       session.createdAt
   );
 }
@@ -55,7 +54,6 @@ export function useSessionIdentity(options: {
   const persistSession = useCallback(
     (session: AuthSession | null) => {
       if (session) {
-        window.localStorage.setItem(sessionStorageKey, JSON.stringify(session));
         setHasStoredSession(true);
         return;
       }
@@ -93,28 +91,23 @@ export function useSessionIdentity(options: {
   }, [setActiveSession]);
 
   useEffect(() => {
-    const storedSession = window.localStorage.getItem(sessionStorageKey);
-    if (!storedSession) {
-      setHydrated(true);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(storedSession) as AuthSession;
-      if (isStoredAuthSession(parsed)) {
-        setActiveSessionState(parsed);
-        setHasStoredSession(true);
-      } else {
-        window.localStorage.removeItem(sessionStorageKey);
-        setHasStoredSession(false);
-      }
-    } catch {
-      window.localStorage.removeItem(sessionStorageKey);
-      setHasStoredSession(false);
-    }
-
+    window.localStorage.removeItem(sessionStorageKey);
     setHydrated(true);
-  }, [sessionStorageKey]);
+    let cancelled = false;
+    void musicRoomApi.me().then((session) => {
+      if (!cancelled && isStoredAuthSession(session)) {
+        setActiveSession(session);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setActiveSession(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionStorageKey, setActiveSession]);
 
   useEffect(() => {
     const handleExpired = () => {

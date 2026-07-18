@@ -53,6 +53,7 @@ describe("validateRuntimeConfig", () => {
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         TURN_PUBLIC_HOST_USE_REQUEST_HOST: "1",
+        TURN_REQUEST_HOST_ALLOWLIST: "example.com",
         TURN_SHARED_SECRET: "super-secret-turn"
       })
     ).not.toThrow();
