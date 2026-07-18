@@ -224,7 +224,7 @@ describe("PeerConnectionLifecycleManager", () => {
     ).toBe(true);
   });
 
-  it("renegotiates a sendrecv media m-line when replacing the source track", async () => {
+  it("starts media negotiation from the source track instead of an empty listener offer", async () => {
     const { manager, sendSignal } = createManager();
     await manager.syncPeers(["peer_b"]);
 
@@ -245,7 +245,18 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(2);
+    expect(mediaOffers).toHaveLength(1);
+  });
+
+  it("does not create an empty media offer during topology sync", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(0);
   });
 
   it("binds the source track before answering an incoming media offer", async () => {
@@ -385,6 +396,20 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(2);
+    expect(mediaOffers).toHaveLength(0);
+  });
+
+  it("allows a forced media recovery to announce a replacement receiver peer", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaPeer.signalingState = "stable";
+    await manager.restartMediaPeer("peer_b", { forceRecreate: true });
+
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(1);
   });
 });

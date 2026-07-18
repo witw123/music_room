@@ -356,12 +356,15 @@ export class PeerConnectionLifecycleManager {
 
   async restartMediaPeer(peerId: string, options?: { forceRecreate?: boolean }) {
     const entry = this.peerConnections.get(peerId, "media");
+    const allowEmptyMediaOffer = options?.forceRecreate === true;
+    const recoveryInitiator = allowEmptyMediaOffer
+      ? true
+      : this.shouldInitiatePeer(peerId);
     if (!entry || entry.releasing) {
-      // A recovery-created media peer must actively announce itself. The
-      // normal lexical initiator rule is only for the initial topology sync;
-      // otherwise a listener can create a new recv peer and wait forever for
-      // an offer from the source that still owns the old peer.
-      return this.ensurePeer(peerId, true, "media");
+      // A forced recovery-created media peer must actively announce itself;
+      // a normal topology repair stays passive and lets the current source
+      // create the first offer with its real audio track.
+      return this.ensurePeer(peerId, recoveryInitiator, "media", allowEmptyMediaOffer);
     }
 
     const now = Date.now();
@@ -382,7 +385,7 @@ export class PeerConnectionLifecycleManager {
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
-      const nextEntry = await this.ensurePeer(peerId, true, "media");
+      const nextEntry = await this.ensurePeer(peerId, recoveryInitiator, "media", allowEmptyMediaOffer);
       nextEntry.reconnectAttempts = reconnectAttempts + 1;
       return nextEntry;
     }
@@ -434,7 +437,8 @@ export class PeerConnectionLifecycleManager {
   private async ensurePeer(
     peerId: string,
     shouldInitiate: boolean,
-    linkKind: PeerLinkKind = "data"
+    linkKind: PeerLinkKind = "data",
+    allowEmptyMediaOffer = false
   ) {
     const existing = this.peerConnections.get(peerId, linkKind);
 
@@ -574,6 +578,16 @@ export class PeerConnectionLifecycleManager {
       } else if (shouldInitiate && linkKind === "media") {
         await enqueuePeerOperation(entry, async () => {
           await this.syncLocalAudioToPeer(peerId, entry, false);
+          // Do not negotiate an empty media m-line during topology sync. A
+          // listener-created sendrecv offer with no source track races with
+          // the real source offer when playback starts, leaving both peers in
+          // have-local-offer and the listener without an ontrack event. The
+          // source-side sync below will create the first offer once a live
+          // track is attached; recovery offers remain available for an
+          // already-established peer.
+          if (!allowEmptyMediaOffer && !entry.audioSender?.track) {
+            return;
+          }
           try {
             await this.signaling.createAndSendOffer(peerId, connection, undefined, "media");
             entry.mediaNegotiationPending = false;
@@ -1095,7 +1109,12 @@ export class PeerConnectionLifecycleManager {
       // A sender can remain "live" while its RTP pipeline is wedged. In that
       // state replaceTrack is a no-op, so recreate only this media peer after
       // several consecutive zero-rate samples.
-      forceRecreate: reason === "no-packets"
+      // A receiver with no track is different: it must wait for the source's
+      // offer instead of creating another empty offer and reopening glare.
+      forceRecreate: reason === "no-packets" &&
+        (entry.senderTrackState === "live" ||
+          entry.receiverTrackState === "live" ||
+          entry.receiverTrackState === "failed")
     });
   }
 
