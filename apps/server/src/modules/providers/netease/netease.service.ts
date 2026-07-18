@@ -214,7 +214,7 @@ export class NeteaseService {
 
     let url: URL;
     try {
-      url = new URL(audio.url);
+      url = normalizeNeteaseAudioUrl(audio.url);
     } catch {
       throw this.unavailableError();
     }
@@ -499,6 +499,24 @@ function isAllowedAudioHost(hostname: string) {
     normalized.endsWith(".music.163.com") ||
     normalized.endsWith(".126.net") ||
     normalized.endsWith(".netease.com");
+}
+
+/**
+ * NetEase's player endpoint still returns HTTP CDN links. The CDN supports
+ * HTTPS, which is required by the provider fetcher's SSRF-safe transport.
+ */
+function normalizeNeteaseAudioUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol === "http:") {
+    url.protocol = "https:";
+    if (url.port === "80") {
+      url.port = "";
+    }
+  }
+  if (url.protocol !== "https:") {
+    throw new Error("NetEase returned a non-HTTPS audio URL.");
+  }
+  return url;
 }
 
 function isNeteaseUnavailableError(error: unknown) {

@@ -1,13 +1,21 @@
 import { HttpException } from "@nestjs/common";
 import type { NeteaseAccountStatus } from "@music-room/shared";
 import { errorCodes } from "@music-room/shared";
+import { fetchProviderUrl } from "../provider-fetch";
 import { NeteaseApiError } from "./netease-api.client";
 import { NeteaseService } from "./netease.service";
+
+jest.mock("../provider-fetch", () => ({
+  fetchProviderUrl: jest.fn()
+}));
+
+const mockedFetchProviderUrl = fetchProviderUrl as jest.MockedFunction<typeof fetchProviderUrl>;
 
 describe("NeteaseService", () => {
   const previousEnabled = process.env.NETEASE_ENABLED;
 
   afterEach(() => {
+    mockedFetchProviderUrl.mockReset();
     if (previousEnabled === undefined) delete process.env.NETEASE_ENABLED;
     else process.env.NETEASE_ENABLED = previousEnabled;
   });
@@ -129,5 +137,47 @@ describe("NeteaseService", () => {
       message: "二维码已扫码，但网易云登录验证失败，请重新生成二维码。"
     });
     expect(redis.delete).toHaveBeenCalledWith("music-room:netease:qr:attempt_1");
+  });
+
+  it("upgrades NetEase CDN HTTP links before the HTTPS-only provider fetch", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      getAudioUrl: jest.fn().mockResolvedValue({
+        code: 200,
+        data: [{
+          url: "http://m10.music.126.net/song.mp3",
+          type: "mp3"
+        }]
+      })
+    };
+    const accounts = {
+      getCookieOrThrow: jest.fn().mockResolvedValue("cookie")
+    };
+    mockedFetchProviderUrl.mockResolvedValue(
+      new Response(Uint8Array.of(1, 2, 3), {
+        status: 200,
+        headers: {
+          "content-type": "audio/mpeg",
+          "content-length": "3"
+        }
+      })
+    );
+    const service = new NeteaseService(api as never, accounts as never, {} as never);
+
+    await expect(service.openAudio("user_1", "123", "exhigh")).resolves.toMatchObject({
+      mimeType: "audio/mpeg",
+      fileType: "mp3",
+      contentLength: 3
+    });
+    expect(mockedFetchProviderUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: "https:",
+        hostname: "m10.music.126.net",
+        pathname: "/song.mp3"
+      }),
+      expect.anything(),
+      expect.any(Number),
+      expect.any(Function)
+    );
   });
 });

@@ -268,6 +268,17 @@ export function MobileBottomPlayerLayout({
         </div>
 
         <div className="col-span-2 flex items-center gap-2">
+          <PlayerQueueDrawer
+            queue={queue}
+            tracks={tracks}
+            currentQueueItemId={currentQueueItemId}
+            activeSessionId={activeSessionId}
+            canControlPlayback={canControlPlayback}
+            canReorderQueue={canReorderQueue}
+            onPlayQueueItem={onPlayQueueItem}
+            onRemoveQueueItem={onRemoveQueueItem}
+            onReorderQueue={onReorderQueue}
+          />
           <span className="w-[44px] shrink-0 text-right text-[11px] tabular-nums text-foreground-muted">
             {formatDuration(boundedProgressMs)}
           </span>
@@ -345,20 +356,7 @@ export function MobileBottomPlayerLayout({
             </Button>
           </div>
 
-          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1 sm:min-w-[104px] sm:gap-2">
-            <PlayerQueueDrawer
-              queue={queue}
-              tracks={tracks}
-              currentQueueItemId={currentQueueItemId}
-              activeSessionId={activeSessionId}
-              canControlPlayback={canControlPlayback}
-              canReorderQueue={canReorderQueue}
-              onPlayQueueItem={onPlayQueueItem}
-              onRemoveQueueItem={onRemoveQueueItem}
-              onReorderQueue={onReorderQueue}
-            />
-            <VolumeControl volume={volume} onChange={applyVolume} />
-          </div>
+          <VolumeControl volume={volume} onChange={applyVolume} />
         </div>
       </div>
     </div>
@@ -465,6 +463,17 @@ export function DesktopBottomPlayerLayout({
 
       <div className="flex items-center justify-end gap-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-4">
+          <PlayerQueueDrawer
+            queue={queue}
+            tracks={tracks}
+            currentQueueItemId={currentQueueItemId}
+            activeSessionId={activeSessionId}
+            canControlPlayback={canControlPlayback}
+            canReorderQueue={canReorderQueue}
+            onPlayQueueItem={onPlayQueueItem}
+            onRemoveQueueItem={onRemoveQueueItem}
+            onReorderQueue={onReorderQueue}
+          />
           <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
             {formatDuration(boundedProgressMs)}
           </span>
@@ -484,20 +493,7 @@ export function DesktopBottomPlayerLayout({
           </span>
         </div>
 
-        <div className="flex min-w-[146px] items-center justify-center gap-3">
-          <PlayerQueueDrawer
-            queue={queue}
-            tracks={tracks}
-            currentQueueItemId={currentQueueItemId}
-            activeSessionId={activeSessionId}
-            canControlPlayback={canControlPlayback}
-            canReorderQueue={canReorderQueue}
-            onPlayQueueItem={onPlayQueueItem}
-            onRemoveQueueItem={onRemoveQueueItem}
-            onReorderQueue={onReorderQueue}
-          />
-          <VolumeControl volume={volume} onChange={applyVolume} />
-        </div>
+        <VolumeControl volume={volume} onChange={applyVolume} />
       </div>
     </div>
   );
