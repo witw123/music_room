@@ -19,6 +19,7 @@ const lastRoomStorageKey = "music-room-last-room";
 type RoomsHomePageProps = {
   awayRoomId?: string | null;
   onResumeAwayRoom?: () => void;
+  showSidebar?: boolean;
 };
 
 type CreateRoomForm = {
@@ -37,7 +38,8 @@ const emptyCreateRoomForm: CreateRoomForm = {
 
 export function RoomsHomePage({
   awayRoomId = null,
-  onResumeAwayRoom
+  onResumeAwayRoom,
+  showSidebar = true
 }: RoomsHomePageProps = {}) {
   const router = useRouter();
   const workspaceEntryHref = buildAppEntryHref();
@@ -272,15 +274,17 @@ export function RoomsHomePage({
         <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
       </div>
 
-      <AppSidebar
-        activeItem="home"
-        activeSession={activeSession}
-        hasBottomPlayer={Boolean(awayRoomId)}
-        onLogout={handleLogout}
-      />
+      {showSidebar ? (
+        <AppSidebar
+          activeItem="home"
+          activeSession={activeSession}
+          hasBottomPlayer={Boolean(awayRoomId)}
+          onLogout={handleLogout}
+        />
+      ) : null}
 
       {awayRoomId && onResumeAwayRoom ? (
-        <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-20 sm:px-6 lg:px-8">
+        <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-20 sm:px-6 lg:px-8 md:mx-0 md:max-w-[1600px]">
           <div
             className="flex flex-col gap-3 rounded-2xl border border-amber-300/45 bg-amber-300/10 px-4 py-3 text-amber-100 shadow-[0_12px_36px_rgba(251,191,36,0.12)] sm:flex-row sm:items-center sm:justify-between"
             data-testid="away-room-banner"
@@ -308,7 +312,7 @@ export function RoomsHomePage({
 
 
 
-      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:py-14 lg:flex-row lg:gap-16 lg:px-8">
+      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:mx-0 md:max-w-[1600px] md:py-14 lg:flex-row lg:gap-16 lg:px-8">
         <div className="z-10 flex flex-1 flex-col items-start justify-center">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.28em] text-accent">Music Room</p>
           <h1 className="mb-4 text-3xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
@@ -374,7 +378,7 @@ export function RoomsHomePage({
         </div>
       </section>
 
-      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-8 sm:px-6 lg:flex-row lg:gap-10 lg:px-8">
+      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-8 sm:px-6 md:mx-0 md:max-w-[1600px] lg:flex-row lg:gap-10 lg:px-8">
         <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[420px] xl:w-[460px]">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">

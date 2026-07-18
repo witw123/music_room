@@ -14,9 +14,9 @@ type AppSidebarProps = {
   onLogout?: () => void;
 };
 
-const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName; nested?: boolean }> = [
+const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [
   { id: "home", label: "首页", href: "/app", icon: "home" },
-  { id: "search", label: "搜索", href: "/app/search", icon: "search", nested: true },
+  { id: "search", label: "搜索", href: "/app/search", icon: "search" },
   { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
   { id: "profile", label: "个人中心", href: "/app/profile", icon: "profile" }
 ];
@@ -73,7 +73,7 @@ export function AppSidebar({
                   isActive
                     ? "bg-accent/15 text-white shadow-[inset_2px_0_0_#0070f3]"
                     : "text-white/[0.48] hover:bg-white/[0.06] hover:text-white"
-                } ${item.nested ? "md:ml-3 md:pl-4" : ""}`}
+                }`}
               >
                 <NavIcon name={item.icon} />
                 <span className="truncate">{item.label}</span>

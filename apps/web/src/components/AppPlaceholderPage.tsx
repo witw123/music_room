@@ -3,10 +3,9 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { AppSidebar, type AppNavItemId } from "@/components/AppSidebar";
+import type { AppNavItemId } from "@/components/AppSidebar";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { musicRoomApi } from "@/lib/music-room-api";
 
 type AppPlaceholderPageProps = {
   page: Exclude<AppNavItemId, "home">;
@@ -24,7 +23,7 @@ export function AppPlaceholderPage({
   const router = useRouter();
   const redirectTo = `/app/${page}`;
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo });
-  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
+  const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -35,16 +34,6 @@ export function AppPlaceholderPage({
     }
   }, [activeSession, authEntryHref, hydrated, router]);
 
-  async function handleLogout() {
-    try {
-      await musicRoomApi.logout();
-    } catch {
-      // The local session must be cleared even when the request cannot reach the server.
-    }
-    clearIdentity();
-    router.replace(authEntryHref as Route);
-  }
-
   if (!hydrated || !activeSession) {
     return <div className="min-h-screen bg-black" />;
   }
@@ -52,9 +41,7 @@ export function AppPlaceholderPage({
   return (
     <main className="relative min-h-screen overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white md:pl-60">
       <AppPageBackground />
-      <AppSidebar activeItem={page} activeSession={activeSession} onLogout={handleLogout} />
-
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-20 pt-24 sm:px-6 md:px-8 md:pt-28">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-20 pt-24 sm:px-6 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">{eyebrow}</p>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">{title}</h1>

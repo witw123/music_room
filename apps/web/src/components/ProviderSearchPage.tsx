@@ -12,7 +12,6 @@ import type {
   QqMusicAccountStatus,
   QqMusicTrackCandidate
 } from "@music-room/shared";
-import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
@@ -34,7 +33,7 @@ const enabledProviders: Provider[] = [
 export function ProviderSearchPage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/search" });
-  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
+  const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -81,16 +80,6 @@ export function ProviderSearchPage() {
 
   const isConnected = account?.connected === true;
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
-
-  async function handleLogout() {
-    try {
-      await musicRoomApi.logout();
-    } catch {
-      // Clear the local identity even if the server is unavailable.
-    }
-    clearIdentity();
-    router.replace(authEntryHref as Route);
-  }
 
   async function searchTracks(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -197,8 +186,7 @@ export function ProviderSearchPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white md:pl-60">
       <AppPageBackground />
-      <AppSidebar activeItem="search" activeSession={activeSession} onLogout={handleLogout} />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col px-4 pb-20 pt-24 sm:px-6 md:px-8 md:pt-28">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col px-4 pb-20 pt-24 sm:px-6 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Search</p>
