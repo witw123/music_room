@@ -46,12 +46,17 @@ export class QqMusicService {
   }
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
     this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6); const cookie = await this.getCookie(userId); const selected = qqMusicQualitySchema.safeParse(quality).success ? quality as QqMusicQuality : this.defaultQuality();
-    const result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: selected, cookie }));
+    const qualities = this.qualitiesForQuality(selected);
+    let result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: qualities[0], cookie }));
+    for (const fallbackQuality of qualities.slice(1)) {
+      if (result.url) break;
+      result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: fallbackQuality, cookie }));
+    }
     if (!result.url) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music audio is unavailable."), HttpStatus.NOT_FOUND);
     let url: URL;
-    try { url = new URL(result.url); } catch { throw this.unavailableError(); }
+    try { url = normalizeQqMusicAudioUrl(result.url); } catch { throw this.unavailableError(); }
     if (!isAllowedHost(url.hostname)) throw this.unavailableError();
-    const headers = new Headers(); if (range) headers.set("range", range); const upstream = await fetchProviderUrl(url, { headers }, this.requestTimeoutMs(), isAllowedHost).catch(() => null);
+    const headers = new Headers(); if (range) headers.set("range", range); const upstream = await fetchProviderUrl(url, { headers }, this.requestTimeoutMs(), isAllowedHost, { allowSyntheticDns: true }).catch(() => null);
     if (!upstream?.ok || !upstream.body) throw this.unavailableError(); const mimeType = resolveMime(upstream.headers.get("content-type"), url.toString());
     if (!mimeType) { await upstream.body.cancel().catch(() => undefined); throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAudioUnsupported, "QQ Music returned an unsupported audio format."), HttpStatus.UNSUPPORTED_MEDIA_TYPE); }
     const contentLength = Number(upstream.headers.get("content-length") ?? "0"); if (contentLength > this.maxImportBytes()) { await upstream.body.cancel().catch(() => undefined); throw new HttpException(createApiErrorResponse(errorCodes.qqMusicImportTooLarge, "QQ Music audio is too large."), HttpStatus.PAYLOAD_TOO_LARGE); }
@@ -69,6 +74,11 @@ export class QqMusicService {
   private async callProvider<T>(operation: () => Promise<T>) { try { return await operation(); } catch (error) { if (error instanceof HttpException) throw error; if (error instanceof QqMusicApiError && error.kind === "auth-expired") throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAuthExpired, "The QQ Music account needs to be bound again."), HttpStatus.CONFLICT); throw this.unavailableError(); } }
   private unavailableError() { return new HttpException(createApiErrorResponse(errorCodes.qqMusicUnavailable, "QQ Music is temporarily unavailable."), HttpStatus.BAD_GATEWAY); }
   private defaultQuality(): QqMusicQuality { return qqMusicQualitySchema.safeParse(process.env.QQMUSIC_DEFAULT_QUALITY).success ? process.env.QQMUSIC_DEFAULT_QUALITY as QqMusicQuality : "exhigh"; }
+  private qualitiesForQuality(quality: QqMusicQuality): QqMusicQuality[] {
+    if (quality === "standard") return ["standard", "high"];
+    if (quality === "high") return ["high", "standard"];
+    return ["exhigh", "high", "standard"];
+  }
   private requestTimeoutMs() { const value = Number(process.env.QQMUSIC_REQUEST_TIMEOUT_MS ?? 15_000); return Number.isFinite(value) ? Math.max(1_000, Math.floor(value)) : 15_000; }
   private maxImportBytes() { const value = Number(process.env.QQMUSIC_MAX_IMPORT_BYTES ?? 209_715_200); return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 209_715_200; }
 }
@@ -76,4 +86,13 @@ function asRecord(value: unknown): Record<string, any> | null { return value && 
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
 function readDuration(value: unknown) { const n = Number(value); return Number.isFinite(n) && n > 0 ? (n < 10_000 ? Math.round(n * 1_000) : Math.round(n)) : 0; }
 function resolveMime(contentType: string | null, url: string) { const type = `${contentType ?? ""} ${url}`.toLowerCase(); return type.includes("flac") ? "audio/flac" : type.includes("mp3") || type.includes("mpeg") ? "audio/mpeg" : null; }
+function normalizeQqMusicAudioUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol === "http:") {
+    url.protocol = "https:";
+    if (url.port === "80") url.port = "";
+  }
+  if (url.protocol !== "https:") throw new Error("QQ Music returned a non-HTTPS audio URL.");
+  return url;
+}
 function isAllowedHost(host: string) { const h = host.toLowerCase(); return h === "qq.com" || h.endsWith(".qq.com") || h === "gtimg.cn" || h.endsWith(".gtimg.cn"); }

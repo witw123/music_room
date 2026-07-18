@@ -3,17 +3,21 @@ import { isIP } from "node:net";
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 const maxRedirects = 3;
+type ProviderFetchOptions = {
+  allowSyntheticDns?: boolean;
+};
 
 export async function fetchProviderUrl(
   initialUrl: URL,
   init: RequestInit,
   timeoutMs: number,
-  isAllowedHost: (hostname: string) => boolean
+  isAllowedHost: (hostname: string) => boolean,
+  options: ProviderFetchOptions = {}
 ) {
   let url = new URL(initialUrl.toString());
 
   for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
-    await assertSafeProviderUrl(url, isAllowedHost);
+    await assertSafeProviderUrl(url, isAllowedHost, options);
     const response = await fetchWithHeadersTimeout(url.toString(), init, timeoutMs);
 
     if (!redirectStatuses.has(response.status)) {
@@ -34,7 +38,8 @@ export async function fetchProviderUrl(
 
 async function assertSafeProviderUrl(
   url: URL,
-  isAllowedHost: (hostname: string) => boolean
+  isAllowedHost: (hostname: string) => boolean,
+  options: ProviderFetchOptions
 ) {
   if (
     url.protocol !== "https:" ||
@@ -50,7 +55,15 @@ async function assertSafeProviderUrl(
     ? [url.hostname]
     : (await lookup(url.hostname, { all: true, verbatim: true })).map((entry) => entry.address);
 
-  if (addresses.length === 0 || addresses.some(isPrivateAddress)) {
+  // Some development/network proxies map public provider names to the
+  // RFC 2544 benchmark range. It is not routable on the public Internet, but
+  // the proxy still needs the original hostname for the request. Only accept
+  // this special case when every resolved address is from that range; all
+  // ordinary private, loopback, link-local, and mixed resolutions stay blocked.
+  const isSyntheticProxyResolution = options.allowSyntheticDns === true &&
+    addresses.length > 0 &&
+    addresses.every(isSyntheticProxyAddress);
+  if (addresses.length === 0 || (addresses.some(isPrivateAddress) && !isSyntheticProxyResolution)) {
     throw new Error("Provider URL resolved to a private address.");
   }
 }
@@ -116,6 +129,14 @@ function isPrivateIpv4(value: string | number[]) {
     (first === 198 && (second === 18 || second === 19 || second === 51)) ||
     (first === 203 && (second === 0 || (second === 0 && third === 113))) ||
     first >= 224;
+}
+
+function isSyntheticProxyAddress(address: string) {
+  const octets = address.split(".").map(Number);
+  return octets.length === 4 &&
+    octets.every((value) => Number.isInteger(value) && value >= 0 && value <= 255) &&
+    octets[0] === 198 &&
+    (octets[1] === 18 || octets[1] === 19);
 }
 
 function parseIpv6(address: string) {

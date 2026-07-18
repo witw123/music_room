@@ -177,7 +177,8 @@ describe("NeteaseService", () => {
       }),
       expect.anything(),
       expect.any(Number),
-      expect.any(Function)
+      expect.any(Function),
+      { allowSyntheticDns: true }
     );
   });
 });

@@ -19,7 +19,7 @@ import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
 
-type PlaybackAction = "play" | "pause" | "seek" | "next" | "prev";
+type PlaybackAction = "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
 
 type PlaybackRateLimitBucket = {
   timestamps: number[];
@@ -59,6 +59,7 @@ export class PlaybackController {
       queueItemId?: string;
       playbackAssetId?: string;
       positionMs?: number;
+      playbackMode?: import("@music-room/shared").PlaybackMode;
       actorPeerId?: string;
       expectedVersion?: number;
     }

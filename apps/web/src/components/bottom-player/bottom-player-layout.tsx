@@ -117,10 +117,12 @@ const playbackModeLabels: Record<PlaybackMode, string> = {
 
 export function PlaybackModeButton({
   mode,
-  onCycle
+  onCycle,
+  disabled = false
 }: {
   mode: PlaybackMode;
   onCycle: () => void;
+  disabled?: boolean;
 }) {
   const label = playbackModeLabels[mode];
   const nextMode = getNextPlaybackMode(mode);
@@ -130,10 +132,11 @@ export function PlaybackModeButton({
       type="button"
       data-testid="playback-mode-button"
       data-playback-mode={mode}
+      disabled={disabled}
       aria-label={`当前为${label}，点击切换到${playbackModeLabels[nextMode]}`}
       title={`当前：${label}，点击切换`}
       onClick={onCycle}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
     >
       <PlaybackModeIcon mode={mode} />
       <span className="sr-only">{label}</span>
@@ -300,7 +303,11 @@ export function MobileBottomPlayerLayout({
 
         <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
           <div className="flex shrink-0 justify-start">
-            <PlaybackModeButton mode={playbackMode} onCycle={onCyclePlaybackMode} />
+            <PlaybackModeButton
+              mode={playbackMode}
+              onCycle={onCyclePlaybackMode}
+              disabled={!canControlPlayback}
+            />
           </div>
 
           <div className="flex min-w-0 items-center justify-center gap-0 sm:gap-1">
@@ -410,7 +417,11 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="flex items-center justify-center gap-3">
-        <PlaybackModeButton mode={playbackMode} onCycle={onCyclePlaybackMode} />
+        <PlaybackModeButton
+          mode={playbackMode}
+          onCycle={onCyclePlaybackMode}
+          disabled={!canControlPlayback}
+        />
         <Button
           data-testid="player-prev-button"
           variant="ghost"

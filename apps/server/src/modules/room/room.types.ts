@@ -82,7 +82,8 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
         startedAt: persistedPlayback.startedAt ?? null,
         queueVersion: persistedPlayback.queueVersion ?? 1,
         playbackRevision: persistedPlayback.playbackRevision ?? 1,
-        mediaEpoch: persistedPlayback.mediaEpoch ?? 0
+        mediaEpoch: persistedPlayback.mediaEpoch ?? 0,
+        playbackMode: persistedPlayback.playbackMode ?? "sequence"
       },
       presenceRevision: resolvePresenceRevision(persisted, persistedPlayback),
       roomRevision: resolveRoomRevision(persisted, persistedPlayback)

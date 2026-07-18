@@ -108,7 +108,8 @@ export class RoomService {
         startedAt: null,
         queueVersion: 1,
         playbackRevision: 1,
-        mediaEpoch: 0
+        mediaEpoch: 0,
+        playbackMode: "sequence"
       }
     };
 
@@ -612,7 +613,7 @@ export class RoomService {
   async updatePlayback(
     roomId: string,
     input: {
-      action: "play" | "pause" | "seek" | "next" | "prev";
+      action: "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
       trackId?: string;
       queueItemId?: string;
       playbackAssetId?: string;
@@ -620,6 +621,7 @@ export class RoomService {
       actorSessionId?: string;
       actorPeerId?: string;
       expectedVersion?: number;
+      playbackMode?: import("@music-room/shared").PlaybackMode;
     }
   ): Promise<PlaybackSnapshot> {
     if (!this.isRealtimeAvailable()) {

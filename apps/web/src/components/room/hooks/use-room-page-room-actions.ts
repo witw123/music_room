@@ -177,6 +177,7 @@ export function useRoomPageRoomActions({
     nextTrack,
     removeQueueItem,
     reorderQueue,
+    setPlaybackMode,
     seekTrack
   } = useRoomActions({
     activeSession,
@@ -232,6 +233,7 @@ export function useRoomPageRoomActions({
     refreshPlaylists,
     removeQueueItem,
     reorderQueue,
+    setPlaybackMode,
     resetPlayerSurface,
     seekTrack
   };

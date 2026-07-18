@@ -8,6 +8,7 @@ import {
   remoteTrackSourceRefSchema,
   trackSourceTypeSchema
 } from "../playlist/models";
+import { playbackModeSchema } from "../playback/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const optionalNullableText = (max: number) =>
@@ -117,15 +118,25 @@ export const reorderQueueRequestSchema = z
 
 export const updatePlaybackRequestSchema = z
   .object({
-    action: z.enum(["play", "pause", "seek", "next", "prev"]),
+    action: z.enum(["play", "pause", "seek", "next", "prev", "set-mode"]),
     trackId: stringId.optional(),
     queueItemId: stringId.optional(),
     playbackAssetId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     positionMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000).optional(),
+    playbackMode: playbackModeSchema.optional(),
     actorPeerId: stringId.optional(),
     expectedVersion: z.number().int().positive()
   })
-  .strict();
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.action === "set-mode" && !payload.playbackMode) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["playbackMode"],
+        message: "Playback mode is required when changing playback order."
+      });
+    }
+  });
 
 export const createPlaylistRequestSchema = z
   .object({

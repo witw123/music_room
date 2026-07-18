@@ -84,7 +84,7 @@ export function PlayerQueueDrawer({
       </Button>
 
       {isOpen ? (
-        <aside data-testid="player-queue-drawer" className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(420px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
+        <aside data-testid="player-queue-drawer" className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
           <div className="flex items-center justify-between border-b border-white/15 bg-[#202228] px-4 py-3">
             <div>
                <h3 className="text-base font-semibold text-white">当前播放队列</h3>
@@ -99,6 +99,8 @@ export function PlayerQueueDrawer({
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = !!activeSessionId && canReorderQueue;
                 const isCurrent = currentQueueItemId === item.id;
+                const artistName = track?.artist?.trim() || "未知歌手";
+                const memberName = track?.ownerNickname?.trim() || item.requestedBy?.trim() || "成员";
 
                 return (
                   <div
@@ -127,8 +129,10 @@ export function PlayerQueueDrawer({
                        <strong className={`block truncate text-sm font-semibold ${isCurrent ? "text-sky-200" : "text-white"}`}>
                          {track?.title ?? "未知曲目"}
                        </strong>
-                       <p className="block truncate text-xs text-zinc-300">
-                         {track?.artist ?? "本地上传"} · {formatDuration(track?.durationMs ?? 0)}
+                       <p className="flex min-w-0 items-center gap-2 text-xs text-zinc-300">
+                         <span className="min-w-0 truncate">{artistName}</span>
+                         <span className="shrink-0 tabular-nums">{formatDuration(track?.durationMs ?? 0)}</span>
+                         <span className="min-w-0 truncate">{memberName}上传</span>
                        </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">

@@ -15,6 +15,7 @@ import {
   type QqMusicQrStatusResponse,
   type QqMusicSearchResponse,
   type QqMusicTrackCandidate,
+  type PlaybackMode,
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
@@ -253,11 +254,12 @@ export const musicRoomApi = {
   updatePlayback: (
     roomId: string,
     payload: {
-      action: "play" | "pause" | "seek" | "next" | "prev";
+      action: "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
       trackId?: string;
       queueItemId?: string;
       playbackAssetId?: string;
       positionMs?: number;
+      playbackMode?: PlaybackMode;
       actorPeerId?: string;
       expectedVersion: number;
     }

@@ -1,4 +1,4 @@
-import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import type { PlaybackMode, PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 
@@ -13,26 +13,29 @@ export class RoomPlaybackService {
   async updatePlayback(
     record: RoomRecord,
     input: {
-      action: "play" | "pause" | "seek" | "next" | "prev";
+      action: "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
       trackId?: string;
       queueItemId?: string;
       playbackAssetId?: string;
       positionMs?: number;
+      playbackMode?: PlaybackMode;
     }
   ): Promise<PlaybackSnapshot> {
     const playback = record.room.playback;
 
+    if (input.action === "set-mode") {
+      if (!input.playbackMode) {
+        throw new Error("Playback mode is required when changing playback order.");
+      }
+      playback.playbackMode = input.playbackMode;
+    }
+
     if (input.action === "next") {
-      await this.advanceToNextPlayable(record, {
-        positionMs: input.positionMs ?? 0,
-        wrap: false
-      });
+      await this.advanceByPlaybackMode(record, "next", input.positionMs ?? 0);
     }
 
     if (input.action === "prev") {
-      await this.advanceToPreviousPlayable(record, {
-        positionMs: input.positionMs ?? 0
-      });
+      await this.advanceByPlaybackMode(record, "prev", input.positionMs ?? 0);
     }
 
     if (input.action === "play") {
@@ -238,6 +241,82 @@ export class RoomPlaybackService {
     return "cleared";
   }
 
+  private async advanceByPlaybackMode(
+    record: RoomRecord,
+    direction: "next" | "prev",
+    positionMs: number
+  ) {
+    const mode = record.room.playback.playbackMode ?? "sequence";
+
+    if (mode === "single") {
+      const playback = record.room.playback;
+      const currentTrackId = playback.currentTrackId;
+      if (currentTrackId) {
+        const currentQueueItemId = playback.currentQueueItemId;
+        const sourceCandidate = await this.resolveTrackSourceCandidate(record, currentTrackId);
+        if (sourceCandidate) {
+          await this.applyTrackPlayback(
+            record,
+            currentTrackId,
+            positionMs,
+            currentQueueItemId
+          );
+          return "advanced" as const;
+        }
+
+        this.pausePlaybackAt(record, this.getTrackDurationMs(record, currentTrackId), {
+          sourceCandidate: null,
+          bumpMediaEpoch: true,
+          clearSourcePeer: true
+        });
+        return "paused-at-end" as const;
+      }
+      return this.advanceToNextPlayable(record, { positionMs, wrap: false });
+    }
+
+    if (mode === "shuffle") {
+      const randomized = await this.advanceToRandomPlayable(record, positionMs);
+      if (randomized) {
+        return "advanced" as const;
+      }
+    }
+
+    return direction === "next"
+      ? this.advanceToNextPlayable(record, { positionMs, wrap: false })
+      : this.advanceToPreviousPlayable(record, { positionMs });
+  }
+
+  private async advanceToRandomPlayable(record: RoomRecord, positionMs: number) {
+    const currentIndex = this.getCurrentQueueIndex(record);
+    const candidates: QueueItem[] = [];
+
+    for (let index = 0; index < record.queue.length; index += 1) {
+      if (index === currentIndex) {
+        continue;
+      }
+      const item = record.queue[index]!;
+      if (await this.resolveTrackSourceCandidate(record, item.trackId)) {
+        candidates.push(item);
+      }
+    }
+
+    // A one-track queue still loops in shuffle mode rather than stopping.
+    if (candidates.length === 0 && currentIndex >= 0) {
+      const current = record.queue[currentIndex];
+      if (current && (await this.resolveTrackSourceCandidate(record, current.trackId))) {
+        candidates.push(current);
+      }
+    }
+
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    const candidate = candidates[Math.floor(Math.random() * candidates.length)]!;
+    await this.applyTrackPlayback(record, candidate.trackId, positionMs, candidate.id);
+    return true;
+  }
+
   async advanceToPreviousPlayable(
     record: RoomRecord,
     options?: {
@@ -310,7 +389,7 @@ export class RoomPlaybackService {
       return false;
     }
 
-    await this.advanceToNextPlayable(record, { positionMs: 0, wrap: false });
+    await this.advanceByPlaybackMode(record, "next", 0);
     this.bumpPlaybackVersion(playback);
     return true;
   }

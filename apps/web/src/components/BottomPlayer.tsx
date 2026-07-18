@@ -17,7 +17,6 @@ import {
   type PendingSeek
 } from "@/components/bottom-player/seek-state";
 import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
-import { getNextPlaybackMode, type PlaybackMode } from "@/components/bottom-player/playback-mode";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -41,6 +40,7 @@ type BottomPlayerProps = {
   onSeek: (positionMs: number) => Promise<PlaybackSnapshot | null>;
   onPrev: () => void;
   onNext: () => void;
+  onCyclePlaybackMode: () => void | Promise<void>;
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
@@ -76,6 +76,7 @@ function BottomPlayerBase({
   onSeek,
   onPrev,
   onNext,
+  onCyclePlaybackMode,
   queue,
   tracks,
   currentQueueItemId,
@@ -98,7 +99,6 @@ function BottomPlayerBase({
   const seekRequestIdRef = useRef(0);
   const [pendingSeek, setPendingSeek] = useState<PendingSeek | null>(null);
   const [isImmersiveOpen, setIsImmersiveOpen] = useState(false);
-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("sequence");
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
@@ -110,6 +110,7 @@ function BottomPlayerBase({
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
+  const playbackMode = playback?.playbackMode ?? "sequence";
   const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
 
   useEffect(() => {
@@ -286,10 +287,6 @@ function BottomPlayerBase({
     void onNext();
   }, [onNext]);
 
-  const cyclePlaybackMode = useCallback(() => {
-    setPlaybackMode((current) => getNextPlaybackMode(current));
-  }, []);
-
   return (
     <>
     <footer className="fixed bottom-3 left-3 right-3 z-50 flex min-h-[6.5rem] flex-col justify-center rounded-2xl border border-surface-border bg-background-secondary/95 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:bottom-0 lg:left-0 lg:right-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3">
@@ -318,7 +315,7 @@ function BottomPlayerBase({
         onNext={playNext}
         onTogglePlay={togglePlayback}
         playbackMode={playbackMode}
-        onCyclePlaybackMode={cyclePlaybackMode}
+        onCyclePlaybackMode={onCyclePlaybackMode}
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}
@@ -346,7 +343,7 @@ function BottomPlayerBase({
         onNext={playNext}
         onTogglePlay={togglePlayback}
         playbackMode={playbackMode}
-        onCyclePlaybackMode={cyclePlaybackMode}
+        onCyclePlaybackMode={onCyclePlaybackMode}
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}

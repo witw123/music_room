@@ -4,6 +4,7 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   errorCodes,
   type AuthSession,
+  type PlaybackMode,
   type PlaybackSnapshot,
   type RoomSnapshot
 } from "@music-room/shared";
@@ -643,6 +644,31 @@ export function useRoomActions({
     [roomSnapshot, activeSession, setStatusMessage, syncRoomSnapshot]
   );
 
+  const setPlaybackMode = useCallback(
+    async (playbackMode: PlaybackMode) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
+
+      const nextPlayback = await runPlaybackMutation(
+        roomSnapshot.room.id,
+        roomSnapshot.room.playback.playbackRevision,
+        (expectedVersion) =>
+          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "set-mode",
+            playbackMode,
+            actorPeerId: getCurrentPeerId?.() ?? undefined,
+            expectedVersion
+          })
+      );
+
+      if (nextPlayback) {
+        setStatusMessage("播放顺序已同步到房间");
+      }
+    },
+    [activeSession, getCurrentPeerId, roomSnapshot, runPlaybackMutation, setStatusMessage]
+  );
+
   const seekTrack = useCallback(
     async (positionMs: number) => {
       if (!roomSnapshot || !activeSession) {
@@ -695,6 +721,7 @@ export function useRoomActions({
     loadPlaylistIntoRoom,
     removeQueueItem,
     reorderQueue,
+    setPlaybackMode,
     seekTrack,
     handleEnded
   };

@@ -144,7 +144,8 @@ export function isSamePlaybackSnapshot(
     current.startedAt === incoming.startedAt &&
     current.queueVersion === incoming.queueVersion &&
     current.playbackRevision === incoming.playbackRevision &&
-    current.mediaEpoch === incoming.mediaEpoch
+    current.mediaEpoch === incoming.mediaEpoch &&
+    (current.playbackMode ?? "sequence") === (incoming.playbackMode ?? "sequence")
   );
 }
 

@@ -22,6 +22,7 @@ type BottomPlayerControllerProps = {
   onSeek: (positionMs: number) => Promise<PlaybackSnapshot | null>;
   onPrev: () => void;
   onNext: () => void;
+  onCyclePlaybackMode: () => void | Promise<void>;
   canReorderQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
@@ -43,6 +44,7 @@ function BottomPlayerControllerBase({
   onSeek,
   onPrev,
   onNext,
+  onCyclePlaybackMode,
   canReorderQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
@@ -125,6 +127,7 @@ function BottomPlayerControllerBase({
       onSeek={onSeek}
       onPrev={onPrev}
       onNext={onNext}
+      onCyclePlaybackMode={onCyclePlaybackMode}
       queue={roomSnapshot?.queue ?? []}
       tracks={roomSnapshot?.tracks ?? []}
       currentQueueItemId={playback?.currentQueueItemId ?? null}

@@ -233,7 +233,8 @@ export class NeteaseService {
       url,
       { headers },
       this.requestTimeoutMs(),
-      isAllowedAudioHost
+      isAllowedAudioHost,
+      { allowSyntheticDns: true }
     ).catch(() => {
       throw this.unavailableError();
     });

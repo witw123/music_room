@@ -6,6 +6,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
+import { getNextPlaybackMode } from "@/components/bottom-player/playback-mode";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";
 import type { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
 import type { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
@@ -119,6 +120,11 @@ export function RoomAppShell({
             onSeek={roomActions.seekTrack}
             onPrev={playbackActions.handlePrevTrack}
             onNext={playbackActions.handleNextTrack}
+            onCyclePlaybackMode={() =>
+              roomActions.setPlaybackMode(
+                getNextPlaybackMode(roomSnapshot?.room.playback.playbackMode ?? "sequence")
+              )
+            }
             canReorderQueue={canReorderQueue}
             onPlayQueueItem={playbackActions.handlePlayQueueItem}
             onRemoveQueueItem={roomActions.removeQueueItem}

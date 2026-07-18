@@ -642,6 +642,87 @@ describe("RoomService", () => {
     expect(previousPlayback.currentQueueItemId).toBe(firstQueueItem.id);
   });
 
+  it("synchronizes playback order mode and uses it for real room advancement", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "First",
+      artist: "Artist",
+      album: null,
+      durationMs: 100000,
+      bitrate: null,
+      fileHash: "mode-first",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Second",
+      artist: "Artist",
+      album: null,
+      durationMs: 100000,
+      bitrate: null,
+      fileHash: "mode-second",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const firstItem = await roomService.addQueueItem(snapshot.room.id, host.id, firstTrack.id);
+    const secondItem = await roomService.addQueueItem(snapshot.room.id, host.id, secondTrack.id);
+
+    const playing = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: firstItem.id,
+      actorSessionId: host.id
+    });
+    const single = await roomService.updatePlayback(snapshot.room.id, {
+      action: "set-mode",
+      playbackMode: "single",
+      actorSessionId: host.id
+    });
+    expect(single).toMatchObject({ playbackMode: "single" });
+
+    const repeated = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+    expect(repeated).toMatchObject({
+      playbackMode: "single",
+      currentTrackId: firstTrack.id,
+      currentQueueItemId: firstItem.id,
+      positionMs: 0
+    });
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "set-mode",
+      playbackMode: "sequence",
+      actorSessionId: host.id
+    });
+    const next = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+    expect(next).toMatchObject({
+      playbackMode: "sequence",
+      currentTrackId: secondTrack.id,
+      currentQueueItemId: secondItem.id
+    });
+    expect(next.playbackRevision).toBeGreaterThan(playing.playbackRevision);
+
+    await expect(roomService.getRoomSnapshot(snapshot.room.id, [])).resolves.toMatchObject({
+      room: { playback: { playbackMode: "sequence" } }
+    });
+  });
+
   it("restarts playback when jumping between queue items that share the same track", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

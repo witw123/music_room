@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const playbackModeSchema = z.enum(["sequence", "shuffle", "single"]);
+export type PlaybackMode = z.infer<typeof playbackModeSchema>;
+
 // Server-authoritative statuses are "playing" | "paused".
 // "buffering" remains accepted for backward-compatible clients but is not written by the server.
 export const playbackSnapshotSchema = z.object({
@@ -15,7 +18,9 @@ export const playbackSnapshotSchema = z.object({
   startedAt: z.string().datetime().nullable(),
   queueVersion: z.number().int().positive(),
   playbackRevision: z.number().int().positive().default(1),
-  mediaEpoch: z.number().int().nonnegative()
+  mediaEpoch: z.number().int().nonnegative(),
+  // Optional for snapshots persisted before room-level playback order was added.
+  playbackMode: playbackModeSchema.optional()
 });
 
 export type PlaybackSnapshot = z.infer<typeof playbackSnapshotSchema>;
