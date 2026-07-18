@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary } from "@music-room/shared";
-import { adminApi, AdminApiError } from "@/lib/admin-api";
+import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON } from "@/lib/admin-api";
 import styles from "./admin.module.css";
 
 type Tab = "overview" | "rooms" | "users" | "incidents" | "audit" | "system";
@@ -111,7 +111,7 @@ export default function AdminPage() {
         <main className={styles.content}>
           <div className={styles.pageHeader}><div><div className={styles.eyebrow}>运维中心 / {activeTab.label}</div><h1 className={styles.title}>{activeTab.label}</h1><p className={styles.subtitle}>{refreshing ? "正在同步最新状态" : lastUpdatedAt ? `最近采样 ${new Date(lastUpdatedAt).toLocaleTimeString()}` : "等待首次采样"}</p></div>{tab === "rooms" || tab === "users" ? <div className={styles.headerTools}><input className={styles.search} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "rooms" ? "搜索房间码" : "搜索用户名或昵称"} aria-label="搜索" /></div> : null}</div>
           {error ? <div className={styles.error}>{error}<button onClick={() => void load()}>重新尝试</button></div> : null}
-          {tab === "overview" ? <Overview overview={overview} rooms={rooms} incidents={incidents} audit={audit} onRooms={() => setTab("rooms")} /> : tab === "rooms" ? <Rooms rooms={rooms} /> : tab === "users" ? <Users users={users} /> : tab === "incidents" ? <Incidents rows={incidents} /> : tab === "audit" ? <Audit rows={audit} /> : <System overview={overview} />}
+          {tab === "overview" ? <Overview overview={overview} rooms={rooms} incidents={incidents} audit={audit} onRooms={() => setTab("rooms")} /> : tab === "rooms" ? <Rooms rooms={rooms} onRefresh={load} /> : tab === "users" ? <Users users={users} onRefresh={load} /> : tab === "incidents" ? <Incidents rows={incidents} /> : tab === "audit" ? <Audit rows={audit} /> : <System overview={overview} />}
         </main>
       </div>
     </div>
@@ -145,9 +145,96 @@ function HealthRow({ label, value, width, color }: { label: string; value: strin
 function IncidentPanel({ rows }: { rows: AdminIncident[] }) { return <div className={styles.panel}><PanelHeader title="异常队列" hint={rows.length ? `最近 ${rows.length} 条` : "暂无异常"} /><div className={styles.incidentList}>{rows.length ? rows.map((row) => <div className={styles.incidentItem} key={row.id}><span className={`${styles.incidentDot} ${row.severity === "CRITICAL" ? styles.incidentDotCritical : ""}`} /><div><div className={styles.incidentType}>{row.type}</div><div className={styles.incidentScope}>{translateScope(row.scopeType)}：{row.scopeId ?? "全局"}</div></div><span className={styles.incidentTime}>{formatTime(row.lastSeenAt)}</span></div>) : <div className={styles.empty}>暂无未处理异常。</div>}</div></div>; }
 function AuditPanel({ rows }: { rows: AuditRow[] }) { return <div className={styles.panel}><PanelHeader title="最近管理活动" hint="审计记录" /><div className={styles.auditList}>{rows.length ? rows.map((row) => <div className={styles.auditItem} key={row.id}><span className={styles.auditTime}>{formatTime(row.createdAt)}</span><div><div className={styles.auditAction}>{translateAction(row.action)}</div><div className={styles.auditTarget}>{translateScope(row.targetType)}：{row.targetId ?? "-"} · {translateResult(row.result)}</div></div></div>) : <div className={styles.empty}>暂无管理活动。</div>}</div></div>; }
 
-function Rooms({ rooms }: { rooms: AdminRoomSummary[] }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>房间目录</div><div className={styles.toolbarMeta}>选择房间码进入监测详情和控制</div></div><span className={styles.toolbarMeta}>{rooms.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>房间码</th></tr></thead><tbody>{rooms.length ? rooms.map((room) => <tr key={room.id}><td><RoomCell room={room} /></td></tr>) : <tr><td><div className={styles.empty}>没有符合筛选条件的房间。</div></td></tr>}</tbody></table></div></div></>; }
-function UserCell({ user }: { user: AdminUserSummary }) { return <div className={styles.roomCell}><span className={styles.userAvatar}>{user.nickname.slice(0, 1).toUpperCase()}</span><div><a className={styles.linkButton} href={`/admin/users/${encodeURIComponent(user.id)}`}>{user.nickname}</a><div className={styles.roomJoin}>{user.username}</div></div></div>; }
-function Users({ users }: { users: AdminUserSummary[] }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>用户目录</div><div className={styles.toolbarMeta}>选择用户进入详情和账号控制</div></div><span className={styles.toolbarMeta}>{users.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>用户</th></tr></thead><tbody>{users.length ? users.map((user) => <tr key={user.id}><td><UserCell user={user} /></td></tr>) : <tr><td><div className={styles.empty}>没有符合筛选条件的用户。</div></td></tr>}</tbody></table></div></div></>; }
+function Rooms({ rooms, onRefresh }: { rooms: AdminRoomSummary[]; onRefresh: () => Promise<void> }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchAction, setBatchAction] = useState<"terminate" | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchMessage, setBatchMessage] = useState("");
+  const allSelected = rooms.length > 0 && rooms.every((room) => selected.has(room.id));
+
+  function toggleRoom(roomId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(roomId)) next.delete(roomId); else next.add(roomId);
+      return next;
+    });
+    setBatchMessage("");
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(rooms.map((room) => room.id)));
+    setBatchMessage("");
+  }
+
+  async function runBatch() {
+    const targets = rooms.filter((room) => selected.has(room.id));
+    if (!targets.length || batchBusy) return;
+    setBatchBusy(true);
+    setBatchMessage("");
+    const results = await Promise.allSettled(targets.map((room) => adminApi.terminateRoom(room.id, room.joinCode, ADMIN_CONFIRM_REASON)));
+    const failed = results.filter((result) => result.status === "rejected").length;
+    setBatchBusy(false);
+    setBatchAction(null);
+    setSelected(new Set());
+    setBatchMessage(failed ? `已处理 ${targets.length - failed} 个房间，${failed} 个失败，请查看详情重试。` : `已结束 ${targets.length} 个房间。`);
+    await onRefresh();
+  }
+
+  function openRoom(roomId: string) { window.location.assign(`/admin/rooms/${encodeURIComponent(roomId)}`); }
+
+  return <>
+    <div className={styles.toolbar}><div><div className={styles.toolbarTitle}>房间目录</div><div className={styles.toolbarMeta}>点击任意一行进入详情，查看状态并执行控制</div></div><span className={styles.toolbarMeta}>{rooms.length} 条结果</span></div>
+    {selected.size ? <div className={styles.batchBar}><span>已选 {selected.size} 个房间</span><div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => setSelected(new Set())}>清空选择</button><button className={styles.dangerButton} onClick={() => setBatchAction("terminate")}>结束选中房间</button></div></div> : null}
+    {batchAction ? <div className={styles.confirmPanel}><div><strong>确认结束选中的 {selected.size} 个房间</strong><p className={styles.controlHint}>操作会永久清理房间状态、队列和在线成员的房间资产。</p></div><div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => setBatchAction(null)} disabled={batchBusy}>取消</button><button className={styles.dangerButton} onClick={() => void runBatch()} disabled={batchBusy}>{batchBusy ? "处理中..." : "确认结束"}</button></div></div> : null}
+    {batchMessage ? <div className={styles.batchMessage} role="status">{batchMessage}</div> : null}
+    <div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={`${styles.table} ${styles.directoryTable}`}><thead><tr><th className={styles.selectionCell}><input className={styles.selectBox} type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="全选房间" /></th><th>房间</th><th>健康度</th><th>成员</th><th>播放</th><th>可见性</th><th>更新时间</th><th>操作</th></tr></thead><tbody>{rooms.map((room) => <tr className={styles.clickableRow} key={room.id} onClick={() => openRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRoom(room.id); } }} role="link" tabIndex={0}><td className={styles.selectionCell} onClick={(event) => event.stopPropagation()}><input className={styles.selectBox} type="checkbox" checked={selected.has(room.id)} onChange={() => toggleRoom(room.id)} aria-label={`选择房间 ${room.joinCode}`} /></td><td><div className={styles.roomCell}><span className={`${styles.roomSignal} ${room.health === "critical" ? styles.roomSignalCritical : room.health === "degraded" ? styles.roomSignalDegraded : ""}`} /><div><div className={`${styles.roomId} ${styles.directoryPrimary}`}>{room.joinCode}</div><div className={styles.roomJoin}>{room.name || "未命名房间"} · 房主 {room.hostNickname || room.hostId}</div></div></div></td><td><HealthText value={room.health} /></td><td className={styles.mono}>{room.onlineMemberCount}/{room.memberCount}</td><td><div className={styles.directoryPlayback}>{translatePlayback(room.playbackStatus)}<span>{room.currentTrackTitle || "未播放"}</span></div></td><td className={styles.mono}>{room.visibility === "private" ? "私密" : "公开"}</td><td className={styles.mono}>{formatTime(room.updatedAt)}</td><td><button className={styles.tableAction} onClick={(event) => { event.stopPropagation(); openRoom(room.id); }}>详情</button></td></tr>)}{rooms.length ? null : <tr><td colSpan={8}><div className={styles.empty}>没有符合筛选条件的房间。</div></td></tr>}</tbody></table></div></div>
+  </>;
+}
+
+function UserCell({ user }: { user: AdminUserSummary }) { return <div className={styles.roomCell}><span className={styles.userAvatar}>{user.nickname.slice(0, 1).toUpperCase()}</span><div><div className={`${styles.linkButton} ${styles.directoryPrimary}`}>{user.nickname}</div><div className={styles.roomJoin}>{user.username}</div></div></div>; }
+function Users({ users, onRefresh }: { users: AdminUserSummary[]; onRefresh: () => Promise<void> }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchAction, setBatchAction] = useState<"disable" | "enable" | "revoke" | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchMessage, setBatchMessage] = useState("");
+  const manageable = users.filter((user) => user.role !== "ADMIN");
+  const selectedUsers = manageable.filter((user) => selected.has(user.id));
+  const allSelected = manageable.length > 0 && manageable.every((user) => selected.has(user.id));
+
+  function toggleUser(userId: string) {
+    setSelected((current) => { const next = new Set(current); if (next.has(userId)) next.delete(userId); else next.add(userId); return next; });
+    setBatchMessage("");
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(manageable.map((user) => user.id)));
+    setBatchMessage("");
+  }
+
+  async function runBatch() {
+    if (!selectedUsers.length || !batchAction || batchBusy) return;
+    const targets = batchAction === "disable" ? selectedUsers.filter((user) => user.status === "ACTIVE") : batchAction === "enable" ? selectedUsers.filter((user) => user.status === "DISABLED") : selectedUsers;
+    if (!targets.length) { setBatchAction(null); return; }
+    setBatchBusy(true);
+    setBatchMessage("");
+    const results = await Promise.allSettled(targets.map((user) => batchAction === "revoke" ? adminApi.revokeSessions(user.id, ADMIN_CONFIRM_REASON) : adminApi.setUserStatus(user.id, batchAction === "disable" ? "DISABLED" : "ACTIVE", ADMIN_CONFIRM_REASON)));
+    const failed = results.filter((result) => result.status === "rejected").length;
+    setBatchBusy(false);
+    setBatchAction(null);
+    setSelected(new Set());
+    setBatchMessage(failed ? `已处理 ${targets.length - failed} 个用户，${failed} 个失败，请查看详情重试。` : `已完成 ${targets.length} 个用户操作。`);
+    await onRefresh();
+  }
+
+  function openUser(userId: string) { window.location.assign(`/admin/users/${encodeURIComponent(userId)}`); }
+  return <>
+    <div className={styles.toolbar}><div><div className={styles.toolbarTitle}>用户目录</div><div className={styles.toolbarMeta}>点击任意一行进入详情，管理员账号不可批量修改</div></div><span className={styles.toolbarMeta}>{users.length} 条结果</span></div>
+    {selectedUsers.length ? <div className={styles.batchBar}><span>已选 {selectedUsers.length} 个普通用户</span><div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => setSelected(new Set())}>清空选择</button><button className={styles.secondaryButton} onClick={() => setBatchAction("enable")} disabled={!selectedUsers.some((user) => user.status === "DISABLED")}>启用选中</button><button className={styles.dangerButton} onClick={() => setBatchAction("disable")} disabled={!selectedUsers.some((user) => user.status === "ACTIVE")}>禁用选中</button><button className={styles.secondaryButton} onClick={() => setBatchAction("revoke")}>撤销选中会话</button></div></div> : null}
+    {batchAction ? <div className={styles.confirmPanel}><div><strong>确认{batchAction === "disable" ? "禁用" : batchAction === "enable" ? "启用" : "撤销会话"}选中的 {selectedUsers.length} 个用户</strong><p className={styles.controlHint}>{batchAction === "disable" ? "禁用会立即撤销普通会话并断开实时连接。" : batchAction === "enable" ? "启用后不会恢复旧会话，用户需要重新登录。" : "撤销后账号状态不变，用户需要重新登录。"}</p></div><div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => setBatchAction(null)} disabled={batchBusy}>取消</button><button className={batchAction === "disable" ? styles.dangerButton : styles.secondaryButton} onClick={() => void runBatch()} disabled={batchBusy}>{batchBusy ? "处理中..." : "确认操作"}</button></div></div> : null}
+    {batchMessage ? <div className={styles.batchMessage} role="status">{batchMessage}</div> : null}
+    <div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={`${styles.table} ${styles.directoryTable}`}><thead><tr><th className={styles.selectionCell}><input className={styles.selectBox} type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="全选普通用户" /></th><th>用户</th><th>状态</th><th>角色</th><th>在线房间</th><th>有效会话</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{users.map((user) => <tr className={styles.clickableRow} key={user.id} onClick={() => openUser(user.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openUser(user.id); } }} role="link" tabIndex={0}><td className={styles.selectionCell} onClick={(event) => event.stopPropagation()}><input className={styles.selectBox} type="checkbox" disabled={user.role === "ADMIN"} checked={selected.has(user.id)} onChange={() => toggleUser(user.id)} aria-label={`选择用户 ${user.nickname}`} /></td><td><UserCell user={user} /></td><td><HealthText value={user.status.toLowerCase()} /></td><td className={styles.mono}>{user.role === "ADMIN" ? "管理员" : "普通用户"}</td><td className={styles.mono}>{user.onlineRoomCount}</td><td className={styles.mono}>{user.activeSessionCount}</td><td className={styles.mono}>{user.lastLoginAt ? formatTime(user.lastLoginAt) : "未登录"}</td><td><button className={styles.tableAction} onClick={(event) => { event.stopPropagation(); openUser(user.id); }}>详情</button></td></tr>)}{users.length ? null : <tr><td colSpan={8}><div className={styles.empty}>没有符合筛选条件的用户。</div></td></tr>}</tbody></table></div></div>
+  </>;
+}
 function Incidents({ rows }: { rows: AdminIncident[] }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>异常队列</div><div className={styles.toolbarMeta}>未处理与已恢复的异常</div></div><span className={styles.toolbarMeta}>{rows.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>级别</th><th>类型</th><th>范围</th><th>状态</th><th>最近发现</th></tr></thead><tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td><HealthText value={row.severity.toLowerCase()} /></td><td className={styles.mono}>{row.type}</td><td className={styles.mono}>{translateScope(row.scopeType)}：{row.scopeId ?? "全局"}</td><td><HealthText value={row.status.toLowerCase()} /></td><td className={styles.mono}>{formatTime(row.lastSeenAt)}</td></tr>) : <tr><td colSpan={5}><div className={styles.empty}>暂无异常记录。</div></td></tr>}</tbody></table></div></div></>; }
 function Audit({ rows }: { rows: AuditRow[] }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>管理审计</div><div className={styles.toolbarMeta}>操作历史与执行结果</div></div><span className={styles.toolbarMeta}>{rows.length} 条结果</span></div><div className={`${styles.panel} ${styles.fullPanel}`}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>时间</th><th>动作</th><th>目标</th><th>结果</th><th>原因</th></tr></thead><tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td className={styles.mono}>{formatTime(row.createdAt)}</td><td className={styles.mono}>{translateAction(row.action)}</td><td className={styles.mono}>{translateScope(row.targetType)}：{row.targetId ?? "-"}</td><td><HealthText value={row.result.toLowerCase()} /></td><td className={styles.mono}>{row.reason ?? "-"}</td></tr>) : <tr><td colSpan={5}><div className={styles.empty}>暂无审计记录。</div></td></tr>}</tbody></table></div></div></>; }
 function System({ overview }: { overview: AdminOverview | null }) { return <><div className={styles.toolbar}><div><div className={styles.toolbarTitle}>系统依赖</div><div className={styles.toolbarMeta}>运行状态与实例心跳</div></div></div><div className={`${styles.sectionGrid} ${styles.fullPanel}`}><SystemHealth overview={overview} /><div className={styles.panel}><PanelHeader title="运行快照" hint="当前管理控制台" /><div className={styles.healthList}><HealthRow label="Redis 模式" value={overview?.dependencies.redisMode ? translateRedisMode(overview.dependencies.redisMode) : "未知"} width="78%" color="var(--admin-blue)" /><HealthRow label="房间健康度" value={`${overview?.rooms.healthy ?? 0} 个健康房间`} width={`${overview?.rooms.total ? Math.round((overview.rooms.healthy / overview.rooms.total) * 100) : 10}%`} color="var(--admin-green)" /><HealthRow label="诊断状态" value={`${overview?.rooms.unknown ?? 0} 个未知`} width={`${overview?.rooms.total ? Math.round(((overview.rooms.total - overview.rooms.unknown) / overview.rooms.total) * 100) : 10}%`} color="var(--admin-amber)" /></div></div></div></>; }

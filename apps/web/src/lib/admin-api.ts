@@ -2,6 +2,7 @@ import { apiBaseUrl } from "./api-client";
 import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary } from "@music-room/shared";
 
 const csrfStorageKey = "music-room-admin-csrf";
+export const ADMIN_CONFIRM_REASON = "管理员面板确认操作";
 
 export class AdminApiError extends Error {
   constructor(message: string, public readonly status: number) { super(message); }

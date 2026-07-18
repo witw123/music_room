@@ -137,16 +137,24 @@
 
 .tableWrap { overflow-x: auto; }
 .table { width: 100%; min-width: 640px; border-collapse: collapse; text-align: left; }
+.directoryTable { min-width: 980px; }
 .table th { border-bottom: 1px solid var(--admin-line); color: var(--admin-faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.1em; padding: 11px 17px; text-transform: uppercase; }
 .table td { border-bottom: 1px solid rgba(148, 163, 184, 0.08); color: #c4d0da; font-size: 11px; padding: 13px 17px; vertical-align: middle; }
 .table tr:last-child td { border-bottom: 0; }
 .table tbody tr:hover { background: rgba(148, 163, 184, 0.035); }
+.clickableRow { cursor: pointer; }
+.selectionCell { width: 38px; padding-right: 4px !important; }
+.selectBox { width: 14px; height: 14px; accent-color: var(--admin-blue); cursor: pointer; }
+.selectBox:disabled { cursor: not-allowed; opacity: 0.35; }
 .roomCell { display: flex; align-items: center; gap: 10px; }
 .roomSignal { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--admin-green); }
 .roomSignalDegraded { background: var(--admin-amber); }
 .roomSignalCritical { background: var(--admin-red); box-shadow: 0 0 0 3px rgba(242, 126, 126, 0.1); }
 .roomId { color: #dbe8f3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 .roomJoin { margin-top: 3px; color: var(--admin-faint); font-size: 9px; }
+.directoryPrimary { color: #dbe8f3; }
+.directoryPlayback { display: grid; gap: 4px; color: #dbe8f3; font-size: 10px; }
+.directoryPlayback span { max-width: 210px; overflow: hidden; color: var(--admin-faint); text-overflow: ellipsis; white-space: nowrap; }
 .statusText { display: inline-flex; align-items: center; gap: 6px; color: var(--admin-green); font-size: 10px; }
 .statusTextMuted { color: var(--admin-muted); }
 .statusTextAmber { color: var(--admin-amber); }
@@ -183,6 +191,11 @@
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 26px; }
 .toolbarTitle { color: #dbe8f3; font-size: 14px; font-weight: 620; }
 .toolbarMeta { color: var(--admin-faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
+.batchBar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; border: 1px solid rgba(57, 160, 255, 0.22); border-radius: 6px; background: rgba(57, 160, 255, 0.08); color: #cce8ff; padding: 10px 13px; font-size: 10px; }
+.batchBar .actionRow { flex-wrap: wrap; }
+.batchMessage { margin-top: 10px; border-left: 2px solid var(--admin-green); color: #b8e9d1; padding: 3px 0 3px 9px; font-size: 10px; }
+.tableAction { border: 1px solid var(--admin-line); border-radius: 4px; background: transparent; color: var(--admin-blue); cursor: pointer; padding: 5px 8px; font-size: 10px; }
+.tableAction:hover { border-color: rgba(57, 160, 255, 0.45); background: rgba(57, 160, 255, 0.08); }
 .fullPanel { margin-top: 12px; }
 .empty { padding: 38px 18px; color: var(--admin-muted); text-align: center; font-size: 12px; }
 .codeTitle { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.12em; }
@@ -197,6 +210,7 @@
 .controlHint { margin-top: 5px; color: var(--admin-muted); font-size: 10px; line-height: 1.6; }
 .confirmPanel { display: grid; gap: 14px; }
 .confirmFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.confirmTarget { border-left: 2px solid rgba(57, 160, 255, 0.45); color: var(--admin-muted); font-size: 10px; padding-left: 9px; }
 .detailInput { width: 100%; height: 35px; margin-top: 7px; border: 1px solid var(--admin-line); border-radius: 5px; background: rgba(148, 163, 184, 0.04); color: var(--admin-text); outline: none; padding: 0 10px; font-size: 11px; }
 .detailInput:focus { border-color: rgba(57, 160, 255, 0.6); box-shadow: 0 0 0 3px rgba(57, 160, 255, 0.08); }
 .actionRow { display: flex; justify-content: flex-end; gap: 8px; }
@@ -262,6 +276,7 @@
   .sectionGrid, .sectionGridBottom { grid-template-columns: 1fr; }
   .detailGrid, .confirmFields { grid-template-columns: 1fr; }
   .controlRow { align-items: flex-start; flex-direction: column; }
+  .batchBar { align-items: flex-start; flex-direction: column; }
   .table th, .table td { padding-right: 13px; padding-left: 13px; }
 }
 

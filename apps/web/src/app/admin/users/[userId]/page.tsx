@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { adminApi, AdminApiError, type AdminUserDetail } from "@/lib/admin-api";
+import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON, type AdminUserDetail } from "@/lib/admin-api";
 import styles from "../../admin.module.css";
 
 export default function AdminUserDetailPage() {
@@ -12,7 +12,6 @@ export default function AdminUserDetailPage() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [action, setAction] = useState<"status" | "revoke" | null>(null);
-  const [reason, setReason] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const loadingRef = useRef(false);
@@ -49,19 +48,14 @@ export default function AdminUserDetailPage() {
   async function confirmAction() {
     if (!user || !action || actionBusy) return;
     setActionError("");
-    if (reason.trim().length < 8) {
-      setActionError("操作原因至少需要 8 个字符。");
-      return;
-    }
     setActionBusy(true);
     try {
       if (action === "status") {
-        await adminApi.setUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", reason.trim());
+        await adminApi.setUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", ADMIN_CONFIRM_REASON);
       } else {
-        await adminApi.revokeSessions(user.id, reason.trim());
+        await adminApi.revokeSessions(user.id, ADMIN_CONFIRM_REASON);
       }
       setAction(null);
-      setReason("");
       await load();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "管理操作失败，请刷新后重试。");
@@ -86,10 +80,10 @@ export default function AdminUserDetailPage() {
         <div className={styles.controlBody}>
           {isAdmin ? <p className={styles.controlHint}>管理员角色和管理员账号状态只能通过服务端 CLI 管理。</p> : action ? <div className={styles.confirmPanel}>
             <div><strong>确认{actionLabel}</strong><p className={styles.controlHint}>{action === "status" ? (user.status === "ACTIVE" ? "禁用后会撤销该用户的全部普通会话并断开实时连接。" : "启用后不会恢复旧会话，用户需要重新登录。") : "撤销后该用户需要重新登录，账号状态不会改变。"}</p></div>
-            <label className={styles.detailLabel}>操作原因<input className={styles.detailInput} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="至少 8 个字符" /></label>
+            <p className={styles.confirmTarget}>目标用户：<span className={styles.mono}>{user.nickname}</span> · {user.username}</p>
             {actionError ? <p className={styles.inlineError}>{actionError}</p> : null}
             <div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => { setAction(null); setActionError(""); }} disabled={actionBusy}>取消</button><button className={styles.dangerButton} onClick={() => void confirmAction()} disabled={actionBusy}>{actionBusy ? "处理中..." : `确认${actionLabel}`}</button></div>
-          </div> : <div className={styles.controlRow}><div><strong>账号操作</strong><p className={styles.controlHint}>每次操作只需在此处确认一次，不使用浏览器弹窗。</p></div><div className={styles.actionRow}><button className={user.status === "ACTIVE" ? styles.dangerButton : styles.secondaryButton} onClick={() => { setAction("status"); setReason(""); setActionError(""); }}>{user.status === "ACTIVE" ? "禁用账号" : "启用账号"}</button><button className={styles.secondaryButton} onClick={() => { setAction("revoke"); setReason(""); setActionError(""); }}>撤销全部会话</button></div></div>}
+          </div> : <div className={styles.controlRow}><div><strong>账号操作</strong><p className={styles.controlHint}>每次操作只需在此处确认一次，不使用浏览器弹窗。</p></div><div className={styles.actionRow}><button className={user.status === "ACTIVE" ? styles.dangerButton : styles.secondaryButton} onClick={() => { setAction("status"); setActionError(""); }}>{user.status === "ACTIVE" ? "禁用账号" : "启用账号"}</button><button className={styles.secondaryButton} onClick={() => { setAction("revoke"); setActionError(""); }}>撤销全部会话</button></div></div>}
         </div>
       </section>
 

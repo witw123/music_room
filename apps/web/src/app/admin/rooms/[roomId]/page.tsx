@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { adminApi, AdminApiError, type AdminRoomDetail } from "@/lib/admin-api";
+import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON, type AdminRoomDetail } from "@/lib/admin-api";
 import styles from "../../admin.module.css";
 
 type RoomMember = { id?: string; nickname?: string; peerId?: string | null; presenceState?: string; role?: string; joinedAt?: string };
@@ -15,8 +15,6 @@ export default function AdminRoomDetailPage() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [action, setAction] = useState<"terminate" | null>(null);
-  const [expectedJoinCode, setExpectedJoinCode] = useState("");
-  const [reason, setReason] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const loadingRef = useRef(false);
@@ -53,17 +51,9 @@ export default function AdminRoomDetailPage() {
   async function confirmTerminate() {
     if (!room || actionBusy) return;
     setActionError("");
-    if (expectedJoinCode.trim().toUpperCase() !== room.joinCode.toUpperCase()) {
-      setActionError("房间码不匹配，请输入当前页面显示的房间码。");
-      return;
-    }
-    if (reason.trim().length < 8) {
-      setActionError("操作原因至少需要 8 个字符。");
-      return;
-    }
     setActionBusy(true);
     try {
-      await adminApi.terminateRoom(room.id, expectedJoinCode.trim(), reason.trim());
+      await adminApi.terminateRoom(room.id, room.joinCode, ADMIN_CONFIRM_REASON);
       router.replace("/admin");
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "结束房间失败，请刷新后重试。");
@@ -96,13 +86,10 @@ export default function AdminRoomDetailPage() {
         <div className={styles.controlBody}>
           {action === "terminate" ? <div className={styles.confirmPanel}>
             <div><strong>确认永久结束此房间</strong><p className={styles.controlHint}>结束后会删除房间状态、播放队列，并通知在线成员退出。</p></div>
-            <div className={styles.confirmFields}>
-              <label className={styles.detailLabel}>输入房间码<input className={styles.detailInput} value={expectedJoinCode} onChange={(event) => setExpectedJoinCode(event.target.value.toUpperCase())} placeholder={room.joinCode} /></label>
-              <label className={styles.detailLabel}>操作原因<input className={styles.detailInput} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="至少 8 个字符" /></label>
-            </div>
+            <p className={styles.confirmTarget}>目标房间：<span className={styles.mono}>{room.joinCode}</span> · {room.name ?? "未命名房间"}</p>
             {actionError ? <p className={styles.inlineError}>{actionError}</p> : null}
             <div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => { setAction(null); setActionError(""); }} disabled={actionBusy}>取消</button><button className={styles.dangerButton} onClick={() => void confirmTerminate()} disabled={actionBusy}>{actionBusy ? "处理中..." : "确认结束房间"}</button></div>
-          </div> : <div className={styles.controlRow}><div><strong>结束房间</strong><p className={styles.controlHint}>仅在需要永久清理房间和客户端资产时使用。</p></div><button className={styles.dangerButton} onClick={() => { setAction("terminate"); setExpectedJoinCode(""); setReason(""); setActionError(""); }}>结束房间</button></div>}
+          </div> : <div className={styles.controlRow}><div><strong>结束房间</strong><p className={styles.controlHint}>仅在需要永久清理房间和客户端资产时使用。</p></div><button className={styles.dangerButton} onClick={() => { setAction("terminate"); setActionError(""); }}>结束房间</button></div>}
         </div>
       </section>
 
