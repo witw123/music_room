@@ -224,7 +224,10 @@ export function RoomsHomePage() {
     router.replace(authEntryHref as Route);
   }
 
-  const visibleRooms = useMemo(() => availableRooms, [availableRooms]);
+  const visibleRooms = useMemo(
+    () => [...availableRooms].sort((left, right) => getOnlineMemberCount(right.room.members) - getOnlineMemberCount(left.room.members)),
+    [availableRooms]
+  );
 
   if (!hydrated || !activeSession) {
     return <div className="min-h-screen bg-background" />;
@@ -552,7 +555,7 @@ function RoomDirectoryCard({
 
   return (
     <article
-      className="group flex cursor-pointer flex-col gap-4 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
+      className="group flex cursor-pointer flex-col gap-3 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -565,6 +568,9 @@ function RoomDirectoryCard({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 rounded-md border border-surface-border bg-background/60 px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.12em] text-foreground-muted">
+            {room.room.joinCode}
+          </span>
           {room.room.hasPassword ? (
             <span className="shrink-0 rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
               有密码
@@ -575,15 +581,11 @@ function RoomDirectoryCard({
           {getOnlineMemberCount(room.room.members)} 人在线
         </span>
       </div>
-      <div className="mt-1">
+      <div className="mt-0.5">
         <h3 className="truncate font-semibold text-foreground">{room.room.name ?? "未命名房间"}</h3>
-        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
           {room.room.description?.trim() || `房主 ${host}`}
         </p>
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
-        <span>{room.room.visibility === "private" ? "私密房间" : "公开房间"}</span>
-        <span className="font-mono text-foreground/70">{room.room.joinCode}</span>
       </div>
     </article>
   );
