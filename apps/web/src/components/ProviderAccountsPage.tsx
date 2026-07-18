@@ -37,9 +37,9 @@ export function ProviderAccountsPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white md:pl-60">
+    <main className="relative min-h-screen overflow-hidden bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-20 pt-24 sm:px-6 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Profile</p>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">个人中心</h1>
@@ -48,7 +48,7 @@ export function ProviderAccountsPage() {
           </p>
         </div>
 
-        <section className="mt-10 grid gap-4 lg:grid-cols-2">
+        <section className="mt-8 grid min-w-0 gap-4 sm:mt-10 lg:grid-cols-2">
           {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
             <NeteaseSourcePanel activeSession={activeSession} mode="account" />
           ) : null}
@@ -76,7 +76,7 @@ function PanelLoading({ label }: { label: string }) {
 
 function AppPageBackground() {
   return (
-    <div className="fixed inset-0 -z-10 bg-black">
+    <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
       <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
       <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />

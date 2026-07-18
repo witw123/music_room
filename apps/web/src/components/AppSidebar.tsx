@@ -69,7 +69,7 @@ export function AppSidebar({
                 key={item.id}
                 href={item.href as Route}
                 aria-current={isActive ? "page" : undefined}
-                className={`group flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-medium transition-[background-color,color,box-shadow] duration-200 md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${
+                className={`group flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${
                   isActive
                     ? "bg-accent/15 text-white shadow-[inset_2px_0_0_#0070f3]"
                     : "text-white/[0.48] hover:bg-white/[0.06] hover:text-white"

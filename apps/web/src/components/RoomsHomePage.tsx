@@ -49,9 +49,7 @@ export function RoomsHomePage({
   });
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [recentRooms, setRecentRooms] = useState<RoomSnapshot[]>([]);
   const [roomPage, setRoomPage] = useState(0);
-  const [recentPage, setRecentPage] = useState(0);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
   const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
@@ -91,15 +89,6 @@ export function RoomsHomePage({
     }
   }, [activeSession]);
 
-  const refreshRecentRooms = useCallback(async () => {
-    try {
-      const rooms = await musicRoomApi.getRecentRooms();
-      setRecentRooms(rooms);
-    } catch {
-      setRecentRooms([]);
-    }
-  }, []);
-
   useEffect(() => {
     if (!activeSession) {
       return;
@@ -107,8 +96,7 @@ export function RoomsHomePage({
 
     void refreshSession();
     void refreshAvailableRooms();
-    void refreshRecentRooms();
-  }, [activeSession, refreshSession, refreshAvailableRooms, refreshRecentRooms]);
+  }, [activeSession, refreshSession, refreshAvailableRooms]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -117,7 +105,6 @@ export function RoomsHomePage({
 
     const refresh = () => {
       void refreshAvailableRooms();
-      void refreshRecentRooms();
     };
 
     const intervalId = window.setInterval(refresh, 10000);
@@ -129,7 +116,7 @@ export function RoomsHomePage({
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [activeSession, refreshAvailableRooms, refreshRecentRooms]);
+  }, [activeSession, refreshAvailableRooms]);
 
   function openCreateRoom(visibility: "public" | "private") {
     setCreateForm({ ...emptyCreateRoomForm, visibility });
@@ -206,35 +193,6 @@ export function RoomsHomePage({
     }
   }
 
-  async function handleReturnToRecentRoom(room: RoomSnapshot) {
-    if (!room) {
-      return;
-    }
-
-    if (room.room.id === awayRoomId && onResumeAwayRoom) {
-      onResumeAwayRoom();
-      return;
-    }
-
-    primeRoomAudioFromUserGesture();
-    try {
-      const recovered = await musicRoomApi.recoverRoom(room.room.id);
-      if (recovered) {
-        storeRoomSnapshotHandoff(recovered);
-        window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
-        router.push(buildRoomHref(recovered.room.id) as Route);
-        return;
-      }
-
-      const joined = await musicRoomApi.joinRoomByCode(room.room.joinCode);
-      storeRoomSnapshotHandoff(joined);
-      window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-      router.push(buildRoomHref(joined.room.id) as Route);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
   async function handleLogout() {
     try {
       await musicRoomApi.logout();
@@ -253,22 +211,17 @@ export function RoomsHomePage({
   const roomsPerPage = 9;
   const roomPageCount = Math.max(1, Math.ceil(visibleRooms.length / roomsPerPage));
   const pagedRooms = visibleRooms.slice(roomPage * roomsPerPage, (roomPage + 1) * roomsPerPage);
-  const recentRoomsPerPage = 4;
-  const recentPageCount = Math.max(1, Math.ceil(recentRooms.length / recentRoomsPerPage));
-  const pagedRecentRooms = recentRooms.slice(recentPage * recentRoomsPerPage, (recentPage + 1) * recentRoomsPerPage);
-
   useEffect(() => {
     setRoomPage((current) => Math.min(current, roomPageCount - 1));
-    setRecentPage((current) => Math.min(current, recentPageCount - 1));
-  }, [recentPageCount, roomPageCount]);
+  }, [roomPageCount]);
 
   if (!hydrated || !activeSession) {
     return <div className="min-h-screen bg-background" />;
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white md:pl-60">
-      <div className="fixed inset-0 -z-10 bg-black">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black pb-[12rem] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+      <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
         <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
         <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
@@ -323,7 +276,7 @@ export function RoomsHomePage({
             </span>
           </h1>
           <p className="mb-8 max-w-xl text-sm leading-relaxed text-foreground-muted sm:text-base md:text-lg">
-            这里是你的房间列表。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
+             这里是你的房间列表。创建新房间、输入房间码快速加入，或回到仍在同步的房间。
           </p>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button data-testid="create-public-room" size="lg" className="w-full sm:w-auto" onClick={() => openCreateRoom("public")} type="button">
@@ -378,169 +331,93 @@ export function RoomsHomePage({
         </div>
       </section>
 
-      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-8 sm:px-6 md:mx-0 md:max-w-[1600px] lg:flex-row lg:gap-10 lg:px-8">
-        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[420px] xl:w-[460px]">
+      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 sm:px-6 md:mx-0 md:max-w-[1600px] md:gap-5 lg:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
-              Recent rooms
+              All rooms
             </p>
-            <h2 className="text-xl font-bold text-foreground">最近加入的房间</h2>
+            <h2 className="flex items-center gap-3 text-xl font-bold text-foreground sm:text-2xl">
+              所有房间
+              {isPending ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              ) : null}
+            </h2>
           </div>
-
-          <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
-            {recentRooms.length ? (
-              <div className="grid grid-cols-2 gap-3">
-                {pagedRecentRooms.map((item) => (
-                  <RoomDirectoryCard
-                    key={item.room.id}
-                    isAway={item.room.id === awayRoomId}
-                    room={item}
-                    onOpen={() => {
-                      startTransition(() => void handleReturnToRecentRoom(item));
-                    }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center py-14 text-center opacity-85">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted opacity-60">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </div>
-                <h3 className="mb-2 font-semibold text-foreground">还没有最近加入的房间</h3>
-                <p className="max-w-sm text-sm text-foreground-muted">
-                  创建或加入房间后，最近加入的房间会显示在这里。
-                </p>
-              </div>
-            )}
-            {recentRooms.length > recentRoomsPerPage ? (
-              <div className="mt-4 flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
-                <span>第 {recentPage + 1} / {recentPageCount} 页</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    aria-label="最近房间上一页"
-                    disabled={recentPage === 0}
-                    onClick={() => setRecentPage((current) => Math.max(0, current - 1))}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    aria-label="最近房间下一页"
-                    disabled={recentPage >= recentPageCount - 1}
-                    onClick={() => setRecentPage((current) => Math.min(recentPageCount - 1, current + 1))}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-start sm:self-auto"
+            onClick={() => startTransition(() => void refreshAvailableRooms())}
+            type="button"
+          >
+            刷新
+          </Button>
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
-                All rooms
-              </p>
-              <h2 className="flex items-center gap-3 text-xl font-bold text-foreground">
-                所有房间
-                {isPending ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-                ) : null}
-              </h2>
+        <div className="glass-panel min-h-[300px] rounded-[24px] p-3 sm:rounded-[28px] sm:p-5 lg:p-6">
+          {visibleRooms.length ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {pagedRooms.map((item) => (
+                <RoomDirectoryCard
+                  key={item.room.id}
+                  isAway={item.room.id === awayRoomId}
+                  room={item}
+                  onOpen={() => openRoomDetails(item)}
+                />
+              ))}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => startTransition(() => void refreshAvailableRooms())}
-              type="button"
-            >
-              刷新
-            </Button>
-          </div>
-
-          <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
-            {visibleRooms.length ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {pagedRooms.map((item) => (
-                  <RoomDirectoryCard
-                    key={item.room.id}
-                    isAway={item.room.id === awayRoomId}
-                    room={item}
-                    onOpen={() => openRoomDetails(item)}
-                  />
-                ))}
+          ) : (
+            <div className="flex min-h-[260px] flex-col items-center justify-center py-14 text-center opacity-85">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="9" y1="21" x2="9" y2="9" />
+                </svg>
               </div>
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center py-14 text-center opacity-85">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted">
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <line x1="3" y1="9" x2="21" y2="9" />
-                    <line x1="9" y1="21" x2="9" y2="9" />
-                  </svg>
-                </div>
-                <h3 className="mb-2 font-semibold text-foreground">当前没有房间</h3>
-                <p className="max-w-sm text-sm text-foreground-muted">
-                  你可以先创建一个房间等待其他人加入，或者稍后回来刷新列表。
-                </p>
+              <h3 className="mb-2 font-semibold text-foreground">当前没有房间</h3>
+              <p className="max-w-sm text-sm text-foreground-muted">
+                你可以先创建一个房间等待其他人加入，或者稍后回来刷新列表。
+              </p>
+            </div>
+          )}
+          {visibleRooms.length > roomsPerPage ? (
+            <div className="mt-4 flex flex-col gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted sm:flex-row sm:items-center sm:justify-between">
+              <span>第 {roomPage + 1} / {roomPageCount} 页</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  aria-label="上一页"
+                  disabled={roomPage === 0}
+                  onClick={() => setRoomPage((current) => Math.max(0, current - 1))}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  上一页
+                </Button>
+                <Button
+                  aria-label="下一页"
+                  disabled={roomPage >= roomPageCount - 1}
+                  onClick={() => setRoomPage((current) => Math.min(roomPageCount - 1, current + 1))}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  下一页
+                </Button>
               </div>
-            )}
-            {visibleRooms.length > roomsPerPage ? (
-              <div className="mt-4 flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
-                <span>第 {roomPage + 1} / {roomPageCount} 页</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    aria-label="上一页"
-                    disabled={roomPage === 0}
-                    onClick={() => setRoomPage((current) => Math.max(0, current - 1))}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    aria-label="下一页"
-                    disabled={roomPage >= roomPageCount - 1}
-                    onClick={() => setRoomPage((current) => Math.min(roomPageCount - 1, current + 1))}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       </section>
 

@@ -186,7 +186,7 @@ function TrackListSectionBase({
                   </div>
 
                   <div
-                    className="flex flex-wrap items-center justify-end gap-2"
+                    className="flex flex-wrap items-center justify-start gap-2 sm:justify-end"
                   >
                     {canDeleteTrack ? (
                       <Button
