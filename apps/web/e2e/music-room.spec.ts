@@ -129,7 +129,7 @@ test("upload-queue-playback", async ({ browser, page }) => {
 
   await page.getByTestId("queue-item-play-button").first().click();
   await expect(page.getByText("正在播放").first()).toBeVisible({ timeout: 10_000 });
-  await expect(listenerPage.getByTestId("queue-item-play-button").first()).toHaveText("播放中", {
+  await expect(listenerPage.getByTestId("queue-item-play-button").first()).toBeDisabled({
     timeout: 15_000
   });
 
