@@ -5,6 +5,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
 import { P2PMesh, resolvePreferredIceTransportPolicy } from "@/features/p2p";
 import { createPeerTelemetryReport, sumFiniteRates } from "@/features/p2p/peer-telemetry";
+import { playbackBandwidthMonitor } from "@/lib/import-bandwidth-governor";
 import type {
   DataMeshBridge,
   PlaybackRecoveryRecommendation,
@@ -98,6 +99,7 @@ export function createRoomDataMeshRuntime(input: {
   queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
   reportMeshResyncFailure: (error: unknown) => void;
 } & RoomDataMeshDiagnosticsRefs) {
+  playbackBandwidthMonitor.clear();
   const peerBufferedAmountBytes = new Map<string, number>();
   const latestMediaSamples = new Map<string, {
     sendRateKbps: number | null;
@@ -211,6 +213,7 @@ export function createRoomDataMeshRuntime(input: {
           });
           if (state !== "connected") {
             latestMediaSamples.delete(peerId);
+            playbackBandwidthMonitor.remove(peerId);
             publishLocalTelemetry(true);
           }
           return;
@@ -257,6 +260,7 @@ export function createRoomDataMeshRuntime(input: {
         }
         if (state === "closed") {
           latestMediaSamples.delete(peerId);
+          playbackBandwidthMonitor.remove(peerId);
           // Remote self-report becomes unavailable once the control channel drops.
           input.recordPeerDiagnosticRef.current({
             peerId,
@@ -289,6 +293,14 @@ export function createRoomDataMeshRuntime(input: {
             sample.mediaReceiveBitrateKbps !== null ||
             sample.mediaSendBitrateKbps !== null);
         if (isMediaSample) {
+          playbackBandwidthMonitor.update(peerId, {
+            availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
+            mediaReceiveBitrateKbps: sample.mediaReceiveBitrateKbps,
+            mediaSendBitrateKbps: sample.mediaSendBitrateKbps,
+            packetLossRate: sample.packetLossRate,
+            jitterMs: sample.jitterMs,
+            hasMediaTrack: Boolean(sample.senderTrackId || sample.receiverTrackId)
+          });
           latestMediaSamples.set(peerId, {
             sendRateKbps: sample.mediaSendBitrateKbps,
             receiveRateKbps: sample.mediaReceiveBitrateKbps,
@@ -352,6 +364,9 @@ export function createRoomDataMeshRuntime(input: {
         });
       },
       onMediaStateChange: ({ peerId, direction, state }) => {
+        if (state === "none" || state === "ended" || state === "failed") {
+          playbackBandwidthMonitor.remove(peerId);
+        }
         input.recordPeerDiagnosticRef.current({
           peerId,
           channelKind: "media",

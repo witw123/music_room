@@ -101,10 +101,11 @@ export class MetingService {
       for (let attempt = 0; attempt <= this.urlRetryCount(); attempt += 1) {
         const headers = new Headers();
         if (range) headers.set("range", range);
-        const upstream = await fetch(url, {
-          headers,
-          signal: AbortSignal.timeout(this.requestTimeoutMs())
-        }).catch(() => null);
+        const upstream = await fetchWithHeadersTimeout(
+          url,
+          { headers },
+          this.requestTimeoutMs()
+        ).catch(() => null);
 
         if (!upstream || !upstream.ok || !upstream.body) {
           lastFetchFailed = true;
@@ -452,4 +453,23 @@ function isPrivateHostname(hostname: string) {
       parts[0] === 0;
   }
   return false;
+}
+
+/**
+ * The provider timeout covers response headers only. Once headers arrive, the
+ * body is a live stream that must remain readable while the browser applies
+ * its own low-priority scheduling.
+ */
+async function fetchWithHeadersTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }

@@ -223,10 +223,11 @@ export class NeteaseService {
     if (range) {
       headers.set("range", range);
     }
-    const upstream = await fetch(url, {
-      headers,
-      signal: AbortSignal.timeout(this.requestTimeoutMs())
-    }).catch(() => {
+    const upstream = await fetchWithHeadersTimeout(
+      url.toString(),
+      { headers },
+      this.requestTimeoutMs()
+    ).catch(() => {
       throw this.unavailableError();
     });
 
@@ -503,4 +504,23 @@ function isNeteaseUnavailableError(error: unknown) {
     response !== null &&
     "code" in response &&
     response.code === errorCodes.neteaseUnavailable;
+}
+
+/**
+ * The provider timeout covers response headers only. Once headers arrive, the
+ * body is a live stream that must remain readable while the browser applies
+ * its own low-priority scheduling.
+ */
+async function fetchWithHeadersTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
