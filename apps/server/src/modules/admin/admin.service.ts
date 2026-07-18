@@ -10,7 +10,7 @@ import { RoomService } from "../room/room.service";
 import { RoomPresenceService } from "../room/services/room-presence.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
-import { getCorsOrigins } from "../../common/cors/get-cors-origins";
+import { getCorsOrigins, getRequestOrigin, isAllowedOrigin } from "../../common/cors/get-cors-origins";
 
 export const adminSessionCookie = "music_room_admin_session";
 export const adminCsrfCookie = "music_room_admin_csrf";
@@ -120,7 +120,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       if (!csrfHeader || !csrfCookie || !safeEqual(hashToken(String(csrfHeader)), row.csrfHash) || !safeEqual(hashToken(csrfCookie), row.csrfHash)) throw new UnauthorizedException("CSRF 校验失败。");
       const origin = request.headers.origin;
       const allowedOrigins = getCorsOrigins();
-      if (!origin || !allowedOrigins.includes(origin)) throw new UnauthorizedException("Origin 校验失败。");
+      if (!isAllowedOrigin(origin, getRequestOrigin(request), allowedOrigins)) throw new UnauthorizedException("Origin 校验失败。");
     }
     if (now - row.lastActiveAt.getTime() > 5 * 60 * 1000) void this.prisma.adminSession.update({ where: { id: row.id }, data: { lastActiveAt: new Date() } });
     return { userId: row.user.id, username: row.user.username, nickname: row.user.nickname, role: "ADMIN", csrfToken: cookies[adminCsrfCookie] ?? "", expiresAt: row.expiresAt };

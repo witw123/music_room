@@ -4,7 +4,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";
 import { validateRuntimeConfig } from "./common/config/runtime-config";
-import { getCorsOrigins } from "./common/cors/get-cors-origins";
+import { getCorsOrigins, getRequestOrigin, isAllowedOrigin } from "./common/cors/get-cors-origins";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
 import { readUserSessionCookie } from "./modules/auth/auth.cookies";
 
@@ -35,7 +35,7 @@ async function bootstrap() {
       process.env.NODE_ENV === "production" &&
       isMutation &&
       hasUserCookie &&
-      (!request.headers.origin || !corsOrigins.includes(request.headers.origin))
+      !isAllowedOrigin(request.headers.origin, getRequestOrigin(request), corsOrigins)
     ) {
       response.status(403).json({
         code: "UNAUTHORIZED",
