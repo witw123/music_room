@@ -69,6 +69,7 @@ export function PlayerQueueDrawer({
       <Button
         variant="ghost"
         size="icon"
+        data-testid="player-queue-button"
         className={`relative h-8 w-8 sm:h-10 sm:w-10 ${isOpen ? 'bg-accent/20 text-accent' : 'text-foreground-muted hover:text-foreground'}`}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
@@ -83,7 +84,7 @@ export function PlayerQueueDrawer({
       </Button>
 
       {isOpen ? (
-        <aside className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(420px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
+        <aside data-testid="player-queue-drawer" className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(420px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
           <div className="flex items-center justify-between border-b border-white/15 bg-[#202228] px-4 py-3">
             <div>
                <h3 className="text-base font-semibold text-white">当前播放队列</h3>
@@ -102,6 +103,7 @@ export function PlayerQueueDrawer({
                 return (
                   <div
                     key={item.id}
+                    data-testid="queue-item"
                     className={`group flex items-center gap-3 rounded-xl border p-3 transition-all ${
                       isCurrent ? "border-accent/50 bg-accent/20" : "border-transparent hover:border-white/10 hover:bg-white/[0.07]"
                     } ${draggingQueueItemId === item.id ? "opacity-50 scale-95" : ""}`}
@@ -133,6 +135,7 @@ export function PlayerQueueDrawer({
                       <Button
                         variant="ghost"
                         size="icon"
+                        data-testid="queue-item-play-button"
                         className="h-8 w-8 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
                         disabled={!canControlPlayback || isCurrent}
                         onClick={() => void onPlayQueueItem(item.id)}
