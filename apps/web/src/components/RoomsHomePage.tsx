@@ -11,7 +11,7 @@ import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
+import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -70,16 +70,18 @@ export function RoomsHomePage() {
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
+      if (activeSession) {
+        setAvailableRooms(filterRoomsForSession(rooms, activeSession.userId));
+      }
     } catch {
       setAvailableRooms([]);
     }
-  }, []);
+  }, [activeSession]);
 
   const refreshRecentRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.getRecentRooms();
-      setRecentRooms(filterOpenPublicRooms(rooms));
+      setRecentRooms(rooms);
     } catch {
       setRecentRooms([]);
     }

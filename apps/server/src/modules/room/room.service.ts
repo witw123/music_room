@@ -185,9 +185,7 @@ export class RoomService {
     const snapshots = await Promise.all(
       publicRecords.map((record) => this.roomSnapshotService.buildSnapshot(record, []))
     );
-    return snapshots.filter((snapshot) =>
-      snapshot.room.members.some((member) => member.presenceState === "online")
-    );
+    return snapshots;
   }
 
   async getRecentRoomSnapshotForSession(sessionId: string): Promise<RoomSnapshot | null> {

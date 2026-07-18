@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
-import { filterOpenPublicRooms } from "./room-list-visibility";
+import { filterOpenPublicRooms, filterRoomsForSession } from "./room-list-visibility";
 
 function createRoomSnapshot(input: {
   id: string;
@@ -44,7 +44,7 @@ function createRoomSnapshot(input: {
 }
 
 describe("filterOpenPublicRooms", () => {
-  it("keeps only public rooms with at least one online member", () => {
+  it("keeps every public room regardless of member presence", () => {
     const rooms = [
       createRoomSnapshot({
         id: "room_public_online",
@@ -64,7 +64,45 @@ describe("filterOpenPublicRooms", () => {
     ];
 
     expect(filterOpenPublicRooms(rooms).map((room) => room.room.id)).toEqual([
-      "room_public_online"
+      "room_public_online",
+      "room_public_offline"
+    ]);
+  });
+});
+
+describe("filterRoomsForSession", () => {
+  it("keeps the current user's rooms and every public room", () => {
+    const rooms = [
+      createRoomSnapshot({
+        id: "room_owned_private",
+        visibility: "private",
+        memberPresenceStates: ["offline"]
+      }),
+      createRoomSnapshot({
+        id: "room_owned_public",
+        visibility: "public",
+        memberPresenceStates: ["offline"]
+      }),
+      createRoomSnapshot({
+        id: "room_other_public_online",
+        visibility: "public",
+        memberPresenceStates: ["online"]
+      }),
+      createRoomSnapshot({
+        id: "room_other_public_offline",
+        visibility: "public",
+        memberPresenceStates: ["offline"]
+      })
+    ];
+
+    rooms[0].room.members[0].id = "session_current";
+    rooms[1].room.members[0].id = "session_current";
+
+    expect(filterRoomsForSession(rooms, "session_current").map((room) => room.room.id)).toEqual([
+      "room_owned_private",
+      "room_owned_public",
+      "room_other_public_online",
+      "room_other_public_offline"
     ]);
   });
 });
