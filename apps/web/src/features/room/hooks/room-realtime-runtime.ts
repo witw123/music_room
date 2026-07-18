@@ -145,6 +145,7 @@ type RoomRealtimeRuntimeInput = {
   iceConfig: Parameters<typeof getWebRTCIceServers>[0];
   socketRef: MutableRefObject<RoomSocket | null>;
   meshRef: MutableRefObject<P2PMesh | null>;
+  localAudibleRef: MutableRefObject<boolean | null>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   updatePeerBufferedAmountRef: MutableRefObject<(peerId: string, bufferedAmountBytes: number) => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -203,6 +204,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     emitPeerSignal,
     iceServers,
     meshRef: input.meshRef,
+    localAudibleRef: input.localAudibleRef,
     currentRoomRef: input.currentRoomRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
     updatePeerBufferedAmountRef: input.updatePeerBufferedAmountRef,

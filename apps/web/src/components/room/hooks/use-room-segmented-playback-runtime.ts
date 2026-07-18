@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
@@ -34,6 +34,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
   setStatusMessage: (message: string) => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
+  audibleRef: MutableRefObject<boolean | null>;
 }) {
   const setStatusMessage = input.setStatusMessage;
   const onPlaybackEnded = input.onPlaybackEnded;
@@ -139,6 +140,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           })
         : null;
     const playbackState = toDiagnosticPlaybackState(visiblePlayback.state);
+    const isAudible = visiblePlayback.state === "live" &&
+      (!runtime.isCurrentSource || visiblePlayback.sourceHealth === "source-ready");
+    runtime.audibleRef.current = isAudible;
     const isRecovering = visiblePlayback.state === "buffering" ||
       visiblePlayback.sourceHealth === "source-underrun" ||
       visiblePlayback.sourceHealth === "source-silent";
@@ -431,6 +435,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       cancelled = true;
       window.clearInterval(interval);
       runtimeInputRef.current.setLocalAudioStream(null, null, null);
+      runtimeInputRef.current.audibleRef.current = false;
       const audio = mountedAudio;
       if (audio && !isCurrentSource) {
         audio.pause();

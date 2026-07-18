@@ -1,9 +1,69 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getPlaybackStatus, resolveMemberMediaRates } from "./MembersPanel";
+import { getMemberAudibleStatus, getPlaybackStatus, resolveMemberMediaRates } from "./MembersPanel";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 
 describe("MembersPanel WebRTC media status", () => {
+  it("shows the local member as speaking only while local playback is audible", () => {
+    const audible = getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: true,
+      localMemberState: {
+        memberId: "member_1",
+        audible: true,
+        playbackStatus: { label: "正常出声", detail: "", tone: "success", badgeText: "RTP Opus" }
+      },
+      diagnostic: undefined
+    });
+    expect(audible).toMatchObject({ label: "正在发声", active: true });
+  });
+
+  it("uses a fresh remote self-report for the speaking indicator", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.reportedAudible = true;
+    diagnostic.reportedAudibleAt = new Date().toISOString();
+
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: false,
+      localMemberState: null,
+      diagnostic,
+      now: Date.now()
+    })).toMatchObject({ label: "正在发声", active: true });
+  });
+
+  it("does not claim a stale remote member is speaking", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.reportedAudible = true;
+    diagnostic.reportedAudibleAt = new Date(Date.now() - 7_000).toISOString();
+
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: false,
+      localMemberState: null,
+      diagnostic,
+      now: Date.now()
+    })).toMatchObject({ label: "等待音频", active: false });
+  });
+
+  it("keeps an unknown remote audio state from being reported as silent", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.reportedAudible = null;
+    diagnostic.reportedAudibleAt = new Date().toISOString();
+
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: false,
+      localMemberState: null,
+      diagnostic,
+      now: Date.now()
+    })).toMatchObject({ label: "等待音频", active: false });
+  });
+
   it("reports the actual current media track", () => {
     const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
     diagnostic.mediaConnectionState = "connected";

@@ -39,6 +39,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
   );
   const roomSnapshot = roomState.snapshot;
   const [peerId, setPeerId] = useState("");
+  const localAudibleRef = useRef<boolean | null>(null);
   const pageState = useRoomPageState({
     audioUnlocked: isSegmentedAudioOutputReady()
   });
@@ -115,6 +116,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
         playbackBitrateKbps: peer.targetAudioBitrateKbps ?? null,
         sourcePeerId: peer.segmentedPlaybackStatus?.sourcePeerId ?? null,
         playbackState: peer.segmentedPlaybackStatus?.listenerPlaybackState ?? null,
+        audible: peer.reportedAudible ?? null,
         errorCode: peer.transportHealth === "failed" ? "media_failed" : null
       }));
       const payload = { protocolVersion: 1 as const, roomId: currentRoomId, sessionId: currentUserId, peerId, reportedAt: new Date().toISOString(), peers };
@@ -206,6 +208,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
     socketRef: appRefs.socketRef,
+    localAudibleRef,
     resetPlayerSurface: roomActions.resetPlayerSurface,
     setStatusMessage,
     statusMessage,
@@ -226,7 +229,8 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setSourceStartState: pageState.setSourceStartState,
     setLastSourceStartError: pageState.setLastSourceStartError,
     setStatusMessage,
-    recordPeerDiagnostic
+    recordPeerDiagnostic,
+    audibleRef: localAudibleRef
   });
   const playbackActions = useRoomPlaybackActions({
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,

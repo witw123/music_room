@@ -135,18 +135,22 @@ export function useRoomDerivedState({
         "mediaReceiveBitrateKbps",
         "mediaSendBitrateKbps"
       ]);
+    const playbackStatus = getLocalPlaybackStatus({
+      presenceState: localMember.presenceState,
+      playbackStatus: roomSnapshot.room.playback.status,
+      segmentedPlayback
+    });
+    const audible = segmentedPlayback.state === "live" &&
+      (segmentedPlayback.sourceHealth === undefined || segmentedPlayback.sourceHealth === "source-ready");
     return {
       memberId: localMember.id,
+      audible,
       mediaSummary: {
         receiveRateKbps: totalMediaReceiveRateKbps,
         sendRateKbps: totalMediaSendRateKbps,
         sampleAgeMs: mediaSampleAgeMs
       },
-      playbackStatus: getLocalPlaybackStatus({
-        presenceState: localMember.presenceState,
-        playbackStatus: roomSnapshot.room.playback.status,
-        segmentedPlayback
-      })
+      playbackStatus
     };
   }, [
     activeMemberPeerIds,

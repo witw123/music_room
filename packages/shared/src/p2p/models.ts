@@ -218,6 +218,8 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   reportedSendRateKbps: z.number().nonnegative().nullable().optional(),
   reportedReceiveRateKbps: z.number().nonnegative().nullable().optional(),
   reportedTelemetryAt: z.string().datetime().nullable().optional(),
+  reportedAudible: z.boolean().nullable().optional(),
+  reportedAudibleAt: z.string().datetime().nullable().optional(),
   dataBufferedAmountBytes: z.number().int().nonnegative().nullable().optional(),
   lastAudibleProgressAt: z.string().datetime().nullable().optional(),
   lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),

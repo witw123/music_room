@@ -12,6 +12,7 @@ describe("peer telemetry protocol", () => {
       fromPeerId: "peer_a",
       sendRateKbps: 192.45,
       receiveRateKbps: 0,
+      audible: true,
       linkSendRateKbps: 96.2,
       linkReceiveRateKbps: null,
       rttMs: 42.2,
@@ -19,6 +20,7 @@ describe("peer telemetry protocol", () => {
     });
 
     expect(report.sendRateKbps).toBe(192.5);
+    expect(report.audible).toBe(true);
     expect(parsePeerTelemetryReport(report)).toEqual(report);
     expect(decodePeerTelemetryReport(JSON.stringify(report))).toEqual(report);
   });

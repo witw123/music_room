@@ -111,6 +111,7 @@ type UseRoomRuntimeInput = {
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   socketRef: MutableRefObject<RoomSocket | null>;
+  localAudibleRef: MutableRefObject<boolean | null>;
   resetPlayerSurface: () => void;
   setStatusMessage: (value: string) => void;
   statusMessage: string;
@@ -191,6 +192,7 @@ export function useRoomRuntime({
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
   socketRef,
+  localAudibleRef,
   resetPlayerSurface,
   setStatusMessage,
   statusMessage,
@@ -485,6 +487,7 @@ export function useRoomRuntime({
       peerId,
       iceConfig,
       socketRef,
+      localAudibleRef,
       recordPeerDiagnosticRef,
       meshRef,
       currentRoomRef,
@@ -547,6 +550,7 @@ export function useRoomRuntime({
     recoveryGenerationRef,
     recoveryModeRef,
     resubscribeRoomRef,
+    localAudibleRef,
     socketDisconnectGraceTimeoutRef,
     socketDisconnectGraceUntilRef,
     socketRef,

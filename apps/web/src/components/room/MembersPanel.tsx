@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import type { PeerDiagnosticsSnapshot, PlaybackSnapshot, RoomMember } from "@music-room/shared";
 import {
   dedupePeerDiagnostics,
@@ -12,6 +12,7 @@ type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
 export type LocalMemberPanelState = {
   memberId: string;
+  audible: boolean | null;
   mediaSummary?: {
     receiveRateKbps: number | null;
     sendRateKbps: number | null;
@@ -106,6 +107,68 @@ export function getPlaybackStatus(
 
 const memberReportedTelemetryFreshMs = 6_000;
 
+export type MemberAudibleStatus = {
+  label: "正在发声" | "未发声" | "等待音频" | "未播放" | "等待重连" | "离线";
+  tone: StatusTone;
+  active: boolean;
+};
+
+export function getMemberAudibleStatus(input: {
+  presenceState: RoomMember["presenceState"];
+  playbackActive: boolean;
+  isLocal: boolean;
+  localMemberState: LocalMemberPanelState | null;
+  diagnostic: PeerDiagnosticsSnapshot | undefined;
+  now?: number;
+}): MemberAudibleStatus {
+  if (input.presenceState === "offline") {
+    return { label: "离线", tone: "neutral", active: false };
+  }
+  if (input.presenceState === "reconnecting") {
+    return { label: "等待重连", tone: "warning", active: false };
+  }
+  if (!input.playbackActive) {
+    return { label: "未播放", tone: "neutral", active: false };
+  }
+
+  if (input.isLocal) {
+    if (input.localMemberState?.audible === true) {
+      return { label: "正在发声", tone: "success", active: true };
+    }
+    if (input.localMemberState?.audible === false) {
+      return { label: "未发声", tone: "warning", active: false };
+    }
+    return { label: "等待音频", tone: "accent", active: false };
+  }
+
+  const reportedAt = input.diagnostic?.reportedAudibleAt ?? input.diagnostic?.reportedTelemetryAt;
+  const reportedAtMs = reportedAt ? Date.parse(reportedAt) : Number.NaN;
+  const sampleAgeMs = Number.isFinite(reportedAtMs)
+    ? Math.max(0, (input.now ?? Date.now()) - reportedAtMs)
+    : null;
+  if (sampleAgeMs === null || sampleAgeMs > memberReportedTelemetryFreshMs) {
+    return { label: "等待音频", tone: "accent", active: false };
+  }
+
+  if (typeof input.diagnostic?.reportedAudible === "boolean") {
+    return input.diagnostic.reportedAudible
+      ? { label: "正在发声", tone: "success", active: true }
+      : { label: "未发声", tone: "warning", active: false };
+  }
+
+  // Older peers do not send an explicit audible flag. Their fresh self-reported
+  // RTP traffic remains a useful compatibility signal until they reconnect.
+  const hasReportedTraffic =
+    (input.diagnostic?.reportedSendRateKbps ?? 0) > 0 ||
+    (input.diagnostic?.reportedReceiveRateKbps ?? 0) > 0;
+  if (input.diagnostic?.reportedAudible === null && !hasReportedTraffic) {
+    return { label: "等待音频", tone: "accent", active: false };
+  }
+  return hasReportedTraffic
+    ? { label: "正在发声", tone: "success", active: true }
+    : { label: "未发声", tone: "warning", active: false };
+}
+
 export function resolveMemberMediaRates(input: {
   diagnostic: PeerDiagnosticsSnapshot | undefined;
   isLocal: boolean;
@@ -162,13 +225,15 @@ export function resolveMemberMediaRates(input: {
 function MemberTelemetry({
   diagnostic,
   isLocal,
-  localMemberState
+  localMemberState,
+  now
 }: {
   diagnostic: PeerDiagnosticsSnapshot | undefined;
   isLocal: boolean;
   localMemberState: LocalMemberPanelState | null;
+  now: number;
 }) {
-  const rates = resolveMemberMediaRates({ diagnostic, isLocal, localMemberState });
+  const rates = resolveMemberMediaRates({ diagnostic, isLocal, localMemberState, now });
   const receiveRate = rates.receiveRateKbps;
   const sendRate = rates.sendRateKbps;
   const telemetry = isLocal
@@ -196,6 +261,36 @@ function MembersPanelBase({
   playbackStatus: roomPlaybackStatus,
   sourcePeerId
 }: MembersPanelProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let intervalId: number | null = null;
+    const refresh = () => setNow(Date.now());
+    const start = () => {
+      if (intervalId === null && document.visibilityState === "visible") {
+        intervalId = window.setInterval(refresh, 1_000);
+      }
+    };
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    const onVisibilityChange = () => {
+      refresh();
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+
+    start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   const normalizedMembers = dedupeRoomMembers(members);
   const diagnosticsByPeerId = new Map(
     dedupePeerDiagnostics(peerDiagnostics).map((item) => [item.peerId, item])
@@ -233,6 +328,14 @@ function MembersPanelBase({
                   isCurrentSource
                 });
             const presence = getPresence(member);
+            const audible = getMemberAudibleStatus({
+              presenceState: member.presenceState,
+              playbackActive: roomPlaybackStatus === "playing",
+              isLocal,
+              localMemberState,
+              diagnostic,
+              now
+            });
 
             return (
               <article key={member.id} className="py-2.5 first:pt-2.5 last:pb-2.5">
@@ -257,21 +360,28 @@ function MembersPanelBase({
                 </header>
 
                 <div className="ml-9 mt-2 min-w-0">
-                  {member.presenceState === "online" ? (
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getToneClasses(audible.tone)}`}
+                      aria-label={`音频状态：${audible.label}`}
+                    >
+                      {audible.label}
+                    </span>
+                    {member.presenceState === "online" && status.label !== "正常出声" ? (
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getToneClasses(status.tone)}`}>
                         {status.label}
                       </span>
-                      {roomPlaybackStatus === "playing" && isCurrentSource ? (
-                        <span className="text-[10px] text-accent">当前音源</span>
-                      ) : null}
-                    </div>
-                  ) : null}
+                    ) : null}
+                    {roomPlaybackStatus === "playing" && isCurrentSource ? (
+                      <span className="text-[10px] text-accent">当前音源</span>
+                    ) : null}
+                  </div>
                   {member.presenceState === "online" ? (
                     <MemberTelemetry
                       diagnostic={diagnostic}
                       isLocal={isLocal}
                       localMemberState={localMemberState}
+                      now={now}
                     />
                   ) : null}
                 </div>

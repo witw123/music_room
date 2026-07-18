@@ -89,6 +89,7 @@ export function createRoomDataMeshRuntime(input: {
   emitPeerSignal: (payload: PeerSignalMessage) => void;
   iceServers: RTCIceServer[];
   meshRef: MutableRefObject<P2PMesh | null>;
+  localAudibleRef: MutableRefObject<boolean | null>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -109,6 +110,7 @@ export function createRoomDataMeshRuntime(input: {
   }>();
   let lastTelemetryBroadcastAtMs = 0;
   let lastPublishedHadTraffic = false;
+  let lastPublishedAudible: boolean | null = null;
 
   const publishLocalTelemetry = (force = false) => {
     const now = Date.now();
@@ -130,17 +132,26 @@ export function createRoomDataMeshRuntime(input: {
     const nextSend = sendRateKbps ?? 0;
     const nextReceive = receiveRateKbps ?? 0;
     const hasTraffic = nextSend > 0 || nextReceive > 0;
+    const audible = input.localAudibleRef.current;
     // Publish zeros once traffic ends so remotes do not freeze the last non-zero rates.
-    if (!force && !hasAnySample && !hasTraffic && !lastPublishedHadTraffic) {
+    if (
+      !force &&
+      !hasAnySample &&
+      !hasTraffic &&
+      !lastPublishedHadTraffic &&
+      audible === lastPublishedAudible
+    ) {
       return;
     }
 
     lastTelemetryBroadcastAtMs = now;
     lastPublishedHadTraffic = hasTraffic;
+    lastPublishedAudible = audible;
     const report = createPeerTelemetryReport({
       fromPeerId: input.peerId,
       sendRateKbps: nextSend,
       receiveRateKbps: nextReceive,
+      audible,
       reportedAt: new Date(now).toISOString()
     });
     // Keep local member diagnostics current even before remote peers are connected.
@@ -156,6 +167,8 @@ export function createRoomDataMeshRuntime(input: {
         reportedSendRateKbps: report.sendRateKbps,
         reportedReceiveRateKbps: report.receiveRateKbps,
         reportedTelemetryAt: report.reportedAt,
+        reportedAudible: report.audible,
+        reportedAudibleAt: report.reportedAt,
         // Do not overwrite path-level mediaSend/Receive with aggregate totals.
         lastMediaStatsProgressAt:
           (report.sendRateKbps ?? 0) > 0 || (report.receiveRateKbps ?? 0) > 0
@@ -273,7 +286,9 @@ export function createRoomDataMeshRuntime(input: {
               ...snapshot,
               reportedSendRateKbps: null,
               reportedReceiveRateKbps: null,
-              reportedTelemetryAt: null
+              reportedTelemetryAt: null,
+              reportedAudible: null,
+              reportedAudibleAt: null
             })
           });
           queueDataPeerRecovery(peerId, "data-channel-closed", state);
@@ -335,6 +350,8 @@ export function createRoomDataMeshRuntime(input: {
             reportedSendRateKbps: report.sendRateKbps,
             reportedReceiveRateKbps: report.receiveRateKbps,
             reportedTelemetryAt: report.reportedAt,
+            reportedAudible: report.audible,
+            reportedAudibleAt: report.reportedAt,
             lastMediaStatsProgressAt:
               (report.sendRateKbps ?? 0) > 0 || (report.receiveRateKbps ?? 0) > 0
                 ? report.reportedAt

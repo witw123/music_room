@@ -21,6 +21,7 @@ export const telemetryPeerReportSchema = z.object({
   playbackBitrateKbps: z.number().nonnegative().nullable(),
   sourcePeerId: z.string().nullable(),
   playbackState: z.string().nullable(),
+  audible: z.boolean().nullable().optional(),
   errorCode: z.string().trim().max(120).nullable()
 }).strict();
 

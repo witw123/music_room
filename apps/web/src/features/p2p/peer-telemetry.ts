@@ -5,6 +5,8 @@ export type PeerTelemetryReport = {
   // Aggregate media rates observed by the reporter on its own browser.
   sendRateKbps: number | null;
   receiveRateKbps: number | null;
+  // Whether the reporter's own browser is currently producing audible audio.
+  audible: boolean | null;
   // Optional per-link sample toward the recipient (reporter -> recipient path).
   linkSendRateKbps?: number | null;
   linkReceiveRateKbps?: number | null;
@@ -16,6 +18,7 @@ export function createPeerTelemetryReport(input: {
   fromPeerId: string;
   sendRateKbps: number | null;
   receiveRateKbps: number | null;
+  audible?: boolean | null;
   linkSendRateKbps?: number | null;
   linkReceiveRateKbps?: number | null;
   rttMs?: number | null;
@@ -27,6 +30,7 @@ export function createPeerTelemetryReport(input: {
     fromPeerId: input.fromPeerId,
     sendRateKbps: normalizeRate(input.sendRateKbps),
     receiveRateKbps: normalizeRate(input.receiveRateKbps),
+    audible: typeof input.audible === "boolean" ? input.audible : null,
     linkSendRateKbps: normalizeRate(input.linkSendRateKbps),
     linkReceiveRateKbps: normalizeRate(input.linkReceiveRateKbps),
     rttMs: normalizeRate(input.rttMs),
@@ -54,6 +58,7 @@ export function parsePeerTelemetryReport(raw: unknown): PeerTelemetryReport | nu
     fromPeerId: value.fromPeerId,
     sendRateKbps: normalizeRate(value.sendRateKbps),
     receiveRateKbps: normalizeRate(value.receiveRateKbps),
+    audible: typeof value.audible === "boolean" ? value.audible : null,
     linkSendRateKbps: normalizeRate(value.linkSendRateKbps),
     linkReceiveRateKbps: normalizeRate(value.linkReceiveRateKbps),
     rttMs: normalizeRate(value.rttMs),

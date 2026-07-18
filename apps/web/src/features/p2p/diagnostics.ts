@@ -201,6 +201,8 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     reportedSendRateKbps: null,
     reportedReceiveRateKbps: null,
     reportedTelemetryAt: null,
+    reportedAudible: null,
+    reportedAudibleAt: null,
     dataBufferedAmountBytes: null,
     lastAudibleProgressAt: null,
     lastMediaStatsProgressAt: null,
