@@ -19,6 +19,9 @@ import { AuthService } from "../../auth/auth.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   neteaseQualitySchema,
+  neteaseAlbumIdSchema,
+  neteaseCatalogPageQuerySchema,
+  neteasePlaylistIdSchema,
   neteaseSearchQuerySchema,
   neteaseTrackIdSchema
 } from "./netease.schemas";
@@ -143,6 +146,63 @@ export class NeteaseController {
         void upstream.body?.cancel().catch(() => undefined);
       }
     });
+  }
+
+  @Get("tracks/:trackId/lyrics")
+  async lyrics(
+    @Param("trackId") trackId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const parsed = neteaseTrackIdSchema.safeParse(trackId);
+    if (!parsed.success) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, "Invalid NetEase track id."),
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    return this.service.getLyrics(userId, parsed.data);
+  }
+
+  @Get("playlists")
+  async playlists(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    return this.service.listPlaylists(
+      await this.getCurrentUserId(sessionToken),
+      parseRequestBody(neteaseCatalogPageQuerySchema, query)
+    );
+  }
+
+  @Get("playlists/:playlistId")
+  async playlist(
+    @Param("playlistId") playlistId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const parsed = neteasePlaylistIdSchema.safeParse(playlistId);
+    if (!parsed.success) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, "Invalid NetEase playlist id."),
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    return this.service.getPlaylist(await this.getCurrentUserId(sessionToken), parsed.data);
+  }
+
+  @Get("albums/:albumId")
+  async album(
+    @Param("albumId") albumId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const parsed = neteaseAlbumIdSchema.safeParse(albumId);
+    if (!parsed.success) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, "Invalid NetEase album id."),
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    return this.service.getAlbum(await this.getCurrentUserId(sessionToken), parsed.data);
   }
 
   private async getCurrentUserId(sessionToken?: string) {

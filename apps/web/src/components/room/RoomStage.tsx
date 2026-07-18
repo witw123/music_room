@@ -24,6 +24,7 @@ type RoomStageProps = {
   mediaConnectedPeersCount: number;
   iceConfigSource: string;
   onCopyJoinCode: () => Promise<void>;
+  onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   socket: RoomSocket | null;
@@ -64,6 +65,7 @@ function RoomStageBase({
   currentSourceOwnerNickname,
   mediaConnectionState,
   onCopyJoinCode,
+  onAwayRoom,
   onLeaveRoom,
   onDeleteRoom
 }: RoomStageProps) {
@@ -193,6 +195,17 @@ function RoomStageBase({
 
           {showSettings ? (
             <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
+              <button
+                data-testid="away-room-button"
+                className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-200 transition-colors hover:bg-amber-300/10 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/40"
+                onClick={() => {
+                  setShowSettings(false);
+                  onAwayRoom();
+                }}
+                type="button"
+              >
+                暂离房间
+              </button>
               <button
                 data-testid="leave-room-button"
                 className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"

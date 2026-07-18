@@ -24,6 +24,7 @@ export * from "@/components/room/hooks/use-room-playback-actions";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
+const awayRoomStorageKey = "music-room-away-room";
 
 type MusicRoomAppProps = { workspaceOnly?: boolean; initialRoomId?: string | null };
 
@@ -39,10 +40,47 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
   );
   const roomSnapshot = roomState.snapshot;
   const [peerId, setPeerId] = useState("");
+  const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
   const localAudibleRef = useRef<boolean | null>(null);
   const pageState = useRoomPageState({
     audioUnlocked: isSegmentedAudioOutputReady()
   });
+
+  useEffect(() => {
+    if (!initialRoomId) {
+      return;
+    }
+
+    const storedAwayRoomId = window.sessionStorage.getItem(awayRoomStorageKey);
+    if (storedAwayRoomId === initialRoomId) {
+      setAwayRoomId(storedAwayRoomId);
+      return;
+    }
+
+    if (storedAwayRoomId) {
+      window.sessionStorage.removeItem(awayRoomStorageKey);
+    }
+  }, [initialRoomId]);
+
+  const currentRoomId = roomSnapshot?.room.id ?? initialRoomId;
+  const isRoomAway = Boolean(currentRoomId && awayRoomId === currentRoomId);
+
+  function handleAwayRoom() {
+    const targetRoomId = roomSnapshot?.room.id ?? initialRoomId;
+    if (!targetRoomId) {
+      return;
+    }
+
+    window.sessionStorage.setItem(awayRoomStorageKey, targetRoomId);
+    setAwayRoomId(targetRoomId);
+    setStatusMessage("");
+  }
+
+  function handleResumeRoom() {
+    window.sessionStorage.removeItem(awayRoomStorageKey);
+    setAwayRoomId(null);
+    setStatusMessage("已返回房间。");
+  }
 
   const {
     activeSession,
@@ -300,6 +338,10 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
       roomActions={roomActions}
       roomSnapshot={roomSnapshot}
       socket={appRefs.socketRef.current}
+      isRoomAway={isRoomAway}
+      awayRoomId={isRoomAway ? currentRoomId : null}
+      onResumeRoom={handleResumeRoom}
+      onAwayRoom={handleAwayRoom}
       statusMessage={statusMessage}
       uploads={uploads}
       workspaceEntryHref={appEntries.workspaceEntryHref}

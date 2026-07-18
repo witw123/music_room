@@ -327,6 +327,32 @@ describe("RoomController", () => {
     expect(roomRealtimePublisher.emitRoomMissing).toHaveBeenCalledWith("room_1");
   });
 
+  it("finishes room deletion and broadcasts when playlist cleanup is unavailable", async () => {
+    const snapshot = buildSnapshot();
+    const roomService = {
+      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
+      assertCanDeleteRoom: jest.fn().mockResolvedValue(undefined),
+      deleteRoom: jest.fn().mockResolvedValue({ ok: true })
+    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
+    const authService = createAuthServiceMock();
+    const playlistService = createPlaylistServiceMock();
+    playlistService.listPlaylistsForRoom.mockRejectedValueOnce(new Error("playlist unavailable"));
+    playlistService.deletePlaylistsForRoom.mockRejectedValueOnce(new Error("playlist unavailable"));
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      authService as never,
+      playlistService as never
+    );
+
+    await expect(controller.deleteRoom("room_1", "token")).resolves.toEqual({ ok: true });
+    expect(roomService.getRoomSnapshot).toHaveBeenCalledWith("room_1", []);
+    expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
+    expect(roomRealtimePublisher.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);
+    expect(roomRealtimePublisher.emitRoomMissing).toHaveBeenCalledWith("room_1");
+  });
+
   it("checks delete permission before loading delete broadcast details", async () => {
     const roomService = {
       getRoomSnapshot: jest.fn(),

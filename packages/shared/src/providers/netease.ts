@@ -43,6 +43,7 @@ export const neteaseTrackCandidateSchema = z
     title: z.string(),
     artist: z.string(),
     album: z.string().nullable(),
+    providerAlbumId: z.string().trim().min(1).optional(),
     durationMs: z.number().int().nonnegative(),
     artworkUrl: z.string().url().nullable()
   })

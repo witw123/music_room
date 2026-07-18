@@ -139,6 +139,16 @@ export const neteaseTrackIdSchema = z.string().trim().regex(/^\d+$/).max(32);
 
 export const neteaseQualitySchema = z.enum(["standard", "high", "exhigh"]);
 
+export const neteaseCatalogPageQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(30),
+    offset: z.coerce.number().int().min(0).max(10_000).default(0)
+  })
+  .strict();
+
+export const neteasePlaylistIdSchema = z.string().trim().regex(/^\d+$/).max(32);
+export const neteaseAlbumIdSchema = z.string().trim().regex(/^\d+$/).max(32);
+
 export const neteaseAccountStatusSchema = z
   .object({
     connected: z.boolean(),
@@ -157,3 +167,4 @@ export type NeteaseLoginStatusBody = z.infer<typeof neteaseLoginStatusBodySchema
 export type NeteaseSearchBody = z.infer<typeof neteaseSearchBodySchema>;
 export type NeteaseSongDetailBody = z.infer<typeof neteaseSongDetailBodySchema>;
 export type NeteaseAudioUrlBody = z.infer<typeof neteaseAudioUrlBodySchema>;
+export type NeteaseCatalogPageQuery = z.infer<typeof neteaseCatalogPageQuerySchema>;

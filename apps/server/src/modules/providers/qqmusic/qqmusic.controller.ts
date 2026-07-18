@@ -4,7 +4,14 @@ import { Transform } from "node:stream";
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import { AuthService } from "../../auth/auth.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
-import { qqMusicQualitySchema, qqMusicSearchQuerySchema, qqMusicTrackIdSchema } from "./qqmusic.schemas";
+import {
+  qqMusicAlbumIdSchema,
+  qqMusicCatalogPageQuerySchema,
+  qqMusicPlaylistIdSchema,
+  qqMusicQualitySchema,
+  qqMusicSearchQuerySchema,
+  qqMusicTrackIdSchema
+} from "./qqmusic.schemas";
 import { QqMusicService } from "./qqmusic.service";
 @Controller("v1/providers/qqmusic")
 export class QqMusicController {
@@ -21,6 +28,24 @@ export class QqMusicController {
     const result = await this.service.openAudio(userId, parsedId.data, parsedQuality.data, range); const upstream = result.upstream; response.status(upstream.status).setHeader("Content-Type", result.mimeType).setHeader("Cache-Control", "no-store").setHeader("Accept-Ranges", "bytes").setHeader("Content-Disposition", `attachment; filename="qqmusic-${parsedId.data}.${result.fileType}"`);
     const length = upstream.headers.get("content-length") ?? (result.contentLength ? String(result.contentLength) : null); if (length) response.setHeader("Content-Length", length); const contentRange = upstream.headers.get("content-range"); if (contentRange) response.setHeader("Content-Range", contentRange); if (!upstream.body) { response.end(); return; }
     const { Readable } = await import("node:stream"); let bytes = 0; const limiter = new Transform({ transform(chunk: Buffer, _encoding, callback) { bytes += chunk.byteLength; if (bytes > result.maxBytes) { callback(new Error("QQ Music audio exceeded the configured import size.")); return; } callback(null, chunk); } }); limiter.on("error", () => { void upstream.body?.cancel().catch(() => undefined); if (!response.destroyed) response.destroy(); }); Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response); request.on("close", () => { if (!response.writableEnded) void upstream.body?.cancel().catch(() => undefined); });
+  }
+  @Get("tracks/:trackId/lyrics") async lyrics(@Param("trackId") id: string, @Headers("x-session-token") token?: string) {
+    const parsed = qqMusicTrackIdSchema.safeParse(id);
+    if (!parsed.success) throw new HttpException(createApiErrorResponse(errorCodes.validationFailed, "Invalid QQ Music track id."), HttpStatus.BAD_REQUEST);
+    return this.service.getLyrics(await this.user(token), parsed.data);
+  }
+  @Get("playlists") async playlists(@Query() query: Record<string, unknown>, @Headers("x-session-token") token?: string) {
+    return this.service.listPlaylists(await this.user(token), parseRequestBody(qqMusicCatalogPageQuerySchema, query));
+  }
+  @Get("playlists/:playlistId") async playlist(@Param("playlistId") id: string, @Headers("x-session-token") token?: string) {
+    const parsed = qqMusicPlaylistIdSchema.safeParse(id);
+    if (!parsed.success) throw new HttpException(createApiErrorResponse(errorCodes.validationFailed, "Invalid QQ Music playlist id."), HttpStatus.BAD_REQUEST);
+    return this.service.getPlaylist(await this.user(token), parsed.data);
+  }
+  @Get("albums/:albumId") async album(@Param("albumId") id: string, @Headers("x-session-token") token?: string) {
+    const parsed = qqMusicAlbumIdSchema.safeParse(id);
+    if (!parsed.success) throw new HttpException(createApiErrorResponse(errorCodes.validationFailed, "Invalid QQ Music album id."), HttpStatus.BAD_REQUEST);
+    return this.service.getAlbum(await this.user(token), parsed.data);
   }
   private async user(token?: string) { try { return (await this.auth.getAuthSessionByTokenOrThrow(token)).userId; } catch (error) { throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized."); } }
 }

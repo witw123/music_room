@@ -10,10 +10,16 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
+import { AppSidebar } from "@/components/AppSidebar";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
+
+type RoomsHomePageProps = {
+  awayRoomId?: string | null;
+  onResumeAwayRoom?: () => void;
+};
 
 type CreateRoomForm = {
   visibility: "public" | "private";
@@ -29,7 +35,10 @@ const emptyCreateRoomForm: CreateRoomForm = {
   password: ""
 };
 
-export function RoomsHomePage() {
+export function RoomsHomePage({
+  awayRoomId = null,
+  onResumeAwayRoom
+}: RoomsHomePageProps = {}) {
   const router = useRouter();
   const workspaceEntryHref = buildAppEntryHref();
   const buildRoomHref = (roomId: string) => `/room/${roomId}`;
@@ -165,6 +174,10 @@ export function RoomsHomePage() {
   }
 
   function openRoomDetails(room: RoomSnapshot) {
+    if (room.room.id === awayRoomId && onResumeAwayRoom) {
+      onResumeAwayRoom();
+      return;
+    }
     setSelectedRoom(room);
     setJoinPassword("");
     setDialogError(null);
@@ -193,6 +206,11 @@ export function RoomsHomePage() {
 
   async function handleReturnToRecentRoom(room: RoomSnapshot) {
     if (!room) {
+      return;
+    }
+
+    if (room.room.id === awayRoomId && onResumeAwayRoom) {
+      onResumeAwayRoom();
       return;
     }
 
@@ -247,25 +265,46 @@ export function RoomsHomePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white md:pl-60">
       <div className="fixed inset-0 -z-10 bg-black">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
         <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
         <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
       </div>
 
-      <div className="absolute right-4 top-6 z-20 sm:right-6 lg:right-8">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="font-medium text-white/40 transition-all hover:bg-white/5 hover:text-white"
+      <AppSidebar
+        activeItem="home"
+        activeSession={activeSession}
+        hasBottomPlayer={Boolean(awayRoomId)}
+        onLogout={handleLogout}
+      />
+
+      {awayRoomId && onResumeAwayRoom ? (
+        <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-20 sm:px-6 lg:px-8">
+          <div
+            className="flex flex-col gap-3 rounded-2xl border border-amber-300/45 bg-amber-300/10 px-4 py-3 text-amber-100 shadow-[0_12px_36px_rgba(251,191,36,0.12)] sm:flex-row sm:items-center sm:justify-between"
+            data-testid="away-room-banner"
           >
-            退出登录
-          </Button>
-        </div>
-      </div>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0 rounded-full border border-amber-200/60 bg-amber-200/15 px-2.5 py-1 text-xs font-bold tracking-[0.12em] text-amber-100">
+                已暂离
+              </span>
+              <span className="truncate text-sm text-amber-100/80">
+                当前房间仍在后台同步播放
+              </span>
+            </div>
+            <Button
+              className="w-full border-amber-200/40 bg-amber-200/10 text-amber-100 hover:bg-amber-200/20 sm:w-auto"
+              onClick={onResumeAwayRoom}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              返回房间
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
 
 
@@ -350,6 +389,7 @@ export function RoomsHomePage() {
                 {pagedRecentRooms.map((item) => (
                   <RoomDirectoryCard
                     key={item.room.id}
+                    isAway={item.room.id === awayRoomId}
                     room={item}
                     onOpen={() => {
                       startTransition(() => void handleReturnToRecentRoom(item));
@@ -439,6 +479,7 @@ export function RoomsHomePage() {
                 {pagedRooms.map((item) => (
                   <RoomDirectoryCard
                     key={item.room.id}
+                    isAway={item.room.id === awayRoomId}
                     room={item}
                     onOpen={() => openRoomDetails(item)}
                   />
@@ -613,16 +654,22 @@ export function RoomsHomePage() {
 
 function RoomDirectoryCard({
   room,
+  isAway,
   onOpen
 }: {
   room: RoomSnapshot;
+  isAway: boolean;
   onOpen: () => void;
 }) {
   const host = room.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
 
   return (
     <article
-      className="group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
+      className={`group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-3xl border p-5 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-accent ${
+        isAway
+          ? "border-amber-300/70 bg-amber-300/10 shadow-[0_12px_36px_rgba(251,191,36,0.14)] hover:border-amber-200 hover:bg-amber-300/15"
+          : "border-surface-border bg-surface/50 shadow-md hover:border-accent/30 hover:bg-surface-hover"
+      }`}
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -638,6 +685,11 @@ function RoomDirectoryCard({
           <span className="shrink-0 rounded-md border border-surface-border bg-background/60 px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.12em] text-foreground-muted">
             {room.room.joinCode}
           </span>
+          {isAway ? (
+            <span className="shrink-0 rounded-full border border-amber-200/60 bg-amber-200/15 px-2 py-1 text-[10px] font-bold text-amber-100">
+              已暂离
+            </span>
+          ) : null}
         </div>
         <span className="shrink-0 rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
           {getOnlineMemberCount(room.room.members)} 人在线

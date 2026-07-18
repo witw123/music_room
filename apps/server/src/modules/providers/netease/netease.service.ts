@@ -5,6 +5,11 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
+  ProviderAlbumDetail,
+  ProviderLyrics,
+  ProviderPlaylistDetail,
+  ProviderPlaylistListResponse,
+  ProviderPlaylistSummary,
   NeteaseSearchResponse,
   NeteaseTrackCandidate
 } from "@music-room/shared";
@@ -18,6 +23,7 @@ import { NeteaseAccountService } from "./netease-account.service";
 import { NeteaseApiClient, NeteaseApiError } from "./netease-api.client";
 import {
   neteaseQualitySchema,
+  type NeteaseCatalogPageQuery,
   type NeteaseQuality,
   type NeteaseSearchQuery
 } from "./netease.schemas";
@@ -178,6 +184,84 @@ export class NeteaseService {
     return track;
   }
 
+  async getLyrics(userId: string, trackId: string): Promise<ProviderLyrics> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const body = await this.callProvider(userId, () => this.api.getLyrics({ trackId, cookie }));
+    return {
+      provider: "netease",
+      providerTrackId: trackId,
+      plainLyric: readLyricText(asRecord(body?.lrc)?.lyric),
+      translatedLyric: readLyricText(asRecord(body?.tlyric)?.lyric),
+      romanizedLyric: readLyricText(asRecord(body?.romalrc)?.lyric)
+    };
+  }
+
+  async listPlaylists(userId: string, query: NeteaseCatalogPageQuery): Promise<ProviderPlaylistListResponse> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const account = await this.accounts.getStatus(userId);
+    if (!account.neteaseUserId) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.neteaseAuthExpired, "The NetEase account needs to be bound again."),
+        HttpStatus.CONFLICT
+      );
+    }
+    const body = await this.callProvider(userId, () => this.api.getUserPlaylists({ userId: account.neteaseUserId!, ...query, cookie }));
+    const records = Array.isArray(body.playlist) ? body.playlist : Array.isArray(body.playlists) ? body.playlists : [];
+    return {
+      items: records.map((item) => this.toPlaylistSummary(item)).filter((item): item is ProviderPlaylistSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
+  }
+
+  async getPlaylist(userId: string, playlistId: string): Promise<ProviderPlaylistDetail> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const body = await this.callProvider(userId, () => this.api.getPlaylist({ playlistId, cookie }));
+    const playlist = asRecord(body.playlist);
+    if (!playlist) throw this.unavailableError();
+    const summary = this.toPlaylistSummary(playlist);
+    if (!summary) throw this.unavailableError();
+    const rawTracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+    const tracks = rawTracks.map((item) => this.toTrackCandidate(item)).filter((item): item is NeteaseTrackCandidate => !!item);
+    const trackIds = Array.isArray(playlist.trackIds)
+      ? playlist.trackIds.map((item) => readString(asRecord(item)?.id ?? item)).filter((item): item is string => !!item && /^\d+$/.test(item))
+      : [];
+    if (trackIds.length > rawTracks.length) {
+      for (let offset = rawTracks.length; offset < trackIds.length; offset += 1_000) {
+        const page = await this.callProvider(userId, () => this.api.getPlaylistTracks({ playlistId, limit: 1_000, offset, cookie }));
+        const pageTracks = Array.isArray(page.songs) ? page.songs : [];
+        tracks.push(...pageTracks.map((item) => this.toTrackCandidate(item)).filter((item): item is NeteaseTrackCandidate => !!item));
+      }
+    }
+    return { ...summary, tracks };
+  }
+
+  async getAlbum(userId: string, albumId: string): Promise<ProviderAlbumDetail> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const body = await this.callProvider(userId, () => this.api.getAlbum({ albumId, cookie }));
+    const album = asRecord(body.album) ?? asRecord(body);
+    if (!album) throw this.unavailableError();
+    const tracks = (Array.isArray(album.songs) ? album.songs : Array.isArray(body.songs) ? body.songs : [])
+      .map((item) => this.toTrackCandidate(item))
+      .filter((item): item is NeteaseTrackCandidate => !!item);
+    const artistRecord = asRecord(album.artist);
+    return {
+      provider: "netease",
+      providerAlbumId: readString(album.id) ?? albumId,
+      title: readString(album.name) ?? "未命名专辑",
+      artist: readString(album.artist) ?? readString(artistRecord?.name) ?? readArtistNames(album.artists),
+      description: readString(album.description) ?? readString(album.briefDesc),
+      artworkUrl: readHttpUrl(album.picUrl),
+      releaseTime: readString(album.publishTime) ?? readString(album.company),
+      trackCount: readNumber(album.size) ?? tracks.length,
+      tracks
+    };
+  }
+
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
     this.assertEnabled();
     this.assertRateLimit(`audio:${userId}`, 6, 60_000);
@@ -320,8 +404,24 @@ export class NeteaseService {
       title,
       artist: artistNames.join(" / ") || "未知歌手",
       album: readString(album?.name),
+      ...(readString(album?.id) ? { providerAlbumId: readString(album?.id)! } : {}),
       durationMs: readNumber(song?.duration) ?? readNumber(song?.dt) ?? 0,
       artworkUrl: artworkUrl && /^https?:\/\//.test(artworkUrl) ? artworkUrl : null
+    };
+  }
+
+  private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
+    const playlist = asRecord(value);
+    const id = readString(playlist?.id);
+    if (!playlist || !id) return null;
+    return {
+      provider: "netease",
+      providerPlaylistId: id,
+      title: readString(playlist.name) ?? "未命名歌单",
+      description: readString(playlist.description) ?? readString(playlist.desc),
+      artworkUrl: readHttpUrl(playlist.coverImgUrl ?? playlist.coverImgUrlStr),
+      creatorName: readString(asRecord(playlist.creator)?.nickname),
+      trackCount: readNumber(playlist.trackCount) ?? readNumber(playlist.trackNumber) ?? (Array.isArray(playlist.tracks) ? playlist.tracks.length : 0),
     };
   }
 
@@ -447,6 +547,21 @@ function readNumber(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function readLyricText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readHttpUrl(value: unknown) {
+  const result = readString(value);
+  return result && /^https?:\/\//.test(result) ? result : null;
+}
+
+function readArtistNames(value: unknown) {
+  if (!Array.isArray(value)) return "未知歌手";
+  const names = value.map((item) => readString(asRecord(item)?.name)).filter((item): item is string => !!item);
+  return names.join(" / ") || "未知歌手";
 }
 
 function resolveTrackAccess(song: SongRecord) {

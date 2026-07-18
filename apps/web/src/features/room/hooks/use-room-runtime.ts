@@ -262,6 +262,7 @@ export function useRoomRuntime({
     peerId,
     recordPeerDiagnostic
   });
+  const exitCurrentRoomRef = useRef<(message: string) => void>(() => undefined);
   const {
     getCurrentPlaybackConnectionKey,
     applyRecoveryAction,
@@ -283,6 +284,15 @@ export function useRoomRuntime({
         });
       },
       onError: (_roomId, _reason, error) => {
+        const rawMessage = error instanceof Error ? error.message.toLowerCase() : "";
+        const userFacingMessage = toUserFacingError(error);
+        if (
+          rawMessage.includes("room not found") ||
+          userFacingMessage.includes("房间不存在或已经被删除")
+        ) {
+          exitCurrentRoomRef.current("这个房间已被删除。");
+          return;
+        }
         recordPeerDiagnostic({
           peerId: "system",
           channelKind: "system",
@@ -299,6 +309,10 @@ export function useRoomRuntime({
     (message: string) => {
       setStatusMessage(message);
       setIsNavigatingRoomExit(true);
+      // A deleted room must not be restored from the browser's last-room
+      // pointer or a pending handoff snapshot after the realtime exit.
+      window.localStorage.removeItem(lastRoomStorageKey);
+      window.sessionStorage.removeItem("music-room-pending-room-snapshot");
       resetPlayerSurfaceRef.current();
       roomAudioOutput.releaseRoomAudioSession();
       dispatchRoomStateEvent({ type: "local-reset" });
@@ -314,6 +328,7 @@ export function useRoomRuntime({
       activeSession,
       authEntryHref,
       dispatchRoomStateEvent,
+      lastRoomStorageKey,
       resetPlayerSurfaceRef,
       router,
       setIsNavigatingRoomExit,
@@ -321,6 +336,7 @@ export function useRoomRuntime({
       workspaceEntryHref
     ]
   );
+  exitCurrentRoomRef.current = exitCurrentRoom;
 
   const requestRoomSnapshotResync = useCallback(
     async (reason: RoomSnapshotResyncReason, roomId?: string | null) => {

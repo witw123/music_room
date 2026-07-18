@@ -251,6 +251,30 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("keeps a live media track healthy when the song segment is silent", async () => {
+    const { context } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    vi.spyOn(roomAudioOutput, "getBroadcastStream").mockReturnValue({
+      getAudioTracks: () => [{ readyState: "live" }]
+    } as unknown as MediaStream);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    expect(engine.getSourceHealth()).toMatchObject({
+      state: "source-ready",
+      energy: 0
+    });
+    engine.destroy();
+  });
+
   it("does not reread cached units on every scheduler tick", async () => {
     const { context } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

@@ -9,14 +9,13 @@ import type {
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
-import type { NeteaseTrackCandidate } from "@music-room/shared";
-import type { QqMusicTrackCandidate } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
+import { AppSidebar } from "@/components/AppSidebar";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -50,15 +49,14 @@ type RoomWorkspaceProps = {
   onLogout: () => void;
   onClearIdentity: () => void;
   onCopyJoinCode: () => Promise<void>;
+  onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
-  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
-  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
-  onTabChange: (tab: "library" | "local" | "netease" | "members") => void;
+  onTabChange: (tab: "library" | "local" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
   playerSlot: ReactNode;
@@ -93,13 +91,13 @@ function RoomWorkspaceBase({
   isNavigatingRoomExit,
   isRecoveringRoom,
   isRoomTransitionPending,
+  onLogout,
   onClearIdentity,
   onCopyJoinCode,
+  onAwayRoom,
   onLeaveRoom,
   onDeleteRoom,
   onFilesSelected,
-  onImportNeteaseTrack,
-  onImportQqMusicTrack,
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
@@ -116,7 +114,13 @@ function RoomWorkspaceBase({
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-background pb-40 lg:pb-32">
+    <main className="relative flex min-h-screen flex-col bg-background pb-40 lg:pb-32 md:pl-60">
+
+      <AppSidebar
+        activeSession={activeSession}
+        hasBottomPlayer
+        onLogout={onLogout}
+      />
 
 
       {roomSnapshot && statusMessage ? (
@@ -168,11 +172,10 @@ function RoomWorkspaceBase({
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
               onCopyJoinCode={onCopyJoinCode}
+              onAwayRoom={onAwayRoom}
               onLeaveRoom={onLeaveRoom}
               onDeleteRoom={onDeleteRoom}
               onFilesSelected={onFilesSelected}
-              onImportNeteaseTrack={onImportNeteaseTrack}
-              onImportQqMusicTrack={onImportQqMusicTrack}
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}

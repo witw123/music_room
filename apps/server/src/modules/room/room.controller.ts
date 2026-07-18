@@ -150,13 +150,20 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.roomService.assertCanDeleteRoom(roomId, userId);
-    const snapshot = await this.roomService.getRoomSnapshot(
-      roomId,
-      await this.playlistService.listPlaylistsForRoom(roomId)
-    );
+    let snapshot;
+    try {
+      snapshot = await this.roomService.getRoomSnapshot(
+        roomId,
+        await this.playlistService.listPlaylistsForRoom(roomId)
+      );
+    } catch {
+      // Playlist data is auxiliary to room termination. Continue with the
+      // authoritative room snapshot if playlist storage is unavailable.
+      snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    }
     const trackIds = snapshot.tracks.map((track) => track.id);
     const result = await this.roomService.deleteRoom(roomId, userId);
-    await this.playlistService.deletePlaylistsForRoom(roomId);
+    await this.playlistService.deletePlaylistsForRoom(roomId).catch(() => undefined);
     this.roomRealtimePublisher.emitRoomDeleted(roomId, trackIds);
     this.roomRealtimePublisher.emitRoomMissing(roomId);
     return result;

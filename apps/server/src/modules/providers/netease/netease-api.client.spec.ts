@@ -3,6 +3,11 @@ import {
   login_qr_create,
   login_qr_key,
   login_status,
+  lyric,
+  playlist_detail,
+  playlist_track_all,
+  user_playlist,
+  album,
   search,
   song_detail,
   song_url
@@ -14,6 +19,11 @@ jest.mock("@neteasecloudmusicapienhanced/api", () => ({
   login_qr_create: jest.fn(),
   login_qr_key: jest.fn(),
   login_status: jest.fn(),
+  lyric: jest.fn(),
+  playlist_detail: jest.fn(),
+  playlist_track_all: jest.fn(),
+  user_playlist: jest.fn(),
+  album: jest.fn(),
   search: jest.fn(),
   song_detail: jest.fn(),
   song_url: jest.fn()
@@ -26,6 +36,11 @@ const mockedLoginStatus = login_status as jest.MockedFunction<typeof login_statu
 const mockedSearch = search as jest.MockedFunction<typeof search>;
 const mockedSongDetail = song_detail as jest.MockedFunction<typeof song_detail>;
 const mockedSongUrl = song_url as jest.MockedFunction<typeof song_url>;
+const mockedLyric = lyric as jest.MockedFunction<typeof lyric>;
+const mockedPlaylistDetail = playlist_detail as jest.MockedFunction<typeof playlist_detail>;
+const mockedPlaylistTrackAll = playlist_track_all as jest.MockedFunction<typeof playlist_track_all>;
+const mockedUserPlaylist = user_playlist as jest.MockedFunction<typeof user_playlist>;
+const mockedAlbum = album as jest.MockedFunction<typeof album>;
 
 describe("NeteaseApiClient", () => {
   beforeEach(() => {
@@ -209,5 +224,21 @@ describe("NeteaseApiClient", () => {
         code: 200,
         data: [{ type: "mp3" }]
       });
+  });
+
+  it("reads lyric, user playlist, playlist detail, and album payloads", async () => {
+    mockedLyric.mockResolvedValue({ status: 200, body: { code: 200, lrc: { lyric: "[00:01]Line" } } } as never);
+    mockedUserPlaylist.mockResolvedValue({ status: 200, body: { code: 200, playlist: [{ id: 11, name: "Favorites" }] } } as never);
+    mockedPlaylistDetail.mockResolvedValue({ status: 200, body: { code: 200, playlist: { id: 11, name: "Favorites", tracks: [] } } } as never);
+    mockedPlaylistTrackAll.mockResolvedValue({ status: 200, body: { code: 200, songs: [] } } as never);
+    mockedAlbum.mockResolvedValue({ status: 200, body: { code: 200, album: { id: 22, name: "Album" } } } as never);
+
+    const client = new NeteaseApiClient();
+    await expect(client.getLyrics({ trackId: "7", cookie: "secret" })).resolves.toMatchObject({ lrc: { lyric: "[00:01]Line" } });
+    await expect(client.getUserPlaylists({ userId: "9", limit: 30, offset: 0, cookie: "secret" })).resolves.toMatchObject({ playlist: [{ id: 11 }] });
+    await expect(client.getPlaylist({ playlistId: "11", cookie: "secret" })).resolves.toMatchObject({ playlist: { id: 11 } });
+    await expect(client.getPlaylistTracks({ playlistId: "11", limit: 1000, offset: 0, cookie: "secret" })).resolves.toMatchObject({ songs: [] });
+    await expect(client.getAlbum({ albumId: "22", cookie: "secret" })).resolves.toMatchObject({ album: { id: 22 } });
+    expect(mockedUserPlaylist).toHaveBeenCalledWith(expect.objectContaining({ uid: "9", limit: 30, offset: 0, cookie: "secret" }));
   });
 });

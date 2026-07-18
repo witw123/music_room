@@ -181,4 +181,32 @@ describe("NeteaseService", () => {
       { allowSyntheticDns: true }
     );
   });
+
+  it("exposes normalized lyrics, playlists, and albums", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      getLyrics: jest.fn().mockResolvedValue({ lrc: { lyric: "plain" }, tlyric: { lyric: "translated" } }),
+      getUserPlaylists: jest.fn().mockResolvedValue({ playlist: [{ id: 11, name: "Favorites", trackCount: 1 }] }),
+      getPlaylist: jest.fn().mockResolvedValue({ playlist: { id: 11, name: "Favorites", tracks: [{ id: 7, name: "Song", ar: [{ name: "Artist" }] }], trackIds: [{ id: 7 }, { id: 8 }] } }),
+      getPlaylistTracks: jest.fn().mockResolvedValue({ songs: [{ id: 8, name: "Song 2", ar: [{ name: "Artist" }] }] }),
+      getAlbum: jest.fn().mockResolvedValue({ album: { id: 22, name: "Album", artist: { name: "Artist" }, songs: [{ id: 7, name: "Song" }] } })
+    };
+    const accounts = {
+      getCookieOrThrow: jest.fn().mockResolvedValue("cookie"),
+      getStatus: jest.fn().mockResolvedValue({ neteaseUserId: "99" })
+    };
+    const service = new NeteaseService(api as never, accounts as never, {} as never);
+
+    await expect(service.getLyrics("user_1", "7")).resolves.toEqual({
+      provider: "netease",
+      providerTrackId: "7",
+      plainLyric: "plain",
+      translatedLyric: "translated",
+      romanizedLyric: null
+    });
+    await expect(service.listPlaylists("user_1", { limit: 30, offset: 0 })).resolves.toMatchObject({ items: [{ providerPlaylistId: "11", title: "Favorites" }] });
+    await expect(service.getPlaylist("user_1", "11")).resolves.toMatchObject({ tracks: [{ providerTrackId: "7", title: "Song" }, { providerTrackId: "8", title: "Song 2" }] });
+    await expect(service.getAlbum("user_1", "22")).resolves.toMatchObject({ providerAlbumId: "22", tracks: [{ providerTrackId: "7" }] });
+    expect(api.getUserPlaylists).toHaveBeenCalledWith({ userId: "99", limit: 30, offset: 0, cookie: "cookie" });
+  });
 });

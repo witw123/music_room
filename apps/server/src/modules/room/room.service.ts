@@ -212,7 +212,7 @@ export class RoomService {
   async getRecoverableRoomSnapshot(roomId: string, sessionId: string): Promise<RoomSnapshot | null> {
     const tombstoneModel = (this.prisma as PrismaService & { roomTombstone?: { findUnique: (args: unknown) => Promise<{ status?: string } | null> } }).roomTombstone;
     const tombstone = tombstoneModel ? await tombstoneModel.findUnique({ where: { roomId } }).catch(() => null) : null;
-    if (tombstone?.status === "SUCCEEDED") return null;
+    if (tombstone?.status === "PENDING" || tombstone?.status === "SUCCEEDED") return null;
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
 
     if (
@@ -247,28 +247,34 @@ export class RoomService {
   }
 
   async deleteRoom(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     await this.assertCanDeleteRoomRecord(record, sessionId);
 
+    await this.roomRecordRepository.markRoomTerminated(record, "房主解散房间");
     await this.roomRecordRepository.deleteRecord(record);
     await Promise.all(
       record.room.members.map((member) =>
         this.roomRecordRepository.clearRecentRoomForSessionIfMatching(member.id, roomId)
       )
     );
+    await this.roomRecordRepository.completeRoomTermination(roomId);
 
     return { ok: true };
   }
 
   async deleteRoomByAdmin(roomId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
+    // AdminService creates the tombstone with the audit reason before this
+    // method runs. Preserve that reason during retries.
+    await this.roomRecordRepository.markRoomTerminated(record);
     await this.roomRecordRepository.deleteRecord(record);
     await Promise.all(record.room.members.map((member) => this.roomRecordRepository.clearRecentRoomForSessionIfMatching(member.id, roomId)));
+    await this.roomRecordRepository.completeRoomTermination(roomId);
     return { ok: true };
   }
 
   async assertCanDeleteRoom(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     await this.assertCanDeleteRoomRecord(record, sessionId);
   }
 

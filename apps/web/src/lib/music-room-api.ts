@@ -10,6 +10,10 @@ import {
   type NeteaseQrStatusResponse,
   type NeteaseSearchResponse,
   type NeteaseTrackCandidate,
+  type ProviderAlbumDetail,
+  type ProviderLyrics,
+  type ProviderPlaylistDetail,
+  type ProviderPlaylistListResponse,
   type QqMusicAccountStatus,
   type QqMusicQrStartResponse,
   type QqMusicQrStatusResponse,
@@ -293,6 +297,19 @@ export const musicRoomApi = {
   },
   getNeteaseTrack: (trackId: string) =>
     request<NeteaseTrackCandidate>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}`),
+  getNeteaseLyrics: (trackId: string) =>
+    request<ProviderLyrics>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  listNeteasePlaylists: (options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      limit: String(options?.limit ?? 30),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderPlaylistListResponse>(`/v1/providers/netease/playlists?${params.toString()}`);
+  },
+  getNeteasePlaylist: (playlistId: string) =>
+    request<ProviderPlaylistDetail>(`/v1/providers/netease/playlists/${encodeURIComponent(playlistId)}`),
+  getNeteaseAlbum: (albumId: string) =>
+    request<ProviderAlbumDetail>(`/v1/providers/netease/albums/${encodeURIComponent(albumId)}`),
   downloadNeteaseTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",
@@ -316,6 +333,19 @@ export const musicRoomApi = {
     return request<QqMusicSearchResponse>(`/v1/providers/qqmusic/search?${params.toString()}`);
   },
   getQqMusicTrack: (trackId: string) => request<QqMusicTrackCandidate>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}`),
+  getQqMusicLyrics: (trackId: string) =>
+    request<ProviderLyrics>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  listQqMusicPlaylists: (options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      limit: String(options?.limit ?? 30),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderPlaylistListResponse>(`/v1/providers/qqmusic/playlists?${params.toString()}`);
+  },
+  getQqMusicPlaylist: (playlistId: string) =>
+    request<ProviderPlaylistDetail>(`/v1/providers/qqmusic/playlists/${encodeURIComponent(playlistId)}`),
+  getQqMusicAlbum: (albumId: string) =>
+    request<ProviderAlbumDetail>(`/v1/providers/qqmusic/albums/${encodeURIComponent(albumId)}`),
   downloadQqMusicTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",

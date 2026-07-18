@@ -30,12 +30,14 @@ const accessLabels = {
 
 type QqMusicSourcePanelProps = {
   activeSession: AuthSession | null;
-  onImportTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
+  mode?: "full" | "account";
 };
 
 export function QqMusicSourcePanel({
   activeSession,
-  onImportTrack
+  onImportTrack,
+  mode = "full"
 }: QqMusicSourcePanelProps) {
   const [account, setAccount] = useState<QqMusicAccountStatus | null>(null);
   const [qrSession, setQrSession] = useState<{
@@ -155,6 +157,7 @@ export function QqMusicSourcePanel({
     setPendingAction(`import:${track.providerTrackId}`);
     setErrorMessage(null);
     try {
+      if (!onImportTrack) return;
       await onImportTrack(track);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error));
@@ -247,7 +250,7 @@ export function QqMusicSourcePanel({
         </div>
       ) : null}
 
-      {account?.connected ? (
+      {mode !== "account" && account?.connected ? (
         <>
           <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void searchTracks(event)}>
             <label className="sr-only" htmlFor="qqmusic-search-input">搜索 QQ 音乐歌曲</label>
@@ -297,15 +300,17 @@ export function QqMusicSourcePanel({
                         <span className="rounded bg-white/[0.06] px-1.5 py-0.5">{qualityLabel}</span>
                       </p>
                     </div>
-                    <Button
-                      className="shrink-0 self-start sm:self-auto"
-                      disabled={pendingAction !== null}
-                      onClick={() => void importTrack(track)}
-                      size="sm"
-                      type="button"
-                    >
-                      {isImporting ? "导入中…" : "导入曲库"}
-                    </Button>
+                    {onImportTrack ? (
+                      <Button
+                        className="shrink-0 self-start sm:self-auto"
+                        disabled={pendingAction !== null}
+                        onClick={() => void importTrack(track)}
+                        size="sm"
+                        type="button"
+                      >
+                        {isImporting ? "导入中…" : "导入曲库"}
+                      </Button>
+                    ) : null}
                   </article>
                 );
               })}

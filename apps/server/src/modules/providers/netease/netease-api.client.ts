@@ -4,6 +4,11 @@ import {
   login_qr_create,
   login_qr_key,
   login_status,
+  lyric,
+  playlist_detail,
+  playlist_track_all,
+  user_playlist,
+  album,
   search,
   song_detail,
   song_url
@@ -180,6 +185,51 @@ export class NeteaseApiClient {
     });
   }
 
+  async getLyrics(input: { trackId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = (await lyric(withProviderOptions({ id: input.trackId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getUserPlaylists(input: { userId: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = (await user_playlist(withProviderOptions({ uid: input.userId, limit: input.limit, offset: input.offset, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getPlaylist(input: { playlistId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = (await playlist_detail(withProviderOptions({ id: input.playlistId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getPlaylistTracks(input: { playlistId: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = (await playlist_track_all(withProviderOptions({ id: input.playlistId, limit: input.limit, offset: input.offset, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getAlbum(input: { albumId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = (await album(withProviderOptions({ id: input.albumId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
   private async call<T>(operation: () => Promise<T>) {
     try {
       return await operation();
@@ -252,6 +302,20 @@ function assertSuccessfulCode(code: number) {
   if (code !== 200) {
     throw new NeteaseApiError("unavailable");
   }
+}
+
+function parseCatalogBody(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new NeteaseApiError("invalid-response");
+  }
+  return value as Record<string, unknown>;
+}
+
+function readCatalogCode(body: Record<string, unknown>) {
+  const value = body.code;
+  const code = Number(value);
+  if (!Number.isFinite(code)) throw new NeteaseApiError("invalid-response");
+  return code;
 }
 
 function readCookie(

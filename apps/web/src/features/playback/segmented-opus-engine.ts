@@ -277,9 +277,10 @@ export class SegmentedOpusEngine {
     this.setBroadcastTrackEnabled(true);
     this.sampleSourceEnergy(context);
     const trackState = roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState;
-    this.sourceHealth = this.sourceEnergy > 0.002 && trackState === "live"
-      ? "source-ready"
-      : "source-silent";
+    // A live RTP track may legitimately carry zero-energy PCM during a quiet
+    // or silent part of a song. Energy is useful telemetry, but it cannot
+    // distinguish valid silence from a broken media path.
+    this.sourceHealth = trackState === "live" ? "source-ready" : "source-silent";
     return {
       state: bufferedUnits * input.manifest.segmentDurationMs >= Math.min(
         targetBufferedAheadMs,

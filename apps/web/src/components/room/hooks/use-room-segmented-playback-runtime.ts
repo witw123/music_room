@@ -141,7 +141,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         : null;
     const playbackState = toDiagnosticPlaybackState(visiblePlayback.state);
     const isAudible = visiblePlayback.state === "live" &&
-      (!runtime.isCurrentSource || visiblePlayback.sourceHealth === "source-ready");
+      (!runtime.isCurrentSource || (
+        visiblePlayback.sourceHealth === "source-ready" &&
+        (visiblePlayback.sourceEnergy === undefined || visiblePlayback.sourceEnergy > 0.002)
+      ));
     runtime.audibleRef.current = isAudible;
     const isRecovering = visiblePlayback.state === "buffering" ||
       visiblePlayback.sourceHealth === "source-underrun" ||
@@ -551,18 +554,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     if (playback.sourceHealth && playback.sourceHealth !== lastSourceHealthRef.current) {
       const previousSourceHealth = lastSourceHealthRef.current;
       lastSourceHealthRef.current = playback.sourceHealth;
-      if (playback.sourceHealth === "source-underrun") {
-        // The initial underrun is the normal decode warm-up window. It must not
-        // be presented as a missing local audio source before RTP is published.
-        if (previousSourceHealth) {
-          setStatusMessage("WebRTC RTP Opus 音频正在恢复。");
-        }
-      } else if (playback.sourceHealth === "source-silent") {
-        if (previousSourceHealth) {
-          setStatusMessage("WebRTC RTP Opus 音频暂时无数据，正在恢复。");
-        }
-      } else if (playback.sourceHealth === "source-ready") {
-        setStatusMessage("WebRTC RTP Opus 播放已启动。");
+      if (
+        playback.sourceHealth === "source-silent" &&
+        previousSourceHealth &&
+        previousSourceHealth !== "source-silent"
+      ) {
+        // source-silent means that the broadcast RTP track is missing or
+        // ended. A quiet song section remains source-ready and never reaches
+        // this branch.
+        setStatusMessage("WebRTC RTP Opus 媒体链路不可用，正在恢复。");
       }
     }
   }, [input.isCurrentSource, playback.sourceHealth, setStatusMessage]);
@@ -582,7 +582,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   useEffect(() => {
     if (playback.state === "live") {
       setSourceStartState("live");
-      setMediaConnectionState("live");
+      setMediaConnectionState(
+        input.isCurrentSource && playback.sourceHealth === "source-silent"
+          ? "reconnecting"
+          : "live"
+      );
       setLastSourceStartError(null);
       return;
     }
@@ -613,8 +617,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     setSourceStartState("idle");
     setMediaConnectionState("idle");
   }, [
+    input.isCurrentSource,
     playback.state,
     playback.lastError,
+    playback.sourceHealth,
     setLastSourceStartError,
     setMediaConnectionState,
     setSourceStartState

@@ -1,5 +1,15 @@
 import { Injectable } from "@nestjs/common";
-import { checkQQLoginQr, getMusicPlay, getQQLoginQr, getSearchByKey } from "@sansenjian/qq-music-api/services";
+import {
+  checkQQLoginQr,
+  getAlbumInfo,
+  getAlbumSongs,
+  getLyric,
+  getMusicPlay,
+  getQQLoginQr,
+  getSearchByKey,
+  getUserPlaylists,
+  songListDetail
+} from "@sansenjian/qq-music-api/services";
 
 export type QqMusicApiErrorKind = "auth-expired" | "unavailable" | "invalid-response";
 export class QqMusicApiError extends Error {
@@ -50,6 +60,56 @@ export class QqMusicApiClient {
       return { url: String(url) };
     });
   }
+
+  async getLyrics(input: { trackId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = await getLyric({
+        params: { songmid: input.trackId },
+        option: { headers: { Cookie: input.cookie } }
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getUserPlaylists(input: { userId: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = await getUserPlaylists({
+        uin: input.userId,
+        limit: input.limit,
+        offset: input.offset,
+        cookie: input.cookie
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getPlaylist(input: { playlistId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = await songListDetail({
+        params: { disstid: input.playlistId },
+        option: { headers: { Cookie: input.cookie } }
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getAlbum(input: { albumId: string; cookie: string }) {
+    return this.call(async () => {
+      const [infoResponse, songsResponse] = await Promise.all([
+        getAlbumInfo({ params: { albummid: input.albumId }, option: { headers: { Cookie: input.cookie } } }) as Promise<ApiResponse>,
+        getAlbumSongs({ params: { albummid: input.albumId }, option: { headers: { Cookie: input.cookie } } }) as Promise<ApiResponse>
+      ]);
+      assertProviderStatus(infoResponse.status);
+      assertProviderStatus(songsResponse.status);
+      return {
+        info: readProviderBody(infoResponse.body),
+        songs: readProviderBody(songsResponse.body)
+      };
+    });
+  }
   private async call<T>(operation: () => Promise<T>) {
     try { return await operation(); } catch (error) {
       if (error instanceof QqMusicApiError) throw error;
@@ -64,3 +124,16 @@ function readCookie(session: any) {
   return null;
 }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
+
+function readProviderBody(value: unknown): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new QqMusicApiError("invalid-response");
+  const body = value as Record<string, any>;
+  if (body.error) throw new QqMusicApiError("unavailable");
+  const response = body.response;
+  return response && typeof response === "object" && !Array.isArray(response) ? response : body;
+}
+
+function assertProviderStatus(status: unknown) {
+  const code = Number(status);
+  if (Number.isFinite(code) && code >= 400) throw new QqMusicApiError("unavailable");
+}

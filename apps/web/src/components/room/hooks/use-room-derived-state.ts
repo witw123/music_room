@@ -19,7 +19,7 @@ export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   connectedPeers: string[];
   mediaConnectedPeers: string[];
-  activeDashboardTab: "library" | "local" | "netease" | "members";
+  activeDashboardTab: "library" | "local" | "members";
   segmentedPlayback: SegmentedPlaybackSnapshot;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
@@ -135,7 +135,10 @@ export function useRoomDerivedState({
       segmentedPlayback
     });
     const audible = segmentedPlayback.state === "live" &&
-      (segmentedPlayback.sourceHealth === undefined || segmentedPlayback.sourceHealth === "source-ready");
+      (segmentedPlayback.sourceHealth === undefined || (
+        segmentedPlayback.sourceHealth === "source-ready" &&
+        (segmentedPlayback.sourceEnergy === undefined || segmentedPlayback.sourceEnergy > 0.002)
+      ));
     return {
       memberId: localMember.id,
       audible,
@@ -220,7 +223,7 @@ export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"])
 }
 
 export function selectWorkspacePeerDiagnostics(input: {
-  activeDashboardTab: "library" | "local" | "netease" | "members";
+  activeDashboardTab: "library" | "local" | "members";
   visiblePeerDiagnostics: PeerDiagnosticsSnapshot[];
   visiblePeerRecentEvents: PeerRecentEvent[];
 }) {

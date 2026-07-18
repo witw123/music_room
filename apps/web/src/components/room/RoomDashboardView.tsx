@@ -11,8 +11,6 @@ import type {
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
-import type { NeteaseTrackCandidate } from "@music-room/shared";
-import type { QqMusicTrackCandidate } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
@@ -20,7 +18,7 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
 import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
 
-type TabId = "library" | "local" | "netease" | "members";
+type TabId = "library" | "local" | "members";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -48,11 +46,10 @@ type RoomDashboardViewProps = {
   iceConfigSource: string;
   iceConfigStatus: string;
   onCopyJoinCode: () => Promise<void>;
+  onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
-  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
-  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
@@ -64,15 +61,10 @@ type RoomDashboardViewProps = {
 const tabLabels: Record<TabId, string> = {
   library: "曲库",
   local: "本地存储",
-  netease: "第三方",
   members: "成员"
 };
 
-const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" || [
-  process.env.NEXT_PUBLIC_QQMUSIC_ENABLED
-].some((value) => value === "true")
-  ? ["library", "local", "netease", "members"]
-  : ["library", "local", "members"];
+const tabIds: TabId[] = ["library", "local", "members"];
 
 const LibraryTabPanel = dynamic(
   () => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel),
@@ -107,17 +99,6 @@ const MembersTabPanel = dynamic(
   }
 );
 
-const ThirdPartyTabPanel = dynamic(
-  () => import("./ThirdPartySourcePanel").then((mod) => mod.ThirdPartySourcePanel),
-  {
-    loading: () => (
-      <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-        正在加载第三方音乐平台…
-      </div>
-    )
-  }
-);
-
 function RoomDashboardViewBase({
   roomSnapshot,
   currentTrack,
@@ -144,11 +125,10 @@ function RoomDashboardViewBase({
   iceConfigSource,
   iceConfigStatus,
   onCopyJoinCode,
+  onAwayRoom,
   onLeaveRoom,
   onDeleteRoom,
   onFilesSelected,
-  onImportNeteaseTrack,
-  onImportQqMusicTrack,
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
@@ -207,6 +187,7 @@ function RoomDashboardViewBase({
             mediaConnectedPeersCount={mediaConnectedPeersCount}
             iceConfigSource={iceConfigSource}
             onCopyJoinCode={onCopyJoinCode}
+            onAwayRoom={onAwayRoom}
             onLeaveRoom={onLeaveRoom}
             onDeleteRoom={onDeleteRoom}
             socket={socket}
@@ -300,14 +281,6 @@ function RoomDashboardViewBase({
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
               onImportCachedTrack={onImportCachedTrack}
-            />
-          ) : null}
-
-          {activeTab === "netease" ? (
-            <ThirdPartyTabPanel
-              activeSession={activeSession}
-              onImportNeteaseTrack={onImportNeteaseTrack}
-              onImportQqMusicTrack={onImportQqMusicTrack}
             />
           ) : null}
 

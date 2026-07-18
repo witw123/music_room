@@ -239,6 +239,145 @@ describe("RoomRecordRepository", () => {
     expect(rooms.has("room_1")).toBe(true);
   });
 
+  it("does not resurrect a room missing from PostgreSQL", async () => {
+    const existingRecord = createRoomRecord(1);
+    const rooms = new Map<string, RoomRecord>([[existingRecord.room.id, existingRecord]]);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        findUnique: jest.fn(async () => null),
+        findMany: jest.fn(async () => [])
+      }
+    };
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      createRedisMock() as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.getRoomRecord(existingRecord.room.id)).rejects.toThrow(
+      "Room not found: room_1"
+    );
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([]);
+  });
+
+  it("deletes the authoritative database row when Redis cleanup is unavailable", async () => {
+    const existingRecord = createRoomRecord(1);
+    const rooms = new Map<string, RoomRecord>([[existingRecord.room.id, existingRecord]]);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        deleteMany: jest.fn(async () => ({ count: 1 }))
+      }
+    };
+    const redis = createRedisMock();
+    redis.removeFromSet.mockRejectedValueOnce(new Error("Redis unavailable"));
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.deleteRecord(existingRecord)).resolves.toBeUndefined();
+    expect(prisma.roomState.deleteMany).toHaveBeenCalledWith({ where: { id: "room_1" } });
+    expect(rooms.has("room_1")).toBe(false);
+  });
+
+  it("rejects stale writes for a room with a pending tombstone", async () => {
+    const record = createRoomRecord(1);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomTombstone: {
+        findUnique: jest.fn(async () => ({ status: "PENDING" }))
+      },
+      roomState: {
+        updateMany: jest.fn(),
+        findUnique: jest.fn()
+      }
+    };
+    const repository = new RoomRecordRepository(
+      new Map(),
+      prisma as never,
+      createRedisMock() as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.persistRecord(record)).rejects.toThrow(
+      "Room has been terminated: room_1"
+    );
+    expect(prisma.roomState.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not list rooms covered by a completed tombstone", async () => {
+    const record = createRoomRecord(1);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomTombstone: {
+        findMany: jest.fn(async () => [{ roomId: record.room.id }])
+      },
+      roomState: {
+        findMany: jest.fn(async () => [
+          {
+            id: record.room.id,
+            hostId: record.room.hostId,
+            joinCode: record.room.joinCode,
+            visibility: record.room.visibility,
+            roomRevision: record.room.roomRevision,
+            presenceRevision: record.room.presenceRevision,
+            playback: record.room.playback,
+            members: record.room.members,
+            tracks: record.tracks,
+            queue: record.queue,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z")
+          }
+        ])
+      }
+    };
+    const repository = new RoomRecordRepository(
+      new Map(),
+      prisma as never,
+      createRedisMock() as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([]);
+  });
+
+  it("filters stale in-memory rooms using the Redis termination marker", async () => {
+    const record = createRoomRecord(1);
+    const redis = createRedisMock() as ReturnType<typeof createRedisMock> & {
+      isAvailable: jest.Mock;
+    };
+    redis.isAvailable = jest.fn(() => true);
+    redis.getJson.mockImplementation(async (key: string) =>
+      key === "music-room:room-terminated:room_1"
+        ? { roomId: "room_1", status: "SUCCEEDED" }
+        : null
+    );
+    const prisma = { isAvailable: jest.fn(() => false) };
+    const repository = new RoomRecordRepository(
+      new Map([[record.room.id, record]]),
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([]);
+  });
+
   it("rejects invalid redis room cache records before hydrating memory", async () => {
     const prisma = {
       isAvailable: jest.fn(() => false)

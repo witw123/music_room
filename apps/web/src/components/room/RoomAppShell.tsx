@@ -5,6 +5,7 @@ import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
+import { RoomsHomePage } from "@/components/RoomsHomePage";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { getNextPlaybackMode } from "@/components/bottom-player/playback-mode";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";
@@ -28,6 +29,10 @@ type RoomAppShellProps = {
   playbackActions: ReturnType<typeof useRoomPlaybackActions>;
   roomActions: ReturnType<typeof useRoomPageRoomActions>;
   roomSnapshot: RoomSnapshot | null;
+  isRoomAway: boolean;
+  awayRoomId: string | null;
+  onResumeRoom: () => void;
+  onAwayRoom: () => void;
   socket: RoomSocket | null;
   statusMessage: string;
   uploads: ReturnType<typeof useTrackUploads>;
@@ -49,6 +54,10 @@ export function RoomAppShell({
   playbackActions,
   roomActions,
   roomSnapshot,
+  isRoomAway,
+  awayRoomId,
+  onResumeRoom,
+  onAwayRoom,
   socket,
   statusMessage,
   uploads,
@@ -61,76 +70,78 @@ export function RoomAppShell({
         visible={pageState.audioBlockedOverlay}
         onUnlock={playbackActions.handleAudioUnlock}
       />
-      <RoomWorkspace
-        activeSession={activeSession}
-        statusMessage={statusMessage}
-        statusTone={workspaceViewModel.statusTone}
+      {isRoomAway ? (
+        <RoomsHomePage awayRoomId={awayRoomId} onResumeAwayRoom={onResumeRoom} />
+      ) : (
+        <RoomWorkspace
+          activeSession={activeSession}
+          statusMessage={statusMessage}
+          statusTone={workspaceViewModel.statusTone}
+          roomSnapshot={roomSnapshot}
+          currentTrack={currentTrack}
+          canControlPlayback={canControlPlayback}
+          canDeleteRoom={canDeleteRoom}
+          canDisbandRoom={workspaceViewModel.canDisbandRoom}
+          uploadedTracks={uploads.uploadedTracks}
+          localStorageSummary={uploads.localStorageSummary}
+          onCleanLocalStorage={uploads.cleanLocalStorage}
+          onChooseLocalFolder={uploads.chooseLocalFolder}
+          onImportCachedTrack={uploads.importCachedTrack}
+          onSaveTrackToLocal={uploads.saveTrackToLocal}
+          connectedPeersCount={workspaceViewModel.connectedPeersCount}
+          mediaConnectionState={pageState.mediaConnectionState}
+          mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
+          localMemberState={workspaceViewModel.localMemberState}
+          peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
+          peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}
+          iceConfigSource={workspaceViewModel.iceConfigSource}
+          iceConfigStatus={workspaceViewModel.iceConfigStatus}
+          workspaceEntryHref={workspaceEntryHref}
+          authEntryHref={authEntryHref}
+          showRoomTransitionState={workspaceViewModel.showRoomTransitionState}
+          isNavigatingRoomExit={pageState.isNavigatingRoomExit}
+          isRecoveringRoom={pageState.isRecoveringRoom}
+          isRoomTransitionPending={workspaceViewModel.isRoomTransitionPending}
+          onLogout={roomActions.handleLogout}
+          onClearIdentity={roomActions.handleClearIdentity}
+          onCopyJoinCode={clipboardActions.handleCopyJoinCode}
+          onAwayRoom={onAwayRoom}
+          onLeaveRoom={roomActions.handleLeaveRoomAction}
+          onDeleteRoom={roomActions.handleDeleteRoomAction}
+          onFilesSelected={playbackActions.handleFilesSelected}
+          onAddToQueue={roomActions.addToQueue}
+          onDeleteTrack={roomActions.deleteTrack}
+          onPlayTrack={playbackActions.handlePlayTrack}
+          onTabChange={pageState.setActiveDashboardTab}
+          onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
+          socket={socket}
+          playerSlot={null}
+        />
+      )}
+      <BottomPlayerController
+        audioRef={audioRef}
+        isSourceOwner={isSourceOwner}
         roomSnapshot={roomSnapshot}
+        activeSession={activeSession}
         currentTrack={currentTrack}
-        canControlPlayback={canControlPlayback}
-        canDeleteRoom={canDeleteRoom}
-        canDisbandRoom={workspaceViewModel.canDisbandRoom}
-        uploadedTracks={uploads.uploadedTracks}
-        localStorageSummary={uploads.localStorageSummary}
-        onCleanLocalStorage={uploads.cleanLocalStorage}
-        onChooseLocalFolder={uploads.chooseLocalFolder}
-        onImportCachedTrack={uploads.importCachedTrack}
-        onSaveTrackToLocal={uploads.saveTrackToLocal}
-        connectedPeersCount={workspaceViewModel.connectedPeersCount}
-        mediaConnectionState={pageState.mediaConnectionState}
-        mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
-        localMemberState={workspaceViewModel.localMemberState}
-        peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
-        peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}
-        iceConfigSource={workspaceViewModel.iceConfigSource}
-        iceConfigStatus={workspaceViewModel.iceConfigStatus}
-        workspaceEntryHref={workspaceEntryHref}
-        authEntryHref={authEntryHref}
-        showRoomTransitionState={workspaceViewModel.showRoomTransitionState}
-        isNavigatingRoomExit={pageState.isNavigatingRoomExit}
-        isRecoveringRoom={pageState.isRecoveringRoom}
-        isRoomTransitionPending={workspaceViewModel.isRoomTransitionPending}
-        onLogout={roomActions.handleLogout}
-        onClearIdentity={roomActions.handleClearIdentity}
-        onCopyJoinCode={clipboardActions.handleCopyJoinCode}
-        onLeaveRoom={roomActions.handleLeaveRoomAction}
-        onDeleteRoom={roomActions.handleDeleteRoomAction}
-        onFilesSelected={playbackActions.handleFilesSelected}
-        onImportNeteaseTrack={uploads.handleNeteaseTrackImport}
-        onImportQqMusicTrack={uploads.handleQqMusicTrackImport}
-        onAddToQueue={roomActions.addToQueue}
-        onDeleteTrack={roomActions.deleteTrack}
-        onPlayTrack={playbackActions.handlePlayTrack}
-        onTabChange={pageState.setActiveDashboardTab}
-        onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
-        socket={socket}
-        playerSlot={
-          <BottomPlayerController
-            audioRef={audioRef}
-            isSourceOwner={isSourceOwner}
-            roomSnapshot={roomSnapshot}
-            activeSession={activeSession}
-            currentTrack={currentTrack}
-            canSeekPlayback={true}
-            resetEpoch={pageState.playerResetEpoch}
-            onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
-            onVolumeChange={pageState.setVolume}
-            onPlay={playbackActions.handlePlayTrack}
-            onPause={roomActions.pauseTrack}
-            onSeek={roomActions.seekTrack}
-            onPrev={playbackActions.handlePrevTrack}
-            onNext={playbackActions.handleNextTrack}
-            onCyclePlaybackMode={() =>
-              roomActions.setPlaybackMode(
-                getNextPlaybackMode(roomSnapshot?.room.playback.playbackMode ?? "sequence")
-              )
-            }
-            canReorderQueue={canReorderQueue}
-            onPlayQueueItem={playbackActions.handlePlayQueueItem}
-            onRemoveQueueItem={roomActions.removeQueueItem}
-            onReorderQueue={roomActions.reorderQueue}
-          />
+        canSeekPlayback={true}
+        resetEpoch={pageState.playerResetEpoch}
+        onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
+        onVolumeChange={pageState.setVolume}
+        onPlay={playbackActions.handlePlayTrack}
+        onPause={roomActions.pauseTrack}
+        onSeek={roomActions.seekTrack}
+        onPrev={playbackActions.handlePrevTrack}
+        onNext={playbackActions.handleNextTrack}
+        onCyclePlaybackMode={() =>
+          roomActions.setPlaybackMode(
+            getNextPlaybackMode(roomSnapshot?.room.playback.playbackMode ?? "sequence")
+          )
         }
+        canReorderQueue={canReorderQueue}
+        onPlayQueueItem={playbackActions.handlePlayQueueItem}
+        onRemoveQueueItem={roomActions.removeQueueItem}
+        onReorderQueue={roomActions.reorderQueue}
       />
     </>
   );
