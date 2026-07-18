@@ -5,7 +5,7 @@ import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { buildAppEntryHref } from "@/lib/client-shell";
 
-const githubRepositoryUrl = "https://github.com/witw123/music_room";
+const githubRepositoryUrl = "https://example.test/music-room";
 
 const projectStats = [
   { label: "Latency", value: "< 50ms Sync" },

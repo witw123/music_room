@@ -12,6 +12,20 @@ describe("redis.config", () => {
     ]);
   });
 
+  it("passes single-instance authentication separately from the Redis URL", () => {
+    expect(buildRedisClientArgs({
+      REDIS_URL: "redis://redis:6379",
+      REDIS_USERNAME: "default",
+      REDIS_PASSWORD: "redis-password"
+    })).toEqual([
+      "redis://redis:6379",
+      expect.objectContaining({
+        username: "default",
+        password: "redis-password"
+      })
+    ]);
+  });
+
   it("uses sentinel mode when REDIS_MODE=sentinel", () => {
     const args = buildRedisClientArgs({
       REDIS_MODE: "sentinel",

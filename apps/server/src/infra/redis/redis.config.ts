@@ -9,7 +9,9 @@ export function buildRedisClientArgs(
 ): RedisClientArgs {
   const sharedOptions: RedisOptions = {
     lazyConnect: true,
-    maxRetriesPerRequest: 1
+    maxRetriesPerRequest: 1,
+    username: env.REDIS_USERNAME?.trim() || undefined,
+    password: env.REDIS_PASSWORD?.trim() || undefined
   };
 
   const mode = getRedisConnectionMode(env);
@@ -30,8 +32,6 @@ export function buildRedisClientArgs(
         name: masterName,
         sentinels,
         db,
-        username: env.REDIS_USERNAME?.trim() || undefined,
-        password: env.REDIS_PASSWORD?.trim() || undefined,
         sentinelUsername: env.REDIS_SENTINEL_USERNAME?.trim() || undefined,
         sentinelPassword: env.REDIS_SENTINEL_PASSWORD?.trim() || undefined
       }

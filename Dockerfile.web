@@ -55,7 +55,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+RUN addgroup -S app && adduser -S -G app app
+COPY --from=builder --chown=app:app /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=app:app /app/apps/web/.next/static ./apps/web/.next/static
+USER app
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

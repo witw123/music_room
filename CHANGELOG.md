@@ -8,14 +8,14 @@
 
 ### 调整
 
-- 桌面端默认公网入口调整为 `https://musicroom.witw.top`
+- 桌面端默认公网入口调整为 `https://music-room.example.test`
 - 统一工作区、桌面端 Tauri 配置和 Android 包内版本号到 `0.2.7`
 
 ## [0.2.6] - 2026-04-03
 
 ### 修复
 
-- 修复 GitHub Actions 客户端发布流程未注入 `MUSIC_ROOM_PUBLIC_ORIGIN`，导致桌面端和移动端壳可能被打包到 `example.com`
+- 修复 GitHub Actions 客户端发布流程未注入 `MUSIC_ROOM_PUBLIC_ORIGIN`，导致桌面端和移动端壳可能被打包到示例域名
 - 为桌面端与移动端打包新增公网入口校验，缺少真实公网地址时直接构建失败，避免再次发布无效客户端
 
 ### 调整

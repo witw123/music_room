@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { QqMusicSearchResponse, QqMusicTrackCandidate } from "@music-room/shared";
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
+import { fetchProviderUrl } from "../provider-fetch";
 import { QqMusicAccountService } from "./qqmusic-account.service";
 import { QqMusicApiClient, QqMusicApiError } from "./qqmusic-api.client";
 import { qqMusicQualitySchema, type QqMusicQuality, type QqMusicSearchQuery } from "./qqmusic.schemas";
@@ -47,8 +48,10 @@ export class QqMusicService {
     this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6); const cookie = await this.getCookie(userId); const selected = qqMusicQualitySchema.safeParse(quality).success ? quality as QqMusicQuality : this.defaultQuality();
     const result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: selected, cookie }));
     if (!result.url) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music audio is unavailable."), HttpStatus.NOT_FOUND);
-    const url = new URL(result.url); if (!/^https?:$/.test(url.protocol) || !isAllowedHost(url.hostname)) throw this.unavailableError();
-    const headers = new Headers(); if (range) headers.set("range", range); const upstream = await fetchWithHeadersTimeout(url.toString(), { headers }, this.requestTimeoutMs()).catch(() => null);
+    let url: URL;
+    try { url = new URL(result.url); } catch { throw this.unavailableError(); }
+    if (!isAllowedHost(url.hostname)) throw this.unavailableError();
+    const headers = new Headers(); if (range) headers.set("range", range); const upstream = await fetchProviderUrl(url, { headers }, this.requestTimeoutMs(), isAllowedHost).catch(() => null);
     if (!upstream?.ok || !upstream.body) throw this.unavailableError(); const mimeType = resolveMime(upstream.headers.get("content-type"), url.toString());
     if (!mimeType) { await upstream.body.cancel().catch(() => undefined); throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAudioUnsupported, "QQ Music returned an unsupported audio format."), HttpStatus.UNSUPPORTED_MEDIA_TYPE); }
     const contentLength = Number(upstream.headers.get("content-length") ?? "0"); if (contentLength > this.maxImportBytes()) { await upstream.body.cancel().catch(() => undefined); throw new HttpException(createApiErrorResponse(errorCodes.qqMusicImportTooLarge, "QQ Music audio is too large."), HttpStatus.PAYLOAD_TOO_LARGE); }
@@ -74,4 +77,3 @@ function readString(value: unknown) { return typeof value === "number" && Number
 function readDuration(value: unknown) { const n = Number(value); return Number.isFinite(n) && n > 0 ? (n < 10_000 ? Math.round(n * 1_000) : Math.round(n)) : 0; }
 function resolveMime(contentType: string | null, url: string) { const type = `${contentType ?? ""} ${url}`.toLowerCase(); return type.includes("flac") ? "audio/flac" : type.includes("mp3") || type.includes("mpeg") ? "audio/mpeg" : null; }
 function isAllowedHost(host: string) { const h = host.toLowerCase(); return h === "qq.com" || h.endsWith(".qq.com") || h === "gtimg.cn" || h.endsWith(".gtimg.cn"); }
-async function fetchWithHeadersTimeout(url: string, init: RequestInit, timeoutMs: number) { const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs); try { return await fetch(url, { ...init, signal: controller.signal }); } finally { clearTimeout(timer); } }

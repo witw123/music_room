@@ -15,6 +15,18 @@
     "deploy:linux": "sh scripts/deploy-linux.sh",
     "migrate:p2p-v4": "pnpm --filter @music-room/server migrate:p2p-v4"
   },
+  "pnpm": {
+    "overrides": {
+      "defu": "6.1.7",
+      "effect": "3.22.0",
+      "lodash": "4.18.1",
+      "multer": "2.2.0",
+      "path-to-regexp": "8.4.2",
+      "postcss": "8.5.19",
+      "qs": "6.15.3",
+      "ws": "8.21.1"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@next/eslint-plugin-next": "^15.2.2",

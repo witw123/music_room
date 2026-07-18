@@ -13,6 +13,7 @@ import {
   errorCodes
 } from "@music-room/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
+import { fetchProviderUrl } from "../provider-fetch";
 import { NeteaseAccountService } from "./netease-account.service";
 import { NeteaseApiClient, NeteaseApiError } from "./netease-api.client";
 import {
@@ -211,8 +212,13 @@ export class NeteaseService {
       );
     }
 
-    const url = new URL(audio.url);
-    if (!/^https?:$/.test(url.protocol) || !isAllowedAudioHost(url.hostname)) {
+    let url: URL;
+    try {
+      url = new URL(audio.url);
+    } catch {
+      throw this.unavailableError();
+    }
+    if (!isAllowedAudioHost(url.hostname)) {
       throw new HttpException(
         createApiErrorResponse(errorCodes.neteaseUnavailable, "NetEase returned an unsupported audio URL."),
         HttpStatus.BAD_GATEWAY
@@ -223,10 +229,11 @@ export class NeteaseService {
     if (range) {
       headers.set("range", range);
     }
-    const upstream = await fetchWithHeadersTimeout(
-      url.toString(),
+    const upstream = await fetchProviderUrl(
+      url,
       { headers },
-      this.requestTimeoutMs()
+      this.requestTimeoutMs(),
+      isAllowedAudioHost
     ).catch(() => {
       throw this.unavailableError();
     });
@@ -504,23 +511,4 @@ function isNeteaseUnavailableError(error: unknown) {
     response !== null &&
     "code" in response &&
     response.code === errorCodes.neteaseUnavailable;
-}
-
-/**
- * The provider timeout covers response headers only. Once headers arrive, the
- * body is a live stream that must remain readable while the browser applies
- * its own low-priority scheduling.
- */
-async function fetchWithHeadersTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number
-) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
 }

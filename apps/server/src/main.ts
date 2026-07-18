@@ -12,6 +12,7 @@ async function bootstrap() {
   validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   const trustProxy = resolveTrustProxy();
+  const corsOrigins = getCorsOrigins();
   if (trustProxy !== false) {
     const expressApp = app.getHttpAdapter().getInstance() as {
       set?: (setting: string, value: unknown) => void;
@@ -27,9 +28,26 @@ async function bootstrap() {
     }
     next();
   });
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    const isMutation = !["GET", "HEAD", "OPTIONS"].includes(request.method);
+    const hasUserCookie = !!readUserSessionCookie(request.headers.cookie);
+    if (
+      process.env.NODE_ENV === "production" &&
+      isMutation &&
+      hasUserCookie &&
+      (!request.headers.origin || !corsOrigins.includes(request.headers.origin))
+    ) {
+      response.status(403).json({
+        code: "UNAUTHORIZED",
+        message: "Origin validation failed."
+      });
+      return;
+    }
+    next();
+  });
   app.useGlobalFilters(new ApiExceptionFilter());
   app.enableCors({
-    origin: getCorsOrigins(),
+    origin: corsOrigins,
     credentials: true
   });
   const port = Number(process.env.PORT ?? 3001);

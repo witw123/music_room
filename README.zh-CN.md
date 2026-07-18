@@ -2,8 +2,6 @@
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/witw123/music_room)](https://github.com/witw123/music_room/releases)
-[![License](https://img.shields.io/github/license/witw123/music_room)](./LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 

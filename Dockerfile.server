@@ -11,6 +11,13 @@ COPY packages/config-eslint/package.json packages/config-eslint/package.json
 COPY packages/config-typescript/package.json packages/config-typescript/package.json
 RUN pnpm install --filter @music-room/server... --frozen-lockfile=true
 
+FROM base AS prod-deps
+COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/server/prisma/schema.prisma apps/server/prisma/schema.prisma
+COPY packages/shared/package.json packages/shared/package.json
+RUN pnpm install --filter @music-room/server... --prod --frozen-lockfile=true
+
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
@@ -23,12 +30,16 @@ RUN pnpm --filter @music-room/server build
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/apps/server/dist ./apps/server/dist
-COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
-COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/package.json ./package.json
+RUN addgroup -S app && adduser -S -G app app
+COPY --from=builder --chown=app:app /app/apps/server/dist ./apps/server/dist
+COPY --from=builder --chown=app:app /app/apps/server/package.json ./apps/server/package.json
+COPY --from=builder --chown=app:app /app/apps/server/prisma ./apps/server/prisma
+COPY --from=prod-deps --chown=app:app /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=app:app /app/apps/server/node_modules ./apps/server/node_modules
+COPY --from=builder --chown=app:app /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=builder --chown=app:app /app/packages/shared/dist ./packages/shared/dist
+COPY --from=prod-deps --chown=app:app /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=builder --chown=app:app /app/package.json ./package.json
+USER app
 EXPOSE 3001
 CMD ["sh", "-c", "./apps/server/node_modules/.bin/prisma migrate deploy --schema apps/server/prisma/schema.prisma && node apps/server/dist/main.js"]

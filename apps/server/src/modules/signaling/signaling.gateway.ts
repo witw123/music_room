@@ -74,6 +74,11 @@ type SessionLease = {
   fenceToken?: string;
 };
 
+type RealtimeRateLimitBucket = {
+  windowStartedAt: number;
+  count: number;
+};
+
 function hasForeignRedisEnvelope(
   message: { sourceId?: unknown; roomId?: unknown },
   localInstanceId: string
@@ -93,7 +98,9 @@ function hasForeignRedisEnvelope(
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly disconnectGracePeriodMs = 25_000;
   private readonly pendingPeerSignalTtlMs = 10_000;
-  private readonly pendingPeerSignalLimit = 64;
+  private readonly pendingPeerSignalLimit = 32;
+  private readonly pendingPeerSignalTargetLimit = 128;
+  private readonly realtimeRateLimits = new Map<string, Map<string, RealtimeRateLimitBucket>>();
   private readonly redisUnsubscribers: Array<() => Promise<void> | void> = [];
   private sequence = 0;
   private recoveryGenerationSequence = 0;
@@ -389,6 +396,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   @SubscribeMessage("peer.signal")
   async handleSignal(@ConnectedSocket() client: Socket, @MessageBody() payload: PeerSignalMessage) {
+    this.assertRealtimeRateLimit(client, "peer.signal", 300);
     const parsed = peerSignalMessageSchema.safeParse(payload);
     if (!parsed.success) {
       throw createWsApiException(
@@ -423,6 +431,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   @SubscribeMessage("diagnostics.report")
   async handleDiagnosticsReport(@ConnectedSocket() client: Socket, @MessageBody() payload: unknown) {
+    this.assertRealtimeRateLimit(client, "diagnostics.report", 30);
     const parsed = diagnosticsReportPayloadSchema.safeParse(payload);
     if (!parsed.success) {
       throw createWsApiException("Invalid diagnostics report.", errorCodes.validationFailed, parsed.error.flatten());
@@ -452,6 +461,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: RoomChatInputPayload
   ) {
+    this.assertRealtimeRateLimit(client, "room.chat", 30);
     const parsed = roomChatInputPayloadSchema.safeParse(payload);
     if (!parsed.success) {
       throw createWsApiException(
@@ -486,6 +496,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: RoomSubscribePayload
   ) {
+    this.assertRealtimeRateLimit(client, "room.subscribe", 12);
     const parsed = roomSubscribePayloadSchema.safeParse(payload);
     if (!parsed.success) {
       throw createWsApiException(
@@ -703,6 +714,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.clearPendingPeerSignals(message.roomId, peerId);
     }
     this.clearRecoveryGeneration(message.roomId, sessionId, peerId);
+    this.realtimeRateLimits.delete(client.id);
     client.data.roomId = undefined;
     client.data.sessionId = undefined;
     client.data.peerId = undefined;
@@ -712,6 +724,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   handleDisconnect(client: Socket) {
+    this.realtimeRateLimits.delete(client.id);
     const roomId = client.data.roomId as string | undefined;
     const sessionId = client.data.sessionId as string | undefined;
     const peerId = client.data.peerId as string | undefined;
@@ -887,6 +900,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private queuePeerSignal(roomId: string, peerId: string, payload: PeerSignalMessage) {
     const key = this.roomPeerKey(roomId, peerId);
     const now = Date.now();
+    if (!this.pendingPeerSignalsByRoomPeer.has(key) && this.pendingPeerSignalsByRoomPeer.size >= this.pendingPeerSignalTargetLimit) {
+      const oldestKey = this.pendingPeerSignalsByRoomPeer.keys().next().value;
+      if (typeof oldestKey === "string") {
+        this.pendingPeerSignalsByRoomPeer.delete(oldestKey);
+      }
+    }
     const queued = (this.pendingPeerSignalsByRoomPeer.get(key) ?? []).filter(
       (entry) => entry.expiresAtMs > now
     );
@@ -898,6 +917,21 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       queued.splice(0, queued.length - this.pendingPeerSignalLimit);
     }
     this.pendingPeerSignalsByRoomPeer.set(key, queued);
+  }
+
+  private assertRealtimeRateLimit(client: Socket, action: string, limit: number) {
+    const now = Date.now();
+    const limits = this.realtimeRateLimits.get(client.id) ?? new Map<string, RealtimeRateLimitBucket>();
+    const current = limits.get(action);
+    const bucket = !current || now - current.windowStartedAt >= 60_000
+      ? { windowStartedAt: now, count: 0 }
+      : current;
+    if (bucket.count >= limit) {
+      throw createWsApiException("Realtime message rate limit exceeded.", errorCodes.rateLimited);
+    }
+    bucket.count += 1;
+    limits.set(action, bucket);
+    this.realtimeRateLimits.set(client.id, limits);
   }
 
   private flushPendingPeerSignals(roomId: string, peerId: string) {

@@ -396,7 +396,7 @@ async function assertFileFitsDecodeMemoryBudget(
 ) {
   onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
   try {
-    const { parseBlob } = await import("music-metadata-browser");
+    const { parseBlob } = await import("music-metadata");
     const metadata = await parseBlob(file, { duration: true, skipCovers: true });
     const durationSeconds = metadata.format.duration;
     const channels = metadata.format.numberOfChannels;

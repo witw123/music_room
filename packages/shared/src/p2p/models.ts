@@ -21,9 +21,9 @@ export const roomMediaConnectionStateSchema = z.enum([
 export const peerSignalMessageSchema = z.object({
   protocolVersion: z.literal(p2pProtocolVersion),
   capability: z.literal(segmentedOpusCapability),
-  roomId: z.string(),
-  fromPeerId: z.string(),
-  toPeerId: z.string(),
+  roomId: z.string().trim().min(1).max(160),
+  fromPeerId: z.string().trim().min(1).max(160),
+  toPeerId: z.string().trim().min(1).max(160),
   // `channelKind` describes the signaling transport. `linkKind` selects the
   // independent WebRTC connection that should receive the SDP/ICE payload.
   // Missing values are interpreted as data by the transport for a short
@@ -42,7 +42,7 @@ export const peerSignalMessageSchema = z.object({
       keys.some((key) => !allowed.has(key)) ||
       message.payload.type !== message.type ||
       typeof message.payload.sdp !== "string" ||
-      message.payload.sdp.length > 1024 * 1024
+      message.payload.sdp.length > 256 * 1024
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

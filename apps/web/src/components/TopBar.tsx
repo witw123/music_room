@@ -39,7 +39,7 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
                 <a className="transition-colors hover:text-white" href="#architecture">技术架构</a>
               </nav>
               <a
-                href="https://github.com/witw123/music_room"
+                href="https://example.test/music-room"
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm font-medium text-white/[0.72] transition-colors hover:bg-white/[0.08] hover:text-white"
