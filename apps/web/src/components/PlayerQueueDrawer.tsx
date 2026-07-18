@@ -15,6 +15,7 @@ type PlayerQueueDrawerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  mode?: "queue" | "order";
 };
 
 export function PlayerQueueDrawer({
@@ -26,7 +27,8 @@ export function PlayerQueueDrawer({
   canReorderQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
-  onReorderQueue
+  onReorderQueue,
+  mode = "queue"
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
@@ -72,9 +74,13 @@ export function PlayerQueueDrawer({
         className={`relative ${isOpen ? 'bg-accent/20 text-accent' : 'text-foreground-muted hover:text-foreground'}`}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
-        title="播放队列"
+        title={mode === "order" ? "调整播放顺序" : "播放队列"}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        {mode === "order" ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h11" /><path d="m12 4 3 3-3 3" /><path d="M20 17H9" /><path d="m12 14-3 3 3 3" /></svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        )}
         {queue.length > 0 && (
           <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center">
             {queue.length}
@@ -86,8 +92,8 @@ export function PlayerQueueDrawer({
         <aside className="absolute bottom-full right-0 mb-4 w-[360px] max-h-[60vh] flex flex-col glass-panel rounded-2xl border border-surface-border shadow-2xl z-50 overflow-hidden animate-slide-up origin-bottom-right">
           <div className="flex items-center justify-between p-4 border-b border-surface-border bg-surface/50">
             <div>
-               <p className="text-[10px] font-bold text-foreground-muted tracking-[0.2em] uppercase mb-0.5">Queue</p>
-               <h3 className="text-base font-semibold text-foreground">当前播放队列</h3>
+               <p className="text-[10px] font-bold text-foreground-muted tracking-[0.2em] uppercase mb-0.5">{mode === "order" ? "ORDER" : "QUEUE"}</p>
+               <h3 className="text-base font-semibold text-foreground">{mode === "order" ? "调整播放顺序" : "当前播放队列"}</h3>
             </div>
             <Button variant="ghost" size="sm" onClick={toggleDrawer} className="h-8 text-xs">
               关闭

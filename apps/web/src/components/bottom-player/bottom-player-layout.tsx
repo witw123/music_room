@@ -3,6 +3,8 @@
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import type { QueueItem, TrackMeta } from "@music-room/shared";
+import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 
 type LayoutProps = {
   isPlaying: boolean;
@@ -20,6 +22,15 @@ type LayoutProps = {
   onPrev: () => void;
   onNext: () => void;
   onTogglePlay: () => void;
+  queue: QueueItem[];
+  tracks: TrackMeta[];
+  currentQueueItemId: string | null;
+  activeSessionId?: string;
+  canReorderQueue: boolean;
+  onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  onOpenImmersive: () => void;
 };
 
 export function VinylBadge({
@@ -73,12 +84,23 @@ export function MobileBottomPlayerLayout({
   applyVolume,
   onPrev,
   onNext,
-  onTogglePlay
+  onTogglePlay,
+  queue,
+  tracks,
+  currentQueueItemId,
+  activeSessionId,
+  canReorderQueue,
+  onPlayQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue,
+  onOpenImmersive
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
       <div className="grid min-h-[5.5rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
-        <VinylBadge isPlaying={isPlaying} compact />
+        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onOpenImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
+          <VinylBadge isPlaying={isPlaying} compact />
+        </button>
 
         <div className="min-w-0">
           <div className="mb-1 flex min-h-[1.1rem] items-center">
@@ -113,7 +135,20 @@ export function MobileBottomPlayerLayout({
         </div>
 
         <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div />
+          <div className="flex justify-start">
+            <PlayerQueueDrawer
+              queue={queue}
+              tracks={tracks}
+              currentQueueItemId={currentQueueItemId}
+              activeSessionId={activeSessionId}
+              canControlPlayback={canControlPlayback}
+              canReorderQueue={canReorderQueue}
+              onPlayQueueItem={onPlayQueueItem}
+              onRemoveQueueItem={onRemoveQueueItem}
+              onReorderQueue={onReorderQueue}
+              mode="order"
+            />
+          </div>
 
           <div className="flex items-center justify-center gap-1">
             <Button
@@ -169,6 +204,17 @@ export function MobileBottomPlayerLayout({
           </div>
 
           <div className="flex min-w-[104px] items-center justify-end gap-2">
+            <PlayerQueueDrawer
+              queue={queue}
+              tracks={tracks}
+              currentQueueItemId={currentQueueItemId}
+              activeSessionId={activeSessionId}
+              canControlPlayback={canControlPlayback}
+              canReorderQueue={canReorderQueue}
+              onPlayQueueItem={onPlayQueueItem}
+              onRemoveQueueItem={onRemoveQueueItem}
+              onReorderQueue={onReorderQueue}
+            />
             <span className="text-foreground-muted">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
@@ -207,12 +253,23 @@ export function DesktopBottomPlayerLayout({
   applyVolume,
   onPrev,
   onNext,
-  onTogglePlay
+  onTogglePlay,
+  queue,
+  tracks,
+  currentQueueItemId,
+  activeSessionId,
+  canReorderQueue,
+  onPlayQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue,
+  onOpenImmersive
 }: LayoutProps) {
   return (
     <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
       <div className="flex min-w-0 items-center gap-3">
-        <VinylBadge isPlaying={isPlaying} />
+        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onOpenImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
+          <VinylBadge isPlaying={isPlaying} />
+        </button>
 
         <div className="min-w-0 flex-1">
           <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.22em] text-accent">
@@ -226,6 +283,18 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="flex items-center justify-center gap-3">
+        <PlayerQueueDrawer
+          queue={queue}
+          tracks={tracks}
+          currentQueueItemId={currentQueueItemId}
+          activeSessionId={activeSessionId}
+          canControlPlayback={canControlPlayback}
+          canReorderQueue={canReorderQueue}
+          onPlayQueueItem={onPlayQueueItem}
+          onRemoveQueueItem={onRemoveQueueItem}
+          onReorderQueue={onReorderQueue}
+          mode="order"
+        />
         <Button
           data-testid="player-prev-button"
           variant="ghost"
@@ -298,6 +367,17 @@ export function DesktopBottomPlayerLayout({
         </div>
 
         <div className="flex min-w-[146px] items-center justify-center gap-3">
+          <PlayerQueueDrawer
+            queue={queue}
+            tracks={tracks}
+            currentQueueItemId={currentQueueItemId}
+            activeSessionId={activeSessionId}
+            canControlPlayback={canControlPlayback}
+            canReorderQueue={canReorderQueue}
+            onPlayQueueItem={onPlayQueueItem}
+            onRemoveQueueItem={onRemoveQueueItem}
+            onReorderQueue={onReorderQueue}
+          />
           <span className="text-foreground-muted">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />

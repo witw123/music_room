@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
-import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   DesktopBottomPlayerLayout,
@@ -16,6 +16,7 @@ import {
   shouldResolvePendingSeek,
   type PendingSeek
 } from "@/components/bottom-player/seek-state";
+import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -39,6 +40,14 @@ type BottomPlayerProps = {
   onSeek: (positionMs: number) => Promise<PlaybackSnapshot | null>;
   onPrev: () => void;
   onNext: () => void;
+  queue: QueueItem[];
+  tracks: TrackMeta[];
+  currentQueueItemId: string | null;
+  activeSessionId?: string;
+  canReorderQueue: boolean;
+  onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -65,7 +74,15 @@ function BottomPlayerBase({
   onPause,
   onSeek,
   onPrev,
-  onNext
+  onNext,
+  queue,
+  tracks,
+  currentQueueItemId,
+  activeSessionId,
+  canReorderQueue,
+  onPlayQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
@@ -79,6 +96,7 @@ function BottomPlayerBase({
   const seekCommitTargetRef = useRef<number | null>(null);
   const seekRequestIdRef = useRef(0);
   const [pendingSeek, setPendingSeek] = useState<PendingSeek | null>(null);
+  const [isImmersiveOpen, setIsImmersiveOpen] = useState(false);
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
@@ -267,6 +285,7 @@ function BottomPlayerBase({
   }, [onNext]);
 
   return (
+    <>
     <footer className="fixed bottom-0 left-0 right-0 z-50 flex flex-col justify-center min-h-[6.5rem] border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:min-h-[4.5rem] lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3">
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5 z-10" aria-hidden="true">
         <div
@@ -292,6 +311,15 @@ function BottomPlayerBase({
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
+        queue={queue}
+        tracks={tracks}
+        currentQueueItemId={currentQueueItemId}
+        activeSessionId={activeSessionId}
+        canReorderQueue={canReorderQueue}
+        onPlayQueueItem={onPlayQueueItem}
+        onRemoveQueueItem={onRemoveQueueItem}
+        onReorderQueue={onReorderQueue}
+        onOpenImmersive={() => setIsImmersiveOpen(true)}
       />
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
@@ -309,6 +337,15 @@ function BottomPlayerBase({
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
+        queue={queue}
+        tracks={tracks}
+        currentQueueItemId={currentQueueItemId}
+        activeSessionId={activeSessionId}
+        canReorderQueue={canReorderQueue}
+        onPlayQueueItem={onPlayQueueItem}
+        onRemoveQueueItem={onRemoveQueueItem}
+        onReorderQueue={onReorderQueue}
+        onOpenImmersive={() => setIsImmersiveOpen(true)}
       />
       </div>
 
@@ -333,6 +370,21 @@ function BottomPlayerBase({
         </div>
       ) : null}
     </footer>
+    <ImmersivePlayerOverlay
+      isOpen={isImmersiveOpen}
+      isPlaying={isPlaying}
+      canControlPlayback={canControlPlayback}
+      currentTrack={currentTrack}
+      progressMs={boundedProgressMs}
+      durationMs={currentTrackDuration}
+      setSeekDraft={setSeekDraft}
+      commitSeek={commitSeek}
+      onClose={() => setIsImmersiveOpen(false)}
+      onPrev={playPrev}
+      onNext={playNext}
+      onTogglePlay={togglePlayback}
+    />
+    </>
   );
 }
 

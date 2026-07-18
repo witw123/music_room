@@ -21,7 +21,7 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
 import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
 
-type TabId = "queue" | "library" | "netease" | "members";
+type TabId = "library" | "local" | "netease" | "members";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -67,8 +67,8 @@ type RoomDashboardViewProps = {
 };
 
 const tabLabels: Record<TabId, string> = {
-  queue: "队列",
   library: "曲库",
+  local: "本地存储",
   netease: "第三方",
   members: "成员"
 };
@@ -76,8 +76,8 @@ const tabLabels: Record<TabId, string> = {
 const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" || [
   process.env.NEXT_PUBLIC_QQMUSIC_ENABLED
 ].some((value) => value === "true")
-  ? ["queue", "library", "netease", "members"]
-  : ["queue", "library", "members"];
+  ? ["library", "local", "netease", "members"]
+  : ["library", "local", "members"];
 
 const LibraryTabPanel = dynamic(
   () => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel),
@@ -85,6 +85,17 @@ const LibraryTabPanel = dynamic(
     loading: () => (
       <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
         正在加载曲库…
+      </div>
+    )
+  }
+);
+
+const LocalStorageTabPanel = dynamic(
+  () => import("./LocalStorageTabPanel").then((mod) => mod.LocalStorageTabPanel),
+  {
+    loading: () => (
+      <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
+        正在加载本地存储…
       </div>
     )
   }
@@ -154,7 +165,7 @@ function RoomDashboardViewBase({
   onTabChange,
   onDiagnosticsVisibilityChange
 }: RoomDashboardViewProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("queue");
+  const [activeTab, setActiveTab] = useState<TabId>("library");
   const currentSourcePeerId = resolveCurrentSourcePeerId(
     roomSnapshot,
     roomSnapshot.room.playback
@@ -211,8 +222,7 @@ function RoomDashboardViewBase({
           />
         </div>
 
-        {activeTab !== "queue" ? (
-          <div className="hidden lg:flex lg:flex-[1] lg:min-h-[120px] flex-col border-t border-white/[0.06] overflow-hidden">
+        <div className="hidden lg:flex lg:flex-[1] lg:min-h-[120px] flex-col border-t border-white/[0.06] overflow-hidden">
             <div className="shrink-0 flex items-center justify-between px-6 py-3 xl:px-8">
               <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">播放队列</h3>
               <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-white/30">{roomSnapshot.queue.length} 首</span>
@@ -231,8 +241,7 @@ function RoomDashboardViewBase({
                 onAddToQueue={onAddToQueue}
               />
             </div>
-          </div>
-        ) : null}
+        </div>
 
       </div>
 
@@ -299,31 +308,11 @@ function RoomDashboardViewBase({
           id={`room-panel-${activeTab}`}
           role="tabpanel"
         >
-          {activeTab === "queue" ? (
-            <div className="animate-fade-in flex w-full flex-col gap-8">
-              <QueuePanel
-                queue={roomSnapshot.queue}
-                tracks={roomSnapshot.tracks}
-                currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
-                activeSession={activeSession}
-                canControlPlayback={canControlPlayback}
-                canReorderQueue={canReorderQueue}
-                onPlayQueueItem={onPlayQueueItem}
-                onRemoveQueueItem={onRemoveQueueItem}
-                onReorderQueue={onReorderQueue}
-                onAddToQueue={onAddToQueue}
-              />
-            </div>
-          ) : null}
-
           {activeTab === "library" ? (
             <LibraryTabPanel
               tracks={roomSnapshot.tracks}
               uploadedTracks={uploadedTracks}
-              localStorageSummary={localStorageSummary}
-              onCleanLocalStorage={onCleanLocalStorage}
-              onChooseLocalFolder={onChooseLocalFolder}
-              onImportCachedTrack={onImportCachedTrack}
+              localSavedFileHashes={localStorageSummary.localSavedFileHashes}
               onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}
               activeSession={activeSession}
@@ -331,6 +320,16 @@ function RoomDashboardViewBase({
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
+            />
+          ) : null}
+
+          {activeTab === "local" ? (
+            <LocalStorageTabPanel
+              tracks={roomSnapshot.tracks}
+              localStorageSummary={localStorageSummary}
+              onCleanLocalStorage={onCleanLocalStorage}
+              onChooseLocalFolder={onChooseLocalFolder}
+              onImportCachedTrack={onImportCachedTrack}
             />
           ) : null}
 

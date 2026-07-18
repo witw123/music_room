@@ -123,6 +123,10 @@ export function RoomAppShell({
             onSeek={roomActions.seekTrack}
             onPrev={playbackActions.handlePrevTrack}
             onNext={playbackActions.handleNextTrack}
+            canReorderQueue={canReorderQueue}
+            onPlayQueueItem={playbackActions.handlePlayQueueItem}
+            onRemoveQueueItem={roomActions.removeQueueItem}
+            onReorderQueue={roomActions.reorderQueue}
           />
         }
       />

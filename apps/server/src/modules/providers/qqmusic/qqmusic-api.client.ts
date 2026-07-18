@@ -11,7 +11,8 @@ export class QqMusicApiClient {
   async createQrCode() {
     return this.call(async () => {
       const response = await getQQLoginQr({}) as ApiResponse;
-      const item = response.body?.response;
+      const body = response.body;
+      const item = body?.response && typeof body.response === "object" ? body.response : body;
       if (!item?.img || !item?.qrsig || !item?.ptqrtoken) throw new QqMusicApiError("invalid-response");
       return { qrimg: String(item.img), qrsig: String(item.qrsig), ptqrtoken: String(item.ptqrtoken) };
     });

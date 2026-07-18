@@ -30,7 +30,7 @@ export type RoomRecoveryState = {
 };
 
 export type RoomPageState = {
-  activeDashboardTab: "queue" | "library" | "netease" | "members";
+  activeDashboardTab: "library" | "local" | "netease" | "members";
   playbackStartRequest: PlaybackStartRequest | null;
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;
@@ -70,7 +70,7 @@ export function createInitialRoomPageState(input: {
   audioUnlocked?: boolean;
 }): RoomPageState {
   return {
-    activeDashboardTab: "queue",
+    activeDashboardTab: "library",
     playbackStartRequest: null,
     roomRecoveryState: {
       phase: "joining",

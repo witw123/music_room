@@ -39,6 +39,8 @@ export function RoomsHomePage() {
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [recentRooms, setRecentRooms] = useState<RoomSnapshot[]>([]);
+  const [roomPage, setRoomPage] = useState(0);
+  const [recentPage, setRecentPage] = useState(0);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
   const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
@@ -228,6 +230,17 @@ export function RoomsHomePage() {
     () => [...availableRooms].sort((left, right) => getOnlineMemberCount(right.room.members) - getOnlineMemberCount(left.room.members)),
     [availableRooms]
   );
+  const roomsPerPage = 9;
+  const roomPageCount = Math.max(1, Math.ceil(visibleRooms.length / roomsPerPage));
+  const pagedRooms = visibleRooms.slice(roomPage * roomsPerPage, (roomPage + 1) * roomsPerPage);
+  const recentRoomsPerPage = 4;
+  const recentPageCount = Math.max(1, Math.ceil(recentRooms.length / recentRoomsPerPage));
+  const pagedRecentRooms = recentRooms.slice(recentPage * recentRoomsPerPage, (recentPage + 1) * recentRoomsPerPage);
+
+  useEffect(() => {
+    setRoomPage((current) => Math.min(current, roomPageCount - 1));
+    setRecentPage((current) => Math.min(current, recentPageCount - 1));
+  }, [recentPageCount, roomPageCount]);
 
   if (!hydrated || !activeSession) {
     return <div className="min-h-screen bg-background" />;
@@ -323,7 +336,7 @@ export function RoomsHomePage() {
       </section>
 
       <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-8 sm:px-6 lg:flex-row lg:gap-10 lg:px-8">
-        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[320px]">
+        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[420px] xl:w-[460px]">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
               Recent rooms
@@ -333,8 +346,8 @@ export function RoomsHomePage() {
 
           <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
             {recentRooms.length ? (
-              <div className="grid grid-cols-1 gap-4">
-                {recentRooms.map((item) => (
+              <div className="grid grid-cols-2 gap-3">
+                {pagedRecentRooms.map((item) => (
                   <RoomDirectoryCard
                     key={item.room.id}
                     room={item}
@@ -367,6 +380,33 @@ export function RoomsHomePage() {
                 </p>
               </div>
             )}
+            {recentRooms.length > recentRoomsPerPage ? (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
+                <span>第 {recentPage + 1} / {recentPageCount} 页</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    aria-label="最近房间上一页"
+                    disabled={recentPage === 0}
+                    onClick={() => setRecentPage((current) => Math.max(0, current - 1))}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    aria-label="最近房间下一页"
+                    disabled={recentPage >= recentPageCount - 1}
+                    onClick={() => setRecentPage((current) => Math.min(recentPageCount - 1, current + 1))}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -395,8 +435,8 @@ export function RoomsHomePage() {
 
           <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
             {visibleRooms.length ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {visibleRooms.map((item) => (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {pagedRooms.map((item) => (
                   <RoomDirectoryCard
                     key={item.room.id}
                     room={item}
@@ -428,6 +468,33 @@ export function RoomsHomePage() {
                 </p>
               </div>
             )}
+            {visibleRooms.length > roomsPerPage ? (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
+                <span>第 {roomPage + 1} / {roomPageCount} 页</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    aria-label="上一页"
+                    disabled={roomPage === 0}
+                    onClick={() => setRoomPage((current) => Math.max(0, current - 1))}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    aria-label="下一页"
+                    disabled={roomPage >= roomPageCount - 1}
+                    onClick={() => setRoomPage((current) => Math.min(roomPageCount - 1, current + 1))}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -555,7 +622,7 @@ function RoomDirectoryCard({
 
   return (
     <article
-      className="group flex cursor-pointer flex-col gap-3 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
+      className="group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-3xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -571,13 +638,8 @@ function RoomDirectoryCard({
           <span className="shrink-0 rounded-md border border-surface-border bg-background/60 px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.12em] text-foreground-muted">
             {room.room.joinCode}
           </span>
-          {room.room.hasPassword ? (
-            <span className="shrink-0 rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
-              有密码
-            </span>
-          ) : null}
         </div>
-        <span className="rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
+        <span className="shrink-0 rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
           {getOnlineMemberCount(room.room.members)} 人在线
         </span>
       </div>
@@ -587,6 +649,13 @@ function RoomDirectoryCard({
           {room.room.description?.trim() || `房主 ${host}`}
         </p>
       </div>
+      {room.room.hasPassword ? (
+        <div className="mt-auto flex justify-end pt-1">
+          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+            有密码
+          </span>
+        </div>
+      ) : null}
     </article>
   );
 }

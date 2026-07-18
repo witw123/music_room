@@ -7,7 +7,7 @@ import {
 describe("roomPageStateReducer", () => {
   it("initializes browser visibility and default playback controls", () => {
     expect(createInitialRoomPageState({ documentHidden: true })).toMatchObject({
-      activeDashboardTab: "queue",
+      activeDashboardTab: "library",
       audioUnlocked: false,
       bufferHealth: "healthy",
       connectedPeers: [],
