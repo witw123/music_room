@@ -2,8 +2,9 @@
 
 import { memo, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
+import { formatDuration } from "@/lib/music-room-ui";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import { TrackListSection } from "./TrackListSection";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { Button } from "@/components/ui/button";
 
@@ -20,6 +21,7 @@ type LibraryTabPanelProps = {
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
+  onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
 };
 
 function formatBytes(value: number | null) {
@@ -34,10 +36,12 @@ function LibraryTabPanelBase({
   localStorageSummary,
   onCleanLocalStorage,
   onChooseLocalFolder,
+  onImportCachedTrack,
   ...trackListProps
 }: LibraryTabPanelProps) {
   const [isCleaning, setIsCleaning] = useState(false);
   const [isChoosingFolder, setIsChoosingFolder] = useState(false);
+  const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
 
   const handleClean = async () => {
     if (isCleaning) return;
@@ -60,6 +64,16 @@ function LibraryTabPanelBase({
       // The room status surface reports the folder selection failure.
     } finally {
       setIsChoosingFolder(false);
+    }
+  };
+
+  const handleImportCachedTrack = async (track: CachedLibraryTrack) => {
+    if (pendingCachedImport) return;
+    setPendingCachedImport(track.fileHash);
+    try {
+      await onImportCachedTrack(track);
+    } finally {
+      setPendingCachedImport(null);
     }
   };
 
@@ -112,11 +126,91 @@ function LibraryTabPanelBase({
           </Button>
         </div>
       </div>
+      <CachedLibrarySection
+        cachedTracks={localStorageSummary.cachedLibraryTracks}
+        roomTracks={trackListProps.tracks}
+        localFolderName={localStorageSummary.localFolderName}
+        onImportCachedTrack={handleImportCachedTrack}
+        pendingCachedImport={pendingCachedImport}
+      />
       <TrackListSection
         {...trackListProps}
         localSavedFileHashes={localStorageSummary.localSavedFileHashes}
       />
     </div>
+  );
+}
+
+function CachedLibrarySection({
+  cachedTracks,
+  roomTracks,
+  localFolderName,
+  onImportCachedTrack,
+  pendingCachedImport
+}: {
+  cachedTracks: CachedLibraryTrack[];
+  roomTracks: TrackMeta[];
+  localFolderName: string | null;
+  onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
+  pendingCachedImport: string | null;
+}) {
+  const roomFileHashes = new Set(roomTracks.map((track) => track.fileHash));
+
+  return (
+    <section className="flex flex-col gap-3 border-b border-surface-border pb-5" data-testid="cached-library-section">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-foreground">本地缓存</p>
+          <p className="mt-1 text-[10px] text-foreground-muted">
+            {localFolderName
+              ? `已从 ${localFolderName}/cache 加载 ${cachedTracks.length} 首歌曲`
+              : "选择本地根文件夹后，这里会显示可导入的缓存歌曲"}
+          </p>
+        </div>
+        <span className="font-mono text-[10px] text-foreground-muted">
+          {cachedTracks.length} 首
+        </span>
+      </div>
+
+      {cachedTracks.length > 0 ? (
+        <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
+          {cachedTracks.map((track) => {
+            const isInRoom = roomFileHashes.has(track.fileHash);
+            const isPending = pendingCachedImport === track.fileHash;
+            return (
+              <article key={track.fileHash} className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
+                  <p className="mt-1 truncate text-[10px] text-foreground-muted">
+                    {track.artist} · {formatDuration(track.durationMs)} · {track.fileHash.slice(0, 8)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="cached-track-import-button"
+                  data-file-hash={track.fileHash}
+                  disabled={isInRoom || pendingCachedImport !== null}
+                  onClick={() => void onImportCachedTrack(track)}
+                  className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    isInRoom
+                      ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                      : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
+                  }`}
+                >
+                  {isInRoom ? "已在本房间" : isPending ? "导入中…" : "导入曲库"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="rounded-lg border border-dashed border-surface-border px-4 py-4 text-xs text-foreground-muted">
+          {localFolderName
+            ? "当前本地 cache 目录没有可导入歌曲。"
+            : "尚未连接本地 cache 目录。"}
+        </p>
+      )}
+    </section>
   );
 }
 

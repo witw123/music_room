@@ -17,6 +17,7 @@ import {
 } from "@/lib/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
+  buildCachedLibraryFileName,
   buildCachedLibraryTrackUpsertRecord,
   createInFlightCachedLibraryTrackFileLoader,
   hasUsableCachedLibraryFileForRoomTrack,
@@ -41,6 +42,7 @@ export type LocalStorageSummary = {
   usageBytes: number | null;
   quotaBytes: number | null;
   cachedTrackCount: number;
+  cachedLibraryTracks: CachedLibraryTrack[];
   localFolderName: string | null;
   localCachedFileHashes: string[];
   localSavedFileHashes: string[];
@@ -79,6 +81,7 @@ export function useTrackUploads(options: {
     usageBytes: null,
     quotaBytes: null,
     cachedTrackCount: 0,
+    cachedLibraryTracks: [],
     localFolderName: null,
     localCachedFileHashes: [],
     localSavedFileHashes: [],
@@ -98,6 +101,9 @@ export function useTrackUploads(options: {
     ]);
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
     setCacheLibraryVersion((current) => current + 1);
+    const localCachedFileHashes = localStorageState.directoryName
+      ? new Set(localStorageState.cachedFileHashes)
+      : new Set<string>();
     let estimate: StorageEstimate | null = null;
     try {
       estimate = typeof navigator !== "undefined" && navigator.storage
@@ -110,6 +116,9 @@ export function useTrackUploads(options: {
       usageBytes: estimate?.usage ?? null,
       quotaBytes: estimate?.quota ?? null,
       cachedTrackCount: snapshot.tracks.length,
+      cachedLibraryTracks: snapshot.tracks.filter((track) =>
+        localCachedFileHashes.has(track.fileHash)
+      ),
       localFolderName: localStorageState.directoryName,
       localCachedFileHashes: localStorageState.cachedFileHashes,
       localSavedFileHashes: localStorageState.savedFileHashes,
@@ -144,6 +153,34 @@ export function useTrackUploads(options: {
     setUploadedTracks,
     uploadedTracks
   });
+
+  const importCachedTrack = useCallback(async (cachedTrack: CachedLibraryTrack) => {
+    try {
+      const localFile = await getLocalAudioCacheFile(cachedTrack.fileHash);
+      const indexedDbRecord = localFile
+        ? null
+        : await getCachedLibraryTrack(cachedTrack.fileHash);
+      const sourceFile = localFile ?? indexedDbRecord?.file ?? null;
+      if (!sourceFile) {
+        setStatusMessage(`《${cachedTrack.title}》的本地缓存文件不可读取，请重新选择存储文件夹。`);
+        return;
+      }
+
+      const file = new File([sourceFile], buildCachedLibraryFileName({
+        title: cachedTrack.title,
+        mimeType: cachedTrack.mimeType || sourceFile.type || "audio/mpeg",
+        fileHash: cachedTrack.fileHash
+      }), {
+        type: cachedTrack.mimeType || sourceFile.type || "audio/mpeg"
+      });
+      await handleFilesSelected([file]);
+    } catch (error) {
+      const detail = error instanceof Error && error.message
+        ? `：${error.message}`
+        : "，请重试";
+      setStatusMessage(`《${cachedTrack.title}》导入失败${detail}`);
+    }
+  }, [handleFilesSelected, setStatusMessage]);
 
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
     setUploadedTracks((current) => {
@@ -273,12 +310,13 @@ export function useTrackUploads(options: {
 
   useEffect(() => {
     void refreshCacheLibrary();
-  }, [refreshCacheLibrary]);
+  }, [refreshCacheLibrary, roomSnapshot?.room.id]);
 
   return {
     uploadedTracks,
     setUploadedTracks,
     refreshCacheLibrary,
+    importCachedTrack,
     localStorageSummary,
     cleanLocalStorage,
     chooseLocalFolder,

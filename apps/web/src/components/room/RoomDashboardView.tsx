@@ -16,7 +16,7 @@ import type { QqMusicTrackCandidate } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState } from "./MembersPanel";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
 import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
@@ -39,6 +39,7 @@ type RoomDashboardViewProps = {
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
+  onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
@@ -127,6 +128,7 @@ function RoomDashboardViewBase({
   localStorageSummary,
   onCleanLocalStorage,
   onChooseLocalFolder,
+  onImportCachedTrack,
   onSaveTrackToLocal,
   connectedPeersCount,
   mediaConnectionState,
@@ -321,6 +323,7 @@ function RoomDashboardViewBase({
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
+              onImportCachedTrack={onImportCachedTrack}
               onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}
               activeSession={activeSession}

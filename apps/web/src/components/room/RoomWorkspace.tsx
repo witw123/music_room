@@ -15,7 +15,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 
 type RoomWorkspaceProps = {
@@ -32,6 +32,7 @@ type RoomWorkspaceProps = {
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
+  onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
@@ -81,6 +82,7 @@ function RoomWorkspaceBase({
   localStorageSummary,
   onCleanLocalStorage,
   onChooseLocalFolder,
+  onImportCachedTrack,
   onSaveTrackToLocal,
   connectedPeersCount,
   mediaConnectionState,
@@ -164,6 +166,7 @@ function RoomWorkspaceBase({
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
+              onImportCachedTrack={onImportCachedTrack}
               onSaveTrackToLocal={onSaveTrackToLocal}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
