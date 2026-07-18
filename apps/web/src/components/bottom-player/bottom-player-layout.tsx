@@ -189,11 +189,11 @@ function VolumeControl({ volume, onChange }: { volume: number; onChange: (value:
   return (
     <div ref={rootRef} className="relative shrink-0">
       {isOpen ? (
-        <div className="absolute bottom-full right-0 z-[60] mb-3 flex h-36 w-14 items-center justify-center rounded-xl border border-white/10 bg-[#252832] px-2 py-2 shadow-[0_14px_36px_rgba(0,0,0,0.55)]">
+        <div className="absolute bottom-full right-0 z-[60] mb-3 flex h-48 w-8 items-center justify-center bg-transparent">
           <div className="relative flex h-full w-full items-center justify-center">
             <Slider
               aria-label="音量"
-              className="h-4 w-28 -rotate-90 [&>div:nth-child(2)]:scale-100 [&>div:nth-child(2)]:opacity-100"
+              className="h-4 w-40 -rotate-90 [&>div:nth-child(2)]:scale-100 [&>div:nth-child(2)]:opacity-100"
               max={1}
               min={0}
               step={0.01}

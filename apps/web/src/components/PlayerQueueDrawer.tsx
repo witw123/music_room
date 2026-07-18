@@ -83,10 +83,9 @@ export function PlayerQueueDrawer({
       </Button>
 
       {isOpen ? (
-        <aside className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(360px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right">
-          <div className="flex items-center justify-between border-b border-white/15 bg-[#202228] p-4">
+        <aside className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(420px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
+          <div className="flex items-center justify-between border-b border-white/15 bg-[#202228] px-4 py-3">
             <div>
-               <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-300">QUEUE</p>
                <h3 className="text-base font-semibold text-white">当前播放队列</h3>
             </div>
             <Button variant="ghost" size="sm" onClick={toggleDrawer} className="h-8 text-xs text-zinc-200 hover:bg-white/10 hover:text-white">
