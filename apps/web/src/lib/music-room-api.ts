@@ -85,7 +85,11 @@ export function extractApiError(rawBody: string): ApiErrorResponse | null {
   return null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  options?: { notifyAuthExpired?: boolean }
+): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
@@ -103,6 +107,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const shouldExpireSession =
       response.status === 401 &&
       apiError?.code === errorCodes.unauthorized &&
+      options?.notifyAuthExpired !== false &&
       typeof window !== "undefined";
     if (shouldExpireSession) {
       window.dispatchEvent(
@@ -191,7 +196,7 @@ export const musicRoomApi = {
     request<{ ok: boolean }>("/v1/auth/logout", {
       method: "POST"
     }),
-  me: () => request<AuthSession>("/v1/auth/me"),
+  me: () => request<AuthSession>("/v1/auth/me", undefined, { notifyAuthExpired: false }),
   createRoom: (input?: {
     visibility?: "private" | "public";
     name?: string;

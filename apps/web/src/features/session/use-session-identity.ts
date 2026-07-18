@@ -92,15 +92,21 @@ export function useSessionIdentity(options: {
 
   useEffect(() => {
     window.localStorage.removeItem(sessionStorageKey);
-    setHydrated(true);
     let cancelled = false;
     void musicRoomApi.me().then((session) => {
-      if (!cancelled && isStoredAuthSession(session)) {
+      if (cancelled) {
+        return;
+      }
+
+      if (isStoredAuthSession(session)) {
         setActiveSession(session);
       }
+      setHydrated(true);
     }).catch(() => {
       if (!cancelled) {
-        setActiveSession(null);
+        // A failed initial probe must not clear a session established by a
+        // concurrent login/register request.
+        setHydrated(true);
       }
     });
 
