@@ -7,6 +7,7 @@ import {
   type AssetUnitDescriptor,
   type AudioAssetManifest
 } from "@music-room/shared";
+import { LocalRepository } from "@/features/upload/local-repository";
 
 export type CachedLibraryTrackRecord = {
   fileHash: string;
@@ -92,6 +93,8 @@ export type LocalAudioDirectoryRecord = {
   id: "default";
   handle: FileSystemDirectoryHandle;
   name: string;
+  repositoryId?: string;
+  schemaVersion?: number;
   updatedAt: string;
 };
 
@@ -100,6 +103,7 @@ export type LocalAudioStorageKind = "cache" | "saved";
 export type LocalAudioFileRecord = {
   fileHash: string;
   fileName: string;
+  relativePath?: string;
   storageKind?: LocalAudioStorageKind;
   source?: "directory-scan";
   savedAt: string;
@@ -108,6 +112,7 @@ export type LocalAudioFileRecord = {
 export type LocalAudioCacheFileRecord = {
   fileHash: string;
   fileName: string;
+  relativePath?: string;
   cachedAt: string;
 };
 
@@ -654,6 +659,18 @@ export async function deleteCachedLibraryTrack(fileHash: string) {
   return record;
 }
 
+export async function upsertCachedLibraryTrackSummary(
+  input: CachedLibraryTrackSummaryRecord
+) {
+  const existing = await musicRoomDatabase.cachedTrackLibraryMetadata.get(input.fileHash);
+  await musicRoomDatabase.cachedTrackLibraryMetadata.put({
+    ...existing,
+    ...input,
+    sourceTrackIds: [...new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds])],
+    sourceRoomIds: [...new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds])]
+  });
+}
+
 export async function getLocalAudioDirectory() {
   return (await musicRoomDatabase.localAudioDirectory.get("default")) ?? null;
 }
@@ -661,11 +678,15 @@ export async function getLocalAudioDirectory() {
 export async function saveLocalAudioDirectory(input: {
   handle: FileSystemDirectoryHandle;
   name: string;
+  repositoryId?: string;
+  schemaVersion?: number;
 }) {
   await musicRoomDatabase.localAudioDirectory.put({
     id: "default",
     handle: input.handle,
     name: input.name,
+    repositoryId: input.repositoryId,
+    schemaVersion: input.schemaVersion,
     updatedAt: new Date().toISOString()
   });
 }
@@ -727,6 +748,16 @@ export async function upsertLocalPlaylistTrack(
     createdAt: input.createdAt ?? existing?.createdAt ?? now,
     updatedAt: input.updatedAt ?? now
   });
+  const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+  if (directory) {
+    await LocalRepository.open(directory.handle)
+      .then((repository) => repository.writeProviderTrack(input.id, {
+        ...input,
+        createdAt: input.createdAt ?? existing?.createdAt ?? now,
+        updatedAt: input.updatedAt ?? now
+      }))
+      .catch(() => undefined);
+  }
 }
 
 export async function listLocalPlaylistTracks() {

@@ -101,4 +101,34 @@ describe("RedisService", () => {
     ]);
     expect(publisher.mget).toHaveBeenCalledWith("presence:a", "presence:b");
   });
+
+  it("claims and refreshes a JSON lease without overwriting another owner", async () => {
+    const service = new RedisService();
+    const publisher = mockRedisInstances[0];
+    publisher.status = "ready";
+
+    await expect(
+      service.setJsonIfAbsent("music-room:provider-download:room_1", { leaseId: "one" }, 60_000)
+    ).resolves.toBe(true);
+    await expect(
+      service.refreshJsonLease("music-room:provider-download:room_1", { leaseId: "one" }, 60_000)
+    ).resolves.toBe(true);
+
+    expect(publisher.eval).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('"NX"'),
+      1,
+      "music-room:provider-download:room_1",
+      JSON.stringify({ leaseId: "one" }),
+      "60000"
+    );
+    expect(publisher.eval).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("PEXPIRE"),
+      1,
+      "music-room:provider-download:room_1",
+      JSON.stringify({ leaseId: "one" }),
+      "60000"
+    );
+  });
 });

@@ -26,6 +26,7 @@ import {
   hashAudioBlob,
   isDefaultLocalPlaylist,
   listLocalPlaylists,
+  restoreLocalPlaylistsFromRepository,
   localPlaylistTrackId,
   toProviderTrackRecord,
   toLocalPlaylistTrackInput,
@@ -167,6 +168,7 @@ export function ProviderSearchPage() {
 
   async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
     if (pending) return;
+    await restoreLocalPlaylistsFromRepository();
     setPlaylistPickerTrack(track);
     setPlaylistPickerAnchor(anchor);
     setPlaylistPickerLoading(true);

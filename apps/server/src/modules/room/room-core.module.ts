@@ -8,6 +8,7 @@ import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomPresenceService } from "./services/room-presence.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
+import { RoomDownloadLockService } from "./services/room-download-lock.service";
 import { RoomService } from "./room.service";
 import { RoomRealtimeBroadcaster } from "../signaling/room-realtime.broadcaster";
 
@@ -65,10 +66,12 @@ type RoomPresenceStore = Map<
     },
     RoomRealtimeBroadcaster,
     RoomService,
+    RoomDownloadLockService,
     RoomRealtimePublisher
   ],
   exports: [
     RoomService,
+    RoomDownloadLockService,
     RoomPresenceService,
     RoomRealtimePublisher,
     RoomRealtimeBroadcaster

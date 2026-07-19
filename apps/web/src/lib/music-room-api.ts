@@ -313,13 +313,10 @@ export const musicRoomApi = {
   downloadNeteaseTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    roomId?: string
   ) =>
-    requestBlob(
-      `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
-      { signal },
-      { throttleImport: true }
-    ),
+    requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?${buildAudioQuery(quality, roomId)}`, { signal }, { throttleImport: true }),
   getQqMusicAccount: () => request<QqMusicAccountStatus>("/v1/providers/qqmusic/account"),
   startQqMusicQrLogin: () => request<QqMusicQrStartResponse>("/v1/providers/qqmusic/account/qr/start", { method: "POST" }),
   getQqMusicQrStatus: (attemptId: string) => request<QqMusicQrStatusResponse>(`/v1/providers/qqmusic/account/qr/${encodeURIComponent(attemptId)}/status`),
@@ -349,13 +346,10 @@ export const musicRoomApi = {
   downloadQqMusicTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    roomId?: string
   ) =>
-    requestBlob(
-      `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
-      { signal },
-      { throttleImport: true }
-    ),
+    requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?${buildAudioQuery(quality, roomId)}`, { signal }, { throttleImport: true }),
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),
   createPlaylist: (payload: {
@@ -403,3 +397,11 @@ export const musicRoomApi = {
       body: JSON.stringify(payload)
     })
 };
+
+function buildAudioQuery(quality: "standard" | "high" | "exhigh", roomId?: string) {
+  const params = new URLSearchParams({ quality });
+  if (roomId?.trim()) {
+    params.set("roomId", roomId.trim());
+  }
+  return params.toString();
+}

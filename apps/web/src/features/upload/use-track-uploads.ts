@@ -223,7 +223,7 @@ export function useTrackUploads(options: {
     try {
       const folderName = await chooseLocalAudioDirectory();
       await refreshCacheLibrary();
-      setStatusMessage(`Music Room 本地存储文件夹已设置为“${folderName}”，已创建 cache 和 saved 子文件夹。`);
+      setStatusMessage(`Music Room 本地存储仓库已设置为“${folderName}”，歌曲和播放资产会保存到该目录。`);
     } catch (error) {
       setStatusMessage(error instanceof Error && error.name === "AbortError"
         ? "已取消选择本地音频文件夹。"

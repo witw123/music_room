@@ -26,12 +26,17 @@ import {
   neteaseTrackIdSchema
 } from "./netease.schemas";
 import { NeteaseService } from "./netease.service";
+import {
+  RoomDownloadLockService,
+  type RoomDownloadLease
+} from "../../room/services/room-download-lock.service";
 
 @Controller("v1/providers/netease")
 export class NeteaseController {
   constructor(
     private readonly service: NeteaseService,
-    private readonly auth: AuthService
+    private readonly auth: AuthService,
+    private readonly roomDownloadLock: RoomDownloadLockService
   ) {}
 
   @Get("account")
@@ -80,6 +85,7 @@ export class NeteaseController {
   async audio(
     @Param("trackId") trackId: string,
     @Query("quality") quality: string | undefined,
+    @Query("roomId") roomId: string | undefined,
     @Headers("range") range: string | undefined,
     @Headers("x-session-token") sessionToken: string | undefined,
     @Req() request: Request,
@@ -103,7 +109,29 @@ export class NeteaseController {
       );
     }
 
-    const result = await this.service.openAudio(userId, parsedTrackId.data, parsedQuality.data, range);
+    const downloadLease = await this.acquireDownloadLease(
+      roomId,
+      userId,
+      parsedTrackId.data
+    );
+    try {
+      const result = await this.service.openAudio(userId, parsedTrackId.data, parsedQuality.data, range);
+      return this.streamAudio(request, response, result, downloadLease, parsedTrackId.data);
+    } catch (error) {
+      if (downloadLease) {
+        await this.roomDownloadLock.release(downloadLease);
+      }
+      throw error;
+    }
+  }
+
+  private async streamAudio(
+    request: Request,
+    response: Response,
+    result: Awaited<ReturnType<NeteaseService["openAudio"]>>,
+    downloadLease: RoomDownloadLease | null,
+    trackId: string
+  ) {
     const upstream = result.upstream;
     response.status(upstream.status);
     response.setHeader("Content-Type", result.mimeType);
@@ -111,7 +139,7 @@ export class NeteaseController {
     response.setHeader("Accept-Ranges", "bytes");
     response.setHeader(
       "Content-Disposition",
-      `attachment; filename="netease-${parsedTrackId.data}.${result.fileType}"`
+      `attachment; filename="netease-${trackId}.${result.fileType}"`
     );
     const contentLength = upstream.headers.get("content-length") ??
       (result.contentLength ? String(result.contentLength) : null);
@@ -121,10 +149,22 @@ export class NeteaseController {
 
     if (!upstream.body) {
       response.end();
+      if (downloadLease) {
+        await this.roomDownloadLock.release(downloadLease);
+      }
       return;
     }
 
     const { Readable } = await import("node:stream");
+    const stopKeepAlive = downloadLease
+      ? this.roomDownloadLock.startKeepAlive(downloadLease)
+      : null;
+    const release = () => {
+      stopKeepAlive?.();
+      if (downloadLease) {
+        void this.roomDownloadLock.release(downloadLease);
+      }
+    };
     let transferredBytes = 0;
     const limiter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
@@ -139,13 +179,31 @@ export class NeteaseController {
     limiter.on("error", () => {
       void upstream.body?.cancel().catch(() => undefined);
       if (!response.destroyed) response.destroy();
+      release();
     });
     Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response);
+    response.once("finish", release);
+    response.once("close", release);
     request.on("close", () => {
       if (!response.writableEnded) {
         void upstream.body?.cancel().catch(() => undefined);
+        release();
       }
     });
+  }
+
+  private async acquireDownloadLease(
+    roomId: string | undefined,
+    userId: string,
+    trackId: string
+  ) {
+    const normalizedRoomId = roomId?.trim();
+    return normalizedRoomId
+      ? this.roomDownloadLock.acquire(normalizedRoomId, userId, {
+          provider: "netease",
+          trackId
+        })
+      : null;
   }
 
   @Get("tracks/:trackId/lyrics")

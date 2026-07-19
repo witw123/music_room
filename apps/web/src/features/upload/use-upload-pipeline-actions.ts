@@ -213,7 +213,7 @@ export function useUploadPipelineActions({
     (candidate: NeteaseTrackCandidate) => importProviderTrack({
       activeSession,
       candidate,
-      download: () => musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh"),
+      download: () => musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, roomSnapshot?.room.id),
       inFlightUploadHashesRef,
       origin: "netease-import",
       persistTrackIntoLibrary,
@@ -238,7 +238,7 @@ export function useUploadPipelineActions({
     (candidate: QqMusicTrackCandidate) => importProviderTrack({
       activeSession,
       candidate,
-      download: () => musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh"),
+      download: () => musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, roomSnapshot?.room.id),
       inFlightUploadHashesRef,
       origin: "qqmusic-import",
       persistTrackIntoLibrary,
@@ -426,6 +426,9 @@ function sanitizeFileName(value: string, sourceType: TrackSourceType) {
 
 function toProviderImportErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
+    if (error.code === "ROOM_DOWNLOAD_BUSY") {
+      return "房间内已有成员正在下载，请稍后再试。";
+    }
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") {
       return "该歌曲没有可用的公开音频，可能受付费、VIP 或版权限制。";
     }

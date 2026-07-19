@@ -19,10 +19,14 @@ import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipbo
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
+import type { Route } from "next";
 import {
   awayRoomChangeEvent,
   clearAwayRoomId,
   readAwayRoomId,
+  readAwayRoomResumeId,
+  requestAwayRoomResume,
+  shouldCommitAwayRoomResume,
   storeAwayRoomId
 } from "@/lib/away-room";
 export * from "@/components/room/hooks/use-room-page-derived";
@@ -54,6 +58,7 @@ export function MusicRoomApp({
   const roomSnapshot = roomState.snapshot;
   const [peerId, setPeerId] = useState("");
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
+  const pendingRoomResumeRef = useRef<string | null>(null);
   const localAudibleRef = useRef<boolean | null>(null);
   const pageState = useRoomPageState({
     audioUnlocked: isSegmentedAudioOutputReady()
@@ -102,6 +107,14 @@ export function MusicRoomApp({
   }
 
   function handleResumeRoom() {
+    const targetRoomId = roomSnapshot?.room.id ?? initialRoomId;
+    if (backgroundOnly && targetRoomId) {
+      pendingRoomResumeRef.current = targetRoomId;
+      requestAwayRoomResume(targetRoomId);
+      router.push(`/room/${targetRoomId}` as Route);
+      return;
+    }
+
     clearAwayRoomId();
     setAwayRoomId(null);
     setStatusMessage("已返回房间。");
@@ -119,6 +132,22 @@ export function MusicRoomApp({
     initialStatusMessage: "登录后即可进入你的音乐房。",
     sessionStorageKey: "music-room-session"
   });
+
+  useEffect(() => {
+    if (!shouldCommitAwayRoomResume({
+      backgroundOnly,
+      initialRoomId,
+      pendingRoomId: pendingRoomResumeRef.current,
+      storedResumeRoomId: readAwayRoomResumeId()
+    })) {
+      return;
+    }
+
+    pendingRoomResumeRef.current = null;
+    clearAwayRoomId();
+    setAwayRoomId(null);
+    setStatusMessage("已返回房间。");
+  }, [backgroundOnly, initialRoomId, setStatusMessage]);
 
   const canControlPlayback =
     !!activeSession &&

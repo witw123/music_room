@@ -286,6 +286,7 @@ function RoomDashboardViewBase({
 
           {activeTab === "local" ? (
             <LocalStorageTabPanel
+              roomId={roomSnapshot.room.id}
               tracks={roomSnapshot.tracks}
               playlists={playlists}
               activeSession={activeSession}

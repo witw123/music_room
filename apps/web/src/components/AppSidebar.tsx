@@ -7,8 +7,8 @@ import type { Route } from "next";
 import type { AuthSession } from "@music-room/shared";
 import {
   awayRoomChangeEvent,
-  clearAwayRoomId,
   readAwayRoomId,
+  requestAwayRoomResume,
   storeAwayRoomId
 } from "@/lib/away-room";
 
@@ -63,8 +63,7 @@ export function AppSidebar({
 
   function handleResumeAwayRoom() {
     if (!awayRoomId) return;
-    clearAwayRoomId();
-    setAwayRoomId(null);
+    requestAwayRoomResume(awayRoomId);
     router.push(`/room/${awayRoomId}` as Route);
   }
 

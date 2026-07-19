@@ -13,7 +13,11 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
-import { clearAwayRoomId, readAwayRoomId } from "@/lib/away-room";
+import {
+  clearAwayRoomId,
+  readAwayRoomId,
+  requestAwayRoomResume
+} from "@/lib/away-room";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -83,12 +87,13 @@ export function RoomsHomePage({
 
   function handleResumeAwayRoom() {
     if (!effectiveAwayRoomId) return;
-    clearAwayRoomId();
-    setStoredAwayRoomId(null);
-    onResumeAwayRoom?.();
-    if (!onResumeAwayRoom) {
-      router.push(buildRoomHref(effectiveAwayRoomId) as Route);
+    if (onResumeAwayRoom) {
+      onResumeAwayRoom();
+      return;
     }
+
+    requestAwayRoomResume(effectiveAwayRoomId);
+    router.push(buildRoomHref(effectiveAwayRoomId) as Route);
   }
 
   useEffect(() => {
@@ -230,6 +235,7 @@ export function RoomsHomePage({
       // Ignore logout network errors and always clear local state.
     }
 
+    clearAwayRoomId();
     clearIdentity();
     router.replace(authEntryHref as Route);
   }

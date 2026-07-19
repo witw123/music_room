@@ -14,6 +14,11 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import { listSelectedLocalAudioFiles } from "@/features/upload/local-audio-storage";
+import { getConfiguredLocalRepository } from "@/features/upload/local-audio-storage";
+import {
+  createRepositoryTrackRecord,
+  type LocalRepositoryPlaylistRecord
+} from "@/features/upload/local-repository";
 
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -48,6 +53,24 @@ export function listLocalPlaylists(): LocalPlaylistRecord[] {
   } catch {
     return fallback;
   }
+}
+
+export async function restoreLocalPlaylistsFromRepository() {
+  const repository = await getConfiguredLocalRepository();
+  if (!repository) return listLocalPlaylists();
+
+  const persisted = await repository.listPlaylists();
+  if (persisted.length > 0) {
+    const playlists = persisted.map(fromRepositoryPlaylist);
+    writeLocalPlaylistsToBrowser(playlists);
+    return playlists;
+  }
+
+  const existing = listLocalPlaylists();
+  await Promise.all(existing.map((playlist) =>
+    repository.writePlaylist(toRepositoryPlaylist(playlist))
+  ));
+  return existing;
 }
 
 export function createLocalPlaylist(input: { title: string; description?: string | null }) {
@@ -203,7 +226,7 @@ export async function syncSelectedLocalDirectoryTracks() {
 
   const scannedTracks = await Promise.all(
     selectedFiles.map(async ({ file, fileName }) => {
-      const fileHash = buildDirectoryFileHash(fileName, file);
+      const fileHash = await hashAudioBlob(file);
       const metadata = await readDirectoryTrackMetadata(file);
       const now = new Date().toISOString();
       return {
@@ -259,6 +282,30 @@ export async function syncSelectedLocalDirectoryTracks() {
       })
     ])
   );
+
+  const repository = await getConfiguredLocalRepository();
+  if (repository) {
+    await Promise.all(scannedTracks.map(({ track, fileName }) =>
+      repository.writeTrack(createRepositoryTrackRecord({
+        fileHash: track.fileHash!,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        artworkUrl: track.artworkUrl,
+        lyrics: track.lyrics,
+        provider: track.provider,
+        mimeType: track.mimeType,
+        durationMs: track.durationMs,
+        sizeBytes: track.sizeBytes,
+        source: {
+          kind: "external",
+          relativePath: fileName,
+          sizeBytes: track.sizeBytes
+        },
+        retention: "library"
+      }))
+    ));
+  }
 
   return scannedTracks.length;
 }
@@ -354,10 +401,6 @@ function createDefaultLocalPlaylist(): LocalPlaylistRecord {
   };
 }
 
-function buildDirectoryFileHash(fileName: string, file: File) {
-  return `local-directory:${fileName}:${file.size}:${file.lastModified}`;
-}
-
 async function readDirectoryTrackMetadata(file: File) {
   const fallback = {
     title: file.name.replace(/\.[^/.]+$/, ""),
@@ -412,10 +455,71 @@ function isLocalPlaylistRecord(value: unknown): value is LocalPlaylistRecord {
 }
 
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
+  writeLocalPlaylistsToBrowser(playlists);
+  void mirrorLocalPlaylistsToRepository(playlists);
+}
+
+function writeLocalPlaylistsToBrowser(playlists: LocalPlaylistRecord[]) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(localPlaylistsStorageKey, JSON.stringify(playlists));
   } catch {
     // Private browsing or storage quotas can reject local metadata writes.
   }
+}
+
+async function mirrorLocalPlaylistsToRepository(playlists: LocalPlaylistRecord[]) {
+  const repository = await getConfiguredLocalRepository();
+  if (!repository) return;
+  const activeIds = new Set(playlists.map((playlist) => playlist.id));
+  const persisted = await repository.listPlaylists();
+  await Promise.all(
+    persisted
+      .filter((playlist) => !activeIds.has(playlist.id))
+      .map((playlist) => repository.deletePlaylist(playlist.id))
+  );
+  await Promise.all(playlists.map((playlist) =>
+    repository.writePlaylist(toRepositoryPlaylist(playlist))
+  ));
+}
+
+function toRepositoryPlaylist(playlist: LocalPlaylistRecord): LocalRepositoryPlaylistRecord {
+  return {
+    schemaVersion: 1,
+    id: playlist.id,
+    title: playlist.title,
+    description: playlist.description,
+    trackRefs: playlist.trackIds.map((trackId) => {
+      const providerMatch = /^provider:(netease|qqmusic):(.+)$/.exec(trackId);
+      if (providerMatch) {
+        return {
+          kind: "provider" as const,
+          provider: providerMatch[1] as "netease" | "qqmusic",
+          trackId: providerMatch[2]!
+        };
+      }
+      return {
+        kind: "content" as const,
+        fileHash: trackId.startsWith("local:") ? trackId.slice("local:".length) : trackId,
+        trackId
+      };
+    }),
+    createdAt: playlist.createdAt,
+    updatedAt: playlist.updatedAt
+  };
+}
+
+function fromRepositoryPlaylist(record: LocalRepositoryPlaylistRecord): LocalPlaylistRecord {
+  return {
+    id: record.id,
+    title: record.title,
+    description: record.description,
+    trackIds: record.trackRefs.map((trackRef) =>
+      trackRef.kind === "provider"
+        ? providerTrackKey(trackRef.provider, trackRef.trackId)
+        : trackRef.trackId ?? `local:${trackRef.fileHash}`
+    ),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
 }

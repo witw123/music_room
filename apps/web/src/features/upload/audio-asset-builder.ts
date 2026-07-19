@@ -21,6 +21,7 @@ import {
   upsertTranscodeJob
 } from "@/lib/indexeddb";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
+import { persistAudioAssetsToLocalRepository } from "./local-audio-storage";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
@@ -119,6 +120,11 @@ export async function prepareAudioAssets(input: {
     try {
       await persistOriginalAsset(input, source);
       await persistPlaybackAsset(input, playback);
+      await persistAudioAssetsToLocalRepository({
+        file: input.file,
+        originalAsset: source.originalAsset,
+        playbackAsset: playback.playbackAsset
+      });
     } catch (error) {
       await Promise.allSettled(createdAssetIds.map((assetId) => deleteAudioAsset(assetId)));
       throw error;

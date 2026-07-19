@@ -128,6 +128,38 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async setJsonIfAbsent(key: string, payload: unknown, ttlMs: number) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `if redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2], "NX") then
+         return 1
+       end
+       return 0`,
+      1,
+      key,
+      JSON.stringify(payload),
+      String(Math.max(1, Math.floor(ttlMs)))
+    );
+    return Number(result) === 1;
+  }
+
+  async refreshJsonLease(key: string, payload: unknown, ttlMs: number) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `if redis.call("GET", KEYS[1]) == ARGV[1] then
+         return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+       end
+       return 0`,
+      1,
+      key,
+      JSON.stringify(payload),
+      String(Math.max(1, Math.floor(ttlMs)))
+    );
+    return Number(result) === 1;
+  }
+
   async deleteJsonIfValue(key: string, expectedPayload: unknown) {
     this.assertReady(this.client, "publisher");
 

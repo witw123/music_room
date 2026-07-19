@@ -331,6 +331,7 @@ export function QqMusicSourcePanel({
 
 function toProviderErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
+    if (error.code === "ROOM_DOWNLOAD_BUSY") return "房间内已有成员正在下载，请稍后再试。";
     if (error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "请先绑定 QQ 音乐账号。";
     if (error.code === "QQMUSIC_AUTH_EXPIRED") return "QQ 音乐登录已失效，请重新绑定。";
     if (error.code === "QQMUSIC_DISABLED") return "QQ 音乐功能当前未启用。";

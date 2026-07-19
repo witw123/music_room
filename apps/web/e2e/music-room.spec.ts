@@ -31,6 +31,7 @@ async function createRoom(page: Page) {
 }
 
 async function joinRoom(page: Page, joinCode: string) {
+  await page.getByTestId("open-join-room-dialog").click();
   await page.getByTestId("join-code-input").fill(joinCode);
   await page.getByTestId("join-code-submit").click();
   await page.getByTestId("room-entry-confirm").click();
@@ -108,6 +109,49 @@ test("two-user-realtime", async ({ browser, page }) => {
   await listenerPage.reload();
   await expect(listenerPage.getByTestId("room-code-button")).toContainText(joinCode);
   await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
+  await listenerContext.close();
+});
+
+test("away-room-keeps-live-membership-and-resumes", async ({ browser, page }) => {
+  test.setTimeout(90_000);
+  await register(page, "host-away");
+  const joinCode = await createRoom(page);
+  const listenerContext = await browser.newContext();
+  const listenerPage = await registerAndJoin(listenerContext, joinCode, "listener-away");
+
+  await expect(page.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
+  await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
+
+  await page.getByTestId("room-settings-button").click();
+  await page.getByTestId("away-room-button").click();
+  await expect(page.getByTestId("away-room-banner")).toBeVisible();
+
+  await page.getByRole("link", { name: "返回首页" }).click();
+  await expect(page).toHaveURL(/\/app/);
+  await expect(page.getByTestId("away-room-banner")).toBeVisible();
+  await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2");
+
+  await listenerPage.evaluate(() => {
+    const count = document.querySelector('[data-testid="online-member-count"]');
+    if (!count) throw new Error("Online member count is not rendered.");
+    const values = [count.textContent ?? ""];
+    const observer = new MutationObserver(() => values.push(count.textContent ?? ""));
+    observer.observe(count, { childList: true, characterData: true, subtree: true });
+    (window as Window & { __awayRoomMemberCounts?: string[]; __awayRoomObserver?: MutationObserver }).__awayRoomMemberCounts = values;
+    (window as Window & { __awayRoomMemberCounts?: string[]; __awayRoomObserver?: MutationObserver }).__awayRoomObserver = observer;
+  });
+
+  await page.getByRole("button", { name: "返回房间" }).click();
+  await expect(page).toHaveURL(/\/room\/room_/);
+  await expect(page.getByTestId("room-code-button")).toContainText(joinCode);
+  await page.waitForTimeout(2_000);
+
+  const memberCounts = await listenerPage.evaluate(() => {
+    const state = window as Window & { __awayRoomMemberCounts?: string[]; __awayRoomObserver?: MutationObserver };
+    state.__awayRoomObserver?.disconnect();
+    return state.__awayRoomMemberCounts ?? [];
+  });
+  expect(memberCounts).not.toContain("1");
   await listenerContext.close();
 });
 

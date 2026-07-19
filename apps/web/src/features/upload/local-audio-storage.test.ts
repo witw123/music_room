@@ -6,6 +6,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   deleteLocalAudioCacheFileRecord: vi.fn(),
   getAssetManifest: vi.fn(),
   getAssetUnits: vi.fn(),
+  getCachedLibraryTrackSummary: vi.fn(),
   getLocalAudioDirectory: vi.fn(),
   getLocalAudioFileRecord: vi.fn(),
   getLocalAudioCacheFileRecord: vi.fn(),
@@ -40,8 +41,11 @@ function createDirectoryHandle(input: {
     createWritable: vi.fn().mockResolvedValue(writable)
   };
   const cacheDirectory = {
-    getFileHandle: vi.fn().mockResolvedValue(fileHandle)
+    getDirectoryHandle: vi.fn(),
+    getFileHandle: vi.fn().mockResolvedValue(fileHandle),
+    removeEntry: vi.fn()
   };
+  cacheDirectory.getDirectoryHandle.mockResolvedValue(cacheDirectory);
   const handle = {
     name: "Music Room",
     queryPermission: vi.fn().mockResolvedValue(input.queryPermission),
@@ -57,6 +61,7 @@ describe("local audio cache persistence", () => {
     vi.clearAllMocks();
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue(null);
     indexedDbMocks.getLocalAudioFileRecord.mockResolvedValue(null);
+    indexedDbMocks.getCachedLibraryTrackSummary.mockResolvedValue(null);
   });
 
   it("reads files saved by the previous root-directory layout", async () => {
@@ -143,7 +148,8 @@ describe("local audio cache persistence", () => {
     expect(writable.write).toHaveBeenCalledWith(file);
     expect(indexedDbMocks.saveLocalAudioCacheFileRecord).toHaveBeenCalledWith({
       fileHash: "hash_1",
-      fileName: "Song [hash_1].mp3"
+      fileName: "Song [hash_1].mp3",
+      relativePath: ".music-room/cache/provider/local_upload/ha/hash_1.mp3"
     });
     expect(indexedDbMocks.deleteCachedLibraryTrackFile).toHaveBeenCalledWith("hash_1");
   });

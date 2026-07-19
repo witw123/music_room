@@ -13,6 +13,7 @@ import {
   deleteLocalPlaylist,
   isDefaultLocalPlaylist,
   listLocalPlaylists,
+  restoreLocalPlaylistsFromRepository,
   listMergedLocalPlaylistTracks,
   listRoomPlaylistTrackIndex,
   syncSelectedLocalDirectoryTracks,
@@ -84,7 +85,7 @@ export function PlaylistsWorkspacePage() {
     const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
     const [tracks, localPlaylistRecords, playlists, storage, roomTracks] = await Promise.all([
       listMergedLocalPlaylistTracks(),
-      listLocalPlaylists(),
+      restoreLocalPlaylistsFromRepository(),
       musicRoomApi.listMyPlaylists(),
       getLocalAudioStorageState(),
       listRoomPlaylistTrackIndex()
