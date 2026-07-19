@@ -158,13 +158,13 @@ function TrackListSectionBase({
                     <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
                   </div>
 
-                  <div className="row-span-2 flex min-w-max self-center flex-nowrap items-center justify-end gap-1">
+                  <div className="row-span-2 flex min-w-max self-center justify-self-end flex-nowrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-8 w-8 shrink-0 rounded-none p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 shrink-0 !rounded-none p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         disabled={pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
@@ -183,7 +183,7 @@ function TrackListSectionBase({
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
                         variant={isSavedLocally ? "ghost" : "outline"}
-                        className="h-8 w-8 shrink-0 rounded-none p-0"
+                        className="h-8 w-8 shrink-0 !rounded-none p-0"
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
                         aria-label={isSavedLocally ? `《${track.title}》已保存到本地` : `保存《${track.title}》到本地`}
@@ -203,7 +203,7 @@ function TrackListSectionBase({
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
                       variant="outline"
-                      className="h-8 w-8 shrink-0 rounded-none bg-background/50 p-0"
+                      className="h-8 w-8 shrink-0 !rounded-none bg-background/50 p-0"
                       disabled={pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       aria-label={`将《${track.title}》加入队列`}
@@ -218,7 +218,7 @@ function TrackListSectionBase({
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-8 w-8 shrink-0 rounded-none p-0 hover:bg-accent/10 hover:text-accent"
+                      className="h-8 w-8 shrink-0 !rounded-none p-0 hover:bg-accent/10 hover:text-accent"
                       disabled={!canControlPlayback || pendingAction !== null}
                       onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"

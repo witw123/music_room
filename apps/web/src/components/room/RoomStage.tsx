@@ -95,6 +95,11 @@ function RoomStageBase({
     : compactStage
       ? "clamp(8rem, min(22vh, 38vw), 11rem)"
       : "clamp(10rem, min(30vh, 38vw), 16rem)";
+  const stageContentOffset = isLyricsOpen
+    ? "translate-y-0"
+    : compactStage
+      ? ultraCompactStage ? "translate-y-3" : "translate-y-[clamp(3rem,12vh,7rem)]"
+      : "translate-y-0";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -329,7 +334,7 @@ function RoomStageBase({
 
       <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible">
         <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-hidden">
-          <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-hidden px-1 ${isLyricsOpen ? "gap-0" : "-translate-y-1 sm:-translate-y-3"}`}>
+          <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-hidden px-1 ${stageContentOffset}`}>
             {!isLyricsOpen ? (
               <div
                 className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
