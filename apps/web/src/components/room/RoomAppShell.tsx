@@ -145,7 +145,9 @@ export function RoomAppShell({
           )
         }
         canReorderQueue={canReorderQueue}
+        canRemoveQueue={!!activeSession && canReorderQueue}
         onPlayQueueItem={playbackActions.handlePlayQueueItem}
+        onAddToQueue={roomActions.addToQueue}
         onRemoveQueueItem={roomActions.removeQueueItem}
         onReorderQueue={roomActions.reorderQueue}
       />

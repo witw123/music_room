@@ -224,6 +224,27 @@ export function ProviderSearchPage() {
     }
   }
 
+  async function saveProviderPlaylist(detail: ProviderPlaylistDetail) {
+    if (pending) return;
+    setPending(`save-playlist:${detail.provider}:${detail.providerPlaylistId}`);
+    setErrorMessage(null);
+    try {
+      await musicRoomApi.createPlaylist({
+        title: detail.title,
+        description: detail.description,
+        coverUrl: detail.artworkUrl,
+        isCollaborative: false,
+        tags: ["network", `network:${detail.provider}:${detail.providerPlaylistId}`],
+        trackIds: detail.tracks.map((track) => `provider:${track.provider}:${track.providerTrackId}`)
+      });
+      setStatusMessage(`《${detail.title}》已保存到网络歌单。`);
+    } catch (error) {
+      setErrorMessage(toProviderErrorMessage(error, provider));
+    } finally {
+      setPending(null);
+    }
+  }
+
   async function loadAlbum(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const id = albumId.trim();
@@ -344,7 +365,7 @@ export function ProviderSearchPage() {
               />
             ) : null}
             {contentTab === "playlists" ? (
-              <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onOpen={loadPlaylist} />
+              <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
             ) : null}
             {contentTab === "albums" ? (
               <AlbumsContent albumId={albumId} album={album} pending={pending} onChange={setAlbumId} onSubmit={loadAlbum} />
@@ -416,12 +437,14 @@ function PlaylistsContent({
   playlists,
   playlist,
   pending,
-  onOpen
+  onOpen,
+  onSave
 }: {
   playlists: ProviderPlaylistSummary[];
   playlist: ProviderPlaylistDetail | null;
   pending: string | null;
   onOpen: (item: ProviderPlaylistSummary) => Promise<void>;
+  onSave: (playlist: ProviderPlaylistDetail) => Promise<void>;
 }) {
   return (
     <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(260px,0.65fr)_minmax(0,1fr)]">
@@ -438,6 +461,9 @@ function PlaylistsContent({
           <>
             <h2 className="text-base font-semibold text-foreground">{playlist.title}</h2>
             <p className="mt-1 text-xs text-foreground-muted">{playlist.description || "暂无简介"} · {playlist.tracks.length} 首</p>
+            <Button className="mt-4" disabled={pending !== null} onClick={() => void onSave(playlist)} size="sm" type="button">
+              {pending === `save-playlist:${playlist.provider}:${playlist.providerPlaylistId}` ? "保存中…" : "保存到网络歌单"}
+            </Button>
             <div className="mt-4 max-h-[28rem] overflow-y-auto divide-y divide-surface-border">{playlist.tracks.map((track) => <p className="py-2 text-xs text-foreground-muted" key={track.providerTrackId}>{track.title} · {track.artist}</p>)}</div>
           </>
         ) : <p className="text-sm text-foreground-muted">选择左侧歌单查看详情。</p>}

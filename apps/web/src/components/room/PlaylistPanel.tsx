@@ -41,7 +41,7 @@ export function PlaylistPanel({
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
             Playlists
           </p>
-          <h2 className="text-lg font-bold text-foreground">歌单</h2>
+          <h2 className="text-lg font-bold text-foreground">网络歌单</h2>
         </div>
         <span className="rounded-md border border-surface-border bg-surface px-2 py-0.5 text-xs font-medium text-foreground-muted">
           {playlists.length} 个

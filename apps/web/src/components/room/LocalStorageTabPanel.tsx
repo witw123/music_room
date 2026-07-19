@@ -146,10 +146,10 @@ function LocalStorageTabPanelBase({
           pendingCachedImport={pendingCachedImport}
         />
       </section>
-      <section className="flex flex-col gap-3" data-testid="room-playlist-section">
+      <section className="flex flex-col gap-3" data-testid="network-playlist-section">
         <div className="border-b border-surface-border pb-3">
-          <p className="text-sm font-semibold text-foreground">房间歌单</p>
-          <p className="mt-1 text-xs text-foreground-muted">保存到账号的房间队列歌单，可再次加入当前房间。</p>
+          <p className="text-sm font-semibold text-foreground">网络歌单</p>
+          <p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单，可将已准备好的曲目加入当前房间。</p>
         </div>
         <PlaylistPanel
           activeSession={activeSession}

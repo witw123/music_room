@@ -29,9 +29,11 @@ type LayoutProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
-  activeSessionId?: string;
   canReorderQueue: boolean;
+  canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  availableTracks?: TrackMeta[];
+  onAddToQueue?: (trackId: string) => void | Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isImmersiveOpen: boolean;
@@ -245,9 +247,11 @@ export function MobileBottomPlayerLayout({
   queue,
   tracks,
   currentQueueItemId,
-  activeSessionId,
   canReorderQueue,
+  canRemoveQueue,
   onPlayQueueItem,
+  availableTracks,
+  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
@@ -277,10 +281,12 @@ export function MobileBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
-            activeSessionId={activeSessionId}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
+            canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
+            availableTracks={availableTracks}
+            onAddToQueue={onAddToQueue}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />
@@ -394,9 +400,11 @@ export function DesktopBottomPlayerLayout({
   queue,
   tracks,
   currentQueueItemId,
-  activeSessionId,
   canReorderQueue,
+  canRemoveQueue,
   onPlayQueueItem,
+  availableTracks,
+  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
@@ -482,10 +490,12 @@ export function DesktopBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
-            activeSessionId={activeSessionId}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
+            canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
+            availableTracks={availableTracks}
+            onAddToQueue={onAddToQueue}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />

@@ -44,9 +44,11 @@ type BottomPlayerProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
-  activeSessionId?: string;
   canReorderQueue: boolean;
+  canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  availableTracks?: TrackMeta[];
+  onAddToQueue?: (trackId: string) => void | Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
@@ -80,9 +82,11 @@ function BottomPlayerBase({
   queue,
   tracks,
   currentQueueItemId,
-  activeSessionId,
   canReorderQueue,
+  canRemoveQueue,
   onPlayQueueItem,
+  availableTracks,
+  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue
 }: BottomPlayerProps) {
@@ -322,9 +326,11 @@ function BottomPlayerBase({
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}
-        activeSessionId={activeSessionId}
         canReorderQueue={canReorderQueue}
+        canRemoveQueue={canRemoveQueue}
         onPlayQueueItem={onPlayQueueItem}
+        availableTracks={availableTracks}
+        onAddToQueue={onAddToQueue}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
@@ -351,9 +357,11 @@ function BottomPlayerBase({
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}
-        activeSessionId={activeSessionId}
         canReorderQueue={canReorderQueue}
+        canRemoveQueue={canRemoveQueue}
         onPlayQueueItem={onPlayQueueItem}
+        availableTracks={availableTracks}
+        onAddToQueue={onAddToQueue}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
@@ -385,16 +393,8 @@ function BottomPlayerBase({
     <ImmersivePlayerOverlay
       isOpen={isImmersiveOpen}
       isPlaying={isPlaying}
-      canControlPlayback={canControlPlayback}
       currentTrack={currentTrack}
-      progressMs={boundedProgressMs}
-      durationMs={currentTrackDuration}
-      setSeekDraft={setSeekDraft}
-      commitSeek={commitSeek}
       onClose={() => setIsImmersiveOpen(false)}
-      onPrev={playPrev}
-      onNext={playNext}
-      onTogglePlay={togglePlayback}
     />
     </>
   );

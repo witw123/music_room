@@ -42,12 +42,15 @@ type LocalPlayerContextValue = {
   syncProgressFromAudio: () => void;
   syncDurationFromAudio: () => void;
   tracks: TrackMeta[];
+  availableTracks: TrackMeta[];
   queue: QueueItem[];
   currentQueueItemId: string | null;
   canControlPlayback: boolean;
   canSeekPlayback: boolean;
   playbackMode: PlaybackMode;
   isTrackPlayable: (track: LocalPlaylistTrackRecord) => boolean;
+  addToQueue: (track: LocalPlaylistTrackRecord) => void;
+  addTrackToQueue: (trackId: string) => void;
   playTrack: (track: LocalPlaylistTrackRecord) => Promise<void>;
   playTracks: (tracks: LocalPlaylistTrackRecord[], startIndex?: number) => Promise<void>;
   onPlay: () => void;
@@ -67,12 +70,15 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const queueRef = useRef<LocalPlaylistTrackRecord[]>([]);
+  const playbackRecordsRef = useRef<LocalPlaylistTrackRecord[]>([]);
+  const playbackSequenceKindRef = useRef<"queue" | "direct" | "playlist">("direct");
   const currentRecordRef = useRef<LocalPlaylistTrackRecord | null>(null);
   const currentIndexRef = useRef(0);
   const progressRef = useRef(0);
   const revisionRef = useRef(0);
   const mediaEpochRef = useRef(0);
   const [queueRecords, setQueueRecords] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [libraryRecords, setLibraryRecords] = useState<LocalPlaylistTrackRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<LocalPlaylistTrackRecord | null>(null);
   const [playback, setPlayback] = useState<PlaybackSnapshot | null>(null);
   const [progressMs, setProgressMs] = useState(0);
@@ -101,8 +107,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void listMergedLocalPlaylistTracks()
       .then((tracks) => {
-        if (cancelled || queueRef.current.length > 0) return;
-        setQueueRecords(tracks);
+        if (!cancelled) setLibraryRecords(tracks);
       })
       .catch(() => undefined);
 
@@ -137,7 +142,9 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       return {
         status: input.status,
         currentTrackId: input.record.id,
-        currentQueueItemId: buildLocalQueueItemId(input.record.id),
+        currentQueueItemId: queueRef.current.some((track) => track.id === input.record?.id)
+          ? buildLocalQueueItemId(input.record.id)
+          : null,
         playbackAssetId: null,
         startAt: null,
         sourceSessionId: null,
@@ -167,7 +174,11 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     return cachedRecord?.file ?? null;
   }, [isTrackPlayable]);
 
-  const playRecords = useCallback(async (records: LocalPlaylistTrackRecord[], startIndex = 0) => {
+  const playRecords = useCallback(async (
+    records: LocalPlaylistTrackRecord[],
+    startIndex = 0,
+    sequenceKind: "queue" | "direct" | "playlist" = "direct"
+  ) => {
     const nextRecords = records.filter((track, index, list) =>
       list.findIndex((candidate) => candidate.id === track.id) === index
     );
@@ -187,9 +198,9 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     objectUrlRef.current = objectUrl;
     mediaEpochRef.current += 1;
     currentIndexRef.current = startIndex;
+    playbackRecordsRef.current = nextRecords;
+    playbackSequenceKindRef.current = sequenceKind;
     currentRecordRef.current = record;
-    queueRef.current = nextRecords;
-    setQueueRecords(nextRecords);
     setCurrentRecord(record);
     setProgressMs(0);
     setSeekDraft(null);
@@ -216,19 +227,53 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
   const playTrack = useCallback(async (track: LocalPlaylistTrackRecord) => {
     const existingIndex = queueRef.current.findIndex((candidate) => candidate.id === track.id);
-    const records = existingIndex >= 0
-      ? queueRef.current
-      : [track, ...queueRef.current];
-    const index = records.findIndex((candidate) => candidate.id === track.id);
-    await playRecords(records, index);
+    if (existingIndex >= 0) {
+      await playRecords(queueRef.current, existingIndex, "queue");
+      return;
+    }
+
+    await playRecords([track], 0, "direct");
   }, [playRecords]);
 
   const playTracks = useCallback(async (
     tracksToPlay: LocalPlaylistTrackRecord[],
     startIndex = 0
   ) => {
-    await playRecords(tracksToPlay, startIndex);
+    await playRecords(tracksToPlay, startIndex, "playlist");
   }, [playRecords]);
+
+  const addToQueue = useCallback((track: LocalPlaylistTrackRecord) => {
+    if (queueRef.current.some((candidate) => candidate.id === track.id)) {
+      return;
+    }
+
+    const nextQueue = [...queueRef.current, track];
+    queueRef.current = nextQueue;
+    setQueueRecords(nextQueue);
+
+    if (playbackSequenceKindRef.current === "queue") {
+      const currentId = currentRecordRef.current?.id;
+      playbackRecordsRef.current = nextQueue;
+      currentIndexRef.current = Math.max(
+        0,
+        nextQueue.findIndex((candidate) => candidate.id === currentId)
+      );
+    } else if (
+      playbackSequenceKindRef.current === "direct" &&
+      currentRecordRef.current
+    ) {
+      playbackRecordsRef.current = [
+        currentRecordRef.current,
+        ...nextQueue.filter((candidate) => candidate.id !== currentRecordRef.current?.id)
+      ];
+      currentIndexRef.current = 0;
+    }
+  }, []);
+
+  const addTrackToQueue = useCallback((trackId: string) => {
+    const track = [...libraryRecords, ...queueRef.current].find((candidate) => candidate.id === trackId);
+    if (track) addToQueue(track);
+  }, [addToQueue, libraryRecords]);
 
   const onPlay = useCallback(() => {
     const record = currentRecordRef.current;
@@ -282,7 +327,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, [audioDurationMs, createPlaybackSnapshot]);
 
   const findPlayableIndex = useCallback((startIndex: number, direction: 1 | -1) => {
-    const records = queueRef.current;
+    const records = playbackRecordsRef.current;
     if (records.length < 2) return -1;
 
     for (let offset = 1; offset <= records.length; offset += 1) {
@@ -298,12 +343,24 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
     const nextIndex = findPlayableIndex(currentIndexRef.current, -1);
-    if (nextIndex >= 0) void playRecords(queueRef.current, nextIndex);
+    if (nextIndex >= 0) {
+      void playRecords(
+        playbackRecordsRef.current,
+        nextIndex,
+        playbackSequenceKindRef.current
+      );
+    }
   }, [findPlayableIndex, onSeek, playRecords]);
 
   const onNext = useCallback(() => {
     const nextIndex = findPlayableIndex(currentIndexRef.current, 1);
-    if (nextIndex >= 0) void playRecords(queueRef.current, nextIndex);
+    if (nextIndex >= 0) {
+      void playRecords(
+        playbackRecordsRef.current,
+        nextIndex,
+        playbackSequenceKindRef.current
+      );
+    }
   }, [findPlayableIndex, playRecords]);
 
   const onCyclePlaybackMode = useCallback(() => {
@@ -312,16 +369,22 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
   const handleAudioEnded = useCallback(() => {
     if (playbackMode === "single") {
-      void playRecords(queueRef.current, currentIndexRef.current);
+      void playRecords(
+        playbackRecordsRef.current,
+        currentIndexRef.current,
+        playbackSequenceKindRef.current
+      );
       return;
     }
     if (playbackMode === "shuffle") {
-      const records = queueRef.current;
+      const records = playbackRecordsRef.current;
       const playable = records
         .map((track, index) => ({ track, index }))
         .filter(({ track, index }) => index !== currentIndexRef.current && isTrackPlayable(track));
       const selected = playable[Math.floor(Math.random() * playable.length)];
-      if (selected) void playRecords(records, selected.index);
+      if (selected) {
+        void playRecords(records, selected.index, playbackSequenceKindRef.current);
+      }
       return;
     }
     onNext();
@@ -371,7 +434,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
   const onPlayQueueItem = useCallback(async (queueItemId: string) => {
     const index = queueRef.current.findIndex((track) => buildLocalQueueItemId(track.id) === queueItemId);
-    if (index >= 0) await playRecords(queueRef.current, index);
+    if (index >= 0) await playRecords(queueRef.current, index, "queue");
   }, [playRecords]);
 
   const onRemoveQueueItem = useCallback(async (queueItemId: string) => {
@@ -380,7 +443,16 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const nextRecords = queueRef.current.filter((_, itemIndex) => itemIndex !== index);
     queueRef.current = nextRecords;
     setQueueRecords(nextRecords);
-    if (index < currentIndexRef.current) currentIndexRef.current -= 1;
+    if (playbackSequenceKindRef.current === "queue") {
+      playbackRecordsRef.current = nextRecords;
+      if (index < currentIndexRef.current) currentIndexRef.current -= 1;
+    } else if (playbackSequenceKindRef.current === "direct" && currentRecordRef.current) {
+      playbackRecordsRef.current = [
+        currentRecordRef.current,
+        ...nextRecords.filter((track) => track.id !== currentRecordRef.current?.id)
+      ];
+      currentIndexRef.current = 0;
+    }
     if (currentRecordRef.current?.id === queueItemId.replace("local-queue:", "")) {
       onPause();
     }
@@ -397,14 +469,36 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const currentId = currentRecordRef.current?.id;
     queueRef.current = nextRecords;
     setQueueRecords(nextRecords);
-    currentIndexRef.current = Math.max(0, nextRecords.findIndex((track) => track.id === currentId));
+    if (playbackSequenceKindRef.current === "queue") {
+      playbackRecordsRef.current = nextRecords;
+      currentIndexRef.current = Math.max(0, nextRecords.findIndex((track) => track.id === currentId));
+    } else if (playbackSequenceKindRef.current === "direct" && currentRecordRef.current) {
+      playbackRecordsRef.current = [
+        currentRecordRef.current,
+        ...nextRecords.filter((track) => track.id !== currentRecordRef.current?.id)
+      ];
+      currentIndexRef.current = 0;
+    }
   }, []);
 
   const currentTrack = useMemo(
     () => currentRecord ? toTrackMeta(currentRecord) : null,
     [currentRecord]
   );
-  const tracks = useMemo(() => queueRecords.map(toTrackMeta), [queueRecords]);
+  const tracks = useMemo(() => {
+    const records = [...libraryRecords, ...queueRecords].filter((track, index, list) =>
+      list.findIndex((candidate) => candidate.id === track.id) === index
+    );
+    return records.map(toTrackMeta);
+  }, [libraryRecords, queueRecords]);
+  const availableTracks = useMemo(() => {
+    const records = [...libraryRecords, ...queueRecords]
+      .filter((track, index, list) =>
+        list.findIndex((candidate) => candidate.id === track.id) === index
+      )
+      .filter(isTrackPlayable);
+    return records.map(toTrackMeta);
+  }, [isTrackPlayable, libraryRecords, queueRecords]);
   const queue = useMemo(
     () => queueRecords.map((track, position) => ({
       id: buildLocalQueueItemId(track.id),
@@ -430,12 +524,17 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     syncProgressFromAudio,
     syncDurationFromAudio,
     tracks,
+    availableTracks,
     queue,
-    currentQueueItemId: currentRecord ? buildLocalQueueItemId(currentRecord.id) : null,
+    currentQueueItemId: currentRecord && queueRecords.some((track) => track.id === currentRecord.id)
+      ? buildLocalQueueItemId(currentRecord.id)
+      : null,
     canControlPlayback: Boolean(currentRecord),
     canSeekPlayback: Boolean(currentRecord),
     playbackMode,
     isTrackPlayable,
+    addToQueue,
+    addTrackToQueue,
     playTrack,
     playTracks,
     onPlay,
@@ -449,8 +548,11 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     onReorderQueue
   }), [
     audioDurationMs,
+    addTrackToQueue,
+    availableTracks,
     currentRecord,
     currentTrack,
+    addToQueue,
     isTrackPlayable,
     onCyclePlaybackMode,
     onNext,
@@ -471,7 +573,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     syncDurationFromAudio,
     syncProgressFromAudio,
     tracks,
-    volume
+    volume,
+    queueRecords
   ]);
 
   return <LocalPlayerContext.Provider value={value}>{children}</LocalPlayerContext.Provider>;

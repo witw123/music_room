@@ -2,13 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { Playlist } from "@music-room/shared";
+import type {
+  NeteaseTrackCandidate,
+  Playlist,
+  QqMusicTrackCandidate
+} from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import {
   listMergedLocalPlaylistTracks,
-  listRoomPlaylistTrackIndex
+  listRoomPlaylistTrackIndex,
+  toLocalPlaylistTrackInput
 } from "@/features/playlist/local-playlist";
 import {
   chooseLocalAudioDirectory,
@@ -22,6 +27,13 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 
+type PlaylistSelection =
+  | { kind: "local" }
+  | { kind: "network"; playlist: Playlist };
+
+type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
+
 export function PlaylistsWorkspacePage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/playlists" });
@@ -30,12 +42,17 @@ export function PlaylistsWorkspacePage() {
     initialStatusMessage: ""
   });
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
-  const [roomPlaylists, setRoomPlaylists] = useState<Playlist[]>([]);
+  const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>([]);
   const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
-  const [selectedRoomPlaylist, setSelectedRoomPlaylist] = useState<Playlist | null>(null);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSelection | null>(null);
   const [storageState, setStorageState] = useState<LocalAudioStorageState | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newPlaylistTitle, setNewPlaylistTitle] = useState("");
+  const [newPlaylistDescription, setNewPlaylistDescription] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Playlist | null>(null);
   const player = useLocalPlayer();
 
   useEffect(() => {
@@ -50,7 +67,7 @@ export function PlaylistsWorkspacePage() {
       listRoomPlaylistTrackIndex()
     ]);
     setLocalTracks(tracks);
-    setRoomPlaylists(playlists);
+    setNetworkPlaylists(playlists);
     setStorageState(storage);
     setRoomTrackIndex(roomTracks);
   };
@@ -64,11 +81,59 @@ export function PlaylistsWorkspacePage() {
     if (pending) return;
     setPending(true);
     setMessage(null);
+    setStatusMessage(null);
     try {
       await chooseLocalAudioDirectory();
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function createNetworkPlaylist() {
+    const title = newPlaylistTitle.trim();
+    if (!title || pending) return;
+    setPending(true);
+    setMessage(null);
+    setStatusMessage(null);
+    try {
+      const playlist = await musicRoomApi.createPlaylist({
+        title,
+        description: newPlaylistDescription.trim() || null,
+        tags: ["network"],
+        isCollaborative: false
+      });
+      await refresh();
+      setCreateDialogOpen(false);
+      setNewPlaylistTitle("");
+      setNewPlaylistDescription("");
+      setSelectedPlaylist({ kind: "network", playlist });
+      setStatusMessage("网络歌单已创建。可从搜索页保存网易云或 QQ 音乐歌单。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "创建歌单失败，请重试。");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function deleteNetworkPlaylist() {
+    if (!deleteTarget || pending) return;
+    const target = deleteTarget;
+    setPending(true);
+    setMessage(null);
+    setStatusMessage(null);
+    try {
+      await musicRoomApi.deletePlaylist(target.id);
+      await refresh();
+      if (selectedPlaylist?.kind === "network" && selectedPlaylist.playlist.id === target.id) {
+        setSelectedPlaylist(null);
+      }
+      setDeleteTarget(null);
+      setStatusMessage(`歌单“${target.title}”已删除。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除歌单失败，请重试。");
     } finally {
       setPending(false);
     }
@@ -84,59 +149,87 @@ export function PlaylistsWorkspacePage() {
           <div>
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Playlists</p>
             <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">我的歌单</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-foreground-muted">本地歌单读取本地保存的音频和平台元数据，房间歌单用于快速恢复协作队列。</p>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-foreground-muted">本地歌单读取本地保存的音频和平台元数据，网络歌单保存网易云音乐与 QQ 音乐的歌单信息。</p>
           </div>
           <div className="flex items-center gap-2">
             <Link className="text-sm text-accent hover:text-accent/80" href="/app/search">去搜索音乐</Link>
+            <Button onClick={() => setCreateDialogOpen(true)} size="sm" variant="outline" type="button">
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
+              新建网络歌单
+            </Button>
             <Button disabled={pending || storageState?.supported === false} onClick={() => void chooseFolder()} size="sm" variant="outline" type="button">{storageState?.directoryName ? "更改本地目录" : "选择本地目录"}</Button>
           </div>
         </div>
 
-        <section className="mt-8 flex flex-col gap-4" data-testid="local-playlists">
-          <div className="flex items-end justify-between border-b border-surface-border pb-3">
-            <div><p className="text-lg font-bold text-foreground">本地歌单</p><p className="mt-1 text-xs text-foreground-muted">{storageState?.directoryName ? `目录：${storageState.directoryName}` : "尚未选择本地目录"}</p></div>
-            <span className="text-xs text-foreground-muted">{localTracks.length} 首</span>
-          </div>
-          {localTracks.length ? (
-            <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface/30">
-              <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
-                <span>#</span><span>标题</span><span className="hidden sm:block">专辑</span><span className="hidden text-right sm:block">时长</span><span aria-hidden="true" />
-              </div>
-              {localTracks.map((track, index) => (
-                <LocalTrackRow
-                  index={index}
-                  isCurrent={player.currentTrack?.id === track.id}
-                  isPlayable={player.isTrackPlayable(track)}
-                  key={track.id}
-                  onPlay={() => void player.playTrack(track)}
-                  track={track}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center text-sm text-foreground-muted">从搜索页下载歌曲或导入歌单后，会显示在这里。</div>
-          )}
-        </section>
-
-        <section className="mt-10 flex flex-col gap-4" data-testid="room-playlists">
-          <div className="flex items-end justify-between border-b border-surface-border pb-3"><div><p className="text-lg font-bold text-foreground">房间歌单</p><p className="mt-1 text-xs text-foreground-muted">账号保存的协作队列</p></div><span className="text-xs text-foreground-muted">{roomPlaylists.length} 个</span></div>
-          {roomPlaylists.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {roomPlaylists.map((playlist) => <RoomPlaylistCard key={playlist.id} playlist={playlist} onOpen={() => setSelectedRoomPlaylist(playlist)} />)}
-            </div>
-          ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center text-sm text-foreground-muted">在房间中保存队列后，会显示房间歌单。</div>}
-        </section>
-
-        {selectedRoomPlaylist ? (
-          <RoomPlaylistDetail
-            playlist={selectedRoomPlaylist}
+        {selectedPlaylist ? (
+          <PlaylistDetailView
+            localTracks={localTracks}
+            player={player}
             roomTrackIndex={roomTrackIndex}
-            isTrackPlayable={player.isTrackPlayable}
-            onPlayTracks={(tracks, index) => void player.playTracks(tracks, index)}
-            onClose={() => setSelectedRoomPlaylist(null)}
+            selection={selectedPlaylist}
+            onBack={() => setSelectedPlaylist(null)}
+            onDelete={selectedPlaylist.kind === "network" ? () => setDeleteTarget(selectedPlaylist.playlist) : undefined}
+          />
+        ) : (
+          <>
+            <section className="mt-8 flex flex-col gap-4" data-testid="local-playlists">
+              <div className="flex items-end justify-between border-b border-surface-border pb-3">
+                <div>
+                  <p className="text-lg font-bold text-foreground">本地歌单</p>
+                  <p className="mt-1 text-xs text-foreground-muted">{storageState?.directoryName ? `目录：${storageState.directoryName}` : "尚未选择本地目录"}</p>
+                </div>
+                <span className="text-xs text-foreground-muted">1 个</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <LocalPlaylistCard
+                  folderName={storageState?.directoryName ?? null}
+                  onOpen={() => setSelectedPlaylist({ kind: "local" })}
+                  tracks={localTracks}
+                />
+              </div>
+            </section>
+
+            <section className="mt-10 flex flex-col gap-4" data-testid="network-playlists">
+              <div className="flex items-end justify-between border-b border-surface-border pb-3">
+                <div><p className="text-lg font-bold text-foreground">网络歌单</p><p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p></div>
+                <span className="text-xs text-foreground-muted">{networkPlaylists.length} 个</span>
+              </div>
+              {networkPlaylists.length ? (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {networkPlaylists.map((playlist) => (
+                    <NetworkPlaylistCard
+                      key={playlist.id}
+                      onDelete={() => setDeleteTarget(playlist)}
+                      onOpen={() => setSelectedPlaylist({ kind: "network", playlist })}
+                      playlist={playlist}
+                    />
+                  ))}
+                </div>
+              ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center text-sm text-foreground-muted">从搜索页保存网易云音乐或 QQ 音乐歌单后，会显示在这里。</div>}
+            </section>
+          </>
+        )}
+        {statusMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{statusMessage}</p> : null}
+        {message ? <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{message}</p> : null}
+        {createDialogOpen ? (
+          <PlaylistEditorDialog
+            description={newPlaylistDescription}
+            onCancel={() => setCreateDialogOpen(false)}
+            onDescriptionChange={setNewPlaylistDescription}
+            onSubmit={() => void createNetworkPlaylist()}
+            onTitleChange={setNewPlaylistTitle}
+            pending={pending}
+            title={newPlaylistTitle}
           />
         ) : null}
-        {message ? <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{message}</p> : null}
+        {deleteTarget ? (
+          <DeletePlaylistDialog
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={() => void deleteNetworkPlaylist()}
+            pending={pending}
+            playlist={deleteTarget}
+          />
+        ) : null}
       </div>
     </main>
   );
@@ -147,12 +240,16 @@ function LocalTrackRow({
   index,
   isCurrent,
   isPlayable,
+  isQueued,
+  onAddToQueue,
   onPlay
 }: {
   track: LocalPlaylistTrackRecord;
   index: number;
   isCurrent: boolean;
   isPlayable: boolean;
+  isQueued: boolean;
+  onAddToQueue: () => void;
   onPlay: () => void;
 }) {
   return (
@@ -164,90 +261,365 @@ function LocalTrackRow({
       </div>
       <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
       <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
-      <Button
-        aria-label={isPlayable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`}
-        className="h-8 w-8 shrink-0"
-        disabled={!isPlayable}
-        onClick={onPlay}
-        size="icon"
-        title={isPlayable ? "播放" : "需要下载后播放"}
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
+          className="h-8 w-8"
+          disabled={isQueued || !isPlayable}
+          onClick={onAddToQueue}
+          size="icon"
+          title={isQueued ? "已在队列中" : isPlayable ? "加入队列" : "需要下载后加入队列"}
+          type="button"
+          variant="ghost"
+        >
+          <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
+        </Button>
+        <Button
+          aria-label={isPlayable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`}
+          className="h-8 w-8"
+          disabled={!isPlayable}
+          onClick={onPlay}
+          size="icon"
+          title={isPlayable ? "播放" : "需要下载后播放"}
+          type="button"
+          variant={isCurrent ? "default" : "ghost"}
+        >
+          {isCurrent ? (
+            <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>
+          ) : (
+            <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
+          )}
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function LocalPlaylistCard({
+  folderName,
+  onOpen,
+  tracks
+}: {
+  folderName: string | null;
+  onOpen: () => void;
+  tracks: LocalPlaylistTrackRecord[];
+}) {
+  const artworkUrl = tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null;
+  const downloadedCount = tracks.filter((track) => track.availableOffline).length;
+
+  return (
+    <button
+      aria-label="打开本地歌单"
+      className="group overflow-hidden rounded-2xl border border-surface-border bg-surface/35 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+      onClick={onOpen}
+      type="button"
+    >
+      <div className="relative overflow-hidden">
+        <Artwork artworkUrl={artworkUrl} title="本地歌单" size="cover" />
+        <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80 backdrop-blur-sm">本地</span>
+        <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white/90 backdrop-blur-sm">{tracks.length} 首歌曲</span>
+      </div>
+      <div className="space-y-1.5 px-4 py-3.5">
+        <strong className="block truncate text-sm font-semibold text-foreground">本地歌单</strong>
+        <p className="truncate text-xs text-foreground-muted">{folderName ? `目录：${folderName}` : "本地保存的歌曲"}</p>
+        <p className="text-xs text-foreground-muted">已下载 {downloadedCount} / {tracks.length}</p>
+      </div>
+    </button>
+  );
+}
+
+function NetworkPlaylistCard({ playlist, onOpen, onDelete }: { playlist: Playlist; onOpen: () => void; onDelete: () => void }) {
+  const source = getNetworkPlaylistSource(playlist);
+  const providerName = source?.provider === "qqmusic" ? "QQ 音乐" : source?.provider === "netease" ? "网易云音乐" : "网络歌单";
+
+  return (
+    <article className="group relative overflow-hidden rounded-2xl border border-surface-border bg-surface/35 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover">
+      <button
+        aria-label={`打开歌单 ${playlist.title}`}
+        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
+        onClick={onOpen}
         type="button"
-        variant={isCurrent ? "default" : "ghost"}
       >
-        {isCurrent ? (
-          <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>
-        ) : (
-          <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
-        )}
+        <div className="relative overflow-hidden">
+          <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="cover" />
+          <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white/90 backdrop-blur-sm">{playlist.trackIds.length} 首歌曲</span>
+        </div>
+        <div className="space-y-1.5 px-4 py-3.5 pr-12">
+          <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
+          <p className="truncate text-xs text-foreground-muted">{playlist.description || "暂无简介"}</p>
+          <p className="text-xs text-foreground-muted">{providerName}</p>
+        </div>
+      </button>
+      <Button
+        aria-label={`删除歌单 ${playlist.title}`}
+        className="absolute right-3 top-3 h-8 w-8 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={onDelete}
+        size="icon"
+        title="删除歌单"
+        type="button"
+        variant="ghost"
+      >
+        <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>
       </Button>
     </article>
   );
 }
 
-function RoomPlaylistCard({ playlist, onOpen }: { playlist: Playlist; onOpen: () => void }) {
-  return <button className="flex min-h-36 items-center gap-4 rounded-2xl border border-surface-border bg-surface/35 p-4 text-left transition hover:border-accent/30 hover:bg-surface-hover" onClick={onOpen} type="button"><Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="lg" /><span className="min-w-0"><strong className="block truncate text-base text-foreground">{playlist.title}</strong><span className="mt-2 block text-xs text-foreground-muted">{playlist.trackIds.length} 首 · {playlist.isCollaborative ? "协作歌单" : "个人歌单"}</span><span className="mt-1 block truncate text-xs text-foreground-muted">{playlist.description || "暂无简介"}</span></span></button>;
-}
-
-function RoomPlaylistDetail({
-  playlist,
+function PlaylistDetailView({
+  localTracks,
   roomTrackIndex,
-  isTrackPlayable,
-  onPlayTracks,
-  onClose
+  player,
+  selection,
+  onBack,
+  onDelete
 }: {
-  playlist: Playlist;
+  localTracks: LocalPlaylistTrackRecord[];
   roomTrackIndex: Map<string, LocalPlaylistTrackRecord>;
-  isTrackPlayable: (track: LocalPlaylistTrackRecord) => boolean;
-  onPlayTracks: (tracks: LocalPlaylistTrackRecord[], index: number) => void;
-  onClose: () => void;
+  player: ReturnType<typeof useLocalPlayer>;
+  selection: PlaylistSelection;
+  onBack: () => void;
+  onDelete?: () => void;
 }) {
-  const resolvedTracks = playlist.trackIds
-    .map((trackId, index) => ({ trackId, index, track: roomTrackIndex.get(trackId) }))
-    .filter((item): item is { trackId: string; index: number; track: LocalPlaylistTrackRecord } => Boolean(item.track));
-  const playableTracks = resolvedTracks.map((item) => item.track);
+  const isLocal = selection.kind === "local";
+  const networkPlaylist = selection.kind === "network" ? selection.playlist : null;
+  const networkSource = networkPlaylist ? getNetworkPlaylistSource(networkPlaylist) : null;
+  const networkProvider = networkSource?.provider ?? null;
+  const networkPlaylistId = networkSource?.playlistId ?? null;
+  const [remoteTracks, setRemoteTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRemoteTracks([]);
+    setRemoteError(null);
+    if (isLocal || !networkProvider || !networkPlaylistId) {
+      setRemoteLoading(false);
+      return;
+    }
+
+    setRemoteLoading(true);
+    const load = networkProvider === "netease"
+      ? musicRoomApi.getNeteasePlaylist(networkPlaylistId)
+      : musicRoomApi.getQqMusicPlaylist(networkPlaylistId);
+    void load
+      .then((detail) => {
+        if (cancelled) return;
+        setRemoteTracks(detail.tracks.map((track) => {
+          const trackId = `provider:${track.provider}:${track.providerTrackId}`;
+          return roomTrackIndex.get(trackId) ?? toProviderTrackRecord(track);
+        }));
+      })
+      .catch((error) => {
+        if (!cancelled) setRemoteError(error instanceof Error ? error.message : "网络歌单详情加载失败。");
+      })
+      .finally(() => {
+        if (!cancelled) setRemoteLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLocal, networkPlaylistId, networkProvider, roomTrackIndex]);
+
+  const title = isLocal ? "本地歌单" : networkPlaylist?.title ?? "网络歌单";
+  const description = isLocal
+    ? "本地目录中保存的歌曲"
+    : networkPlaylist?.description || (networkSource?.provider === "qqmusic" ? "来自 QQ 音乐的网络歌单" : networkSource?.provider === "netease" ? "来自网易云音乐的网络歌单" : "保存的网络歌单");
+  const artworkUrl = isLocal
+    ? localTracks.find((track) => track.artworkUrl)?.artworkUrl ?? null
+    : networkPlaylist?.coverUrl ?? null;
+  const networkTracks = remoteTracks.length
+    ? remoteTracks.map((track, index) => ({ track, index, trackId: track.id }))
+    : (networkPlaylist?.trackIds ?? []).map((trackId, index) => ({ track: roomTrackIndex.get(trackId), index, trackId }));
+  const rows = isLocal
+    ? localTracks.map((track, index) => ({ track, index, trackId: track.id }))
+    : networkTracks;
+  const playableTracks = rows
+    .map((row) => row.track)
+    .filter((track): track is LocalPlaylistTrackRecord => Boolean(track && player.isTrackPlayable(track)))
+    .filter((track, index, list) => list.findIndex((candidate) => candidate.id === track.id) === index);
+  const playableIndexById = new Map(playableTracks.map((track, index) => [track.id, index]));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onMouseDown={onClose} role="presentation">
-      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="flex items-start justify-between gap-4">
-          <div><h2 className="text-lg font-semibold text-foreground">{playlist.title}</h2><p className="mt-1 text-xs text-foreground-muted">{playlist.trackIds.length} 首曲目</p></div>
-          <Button onClick={onClose} size="sm" variant="ghost" type="button">关闭</Button>
+    <section className="mt-8" data-testid="playlist-detail">
+      <Button className="mb-6 gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
+        <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /></svg>
+        返回歌单
+      </Button>
+
+      <div className="flex flex-col gap-6 border-b border-surface-border pb-7 sm:flex-row sm:items-end">
+        <Artwork artworkUrl={artworkUrl} title={title} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">{isLocal ? "Local playlist" : "Network playlist"}</p>
+          <h2 className="mt-2 truncate text-2xl font-bold text-foreground sm:text-3xl">{title}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-foreground-muted">{description}</p>
+          <p className="mt-3 text-xs text-foreground-muted">{rows.length} 首歌曲{isLocal ? "" : " · 网络歌单"}</p>
+          {remoteLoading ? <p className="mt-2 text-xs text-accent">正在同步平台歌单详情…</p> : null}
+          {remoteError ? <p className="mt-2 text-xs text-amber-300">{remoteError} 当前显示已保存的歌曲索引。</p> : null}
         </div>
-        <div className="mt-4 divide-y divide-surface-border">
-          {playlist.trackIds.map((trackId, index) => {
-            const record = roomTrackIndex.get(trackId);
-            const playable = Boolean(record && isTrackPlayable(record));
-            const resolvedIndex = record ? playableTracks.findIndex((track) => track.id === record.id) : -1;
-            return (
-              <div className="flex items-center gap-3 py-3" key={`${playlist.id}:${trackId}`}>
-                <span className="w-6 shrink-0 text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-foreground">{record?.title ?? trackId}</p>
-                  <p className="truncate text-xs text-foreground-muted">{record?.artist ?? "曲目信息不可用"}{playable ? " · 已下载" : " · 需下载后播放"}</p>
-                </div>
-                <Button
-                  aria-label={playable ? `播放《${record?.title ?? trackId}》` : "需要下载后播放"}
-                  className="h-8 w-8 shrink-0"
-                  disabled={!playable}
-                  onClick={() => onPlayTracks(playableTracks, resolvedIndex)}
-                  size="icon"
-                  title={playable ? "播放" : "需要下载后播放"}
-                  type="button"
-                  variant="ghost"
-                >
-                  <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
-                </Button>
-              </div>
-            );
-          })}
-        </div>
+        {onDelete ? (
+          <Button aria-label="删除网络歌单" className="text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={onDelete} size="sm" type="button" variant="ghost">
+            <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>
+            删除
+          </Button>
+        ) : null}
+        <Button disabled={playableTracks.length === 0} onClick={() => void player.playTracks(playableTracks, 0)} type="button">
+          <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
+          播放全部
+        </Button>
       </div>
+
+      <div className="mt-6 overflow-hidden rounded-2xl border border-surface-border bg-surface/25">
+        <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
+          <span>#</span><span>标题</span><span className="hidden sm:block">专辑</span><span className="hidden text-right sm:block">时长</span><span aria-hidden="true" />
+        </div>
+        {rows.length ? rows.map(({ track, index, trackId }) => {
+          if (!track) {
+            return (
+              <article className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-b-0" key={`${selection.kind}:${trackId}`}>
+                <span className="w-8 shrink-0 text-xs text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
+                <div className="min-w-0"><p className="truncate text-sm text-foreground">{trackId}</p><p className="mt-1 text-xs text-foreground-muted">曲目信息不可用</p></div>
+              </article>
+            );
+          }
+          const playable = player.isTrackPlayable(track);
+          return (
+            <LocalTrackRow
+              index={index}
+              isCurrent={player.currentTrack?.id === track.id}
+              isPlayable={playable}
+              isQueued={player.queue.some((item) => item.trackId === track.id)}
+              key={`${selection.kind}:${track.id}`}
+              onAddToQueue={() => player.addToQueue(track)}
+              onPlay={() => {
+                const playableIndex = playableIndexById.get(track.id);
+                if (playableIndex !== undefined) void player.playTracks(playableTracks, playableIndex);
+              }}
+              track={track}
+            />
+          );
+        }) : <div className="px-6 py-14 text-center text-sm text-foreground-muted">这个歌单还没有歌曲。</div>}
+      </div>
+    </section>
+  );
+}
+
+function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "cover" }) {
+  const sizeClass = size === "cover"
+    ? "aspect-square w-full rounded-none"
+    : size === "lg"
+      ? "h-24 w-24 rounded-xl"
+      : "h-10 w-10 rounded-lg";
+  return (
+    <div
+      aria-label={`${title} 封面`}
+      className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden border border-surface-border bg-surface text-lg font-bold text-foreground-muted`}
+      style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
+    >
+      {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
     </div>
   );
 }
 
-function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" }) {
-  return <div aria-label={`${title} 封面`} className={`${size === "lg" ? "h-24 w-24 rounded-xl" : "h-10 w-10 rounded-lg"} shrink-0 border border-surface-border bg-surface`} style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined} />;
+function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSource | null {
+  const sourceTag = playlist.tags.find((tag) => tag.startsWith("network:"));
+  if (!sourceTag) return null;
+  const [, provider, ...playlistIdParts] = sourceTag.split(":");
+  if (provider !== "netease" && provider !== "qqmusic") return null;
+  const playlistId = playlistIdParts.join(":").trim();
+  return playlistId ? { provider, playlistId } : null;
+}
+
+function toProviderTrackRecord(track: ProviderTrack): LocalPlaylistTrackRecord {
+  const now = new Date().toISOString();
+  return {
+    ...toLocalPlaylistTrackInput({ track, availableOffline: false }),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function PlaylistEditorDialog({
+  title,
+  description,
+  pending,
+  onTitleChange,
+  onDescriptionChange,
+  onSubmit,
+  onCancel
+}: {
+  title: string;
+  description: string;
+  pending: boolean;
+  onTitleChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" role="presentation">
+      <form
+        aria-labelledby="create-network-playlist-title"
+        className="w-full max-w-md rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground" id="create-network-playlist-title">新建网络歌单</h2>
+            <p className="mt-1 text-xs text-foreground-muted">也可以从搜索页直接保存网易云音乐或 QQ 音乐歌单。</p>
+          </div>
+          <Button aria-label="关闭" onClick={onCancel} size="icon" type="button" variant="ghost">
+            <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </Button>
+        </div>
+        <label className="mt-5 block text-xs font-medium text-foreground-muted" htmlFor="new-network-playlist-title">歌单名称</label>
+        <input
+          autoFocus
+          className="mt-2 w-full rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          id="new-network-playlist-title"
+          maxLength={160}
+          onChange={(event) => onTitleChange(event.target.value)}
+          placeholder="例如：通勤歌单"
+          required
+          value={title}
+        />
+        <label className="mt-4 block text-xs font-medium text-foreground-muted" htmlFor="new-network-playlist-description">歌单简介（可选）</label>
+        <textarea
+          className="mt-2 min-h-24 w-full resize-y rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          id="new-network-playlist-description"
+          maxLength={1000}
+          onChange={(event) => onDescriptionChange(event.target.value)}
+          placeholder="写点歌单备注"
+          value={description}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button disabled={pending} onClick={onCancel} type="button" variant="ghost">取消</Button>
+          <Button disabled={pending || !title.trim()} type="submit">{pending ? "创建中…" : "创建歌单"}</Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function DeletePlaylistDialog({ playlist, pending, onConfirm, onCancel }: { playlist: Playlist; pending: boolean; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" role="presentation">
+      <div aria-labelledby="delete-network-playlist-title" className="w-full max-w-sm rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl" role="dialog" aria-modal="true">
+        <h2 className="text-lg font-semibold text-foreground" id="delete-network-playlist-title">删除网络歌单</h2>
+        <p className="mt-3 text-sm leading-6 text-foreground-muted">确定删除“{playlist.title}”吗？已下载到本地的歌曲不会被删除。</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button disabled={pending} onClick={onCancel} type="button" variant="ghost">取消</Button>
+          <Button className="bg-red-500 hover:bg-red-400" disabled={pending} onClick={onConfirm} type="button">{pending ? "删除中…" : "确认删除"}</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AppPageBackground() {

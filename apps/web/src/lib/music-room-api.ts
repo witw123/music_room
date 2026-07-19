@@ -358,6 +358,18 @@ export const musicRoomApi = {
     ),
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),
+  createPlaylist: (payload: {
+    title: string;
+    description?: string | null;
+    trackIds?: string[];
+    tags?: string[];
+    coverUrl?: string | null;
+    isCollaborative?: boolean;
+  }) =>
+    request<Playlist>("/v1/playlists", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   updatePlaylist: (
     playlistId: string,
     payload: {
