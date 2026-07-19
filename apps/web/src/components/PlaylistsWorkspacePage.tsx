@@ -45,6 +45,10 @@ type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: stri
 type PlaylistDeleteTarget =
   | { kind: "local"; playlist: LocalPlaylistRecord }
   | { kind: "network"; playlist: Playlist };
+type TrackMoveRequest = {
+  track: LocalPlaylistTrackRecord;
+  source: PlaylistSelection;
+};
 
 export function PlaylistsWorkspacePage() {
   const router = useRouter();
@@ -68,6 +72,7 @@ export function PlaylistsWorkspacePage() {
   const [newPlaylistTitle, setNewPlaylistTitle] = useState("");
   const [newPlaylistDescription, setNewPlaylistDescription] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<PlaylistDeleteTarget | null>(null);
+  const [moveTarget, setMoveTarget] = useState<TrackMoveRequest | null>(null);
   const player = useLocalPlayer();
 
   useEffect(() => {
@@ -221,6 +226,64 @@ export function PlaylistsWorkspacePage() {
     }
   }
 
+  async function moveTrackToPlaylist(request: TrackMoveRequest, target: PlaylistSelection) {
+    if (pending) return;
+    if (request.source.kind === target.kind && request.source.playlist.id === target.playlist.id) {
+      setMoveTarget(null);
+      return;
+    }
+
+    setPending(true);
+    setMessage(null);
+    setStatusMessage(null);
+    try {
+      const trackId = request.track.id;
+      if (target.kind === "local") {
+        const targetPlaylist = listLocalPlaylists().find((playlist) => playlist.id === target.playlist.id);
+        if (!targetPlaylist) throw new Error("目标本地歌单不存在，请刷新后重试。");
+        await upsertLocalPlaylistTrack(request.track);
+        if (!isDefaultLocalPlaylist(targetPlaylist) && !targetPlaylist.trackIds.includes(trackId)) {
+          updateLocalPlaylist(targetPlaylist.id, { trackIds: [...targetPlaylist.trackIds, trackId] });
+        }
+      } else {
+        if (!request.track.providerTrackId || request.track.provider === "local_upload") {
+          throw new Error("本地上传歌曲只能移动到本地歌单。");
+        }
+        if (!target.playlist.trackIds.includes(trackId)) {
+          await musicRoomApi.updatePlaylist(target.playlist.id, {
+            trackIds: [...target.playlist.trackIds, trackId]
+          });
+        }
+      }
+
+      if (request.source.kind === "local") {
+        const sourcePlaylist = listLocalPlaylists().find((playlist) => playlist.id === request.source.playlist.id);
+        if (!sourcePlaylist) throw new Error("来源本地歌单不存在，请刷新后重试。");
+        let updatedSource = sourcePlaylist;
+        if (!isDefaultLocalPlaylist(sourcePlaylist)) {
+          updatedSource = updateLocalPlaylist(sourcePlaylist.id, {
+            trackIds: sourcePlaylist.trackIds.filter((id) => id !== trackId)
+          }) ?? sourcePlaylist;
+        }
+        await refresh();
+        setSelectedPlaylist({ kind: "local", playlist: updatedSource });
+      } else {
+        const updatedSource = await musicRoomApi.updatePlaylist(request.source.playlist.id, {
+          trackIds: request.source.playlist.trackIds.filter((id) => id !== trackId)
+        });
+        await refresh();
+        setSelectedPlaylist({ kind: "network", playlist: updatedSource });
+      }
+
+      setMoveTarget(null);
+      setStatusMessage(`《${request.track.title}》已移动到“${target.playlist.title}”。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "移动歌曲失败，请重试。");
+    } finally {
+      setPending(false);
+    }
+  }
+
   if (!hydrated || !activeSession) return <div className="min-h-screen bg-black" />;
 
   return (
@@ -259,6 +322,7 @@ export function PlaylistsWorkspacePage() {
               return next;
             })}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
+            onMoveTrack={(track) => setMoveTarget({ track, source: selectedPlaylist })}
             onDelete={selectedPlaylist.kind === "local"
               ? () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
               : () => setDeleteTarget({ kind: "network", playlist: selectedPlaylist.playlist })}
@@ -361,6 +425,19 @@ export function PlaylistsWorkspacePage() {
             playlist={deleteTarget.playlist}
           />
         ) : null}
+        {moveTarget ? (
+          <PlaylistMoveDialog
+            localPlaylists={localPlaylists}
+            networkPlaylists={networkPlaylists}
+            onCancel={() => {
+              if (!pending) setMoveTarget(null);
+            }}
+            onSelect={(target) => void moveTrackToPlaylist(moveTarget, target)}
+            pending={pending}
+            source={moveTarget.source}
+            track={moveTarget.track}
+          />
+        ) : null}
       </div>
     </main>
   );
@@ -374,6 +451,7 @@ function LocalTrackRow({
   isQueued,
   onAddToQueue,
   onDownload,
+  onMove,
   onPlay,
   onRemove,
   isDownloading = false,
@@ -391,6 +469,7 @@ function LocalTrackRow({
   isQueued: boolean;
   onAddToQueue: () => void;
   onDownload?: () => void;
+  onMove?: () => void;
   onPlay: () => void;
   onRemove?: () => void;
   isDownloading?: boolean;
@@ -403,7 +482,7 @@ function LocalTrackRow({
 }) {
   return (
     <article
-      className={`grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-surface-border px-4 py-3 last:border-b-0 hover:bg-surface-hover/50 sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto] ${isCurrent ? "bg-accent/10" : ""} ${isDragTarget ? "border-accent/60 bg-accent/10" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 border-b border-surface-border px-4 py-3 last:border-b-0 hover:bg-surface-hover/50 sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto] ${isCurrent ? "bg-accent/10" : ""} ${isDragTarget ? "border-accent/60 bg-accent/10" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
       draggable={draggable}
       onDragEnd={onDragEnd}
       onDragOver={(event: DragEvent<HTMLElement>) => {
@@ -432,7 +511,7 @@ function LocalTrackRow({
       </div>
       <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
       <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="col-start-2 flex shrink-0 items-center justify-end gap-1 sm:col-auto">
         {onDownload ? (
           <Button
             aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
@@ -479,6 +558,20 @@ function LocalTrackRow({
             <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
           )}
         </Button>
+        {onMove ? (
+          <Button
+            aria-label={`移动《${track.title}》到其他歌单`}
+            className="h-8 w-8"
+            disabled={!track.providerTrackId && track.provider !== "local_upload"}
+            onClick={onMove}
+            size="icon"
+            title="移动到其他歌单"
+            type="button"
+            variant="ghost"
+          >
+            <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M5 7h10M11 3l4 4-4 4M19 17H9m4-4-4 4 4 4" /></svg>
+          </Button>
+        ) : null}
         {onRemove ? (
           <Button aria-label={`从歌单移除《${track.title}》`} className="h-8 w-8 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={onRemove} size="icon" title="从歌单移除" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>
@@ -583,6 +676,7 @@ function PlaylistDetailView({
   onArtworkResolved,
   onTrackUpdated,
   onUpdateTracks,
+  onMoveTrack,
   pending
 }: {
   localTracks: LocalPlaylistTrackRecord[];
@@ -595,6 +689,7 @@ function PlaylistDetailView({
   onArtworkResolved?: (artworkUrl: string) => void;
   onTrackUpdated?: (track: LocalPlaylistTrackRecord) => void;
   onUpdateTracks: (trackIds: string[]) => void;
+  onMoveTrack?: (track: LocalPlaylistTrackRecord) => void;
   pending: boolean;
 }) {
   const isLocal = selection.kind === "local";
@@ -679,15 +774,19 @@ function PlaylistDetailView({
     onUpdateTracks(nextTrackIds);
   }
 
-  async function downloadNetworkTrack(track: LocalPlaylistTrackRecord) {
-    if (isLocal || !networkProvider || !track.providerTrackId || track.availableOffline || downloadTrackId) return;
+  async function downloadTrack(track: LocalPlaylistTrackRecord) {
+    const provider = track.provider === "netease" || track.provider === "qqmusic" ? track.provider : null;
+    if (!provider || !track.providerTrackId || track.availableOffline || downloadTrackId) return;
     setDownloadTrackId(track.id);
     setDownloadMessage(null);
     try {
-      const resolvedTrack = await resolveProviderArtwork(track, networkProvider);
-      if (resolvedTrack.artworkUrl) onArtworkResolved?.(resolvedTrack.artworkUrl);
+      const resolvedTrack = await resolveProviderArtwork(track, provider);
+      if (resolvedTrack.artworkUrl) {
+        onArtworkResolved?.(resolvedTrack.artworkUrl);
+        onTrackUpdated?.(resolvedTrack);
+      }
       await ensureLocalAudioDirectoryWriteAccess();
-      const response = networkProvider === "netease"
+      const response = provider === "netease"
         ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId!)
         : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId!);
       const fileHash = await hashAudioBlob(response.blob);
@@ -700,7 +799,7 @@ function PlaylistDetailView({
       });
       const lyricPayload = resolvedTrack.lyrics
         ? null
-        : await (networkProvider === "netease"
+        : await (provider === "netease"
           ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId!)
           : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId!)
         ).catch(() => null);
@@ -762,8 +861,8 @@ function PlaylistDetailView({
       {downloadMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{downloadMessage}</p> : null}
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-surface-border bg-surface/25">
-        <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
-          <span>#</span><span>标题</span><span className="hidden sm:block">专辑</span><span className="hidden text-right sm:block">时长</span><span aria-hidden="true" />
+        <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
+          <span>#</span><span>标题</span><span className="hidden sm:block">专辑</span><span className="hidden text-right sm:block">时长</span><span aria-hidden="true" className="hidden sm:block" />
         </div>
         {rows.length ? rows.map(({ track, index, trackId }) => {
           if (!track) {
@@ -807,7 +906,9 @@ function PlaylistDetailView({
               isDragTarget={dragOverTrackId === track.id}
               key={`${selection.kind}:${track.id}`}
               onAddToQueue={() => player.addToQueue(track)}
-              onDownload={!isLocal && networkProvider && track.providerTrackId ? () => void downloadNetworkTrack(track) : undefined}
+              onDownload={track.providerTrackId && (track.provider === "netease" || track.provider === "qqmusic")
+                ? () => void downloadTrack(track)
+                : undefined}
               isDownloading={downloadTrackId === track.id}
               onDragEnd={() => {
                 setDraggingTrackId(null);
@@ -816,6 +917,7 @@ function PlaylistDetailView({
               onDragOver={() => setDragOverTrackId(track.id)}
               onDragStart={() => setDraggingTrackId(track.id)}
               onDrop={() => reorderTracks(track.id)}
+              onMove={() => onMoveTrack?.(track)}
               onRemove={canEditTracks ? () => onUpdateTracks(currentTrackIds.filter((trackId) => trackId !== track.id)) : undefined}
               onPlay={() => {
                 const playableIndex = playableIndexById.get(track.id);
@@ -975,6 +1077,88 @@ function PlaylistEditorDialog({
           <Button disabled={pending || !title.trim()} type="submit">{pending ? "创建中…" : "创建歌单"}</Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function PlaylistMoveDialog({
+  track,
+  source,
+  localPlaylists,
+  networkPlaylists,
+  pending,
+  onCancel,
+  onSelect
+}: {
+  track: LocalPlaylistTrackRecord;
+  source: PlaylistSelection;
+  localPlaylists: LocalPlaylistRecord[];
+  networkPlaylists: Playlist[];
+  pending: boolean;
+  onCancel: () => void;
+  onSelect: (target: PlaylistSelection) => void;
+}) {
+  const canMoveToNetwork = Boolean(track.providerTrackId && track.provider !== "local_upload");
+  const options: PlaylistSelection[] = [
+    ...localPlaylists.map((playlist) => ({ kind: "local" as const, playlist })),
+    ...networkPlaylists.map((playlist) => ({ kind: "network" as const, playlist }))
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={onCancel} role="presentation">
+      <div
+        aria-labelledby="playlist-move-title"
+        className="max-h-[min(86vh,680px)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-foreground" id="playlist-move-title">移动到歌单</h2>
+            <p className="mt-1 truncate text-xs text-foreground-muted">《{track.title}》 · {track.artist}</p>
+          </div>
+          <Button aria-label="关闭" disabled={pending} onClick={onCancel} size="icon" type="button" variant="ghost">
+            <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </Button>
+        </div>
+
+        {options.length ? (
+          <div className="mt-5 space-y-2">
+            {options.map((target) => {
+              const isSource = source.kind === target.kind && source.playlist.id === target.playlist.id;
+              const networkUnavailable = target.kind === "network" && !canMoveToNetwork;
+              const disabled = pending || isSource || networkUnavailable;
+              return (
+                <button
+                  aria-disabled={disabled}
+                  className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-background/60 px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={disabled}
+                  key={`${target.kind}:${target.playlist.id}`}
+                  onClick={() => onSelect(target)}
+                  title={isSource ? "当前歌单" : networkUnavailable ? "本地上传歌曲只能移动到本地歌单" : undefined}
+                  type="button"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                    <svg aria-hidden="true" fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="17"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10l2 2h6.5A1.5 1.5 0 0 1 20 7.5v10A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" /><path d="M8 12h8m-3-3 3 3-3 3" /></svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">{target.playlist.title}</span>
+                    <span className="mt-1 block truncate text-xs text-foreground-muted">
+                      {target.kind === "local"
+                        ? (isDefaultLocalPlaylist(target.playlist) ? "本地保存的歌曲" : `${target.playlist.trackIds.length} 首歌曲`)
+                        : `${target.playlist.trackIds.length} 首歌曲`}
+                    </span>
+                  </span>
+                  <svg aria-hidden="true" className="shrink-0 text-foreground-muted" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m9 18 6-6-6-6" /></svg>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-6 text-center text-sm text-foreground-muted">还没有可移动的歌单。</p>
+        )}
+      </div>
     </div>
   );
 }

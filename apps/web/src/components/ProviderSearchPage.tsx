@@ -14,7 +14,6 @@ import type {
   QqMusicTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { AppSidebar } from "@/components/AppSidebar";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
@@ -52,7 +51,7 @@ const enabledProviders: Provider[] = [
 export function ProviderSearchPage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/search" });
-  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
+  const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -343,15 +342,6 @@ export function ProviderSearchPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <AppSidebar activeItem="search" activeSession={activeSession} onLogout={async () => {
-        try {
-          await musicRoomApi.logout();
-        } catch {
-          // Clear local identity below even if the server is unavailable.
-        }
-        clearIdentity();
-        router.replace(authEntryHref as Route);
-      }} />
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

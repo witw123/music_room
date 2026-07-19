@@ -141,8 +141,6 @@ function LocalPlaylistSection({
     }
   }
   const visibleImportable = [...byHash.values()];
-  const metadataOnly = localTracks.filter((track) => !track.availableOffline || !track.fileHash);
-
   return (
     <div className="flex flex-col gap-4">
       <CachedLibrarySection
@@ -152,19 +150,6 @@ function LocalPlaylistSection({
         onImportCachedTrack={onImportCachedTrack}
         pendingCachedImport={pendingCachedImport}
       />
-      {metadataOnly.length > 0 ? (
-        <div className="rounded-lg border border-dashed border-surface-border px-3 py-3">
-          <p className="text-xs font-semibold text-foreground">待下载歌曲</p>
-          <div className="mt-2 divide-y divide-surface-border">
-            {metadataOnly.map((track) => (
-              <div className="flex items-center justify-between gap-3 py-2" key={track.id}>
-                <div className="min-w-0"><p className="truncate text-xs text-foreground">{track.title}</p><p className="truncate text-[10px] text-foreground-muted">{track.artist} · 尚未下载音频</p></div>
-                <span className="shrink-0 text-[10px] text-foreground-muted">请先下载</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

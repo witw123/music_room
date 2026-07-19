@@ -50,6 +50,7 @@ export function RoomsHomePage({
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [roomPage, setRoomPage] = useState(0);
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
   const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
@@ -124,6 +125,12 @@ export function RoomsHomePage({
     setCreateDialogOpen(true);
   }
 
+  function openJoinDialog() {
+    setJoinCode("");
+    setDialogError(null);
+    setJoinDialogOpen(true);
+  }
+
   async function handleCreateRoom() {
     primeRoomAudioFromUserGesture();
     try {
@@ -177,6 +184,7 @@ export function RoomsHomePage({
       (item) => item.room.joinCode.toUpperCase() === joinCode.trim().toUpperCase()
     );
     if (room) {
+      setJoinDialogOpen(false);
       openRoomDetails(room);
       return;
     }
@@ -265,73 +273,7 @@ export function RoomsHomePage({
 
 
 
-      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:mx-0 md:max-w-[1600px] md:py-14 lg:flex-row lg:gap-16 lg:px-8">
-        <div className="z-10 flex flex-1 flex-col items-start justify-center">
-          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.28em] text-accent">Music Room</p>
-          <h1 className="mb-4 text-3xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
-            欢迎回来，
-            <br />
-            <span className="bg-gradient-to-r from-accent to-fuchsia-400 bg-clip-text text-transparent">
-              {activeSession.nickname}
-            </span>
-          </h1>
-          <p className="mb-8 max-w-xl text-sm leading-relaxed text-foreground-muted sm:text-base md:text-lg">
-             这里是你的房间列表。创建新房间、输入房间码快速加入，或回到仍在同步的房间。
-          </p>
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-            <Button data-testid="create-public-room" size="lg" className="w-full sm:w-auto" onClick={() => openCreateRoom("public")} type="button">
-              创建公开房间
-            </Button>
-            <Button data-testid="create-private-room" variant="outline" size="lg" className="w-full sm:w-auto bg-surface hover:bg-surface-hover border-surface-border" onClick={() => openCreateRoom("private")} type="button">
-              创建私密房间
-            </Button>
-          </div>
-        </div>
-
-        <div className="z-10 w-full shrink-0 lg:w-[420px] xl:w-[460px]">
-          <div className="glass-panel relative flex flex-col gap-5 overflow-hidden rounded-[28px] p-5 shadow-2xl sm:p-7">
-            <div className="pointer-events-none absolute right-0 top-0 h-36 w-36 rounded-full bg-accent/20 blur-[90px]" />
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
-                  Join with code
-                </p>
-                <h2 className="text-xl font-bold text-foreground sm:text-2xl">输入房间码加入</h2>
-              </div>
-              <span className="inline-flex max-w-full rounded-full border border-surface-border bg-surface px-3 py-1 text-xs font-medium text-foreground-muted">
-                {activeSession.username}
-              </span>
-            </div>
-
-            <div className="mt-1 flex flex-col gap-3">
-              <input
-                data-testid="join-code-input"
-                className="w-full rounded-2xl border border-surface-border bg-black/40 px-4 py-3 text-base font-mono uppercase text-foreground placeholder:font-sans placeholder:normal-case placeholder:text-foreground-muted/50 focus:outline-none focus:ring-2 focus:ring-accent"
-                value={joinCode}
-                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                placeholder="输入 6 位房间码"
-              />
-              <Button
-                data-testid="join-code-submit"
-                size="lg"
-                variant="outline"
-                className="w-full bg-white/5 hover:bg-white/10"
-                disabled={!joinCode.trim()}
-                onClick={handleJoinCodeSubmit}
-                type="button"
-              >
-                直接进入房间
-              </Button>
-
-              {statusMessage ? (
-                <p data-testid="room-home-status" className="animate-fade-in text-center text-sm text-red-400">{statusMessage}</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 sm:px-6 md:mx-0 md:max-w-[1600px] md:gap-5 lg:px-8">
+      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-16 sm:px-6 sm:pt-20 md:mx-0 md:max-w-[1600px] md:gap-5 lg:px-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
@@ -344,15 +286,26 @@ export function RoomsHomePage({
               ) : null}
             </h2>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-start sm:self-auto"
-            onClick={() => startTransition(() => void refreshAvailableRooms())}
-            type="button"
-          >
-            刷新
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
+              创建公开房间
+            </Button>
+            <Button data-testid="create-private-room" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={() => openCreateRoom("private")} type="button">
+              创建私密房间
+            </Button>
+            <Button data-testid="open-join-room-dialog" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={openJoinDialog} type="button">
+              输入房间码加入
+            </Button>
+            <Button
+              aria-label="刷新房间列表"
+              variant="ghost"
+              size="sm"
+              onClick={() => startTransition(() => void refreshAvailableRooms())}
+              type="button"
+            >
+              刷新
+            </Button>
+          </div>
         </div>
 
         <div className="glass-panel min-h-[300px] rounded-[24px] p-3 sm:rounded-[28px] sm:p-5 lg:p-6">
@@ -487,6 +440,42 @@ export function RoomsHomePage({
               <Button disabled={isPending} onClick={() => setCreateDialogOpen(false)} type="button" variant="ghost">取消</Button>
               <Button data-testid="create-room-submit" disabled={isPending || !createForm.name.trim() || (createForm.password.trim().length > 0 && createForm.password.trim().length < 4)} type="submit">
                 {isPending ? "创建中…" : "创建并进入"}
+              </Button>
+            </div>
+          </form>
+        </RoomDialog>
+      ) : null}
+
+      {joinDialogOpen ? (
+        <RoomDialog
+          title="输入房间码加入"
+          description="输入 6 位房间码，加入公开或私密房间。"
+          onClose={() => setJoinDialogOpen(false)}
+        >
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleJoinCodeSubmit();
+            }}
+          >
+            <label className="flex flex-col gap-2 text-sm text-foreground" htmlFor="join-code-input">
+              房间码
+              <input
+                autoFocus
+                data-testid="join-code-input"
+                id="join-code-input"
+                className="w-full rounded-xl border border-surface-border bg-background px-3 py-2.5 font-mono uppercase text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                value={joinCode}
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                placeholder="输入 6 位房间码"
+              />
+            </label>
+            {statusMessage ? <p data-testid="room-home-status" className="animate-fade-in rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{statusMessage}</p> : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button onClick={() => setJoinDialogOpen(false)} type="button" variant="ghost">取消</Button>
+              <Button data-testid="join-code-submit" disabled={!joinCode.trim() || isPending} type="submit">
+                {isPending ? "进入中…" : "进入房间"}
               </Button>
             </div>
           </form>

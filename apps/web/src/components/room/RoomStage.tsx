@@ -82,9 +82,9 @@ function RoomStageBase({
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [lyricsText, setLyricsText] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const compactStage = viewportHeight !== null && viewportHeight < 900;
-  const ultraCompactStage = viewportHeight !== null && viewportHeight < 760;
+  const [viewportSize, setViewportSize] = useState<{ height: number; width: number } | null>(null);
+  const compactStage = viewportSize !== null && (viewportSize.height < 900 || viewportSize.width < 1024);
+  const ultraCompactStage = viewportSize !== null && (viewportSize.height < 760 || viewportSize.width < 640);
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
   const playback = roomSnapshot.room.playback;
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
@@ -94,7 +94,7 @@ function RoomStageBase({
     ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
     : compactStage
       ? "clamp(8rem, min(22vh, 38vw), 11rem)"
-      : "clamp(11rem, min(34vh, 42vw), 20rem)";
+      : "clamp(10rem, min(30vh, 38vw), 16rem)";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -120,7 +120,7 @@ function RoomStageBase({
 
   useEffect(() => {
     const updateViewportHeight = () => {
-      setViewportHeight(window.innerHeight);
+      setViewportSize({ height: window.innerHeight, width: window.innerWidth });
     };
 
     updateViewportHeight();
@@ -146,7 +146,7 @@ function RoomStageBase({
   }, [isPlaying, playback.currentTrackId, playback.positionMs, playback.startedAt]);
 
   useEffect(() => {
-    if (!isLyricsOpen || !currentTrack) {
+    if (!currentTrack) {
       setLyricsText(null);
       setLyricsStatus("idle");
       return;
@@ -198,7 +198,7 @@ function RoomStageBase({
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, isLyricsOpen, sourceProvider, sourceTrackId]);
+  }, [currentTrack, sourceProvider, sourceTrackId]);
 
   return (
     <section
@@ -328,8 +328,8 @@ function RoomStageBase({
       </div>
 
       <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible">
-        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center">
-          <div className="flex w-full flex-col items-center gap-5 sm:gap-7">
+        <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-hidden">
+          <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-hidden px-1 ${isLyricsOpen ? "gap-0" : "-translate-y-1 sm:-translate-y-3"}`}>
             {!isLyricsOpen ? (
               <div
                 className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
@@ -379,75 +379,75 @@ function RoomStageBase({
           </div>
               </div>
             ) : null}
-            <div
-              className={`relative z-30 flex shrink-0 flex-col items-center gap-3 pb-2 sm:gap-4 ${
-                ultraCompactStage ? "pt-0" : compactStage ? "pt-1" : "pt-2"
-              }`}
-            >
-          <div className={`flex w-full flex-col items-center text-center ${isLyricsOpen ? "gap-1.5" : compactStage ? "gap-2" : "gap-3 md:gap-4"}`}>
-          {currentTrack ? (
-            <>
-              {!isLyricsOpen ? (
-                <div className={`flex flex-wrap items-center justify-center ${compactStage ? "mb-0.5 gap-1.5" : "mb-1 gap-2 sm:gap-3"}`}>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
-                      isPlaying
-                        ? "border border-accent/30 bg-accent/20 text-accent"
-                        : "border border-white/10 bg-white/10 text-white/[0.55]"
-                    }`}
-                  >
-                    {isPlaying ? "正在播放" : "准备就绪"}
-                  </span>
-                  {currentSourceOwnerNickname ? (
-                    <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                      当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <h2
-                className={`max-w-[18ch] font-extrabold tracking-tight text-white drop-shadow-lg ${
-                  ultraCompactStage
-                    ? "text-[1.55rem] leading-[1]"
-                    : compactStage
-                      ? "text-[1.85rem] leading-[1]"
-                      : "text-2xl leading-[1.06] sm:text-3xl md:text-[38px] lg:text-[44px]"
+            {!isLyricsOpen ? (
+              <div
+                className={`relative z-30 flex shrink-0 flex-col items-center text-center ${
+                  ultraCompactStage ? "gap-2 pt-2" : compactStage ? "gap-3 pt-3" : "gap-4 pt-4 sm:gap-5 sm:pt-5"
                 }`}
               >
-                {currentTrack.title}
-              </h2>
-            </>
-          ) : null}
+                {currentTrack ? (
+                  <>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
+                          isPlaying
+                            ? "border border-accent/30 bg-accent/20 text-accent"
+                            : "border border-white/10 bg-white/10 text-white/[0.55]"
+                        }`}
+                      >
+                        {isPlaying ? "正在播放" : "准备就绪"}
+                      </span>
+                      {currentSourceOwnerNickname ? (
+                        <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
+                        </span>
+                      ) : null}
+                    </div>
 
-          <p
-            className={`font-medium tracking-wide text-white/60 ${
-              ultraCompactStage
-                ? "max-w-[24ch] text-[13px] leading-snug"
-                : compactStage
-                  ? "max-w-[24ch] text-[15px] leading-snug"
-                  : "max-w-[26ch] text-sm leading-relaxed sm:text-base md:text-[17px]"
-            }`}
-          >
-            {currentTrack
-              ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`
-              : "从曲库添加音乐，或导入本地音频，马上开始这场协作收听。"}
-          </p>
-          </div>
-          {isLyricsOpen ? (
+                    <h2
+                      className={`max-w-[18ch] font-extrabold tracking-tight text-white drop-shadow-lg ${
+                        ultraCompactStage
+                          ? "text-[1.55rem] leading-[1]"
+                          : compactStage
+                            ? "text-[1.85rem] leading-[1]"
+                            : "text-2xl leading-[1.06] sm:text-3xl md:text-[38px] lg:text-[44px]"
+                      }`}
+                    >
+                      {currentTrack.title}
+                    </h2>
+
+                    <p
+                      className={`font-medium tracking-wide text-white/60 ${
+                        ultraCompactStage
+                          ? "max-w-[24ch] text-[13px] leading-snug"
+                          : compactStage
+                            ? "max-w-[24ch] text-[15px] leading-snug"
+                            : "max-w-[26ch] text-sm leading-relaxed sm:text-base md:text-[17px]"
+                      }`}
+                    >
+                      {`${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`}
+                    </p>
+                  </>
+                ) : (
+                  <p className="max-w-[26ch] text-center text-sm leading-relaxed text-white/60 sm:text-base">
+                    从曲库添加音乐，或导入本地音频，马上开始这场协作收听。
+                  </p>
+                )}
+              </div>
+            ) : null}
+
             <RoomLyricsPanel
-              visibleLines={7}
+              className={isLyricsOpen ? "max-w-[42rem]" : "max-w-[36rem]"}
+              visibleLines={isLyricsOpen ? 5 : 3}
               isPlaying={isPlaying}
               lyrics={lyricsText}
               positionMs={lyricsPositionMs}
               status={lyricsStatus}
             />
-          ) : null}
-            </div>
           </div>
         </div>
       </div>
