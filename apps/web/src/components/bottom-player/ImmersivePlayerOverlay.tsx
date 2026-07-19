@@ -120,7 +120,8 @@ function ImmersiveVinyl({ artworkUrl, isPlaying, palette }: { artworkUrl: string
         className="relative flex aspect-square w-[86%] items-center justify-center overflow-visible"
       >
         <div
-          className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] transition-[box-shadow,transform] duration-700 ease-out ${isPlaying ? "animate-spin-slow" : ""}`}
+          className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] transition-[box-shadow,transform] duration-700 ease-out animate-spin-slow"
+          style={{ animationPlayState: isPlaying ? "running" : "paused" }}
         >
           <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
           <div
@@ -138,7 +139,7 @@ function ImmersiveVinyl({ artworkUrl, isPlaying, palette }: { artworkUrl: string
           ))}
           {artworkUrl ? (
             <div
-              className="relative z-10 aspect-square w-[47%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+              className="absolute z-10 aspect-square w-[47%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
               style={{ backgroundImage: `url("${artworkUrl}")` }}
             />
           ) : null}

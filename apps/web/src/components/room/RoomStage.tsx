@@ -101,6 +101,13 @@ function RoomStageBase({
       : compactStage
         ? "clamp(8rem, min(22vh, 38vw), 11rem)"
         : "clamp(11rem, min(34vh, 42vw), 20rem)";
+  const contentPositionClass = isLyricsOpen
+    ? ultraCompactStage
+      ? "-translate-y-[12%]"
+      : compactStage
+        ? "-translate-y-[10%]"
+        : "-translate-y-[8%]"
+    : "translate-y-0";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -334,15 +341,9 @@ function RoomStageBase({
       </div>
 
       <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center justify-center overflow-visible">
-        <div
-          className={`relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center ${
-            ultraCompactStage
-              ? "-translate-y-[12%]"
-              : compactStage
-                ? "-translate-y-[10%]"
-                : "-translate-y-[8%]"
-          }`}
-        >
+          <div
+            className={`relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center ${contentPositionClass} transition-transform duration-500 ease-out motion-reduce:transition-none`}
+          >
           <div
             className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
             style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
@@ -354,7 +355,8 @@ function RoomStageBase({
               style={{ width: "var(--record-size)", height: "var(--record-size)" }}
             >
               <div
-                className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out ${isPlaying ? "animate-spin-slow" : ""}`}
+                className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out animate-spin-slow"
+                style={{ animationPlayState: isPlaying ? "running" : "paused" }}
               >
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
                 <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
@@ -368,11 +370,11 @@ function RoomStageBase({
                 {currentTrack?.artworkUrl ? (
                   <div
                     aria-hidden="true"
-                    className="relative z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+                    className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
                     style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
                   />
                 ) : null}
-                <div className="relative z-20 flex items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
+                <div className="absolute z-20 flex aspect-square items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
                   <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
                 </div>
               </div>
@@ -387,7 +389,7 @@ function RoomStageBase({
           </div>
         </div>
         <div
-          className={`relative z-30 flex shrink-0 flex-col items-center pb-2 ${
+          className={`relative z-30 ${contentPositionClass} flex shrink-0 flex-col items-center pb-2 transition-transform duration-500 ease-out motion-reduce:transition-none ${
           ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-2 pt-2"
           }`}
         >

@@ -62,9 +62,8 @@ export function VinylBadge({
   return (
     <div className={`relative flex ${shellSize} shrink-0 items-center justify-center`}>
       <div
-        className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-transform duration-700 will-change-transform ${
-          isPlaying ? "animate-spin-slow" : ""
-        }`}
+        className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-transform duration-700 will-change-transform animate-spin-slow"
+        style={{ animationPlayState: isPlaying ? "running" : "paused" }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
         <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
@@ -78,12 +77,12 @@ export function VinylBadge({
         {artworkUrl ? (
           <div
             aria-hidden="true"
-            className="relative z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_12px_rgba(0,0,0,0.4)]"
+            className="absolute z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_12px_rgba(0,0,0,0.4)]"
             style={{ backgroundImage: `url("${artworkUrl}")` }}
           />
         ) : null}
         <div
-          className={`relative z-20 flex ${centerSize} items-center justify-center rounded-full border shadow-inner`}
+          className={`absolute z-20 flex ${centerSize} items-center justify-center rounded-full border shadow-inner`}
           style={{ borderColor: accentSoft, backgroundColor: accentSoft, color: accentColor }}
         >
           <div className="h-1.5 w-1.5 rounded-full border border-white/5 bg-black shadow-inner" />
@@ -214,7 +213,15 @@ function VolumeIcon({ volume }: { volume: number }) {
   );
 }
 
-function VolumeControl({ volume, onChange }: { volume: number; onChange: (value: number) => void }) {
+function VolumeControl({
+  volume,
+  onChange,
+  accentColor = "rgb(0 148 255)"
+}: {
+  volume: number;
+  onChange: (value: number) => void;
+  accentColor?: string;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const percentage = Math.round(Math.max(0, Math.min(1, volume)) * 100);
@@ -242,20 +249,40 @@ function VolumeControl({ volume, onChange }: { volume: number; onChange: (value:
   return (
     <div ref={rootRef} className="relative shrink-0">
       {isOpen ? (
-        <div className="absolute bottom-full right-0 z-[60] mb-3 flex h-44 w-8 items-center justify-center bg-transparent">
-          <div className="relative flex h-full w-full items-center justify-center">
-            <Slider
-              aria-label="音量"
-              className="h-4 shrink-0 -rotate-90 [&>div:nth-child(2)]:scale-100 [&>div:nth-child(2)]:opacity-100"
-              containerStyle={{ width: "10rem" }}
-              max={1}
-              min={0}
-              step={0.01}
-              value={volume}
-              onChange={(event) => onChange(Number(event.target.value))}
-              onInput={(event) => onChange(Number((event.target as HTMLInputElement).value))}
-            />
+        <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
+          <div className="flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            <div className="relative h-24 w-5 shrink-0">
+              <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="absolute inset-x-0 bottom-0 rounded-full transition-[height,background-color] duration-150"
+                  style={{
+                    height: `${percentage}%`,
+                    backgroundColor: accentColor,
+                    boxShadow: `0 0 10px ${accentColor}`
+                  }}
+                />
+              </div>
+              <div
+                aria-hidden="true"
+                className="absolute left-1/2 h-5 w-5 -translate-x-1/2 translate-y-1/2 rounded-full border border-white/20 bg-foreground shadow-[0_3px_9px_rgba(0,0,0,0.35)] transition-[bottom] duration-150"
+                style={{ bottom: `${percentage}%` }}
+              />
+              <input
+                aria-label="音量"
+                data-testid="player-volume-slider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={volume}
+                onChange={(event) => onChange(Number(event.target.value))}
+                onInput={(event) => onChange(Number((event.target as HTMLInputElement).value))}
+                className="absolute left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer opacity-0 focus-visible:opacity-100 focus-visible:outline-none"
+              />
+            </div>
+            <span className="mt-2 text-xs tabular-nums text-foreground-muted">{percentage}%</span>
           </div>
+          <div className="h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-background-secondary" aria-hidden="true" />
         </div>
       ) : null}
       <button
@@ -429,7 +456,7 @@ export function MobileBottomPlayerLayout({
             </Button>
           </div>
 
-          <VolumeControl volume={volume} onChange={applyVolume} />
+          <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} />
           <ImmersiveToggleButton accentColor={artworkAccent} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
         </div>
       </div>
@@ -583,7 +610,7 @@ export function DesktopBottomPlayerLayout({
           </span>
         </div>
 
-        <VolumeControl volume={volume} onChange={applyVolume} />
+        <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} />
         <ImmersiveToggleButton accentColor={artworkAccent} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
       </div>
     </div>

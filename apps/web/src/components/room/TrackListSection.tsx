@@ -154,7 +154,10 @@ function TrackListSectionBase({
                   <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
                   <div className="min-w-0 space-y-0.5">
                     <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
-                    <p className="truncate text-xs text-foreground-muted">{track.artist}</p>
+                    <p className="truncate text-xs text-foreground-muted">
+                      {track.artist}
+                      <span className="sm:hidden"> · {formatDuration(track.durationMs)}</span>
+                    </p>
                     <p className="truncate text-[10px] text-foreground-muted/60">
                       <span
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
@@ -170,7 +173,7 @@ function TrackListSectionBase({
                   <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
                   <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
 
-                  <div className="flex flex-wrap items-center justify-end gap-1">
+                  <div className="flex min-w-max flex-nowrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
