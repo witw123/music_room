@@ -330,6 +330,19 @@ export function useTrackUploads(options: {
 
   useEffect(() => {
     void refreshCacheLibrary();
+    const refreshWhenActive = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCacheLibrary();
+      }
+    };
+    const refreshInterval = window.setInterval(refreshWhenActive, 10_000);
+    window.addEventListener("focus", refreshWhenActive);
+    document.addEventListener("visibilitychange", refreshWhenActive);
+    return () => {
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", refreshWhenActive);
+      document.removeEventListener("visibilitychange", refreshWhenActive);
+    };
   }, [refreshCacheLibrary, roomSnapshot?.room.id]);
 
   return {

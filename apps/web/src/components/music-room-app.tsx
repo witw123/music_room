@@ -26,9 +26,17 @@ export * from "@/components/room/hooks/use-room-playback-actions";
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 
-type MusicRoomAppProps = { workspaceOnly?: boolean; initialRoomId?: string | null };
+type MusicRoomAppProps = {
+  workspaceOnly?: boolean;
+  initialRoomId?: string | null;
+  backgroundOnly?: boolean;
+};
 
-export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: MusicRoomAppProps) {
+export function MusicRoomApp({
+  workspaceOnly = true,
+  initialRoomId = null,
+  backgroundOnly = false
+}: MusicRoomAppProps) {
   const router = useRouter();
   const appEntries = useRoomAppEntries({
     initialRoomId
@@ -327,6 +335,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
       activeSession={activeSession}
       audioRef={appRefs.audioRef}
       authEntryHref={appEntries.authEntryHref}
+      backgroundOnly={backgroundOnly}
       canControlPlayback={canControlPlayback}
       canDeleteRoom={canDeleteRoom}
       canReorderQueue={canReorderQueue}

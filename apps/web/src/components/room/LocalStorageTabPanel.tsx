@@ -76,6 +76,10 @@ function LocalStorageTabPanelBase({
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
         <LocalPlaylistSection
+          availableLocalFileHashes={[
+            ...localStorageSummary.localSavedFileHashes,
+            ...localStorageSummary.localCachedFileHashes
+          ]}
           localTracks={localStorageSummary.localPlaylistTracks}
           fallbackTracks={localStorageSummary.cachedLibraryTracks}
           roomTracks={tracks}
@@ -104,6 +108,7 @@ function LocalStorageTabPanelBase({
 }
 
 function LocalPlaylistSection({
+  availableLocalFileHashes,
   localTracks,
   fallbackTracks,
   roomTracks,
@@ -111,6 +116,7 @@ function LocalPlaylistSection({
   onImportCachedTrack,
   pendingCachedImport
 }: {
+  availableLocalFileHashes: string[];
   localTracks: LocalPlaylistTrackRecord[];
   fallbackTracks: CachedLibraryTrack[];
   roomTracks: TrackMeta[];
@@ -118,8 +124,13 @@ function LocalPlaylistSection({
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 }) {
+  const availableHashes = new Set(availableLocalFileHashes);
   const importable = localTracks
-    .filter((track) => track.availableOffline && track.fileHash)
+    .filter((track) =>
+      track.availableOffline &&
+      !!track.fileHash &&
+      availableHashes.has(track.fileHash)
+    )
     .map((track) => ({
       fileHash: track.fileHash!,
       title: track.title,

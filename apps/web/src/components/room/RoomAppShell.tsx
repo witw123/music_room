@@ -20,6 +20,7 @@ type RoomAppShellProps = {
   activeSession: AuthSession | null;
   audioRef: RefObject<HTMLAudioElement | null>;
   authEntryHref: string;
+  backgroundOnly?: boolean;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
   canReorderQueue: boolean;
@@ -45,6 +46,7 @@ export function RoomAppShell({
   activeSession,
   audioRef,
   authEntryHref,
+  backgroundOnly = false,
   canControlPlayback,
   canDeleteRoom,
   canReorderQueue,
@@ -69,14 +71,16 @@ export function RoomAppShell({
 
   return (
     <>
-      <AudioUnlockOverlay
-        visible={pageState.audioBlockedOverlay}
-        onUnlock={playbackActions.handleAudioUnlock}
-      />
-      {isRoomAway ? (
-        <RoomsHomePage awayRoomId={awayRoomId} onResumeAwayRoom={onResumeRoom} />
-      ) : (
-        <RoomWorkspace
+      {!backgroundOnly ? (
+        <>
+          <AudioUnlockOverlay
+            visible={pageState.audioBlockedOverlay}
+            onUnlock={playbackActions.handleAudioUnlock}
+          />
+          {isRoomAway ? (
+            <RoomsHomePage awayRoomId={awayRoomId} onResumeAwayRoom={onResumeRoom} />
+          ) : (
+            <RoomWorkspace
           activeSession={activeSession}
           statusMessage={statusMessage}
           statusTone={workspaceViewModel.statusTone}
@@ -129,8 +133,10 @@ export function RoomAppShell({
           onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
           socket={socket}
           playerSlot={null}
-        />
-      )}
+            />
+          )}
+        </>
+      ) : null}
       <BottomPlayerController
         audioRef={audioRef}
         isSourceOwner={isSourceOwner}

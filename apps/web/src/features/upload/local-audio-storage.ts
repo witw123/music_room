@@ -72,14 +72,28 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   let permission: PermissionState | null = null;
   if (directory) {
     permission = await asPermissionedHandle(directory.handle)
-      .queryPermission({ mode: "readwrite" })
+      .queryPermission({ mode: "read" })
       .catch(() => null);
   }
+  if (!directory || permission !== "granted") {
+    return {
+      supported: supportsLocalAudioDirectory(),
+      directoryName: directory?.name ?? null,
+      savedFileHashes: [],
+      cachedFileHashes: [],
+      permission
+    };
+  }
+
+  const [availableSavedFiles, availableCachedFiles] = await Promise.all([
+    filterReadableLocalFiles(directory.handle, files, ["local", "saved"], true),
+    filterReadableLocalFiles(directory.handle, cachedFiles, ["local", "cache"], false)
+  ]);
   return {
     supported: supportsLocalAudioDirectory(),
     directoryName: directory?.name ?? null,
-    savedFileHashes: files.map((file) => file.fileHash),
-    cachedFileHashes: cachedFiles.map((file) => file.fileHash),
+    savedFileHashes: availableSavedFiles,
+    cachedFileHashes: availableCachedFiles,
     permission
   };
 }
@@ -398,6 +412,32 @@ async function readLocalAudioFile(
   } catch {
     return null;
   }
+}
+
+async function filterReadableLocalFiles(
+  root: FileSystemDirectoryHandle,
+  records: ReadonlyArray<{ fileHash: string; fileName: string }>,
+  kinds: ReadonlyArray<keyof typeof localAudioSubdirectories>,
+  checkRootFallback: boolean
+) {
+  const available = await Promise.all(records.map(async (record) => {
+    for (const kind of kinds) {
+      if (await readLocalAudioFile(root, record.fileName, kind)) {
+        return record.fileHash;
+      }
+    }
+
+    if (checkRootFallback) {
+      try {
+        await root.getFileHandle(record.fileName);
+        return record.fileHash;
+      } catch {
+        // The record points to a file that is no longer present.
+      }
+    }
+    return null;
+  }));
+  return available.filter((fileHash): fileHash is string => !!fileHash);
 }
 
 function inferFileExtension(mimeType: string) {

@@ -72,6 +72,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const playbackSequenceKindRef = useRef<"queue" | "direct" | "playlist">("direct");
   const currentRecordRef = useRef<LocalPlaylistTrackRecord | null>(null);
   const currentIndexRef = useRef(0);
+  const playRequestRef = useRef(0);
   const progressRef = useRef(0);
   const revisionRef = useRef(0);
   const mediaEpochRef = useRef(0);
@@ -160,7 +161,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   );
 
   const loadAudioFile = useCallback(async (track: LocalPlaylistTrackRecord) => {
-    if (!isTrackPlayable(track) || !track.fileHash) return null;
+    if (!track.fileHash) return null;
 
     const localFile = await getLocalAudioFile(track.fileHash);
     if (localFile) return localFile;
@@ -170,7 +171,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
     const cachedRecord = await getCachedLibraryTrack(track.fileHash);
     return cachedRecord?.file ?? null;
-  }, [isTrackPlayable]);
+  }, []);
 
   const playRecords = useCallback(async (
     records: LocalPlaylistTrackRecord[],
@@ -180,11 +181,30 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const nextRecords = records.filter((track, index, list) =>
       list.findIndex((candidate) => candidate.id === track.id) === index
     );
-    const record = nextRecords[startIndex];
-    if (!record) return;
+    if (nextRecords.length === 0) return;
 
-    const file = await loadAudioFile(record);
-    if (!file) return;
+    const requestId = ++playRequestRef.current;
+    const normalizedStartIndex = Math.min(Math.max(0, startIndex), nextRecords.length - 1);
+    const shouldSkipMissingFiles = sequenceKind !== "direct" && playbackMode !== "single";
+    const candidateCount = shouldSkipMissingFiles ? nextRecords.length : 1;
+    let selectedIndex = normalizedStartIndex;
+    let record: LocalPlaylistTrackRecord | undefined;
+    let file: Blob | null = null;
+
+    for (let offset = 0; offset < candidateCount; offset += 1) {
+      const candidateIndex = (normalizedStartIndex + offset) % nextRecords.length;
+      const candidate = nextRecords[candidateIndex];
+      const candidateFile = await loadAudioFile(candidate);
+      if (requestId !== playRequestRef.current) return;
+      if (candidateFile) {
+        selectedIndex = candidateIndex;
+        record = candidate;
+        file = candidateFile;
+        break;
+      }
+    }
+
+    if (!record || !file || requestId !== playRequestRef.current) return;
 
     const audio = audioRef.current;
     if (!audio) return;
@@ -195,7 +215,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const objectUrl = URL.createObjectURL(file);
     objectUrlRef.current = objectUrl;
     mediaEpochRef.current += 1;
-    currentIndexRef.current = startIndex;
+    currentIndexRef.current = selectedIndex;
     playbackRecordsRef.current = nextRecords;
     playbackSequenceKindRef.current = sequenceKind;
     currentRecordRef.current = record;
@@ -210,6 +230,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     audio.load();
     try {
       await audio.play();
+      if (requestId !== playRequestRef.current) return;
       const startedAt = new Date(Date.now() - audio.currentTime * 1000).toISOString();
       setPlayback(createPlaybackSnapshot({
         record,
@@ -218,10 +239,11 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         startedAt
       }));
     } catch {
+      if (requestId !== playRequestRef.current) return;
       // Browsers can reject autoplay after an asynchronous local-file read.
       setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: 0 }));
     }
-  }, [createPlaybackSnapshot, loadAudioFile]);
+  }, [createPlaybackSnapshot, loadAudioFile, playbackMode]);
 
   const playTrack = useCallback(async (track: LocalPlaylistTrackRecord) => {
     const existingIndex = queueRef.current.findIndex((candidate) => candidate.id === track.id);

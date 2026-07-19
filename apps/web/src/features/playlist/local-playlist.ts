@@ -1,6 +1,7 @@
 import { createSHA256 } from "hash-wasm";
 import type { NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@music-room/shared";
 import {
+  listCachedLibraryTrackHashes,
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
@@ -166,28 +167,35 @@ export function toCachedProviderTrack(record: LocalPlaylistTrackRecord): Provide
 }
 
 export async function listMergedLocalPlaylistTracks() {
-  const [explicit, summaries, savedFiles, cacheFiles] = await Promise.all([
+  const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
     listLocalPlaylistTracks(),
     listCachedLibraryTrackSummaries(),
+    listCachedLibraryTrackHashes(),
     listLocalAudioFiles("saved"),
     listLocalAudioCacheFiles()
   ]);
-  const explicitByHash = new Set(explicit.map((track) => track.fileHash).filter(Boolean));
   const fileNames = new Map<string, string>();
   for (const file of [...savedFiles, ...cacheFiles]) {
     fileNames.set(file.fileHash, file.fileName);
   }
+  const availableHashes = new Set([
+    ...fileNames.keys(),
+    ...cachedFileHashes
+  ]);
+  const reconciledExplicit = explicit.map((track) => reconcileTrackAvailability(track, fileNames, availableHashes));
+  const explicitByHash = new Set(reconciledExplicit.map((track) => track.fileHash).filter(Boolean));
 
   const derived = summaries
-    .filter((summary) => fileNames.has(summary.fileHash) && !explicitByHash.has(summary.fileHash))
+    .filter((summary) => availableHashes.has(summary.fileHash) && !explicitByHash.has(summary.fileHash))
     .map((summary) => fromCachedSummary(summary, fileNames.get(summary.fileHash) ?? null, true));
-  return [...explicit, ...derived];
+  return [...reconciledExplicit, ...derived];
 }
 
 export async function listRoomPlaylistTrackIndex() {
-  const [explicit, summaries, savedFiles, cacheFiles] = await Promise.all([
+  const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
     listLocalPlaylistTracks(),
     listCachedLibraryTrackSummaries(),
+    listCachedLibraryTrackHashes(),
     listLocalAudioFiles("saved"),
     listLocalAudioCacheFiles()
   ]);
@@ -195,16 +203,20 @@ export async function listRoomPlaylistTrackIndex() {
   for (const file of [...savedFiles, ...cacheFiles]) {
     fileNames.set(file.fileHash, file.fileName);
   }
+  const availableHashes = new Set([
+    ...fileNames.keys(),
+    ...cachedFileHashes
+  ]);
 
   const byTrackId = new Map<string, LocalPlaylistTrackRecord>();
-  for (const track of explicit) {
+  for (const track of explicit.map((item) => reconcileTrackAvailability(item, fileNames, availableHashes))) {
     byTrackId.set(track.id, track);
   }
   for (const summary of summaries) {
     const record = fromCachedSummary(
       summary,
       fileNames.get(summary.fileHash) ?? null,
-      fileNames.has(summary.fileHash)
+      availableHashes.has(summary.fileHash)
     );
     for (const trackId of summary.sourceTrackIds) {
       if (!byTrackId.has(trackId)) {
@@ -213,6 +225,23 @@ export async function listRoomPlaylistTrackIndex() {
     }
   }
   return byTrackId;
+}
+
+function reconcileTrackAvailability(
+  track: LocalPlaylistTrackRecord,
+  fileNames: ReadonlyMap<string, string>,
+  availableHashes: ReadonlySet<string>
+) {
+  if (!track.fileHash) {
+    return track.availableOffline ? { ...track, availableOffline: false } : track;
+  }
+
+  const hasAvailableFile = availableHashes.has(track.fileHash);
+  return {
+    ...track,
+    fileName: hasAvailableFile ? fileNames.get(track.fileHash) ?? track.fileName : null,
+    availableOffline: hasAvailableFile
+  };
 }
 
 function fromCachedSummary(

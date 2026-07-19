@@ -599,6 +599,11 @@ export async function listCachedLibraryTrackSummaries() {
   return musicRoomDatabase.cachedTrackLibraryMetadata.orderBy("cachedAt").reverse().toArray();
 }
 
+export async function listCachedLibraryTrackHashes() {
+  const keys = await musicRoomDatabase.cachedTrackLibrary.toCollection().primaryKeys();
+  return keys.filter((key): key is string => typeof key === "string");
+}
+
 export async function getCachedLibraryTrack(fileHash: string) {
   return musicRoomDatabase.cachedTrackLibrary.get(fileHash);
 }

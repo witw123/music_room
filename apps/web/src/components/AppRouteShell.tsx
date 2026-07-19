@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
 import { AppSidebar } from "@/components/AppSidebar";
+import { MusicRoomApp } from "@/components/music-room-app";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/away-room";
 import { musicRoomApi } from "@/lib/music-room-api";
 
 export function AppRouteShell({ children }: { children: ReactNode }) {
@@ -20,6 +22,18 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
+  const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncAwayRoom = () => setAwayRoomId(readAwayRoomId());
+    syncAwayRoom();
+    window.addEventListener(awayRoomChangeEvent, syncAwayRoom);
+    window.addEventListener("storage", syncAwayRoom);
+    return () => {
+      window.removeEventListener(awayRoomChangeEvent, syncAwayRoom);
+      window.removeEventListener("storage", syncAwayRoom);
+    };
+  }, []);
 
   useEffect(() => {
     if (hydrated && !activeSession) {
@@ -42,13 +56,21 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-black">
         <AppSidebar
           activeSession={activeSession}
-          hasBottomPlayer
+          hasBottomPlayer={Boolean(awayRoomId)}
           onLogout={handleLogout}
         />
         <div key={pathname} className="app-route-transition">
           {children}
         </div>
-        <AppPersistentPlayer />
+        {awayRoomId ? (
+          <MusicRoomApp
+            backgroundOnly
+            initialRoomId={awayRoomId}
+            workspaceOnly
+          />
+        ) : (
+          <AppPersistentPlayer />
+        )}
       </div>
     </LocalPlayerProvider>
   );

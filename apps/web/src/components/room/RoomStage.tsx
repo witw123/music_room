@@ -93,17 +93,17 @@ function RoomStageBase({
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
   const artworkUrl = currentTrack?.artworkUrl ?? cachedArtworkUrl;
   const recordSize = ultraCompactStage
-    ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
+    ? "clamp(8.5rem, min(24vh, 40vw), 11rem)"
     : compactStage
-      ? "clamp(8rem, min(22vh, 38vw), 11rem)"
-      : "clamp(10rem, min(30vh, 38vw), 16rem)";
+      ? "clamp(10rem, min(28vh, 42vw), 14rem)"
+      : "clamp(12rem, min(36vh, 42vw), 20rem)";
   const stageContentOffset = isLyricsOpen
     ? "translate-y-0"
     : ultraCompactStage
-      ? "-translate-y-2"
+      ? "-translate-y-3"
       : compactStage
-        ? "-translate-y-[clamp(1rem,4vh,3rem)]"
-        : "-translate-y-[clamp(0.5rem,2vh,1.5rem)]";
+        ? "-translate-y-[clamp(1.5rem,5vh,4rem)]"
+        : "-translate-y-[clamp(2rem,5vh,4rem)]";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -359,8 +359,8 @@ function RoomStageBase({
       </div>
 
       <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible">
-        <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-hidden">
-          <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-hidden px-1 ${stageContentOffset}`}>
+        <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-visible">
+          <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-visible px-1 ${stageContentOffset}`}>
             {!isLyricsOpen ? (
               <div
                 className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
