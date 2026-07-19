@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type {
   AuthSession,
   NeteaseTrackCandidate,
@@ -297,12 +297,15 @@ function PlaylistDetail({
   remoteError: string | null;
 }) {
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
-  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
+  const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());
+  const pendingTrackIdsRef = useRef(new Set<string>());
+  const [isImportingSelected, setIsImportingSelected] = useState(false);
   const selectableTracks = tracks.filter(
     (track): track is PlaylistTrackInfo => !!track?.providerTrack && !track.isInRoom
   );
   const selectedTracks = selectableTracks.filter((track) => selectedTrackIds.includes(track.id));
   const allSelectableSelected = selectableTracks.length > 0 && selectedTracks.length === selectableTracks.length;
+  const isImportBusy = pendingTrackIds.size > 0 || isImportingSelected;
 
   useEffect(() => {
     const availableIds = new Set(
@@ -317,8 +320,13 @@ function PlaylistDetail({
   }, [tracks]);
 
   const importTrack = async (track: PlaylistTrackInfo) => {
-    if (!track.providerTrack || track.isInRoom || pendingTrackId) return;
-    setPendingTrackId(track.id);
+    if (
+      !track.providerTrack ||
+      track.isInRoom ||
+      pendingTrackIdsRef.current.has(track.id)
+    ) return;
+    pendingTrackIdsRef.current.add(track.id);
+    setPendingTrackIds((current) => new Set(current).add(track.id));
     try {
       if (track.providerTrack.provider === "netease") {
         await onImportNeteaseTrack(track.providerTrack);
@@ -329,14 +337,31 @@ function PlaylistDetail({
     } catch {
       // The upload pipeline reports the detailed error through the room status surface.
     } finally {
-      setPendingTrackId(null);
+      pendingTrackIdsRef.current.delete(track.id);
+      setPendingTrackIds((current) => {
+        const next = new Set(current);
+        next.delete(track.id);
+        return next;
+      });
     }
   };
 
   const importSelectedTracks = async () => {
-    if (pendingTrackId || selectedTracks.length === 0) return;
-    for (const track of selectedTracks) {
-      await importTrack(track);
+    if (isImportBusy || selectedTracks.length === 0) return;
+    setIsImportingSelected(true);
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < selectedTracks.length) {
+        const track = selectedTracks[nextIndex++];
+        if (track) await importTrack(track);
+      }
+    };
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(2, selectedTracks.length) }, () => worker())
+      );
+    } finally {
+      setIsImportingSelected(false);
     }
   };
 
@@ -369,7 +394,7 @@ function PlaylistDetail({
                 <input
                   type="checkbox"
                   checked={allSelectableSelected}
-                  disabled={selectableTracks.length === 0 || pendingTrackId !== null}
+                  disabled={selectableTracks.length === 0 || isImportBusy}
                   onChange={toggleSelectAll}
                   className="h-4 w-4 accent-accent"
                 />
@@ -379,25 +404,25 @@ function PlaylistDetail({
                 <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
                 <button
                   type="button"
-                  disabled={selectedTracks.length === 0 || pendingTrackId !== null}
+                  disabled={selectedTracks.length === 0 || isImportBusy}
                   onClick={() => void importSelectedTracks()}
                   className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {pendingTrackId ? "导入中…" : "导入所选歌曲"}
+                  {isImportBusy ? "导入中…" : "导入所选歌曲"}
                 </button>
               </div>
             </div>
             <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
               {tracks.map((track, index) => {
                 const trackId = track?.id ?? playlist.trackIds[index];
-                const isPending = pendingTrackId === track?.id;
+                const isPending = !!track && pendingTrackIds.has(track.id);
                 return (
                   <article className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between" key={`${playlist.id}:${playlist.trackIds[index]}`}>
                     <div className="flex min-w-0 items-start gap-2">
                       <input
                         type="checkbox"
                         checked={!!track?.providerTrack && selectedTrackIds.includes(track.id)}
-                        disabled={!track?.providerTrack || track.isInRoom || pendingTrackId !== null}
+                        disabled={!track?.providerTrack || track.isInRoom || isImportBusy}
                         onChange={() => toggleTrackSelection(trackId)}
                         className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
                         aria-label={`选择《${track?.title ?? playlist.trackIds[index]}》`}
@@ -413,7 +438,7 @@ function PlaylistDetail({
                     </div>
                     <button
                       type="button"
-                      disabled={!track?.providerTrack || track.isInRoom || pendingTrackId !== null}
+                      disabled={!track?.providerTrack || track.isInRoom || isImportBusy}
                       onClick={() => {
                         if (track) void importTrack(track);
                       }}

@@ -17,11 +17,11 @@ import {
   deleteAudioAsset,
   getCompleteAssetPairForSourceFileHash,
   getAssetManifest,
+  putAssetManifest,
+  putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
 } from "@/lib/indexeddb";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
-import { getConfiguredLocalRepository } from "./local-audio-storage";
-import { LocalRepository } from "./local-repository";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
@@ -85,11 +85,6 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
-  const repository = await getConfiguredLocalRepository();
-  if (!repository) {
-    throw new Error("请先选择本地音频文件夹，音频文件不会保存到浏览器缓存。 ");
-  }
-
   await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
   const sourcePromise = prepareOriginalAsset(input);
   const playbackPromise = preparePlaybackAsset({
@@ -112,8 +107,8 @@ export async function prepareAudioAssets(input: {
     const preexistingAssetIds = new Set(
       (
         await Promise.all([
-          getAssetManifest(source.originalAsset.assetId),
-          getAssetManifest(playback.playbackAsset.assetId)
+          getAssetManifest(source.originalAsset.assetId, { includeLocalRepository: false }),
+          getAssetManifest(playback.playbackAsset.assetId, { includeLocalRepository: false })
         ])
       )
         .filter((record) => !!record)
@@ -122,34 +117,36 @@ export async function prepareAudioAssets(input: {
     const createdAssetIds = [source.originalAsset.assetId, playback.playbackAsset.assetId]
       .filter((assetId) => !preexistingAssetIds.has(assetId));
     try {
-      const [existingOriginal, existingPlayback] = await Promise.all([
-        getAssetManifest(source.originalAsset.assetId),
-        getAssetManifest(playback.playbackAsset.assetId)
-      ]);
-      if (!existingOriginal?.complete) {
-        await persistOriginalAsset(input, source, repository);
-      }
-      if (!existingPlayback?.complete) {
-        await persistPlaybackAsset(input, playback, repository);
+      await putAssetManifest(source.originalAsset, { complete: true });
+      input.onProgress?.({
+        stage: "persisting-original",
+        completed: source.originalAsset.unitCount,
+        total: source.originalAsset.unitCount
+      });
+      await putAssetManifest(playback.playbackAsset);
+      await putLocallyGeneratedAssetUnits({
+        assetId: playback.playbackAsset.assetId,
+        units: playback.encodedUnits.map((unit, unitIndex) => ({
+          descriptor: {
+            ...unit.descriptor,
+            assetId: playback.playbackAsset.assetId,
+            contentHash: playback.leafHashes[unitIndex]!,
+            proof: playback.proofs[unitIndex]!
+          },
+          payload: unit.payload
+        })),
+        complete: true
+      });
+      for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
+        input.onProgress?.({
+          stage: "persisting-playback",
+          completed: unitIndex + 1,
+          total: playback.encodedUnits.length
+        });
       }
     } catch (error) {
       await Promise.allSettled([
         ...createdAssetIds.map((assetId) => deleteAudioAsset(assetId)),
-        ...(createdAssetIds.includes(source.originalAsset.assetId)
-          ? [
-              repository.deleteOriginalAsset(source.originalAsset.assetId),
-              repository.removePath(repository.getManagedSourcePath({
-                fileHash: source.fileHash,
-                mimeType: source.originalAsset.mimeType
-              }))
-            ]
-          : []),
-        ...(createdAssetIds.includes(playback.playbackAsset.assetId)
-          ? [repository.deletePlaybackAsset(
-              playback.playbackAsset.assetId,
-              playback.playbackAsset.profileId
-            )]
-          : [])
       ]);
       throw error;
     }
@@ -359,66 +356,6 @@ async function encodePlaybackAsset(
     leafHashes: completeLeafHashes,
     proofs: tree.proofs
   };
-}
-
-async function persistOriginalAsset(
-  input: {
-    file: File;
-    signal?: AbortSignal;
-    onProgress?: (progress: AssetPreparationProgress) => void;
-  },
-  source: Awaited<ReturnType<typeof prepareOriginalAsset>>,
-  repository: LocalRepository
-) {
-  throwIfAborted(input.signal);
-  const sourcePath = await repository.writeManagedSource({
-    file: input.file,
-    fileHash: source.fileHash,
-    mimeType: source.originalAsset.mimeType
-  });
-  await repository.writeOriginalManifest(source.originalAsset, sourcePath);
-  input.onProgress?.({
-    stage: "persisting-original",
-    completed: source.originalAsset.unitCount,
-    total: source.originalAsset.unitCount
-  });
-  return sourcePath;
-}
-
-async function persistPlaybackAsset(
-  input: {
-    signal?: AbortSignal;
-    onProgress?: (progress: AssetPreparationProgress) => void;
-  },
-  playback: Awaited<ReturnType<typeof preparePlaybackAsset>>,
-  repository: LocalRepository
-) {
-  const units = playback.encodedUnits.map((unit, unitIndex) => {
-    throwIfAborted(input.signal);
-    return {
-      descriptor: {
-        ...unit.descriptor,
-        assetId: playback.playbackAsset.assetId,
-        contentHash: playback.leafHashes[unitIndex]!,
-        proof: playback.proofs[unitIndex]!
-      },
-      payload: unit.payload
-    };
-  });
-  await repository.writePlaybackAsset({
-    manifest: playback.playbackAsset,
-    units: units.map((unit) => ({
-      descriptor: unit.descriptor,
-      payload: unit.payload
-    }))
-  });
-  for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
-    input.onProgress?.({
-      stage: "persisting-playback",
-      completed: unitIndex + 1,
-      total: playback.encodedUnits.length
-    });
-  }
 }
 
 export function resolveEncodingConcurrency(unitCount: number, hardwareConcurrency =

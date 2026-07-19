@@ -12,7 +12,6 @@ import {
   createLocalPlaylist,
   deleteLocalPlaylist,
   flushLocalPlaylistPersistence,
-  isDefaultLocalPlaylist,
   listLocalPlaylists,
   restoreLocalPlaylistsFromRepository,
   listMergedLocalPlaylistTracks,
@@ -250,6 +249,24 @@ export function PlaylistsWorkspacePage() {
     }
   }
 
+  async function openCreateDialog(kind: "local" | "network") {
+    if (pending) return;
+    setMessage(null);
+    if (kind === "local" && (!storageState?.directoryName || storageState.permission !== "granted")) {
+      setPending(true);
+      try {
+        await chooseLocalAudioDirectory();
+        await refresh();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "选择项目根目录失败，请重试。 ");
+        return;
+      } finally {
+        setPending(false);
+      }
+    }
+    setCreateDialogKind(kind);
+  }
+
   async function createPlaylist(kind: "local" | "network") {
     const title = newPlaylistTitle.trim();
     if (!title || pending) return;
@@ -257,23 +274,32 @@ export function PlaylistsWorkspacePage() {
     setMessage(null);
     setStatusMessage(null);
     try {
+      let playlist: LocalPlaylistRecord | Playlist;
       if (kind === "local") {
         await ensureLocalAudioDirectoryWriteAccess();
+        await syncSelectedLocalDirectoryTracks();
+        const availableTracks = (await listMergedLocalPlaylistTracks())
+          .filter((track) => track.availableOffline)
+          .map((track) => track.id);
+        playlist = createLocalPlaylist({
+          title,
+          description: newPlaylistDescription,
+          trackIds: availableTracks
+        });
+      } else {
+        playlist = await musicRoomApi.createPlaylist({
+          title,
+          description: newPlaylistDescription.trim() || null,
+          tags: ["network"],
+          isCollaborative: false
+        });
       }
-      const playlist = kind === "local"
-        ? createLocalPlaylist({ title, description: newPlaylistDescription })
-        : await musicRoomApi.createPlaylist({
-            title,
-            description: newPlaylistDescription.trim() || null,
-            tags: ["network"],
-            isCollaborative: false
-          });
       await refresh();
       setCreateDialogKind(null);
       setNewPlaylistTitle("");
       setNewPlaylistDescription("");
       if (kind === "local") {
-        setSelectedPlaylist({ kind: "local", playlist });
+        setSelectedPlaylist({ kind: "local", playlist: playlist as LocalPlaylistRecord });
       } else {
         setSelectedPlaylist({ kind: "network", playlist: playlist as Playlist });
       }
@@ -293,9 +319,6 @@ export function PlaylistsWorkspacePage() {
     setStatusMessage(null);
     try {
       if (target.kind === "local") {
-        if (isDefaultLocalPlaylist(target.playlist)) {
-          throw new Error("默认本地歌单不能删除。请删除其中的歌曲或创建其他本地歌单。 ");
-        }
         deleteLocalPlaylist(target.playlist.id);
       } else {
         await musicRoomApi.deletePlaylist(target.playlist.id);
@@ -353,7 +376,7 @@ export function PlaylistsWorkspacePage() {
         const targetPlaylist = listLocalPlaylists().find((playlist) => playlist.id === target.playlist.id);
         if (!targetPlaylist) throw new Error("目标本地歌单不存在，请刷新后重试。");
         await upsertLocalPlaylistTrack(request.track);
-        if (!isDefaultLocalPlaylist(targetPlaylist) && !targetPlaylist.trackIds.includes(trackId)) {
+        if (!targetPlaylist.trackIds.includes(trackId)) {
           updateLocalPlaylist(targetPlaylist.id, { trackIds: [...targetPlaylist.trackIds, trackId] });
         }
       } else {
@@ -371,11 +394,9 @@ export function PlaylistsWorkspacePage() {
         const sourcePlaylist = listLocalPlaylists().find((playlist) => playlist.id === request.source.playlist.id);
         if (!sourcePlaylist) throw new Error("来源本地歌单不存在，请刷新后重试。");
         let updatedSource = sourcePlaylist;
-        if (!isDefaultLocalPlaylist(sourcePlaylist)) {
-          updatedSource = updateLocalPlaylist(sourcePlaylist.id, {
-            trackIds: sourcePlaylist.trackIds.filter((id) => id !== trackId)
-          }) ?? sourcePlaylist;
-        }
+        updatedSource = updateLocalPlaylist(sourcePlaylist.id, {
+          trackIds: sourcePlaylist.trackIds.filter((id) => id !== trackId)
+        }) ?? sourcePlaylist;
         await refresh();
         setSelectedPlaylist({ kind: "local", playlist: updatedSource });
       } else {
@@ -474,7 +495,7 @@ export function PlaylistsWorkspacePage() {
                     <p className="text-lg font-bold text-foreground">本地歌单</p>
                     <p className="mt-1 text-xs text-foreground-muted">{storageState?.directoryName ? `目录：${storageState.directoryName}` : "尚未选择本地目录"}</p>
                   </div>
-                  <Button onClick={() => setCreateDialogKind("local")} size="sm" variant="outline" type="button">
+                  <Button onClick={() => void openCreateDialog("local")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
                     新建本地歌单
                   </Button>
@@ -484,9 +505,7 @@ export function PlaylistsWorkspacePage() {
                     {localPlaylists.map((playlist) => (
                       <LocalPlaylistCard
                         key={playlist.id}
-                        onDelete={isDefaultLocalPlaylist(playlist)
-                          ? undefined
-                          : () => setDeleteTarget({ kind: "local", playlist })}
+                        onDelete={() => setDeleteTarget({ kind: "local", playlist })}
                         onOpen={() => setSelectedPlaylist({ kind: "local", playlist })}
                         playlist={playlist}
                         tracks={tracksForLocalPlaylist(playlist, localTracks)}
@@ -499,7 +518,7 @@ export function PlaylistsWorkspacePage() {
               <section className="mt-4 flex flex-col gap-3" data-testid="network-playlists">
                 <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-2">
                   <div><p className="text-lg font-bold text-foreground">网络歌单</p><p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p></div>
-                  <Button onClick={() => setCreateDialogKind("network")} size="sm" variant="outline" type="button">
+                  <Button onClick={() => void openCreateDialog("network")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
                     新建网络歌单
                   </Button>
@@ -1202,7 +1221,6 @@ function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSource | n
 }
 
 function tracksForLocalPlaylist(playlist: LocalPlaylistRecord, tracks: LocalPlaylistTrackRecord[]) {
-  if (isDefaultLocalPlaylist(playlist) && playlist.isAggregate !== false) return tracks;
   const trackMap = new Map(tracks.map((track) => [track.id, track]));
   return playlist.trackIds
     .map((trackId) => trackMap.get(trackId))
@@ -1260,7 +1278,7 @@ function PlaylistEditorDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground" id={titleId}>{isLocal ? "新建本地歌单" : "新建网络歌单"}</h2>
-            <p className="mt-1 text-xs text-foreground-muted">{isLocal ? "新歌单会保存在当前设备，可稍后整理本地歌曲。" : "也可以从搜索页直接保存网易云音乐或 QQ 音乐歌单。"}</p>
+            <p className="mt-1 text-xs text-foreground-muted">{isLocal ? "创建前需要选择项目根目录，已识别的本地歌曲会加入新歌单。" : "网络歌单无需本地目录，可从搜索页保存网易云音乐或 QQ 音乐歌单。"}</p>
           </div>
           <Button aria-label="关闭" onClick={onCancel} size="icon" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>
@@ -1359,9 +1377,7 @@ function PlaylistMoveDialog({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-foreground">{target.playlist.title}</span>
                     <span className="mt-1 block truncate text-xs text-foreground-muted">
-                      {target.kind === "local"
-                        ? (isDefaultLocalPlaylist(target.playlist) ? "本地保存的歌曲" : `${target.playlist.trackIds.length} 首歌曲`)
-                        : `${target.playlist.trackIds.length} 首歌曲`}
+                      {`${target.playlist.trackIds.length} 首歌曲`}
                     </span>
                   </span>
                   <svg aria-hidden="true" className="shrink-0 text-foreground-muted" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m9 18 6-6-6-6" /></svg>

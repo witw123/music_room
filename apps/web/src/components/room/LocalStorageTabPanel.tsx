@@ -16,6 +16,7 @@ import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import { Button } from "@/components/ui/button";
 import { PlaylistPanel } from "./PlaylistPanel";
 
 type Provider = "netease" | "qqmusic";
@@ -49,6 +50,7 @@ function LocalStorageTabPanelBase({
   playlists,
   activeSession,
   localStorageSummary,
+  onChooseLocalFolder,
   onImportCachedTrack,
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
@@ -94,20 +96,21 @@ function LocalStorageTabPanelBase({
         </button>
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
-        <LocalPlaylistSearch
-          roomTracks={tracks}
-          onImportNeteaseTrack={onImportNeteaseTrack}
-          onImportQqMusicTrack={onImportQqMusicTrack}
-        />
         <LocalPlaylistSection
           localTracks={localStorageSummary.localPlaylistTracks}
           roomTracks={tracks}
           localFolderName={localStorageSummary.localFolderName}
+          onChooseLocalFolder={onChooseLocalFolder}
           onImportCachedTrack={handleImportCachedTrack}
           pendingCachedImport={pendingCachedImport}
         />
       </section> : null}
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
+        <NetworkPlaylistSearch
+          roomTracks={tracks}
+          onImportNeteaseTrack={onImportNeteaseTrack}
+          onImportQqMusicTrack={onImportQqMusicTrack}
+        />
         <PlaylistPanel
           activeSession={activeSession}
           canCreatePlaylist={!!activeSession}
@@ -128,7 +131,7 @@ function LocalStorageTabPanelBase({
 
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
-function LocalPlaylistSearch({
+function NetworkPlaylistSearch({
   roomTracks,
   onImportNeteaseTrack,
   onImportQqMusicTrack
@@ -169,7 +172,7 @@ function LocalPlaylistSearch({
 
   if (enabledSearchProviders.length === 0) {
     return (
-      <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid="local-playlist-search">
+      <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid="network-playlist-search">
         <span className="text-sm font-semibold text-foreground">搜索歌曲并导入曲库</span>
         <span className="text-xs text-foreground-muted">网易云音乐和 QQ 音乐当前未启用，请先在服务端配置对应平台。</span>
       </section>
@@ -269,7 +272,7 @@ function LocalPlaylistSearch({
   }
 
   return (
-    <section className="flex flex-col gap-3 border-b border-surface-border pb-3" data-testid="local-playlist-search">
+    <section className="flex flex-col gap-3 border-b border-surface-border pb-3" data-testid="network-playlist-search">
       <button
         type="button"
         aria-expanded={isExpanded}
@@ -308,9 +311,9 @@ function LocalPlaylistSearch({
           </div>
 
           <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void searchTracks(event)}>
-            <label className="sr-only" htmlFor="local-playlist-search-input">搜索歌曲</label>
+            <label className="sr-only" htmlFor="network-playlist-search-input">搜索歌曲</label>
             <input
-              id="local-playlist-search-input"
+              id="network-playlist-search-input"
               className="min-w-0 flex-1 border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
               disabled={!isConnected || pending !== null}
               maxLength={100}
@@ -376,12 +379,14 @@ function LocalPlaylistSection({
   localTracks,
   roomTracks,
   localFolderName,
+  onChooseLocalFolder,
   onImportCachedTrack,
   pendingCachedImport
 }: {
   localTracks: LocalPlaylistTrackRecord[];
   roomTracks: TrackMeta[];
   localFolderName: string | null;
+  onChooseLocalFolder: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 }) {
@@ -410,15 +415,14 @@ function LocalPlaylistSection({
       lastOwnerNickname: null
     } satisfies CachedLibraryTrack));
   return (
-    <div className="flex flex-col gap-4">
-      <CachedLibrarySection
-        cachedTracks={importable}
-        roomTracks={roomTracks}
-        localFolderName={localFolderName}
-        onImportCachedTrack={onImportCachedTrack}
-        pendingCachedImport={pendingCachedImport}
-      />
-    </div>
+    <CachedLibrarySection
+      cachedTracks={importable}
+      roomTracks={roomTracks}
+      localFolderName={localFolderName}
+      onChooseLocalFolder={onChooseLocalFolder}
+      onImportCachedTrack={onImportCachedTrack}
+      pendingCachedImport={pendingCachedImport}
+    />
   );
 }
 
@@ -426,16 +430,17 @@ function CachedLibrarySection({
   cachedTracks,
   roomTracks,
   localFolderName,
+  onChooseLocalFolder,
   onImportCachedTrack,
   pendingCachedImport
 }: {
   cachedTracks: CachedLibraryTrack[];
   roomTracks: TrackMeta[];
   localFolderName: string | null;
+  onChooseLocalFolder: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 }) {
-  const [isExpanded, setIsExpanded] = useState(true);
   const [selectedFileHashes, setSelectedFileHashes] = useState<string[]>([]);
   const [isBatchImporting, setIsBatchImporting] = useState(false);
   const roomFileHashes = new Set(roomTracks.map((track) => track.fileHash));
@@ -487,118 +492,129 @@ function CachedLibrarySection({
   };
 
   return (
-    <section className="flex flex-col gap-3" data-testid="cached-library-section">
+    <section className="flex w-full flex-col gap-3" data-testid="cached-library-section">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          data-testid="cached-library-toggle"
-          aria-expanded={isExpanded}
-          aria-controls="cached-library-content"
-          onClick={() => setIsExpanded((current) => !current)}
-          className="flex min-w-0 items-start gap-2 text-left"
-        >
-          <span
-            aria-hidden="true"
-            className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center text-sm text-foreground-muted transition-transform ${isExpanded ? "rotate-0" : "-rotate-90"}`}
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-foreground">本地歌单</p>
+          <p className="mt-1 truncate text-[10px] text-foreground-muted">
+            {localFolderName ? `来自 ${localFolderName} 的本地歌曲` : "本地保存的音频和平台元数据"}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          <span className="font-mono text-[10px] text-foreground-muted">{cachedTracks.length} 首歌曲</span>
+          <Button
+            aria-label="选择本地目录"
+            className="h-8 w-8"
+            onClick={() => void onChooseLocalFolder()}
+            size="icon"
+            title="选择本地目录"
+            type="button"
+            variant="outline"
           >
-            ⌄
-          </span>
-          <span className="min-w-0">
-            <p className="text-xs font-semibold text-foreground">本地歌曲</p>
-            <p className="mt-1 text-[10px] text-foreground-muted">
-              {localFolderName
-                ? `已从 ${localFolderName} 加载 ${cachedTracks.length} 首歌曲`
-                : "选择本地根文件夹后，这里会显示本地歌曲"}
-            </p>
-          </span>
-        </button>
-        <span className="shrink-0 font-mono text-[10px] text-foreground-muted">
-          {cachedTracks.length} 首
-        </span>
+            <PlusIcon />
+          </Button>
+        </div>
       </div>
 
-      {isExpanded ? (
-        <div id="cached-library-content">
-          {cachedTracks.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface/40 px-2.5 py-2 sm:px-3">
-                <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[11px] text-foreground-muted">
-                  <input
-                    type="checkbox"
-                    data-testid="cached-track-select-all"
-                    checked={allSelectableSelected}
-                    disabled={selectableTracks.length === 0 || isBatchImporting || pendingCachedImport !== null}
-                    onChange={toggleSelectAll}
-                    className="h-4 w-4 accent-accent"
-                  />
-                  <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
-                </label>
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-[10px] text-foreground-muted">
-                    已选择 {selectedTracks.length} 首
-                  </span>
+      {cachedTracks.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface/40 px-2.5 py-2 sm:px-3">
+            <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[11px] text-foreground-muted">
+              <input
+                type="checkbox"
+                data-testid="cached-track-select-all"
+                checked={allSelectableSelected}
+                disabled={selectableTracks.length === 0 || isBatchImporting || pendingCachedImport !== null}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 accent-accent"
+              />
+              <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+            </label>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
+              <button
+                type="button"
+                data-testid="cached-track-batch-import-button"
+                disabled={selectedTracks.length === 0 || isBatchImporting || pendingCachedImport !== null}
+                onClick={() => void importSelectedTracks()}
+                className="shrink-0 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
+              >
+                {isBatchImporting ? "批量导入中…" : "导入所选歌曲"}
+              </button>
+            </div>
+          </div>
+          <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
+            {cachedTracks.map((track) => {
+              const isInRoom = roomFileHashes.has(track.fileHash);
+              const isPending = pendingCachedImport === track.fileHash;
+              return (
+                <article key={track.fileHash} className="group flex min-w-0 items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-hover">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      data-testid="cached-track-select-checkbox"
+                      data-file-hash={track.fileHash}
+                      checked={selectedFileHashes.includes(track.fileHash)}
+                      disabled={isInRoom || isBatchImporting || pendingCachedImport !== null}
+                      onChange={() => toggleTrackSelection(track.fileHash)}
+                      className="h-4 w-4 shrink-0 accent-accent"
+                      aria-label={`选择《${track.title}》`}
+                    />
+                    <LocalTrackArtwork artworkUrl={track.artworkUrl ?? null} title={track.title} />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <strong className="block truncate text-sm font-semibold text-foreground">{track.title}</strong>
+                      <p className="truncate text-[10px] text-foreground-muted">
+                        {track.artist} · {track.album ?? "本地歌曲"} · {formatDuration(track.durationMs)}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    data-testid="cached-track-batch-import-button"
-                    disabled={selectedTracks.length === 0 || isBatchImporting || pendingCachedImport !== null}
-                    onClick={() => void importSelectedTracks()}
-                    className="shrink-0 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
+                    data-testid="cached-track-import-button"
+                    data-file-hash={track.fileHash}
+                    disabled={isInRoom || isBatchImporting || pendingCachedImport !== null}
+                    onClick={() => void onImportCachedTrack(track)}
+                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                      isInRoom
+                        ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                        : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"}`}
                   >
-                    {isBatchImporting ? "批量导入中…" : "导入所选歌曲"}
+                    {isInRoom ? "已在本房间" : isPending ? "导入中…" : "导入曲库"}
                   </button>
-                </div>
-              </div>
-              <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
-                {cachedTracks.map((track) => {
-                  const isInRoom = roomFileHashes.has(track.fileHash);
-                  const isPending = pendingCachedImport === track.fileHash;
-                  return (
-                    <article key={track.fileHash} className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-start gap-2">
-                        <input
-                          type="checkbox"
-                          data-testid="cached-track-select-checkbox"
-                          data-file-hash={track.fileHash}
-                          checked={selectedFileHashes.includes(track.fileHash)}
-                          disabled={isInRoom || isBatchImporting || pendingCachedImport !== null}
-                          onChange={() => toggleTrackSelection(track.fileHash)}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-                          aria-label={`选择《${track.title}》`}
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
-                          <p className="mt-1 truncate text-[10px] text-foreground-muted">
-                            {track.artist} · {formatDuration(track.durationMs)} · {track.fileHash.slice(0, 8)}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        data-testid="cached-track-import-button"
-                        data-file-hash={track.fileHash}
-                        disabled={isInRoom || isBatchImporting || pendingCachedImport !== null}
-                        onClick={() => void onImportCachedTrack(track)}
-                        className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                          isInRoom
-                            ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
-                            : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"}`}
-                      >
-                        {isInRoom ? "已在本房间" : isPending ? "导入中…" : "导入曲库"}
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed border-surface-border px-4 py-4 text-xs text-foreground-muted">
-              {localFolderName ? "当前本地目录没有歌曲。" : "尚未选择本地目录。"}
-            </p>
-          )}
+                </article>
+              );
+            })}
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-lg border border-dashed border-surface-border px-4 py-4">
+          <p className="text-xs text-foreground-muted">
+            {localFolderName ? "当前本地目录没有歌曲。" : "尚未选择本地目录。"}
+          </p>
+          <Button className="mt-3" onClick={() => void onChooseLocalFolder()} size="sm" type="button">
+            <PlusIcon />
+            选择本地目录
+          </Button>
+        </div>
+      )}
     </section>
   );
+}
+
+function LocalTrackArtwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
+  return (
+    <div
+      aria-label={`${title} 封面`}
+      className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-surface-border bg-surface text-lg font-bold text-foreground-muted"
+      style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
+    >
+      {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
+    </div>
+  );
+}
+
+function PlusIcon() {
+  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M12 5v14M5 12h14" /></svg>;
 }
 
 export const LocalStorageTabPanel = memo(LocalStorageTabPanelBase);

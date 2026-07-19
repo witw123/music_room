@@ -24,7 +24,6 @@ import {
 } from "@/features/upload/local-audio-storage";
 import {
   hashAudioBlob,
-  isDefaultLocalPlaylist,
   listLocalPlaylists,
   restoreLocalPlaylistsFromRepository,
   localPlaylistTrackId,
@@ -202,7 +201,7 @@ export function ProviderSearchPage() {
         await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({ track: resolvedTrack, lyrics }));
         const currentPlaylist = listLocalPlaylists().find((playlist) => playlist.id === option.playlist.id);
         if (!currentPlaylist) throw new Error("本地歌单不存在，请刷新后重试。");
-        if (!isDefaultLocalPlaylist(currentPlaylist) && !currentPlaylist.trackIds.includes(trackId)) {
+        if (!currentPlaylist.trackIds.includes(trackId)) {
           updateLocalPlaylist(currentPlaylist.id, { trackIds: [...currentPlaylist.trackIds, trackId] });
         }
         setStatusMessage(`《${resolvedTrack.title}》已加入“${currentPlaylist.title}”。`);
@@ -600,7 +599,6 @@ function PlaylistPickerSection({
       <div className="space-y-2">
         {options.map((option) => {
           const playlist = option.playlist;
-          const isLocal = option.kind === "local";
           return (
             <button
               className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-background/60 px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
@@ -615,7 +613,7 @@ function PlaylistPickerSection({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">{playlist.title}</span>
                 <span className="mt-1 block truncate text-xs text-foreground-muted">
-                  {isLocal ? (isDefaultLocalPlaylist(playlist) ? "本地保存的歌曲" : "本机歌单") : `${playlist.trackIds.length} 首歌曲`}
+                  {`${playlist.trackIds.length} 首歌曲`}
                 </span>
               </span>
               <svg aria-hidden="true" className="shrink-0 text-foreground-muted" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m9 18 6-6-6-6" /></svg>

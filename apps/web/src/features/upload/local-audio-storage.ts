@@ -1,13 +1,11 @@
 "use client";
 
 import {
-  playbackProfileId,
   type OriginalAssetManifest,
   type PlaybackAssetManifest
 } from "@music-room/shared";
 import {
   deleteCachedLibraryTrackFile,
-  deleteAudioAsset,
   deleteOriginalAssetForTrack,
   deleteLocalAudioCacheFileRecord,
   getLocalAudioDirectory,
@@ -20,13 +18,10 @@ import {
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
-  listCachedLibraryTracks,
-  musicRoomDatabase,
   saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
   saveLocalAudioFileRecord
 } from "@/lib/indexeddb";
-import type { AudioAssetManifestRecord } from "@/lib/indexeddb";
 import { createRepositoryTrackRecord, LocalRepository } from "./local-repository";
 import { hydrateLocalRepository } from "./local-repository-hydration";
 
@@ -79,126 +74,8 @@ export async function chooseLocalAudioDirectory() {
     repositoryId: repository.manifest.repositoryId,
     schemaVersion: repository.manifest.schemaVersion
   });
-  await migrateIndexedDbAudioToLocalRepository(repository);
   await hydrateLocalRepository(repository);
   return handle.name;
-}
-
-async function migrateIndexedDbAudioToLocalRepository(repository: LocalRepository) {
-  const [cachedTracks, manifests] = await Promise.all([
-    listCachedLibraryTracks(),
-    musicRoomDatabase.assetManifests.toArray()
-  ]);
-  const originalManifests = manifests.filter(
-    (record): record is AudioAssetManifestRecord & { manifest: OriginalAssetManifest } =>
-      record.complete && record.manifest.kind === "original"
-  );
-  const playbackManifests = manifests.filter(
-    (record): record is AudioAssetManifestRecord & { manifest: PlaybackAssetManifest } =>
-      record.complete && record.manifest.kind === "playback" && record.manifest.profileId === playbackProfileId
-  );
-  const sourcePaths = new Map<string, string>();
-  const originalPaths = new Map<string, string>();
-  const playbackPaths = new Map<string, string>();
-
-  for (const track of cachedTracks) {
-    const sourcePath = await repository.writeManagedSource({
-      file: track.file,
-      fileHash: track.fileHash,
-      mimeType: track.mimeType
-    });
-    sourcePaths.set(track.fileHash, sourcePath);
-    await saveLocalAudioFileRecord({
-      fileHash: track.fileHash,
-      fileName: buildLocalAudioFileName({
-        title: track.title,
-        mimeType: track.mimeType,
-        fileHash: track.fileHash
-      }),
-      relativePath: sourcePath,
-      storageKind: "saved"
-    });
-  }
-
-  for (const record of originalManifests) {
-    let sourcePath = sourcePaths.get(record.sourceFileHash);
-    if (!sourcePath) {
-      const units = await getAssetUnits(
-        record.assetId,
-        Array.from({ length: record.manifest.unitCount }, (_, index) => index)
-      );
-      if (units.length !== record.manifest.unitCount) continue;
-      units.sort((left, right) => left.unitIndex - right.unitIndex);
-      sourcePath = await repository.writeManagedSource({
-        file: new Blob(units.map((unit) => unit.payload), { type: record.manifest.mimeType }),
-        fileHash: record.sourceFileHash,
-        mimeType: record.manifest.mimeType
-      });
-      sourcePaths.set(record.sourceFileHash, sourcePath);
-    }
-    originalPaths.set(
-      record.sourceFileHash,
-      await repository.writeOriginalManifest(record.manifest, sourcePath)
-    );
-  }
-
-  for (const record of playbackManifests) {
-    const units = await getAssetUnits(
-      record.assetId,
-      Array.from({ length: record.manifest.unitCount }, (_, index) => index)
-    );
-    if (units.length !== record.manifest.unitCount) continue;
-    playbackPaths.set(
-      record.sourceFileHash,
-      await repository.writePlaybackAsset({
-        manifest: record.manifest,
-        units: units.map((unit) => ({ descriptor: unit, payload: unit.payload }))
-      })
-    );
-  }
-
-  for (const track of cachedTracks) {
-    const sourcePath = sourcePaths.get(track.fileHash);
-    if (!sourcePath) continue;
-    const original = originalManifests.find((record) => record.sourceFileHash === track.fileHash);
-    const playback = playbackManifests.find((record) => record.sourceFileHash === track.fileHash);
-    await repository.writeTrack(createRepositoryTrackRecord({
-      fileHash: track.fileHash,
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
-      artworkUrl: track.artworkUrl,
-      lyrics: track.lyrics,
-      provider: track.provider,
-      providerTrackId: track.providerTrackId,
-      mimeType: track.mimeType,
-      durationMs: track.durationMs,
-      sizeBytes: track.sizeBytes,
-      source: { kind: "managed", relativePath: sourcePath, sizeBytes: track.sizeBytes },
-      originalAsset: original
-        ? { assetId: original.assetId, manifestPath: originalPaths.get(track.fileHash) ?? "" }
-        : null,
-      playbackAsset: playback
-        ? {
-            assetId: playback.assetId,
-            profileId: playback.manifest.profileId,
-            manifestPath: playbackPaths.get(track.fileHash) ?? ""
-          }
-        : null,
-      retention: "library",
-      updatedAt: track.cachedAt
-    }));
-    await deleteCachedLibraryTrackFile(track.fileHash);
-  }
-
-  await Promise.all([
-    ...originalManifests
-      .filter((record) => originalPaths.has(record.sourceFileHash))
-      .map((record) => deleteAudioAsset(record.assetId)),
-    ...playbackManifests
-      .filter((record) => playbackPaths.has(record.sourceFileHash))
-      .map((record) => deleteAudioAsset(record.assetId))
-  ]);
 }
 
 export async function getConfiguredLocalRepository() {

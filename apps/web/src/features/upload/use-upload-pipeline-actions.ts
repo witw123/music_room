@@ -12,8 +12,8 @@ import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteLocalTrackDataForTracks,
   linkTrackAssets,
-  saveLocalAudioFileRecord,
-  upsertCachedLibraryTrackSummary
+  getCachedLibraryTrackByProviderTrack,
+  upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "./audio-utils";
@@ -23,14 +23,11 @@ import {
   buildRegisterTrackPayload,
   processSelectedTrackFiles
 } from "./upload-pipeline";
-import { buildCachedLibraryTrackUpsertRecord } from "./cache-library";
 import {
-  buildLocalAudioFileName,
-  cleanupLocalAudioCacheFiles,
-  ensureLocalAudioDirectoryWriteAccess,
-  getConfiguredLocalRepository
-} from "./local-audio-storage";
-import { createRepositoryTrackRecord } from "./local-repository";
+  buildCachedLibraryTrackUpsertRecord,
+  toCachedLibraryFile
+} from "./cache-library";
+import { cleanupLocalAudioCacheFiles } from "./local-audio-storage";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -98,68 +95,9 @@ export function useUploadPipelineActions({
           lyrics: input.lyrics ?? null
         }
       });
-      const { file: _file, ...summaryWithoutTimestamp } = cachedRecord;
-      const summary = {
-        ...summaryWithoutTimestamp,
-        cachedAt: new Date().toISOString()
-      };
-      const repository = await getConfiguredLocalRepository();
-      if (!repository) {
-        throw new Error("请先选择本地音频文件夹，音频文件不会保存到浏览器缓存。 ");
-      }
-      const sourcePath = repository.getManagedSourcePath({
-        fileHash: input.track.fileHash,
-        mimeType: input.track.mimeType || input.file.type || "audio/mpeg"
-      });
-      await repository.writeTrack(createRepositoryTrackRecord({
-        fileHash: input.track.fileHash,
-        title: input.track.title,
-        artist: input.track.artist,
-        album: input.track.album,
-        artworkUrl: input.track.artworkUrl,
-        lyrics: input.lyrics ?? null,
-        provider: input.track.sourceType,
-        providerTrackId: input.track.sourceRef?.trackId,
-        mimeType: input.track.mimeType || input.file.type || "audio/mpeg",
-        durationMs: input.track.durationMs,
-        sizeBytes: input.track.sizeBytes ?? input.file.size,
-        source: {
-          kind: "managed",
-          relativePath: sourcePath,
-          sizeBytes: input.track.sizeBytes ?? input.file.size
-        },
-        originalAsset: input.track.originalAsset
-          ? {
-              assetId: input.track.originalAsset.assetId,
-              manifestPath: repository.getOriginalManifestPath(input.track.originalAsset.assetId)
-            }
-          : null,
-        playbackAsset: input.track.playbackAsset
-          ? {
-              assetId: input.track.playbackAsset.assetId,
-              profileId: input.track.playbackAsset.profileId,
-              manifestPath: repository.getPlaybackManifestPath(
-                input.track.playbackAsset.assetId,
-                input.track.playbackAsset.profileId
-              )
-            }
-          : null,
-        retention: "library"
-      }));
-      await saveLocalAudioFileRecord({
-        fileHash: input.track.fileHash,
-        fileName: buildLocalAudioFileName({
-          title: input.track.title,
-          mimeType: input.track.mimeType || input.file.type || "audio/mpeg",
-          fileHash: input.track.fileHash
-        }),
-        relativePath: sourcePath,
-        storageKind: "saved"
-      });
-      await upsertCachedLibraryTrackSummary(summary);
-      await refreshCacheLibrary();
+      await upsertCachedLibraryTrack(cachedRecord);
     },
-    [refreshCacheLibrary]
+    []
   );
 
   const handleFilesSelected = useCallback(
@@ -172,12 +110,6 @@ export function useUploadPipelineActions({
       }
 
       const roomId = roomSnapshot.room.id;
-      try {
-        await ensureLocalAudioDirectoryWriteAccess();
-      } catch (error) {
-        setStatusMessage(toLocalAudioStorageErrorMessage(error));
-        return;
-      }
       const result = await processSelectedTrackFiles({
         files: Array.from(files),
         activeSession,
@@ -272,6 +204,7 @@ export function useUploadPipelineActions({
         syncRoomSnapshot,
         setStatusMessage
       });
+      await refreshCacheLibrary();
     },
     [
       activeSession,
@@ -280,7 +213,8 @@ export function useUploadPipelineActions({
       roomSnapshot,
       setStatusMessage,
       setUploadedTracks,
-      syncRoomSnapshot
+      syncRoomSnapshot,
+      refreshCacheLibrary
     ]
   );
 
@@ -296,7 +230,8 @@ export function useUploadPipelineActions({
       setStatusMessage,
       setUploadedTracks,
       sourceType: "netease",
-      syncRoomSnapshot
+      syncRoomSnapshot,
+      refreshCacheLibrary
     }),
     [
       activeSession,
@@ -305,7 +240,8 @@ export function useUploadPipelineActions({
       roomSnapshot,
       setStatusMessage,
       setUploadedTracks,
-      syncRoomSnapshot
+      syncRoomSnapshot,
+      refreshCacheLibrary
     ]
   );
 
@@ -321,7 +257,8 @@ export function useUploadPipelineActions({
       setStatusMessage,
       setUploadedTracks,
       sourceType: candidate.provider,
-      syncRoomSnapshot
+      syncRoomSnapshot,
+      refreshCacheLibrary
     }),
     [
       activeSession,
@@ -330,7 +267,8 @@ export function useUploadPipelineActions({
       roomSnapshot,
       setStatusMessage,
       setUploadedTracks,
-      syncRoomSnapshot
+      syncRoomSnapshot,
+      refreshCacheLibrary
     ]
   );
 
@@ -361,6 +299,7 @@ async function importProviderTrack(input: {
   setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
   sourceType: Exclude<TrackSourceType, "local_upload">;
   syncRoomSnapshot: (roomId: string) => Promise<void>;
+  refreshCacheLibrary: () => Promise<void>;
 }) {
   const {
     activeSession,
@@ -373,7 +312,8 @@ async function importProviderTrack(input: {
     setStatusMessage,
     setUploadedTracks,
     sourceType,
-    syncRoomSnapshot
+    syncRoomSnapshot,
+    refreshCacheLibrary
   } = input;
   if (!activeSession || !roomSnapshot) {
     throw new Error(`请先进入一个房间后再导入${sourceTypeLabel(sourceType)}歌曲。`);
@@ -388,16 +328,48 @@ async function importProviderTrack(input: {
   let registeredTrackId: string | null = null;
   let shouldRollbackRegisteredTrack = false;
   try {
-    await ensureLocalAudioDirectoryWriteAccess();
-    setStatusMessage(`正在获取《${candidate.title}》音频…`);
-    const source = await download();
-    const mimeType = normalizeImportedMimeType(source.contentType);
-    const extension = mimeType === "audio/flac" ? "flac" : "mp3";
-    const file = new File([source.blob], `${sanitizeFileName(candidate.title, sourceType)}.${extension}`, {
-      type: mimeType
-    });
+    const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
+    const existingTrack = roomSnapshot.tracks.find(
+      (track) =>
+        track.ownerSessionId === activeSession.userId &&
+        track.sourceType === sourceType &&
+        track.sourceRef?.provider === sourceRef.provider &&
+        track.sourceRef.trackId === sourceRef.trackId
+    );
+    if (existingTrack) {
+      setStatusMessage(`《${candidate.title}》已在当前房间曲库中。`);
+      return;
+    }
+
+    const cachedTrack = await getCachedLibraryTrackByProviderTrack(
+      sourceType,
+      candidate.providerTrackId
+    );
+    let file: File;
+    let assets: Awaited<ReturnType<typeof prepareAudioAssets>> | null = null;
+    if (cachedTrack) {
+      setStatusMessage(`正在使用《${candidate.title}》的浏览器缓存…`);
+      file = toCachedLibraryFile({
+        file: cachedTrack.file,
+        title: candidate.title,
+        mimeType: cachedTrack.mimeType,
+        fileHash: cachedTrack.fileHash
+      });
+      assets = await getReusableAudioAssets({
+        fileHash: cachedTrack.fileHash,
+        sizeBytes: cachedTrack.sizeBytes
+      });
+    } else {
+      setStatusMessage(`正在获取《${candidate.title}》音频…`);
+      const source = await download();
+      const mimeType = normalizeImportedMimeType(source.contentType);
+      const extension = mimeType === "audio/flac" ? "flac" : "mp3";
+      file = new File([source.blob], `${sanitizeFileName(candidate.title, sourceType)}.${extension}`, {
+        type: mimeType
+      });
+    }
     objectUrl = URL.createObjectURL(file);
-    const assets = await prepareAudioAssets({
+    assets ??= await prepareAudioAssets({
       file,
       onProgress: ({ stage, completed, total }) => {
         const labels = {
@@ -412,20 +384,11 @@ async function importProviderTrack(input: {
         setStatusMessage(`${labels[stage]} ${percent}%`);
       }
     });
-    const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
     const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, {
       type: sourceType,
       metadata: candidate,
       sourceRef
     });
-    const existingTrack = roomSnapshot.tracks.find(
-      (track) =>
-        track.ownerSessionId === activeSession.userId &&
-        ((track.sourceType === sourceType &&
-          track.sourceRef?.provider === sourceRef.provider &&
-          track.sourceRef.trackId === sourceRef.trackId) ||
-          track.fileHash === assets.fileHash)
-    );
     const registered = await musicRoomApi.registerTrack(
       roomSnapshot.room.id,
       buildRegisterTrackPayload(draft)
@@ -450,6 +413,7 @@ async function importProviderTrack(input: {
     }));
     retainedObjectUrl = true;
     await syncRoomSnapshot(roomSnapshot.room.id);
+    await refreshCacheLibrary().catch(() => undefined);
     setStatusMessage(`《${candidate.title}》已导入曲库。`);
   } catch (error) {
     if (registeredTrackId && shouldRollbackRegisteredTrack) {
@@ -512,8 +476,4 @@ function toProviderImportErrorMessage(error: unknown) {
     }
   }
   return error instanceof Error ? error.message : "音乐平台导入失败，请稍后重试。";
-}
-
-function toLocalAudioStorageErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "本地音频存储不可用，请重新选择根文件夹。";
 }

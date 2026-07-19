@@ -377,7 +377,10 @@ export async function putAssetManifest(
   });
 }
 
-export async function getAssetManifest(assetId: string) {
+export async function getAssetManifest(
+  assetId: string,
+  options?: { includeLocalRepository?: boolean }
+) {
   const record = await musicRoomDatabase.assetManifests.get(assetId);
   if (record) {
     await musicRoomDatabase.assetManifests.update(assetId, {
@@ -385,6 +388,8 @@ export async function getAssetManifest(assetId: string) {
     });
     return record;
   }
+
+  if (options?.includeLocalRepository === false) return null;
 
   const repository = await getLocalRepositoryForAssetRead();
   if (!repository) return null;
@@ -696,13 +701,25 @@ export async function listQueuedTranscodeJobs() {
 export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRecord, "cachedAt"> & {
   cachedAt?: string;
 }) {
-  const { file: _file, ...summaryInput } = input;
   const existing = await musicRoomDatabase.cachedTrackLibraryMetadata.get(input.fileHash);
-  await upsertCachedLibraryTrackSummary({
-    ...summaryInput,
-    cachedAt: input.cachedAt ?? existing?.cachedAt ?? new Date().toISOString()
-  });
-  await musicRoomDatabase.cachedTrackLibrary.delete(input.fileHash);
+  const cachedAt = input.cachedAt ?? existing?.cachedAt ?? new Date().toISOString();
+  const record: CachedLibraryTrackRecord = {
+    ...input,
+    cachedAt,
+    sourceTrackIds: [...new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds])],
+    sourceRoomIds: [...new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds])]
+  };
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.cachedTrackLibrary,
+    musicRoomDatabase.cachedTrackLibraryMetadata,
+    async () => {
+      await musicRoomDatabase.cachedTrackLibrary.put(record);
+      await musicRoomDatabase.cachedTrackLibraryMetadata.put(
+        toCachedLibraryTrackSummaryRecord(record)
+      );
+    }
+  );
 }
 
 export async function listCachedLibraryTracks() {
@@ -721,6 +738,17 @@ export async function listCachedLibraryTrackHashes() {
 
 export async function getCachedLibraryTrack(fileHash: string) {
   return musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+}
+
+export async function getCachedLibraryTrackByProviderTrack(
+  provider: "netease" | "qqmusic",
+  providerTrackId: string
+) {
+  return musicRoomDatabase.cachedTrackLibrary
+    .filter((record) =>
+      record.provider === provider && record.providerTrackId === providerTrackId
+    )
+    .first();
 }
 
 export async function deleteCachedLibraryTrackFile(fileHash: string) {
@@ -1019,8 +1047,21 @@ async function cleanupDeletedLocalRepositoryData(
   if (!repository) return;
 
   const localAssetRefs = new Map<string, { kind: "original" | "playback"; profileId?: string }>();
+  const protectedLocalAssetIds = new Set<string>();
   for (const fileHash of fileHashes) {
     const record = await repository.readTrack(fileHash);
+    const localFile = await musicRoomDatabase.localAudioFiles.get(fileHash);
+    const isSavedLocally =
+      localFile && (localFile.storageKind ?? "saved") === "saved";
+    if (isSavedLocally || record?.retention === "library") {
+      if (record?.originalAsset) {
+        protectedLocalAssetIds.add(record.originalAsset.assetId);
+      }
+      if (record?.playbackAsset) {
+        protectedLocalAssetIds.add(record.playbackAsset.assetId);
+      }
+      continue;
+    }
     if (record?.source.kind !== "managed") continue;
     if (record.originalAsset) {
       localAssetRefs.set(record.originalAsset.assetId, { kind: "original" });
@@ -1038,6 +1079,7 @@ async function cleanupDeletedLocalRepositoryData(
   }
 
   for (const record of manifests.values()) {
+    if (protectedLocalAssetIds.has(record.assetId)) continue;
     if (record.manifest.kind === "original") {
       await repository.deleteOriginalAsset(record.assetId);
     } else {
@@ -1045,6 +1087,7 @@ async function cleanupDeletedLocalRepositoryData(
     }
   }
   for (const [assetId, asset] of localAssetRefs) {
+    if (protectedLocalAssetIds.has(assetId)) continue;
     if (asset.kind === "original") {
       await repository.deleteOriginalAsset(assetId);
     } else if (asset.profileId) {
