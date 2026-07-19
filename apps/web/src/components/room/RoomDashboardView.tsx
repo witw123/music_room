@@ -62,7 +62,7 @@ type RoomDashboardViewProps = {
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
-  onAddToQueue: (trackId: string) => Promise<void>;
+  onAddToQueue: (trackId: string) => Promise<unknown>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   socket: RoomSocket | null;

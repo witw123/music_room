@@ -17,18 +17,16 @@ import {
   deleteAudioAsset,
   getCompleteAssetPairForSourceFileHash,
   getAssetManifest,
-  putAssetManifest,
-  putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
 } from "@/lib/indexeddb";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
-import { persistAudioAssetsToLocalRepository } from "./local-audio-storage";
+import { getConfiguredLocalRepository } from "./local-audio-storage";
+import { LocalRepository } from "./local-repository";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
-const persistenceBatchSize = 8;
 export { playbackEncoderVersion, playbackProfileId };
 export const maxDecodedPcmBytes = 256 * 1024 * 1024;
 
@@ -87,6 +85,11 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
+  const repository = await getConfiguredLocalRepository();
+  if (!repository) {
+    throw new Error("请先选择本地音频文件夹，音频文件不会保存到浏览器缓存。 ");
+  }
+
   await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
   const sourcePromise = prepareOriginalAsset(input);
   const playbackPromise = preparePlaybackAsset({
@@ -124,18 +127,30 @@ export async function prepareAudioAssets(input: {
         getAssetManifest(playback.playbackAsset.assetId)
       ]);
       if (!existingOriginal?.complete) {
-        await persistOriginalAsset(input, source);
+        await persistOriginalAsset(input, source, repository);
       }
       if (!existingPlayback?.complete) {
-        await persistPlaybackAsset(input, playback);
+        await persistPlaybackAsset(input, playback, repository);
       }
-      await persistAudioAssetsToLocalRepository({
-        file: input.file,
-        originalAsset: source.originalAsset,
-        playbackAsset: playback.playbackAsset
-      });
     } catch (error) {
-      await Promise.allSettled(createdAssetIds.map((assetId) => deleteAudioAsset(assetId)));
+      await Promise.allSettled([
+        ...createdAssetIds.map((assetId) => deleteAudioAsset(assetId)),
+        ...(createdAssetIds.includes(source.originalAsset.assetId)
+          ? [
+              repository.deleteOriginalAsset(source.originalAsset.assetId),
+              repository.removePath(repository.getManagedSourcePath({
+                fileHash: source.fileHash,
+                mimeType: source.originalAsset.mimeType
+              }))
+            ]
+          : []),
+        ...(createdAssetIds.includes(playback.playbackAsset.assetId)
+          ? [repository.deletePlaybackAsset(
+              playback.playbackAsset.assetId,
+              playback.playbackAsset.profileId
+            )]
+          : [])
+      ]);
       throw error;
     }
     await upsertTranscodeJob({
@@ -167,9 +182,8 @@ export async function prepareAudioAssets(input: {
 export async function getReusableAudioAssets(input: {
   fileHash: string;
   sizeBytes?: number;
-  durationMs?: number;
 }): Promise<PreparedAudioAssets | null> {
-  const pair = await getCompleteAssetPairForSourceFileHash(input.fileHash);
+  let pair = await getCompleteAssetPairForSourceFileHash(input.fileHash);
   if (!pair) return null;
 
   const originalAsset = pair.original.manifest;
@@ -179,8 +193,7 @@ export async function getReusableAudioAssets(input: {
     playbackAsset.kind !== "playback" ||
     originalAsset.fileHash !== input.fileHash ||
     playbackAsset.sourceFileHash !== input.fileHash ||
-    (input.sizeBytes !== undefined && input.sizeBytes > 0 && originalAsset.sizeBytes !== input.sizeBytes) ||
-    (input.durationMs !== undefined && input.durationMs > 0 && playbackAsset.durationMs !== input.durationMs)
+    (input.sizeBytes !== undefined && input.sizeBytes > 0 && originalAsset.sizeBytes !== input.sizeBytes)
   ) {
     return null;
   }
@@ -354,40 +367,22 @@ async function persistOriginalAsset(
     signal?: AbortSignal;
     onProgress?: (progress: AssetPreparationProgress) => void;
   },
-  source: Awaited<ReturnType<typeof prepareOriginalAsset>>
+  source: Awaited<ReturnType<typeof prepareOriginalAsset>>,
+  repository: LocalRepository
 ) {
-  await putAssetManifest(source.originalAsset);
-  for (let batchStart = 0; batchStart < source.originalAsset.unitCount; batchStart += persistenceBatchSize) {
-    const batchEnd = Math.min(source.originalAsset.unitCount, batchStart + persistenceBatchSize);
-    const units = await Promise.all(
-      Array.from({ length: batchEnd - batchStart }, async (_, offset) => {
-        const unitIndex = batchStart + offset;
-        throwIfAborted(input.signal);
-        const payload = await readFileUnit(input.file, unitIndex);
-        return {
-          descriptor: {
-            assetId: source.originalAsset.assetId,
-            kind: "original" as const,
-            unitIndex,
-            payloadBytes: payload.byteLength,
-            contentHash: source.leafHashes[unitIndex]!,
-            proof: source.proofs[unitIndex]!
-          },
-          payload
-        };
-      })
-    );
-    await putLocallyGeneratedAssetUnits({
-      assetId: source.originalAsset.assetId,
-      units,
-      complete: batchEnd === source.originalAsset.unitCount
-    });
-    input.onProgress?.({
-      stage: "persisting-original",
-      completed: batchEnd,
-      total: source.originalAsset.unitCount
-    });
-  }
+  throwIfAborted(input.signal);
+  const sourcePath = await repository.writeManagedSource({
+    file: input.file,
+    fileHash: source.fileHash,
+    mimeType: source.originalAsset.mimeType
+  });
+  await repository.writeOriginalManifest(source.originalAsset, sourcePath);
+  input.onProgress?.({
+    stage: "persisting-original",
+    completed: source.originalAsset.unitCount,
+    total: source.originalAsset.unitCount
+  });
+  return sourcePath;
 }
 
 async function persistPlaybackAsset(
@@ -395,9 +390,9 @@ async function persistPlaybackAsset(
     signal?: AbortSignal;
     onProgress?: (progress: AssetPreparationProgress) => void;
   },
-  playback: Awaited<ReturnType<typeof preparePlaybackAsset>>
+  playback: Awaited<ReturnType<typeof preparePlaybackAsset>>,
+  repository: LocalRepository
 ) {
-  await putAssetManifest(playback.playbackAsset);
   const units = playback.encodedUnits.map((unit, unitIndex) => {
     throwIfAborted(input.signal);
     return {
@@ -410,10 +405,12 @@ async function persistPlaybackAsset(
       payload: unit.payload
     };
   });
-  await putLocallyGeneratedAssetUnits({
-    assetId: playback.playbackAsset.assetId,
-    units,
-    complete: true
+  await repository.writePlaybackAsset({
+    manifest: playback.playbackAsset,
+    units: units.map((unit) => ({
+      descriptor: unit.descriptor,
+      payload: unit.payload
+    }))
   });
   for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
     input.onProgress?.({

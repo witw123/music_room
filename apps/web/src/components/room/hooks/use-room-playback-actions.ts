@@ -8,7 +8,7 @@ import {
   type RefObject,
   type SetStateAction
 } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { QueueItem, RoomSnapshot } from "@music-room/shared";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import {
   createPlaybackStartRequest,
@@ -29,6 +29,7 @@ type UseRoomPlaybackActionsInput = {
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
   handleTrackFilesSelected: (files: FileList | File[] | null) => Promise<void>;
+  addToQueue: (trackId: string) => Promise<QueueItem | null>;
   playTrack: (trackId?: string) => Promise<unknown>;
   playQueueItem: (queueItemId: string) => Promise<unknown>;
   prevTrack: () => Promise<unknown>;
@@ -66,6 +67,7 @@ export function useRoomPlaybackActions({
   isCurrentSourceOwner,
   audioUnlocked,
   handleTrackFilesSelected,
+  addToQueue,
   playTrack,
   playQueueItem,
   prevTrack,
@@ -247,13 +249,28 @@ export function useRoomPlaybackActions({
   const handlePlayTrack = useCallback(
     async (trackId?: string) => {
       const targetTrackId = trackId ?? currentPlaybackTrackId ?? null;
+      const queueItem = trackId ? await addToQueue(trackId) : null;
+      if (trackId && !queueItem) {
+        return;
+      }
       await armPlaybackStart({
         reason: trackId ? "track-change" : "user-play",
-        trackId: targetTrackId
+        trackId: queueItem?.trackId ?? targetTrackId,
+        queueItemId: queueItem?.id
       });
+      if (queueItem) {
+        await playQueueItem(queueItem.id);
+        return;
+      }
       await playTrack(trackId);
     },
-    [armPlaybackStart, currentPlaybackTrackId, playTrack]
+    [
+      addToQueue,
+      armPlaybackStart,
+      currentPlaybackTrackId,
+      playQueueItem,
+      playTrack
+    ]
   );
 
   const handlePlayQueueItem = useCallback(

@@ -12,7 +12,8 @@ import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteLocalTrackDataForTracks,
   linkTrackAssets,
-  upsertCachedLibraryTrack
+  saveLocalAudioFileRecord,
+  upsertCachedLibraryTrackSummary
 } from "@/lib/indexeddb";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "./audio-utils";
@@ -24,10 +25,12 @@ import {
 } from "./upload-pipeline";
 import { buildCachedLibraryTrackUpsertRecord } from "./cache-library";
 import {
+  buildLocalAudioFileName,
   cleanupLocalAudioCacheFiles,
   ensureLocalAudioDirectoryWriteAccess,
-  saveCachedAudioFileToLocalDirectory
+  getConfiguredLocalRepository
 } from "./local-audio-storage";
+import { createRepositoryTrackRecord } from "./local-repository";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -79,25 +82,81 @@ export function useUploadPipelineActions({
         | "fileHash"
         | "ownerNickname"
       > & Partial<
-        Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef">
+        Pick<
+          TrackMeta,
+          "album" | "artworkUrl" | "sourceType" | "sourceRef" | "originalAsset" | "playbackAsset"
+        >
       >;
       roomId: string;
       file: File | Blob;
       lyrics?: string | null;
     }) => {
-      await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord({
+      const cachedRecord = buildCachedLibraryTrackUpsertRecord({
         ...input,
         track: {
           ...input.track,
           lyrics: input.lyrics ?? null
         }
-      }));
-      await saveCachedAudioFileToLocalDirectory({
-        file: input.file,
+      });
+      const { file: _file, ...summaryWithoutTimestamp } = cachedRecord;
+      const summary = {
+        ...summaryWithoutTimestamp,
+        cachedAt: new Date().toISOString()
+      };
+      const repository = await getConfiguredLocalRepository();
+      if (!repository) {
+        throw new Error("请先选择本地音频文件夹，音频文件不会保存到浏览器缓存。 ");
+      }
+      const sourcePath = repository.getManagedSourcePath({
         fileHash: input.track.fileHash,
-        title: input.track.title,
         mimeType: input.track.mimeType || input.file.type || "audio/mpeg"
       });
+      await repository.writeTrack(createRepositoryTrackRecord({
+        fileHash: input.track.fileHash,
+        title: input.track.title,
+        artist: input.track.artist,
+        album: input.track.album,
+        artworkUrl: input.track.artworkUrl,
+        lyrics: input.lyrics ?? null,
+        provider: input.track.sourceType,
+        providerTrackId: input.track.sourceRef?.trackId,
+        mimeType: input.track.mimeType || input.file.type || "audio/mpeg",
+        durationMs: input.track.durationMs,
+        sizeBytes: input.track.sizeBytes ?? input.file.size,
+        source: {
+          kind: "managed",
+          relativePath: sourcePath,
+          sizeBytes: input.track.sizeBytes ?? input.file.size
+        },
+        originalAsset: input.track.originalAsset
+          ? {
+              assetId: input.track.originalAsset.assetId,
+              manifestPath: repository.getOriginalManifestPath(input.track.originalAsset.assetId)
+            }
+          : null,
+        playbackAsset: input.track.playbackAsset
+          ? {
+              assetId: input.track.playbackAsset.assetId,
+              profileId: input.track.playbackAsset.profileId,
+              manifestPath: repository.getPlaybackManifestPath(
+                input.track.playbackAsset.assetId,
+                input.track.playbackAsset.profileId
+              )
+            }
+          : null,
+        retention: "library"
+      }));
+      await saveLocalAudioFileRecord({
+        fileHash: input.track.fileHash,
+        fileName: buildLocalAudioFileName({
+          title: input.track.title,
+          mimeType: input.track.mimeType || input.file.type || "audio/mpeg",
+          fileHash: input.track.fileHash
+        }),
+        relativePath: sourcePath,
+        storageKind: "saved"
+      });
+      await upsertCachedLibraryTrackSummary(summary);
       await refreshCacheLibrary();
     },
     [refreshCacheLibrary]
@@ -134,8 +193,7 @@ export function useUploadPipelineActions({
           const reusedAssets = cachedMetadata
             ? await getReusableAudioAssets({
                 fileHash: cachedMetadata.fileHash,
-                sizeBytes: cachedMetadata.sizeBytes,
-                durationMs: cachedMetadata.durationMs
+                sizeBytes: cachedMetadata.sizeBytes
               })
             : null;
           const assets = reusedAssets ?? await prepareAudioAssets({
@@ -152,7 +210,7 @@ export function useUploadPipelineActions({
                 const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
                 setStatusMessage(`${labels[stage]} ${percent}%`);
               }
-            });
+  });
           const resolvedCachedMetadata = metadataByFileHash?.get(assets.fileHash);
           const provider = resolvedCachedMetadata?.provider;
           const providerTrackId = resolvedCachedMetadata?.providerTrackId;

@@ -27,6 +27,7 @@ const repositoryDirectories = [
   "tmp",
   "trash"
 ] as const;
+const playbackWriteConcurrency = 4;
 
 export type LocalRepositoryManifest = {
   format: typeof localRepositoryFormat;
@@ -147,21 +148,32 @@ export class LocalRepository {
     fileHash: string;
     mimeType: string;
   }) {
-    const extension = inferFileExtension(input.mimeType);
-    const relativePath = `${localRepositoryDirectoryName}/library/sources/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
+    const relativePath = this.getManagedSourcePath(input);
     await this.writeBlob(relativePath, input.file);
     return relativePath;
+  }
+
+  getManagedSourcePath(input: { fileHash: string; mimeType: string }) {
+    const extension = inferFileExtension(input.mimeType);
+    return `${localRepositoryDirectoryName}/library/sources/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
   }
 
   async writeCachedSource(input: {
     file: Blob;
     fileHash: string;
     mimeType: string;
-  }) {
-    const extension = inferFileExtension(input.mimeType);
-    const relativePath = `${localRepositoryDirectoryName}/cache/provider/local_upload/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
+  }, options?: { reuseExisting?: boolean }) {
+    const relativePath = this.getCachedSourcePath(input);
+    if (options?.reuseExisting && await getFileByPath(this.root, relativePath, false)) {
+      return relativePath;
+    }
     await this.writeBlob(relativePath, input.file);
     return relativePath;
+  }
+
+  getCachedSourcePath(input: { fileHash: string; mimeType: string }) {
+    const extension = inferFileExtension(input.mimeType);
+    return `${localRepositoryDirectoryName}/cache/provider/local_upload/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
   }
 
   async readPath(relativePath: string) {
@@ -180,6 +192,24 @@ export class LocalRepository {
     } catch (error) {
       if ((error as DOMException).name !== "NotFoundError") throw error;
     }
+  }
+
+  async removeDirectory(relativePath: string) {
+    const parts = splitSafePath(relativePath);
+    const directoryName = parts.pop();
+    if (!directoryName) return;
+    const parent = await getDirectoryByParts(this.root, parts, false);
+    if (!parent) return;
+    try {
+      await parent.removeEntry(directoryName, { recursive: true });
+    } catch (error) {
+      if ((error as DOMException).name !== "NotFoundError") throw error;
+    }
+  }
+
+  async deleteOriginalAsset(assetId: string) {
+    await this.removeDirectory(`${localRepositoryDirectoryName}/assets/original/${assetId}`);
+    await this.touch();
   }
 
   async writeTrack(record: LocalRepositoryTrackRecord) {
@@ -254,13 +284,17 @@ export class LocalRepository {
     manifest: OriginalAssetManifest,
     sourcePath: string
   ) {
-    const relativePath = `${localRepositoryDirectoryName}/assets/original/${manifest.assetId}/manifest.json`;
+    const relativePath = this.getOriginalManifestPath(manifest.assetId);
     await this.writeJson(relativePath, {
       storageSchemaVersion: 1,
       manifest,
       sourcePath
     } satisfies LocalRepositoryOriginalManifest);
     return relativePath;
+  }
+
+  getOriginalManifestPath(assetId: string) {
+    return `${localRepositoryDirectoryName}/assets/original/${assetId}/manifest.json`;
   }
 
   async readOriginalManifest(assetId: string) {
@@ -279,19 +313,27 @@ export class LocalRepository {
     manifest: PlaybackAssetManifest;
     units: Array<{ descriptor: AssetUnitDescriptor; payload: ArrayBuffer }>;
   }) {
-    const basePath = `${localRepositoryDirectoryName}/assets/playback/${input.manifest.profileId}/${input.manifest.assetId}`;
-    const unitDescriptors: LocalRepositoryPlaybackUnit[] = [];
-    for (const unit of input.units) {
-      const fileName = `${String(unit.descriptor.unitIndex).padStart(6, "0")}.opus`;
-      const relativePath = `${basePath}/units/${fileName}`;
-      await this.writeBlob(relativePath, new Blob([new Uint8Array(unit.payload)], {
-        type: "audio/ogg"
-      }));
-      unitDescriptors.push({
-        descriptor: unit.descriptor,
-        relativePath
-      });
-    }
+    const basePath = this.getPlaybackAssetPath(input.manifest.assetId, input.manifest.profileId);
+    const unitDescriptors: LocalRepositoryPlaybackUnit[] = new Array(input.units.length);
+    let nextUnitIndex = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(playbackWriteConcurrency, input.units.length) }, async () => {
+        while (true) {
+          const unitIndex = nextUnitIndex++;
+          if (unitIndex >= input.units.length) return;
+          const unit = input.units[unitIndex]!;
+          const fileName = `${String(unit.descriptor.unitIndex).padStart(6, "0")}.opus`;
+          const relativePath = `${basePath}/units/${fileName}`;
+          await this.writeBlob(relativePath, new Blob([new Uint8Array(unit.payload)], {
+            type: "audio/ogg"
+          }));
+          unitDescriptors[unitIndex] = {
+            descriptor: unit.descriptor,
+            relativePath
+          };
+        }
+      })
+    );
     await this.writeJson(`${basePath}/manifest.json`, {
       storageSchemaVersion: 1,
       manifest: input.manifest,
@@ -301,10 +343,25 @@ export class LocalRepository {
     return `${basePath}/manifest.json`;
   }
 
+  getPlaybackAssetPath(assetId: string, profileId: string) {
+    return `${localRepositoryDirectoryName}/assets/playback/${profileId}/${assetId}`;
+  }
+
+  getPlaybackManifestPath(assetId: string, profileId: string) {
+    return `${this.getPlaybackAssetPath(assetId, profileId)}/manifest.json`;
+  }
+
   async readPlaybackAsset(assetId: string, profileId: string) {
     return this.readJson<LocalRepositoryPlaybackManifest>(
       `${localRepositoryDirectoryName}/assets/playback/${profileId}/${assetId}/manifest.json`
     );
+  }
+
+  async deletePlaybackAsset(assetId: string, profileId: string) {
+    await this.removeDirectory(
+      `${localRepositoryDirectoryName}/assets/playback/${profileId}/${assetId}`
+    );
+    await this.touch();
   }
 
   async listPlaybackAssets() {
@@ -323,21 +380,11 @@ export class LocalRepository {
     if (!fileName) throw new Error("本地仓库文件路径为空。");
     const directory = await getDirectoryByParts(this.root, parts, true);
     if (!directory) throw new Error("无法创建本地仓库目录。");
-    const fileHandle = await directory.getFileHandle(`${fileName}.partial`, { create: true });
+    const fileHandle = await directory.getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
     try {
       await writable.write(blob);
       await writable.close();
-      const finalHandle = await directory.getFileHandle(fileName, { create: true });
-      const finalWritable = await finalHandle.createWritable();
-      try {
-        await finalWritable.write(blob);
-        await finalWritable.close();
-      } catch (error) {
-        await finalWritable.abort().catch(() => undefined);
-        throw error;
-      }
-      await directory.removeEntry(`${fileName}.partial`);
     } catch (error) {
       await writable.abort().catch(() => undefined);
       throw error;

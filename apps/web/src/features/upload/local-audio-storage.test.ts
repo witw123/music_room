@@ -41,7 +41,12 @@ function createDirectoryHandle(input: {
   };
   const cacheDirectory = {
     getDirectoryHandle: vi.fn(),
-    getFileHandle: vi.fn().mockResolvedValue(fileHandle),
+    getFileHandle: vi.fn().mockImplementation(async (_name, options) => {
+      if (!options?.create) {
+        throw new DOMException("missing", "NotFoundError");
+      }
+      return fileHandle;
+    }),
     removeEntry: vi.fn()
   };
   cacheDirectory.getDirectoryHandle.mockResolvedValue(cacheDirectory);

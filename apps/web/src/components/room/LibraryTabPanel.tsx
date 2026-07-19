@@ -12,7 +12,7 @@ type LibraryTabPanelProps = {
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
-  onAddToQueue: (trackId: string) => Promise<void>;
+  onAddToQueue: (trackId: string) => Promise<unknown>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;

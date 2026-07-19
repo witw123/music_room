@@ -33,28 +33,13 @@ export type LocalPlaylistRecord = {
   updatedAt: string;
 };
 
-const localPlaylistsStorageKey = "music-room-local-playlists";
 const defaultLocalPlaylistId = "local-default";
 const directoryScanSource = "directory-scan" as const;
 let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
+let localPlaylists = [createDefaultLocalPlaylist()];
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
-  const fallback = [createDefaultLocalPlaylist()];
-  if (typeof window === "undefined") return fallback;
-
-  try {
-    const raw = window.localStorage.getItem(localPlaylistsStorageKey);
-    if (!raw) {
-      writeLocalPlaylists(fallback);
-      return fallback;
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return fallback;
-    const records = parsed.filter(isLocalPlaylistRecord);
-    return records;
-  } catch {
-    return fallback;
-  }
+  return localPlaylists;
 }
 
 export async function restoreLocalPlaylistsFromRepository() {
@@ -62,23 +47,27 @@ export async function restoreLocalPlaylistsFromRepository() {
   const repository = await getConfiguredLocalRepository();
   if (!repository) return listLocalPlaylists();
 
-  const persisted = await repository.listPlaylists();
-  if (persisted.length > 0) {
-    const playlists = persisted.map(fromRepositoryPlaylist);
-    writeLocalPlaylistsToBrowser(playlists);
-    return playlists;
-  }
+  try {
+    const persisted = await repository.listPlaylists();
+    if (persisted.length > 0) {
+      const playlists = persisted.map(fromRepositoryPlaylist);
+      localPlaylists = playlists;
+      return playlists;
+    }
 
-  const existing = listLocalPlaylists();
-  await flushLocalPlaylistPersistence();
-  for (const playlist of existing) {
-    await repository.writePlaylist(toRepositoryPlaylist(playlist));
+    const existing = localPlaylists;
+    await flushLocalPlaylistPersistence();
+    for (const playlist of existing) {
+      await repository.writePlaylist(toRepositoryPlaylist(playlist));
+    }
+    return existing;
+  } catch {
+    return listLocalPlaylists();
   }
-  return existing;
 }
 
 export async function flushLocalPlaylistPersistence() {
-  await localPlaylistPersistencePromise;
+  await localPlaylistPersistencePromise.catch(() => undefined);
 }
 
 export function createLocalPlaylist(input: { title: string; description?: string | null }) {
@@ -444,34 +433,12 @@ function createLocalPlaylistId() {
   return `local-playlist-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
-function isLocalPlaylistRecord(value: unknown): value is LocalPlaylistRecord {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Partial<LocalPlaylistRecord>;
-  return typeof item.id === "string"
-    && typeof item.title === "string"
-    && (typeof item.description === "string" || item.description === null)
-    && Array.isArray(item.trackIds)
-    && item.trackIds.every((trackId) => typeof trackId === "string")
-    && (item.isAggregate === undefined || typeof item.isAggregate === "boolean")
-    && typeof item.createdAt === "string"
-    && typeof item.updatedAt === "string";
-}
-
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
-  writeLocalPlaylistsToBrowser(playlists);
+  localPlaylists = playlists;
   localPlaylistPersistencePromise = localPlaylistPersistencePromise
     .catch(() => undefined)
-    .then(() => mirrorLocalPlaylistsToRepository(playlists));
-  void localPlaylistPersistencePromise.catch(() => undefined);
-}
-
-function writeLocalPlaylistsToBrowser(playlists: LocalPlaylistRecord[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(localPlaylistsStorageKey, JSON.stringify(playlists));
-  } catch {
-    // Private browsing or storage quotas can reject local metadata writes.
-  }
+    .then(() => mirrorLocalPlaylistsToRepository(playlists))
+    .catch(() => undefined);
 }
 
 async function mirrorLocalPlaylistsToRepository(playlists: LocalPlaylistRecord[]) {

@@ -6,6 +6,7 @@ import {
   type AuthSession,
   type PlaybackMode,
   type PlaybackSnapshot,
+  type QueueItem,
   type RoomSnapshot
 } from "@music-room/shared";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
@@ -330,20 +331,37 @@ export function useRoomActions({
   ]);
 
   const addToQueue = useCallback(
-    async (trackId: string) => {
+    async (trackId: string): Promise<QueueItem | null> => {
       if (!activeSession || !roomSnapshot) {
-        return;
+        return null;
       }
 
       try {
-        await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
+        const result = await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
+        dispatchRoomStateEvent({
+          type: "server-queue-patch",
+          roomId: roomSnapshot.room.id,
+          queue: result.queue,
+          playback: result.playback
+        });
         void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌曲已加入共享队列。");
+        return [...result.queue]
+          .reverse()
+          .find((item) => item.trackId === trackId && item.requestedById === activeSession.userId)
+          ?? null;
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
+        return null;
       }
     },
-    [activeSession, roomSnapshot, setStatusMessage, syncRoomSnapshot]
+    [
+      activeSession,
+      dispatchRoomStateEvent,
+      roomSnapshot,
+      setStatusMessage,
+      syncRoomSnapshot
+    ]
   );
 
   const deleteTrack = useCallback(

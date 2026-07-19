@@ -1,8 +1,13 @@
 "use client";
 
-import type { OriginalAssetManifest, PlaybackAssetManifest } from "@music-room/shared";
+import {
+  playbackProfileId,
+  type OriginalAssetManifest,
+  type PlaybackAssetManifest
+} from "@music-room/shared";
 import {
   deleteCachedLibraryTrackFile,
+  deleteAudioAsset,
   deleteOriginalAssetForTrack,
   deleteLocalAudioCacheFileRecord,
   getLocalAudioDirectory,
@@ -12,15 +17,17 @@ import {
   getAssetUnits,
   getTrackAssetLink,
   getCachedLibraryTrackSummary,
-  listCachedLibraryTracks,
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
+  listCachedLibraryTracks,
+  musicRoomDatabase,
   saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
   saveLocalAudioFileRecord
 } from "@/lib/indexeddb";
-import { LocalRepository } from "./local-repository";
+import type { AudioAssetManifestRecord } from "@/lib/indexeddb";
+import { createRepositoryTrackRecord, LocalRepository } from "./local-repository";
 import { hydrateLocalRepository } from "./local-repository-hydration";
 
 type DirectoryPickerWindow = Window & {
@@ -72,15 +79,138 @@ export async function chooseLocalAudioDirectory() {
     repositoryId: repository.manifest.repositoryId,
     schemaVersion: repository.manifest.schemaVersion
   });
+  await migrateIndexedDbAudioToLocalRepository(repository);
   await hydrateLocalRepository(repository);
-  await migrateIndexedDbCacheToLocalDirectory();
   return handle.name;
+}
+
+async function migrateIndexedDbAudioToLocalRepository(repository: LocalRepository) {
+  const [cachedTracks, manifests] = await Promise.all([
+    listCachedLibraryTracks(),
+    musicRoomDatabase.assetManifests.toArray()
+  ]);
+  const originalManifests = manifests.filter(
+    (record): record is AudioAssetManifestRecord & { manifest: OriginalAssetManifest } =>
+      record.complete && record.manifest.kind === "original"
+  );
+  const playbackManifests = manifests.filter(
+    (record): record is AudioAssetManifestRecord & { manifest: PlaybackAssetManifest } =>
+      record.complete && record.manifest.kind === "playback" && record.manifest.profileId === playbackProfileId
+  );
+  const sourcePaths = new Map<string, string>();
+  const originalPaths = new Map<string, string>();
+  const playbackPaths = new Map<string, string>();
+
+  for (const track of cachedTracks) {
+    const sourcePath = await repository.writeManagedSource({
+      file: track.file,
+      fileHash: track.fileHash,
+      mimeType: track.mimeType
+    });
+    sourcePaths.set(track.fileHash, sourcePath);
+    await saveLocalAudioFileRecord({
+      fileHash: track.fileHash,
+      fileName: buildLocalAudioFileName({
+        title: track.title,
+        mimeType: track.mimeType,
+        fileHash: track.fileHash
+      }),
+      relativePath: sourcePath,
+      storageKind: "saved"
+    });
+  }
+
+  for (const record of originalManifests) {
+    let sourcePath = sourcePaths.get(record.sourceFileHash);
+    if (!sourcePath) {
+      const units = await getAssetUnits(
+        record.assetId,
+        Array.from({ length: record.manifest.unitCount }, (_, index) => index)
+      );
+      if (units.length !== record.manifest.unitCount) continue;
+      units.sort((left, right) => left.unitIndex - right.unitIndex);
+      sourcePath = await repository.writeManagedSource({
+        file: new Blob(units.map((unit) => unit.payload), { type: record.manifest.mimeType }),
+        fileHash: record.sourceFileHash,
+        mimeType: record.manifest.mimeType
+      });
+      sourcePaths.set(record.sourceFileHash, sourcePath);
+    }
+    originalPaths.set(
+      record.sourceFileHash,
+      await repository.writeOriginalManifest(record.manifest, sourcePath)
+    );
+  }
+
+  for (const record of playbackManifests) {
+    const units = await getAssetUnits(
+      record.assetId,
+      Array.from({ length: record.manifest.unitCount }, (_, index) => index)
+    );
+    if (units.length !== record.manifest.unitCount) continue;
+    playbackPaths.set(
+      record.sourceFileHash,
+      await repository.writePlaybackAsset({
+        manifest: record.manifest,
+        units: units.map((unit) => ({ descriptor: unit, payload: unit.payload }))
+      })
+    );
+  }
+
+  for (const track of cachedTracks) {
+    const sourcePath = sourcePaths.get(track.fileHash);
+    if (!sourcePath) continue;
+    const original = originalManifests.find((record) => record.sourceFileHash === track.fileHash);
+    const playback = playbackManifests.find((record) => record.sourceFileHash === track.fileHash);
+    await repository.writeTrack(createRepositoryTrackRecord({
+      fileHash: track.fileHash,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      artworkUrl: track.artworkUrl,
+      lyrics: track.lyrics,
+      provider: track.provider,
+      providerTrackId: track.providerTrackId,
+      mimeType: track.mimeType,
+      durationMs: track.durationMs,
+      sizeBytes: track.sizeBytes,
+      source: { kind: "managed", relativePath: sourcePath, sizeBytes: track.sizeBytes },
+      originalAsset: original
+        ? { assetId: original.assetId, manifestPath: originalPaths.get(track.fileHash) ?? "" }
+        : null,
+      playbackAsset: playback
+        ? {
+            assetId: playback.assetId,
+            profileId: playback.manifest.profileId,
+            manifestPath: playbackPaths.get(track.fileHash) ?? ""
+          }
+        : null,
+      retention: "library",
+      updatedAt: track.cachedAt
+    }));
+    await deleteCachedLibraryTrackFile(track.fileHash);
+  }
+
+  await Promise.all([
+    ...originalManifests
+      .filter((record) => originalPaths.has(record.sourceFileHash))
+      .map((record) => deleteAudioAsset(record.assetId)),
+    ...playbackManifests
+      .filter((record) => playbackPaths.has(record.sourceFileHash))
+      .map((record) => deleteAudioAsset(record.assetId))
+  ]);
 }
 
 export async function getConfiguredLocalRepository() {
   const directory = await getLocalAudioDirectory();
   if (!directory) return null;
-  return LocalRepository.open(directory.handle);
+  try {
+    return await LocalRepository.open(directory.handle);
+  } catch {
+    // A directory handle can become unavailable after the folder is moved or deleted.
+    // Browser storage remains usable until the user selects a new folder.
+    return null;
+  }
 }
 
 export async function getLocalAudioStorageState(): Promise<LocalAudioStorageState> {
@@ -128,7 +258,11 @@ export async function listSelectedLocalAudioFiles(): Promise<SelectedLocalAudioF
   if (permission !== "granted") return null;
 
   const files: SelectedLocalAudioFile[] = [];
-  await collectSelectedLocalAudioFiles(directory.handle, "", files);
+  try {
+    await collectSelectedLocalAudioFiles(directory.handle, "", files);
+  } catch {
+    return null;
+  }
   return files;
 }
 
@@ -167,6 +301,27 @@ export async function getOriginalAssetFile(input: {
   title: string;
   mimeType: string;
 }) {
+  const repository = await getConfiguredLocalRepository();
+  const persisted = repository ? await repository.readOriginalManifest(input.assetId) : null;
+  if (
+    repository &&
+    persisted?.manifest.kind === "original" &&
+    persisted.manifest.fileHash === input.fileHash
+  ) {
+    const source = await repository.readPath(persisted.sourcePath);
+    if (source) {
+      return new File(
+        [source],
+        buildLocalAudioFileName({
+          title: input.title,
+          mimeType: input.mimeType,
+          fileHash: input.fileHash
+        }),
+        { type: input.mimeType }
+      );
+    }
+  }
+
   const assetRecord = await getAssetManifest(input.assetId);
   if (
     assetRecord?.manifest.kind === "original" &&
@@ -189,56 +344,25 @@ export async function getOriginalAssetFile(input: {
     }
   }
 
-  const repository = await getConfiguredLocalRepository();
-  const persisted = repository ? await repository.readOriginalManifest(input.assetId) : null;
-  if (
-    !persisted ||
-    persisted.manifest.fileHash !== input.fileHash ||
-    persisted.manifest.kind !== "original"
-  ) {
-    return null;
-  }
-  const source = await repository?.readPath(persisted.sourcePath);
-  if (!source) return null;
-  return new File(
-    [source],
-    buildLocalAudioFileName({
-      title: input.title,
-      mimeType: input.mimeType,
-      fileHash: input.fileHash
-    }),
-    { type: input.mimeType }
-  );
+  return null;
 }
 
-export async function persistAudioAssetsToLocalRepository(input: {
-  file: Blob;
-  originalAsset: OriginalAssetManifest;
-  playbackAsset: PlaybackAssetManifest;
-}) {
-  const repository = await getConfiguredLocalRepository();
-  if (!repository) return null;
-
-  const sourcePath = await repository.writeCachedSource({
-    file: input.file,
-    fileHash: input.originalAsset.fileHash,
-    mimeType: input.originalAsset.mimeType
-  });
-  await repository.writeOriginalManifest(input.originalAsset, sourcePath);
-
-  const unitIndexes = Array.from({ length: input.playbackAsset.unitCount }, (_, index) => index);
-  const units = await getAssetUnits(input.playbackAsset.assetId, unitIndexes);
+async function persistPlaybackAssetToLocalRepository(
+  repository: LocalRepository,
+  playbackAsset: PlaybackAssetManifest
+) {
+  const unitIndexes = Array.from({ length: playbackAsset.unitCount }, (_, index) => index);
+  const units = await getAssetUnits(playbackAsset.assetId, unitIndexes);
   if (units.length !== unitIndexes.length) {
     throw new Error("播放资产尚未完整写入，无法持久化到本地仓库。");
   }
-  await repository.writePlaybackAsset({
-    manifest: input.playbackAsset,
+  return repository.writePlaybackAsset({
+    manifest: playbackAsset,
     units: units.map((unit) => ({
       descriptor: unit,
       payload: unit.payload
     }))
   });
-  return { sourcePath };
 }
 
 export async function getLocalAudioCacheFile(fileHash: string) {
@@ -285,18 +409,22 @@ export async function saveAudioFileToLocalDirectory(input: {
     mimeType: input.mimeType
   });
 
+  const trackAssets = input.trackId
+    ? await getTrackAssetManifests(input.trackId)
+    : null;
+  if (trackAssets?.original) {
+    await repository.writeOriginalManifest(trackAssets.original, relativePath);
+  }
+  if (trackAssets?.playback) {
+    await persistPlaybackAssetToLocalRepository(repository, trackAssets.playback);
+  }
+
   await saveLocalAudioFileRecord({
     fileHash: input.fileHash,
     fileName,
     relativePath,
     storageKind: "saved"
   });
-  const originalManifest = input.trackId
-    ? await getTrackOriginalManifest(input.trackId)
-    : null;
-  if (originalManifest) {
-    await repository.writeOriginalManifest(originalManifest.manifest, relativePath);
-  }
   await persistCachedTrackRecord(input.fileHash, relativePath, "library");
   await deleteCachedLibraryTrackFile(input.fileHash);
   if (input.trackId) {
@@ -322,7 +450,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
     file: input.file,
     fileHash: input.fileHash,
     mimeType: input.mimeType
-  });
+  }, { reuseExisting: true });
   await saveLocalAudioCacheFileRecord({
     fileHash: input.fileHash,
     fileName,
@@ -406,29 +534,20 @@ export async function deleteLocalAudioCacheFile(fileHash: string) {
   return true;
 }
 
-async function migrateIndexedDbCacheToLocalDirectory() {
-  const records = await listCachedLibraryTracks();
-  for (const record of records) {
-    try {
-      await saveCachedAudioFileToLocalDirectory({
-        file: record.file,
-        fileHash: record.fileHash,
-        title: record.title,
-        mimeType: record.mimeType
-      });
-    } catch {
-      // Keep the IndexedDB copy when a single file cannot be migrated.
-    }
-  }
-}
-
-async function getTrackOriginalManifest(trackId: string) {
+async function getTrackAssetManifests(trackId: string) {
   const link = await getTrackAssetLink(trackId);
-  const assetRecord = link ? await getAssetManifest(link.originalAssetId) : null;
-  if (!assetRecord || assetRecord.manifest.kind !== "original") return null;
+  if (!link) return null;
+  const [originalRecord, playbackRecord] = await Promise.all([
+    getAssetManifest(link.originalAssetId),
+    getAssetManifest(link.playbackAssetId)
+  ]);
   return {
-    ...assetRecord,
-    manifest: assetRecord.manifest as OriginalAssetManifest
+    original: originalRecord?.manifest.kind === "original"
+      ? originalRecord.manifest as OriginalAssetManifest
+      : null,
+    playback: playbackRecord?.manifest.kind === "playback"
+      ? playbackRecord.manifest as PlaybackAssetManifest
+      : null
   };
 }
 

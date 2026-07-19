@@ -336,6 +336,7 @@ export function MusicRoomApp({
     isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
     audioUnlocked: pageState.audioUnlocked,
     handleTrackFilesSelected: uploads.handleFilesSelected,
+    addToQueue: roomActions.addToQueue,
     playTrack: roomActions.playTrack,
     playQueueItem: roomActions.playQueueItem,
     prevTrack: roomActions.prevTrack,

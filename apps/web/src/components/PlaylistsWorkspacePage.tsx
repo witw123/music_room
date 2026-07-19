@@ -231,6 +231,9 @@ export function PlaylistsWorkspacePage() {
     setMessage(null);
     setStatusMessage(null);
     try {
+      if (kind === "local") {
+        await ensureLocalAudioDirectoryWriteAccess();
+      }
       const playlist = kind === "local"
         ? createLocalPlaylist({ title, description: newPlaylistDescription })
         : await musicRoomApi.createPlaylist({
