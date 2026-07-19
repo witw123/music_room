@@ -27,6 +27,7 @@ import {
   isDefaultLocalPlaylist,
   listLocalPlaylists,
   localPlaylistTrackId,
+  toProviderTrackRecord,
   toLocalPlaylistTrackInput,
   updateLocalPlaylist,
   type LocalPlaylistRecord
@@ -34,6 +35,7 @@ import {
 import { upsertLocalPlaylistTrack } from "@/lib/indexeddb";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
+import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 
 type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -70,6 +72,7 @@ export function ProviderSearchPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
+  const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<PlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
 
@@ -162,9 +165,10 @@ export function ProviderSearchPage() {
     }
   }
 
-  async function openPlaylistPicker(track: Track) {
+  async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
     if (pending) return;
     setPlaylistPickerTrack(track);
+    setPlaylistPickerAnchor(anchor);
     setPlaylistPickerLoading(true);
     setPlaylistPickerOptions(listLocalPlaylists().map((playlist) => ({ kind: "local", playlist })));
     setErrorMessage(null);
@@ -200,15 +204,23 @@ export function ProviderSearchPage() {
           updateLocalPlaylist(currentPlaylist.id, { trackIds: [...currentPlaylist.trackIds, trackId] });
         }
         setStatusMessage(`《${resolvedTrack.title}》已加入“${currentPlaylist.title}”。`);
-      } else if (option.playlist.trackIds.includes(trackId)) {
-        setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
       } else {
-        await musicRoomApi.updatePlaylist(option.playlist.id, {
-          trackIds: [...option.playlist.trackIds, trackId]
-        });
-        setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
+        try {
+          await upsertLocalPlaylistTrack(toProviderTrackRecord(resolvedTrack));
+        } catch {
+          // The network playlist remains authoritative when local metadata storage is unavailable.
+        }
+        if (option.playlist.trackIds.includes(trackId)) {
+          setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
+        } else {
+          await musicRoomApi.updatePlaylist(option.playlist.id, {
+            trackIds: [...option.playlist.trackIds, trackId]
+          });
+          setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
+        }
       }
       setPlaylistPickerTrack(null);
+      setPlaylistPickerAnchor(null);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
     } finally {
@@ -299,6 +311,13 @@ export function ProviderSearchPage() {
         tags: ["network", `network:${detail.provider}:${detail.providerPlaylistId}`],
         trackIds: detail.tracks.map((track) => `provider:${track.provider}:${track.providerTrackId}`)
       });
+      await Promise.all(detail.tracks.map(async (track) => {
+        try {
+          await upsertLocalPlaylistTrack(toProviderTrackRecord(track));
+        } catch {
+          // The saved network playlist remains usable when local metadata storage is unavailable.
+        }
+      }));
       setStatusMessage(`《${detail.title}》已保存到网络歌单。`);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
@@ -431,14 +450,18 @@ export function ProviderSearchPage() {
         {statusMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{errorMessage}</p> : null}
       </div>
-      {playlistPickerTrack ? (
+      {playlistPickerTrack && playlistPickerAnchor ? (
         <PlaylistPickerDialog
+          anchor={playlistPickerAnchor}
           loading={playlistPickerLoading}
           options={playlistPickerOptions}
           pending={pending !== null}
           track={playlistPickerTrack}
           onClose={() => {
-            if (!pending) setPlaylistPickerTrack(null);
+            if (!pending) {
+              setPlaylistPickerTrack(null);
+              setPlaylistPickerAnchor(null);
+            }
           }}
           onSelect={(option) => void addTrackToPlaylist(option)}
         />
@@ -462,7 +485,7 @@ function SongsResults({
   onLyrics: (track: Track) => Promise<void>;
   onAlbum: (track: Track) => Promise<void>;
   onDownload: (track: Track) => Promise<void>;
-  onImportPlaylist: (track: Track) => Promise<void>;
+  onImportPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => Promise<void>;
 }) {
   return (
     <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
@@ -477,7 +500,7 @@ function SongsResults({
               <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onDownload(track)} size="sm" variant="ghost" type="button">
                 {pending === `download:${track.providerTrackId}` ? "下载中…" : "下载"}
               </Button>
-              <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onImportPlaylist(track)} size="sm" variant="ghost" type="button">
+              <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))} size="sm" variant="ghost" type="button">
                 {pending?.startsWith(`playlist-picker:${track.providerTrackId}`) ? "选择中…" : "加入歌单"}
               </Button>
               <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onLyrics(track)} size="sm" variant="ghost" type="button">
@@ -499,6 +522,7 @@ function SongsResults({
 }
 
 function PlaylistPickerDialog({
+  anchor,
   loading,
   options,
   pending,
@@ -506,6 +530,7 @@ function PlaylistPickerDialog({
   onClose,
   onSelect
 }: {
+  anchor: AnchoredDialogAnchor;
   loading: boolean;
   options: PlaylistPickerOption[];
   pending: boolean;
@@ -517,14 +542,7 @@ function PlaylistPickerDialog({
   const networkOptions = options.filter((option) => option.kind === "network");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={onClose} role="presentation">
-      <div
-        aria-labelledby="playlist-picker-title"
-        className="max-h-[min(86vh,680px)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <AnchoredDialog anchor={anchor} ariaLabelledBy="playlist-picker-title" className="max-w-md" onClose={onClose}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-foreground" id="playlist-picker-title">选择目标歌单</h2>
@@ -559,8 +577,7 @@ function PlaylistPickerDialog({
             onSelect={onSelect}
           />
         ) : null}
-      </div>
-    </div>
+    </AnchoredDialog>
   );
 }
 

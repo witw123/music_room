@@ -91,7 +91,11 @@ export async function hashAudioBlob(blob: Blob) {
 }
 
 export function localPlaylistTrackId(track: ProviderTrack) {
-  return `provider:${track.provider}:${track.providerTrackId}`;
+  return providerTrackKey(track.provider, track.providerTrackId);
+}
+
+export function providerTrackKey(provider: ProviderTrack["provider"], providerTrackId: string) {
+  return `provider:${provider}:${providerTrackId}`;
 }
 
 export function toLocalPlaylistTrackInput(input: {
@@ -120,6 +124,45 @@ export function toLocalPlaylistTrackInput(input: {
     fileName: input.fileName ?? null,
     availableOffline: input.availableOffline ?? false
   } satisfies Omit<LocalPlaylistTrackRecord, "createdAt" | "updatedAt">;
+}
+
+export function toProviderTrackRecord(
+  track: ProviderTrack,
+  existing?: LocalPlaylistTrackRecord
+): LocalPlaylistTrackRecord {
+  const now = new Date().toISOString();
+  const metadata = toLocalPlaylistTrackInput({ track, availableOffline: false });
+  return {
+    ...(existing ?? metadata),
+    id: metadata.id,
+    title: metadata.title,
+    artist: metadata.artist,
+    album: metadata.album,
+    durationMs: metadata.durationMs,
+    artworkUrl: track.artworkUrl ?? existing?.artworkUrl ?? null,
+    provider: metadata.provider,
+    providerTrackId: metadata.providerTrackId,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  };
+}
+
+export function toCachedProviderTrack(record: LocalPlaylistTrackRecord): ProviderTrack | null {
+  if ((record.provider !== "netease" && record.provider !== "qqmusic") || !record.providerTrackId) {
+    return null;
+  }
+
+  return {
+    provider: record.provider,
+    providerTrackId: record.providerTrackId,
+    access: "unknown",
+    quality: null,
+    title: record.title,
+    artist: record.artist,
+    album: record.album,
+    durationMs: record.durationMs,
+    artworkUrl: record.artworkUrl
+  };
 }
 
 export async function listMergedLocalPlaylistTracks() {

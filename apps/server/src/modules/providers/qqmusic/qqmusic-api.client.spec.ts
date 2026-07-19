@@ -1,4 +1,4 @@
-import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getLyric, getQQLoginQr, getUserPlaylists, songListDetail } from "@sansenjian/qq-music-api/services";
+import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getLyric, getQQLoginQr, getSearchByKey, getUserPlaylists, songListDetail } from "@sansenjian/qq-music-api/services";
 import { QqMusicApiClient } from "./qqmusic-api.client";
 
 jest.mock("@sansenjian/qq-music-api/services", () => ({
@@ -15,6 +15,7 @@ jest.mock("@sansenjian/qq-music-api/services", () => ({
 
 const mockedGetQQLoginQr = getQQLoginQr as jest.MockedFunction<typeof getQQLoginQr>;
 const mockedCheckQQLoginQr = checkQQLoginQr as jest.MockedFunction<typeof checkQQLoginQr>;
+const mockedGetSearchByKey = getSearchByKey as jest.MockedFunction<typeof getSearchByKey>;
 const mockedGetLyric = getLyric as jest.MockedFunction<typeof getLyric>;
 const mockedGetUserPlaylists = getUserPlaylists as jest.MockedFunction<typeof getUserPlaylists>;
 const mockedSongListDetail = songListDetail as jest.MockedFunction<typeof songListDetail>;
@@ -113,6 +114,16 @@ describe("QqMusicApiClient", () => {
     await expect(client.getUserPlaylists({ userId: "123", limit: 30, offset: 0, cookie: "secret" })).resolves.toMatchObject({ data: { playlists: [{ dissid: "1" }] } });
     await expect(client.getPlaylist({ playlistId: "1", cookie: "secret" })).resolves.toMatchObject({ cdlist: [{ disstid: "1" }] });
     await expect(client.getAlbum({ albumId: "alb1", cookie: "secret" })).resolves.toMatchObject({ info: { data: { albumMid: "alb1" } }, songs: { data: { songList: [] } } });
+  });
+
+  it("reads both nested and flat QQ search envelopes", async () => {
+    mockedGetSearchByKey
+      .mockResolvedValueOnce({ status: 200, body: { response: { data: { song: { list: [{ songmid: "song-mid" }] } } } } } as never)
+      .mockResolvedValueOnce({ status: 200, body: { data: { song: { list: [{ songmid: "song-mid-2" }] } } } } as never);
+
+    const client = new QqMusicApiClient();
+    await expect(client.searchTracks({ keywords: "song", limit: 20, offset: 0, cookie: "secret" })).resolves.toEqual([{ songmid: "song-mid" }]);
+    await expect(client.searchTracks({ keywords: "song", limit: 20, offset: 20, cookie: "secret" })).resolves.toEqual([{ songmid: "song-mid-2" }]);
   });
 
   it("does not turn QQ upstream playlist errors into an empty playlist", async () => {

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { listRoomPlaylistTrackIndex } from "@/features/playlist/local-playlist";
+import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -82,6 +82,7 @@ function RoomStageBase({
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [lyricsText, setLyricsText] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [cachedArtworkUrl, setCachedArtworkUrl] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState<{ height: number; width: number } | null>(null);
   const compactStage = viewportSize !== null && (viewportSize.height < 900 || viewportSize.width < 1024);
   const ultraCompactStage = viewportSize !== null && (viewportSize.height < 760 || viewportSize.width < 640);
@@ -90,6 +91,7 @@ function RoomStageBase({
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
+  const artworkUrl = currentTrack?.artworkUrl ?? cachedArtworkUrl;
   const recordSize = ultraCompactStage
     ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
     : compactStage
@@ -122,6 +124,28 @@ function RoomStageBase({
       setIsDeletingRoom(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentTrack) {
+      setCachedArtworkUrl(null);
+      return;
+    }
+    void listRoomPlaylistTrackIndex()
+      .then((index) => {
+        if (cancelled) return;
+        const key = sourceProvider && sourceTrackId
+          ? providerTrackKey(sourceProvider, sourceTrackId)
+          : currentTrack.id;
+        setCachedArtworkUrl(index.get(key)?.artworkUrl ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCachedArtworkUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, sourceProvider, sourceTrackId]);
 
   useEffect(() => {
     const updateViewportHeight = () => {
@@ -362,11 +386,11 @@ function RoomStageBase({
                     style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
                   />
                 ))}
-                {currentTrack?.artworkUrl ? (
+                {artworkUrl ? (
                   <div
                     aria-hidden="true"
                     className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
-                    style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
+                    style={{ backgroundImage: `url("${artworkUrl}")` }}
                   />
                 ) : null}
                 <div className="absolute z-20 flex aspect-square items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>

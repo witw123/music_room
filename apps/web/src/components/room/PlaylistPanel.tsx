@@ -11,6 +11,12 @@ import type {
 import { formatDuration, normalizePlaylistTitle } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { musicRoomApi } from "@/lib/music-room-api";
+import {
+  listRoomPlaylistTrackIndex,
+  providerTrackKey,
+  toCachedProviderTrack
+} from "@/features/playlist/local-playlist";
+import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 
 type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
@@ -50,6 +56,7 @@ export function PlaylistPanel({
   const [remoteTracks, setRemoteTracks] = useState<ProviderTrack[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [cachedTracks, setCachedTracks] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
   const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
   const selectedSource = selectedPlaylist ? getNetworkPlaylistSource(selectedPlaylist) : null;
   const selectedProvider = selectedSource?.provider ?? null;
@@ -60,16 +67,53 @@ export function PlaylistPanel({
       return source ? [`${source.provider}:${source.trackId}`] : [];
     })
   );
-  const roomTrackMap = new Map(tracks.map((track) => [track.id, toPlaylistTrackInfo(track, roomProviderTrackKeys)]));
+  const roomTrackMap = new Map<string, PlaylistTrackInfo>();
+  for (const track of tracks) {
+    const providerKey = track.sourceRef
+      ? providerTrackKey(track.sourceRef.provider, track.sourceRef.trackId)
+      : null;
+    const cached = providerKey ? cachedTracks.get(providerKey) : cachedTracks.get(track.id);
+    const info = toPlaylistTrackInfo(track, roomProviderTrackKeys, cached);
+    roomTrackMap.set(track.id, info);
+    if (providerKey) roomTrackMap.set(providerKey, info);
+  }
+  const cachedTrackMap = new Map(
+    [...cachedTracks.values()]
+      .map((track) => {
+        const providerTrack = toCachedProviderTrack(track);
+        return providerTrack ? [providerTrackKey(providerTrack.provider, providerTrack.providerTrackId), toPlaylistTrackInfo(providerTrack, roomProviderTrackKeys, track)] as const : null;
+      })
+      .filter((entry): entry is readonly [string, PlaylistTrackInfo] => !!entry)
+  );
   const remoteTrackMap = new Map(
     remoteTracks.map((track) => [
-      `provider:${track.provider}:${track.providerTrackId}`,
-      toPlaylistTrackInfo(track, roomProviderTrackKeys)
+      providerTrackKey(track.provider, track.providerTrackId),
+      toPlaylistTrackInfo(track, roomProviderTrackKeys, cachedTracks.get(providerTrackKey(track.provider, track.providerTrackId)))
     ])
   );
   const selectedPlaylistTracks = selectedPlaylist
-    ? selectedPlaylist.trackIds.map((trackId) => roomTrackMap.get(trackId) ?? remoteTrackMap.get(trackId) ?? null)
+    ? selectedPlaylist.trackIds.map((trackId, index) =>
+        remoteTrackMap.get(trackId)
+        ?? (trackId.startsWith("local:") && remoteTracks[index]
+          ? toPlaylistTrackInfo(remoteTracks[index], roomProviderTrackKeys, cachedTracks.get(providerTrackKey(remoteTracks[index].provider, remoteTracks[index].providerTrackId)))
+          : undefined)
+        ?? cachedTrackMap.get(trackId)
+        ?? roomTrackMap.get(trackId)
+        ?? null
+      )
     : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    void listRoomPlaylistTrackIndex()
+      .then((index) => {
+        if (!cancelled) setCachedTracks(index);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -465,7 +509,11 @@ function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSource | n
   return playlistId ? { provider, playlistId } : null;
 }
 
-function toPlaylistTrackInfo(track: TrackMeta | ProviderTrack, roomProviderTrackKeys: Set<string>): PlaylistTrackInfo {
+function toPlaylistTrackInfo(
+  track: TrackMeta | ProviderTrack,
+  roomProviderTrackKeys: Set<string>,
+  cached?: LocalPlaylistTrackRecord
+): PlaylistTrackInfo {
   const isProviderTrack = "providerTrackId" in track;
   return {
     id: isProviderTrack ? `provider:${track.provider}:${track.providerTrackId}` : track.id,
@@ -473,7 +521,7 @@ function toPlaylistTrackInfo(track: TrackMeta | ProviderTrack, roomProviderTrack
     artist: track.artist,
     album: track.album,
     durationMs: track.durationMs,
-    artworkUrl: track.artworkUrl,
+    artworkUrl: track.artworkUrl ?? cached?.artworkUrl ?? null,
     providerTrack: isProviderTrack ? track : null,
     isInRoom: isProviderTrack
       ? roomProviderTrackKeys.has(`${track.provider}:${track.providerTrackId}`)

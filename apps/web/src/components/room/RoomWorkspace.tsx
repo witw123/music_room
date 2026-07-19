@@ -137,7 +137,7 @@ function RoomWorkspaceBase({
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
-    <main className="relative flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background md:pl-60">
+    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-[4.5rem]">
 
       <AppSidebar
         activeSession={activeSession}

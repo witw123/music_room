@@ -1,10 +1,11 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
@@ -49,10 +50,31 @@ function TrackListSectionBase({
 }: TrackListSectionProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [trackFilter, setTrackFilter] = useState<LibraryTrackFilter>("all");
+  const [cachedArtworkByTrackId, setCachedArtworkByTrackId] = useState<Map<string, string>>(new Map());
   const activeSessionUserId = activeSession?.userId;
   const ownTrackCount = tracks.filter((track) => track.ownerSessionId === activeSessionUserId).length;
   const otherTrackCount = tracks.length - ownTrackCount;
   const visibleTracks = filterLibraryTracks(tracks, activeSessionUserId, trackFilter);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listRoomPlaylistTrackIndex()
+      .then((index) => {
+        if (cancelled) return;
+        const artworkByTrackId = new Map<string, string>();
+        for (const [trackId, record] of index) {
+          if (record.artworkUrl) artworkByTrackId.set(trackId, record.artworkUrl);
+          if (record.providerTrackId && (record.provider === "netease" || record.provider === "qqmusic") && record.artworkUrl) {
+            artworkByTrackId.set(providerTrackKey(record.provider, record.providerTrackId), record.artworkUrl);
+          }
+        }
+        setCachedArtworkByTrackId(artworkByTrackId);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const runAction = async (key: string, action: () => Promise<void>) => {
     if (pendingAction) return;
     setPendingAction(key);
@@ -142,6 +164,10 @@ function TrackListSectionBase({
               const isUploadedLocally = !!uploadedTrack;
               const isSavedLocally = localSavedFileHashes.includes(track.fileHash);
               const canSaveLocalTrack = track.ownerSessionId === activeSession?.userId || isSavedLocally;
+              const cachedArtworkKey = track.sourceRef
+                ? providerTrackKey(track.sourceRef.provider, track.sourceRef.trackId)
+                : track.id;
+              const artworkUrl = track.artworkUrl ?? cachedArtworkByTrackId.get(cachedArtworkKey) ?? null;
 
               return (
                 <article
@@ -151,7 +177,7 @@ function TrackListSectionBase({
                   className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-3.5"
                 >
                   <div className="row-span-2">
-                    <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
+                    <TrackArtwork artworkUrl={artworkUrl} title={track.title} />
                   </div>
 
                   <div className="min-w-0">
@@ -159,6 +185,23 @@ function TrackListSectionBase({
                   </div>
 
                   <div className="col-start-3 row-span-2 flex min-w-max self-center justify-self-end flex-nowrap items-center justify-end gap-1">
+                    <Button
+                      data-testid="track-play-button"
+                      data-track-id={track.id}
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 !text-accent hover:bg-transparent hover:!text-accent disabled:opacity-100 disabled:!text-accent/45"
+                      disabled={!canControlPlayback || pendingAction !== null}
+                      onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
+                      type="button"
+                      aria-label={`播放《${track.title}》`}
+                      title="立即播放"
+                      size="icon"
+                    >
+                      <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18">
+                        <path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10-6.8a1.1 1.1 0 0 0 0-1.8l-10-6.8C8.9 3.9 8 4.4 8 5.2Z" />
+                      </svg>
+                    </Button>
+
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
@@ -214,21 +257,6 @@ function TrackListSectionBase({
                       <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M12 5v14M5 12h14" /></svg>
                     </Button>
 
-                    <Button
-                      data-testid="track-play-button"
-                      data-track-id={track.id}
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 text-foreground-muted hover:bg-transparent hover:text-accent disabled:opacity-100 disabled:text-foreground-muted/45"
-                      disabled={!canControlPlayback || pendingAction !== null}
-                      onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
-                      type="button"
-                      aria-label={`播放《${track.title}》`}
-                      title="立即播放"
-                    >
-                      <svg aria-hidden="true" fill="currentColor" height="17" viewBox="0 0 24 24" width="17">
-                        <path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10-6.8a1.1 1.1 0 0 0 0-1.8l-10-6.8C8.9 3.9 8 4.4 8 5.2Z" />
-                      </svg>
-                    </Button>
                   </div>
 
                   <div className="col-start-2 col-end-3 min-w-0 space-y-0.5">

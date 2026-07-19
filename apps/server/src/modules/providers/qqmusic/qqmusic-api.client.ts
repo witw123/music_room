@@ -45,7 +45,12 @@ export class QqMusicApiClient {
   async searchTracks(input: { keywords: string; limit: number; offset: number; cookie: string }) {
     return this.call(async () => {
       const response = await getSearchByKey({ params: { key: input.keywords, w: input.keywords, p: Math.floor(input.offset / input.limit) + 1, n: input.limit }, option: { headers: { Cookie: input.cookie } } }) as ApiResponse;
-      const list = response.body?.response?.data?.song?.list;
+      assertProviderStatus(response.status);
+      const body = asRecord(response.body);
+      const responseBody = asRecord(body?.response) ?? body;
+      const data = asRecord(responseBody?.data) ?? responseBody;
+      const song = asRecord(data?.song) ?? data;
+      const list = song?.list;
       if (!Array.isArray(list)) throw new QqMusicApiError("invalid-response");
       return list;
     });
@@ -54,7 +59,10 @@ export class QqMusicApiClient {
     return this.call(async () => {
       const quality = input.quality === "standard" ? "128" : input.quality === "high" ? "320" : "flac";
       const response = await getMusicPlay({ params: { songmid: input.trackId, quality, resType: "play" }, option: { headers: { Cookie: input.cookie } } }) as ApiResponse;
-      const value = response.body?.data?.playUrl?.[input.trackId];
+      assertProviderStatus(response.status);
+      const body = asRecord(response.body);
+      const data = asRecord(body?.data) ?? asRecord(asRecord(body?.response)?.data);
+      const value = data?.playUrl?.[input.trackId];
       const url = typeof value === "string" ? value : value?.url;
       if (!url) return { url: null };
       return { url: String(url) };
@@ -123,6 +131,7 @@ function readCookie(session: any) {
   if (session?.cookieObject && typeof session.cookieObject === "object") return Object.entries(session.cookieObject).map(([key, value]) => `${key}=${String(value)}`).join("; ");
   return null;
 }
+function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
 
 function readProviderBody(value: unknown): Record<string, any> {

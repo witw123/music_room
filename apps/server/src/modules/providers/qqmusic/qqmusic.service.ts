@@ -54,7 +54,9 @@ export class QqMusicService {
   }
   async getTrack(userId: string, trackId: string) {
     this.assertEnabled(); const cookie = await this.getCookie(userId); const records = await this.callProvider(() => this.api.searchTracks({ keywords: trackId, limit: 20, offset: 0, cookie }));
-    const track = records.map((record) => this.toTrackCandidate(record)).find((value) => value?.providerTrackId === trackId) ?? records.map((record) => this.toTrackCandidate(record)).find(Boolean);
+    const track = records
+      .map((record) => this.toTrackCandidate(record))
+      .find((value) => value?.providerTrackId === trackId);
     if (!track) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music track was not found."), HttpStatus.NOT_FOUND); return track;
   }
 
@@ -82,6 +84,8 @@ export class QqMusicService {
     const data = asRecord(body.data);
     const records = Array.isArray(data?.playlists)
       ? data.playlists
+      : Array.isArray(data?.list)
+        ? data.list
       : Array.isArray(body.playlists)
         ? body.playlists
         : Array.isArray(asRecord(data?.mydiss)?.list)
@@ -108,7 +112,7 @@ export class QqMusicService {
     if (!playlist) throw this.unavailableError();
     const summary = this.toPlaylistSummary(playlist);
     if (!summary) throw this.unavailableError();
-    const tracks = (Array.isArray(playlist.songlist) ? playlist.songlist : Array.isArray(playlist.songs) ? playlist.songs : [])
+    const tracks = readTrackArray(playlist.songlist ?? playlist.songList ?? playlist.songs)
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is QqMusicTrackCandidate => !!item);
     return { ...summary, tracks };
@@ -155,10 +159,21 @@ export class QqMusicService {
     return { upstream, mimeType, contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null, fileType: mimeType === "audio/flac" ? "flac" : "mp3", maxBytes: this.maxImportBytes() };
   }
   private toTrackCandidate(value: unknown): QqMusicTrackCandidate | null {
-    const raw = asRecord(value); const r = asRecord(raw?.songInfo) ?? raw; if (!r) return null; const id = readString(r.songmid ?? r.mid ?? r.songId ?? r.id); const title = readString(r.songname ?? r.name ?? r.title); if (!id || !title) return null;
-    const singers = Array.isArray(r.singer) ? r.singer.map((s) => readString(asRecord(s)?.name)).filter(Boolean).join(" / ") : readString(r.singername ?? r.artist) ?? "未知歌手";
+    const raw = asRecord(value);
+    const r = asRecord(raw?.songInfo) ?? asRecord(raw?.songinfo) ?? asRecord(raw?.song) ?? raw;
+    if (!r) return null;
+    const id = readQqTrackId(r);
+    const title = readString(r.songname ?? r.songName ?? r.name ?? r.title);
+    if (!id || !title) return null;
+    const singers = Array.isArray(r.singer)
+      ? r.singer.map((s) => readString(asRecord(s)?.name)).filter(Boolean).join(" / ")
+      : Array.isArray(r.singers)
+        ? r.singers.map((s) => readString(asRecord(s)?.name)).filter(Boolean).join(" / ")
+        : readString(r.singername ?? r.singerName ?? r.artist) ?? "未知歌手";
     const pay = asRecord(r.pay); const payPlay = Number(pay?.payplay ?? pay?.pay_play); const file = asRecord(r.file); const quality = Number(r.sizeflac ?? file?.size_flac) > 0 ? "lossless" : Number(r.size320 ?? file?.size_320mp3) > 0 ? "high" : Number(r.size128 ?? file?.size_128mp3) > 0 ? "standard" : null;
-    const album = asRecord(r.album); const albumMid = readString(r.albummid ?? album?.mid); return { provider: "qqmusic", providerTrackId: id, access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl: albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : null };
+    const album = asRecord(r.album); const albumMid = readString(r.albummid ?? r.albumMid ?? album?.mid ?? album?.albummid);
+    const artworkUrl = readHttpUrl(r.albumPic ?? r.album_pic ?? r.picUrl) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
+    return { provider: "qqmusic", providerTrackId: id, access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
   }
   private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
     const playlist = asRecord(value);
@@ -190,6 +205,19 @@ export class QqMusicService {
 }
 function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
+function readQqTrackId(record: Record<string, any>) {
+  const mid = readString(record.songmid ?? record.songMid ?? record.song_mid ?? record.mid);
+  if (mid) return mid;
+  const legacyId = readString(record.songId ?? record.songid ?? record.id);
+  return legacyId && !/^\d+$/.test(legacyId) ? legacyId : null;
+}
+function readTrackArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  const record = asRecord(value);
+  if (Array.isArray(record?.list)) return record.list;
+  const data = asRecord(record?.data);
+  return Array.isArray(data?.list) ? data.list : [];
+}
 function readNumber(value: unknown) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
 function readLyricText(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }
 function readHttpUrl(value: unknown) { const result = readString(value); return result && /^https?:\/\//.test(result) ? result : null; }

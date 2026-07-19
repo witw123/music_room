@@ -105,4 +105,19 @@ describe("QqMusicService", () => {
     await expect(service.getAlbum("user_1", "alb1")).resolves.toMatchObject({ providerAlbumId: "alb1", tracks: [{ providerTrackId: "song1" }] });
     expect(api.getUserPlaylists).toHaveBeenCalledWith({ userId: "123", limit: 30, offset: 0, cookie: "cookie" });
   });
+
+  it("does not replace a missing QQ track with an unrelated search result", async () => {
+    process.env.QQMUSIC_ENABLED = "true";
+    const api = {
+      searchTracks: jest.fn().mockResolvedValue([
+        { songmid: "different-mid", songname: "Different Song", singername: "Other Artist" }
+      ])
+    };
+    const accounts = { getCookieOrThrow: jest.fn().mockResolvedValue("cookie") };
+    const service = new QqMusicService(api as never, accounts as never, {} as never);
+
+    await expect(service.getTrack("user_1", "requested-mid")).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "QQ_MUSIC_TRACK_NOT_FOUND" })
+    });
+  });
 });

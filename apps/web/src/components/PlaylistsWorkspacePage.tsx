@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
 import type {
-  NeteaseTrackCandidate,
-  Playlist,
-  QqMusicTrackCandidate
+  Playlist
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
@@ -18,7 +16,8 @@ import {
   listMergedLocalPlaylistTracks,
   listRoomPlaylistTrackIndex,
   hashAudioBlob,
-  toLocalPlaylistTrackInput,
+  providerTrackKey,
+  toProviderTrackRecord,
   updateLocalPlaylist,
   type LocalPlaylistRecord
 } from "@/features/playlist/local-playlist";
@@ -35,12 +34,12 @@ import { formatDuration } from "@/lib/music-room-ui";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
+import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 
 type PlaylistSelection =
   | { kind: "local"; playlist: LocalPlaylistRecord }
   | { kind: "network"; playlist: Playlist };
 
-type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
 type PlaylistDeleteTarget =
   | { kind: "local"; playlist: LocalPlaylistRecord }
@@ -48,6 +47,7 @@ type PlaylistDeleteTarget =
 type TrackMoveRequest = {
   track: LocalPlaylistTrackRecord;
   source: PlaylistSelection;
+  anchor: AnchoredDialogAnchor;
 };
 
 export function PlaylistsWorkspacePage() {
@@ -115,9 +115,15 @@ export function PlaylistsWorkspacePage() {
           const detail = source.provider === "netease"
             ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
             : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
-          return [playlist.id, detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? playlist.coverUrl] as const;
+          const cachedArtwork = playlist.trackIds
+            .map((trackId) => roomTrackIndex.get(trackId)?.artworkUrl)
+            .find((artworkUrl): artworkUrl is string => !!artworkUrl);
+          return [playlist.id, detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? cachedArtwork ?? playlist.coverUrl] as const;
         } catch {
-          return [playlist.id, playlist.coverUrl] as const;
+          const cachedArtwork = playlist.trackIds
+            .map((trackId) => roomTrackIndex.get(trackId)?.artworkUrl)
+            .find((artworkUrl): artworkUrl is string => !!artworkUrl);
+          return [playlist.id, cachedArtwork ?? playlist.coverUrl] as const;
         }
       }));
 
@@ -128,7 +134,7 @@ export function PlaylistsWorkspacePage() {
     return () => {
       cancelled = true;
     };
-  }, [networkPlaylists]);
+  }, [networkPlaylists, roomTrackIndex]);
 
   async function chooseFolder() {
     if (pending) return;
@@ -322,7 +328,7 @@ export function PlaylistsWorkspacePage() {
               return next;
             })}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
-            onMoveTrack={(track) => setMoveTarget({ track, source: selectedPlaylist })}
+            onMoveTrack={(track, anchor) => setMoveTarget({ anchor, track, source: selectedPlaylist })}
             onDelete={selectedPlaylist.kind === "local"
               ? () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
               : () => setDeleteTarget({ kind: "network", playlist: selectedPlaylist.playlist })}
@@ -436,6 +442,7 @@ export function PlaylistsWorkspacePage() {
             pending={pending}
             source={moveTarget.source}
             track={moveTarget.track}
+            anchor={moveTarget.anchor}
           />
         ) : null}
       </div>
@@ -469,7 +476,7 @@ function LocalTrackRow({
   isQueued: boolean;
   onAddToQueue: () => void;
   onDownload?: () => void;
-  onMove?: () => void;
+  onMove?: (event: MouseEvent<HTMLButtonElement>) => void;
   onPlay: () => void;
   onRemove?: () => void;
   isDownloading?: boolean;
@@ -689,7 +696,7 @@ function PlaylistDetailView({
   onArtworkResolved?: (artworkUrl: string) => void;
   onTrackUpdated?: (track: LocalPlaylistTrackRecord) => void;
   onUpdateTracks: (trackIds: string[]) => void;
-  onMoveTrack?: (track: LocalPlaylistTrackRecord) => void;
+  onMoveTrack?: (track: LocalPlaylistTrackRecord, anchor: AnchoredDialogAnchor) => void;
   pending: boolean;
 }) {
   const isLocal = selection.kind === "local";
@@ -724,8 +731,8 @@ function PlaylistDetailView({
       .then((detail) => {
         if (cancelled) return;
         setRemoteTracks(detail.tracks.map((track) => {
-          const trackId = `provider:${track.provider}:${track.providerTrackId}`;
-          return mergeProviderTrackRecord(toProviderTrackRecord(track), roomTrackIndex.get(trackId));
+          const trackId = providerTrackKey(track.provider, track.providerTrackId);
+          return toProviderTrackRecord(track, roomTrackIndex.get(trackId));
         }));
       })
       .catch((error) => {
@@ -745,20 +752,26 @@ function PlaylistDetailView({
   const description = isLocal
     ? localPlaylist?.description || "本地目录中保存的歌曲"
     : networkPlaylist?.description || (networkSource?.provider === "qqmusic" ? "来自 QQ 音乐的网络歌单" : networkSource?.provider === "netease" ? "来自网易云音乐的网络歌单" : "保存的网络歌单");
-  const artworkUrl = isLocal
-    ? localPlaylistTracks.find((track) => track.artworkUrl)?.artworkUrl ?? null
-    : networkArtworkUrl ?? networkPlaylist?.coverUrl ?? null;
   const remoteTrackMap = new Map(remoteTracks.map((track) => [track.id, track]));
   const localTrackMap = new Map(localTracks.map((track) => [track.id, track]));
   const networkTracks = (networkPlaylist?.trackIds ?? []).map((trackId, index) => ({
-    track: remoteTrackMap.get(trackId) ?? roomTrackIndex.get(trackId) ?? localTrackMap.get(trackId),
+    track: remoteTrackMap.get(trackId)
+      ?? (trackId.startsWith("local:") ? remoteTracks[index] : undefined)
+      ?? roomTrackIndex.get(trackId)
+      ?? localTrackMap.get(trackId),
     index,
     trackId
   }));
+  const artworkUrl = isLocal
+    ? localPlaylistTracks.find((track) => track.artworkUrl)?.artworkUrl ?? null
+    : networkArtworkUrl
+      ?? networkPlaylist?.coverUrl
+      ?? networkTracks.map(({ track }) => track?.artworkUrl).find((artworkUrl): artworkUrl is string => !!artworkUrl)
+      ?? null;
   const rows = isLocal
     ? localPlaylistTracks.map((track, index) => ({ track, index, trackId: track.id }))
     : networkTracks;
-  const currentTrackIds = rows.map(({ track, trackId }) => track?.id ?? trackId);
+  const currentTrackIds = rows.map(({ trackId }) => trackId);
   const canEditTracks = !pending;
 
   function reorderTracks(targetTrackId: string) {
@@ -903,7 +916,7 @@ function PlaylistDetailView({
               isCurrent={player.currentTrack?.id === track.id}
               isPlayable={playable}
               isQueued={player.queue.some((item) => item.trackId === track.id)}
-              isDragTarget={dragOverTrackId === track.id}
+               isDragTarget={dragOverTrackId === trackId}
               key={`${selection.kind}:${track.id}`}
               onAddToQueue={() => player.addToQueue(track)}
               onDownload={track.providerTrackId && (track.provider === "netease" || track.provider === "qqmusic")
@@ -914,11 +927,11 @@ function PlaylistDetailView({
                 setDraggingTrackId(null);
                 setDragOverTrackId(null);
               }}
-              onDragOver={() => setDragOverTrackId(track.id)}
-              onDragStart={() => setDraggingTrackId(track.id)}
-              onDrop={() => reorderTracks(track.id)}
-              onMove={() => onMoveTrack?.(track)}
-              onRemove={canEditTracks ? () => onUpdateTracks(currentTrackIds.filter((trackId) => trackId !== track.id)) : undefined}
+               onDragOver={() => setDragOverTrackId(trackId)}
+               onDragStart={() => setDraggingTrackId(trackId)}
+               onDrop={() => reorderTracks(trackId)}
+              onMove={(event) => onMoveTrack?.(track, getAnchoredDialogAnchor(event.currentTarget))}
+               onRemove={canEditTracks ? () => onUpdateTracks(currentTrackIds.filter((itemTrackId) => itemTrackId !== trackId)) : undefined}
               onPlay={() => {
                 const playableIndex = playableIndexById.get(track.id);
                 if (playableIndex !== undefined) void player.playTracks(playableTracks, playableIndex);
@@ -969,32 +982,6 @@ function tracksForLocalPlaylist(playlist: LocalPlaylistRecord, tracks: LocalPlay
     .filter((track): track is LocalPlaylistTrackRecord => Boolean(track));
 }
 
-function toProviderTrackRecord(track: ProviderTrack): LocalPlaylistTrackRecord {
-  const now = new Date().toISOString();
-  return {
-    ...toLocalPlaylistTrackInput({ track, availableOffline: false }),
-    createdAt: now,
-    updatedAt: now
-  };
-}
-
-function mergeProviderTrackRecord(
-  providerTrack: LocalPlaylistTrackRecord,
-  existing?: LocalPlaylistTrackRecord
-): LocalPlaylistTrackRecord {
-  if (!existing) return providerTrack;
-  return {
-    ...existing,
-    title: providerTrack.title,
-    artist: providerTrack.artist,
-    album: providerTrack.album,
-    durationMs: providerTrack.durationMs,
-    artworkUrl: providerTrack.artworkUrl ?? existing.artworkUrl,
-    provider: providerTrack.provider,
-    providerTrackId: providerTrack.providerTrackId
-  };
-}
-
 async function resolveProviderArtwork(
   track: LocalPlaylistTrackRecord,
   provider: "netease" | "qqmusic"
@@ -1004,7 +991,7 @@ async function resolveProviderArtwork(
     const providerTrack = provider === "netease"
       ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
       : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
-    return mergeProviderTrackRecord(toProviderTrackRecord(providerTrack), track);
+    return toProviderTrackRecord(providerTrack, track);
   } catch {
     return track;
   }
@@ -1082,6 +1069,7 @@ function PlaylistEditorDialog({
 }
 
 function PlaylistMoveDialog({
+  anchor,
   track,
   source,
   localPlaylists,
@@ -1090,6 +1078,7 @@ function PlaylistMoveDialog({
   onCancel,
   onSelect
 }: {
+  anchor: AnchoredDialogAnchor;
   track: LocalPlaylistTrackRecord;
   source: PlaylistSelection;
   localPlaylists: LocalPlaylistRecord[];
@@ -1105,14 +1094,12 @@ function PlaylistMoveDialog({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={onCancel} role="presentation">
-      <div
-        aria-labelledby="playlist-move-title"
-        className="max-h-[min(86vh,680px)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <AnchoredDialog
+      anchor={anchor}
+      ariaLabelledBy="playlist-move-title"
+      className="max-w-md"
+      onClose={onCancel}
+    >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-foreground" id="playlist-move-title">移动到歌单</h2>
@@ -1158,8 +1145,7 @@ function PlaylistMoveDialog({
         ) : (
           <p className="mt-6 text-center text-sm text-foreground-muted">还没有可移动的歌单。</p>
         )}
-      </div>
-    </div>
+    </AnchoredDialog>
   );
 }
 
