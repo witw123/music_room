@@ -5,11 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
 import { AppSidebar } from "@/components/AppSidebar";
-import { MusicRoomApp } from "@/components/music-room-app";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/away-room";
+import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId } from "@/lib/away-room";
 import { musicRoomApi } from "@/lib/music-room-api";
 
 export function AppRouteShell({ children }: { children: ReactNode }) {
@@ -47,6 +46,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
     } catch {
       // Clear the local identity even if the server is unavailable.
     }
+    clearAwayRoomId();
     clearIdentity();
     router.replace(authEntryHref as Route);
   }
@@ -62,15 +62,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
         <div key={pathname} className="app-route-transition">
           {children}
         </div>
-        {awayRoomId ? (
-          <MusicRoomApp
-            backgroundOnly
-            initialRoomId={awayRoomId}
-            workspaceOnly
-          />
-        ) : (
-          <AppPersistentPlayer />
-        )}
+        {awayRoomId ? null : <AppPersistentPlayer />}
       </div>
     </LocalPlayerProvider>
   );

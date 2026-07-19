@@ -107,37 +107,61 @@ export function PlaylistsWorkspacePage() {
     }
 
     const loadNetworkArtwork = async () => {
-      const entries = await Promise.all(networkPlaylists.map(async (playlist) => {
+      setNetworkArtworkById((current) => {
+        const next = { ...current };
+        for (const playlist of networkPlaylists) {
+          const cachedArtwork = getPlaylistArtworkCandidates(playlist, roomTrackIndex, localTracks);
+          if (cachedArtwork.length > 0) {
+            next[playlist.id] = uniqueArtworkUrls([
+              ...cachedArtwork,
+              ...(current[playlist.id] ?? [])
+            ]);
+          }
+        }
+        return next;
+      });
+
+      await Promise.all(networkPlaylists.map(async (playlist) => {
         const source = getNetworkPlaylistSource(playlist);
-        const cachedArtwork = getPlaylistArtworkCandidates(playlist, roomTrackIndex);
-        if (!source) {
+        const cachedArtwork = getPlaylistArtworkCandidates(playlist, roomTrackIndex, localTracks);
+        let artworkUrls = cachedArtwork;
+
+        if (source) {
+          try {
+            const detail = source.provider === "netease"
+              ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+              : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+            artworkUrls = uniqueArtworkUrls([
+              detail.artworkUrl,
+              ...detail.tracks.map((track) => track.artworkUrl),
+              ...cachedArtwork
+            ]);
+          } catch {
+            const legacyArtwork = await resolveLegacyNetworkPlaylistArtwork(playlist, roomTrackIndex);
+            artworkUrls = uniqueArtworkUrls([...cachedArtwork, ...legacyArtwork]);
+          }
+        } else {
           const legacyArtwork = await resolveLegacyNetworkPlaylistArtwork(playlist, roomTrackIndex);
-          return [playlist.id, uniqueArtworkUrls([...cachedArtwork, ...legacyArtwork])] as const;
+          artworkUrls = uniqueArtworkUrls([...cachedArtwork, ...legacyArtwork]);
         }
 
-        try {
-          const detail = source.provider === "netease"
-            ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-            : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
-          return [playlist.id, uniqueArtworkUrls([
-            detail.artworkUrl,
-            ...detail.tracks.map((track) => track.artworkUrl),
-            ...cachedArtwork
-          ])] as const;
-        } catch {
-          const legacyArtwork = await resolveLegacyNetworkPlaylistArtwork(playlist, roomTrackIndex);
-          return [playlist.id, uniqueArtworkUrls([...cachedArtwork, ...legacyArtwork])] as const;
+        if (!cancelled && artworkUrls.length > 0) {
+          setNetworkArtworkById((current) => ({
+            ...current,
+            [playlist.id]: uniqueArtworkUrls([
+              ...artworkUrls,
+              ...(current[playlist.id] ?? [])
+            ])
+          }));
         }
       }));
-
-      if (!cancelled) setNetworkArtworkById(Object.fromEntries(entries));
     };
 
     void loadNetworkArtwork();
     return () => {
       cancelled = true;
     };
-  }, [networkPlaylists, roomTrackIndex]);
+  }, [localTracks, networkPlaylists, roomTrackIndex]);
 
   useEffect(() => {
     let cancelled = false;
@@ -447,7 +471,10 @@ export function PlaylistsWorkspacePage() {
                         onDelete={() => setDeleteTarget({ kind: "network", playlist })}
                         onOpen={() => setSelectedPlaylist({ kind: "network", playlist })}
                         playlist={playlist}
-                        artworkUrls={networkArtworkById[playlist.id] ?? getPlaylistArtworkCandidates(playlist, roomTrackIndex)}
+                        artworkUrls={uniqueArtworkUrls([
+                          ...(networkArtworkById[playlist.id] ?? []),
+                          ...getPlaylistArtworkCandidates(playlist, roomTrackIndex, localTracks)
+                        ])}
                       />
                     ))}
                   </div>
@@ -814,7 +841,7 @@ function PlaylistDetailView({
     ? getTrackArtworkUrls(localPlaylistTracks)
     : uniqueArtworkUrls([
         ...(networkArtworkUrls ?? []),
-        ...(networkPlaylist ? getPlaylistArtworkCandidates(networkPlaylist, roomTrackIndex) : []),
+        ...(networkPlaylist ? getPlaylistArtworkCandidates(networkPlaylist, roomTrackIndex, localTracks) : []),
         ...networkTracks.map(({ track }) => track?.artworkUrl)
       ]);
   const rows = isLocal
@@ -1045,11 +1072,16 @@ function getTrackArtworkUrls(tracks: readonly Pick<LocalPlaylistTrackRecord, "ar
 
 function getPlaylistArtworkCandidates(
   playlist: Playlist,
-  roomTrackIndex: ReadonlyMap<string, LocalPlaylistTrackRecord>
+  roomTrackIndex: ReadonlyMap<string, LocalPlaylistTrackRecord>,
+  localTracks: readonly LocalPlaylistTrackRecord[] = []
 ) {
+  const localTrackIndex = new Map(localTracks.map((track) => [track.id, track]));
   return uniqueArtworkUrls([
     playlist.coverUrl,
-    ...playlist.trackIds.map((trackId) => roomTrackIndex.get(trackId)?.artworkUrl)
+    ...playlist.trackIds.flatMap((trackId) => [
+      roomTrackIndex.get(trackId)?.artworkUrl,
+      localTrackIndex.get(trackId)?.artworkUrl
+    ])
   ]);
 }
 

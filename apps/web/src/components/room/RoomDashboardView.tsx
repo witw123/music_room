@@ -39,6 +39,7 @@ type RoomDashboardViewProps = {
   playlists: Playlist[];
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
+  onRefreshLocalStorage: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
@@ -128,6 +129,7 @@ function RoomDashboardViewBase({
   playlists,
   onCleanLocalStorage,
   onChooseLocalFolder,
+  onRefreshLocalStorage,
   onImportCachedTrack,
   onSaveTrackToLocal,
   onSavePlaylistFromQueue,
@@ -193,7 +195,11 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ LEFT: Immersive Stage ══════ */}
-      <div className="relative z-10 flex h-[min(52svh,34rem)] max-h-[60svh] min-h-[min(40svh,26rem)] w-full min-w-0 shrink-0 flex-col lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
+      <div className={`relative z-10 flex w-full min-w-0 shrink-0 flex-col lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden ${
+        isLyricsOpen
+          ? "h-[clamp(20rem,48svh,32rem)] max-h-[54svh] min-h-[20rem]"
+          : "h-[clamp(18rem,42svh,28rem)] max-h-[46svh] min-h-[18rem]"
+      }`}>
 
         {/* Vinyl + Track Info */}
         <div className="flex h-full min-h-0 flex-1 flex-col lg:flex-[2] lg:min-h-0">
@@ -223,7 +229,7 @@ function RoomDashboardViewBase({
 
       {/* ══════ RIGHT: Management Panel ══════ */}
       <div className="material-surface relative z-20 flex w-full min-w-0 min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 rounded-t-[24px] border-b border-white/[0.08] px-3 pb-2.5 pt-2.5 sm:px-5 sm:pt-4 lg:rounded-none">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 rounded-t-[24px] border-b border-white/[0.08] px-3 pb-2 pt-2 sm:px-5 sm:pt-4 lg:rounded-none">
           <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
             <span
               aria-hidden="true"
@@ -259,7 +265,7 @@ function RoomDashboardViewBase({
 
         <div
           aria-labelledby={`room-tab-${activeTab}`}
-          className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pt-4 lg:pb-32"
+          className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[calc(10rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pt-4 lg:pb-32"
           id={`room-panel-${activeTab}`}
           role="tabpanel"
         >
@@ -286,6 +292,7 @@ function RoomDashboardViewBase({
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
+              onRefreshLocalStorage={onRefreshLocalStorage}
               onImportCachedTrack={onImportCachedTrack}
               onSavePlaylistFromQueue={onSavePlaylistFromQueue}
               onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}

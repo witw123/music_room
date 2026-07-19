@@ -10,6 +10,7 @@ import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
+import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -93,7 +94,7 @@ function RoomStageBase({
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
   const artworkUrl = currentTrack?.artworkUrl ?? cachedArtworkUrl;
   const recordSize = ultraCompactStage
-    ? "clamp(8.5rem, min(24vh, 40vw), 11rem)"
+    ? "clamp(9.5rem, min(26vh, 44vw), 12rem)"
     : compactStage
       ? "clamp(10rem, min(28vh, 42vw), 14rem)"
       : "clamp(12rem, min(36vh, 42vw), 20rem)";
@@ -160,21 +161,18 @@ function RoomStageBase({
   }, []);
 
   useEffect(() => {
-    const basePositionMs = playback.positionMs;
-    const startedAtMs = playback.startedAt ? Date.parse(playback.startedAt) : Number.NaN;
     const updatePosition = () => {
-      const elapsedMs = isPlaying && Number.isFinite(startedAtMs)
-        ? Math.max(0, Date.now() - startedAtMs)
-        : 0;
-      setLyricsPositionMs(Math.max(0, basePositionMs + elapsedMs));
+      setLyricsPositionMs(
+        getPlaybackEffectivePositionMs(playback, currentTrackDuration)
+      );
     };
 
     updatePosition();
-    if (!isPlaying || !Number.isFinite(startedAtMs)) return;
+    if (!isPlaying || playback.status !== "playing" || !playback.startedAt) return;
 
     const timer = window.setInterval(updatePosition, 250);
     return () => window.clearInterval(timer);
-  }, [isPlaying, playback.currentTrackId, playback.positionMs, playback.startedAt]);
+  }, [currentTrackDuration, isPlaying, playback]);
 
   useEffect(() => {
     if (!currentTrack) {

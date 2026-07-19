@@ -26,6 +26,7 @@ type RoomAppShellProps = {
   canReorderQueue: boolean;
   clipboardActions: ReturnType<typeof useRoomClipboardActions>;
   currentTrack: TrackMeta | null;
+  initialRoomId: string | null;
   isSourceOwner: boolean;
   pageState: ReturnType<typeof useRoomPageState>;
   playbackActions: ReturnType<typeof useRoomPlaybackActions>;
@@ -52,6 +53,7 @@ export function RoomAppShell({
   canReorderQueue,
   clipboardActions,
   currentTrack,
+  initialRoomId,
   isSourceOwner,
   pageState,
   playbackActions,
@@ -85,6 +87,7 @@ export function RoomAppShell({
           statusMessage={statusMessage}
           statusTone={workspaceViewModel.statusTone}
           roomSnapshot={roomSnapshot}
+          roomId={roomSnapshot?.room.id ?? initialRoomId}
           currentTrack={currentTrack}
           canControlPlayback={canControlPlayback}
           canDeleteRoom={canDeleteRoom}
@@ -94,6 +97,7 @@ export function RoomAppShell({
           playlists={pageState.playlists}
           onCleanLocalStorage={uploads.cleanLocalStorage}
           onChooseLocalFolder={uploads.chooseLocalFolder}
+          onRefreshLocalStorage={uploads.refreshCacheLibrary}
           onImportCachedTrack={uploads.importCachedTrack}
           onSaveTrackToLocal={uploads.saveTrackToLocal}
            onSavePlaylistFromQueue={roomActions.savePlaylistFromQueue}

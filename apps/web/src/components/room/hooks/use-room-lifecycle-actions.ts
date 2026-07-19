@@ -7,6 +7,7 @@ import type { Route } from "next";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { clearAwayRoomId } from "@/lib/away-room";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -50,6 +51,7 @@ export function useRoomLifecycleActions({
     roomAudioOutput.releaseRoomAudioSession();
     resetRealtimePeer();
     clearIdentity();
+    clearAwayRoomId();
     dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     window.localStorage.removeItem("music-room-last-room");
@@ -71,6 +73,7 @@ export function useRoomLifecycleActions({
     }
 
     setSuppressRoomRecovery(true);
+    clearAwayRoomId();
     dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     if (workspaceOnly) {
@@ -99,6 +102,7 @@ export function useRoomLifecycleActions({
     }
 
     setSuppressRoomRecovery(true);
+    clearAwayRoomId();
     dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     if (workspaceOnly) {

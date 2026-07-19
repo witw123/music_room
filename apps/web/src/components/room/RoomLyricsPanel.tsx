@@ -41,7 +41,7 @@ export function RoomLyricsPanel({
   return (
     <section
       aria-label="歌词"
-      className={`pointer-events-auto relative z-20 flex w-full max-w-[min(100%,34rem)] flex-none flex-col overflow-hidden px-3 animate-fade-in sm:px-6 ${isFiveLineView ? "h-[clamp(14rem,34vh,20.5rem)] max-h-[20.5rem] min-h-[14rem] sm:min-h-[18rem]" : isThreeLineView ? "h-[clamp(8rem,18vh,10rem)] max-h-[10rem] min-h-[8rem]" : "h-[clamp(8rem,18vh,10rem)] max-h-[10rem] min-h-[8rem]"} ${className ?? ""}`}
+      className={`pointer-events-auto relative z-20 flex w-full max-w-[min(100%,34rem)] flex-none flex-col overflow-hidden px-3 animate-fade-in sm:px-6 ${isFiveLineView ? "h-[clamp(12rem,29vh,20.5rem)] max-h-[20.5rem] min-h-[12rem] sm:h-[clamp(14rem,34vh,20.5rem)] sm:min-h-[18rem]" : isThreeLineView ? "h-[clamp(8rem,18vh,10rem)] max-h-[10rem] min-h-[8rem]" : "h-[clamp(8rem,18vh,10rem)] max-h-[10rem] min-h-[8rem]"} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">

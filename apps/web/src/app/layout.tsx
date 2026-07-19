@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { PersistentRoomRuntime } from "@/components/PersistentRoomRuntime";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -24,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={plusJakartaSans.variable}>
-        {children}
+        <PersistentRoomRuntime>{children}</PersistentRoomRuntime>
       </body>
     </html>
   );

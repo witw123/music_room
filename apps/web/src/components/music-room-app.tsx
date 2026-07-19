@@ -19,7 +19,12 @@ import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipbo
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
-import { clearAwayRoomId, readAwayRoomId, storeAwayRoomId } from "@/lib/away-room";
+import {
+  awayRoomChangeEvent,
+  clearAwayRoomId,
+  readAwayRoomId,
+  storeAwayRoomId
+} from "@/lib/away-room";
 export * from "@/components/room/hooks/use-room-page-derived";
 export * from "@/components/room/hooks/use-room-playback-actions";
 
@@ -55,19 +60,31 @@ export function MusicRoomApp({
   });
 
   useEffect(() => {
-    if (!initialRoomId) {
-      return;
-    }
+    const syncAwayRoom = () => {
+      if (!initialRoomId) {
+        setAwayRoomId(null);
+        return;
+      }
 
-    const storedAwayRoomId = readAwayRoomId();
-    if (storedAwayRoomId === initialRoomId) {
-      setAwayRoomId(storedAwayRoomId);
-      return;
-    }
+      const storedAwayRoomId = readAwayRoomId();
+      if (storedAwayRoomId === initialRoomId) {
+        setAwayRoomId(storedAwayRoomId);
+        return;
+      }
 
-    if (storedAwayRoomId) {
-      clearAwayRoomId();
-    }
+      setAwayRoomId(null);
+      if (storedAwayRoomId) {
+        clearAwayRoomId();
+      }
+    };
+
+    syncAwayRoom();
+    window.addEventListener(awayRoomChangeEvent, syncAwayRoom);
+    window.addEventListener("storage", syncAwayRoom);
+    return () => {
+      window.removeEventListener(awayRoomChangeEvent, syncAwayRoom);
+      window.removeEventListener("storage", syncAwayRoom);
+    };
   }, [initialRoomId]);
 
   const currentRoomId = roomSnapshot?.room.id ?? initialRoomId;
@@ -341,6 +358,7 @@ export function MusicRoomApp({
       canReorderQueue={canReorderQueue}
       clipboardActions={clipboardActions}
       currentTrack={pageDerived.currentTrack}
+      initialRoomId={initialRoomId}
       isSourceOwner={pageDerived.isCurrentSourceOwner}
       pageState={pageState}
       playbackActions={playbackActions}

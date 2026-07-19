@@ -359,7 +359,7 @@ function PlaylistDetail({
         返回歌单
       </Button>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-surface-border bg-surface/40" data-testid="network-playlist-tracks">
+      <div className="mt-2 overflow-hidden rounded-lg border border-surface-border bg-surface/40" data-testid="network-playlist-tracks">
         {remoteLoading ? <p className="px-3 py-4 text-xs text-foreground-muted">正在加载歌曲信息…</p> : null}
         {remoteError ? <p className="px-3 py-4 text-xs text-amber-200">歌曲信息加载失败，当前显示已保存的歌曲索引。</p> : null}
         {tracks.length > 0 ? (
@@ -440,10 +440,10 @@ function PlaylistDetail({
 
 function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" role="presentation">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-4 sm:items-center sm:py-6" role="presentation">
       <form
         aria-labelledby="room-save-playlist-title"
-        className="w-full max-w-md rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl"
+        className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
@@ -471,7 +471,7 @@ function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCance
           required
           value={title}
         />
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button disabled={isPending} onClick={onCancel} type="button" variant="ghost">取消</Button>
           <Button disabled={isPending || !title.trim()} type="submit">{isPending ? "保存中…" : "保存歌单"}</Button>
         </div>

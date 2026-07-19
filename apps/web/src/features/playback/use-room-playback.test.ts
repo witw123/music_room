@@ -1,10 +1,51 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getPlaybackEffectivePositionMs,
   resolveAudibleClockSample,
   resolveAudibleClockContinuitySample,
   resolveDisplayClockProgress,
   type DisplayClockSource
 } from "./use-room-playback";
+import {
+  calibrateRoomPlaybackClock,
+  resetRoomPlaybackClockForTests
+} from "./room-playback-clock";
+
+afterEach(() => resetRoomPlaybackClockForTests());
+
+describe("getPlaybackEffectivePositionMs", () => {
+  it("uses the calibrated room clock for synchronized lyric progress", () => {
+    resetRoomPlaybackClockForTests();
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-07-10T00:00:02.000Z"));
+    expect(calibrateRoomPlaybackClock({
+      serverNow: "2026-07-10T00:00:01.050Z",
+      requestStartedAtMs: Date.parse("2026-07-10T00:00:00.000Z"),
+      responseReceivedAtMs: Date.parse("2026-07-10T00:00:00.100Z")
+    })).toBe(true);
+
+    try {
+      expect(getPlaybackEffectivePositionMs({
+        status: "playing",
+        currentTrackId: "track_1",
+        currentQueueItemId: null,
+        playbackAssetId: null,
+        startAt: "2026-07-10T00:00:00.000Z",
+        sourceSessionId: null,
+        sourcePeerId: null,
+        sourceTrackId: "track_1",
+        positionMs: 4_000,
+        startedAt: "2026-07-10T00:00:01.000Z",
+        queueVersion: 1,
+        playbackRevision: 1,
+        mediaEpoch: 1,
+        playbackMode: "sequence"
+      }, 120_000)).toBe(6_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe("resolveAudibleClockSample", () => {
   it("uses the local audio clock while local playback is audible", () => {

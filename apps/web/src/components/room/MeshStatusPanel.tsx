@@ -148,7 +148,7 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
         </div>
         {peer.lastError ? <p className="mt-2 text-[10px] text-red-300">{peer.lastError}</p> : null}
       </summary>
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
         <DiagnosticSection title="连接路径">
           <DiagnosticGrid>
             <span>网络路径：{describeCandidatePath(peer)}</span>

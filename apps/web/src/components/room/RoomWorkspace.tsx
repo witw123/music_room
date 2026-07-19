@@ -25,6 +25,7 @@ type RoomWorkspaceProps = {
   statusMessage: string;
   statusTone: string;
   roomSnapshot: RoomSnapshot | null;
+  roomId: string | null;
   currentTrack: TrackMeta | null;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
@@ -34,6 +35,7 @@ type RoomWorkspaceProps = {
   playlists: Playlist[];
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
+  onRefreshLocalStorage: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
@@ -80,6 +82,7 @@ function RoomWorkspaceBase({
   statusMessage,
   statusTone,
   roomSnapshot,
+  roomId,
   currentTrack,
   canControlPlayback,
   canDeleteRoom,
@@ -89,6 +92,7 @@ function RoomWorkspaceBase({
   playlists,
   onCleanLocalStorage,
   onChooseLocalFolder,
+  onRefreshLocalStorage,
   onImportCachedTrack,
   onSaveTrackToLocal,
   onSavePlaylistFromQueue,
@@ -137,11 +141,14 @@ function RoomWorkspaceBase({
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
-    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-[4.5rem]">
+    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[calc(10rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-[4.5rem]">
 
       <AppSidebar
         activeSession={activeSession}
         hasBottomPlayer
+        compactMobile
+        keepHomeInRoom
+        roomId={roomId}
         onLogout={onLogout}
       />
 
@@ -185,6 +192,7 @@ function RoomWorkspaceBase({
               playlists={playlists}
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
+              onRefreshLocalStorage={onRefreshLocalStorage}
               onImportCachedTrack={onImportCachedTrack}
               onSaveTrackToLocal={onSaveTrackToLocal}
               onSavePlaylistFromQueue={onSavePlaylistFromQueue}

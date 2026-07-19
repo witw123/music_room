@@ -5,7 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Route } from "next";
 import type { AuthSession } from "@music-room/shared";
-import { clearAwayRoomId, readAwayRoomId } from "@/lib/away-room";
+import {
+  awayRoomChangeEvent,
+  clearAwayRoomId,
+  readAwayRoomId,
+  storeAwayRoomId
+} from "@/lib/away-room";
 
 export type AppNavItemId = "home" | "search" | "playlists" | "profile";
 
@@ -13,6 +18,9 @@ type AppSidebarProps = {
   activeSession: AuthSession | null;
   activeItem?: AppNavItemId;
   hasBottomPlayer?: boolean;
+  compactMobile?: boolean;
+  keepHomeInRoom?: boolean;
+  roomId?: string | null;
   onLogout?: () => void;
 };
 
@@ -29,6 +37,9 @@ export function AppSidebar({
   activeSession,
   activeItem,
   hasBottomPlayer = false,
+  compactMobile = false,
+  keepHomeInRoom = false,
+  roomId = null,
   onLogout
 }: AppSidebarProps) {
   const pathname = usePathname();
@@ -42,8 +53,12 @@ export function AppSidebar({
   useEffect(() => {
     const syncAwayRoom = () => setAwayRoomId(readAwayRoomId());
     syncAwayRoom();
+    window.addEventListener(awayRoomChangeEvent, syncAwayRoom);
     window.addEventListener("storage", syncAwayRoom);
-    return () => window.removeEventListener("storage", syncAwayRoom);
+    return () => {
+      window.removeEventListener(awayRoomChangeEvent, syncAwayRoom);
+      window.removeEventListener("storage", syncAwayRoom);
+    };
   }, []);
 
   function handleResumeAwayRoom() {
@@ -57,12 +72,25 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`relative z-40 mx-3 mb-4 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:w-60 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r ${desktopBottomOffsetClass}`}
+      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:w-60 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r ${desktopBottomOffsetClass}`}
       aria-label="主导航"
     >
-      <div className="flex items-center gap-3 border-b border-white/[0.07] px-4 py-3 md:flex-col md:items-stretch md:px-4 md:py-5">
-        <Link href="/app" className="flex min-w-0 items-center gap-3" aria-label="返回首页">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-[0_8px_30px_rgba(0,112,243,0.28)]">
+      <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-4 md:py-5`}>
+        <Link
+          href="/app"
+          className="flex min-w-0 items-center gap-3"
+          aria-label="返回首页"
+          onClick={(event) => {
+            if (keepHomeInRoom) {
+              event.preventDefault();
+              return;
+            }
+            if (roomId) {
+              storeAwayRoomId(roomId);
+            }
+          }}
+        >
+          <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-[0_8px_30px_rgba(0,112,243,0.28)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
             <NavIcon name="home" size={17} />
           </span>
           <span className="min-w-0 leading-none">
@@ -80,19 +108,32 @@ export function AppSidebar({
         </span>
       </div>
 
-      <div className="flex items-center gap-3 p-2.5 md:flex-col md:items-stretch md:gap-5 md:p-4">
+      <div className={`flex items-center md:flex-col md:items-stretch md:gap-5 md:p-4 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
         <nav className="flex min-w-0 flex-1 items-center gap-1 md:flex-col md:items-stretch" aria-label="工作区">
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
+            const keepsHomeInRoom = keepHomeInRoom && item.id === "home";
             return (
               <Link
                 key={item.id}
                 href={item.href as Route}
                 aria-current={isActive ? "page" : undefined}
-                className={`group flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${
+                aria-disabled={keepsHomeInRoom || undefined}
+                onClick={(event) => {
+                  if (keepsHomeInRoom) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (roomId) {
+                    storeAwayRoomId(roomId);
+                  }
+                }}
+                className={`group flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
                     ? "bg-accent/15 text-white shadow-[inset_2px_0_0_#0070f3]"
-                    : "text-white/[0.48] hover:bg-white/[0.06] hover:text-white"
+                    : keepsHomeInRoom
+                      ? "cursor-default text-white/[0.48]"
+                      : "text-white/[0.48] hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
                 <NavIcon name={item.icon} />

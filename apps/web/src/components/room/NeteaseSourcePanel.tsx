@@ -189,7 +189,7 @@ export function NeteaseSourcePanel({
 
   return (
     <section
-      className="flex w-full flex-col gap-4 rounded-xl border border-surface-border bg-surface/40 p-4"
+      className="flex w-full min-w-0 flex-col gap-4 rounded-xl border border-surface-border bg-surface/40 p-3 sm:p-4"
       data-testid="netease-source-panel"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -276,7 +276,7 @@ export function NeteaseSourcePanel({
           ) : null}
 
           {results.length > 0 ? (
-            <div className="netease-results-scroll max-h-[min(32rem,58dvh)] overflow-y-auto overscroll-contain rounded-lg border border-surface-border">
+            <div className="netease-results-scroll max-h-[min(28rem,52dvh)] overflow-y-auto overscroll-contain rounded-lg border border-surface-border sm:max-h-[min(32rem,58dvh)]">
               <div className="flex flex-col divide-y divide-surface-border">
               {results.map((track) => {
                 const isImporting = pendingAction === `import:${track.providerTrackId}`;
@@ -284,7 +284,7 @@ export function NeteaseSourcePanel({
                 const qualityLabel = track.quality ? qualityLabels[track.quality] : "标准";
                 return (
                   <article
-                    className="flex min-h-[76px] flex-col gap-3 bg-background/40 px-3 py-3 transition-colors hover:bg-surface-hover/60 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex min-h-[76px] min-w-0 flex-col gap-3 bg-background/40 px-3 py-3 transition-colors hover:bg-surface-hover/60 sm:flex-row sm:items-center sm:justify-between"
                     data-testid="netease-search-result"
                     data-track-id={track.providerTrackId}
                     key={track.providerTrackId}
