@@ -195,7 +195,7 @@ export function VinylAuraVisualizer({
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none absolute -left-1/2 -top-1/2 h-[200%] w-[200%] opacity-80 mix-blend-screen transition-opacity duration-1000 blur-md"
+      className="pointer-events-none absolute -left-1/2 -top-1/2 h-[200%] w-[200%] rounded-full opacity-80 mix-blend-screen transition-opacity duration-1000 blur-md"
       data-testid="vinyl-aura-visualizer"
     />
   );

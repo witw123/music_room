@@ -17,6 +17,7 @@ import {
   type PendingSeek
 } from "@/components/bottom-player/seek-state";
 import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
+import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -49,6 +50,8 @@ type BottomPlayerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  isLyricsOpen?: boolean;
+  onToggleLyrics?: () => void;
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -84,7 +87,9 @@ function BottomPlayerBase({
   canRemoveQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
-  onReorderQueue
+  onReorderQueue,
+  isLyricsOpen = false,
+  onToggleLyrics
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
@@ -111,6 +116,11 @@ function BottomPlayerBase({
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
   const playbackMode = playback?.playbackMode ?? "sequence";
+  const artworkPalette = useArtworkPalette(currentTrack?.artworkUrl);
+  const playerStyle = {
+    backgroundColor: artworkPalette.surface,
+    borderColor: artworkPalette.border
+  };
   const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
 
   useEffect(() => {
@@ -290,13 +300,18 @@ function BottomPlayerBase({
   return (
     <>
     <footer
-      className="fixed inset-x-3 bottom-3 z-[60] flex min-h-[6.5rem] flex-col justify-center rounded-2xl border border-surface-border bg-background-secondary/95 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:inset-x-0 lg:bottom-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3"
+      className="fixed inset-x-3 bottom-3 z-[60] flex min-h-[6.5rem] flex-col justify-center rounded-2xl border border-surface-border bg-background-secondary/95 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[background-color,border-color] duration-700 sm:px-4 lg:inset-x-0 lg:bottom-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3"
+      style={playerStyle}
       data-testid="bottom-player"
     >
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5 z-10" aria-hidden="true">
         <div
-          className="h-full bg-gradient-to-r from-accent to-blue-400 shadow-[0_0_10px_rgba(0,112,243,0.6)] transition-[width] duration-150 ease-linear"
-          style={{ width: `${progressRatio * 100}%` }}
+          className="h-full transition-[width,background-color,box-shadow] duration-150 ease-linear"
+          style={{
+            width: `${progressRatio * 100}%`,
+            backgroundColor: artworkPalette.accent,
+            boxShadow: `0 0 10px ${artworkPalette.accentGlow}`
+          }}
         />
       </div>
 
@@ -329,6 +344,10 @@ function BottomPlayerBase({
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
+        isLyricsOpen={isLyricsOpen}
+        onToggleLyrics={onToggleLyrics}
+        artworkAccent={artworkPalette.accent}
+        artworkAccentSoft={artworkPalette.accentSoft}
       />
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
@@ -358,6 +377,10 @@ function BottomPlayerBase({
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
+        isLyricsOpen={isLyricsOpen}
+        onToggleLyrics={onToggleLyrics}
+        artworkAccent={artworkPalette.accent}
+        artworkAccentSoft={artworkPalette.accentSoft}
       />
       </div>
 

@@ -65,6 +65,8 @@ type RoomWorkspaceProps = {
   onPlayTrack: (trackId: string) => Promise<void>;
   onTabChange: (tab: "library" | "local" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
+  isLyricsOpen: boolean;
+  onToggleLyrics: () => void;
   socket: RoomSocket | null;
   playerSlot: ReactNode;
 };
@@ -116,6 +118,8 @@ function RoomWorkspaceBase({
   onPlayTrack,
   onTabChange,
   onDiagnosticsVisibilityChange,
+  isLyricsOpen,
+  onToggleLyrics,
   socket,
   playerSlot
 }: RoomWorkspaceProps) {
@@ -127,7 +131,7 @@ function RoomWorkspaceBase({
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-32">
+    <main className="relative flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background md:pl-60">
 
       <AppSidebar
         activeSession={activeSession}
@@ -156,8 +160,8 @@ function RoomWorkspaceBase({
         </div>
       ) : null}
 
-      <div className="relative min-h-0 flex-1" role="tabpanel">
-        <div className="h-full w-full">
+      <div className="relative min-h-0 flex-1 overflow-hidden" role="tabpanel">
+        <div className="h-full min-h-0 w-full">
           {roomSnapshot ? (
             <RoomDashboardView
               roomSnapshot={roomSnapshot}
@@ -201,6 +205,8 @@ function RoomWorkspaceBase({
               socket={socket}
               onTabChange={onTabChange}
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
+              isLyricsOpen={isLyricsOpen}
+              onToggleLyrics={onToggleLyrics}
             />
           ) : showRoomTransitionState ? (
             <RoomTransitionState

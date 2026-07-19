@@ -28,6 +28,8 @@ type BottomPlayerControllerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  isLyricsOpen: boolean;
+  onToggleLyrics: () => void;
 };
 
 function BottomPlayerControllerBase({
@@ -50,7 +52,9 @@ function BottomPlayerControllerBase({
   canRemoveQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
-  onReorderQueue
+  onReorderQueue,
+  isLyricsOpen,
+  onToggleLyrics
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
   const canControlPlayback =
@@ -138,6 +142,8 @@ function BottomPlayerControllerBase({
       onPlayQueueItem={onPlayQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
       onReorderQueue={onReorderQueue}
+      isLyricsOpen={isLyricsOpen}
+      onToggleLyrics={onToggleLyrics}
     />
   );
 }

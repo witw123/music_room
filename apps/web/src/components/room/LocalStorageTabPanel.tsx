@@ -177,7 +177,6 @@ function LocalStorageTabPanelBase({
           onUpdatePlaylistTitle={onUpdatePlaylistTitle}
           onUpdatePlaylistTracks={onUpdatePlaylistTracks}
           playlists={playlists}
-          tracks={tracks}
         />
       </section> : null}
     </div>

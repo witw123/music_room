@@ -63,6 +63,8 @@ type RoomDashboardViewProps = {
   socket: RoomSocket | null;
   onTabChange?: (tab: TabId) => void;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
+  isLyricsOpen: boolean;
+  onToggleLyrics: () => void;
 };
 
 const tabLabels: Record<TabId, string> = {
@@ -147,7 +149,9 @@ function RoomDashboardViewBase({
   onPlayTrack,
   socket,
   onTabChange,
-  onDiagnosticsVisibilityChange
+  onDiagnosticsVisibilityChange,
+  isLyricsOpen,
+  onToggleLyrics
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("library");
   const currentSourcePeerId = resolveCurrentSourcePeerId(
@@ -175,7 +179,7 @@ function RoomDashboardViewBase({
   }, [handleTabChange]);
 
   return (
-    <div className="relative flex min-h-[calc(100dvh-112px)] w-full min-w-0 flex-col overflow-x-clip overflow-y-visible lg:grid lg:h-[calc(100dvh-80px)] lg:min-h-0 lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0 lg:overflow-hidden">
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden lg:grid lg:h-full lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
           <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" />
@@ -183,7 +187,7 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ LEFT: Immersive Stage ══════ */}
-      <div className="relative z-10 flex min-h-[min(40svh,26rem)] w-full min-w-0 shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
+      <div className="relative z-10 flex h-[min(52svh,34rem)] max-h-[60svh] min-h-[min(40svh,26rem)] w-full min-w-0 shrink-0 flex-col lg:h-full lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
 
         {/* Vinyl + Track Info */}
         <div className="lg:flex-[2] lg:min-h-0">
@@ -203,6 +207,8 @@ function RoomDashboardViewBase({
             onAwayRoom={onAwayRoom}
             onLeaveRoom={onLeaveRoom}
             onDeleteRoom={onDeleteRoom}
+            isLyricsOpen={isLyricsOpen}
+            onToggleLyrics={onToggleLyrics}
             socket={socket}
           />
         </div>

@@ -31,6 +31,8 @@ type RoomStageProps = {
   onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
+  isLyricsOpen: boolean;
+  onToggleLyrics: () => void;
   socket: RoomSocket | null;
 };
 
@@ -71,13 +73,13 @@ function RoomStageBase({
   onCopyJoinCode,
   onAwayRoom,
   onLeaveRoom,
-  onDeleteRoom
+  onDeleteRoom,
+  isLyricsOpen
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
-  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const [lyricsText, setLyricsText] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -207,13 +209,9 @@ function RoomStageBase({
   return (
     <section
       className={`relative flex h-full w-full min-h-0 flex-col px-3 sm:px-5 md:px-8 ${
-        isLyricsOpen ? "min-h-[min(68svh,38rem)]" : ""
-      } ${
         ultraCompactStage ? "py-2" : compactStage ? "py-3" : "py-4 sm:py-5 md:py-6"
       }`}
     >
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-accent/[0.035] blur-[110px]" />
-
       <div
         className={`relative z-30 flex w-full shrink-0 items-start justify-between gap-3 ${
           compactStage ? "mb-3" : "mb-5 sm:mb-6"
@@ -335,24 +333,7 @@ function RoomStageBase({
         </div>
       </div>
 
-      <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
-        <Button
-          aria-label={isLyricsOpen ? "关闭歌词" : "打开歌词"}
-          className={`pointer-events-auto absolute left-0 top-1/2 z-40 h-8 w-8 -translate-y-1/2 rounded-xl border backdrop-blur-md sm:left-2 sm:h-9 sm:w-9 md:left-4 ${
-            isLyricsOpen
-              ? "border-accent/40 bg-accent/20 text-accent"
-              : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10 hover:text-white"
-          }`}
-          data-testid="room-lyrics-toggle"
-          disabled={!currentTrack}
-          onClick={() => setIsLyricsOpen((value) => !value)}
-          size="icon"
-          title={isLyricsOpen ? "关闭歌词" : "打开歌词"}
-          type="button"
-          variant="ghost"
-        >
-          <span aria-hidden="true" className="text-xs font-semibold leading-none sm:text-sm">词</span>
-        </Button>
+      <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center justify-center overflow-visible">
         <div
           className={`relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center ${
             ultraCompactStage

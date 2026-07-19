@@ -36,14 +36,22 @@ type LayoutProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isImmersiveOpen: boolean;
   onToggleImmersive: () => void;
+  isLyricsOpen?: boolean;
+  onToggleLyrics?: () => void;
+  artworkAccent: string;
+  artworkAccentSoft: string;
 };
 
 export function VinylBadge({
   isPlaying,
-  compact = false
+  compact = false,
+  accentColor = "rgb(0 112 243)",
+  accentSoft = "rgba(0, 112, 243, 0.16)"
 }: {
   isPlaying: boolean;
   compact?: boolean;
+  accentColor?: string;
+  accentSoft?: string;
 }) {
   const shellSize = compact ? "h-10 w-10" : "h-12 w-12";
   const centerSize = compact ? "h-3.5 w-3.5" : "h-4 w-4";
@@ -65,7 +73,8 @@ export function VinylBadge({
           />
         ))}
         <div
-          className={`relative z-10 flex ${centerSize} items-center justify-center rounded-full border border-accent/20 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner`}
+          className={`relative z-10 flex ${centerSize} items-center justify-center rounded-full border shadow-inner`}
+          style={{ borderColor: accentSoft, backgroundColor: accentSoft, color: accentColor }}
         >
           <div className="h-1.5 w-1.5 rounded-full border border-white/5 bg-black shadow-inner" />
         </div>
@@ -141,6 +150,36 @@ export function PlaybackModeButton({
     >
       <PlaybackModeIcon mode={mode} />
       <span className="sr-only">{label}</span>
+    </button>
+  );
+}
+
+export function LyricsToggleButton({
+  isOpen,
+  onToggle,
+  disabled = false,
+  accentColor,
+  accentSoft
+}: {
+  isOpen: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  accentColor?: string;
+  accentSoft?: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="player-lyrics-toggle"
+      aria-pressed={isOpen}
+      aria-label={isOpen ? "关闭歌词" : "打开歌词"}
+      title={isOpen ? "关闭歌词" : "打开歌词"}
+      onClick={onToggle}
+      disabled={disabled}
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${isOpen ? "bg-accent/15 text-accent" : "text-zinc-200"}`}
+      style={isOpen ? { color: accentColor, backgroundColor: accentSoft } : undefined}
+    >
+      词
     </button>
   );
 }
@@ -251,18 +290,25 @@ export function MobileBottomPlayerLayout({
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
-  onToggleImmersive
+  onToggleImmersive,
+  isLyricsOpen = false,
+  onToggleLyrics,
+  artworkAccent,
+  artworkAccentSoft
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
       <div className="grid min-h-[5.5rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
-          <VinylBadge isPlaying={isPlaying} compact />
+          <VinylBadge accentColor={artworkAccent} accentSoft={artworkAccentSoft} isPlaying={isPlaying} compact />
         </button>
 
         <div className="min-w-0">
           <div className="mb-1 flex min-h-[1.1rem] items-center">
-            <span className="inline-flex w-[5.4rem] shrink-0 items-center justify-center rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
+            <span
+              className="inline-flex w-[5.4rem] shrink-0 items-center justify-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em]"
+              style={{ borderColor: artworkAccentSoft, backgroundColor: artworkAccentSoft, color: artworkAccent }}
+            >
               {isPlaying ? "正在播放" : "已暂停"}
             </span>
           </div>
@@ -305,6 +351,7 @@ export function MobileBottomPlayerLayout({
 
         <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
           <div className="flex shrink-0 justify-start">
+            {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
             <PlaybackModeButton
               mode={playbackMode}
               onCycle={onCyclePlaybackMode}
@@ -366,7 +413,7 @@ export function MobileBottomPlayerLayout({
           </div>
 
           <VolumeControl volume={volume} onChange={applyVolume} />
-          <ImmersiveToggleButton isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+          <ImmersiveToggleButton accentColor={artworkAccent} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
         </div>
       </div>
     </div>
@@ -400,17 +447,21 @@ export function DesktopBottomPlayerLayout({
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
-  onToggleImmersive
+  onToggleImmersive,
+  isLyricsOpen = false,
+  onToggleLyrics,
+  artworkAccent,
+  artworkAccentSoft
 }: LayoutProps) {
   return (
     <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
-          <VinylBadge isPlaying={isPlaying} />
+        <VinylBadge accentColor={artworkAccent} accentSoft={artworkAccentSoft} isPlaying={isPlaying} />
         </button>
 
         <div className="min-w-0 flex-1">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.22em] text-accent">
+          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.22em]" style={{ color: artworkAccent }}>
             {isPlaying ? "正在播放" : "已暂停"}
           </p>
           <div className="min-h-[2rem]">
@@ -421,6 +472,7 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="flex items-center justify-center gap-3">
+        {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
         <PlaybackModeButton
           mode={playbackMode}
           onCycle={onCyclePlaybackMode}
@@ -509,13 +561,13 @@ export function DesktopBottomPlayerLayout({
         </div>
 
         <VolumeControl volume={volume} onChange={applyVolume} />
-        <ImmersiveToggleButton isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+        <ImmersiveToggleButton accentColor={artworkAccent} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
       </div>
     </div>
   );
 }
 
-function ImmersiveToggleButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+function ImmersiveToggleButton({ isOpen, onToggle, accentColor }: { isOpen: boolean; onToggle: () => void; accentColor?: string }) {
   return (
     <button
       type="button"
@@ -523,6 +575,7 @@ function ImmersiveToggleButton({ isOpen, onToggle }: { isOpen: boolean; onToggle
       title={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       onClick={onToggle}
       className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10 ${isOpen ? "text-accent" : "text-foreground-muted"}`}
+      style={isOpen && accentColor ? { color: accentColor } : undefined}
     >
       {isOpen ? (
         <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M9 15H4v5" /><path d="m4 20 6-6" /><path d="M15 9h5V4" /><path d="m20 4-6 6" /></svg>

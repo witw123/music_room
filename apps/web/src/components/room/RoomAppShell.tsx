@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -64,6 +65,8 @@ export function RoomAppShell({
   workspaceEntryHref,
   workspaceViewModel
 }: RoomAppShellProps) {
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+
   return (
     <>
       <AudioUnlockOverlay
@@ -120,6 +123,8 @@ export function RoomAppShell({
           onPlayTrack={playbackActions.handlePlayTrack}
           onTabChange={pageState.setActiveDashboardTab}
           onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
+          isLyricsOpen={isLyricsOpen}
+          onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
           socket={socket}
           playerSlot={null}
         />
@@ -149,6 +154,8 @@ export function RoomAppShell({
         onPlayQueueItem={playbackActions.handlePlayQueueItem}
         onRemoveQueueItem={roomActions.removeQueueItem}
         onReorderQueue={roomActions.reorderQueue}
+        isLyricsOpen={isLyricsOpen}
+        onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
       />
     </>
   );

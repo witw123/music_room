@@ -132,7 +132,7 @@ function TrackListSectionBase({
 
       <div className="mt-2 flex flex-col gap-1.5">
         {visibleTracks.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
+          <div className="overflow-hidden border border-surface-border bg-surface">
             {visibleTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
@@ -167,15 +167,13 @@ function TrackListSectionBase({
                     </p>
                   </div>
 
-                  <div
-                    className="flex flex-wrap items-center justify-start gap-1 sm:justify-end"
-                  >
+                  <div className="flex flex-wrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-8 w-8 shrink-0 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 shrink-0 rounded-none p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         disabled={pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
@@ -194,7 +192,7 @@ function TrackListSectionBase({
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
                         variant={isSavedLocally ? "ghost" : "outline"}
-                        className="h-8 w-8 shrink-0 p-0"
+                        className="h-8 w-8 shrink-0 rounded-none p-0"
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
                         aria-label={isSavedLocally ? `《${track.title}》已保存到本地` : `保存《${track.title}》到本地`}
@@ -214,7 +212,7 @@ function TrackListSectionBase({
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
                       variant="outline"
-                      className="h-8 w-8 shrink-0 bg-background/50 p-0"
+                      className="h-8 w-8 shrink-0 rounded-none bg-background/50 p-0"
                       disabled={pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       aria-label={`将《${track.title}》加入队列`}
@@ -229,7 +227,7 @@ function TrackListSectionBase({
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-8 w-8 shrink-0 p-0 hover:bg-accent/10 hover:text-accent"
+                      className="h-8 w-8 shrink-0 rounded-none p-0 hover:bg-accent/10 hover:text-accent"
                       disabled={!canControlPlayback || pendingAction !== null}
                       onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"
