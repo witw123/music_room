@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
+import { clearAwayRoomId, readAwayRoomId } from "@/lib/away-room";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -37,7 +38,7 @@ const emptyCreateRoomForm: CreateRoomForm = {
 };
 
 export function RoomsHomePage({
-  awayRoomId = null,
+  awayRoomId,
   onResumeAwayRoom,
   showSidebar = true
 }: RoomsHomePageProps = {}) {
@@ -56,6 +57,7 @@ export function RoomsHomePage({
   const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
   const [joinPassword, setJoinPassword] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const {
     activeSession,
@@ -68,6 +70,26 @@ export function RoomsHomePage({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
+  const effectiveAwayRoomId = awayRoomId ?? storedAwayRoomId;
+
+  useEffect(() => {
+    if (awayRoomId !== undefined) {
+      setStoredAwayRoomId(awayRoomId);
+      return;
+    }
+
+    setStoredAwayRoomId(readAwayRoomId());
+  }, [awayRoomId]);
+
+  function handleResumeAwayRoom() {
+    if (!effectiveAwayRoomId) return;
+    clearAwayRoomId();
+    setStoredAwayRoomId(null);
+    onResumeAwayRoom?.();
+    if (!onResumeAwayRoom) {
+      router.push(buildRoomHref(effectiveAwayRoomId) as Route);
+    }
+  }
 
   useEffect(() => {
     if (!hydrated) {
@@ -170,8 +192,8 @@ export function RoomsHomePage({
   }
 
   function openRoomDetails(room: RoomSnapshot) {
-    if (room.room.id === awayRoomId && onResumeAwayRoom) {
-      onResumeAwayRoom();
+    if (room.room.id === effectiveAwayRoomId) {
+      handleResumeAwayRoom();
       return;
     }
     setSelectedRoom(room);
@@ -239,12 +261,12 @@ export function RoomsHomePage({
         <AppSidebar
           activeItem="home"
           activeSession={activeSession}
-          hasBottomPlayer={Boolean(awayRoomId)}
+          hasBottomPlayer={Boolean(effectiveAwayRoomId)}
           onLogout={handleLogout}
         />
       ) : null}
 
-      {awayRoomId && onResumeAwayRoom ? (
+      {effectiveAwayRoomId ? (
         <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-20 sm:px-6 lg:px-8 md:mx-0 md:max-w-[1600px]">
           <div
             className="flex flex-col gap-3 rounded-2xl border border-amber-300/45 bg-amber-300/10 px-4 py-3 text-amber-100 shadow-[0_12px_36px_rgba(251,191,36,0.12)] sm:flex-row sm:items-center sm:justify-between"
@@ -260,7 +282,7 @@ export function RoomsHomePage({
             </div>
             <Button
               className="w-full border-amber-200/40 bg-amber-200/10 text-amber-100 hover:bg-amber-200/20 sm:w-auto"
-              onClick={onResumeAwayRoom}
+              onClick={handleResumeAwayRoom}
               size="sm"
               type="button"
               variant="outline"
@@ -314,7 +336,7 @@ export function RoomsHomePage({
               {pagedRooms.map((item) => (
                 <RoomDirectoryCard
                   key={item.room.id}
-                  isAway={item.room.id === awayRoomId}
+                  isAway={item.room.id === effectiveAwayRoomId}
                   room={item}
                   onOpen={() => openRoomDetails(item)}
                 />

@@ -5,6 +5,7 @@ import type {
   QqMusicTrackCandidate,
   RemoteTrackSourceRef,
   RoomSnapshot,
+  TrackMeta,
   TrackSourceType
 } from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -14,7 +15,7 @@ import {
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
-import { buildTrackMeta, type UploadedTrack } from "./audio-utils";
+import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "./audio-utils";
 import { prepareAudioAssets } from "./audio-asset-builder";
 import {
   applySelectedTrackFilesResult,
@@ -77,7 +78,9 @@ export function useUploadPipelineActions({
         | "sizeBytes"
         | "fileHash"
         | "ownerNickname"
-      >;
+      > & Partial<
+        Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef">
+      > & { lyrics?: string | null };
       roomId: string;
       file: File | Blob;
     }) => {
@@ -94,7 +97,10 @@ export function useUploadPipelineActions({
   );
 
   const handleFilesSelected = useCallback(
-    async (files: FileList | File[] | null) => {
+    async (
+      files: FileList | File[] | null,
+      metadataByFileHash?: ReadonlyMap<string, CachedLibraryTrack>
+    ) => {
       if (!files || !activeSession || !roomSnapshot) {
         return;
       }
@@ -130,7 +136,33 @@ export function useUploadPipelineActions({
               setStatusMessage(`${labels[stage]} ${percent}%`);
             }
           });
-          return buildTrackMeta(file, objectUrl, activeSession, assets);
+          const cachedMetadata = metadataByFileHash?.get(assets.fileHash);
+          const provider = cachedMetadata?.provider;
+          const providerTrackId = cachedMetadata?.providerTrackId;
+          let sourceType: TrackSourceType = "local_upload";
+          let sourceRef: RemoteTrackSourceRef | undefined;
+          if (
+            (provider === "netease" || provider === "qqmusic") &&
+            providerTrackId
+          ) {
+            sourceType = provider;
+            sourceRef = { provider, trackId: providerTrackId };
+          }
+          const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, cachedMetadata
+            ? {
+                type: sourceType,
+                metadata: {
+                  title: cachedMetadata.title,
+                  artist: cachedMetadata.artist,
+                  album: cachedMetadata.album ?? null,
+                  artworkUrl: cachedMetadata.artworkUrl ?? null
+                },
+                ...(sourceRef ? { sourceRef } : {})
+              }
+            : undefined);
+          return cachedMetadata
+            ? { ...draft, lyrics: cachedMetadata.lyrics ?? null }
+            : draft;
         },
         buildRegisterTrackPayload,
         registerTrack: (registerRoomId, payload) =>

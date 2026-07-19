@@ -1,7 +1,10 @@
 import type { TrackMeta } from "@music-room/shared";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
-type TrackRegistrationDraft = Omit<TrackMeta, "id"> & { id?: string };
+type TrackRegistrationDraft = Omit<TrackMeta, "id"> & {
+  id?: string;
+  lyrics?: string | null;
+};
 
 export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
   return {
@@ -46,6 +49,7 @@ export async function processSelectedTrackFiles(input: {
     track: TrackMeta;
     roomId: string;
     file: File;
+    lyrics?: string | null;
   }) => Promise<void>;
   deleteTrack?: (roomId: string, trackId: string) => Promise<unknown>;
   deleteLocalTrackData?: (trackIds: readonly string[]) => Promise<void>;
@@ -104,7 +108,8 @@ export async function processSelectedTrackFiles(input: {
         await input.persistTrackIntoLibrary({
           track: registered,
           roomId: input.roomId,
-          file
+          file,
+          lyrics: track.lyrics ?? null
         });
       } catch (error) {
         await Promise.allSettled([

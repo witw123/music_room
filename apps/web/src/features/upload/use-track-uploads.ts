@@ -182,7 +182,7 @@ export function useTrackUploads(options: {
       }), {
         type: cachedTrack.mimeType || sourceFile.type || "audio/mpeg"
       });
-      await handleFilesSelected([file]);
+      await handleFilesSelected([file], new Map([[cachedTrack.fileHash, cachedTrack]]));
     } catch (error) {
       const detail = error instanceof Error && error.message
         ? `：${error.message}`

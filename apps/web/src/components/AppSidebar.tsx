@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { Route } from "next";
 import type { AuthSession } from "@music-room/shared";
+import { clearAwayRoomId, readAwayRoomId } from "@/lib/away-room";
 
 export type AppNavItemId = "home" | "search" | "playlists" | "profile";
 
@@ -30,10 +32,28 @@ export function AppSidebar({
   onLogout
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const currentItem = activeItem ?? resolveActiveItem(pathname);
+  const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
   const desktopBottomOffsetClass = hasBottomPlayer
     ? "md:bottom-[11.5rem] lg:bottom-[5.25rem]"
     : "md:bottom-0";
+
+  useEffect(() => {
+    const syncAwayRoom = () => setAwayRoomId(readAwayRoomId());
+    syncAwayRoom();
+    window.addEventListener("storage", syncAwayRoom);
+    return () => window.removeEventListener("storage", syncAwayRoom);
+  }, []);
+
+  function handleResumeAwayRoom() {
+    if (!awayRoomId) return;
+    clearAwayRoomId();
+    setAwayRoomId(null);
+    router.push(`/room/${awayRoomId}` as Route);
+  }
+
+  const showAwayRoomStatus = pathname?.startsWith("/app/") ?? false;
 
   return (
     <aside
@@ -81,6 +101,26 @@ export function AppSidebar({
             );
           })}
         </nav>
+
+        {showAwayRoomStatus && awayRoomId ? (
+          <div
+            className="min-w-0 border-t border-amber-300/20 pt-3 md:mt-1"
+            data-testid="away-room-sidebar-indicator"
+          >
+            <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2">
+              <p className="truncate text-xs font-semibold text-amber-100">已暂离房间</p>
+              <p className="mt-1 truncate text-[10px] text-amber-100/65">播放仍在同步</p>
+              <button
+                className="mt-2 w-full text-left text-xs font-medium text-amber-200 hover:text-amber-100"
+                data-testid="resume-away-room"
+                onClick={handleResumeAwayRoom}
+                type="button"
+              >
+                返回房间
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {activeSession ? (
           <div className="hidden border-t border-white/[0.07] pt-4 md:block">

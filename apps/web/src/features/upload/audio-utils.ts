@@ -28,6 +28,11 @@ export type CachedLibraryTrack = {
   fileHash: string;
   title: string;
   artist: string;
+  album?: string | null;
+  artworkUrl?: string | null;
+  lyrics?: string | null;
+  provider?: "netease" | "qqmusic" | "local_upload";
+  providerTrackId?: string | null;
   mimeType: string;
   durationMs: number;
   sizeBytes: number;

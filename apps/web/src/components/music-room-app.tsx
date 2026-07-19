@@ -19,12 +19,12 @@ import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipbo
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
+import { clearAwayRoomId, readAwayRoomId, storeAwayRoomId } from "@/lib/away-room";
 export * from "@/components/room/hooks/use-room-page-derived";
 export * from "@/components/room/hooks/use-room-playback-actions";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
-const awayRoomStorageKey = "music-room-away-room";
 
 type MusicRoomAppProps = { workspaceOnly?: boolean; initialRoomId?: string | null };
 
@@ -51,14 +51,14 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
       return;
     }
 
-    const storedAwayRoomId = window.sessionStorage.getItem(awayRoomStorageKey);
+    const storedAwayRoomId = readAwayRoomId();
     if (storedAwayRoomId === initialRoomId) {
       setAwayRoomId(storedAwayRoomId);
       return;
     }
 
     if (storedAwayRoomId) {
-      window.sessionStorage.removeItem(awayRoomStorageKey);
+      clearAwayRoomId();
     }
   }, [initialRoomId]);
 
@@ -71,13 +71,13 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
       return;
     }
 
-    window.sessionStorage.setItem(awayRoomStorageKey, targetRoomId);
+    storeAwayRoomId(targetRoomId);
     setAwayRoomId(targetRoomId);
     setStatusMessage("");
   }
 
   function handleResumeRoom() {
-    window.sessionStorage.removeItem(awayRoomStorageKey);
+    clearAwayRoomId();
     setAwayRoomId(null);
     setStatusMessage("已返回房间。");
   }

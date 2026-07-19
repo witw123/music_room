@@ -99,9 +99,11 @@ function RoomStageBase({
       : "clamp(10rem, min(30vh, 38vw), 16rem)";
   const stageContentOffset = isLyricsOpen
     ? "translate-y-0"
-    : compactStage
-      ? ultraCompactStage ? "translate-y-3" : "translate-y-[clamp(3rem,12vh,7rem)]"
-      : "translate-y-0";
+    : ultraCompactStage
+      ? "-translate-y-2"
+      : compactStage
+        ? "-translate-y-[clamp(1rem,4vh,3rem)]"
+        : "-translate-y-[clamp(0.5rem,2vh,1.5rem)]";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -400,18 +402,13 @@ function RoomStageBase({
               <VinylTonearm isPlaying={isPlaying} />
             </div>
 
-            <div
-              className={`absolute bottom-[clamp(-2.5rem,-5vh,-2rem)] left-1/2 h-[clamp(2rem,5vh,2.5rem)] w-[72%] -translate-x-1/2 bg-accent/20 blur-[45px] transition-[opacity,transform] duration-700 ease-out sm:w-[80%] ${
-                isPlaying ? "scale-110 opacity-100" : "scale-90 opacity-30"
-              }`}
-            />
           </div>
               </div>
             ) : null}
             {!isLyricsOpen ? (
               <div
                 className={`relative z-30 flex shrink-0 flex-col items-center text-center ${
-                  ultraCompactStage ? "gap-2 pt-2" : compactStage ? "gap-3 pt-3" : "gap-4 pt-4 sm:gap-5 sm:pt-5"
+                  ultraCompactStage ? "gap-3 pt-4" : compactStage ? "gap-4 pt-5" : "gap-5 pt-6 sm:gap-6 sm:pt-7"
                 }`}
               >
                 {currentTrack ? (
