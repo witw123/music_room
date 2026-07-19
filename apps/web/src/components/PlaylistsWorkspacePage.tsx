@@ -191,12 +191,12 @@ export function PlaylistsWorkspacePage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-0 md:px-8 md:pt-28">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-8 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Playlists</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Playlists</p>
             <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">我的歌单</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-foreground-muted">本地歌单读取本地保存的音频和平台元数据，网络歌单保存网易云音乐与 QQ 音乐的歌单信息。</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">本地歌单读取本地保存的音频和平台元数据，网络歌单保存网易云音乐与 QQ 音乐的歌单信息。</p>
           </div>
           <div className="flex items-center gap-2">
             <Link className="text-sm text-accent hover:text-accent/80" href="/app/search">去搜索音乐</Link>
@@ -219,7 +219,7 @@ export function PlaylistsWorkspacePage() {
           />
         ) : (
           <>
-            <div className="mt-8 flex w-full max-w-xl gap-1 rounded-xl border border-surface-border bg-surface/40 p-1" role="tablist" aria-label="歌单类型">
+            <div className="mt-5 flex w-full max-w-xl gap-1 rounded-xl border border-surface-border bg-surface/40 p-1" role="tablist" aria-label="歌单类型">
               <button
                 aria-selected={activeTab === "local"}
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
@@ -241,8 +241,8 @@ export function PlaylistsWorkspacePage() {
             </div>
 
             {activeTab === "local" ? (
-              <section className="mt-6 flex flex-col gap-4" data-testid="local-playlists">
-                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-3">
+              <section className="mt-4 flex flex-col gap-3" data-testid="local-playlists">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-2">
                   <div>
                     <p className="text-lg font-bold text-foreground">本地歌单</p>
                     <p className="mt-1 text-xs text-foreground-muted">{storageState?.directoryName ? `目录：${storageState.directoryName}` : "尚未选择本地目录"}</p>
@@ -253,7 +253,7 @@ export function PlaylistsWorkspacePage() {
                   </Button>
                 </div>
                 {localPlaylists.length ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <div className="flex flex-col gap-2">
                     {localPlaylists.map((playlist) => (
                       <LocalPlaylistCard
                         folderName={storageState?.directoryName ?? null}
@@ -265,11 +265,11 @@ export function PlaylistsWorkspacePage() {
                       />
                     ))}
                   </div>
-                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center text-sm text-foreground-muted">当前没有本地歌单，可使用右上角按钮新建。</div>}
+                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">当前没有本地歌单，可使用右上角按钮新建。</div>}
               </section>
             ) : (
-              <section className="mt-6 flex flex-col gap-4" data-testid="network-playlists">
-                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-3">
+              <section className="mt-4 flex flex-col gap-3" data-testid="network-playlists">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-2">
                   <div><p className="text-lg font-bold text-foreground">网络歌单</p><p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p></div>
                   <Button onClick={() => setCreateDialogKind("network")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
@@ -277,7 +277,7 @@ export function PlaylistsWorkspacePage() {
                   </Button>
                 </div>
                 {networkPlaylists.length ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <div className="flex flex-col gap-2">
                     {networkPlaylists.map((playlist) => (
                       <NetworkPlaylistCard
                         key={playlist.id}
@@ -287,7 +287,7 @@ export function PlaylistsWorkspacePage() {
                       />
                     ))}
                   </div>
-                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center text-sm text-foreground-muted">从搜索页保存网易云音乐或 QQ 音乐歌单后，会显示在这里。</div>}
+                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">从搜索页保存网易云音乐或 QQ 音乐歌单后，会显示在这里。</div>}
               </section>
             )}
           </>
@@ -438,28 +438,27 @@ function LocalPlaylistCard({
   const downloadedCount = tracks.filter((track) => track.availableOffline).length;
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-surface-border bg-surface/35 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover">
+    <article className="group relative flex min-w-0 items-center rounded-xl border border-surface-border bg-surface/35 p-2 text-left transition hover:border-accent/40 hover:bg-surface-hover sm:p-2.5">
       <button
         aria-label={`打开本地歌单 ${playlist.title}`}
-        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
+        className="flex min-w-0 flex-1 items-center gap-3 pr-10 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
         onClick={onOpen}
         type="button"
       >
-        <div className="relative overflow-hidden">
-          <Artwork artworkUrl={artworkUrl} title={playlist.title} size="cover" />
-          <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80 backdrop-blur-sm">本地</span>
-          <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white/90 backdrop-blur-sm">{tracks.length} 首歌曲</span>
+        <div className="relative shrink-0">
+          <Artwork artworkUrl={artworkUrl} title={playlist.title} size="row" />
+          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white/90">本地</span>
         </div>
-        <div className="space-y-1.5 px-4 py-3.5 pr-12">
+        <div className="min-w-0 flex-1 space-y-1">
           <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
           <p className="truncate text-xs text-foreground-muted">{playlist.description || (folderName ? `目录：${folderName}` : "本地保存的歌曲")}</p>
-          <p className="text-xs text-foreground-muted">已下载 {downloadedCount} / {tracks.length}</p>
+          <p className="truncate text-xs text-foreground-muted">{tracks.length} 首歌曲 · 已下载 {downloadedCount}</p>
         </div>
       </button>
       {onDelete ? (
         <Button
           aria-label={`删除本地歌单 ${playlist.title}`}
-          className="absolute right-3 top-3 h-8 w-8 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
           onClick={onDelete}
           size="icon"
           title="删除歌单"
@@ -478,26 +477,26 @@ function NetworkPlaylistCard({ playlist, onOpen, onDelete }: { playlist: Playlis
   const providerName = source?.provider === "qqmusic" ? "QQ 音乐" : source?.provider === "netease" ? "网易云音乐" : "网络歌单";
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-surface-border bg-surface/35 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover">
+    <article className="group relative flex min-w-0 items-center rounded-xl border border-surface-border bg-surface/35 p-2 text-left transition hover:border-accent/40 hover:bg-surface-hover sm:p-2.5">
       <button
         aria-label={`打开歌单 ${playlist.title}`}
-        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
+        className="flex min-w-0 flex-1 items-center gap-3 pr-10 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
         onClick={onOpen}
         type="button"
       >
-        <div className="relative overflow-hidden">
-          <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="cover" />
-          <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white/90 backdrop-blur-sm">{playlist.trackIds.length} 首歌曲</span>
+        <div className="relative shrink-0">
+          <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="row" />
+          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white/90">{providerName}</span>
         </div>
-        <div className="space-y-1.5 px-4 py-3.5 pr-12">
+        <div className="min-w-0 flex-1 space-y-1">
           <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
           <p className="truncate text-xs text-foreground-muted">{playlist.description || "暂无简介"}</p>
-          <p className="text-xs text-foreground-muted">{providerName}</p>
+          <p className="truncate text-xs text-foreground-muted">{playlist.trackIds.length} 首歌曲 · {playlist.isCollaborative ? "协作歌单" : "个人歌单"}</p>
         </div>
       </button>
       <Button
         aria-label={`删除歌单 ${playlist.title}`}
-        className="absolute right-3 top-3 h-8 w-8 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onDelete}
         size="icon"
         title="删除歌单"
@@ -623,13 +622,13 @@ function PlaylistDetailView({
   const playableIndexById = new Map(playableTracks.map((track, index) => [track.id, index]));
 
   return (
-    <section className="mt-8" data-testid="playlist-detail">
-      <Button className="mb-6 gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
+    <section className="mt-5" data-testid="playlist-detail">
+      <Button className="mb-4 gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
         <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /></svg>
         返回歌单
       </Button>
 
-      <div className="flex flex-col gap-6 border-b border-surface-border pb-7 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-4 border-b border-surface-border pb-5 sm:flex-row sm:items-end">
         <Artwork artworkUrl={artworkUrl} title={title} size="lg" />
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">{isLocal ? "Local playlist" : "Network playlist"}</p>
@@ -732,17 +731,19 @@ function PlaylistDetailView({
               draggable={canEditTracks}
             />
           );
-        }) : <div className="px-6 py-14 text-center text-sm text-foreground-muted">这个歌单还没有歌曲。</div>}
+        }) : <div className="px-6 py-8 text-center text-sm text-foreground-muted">这个歌单还没有歌曲。</div>}
       </div>
     </section>
   );
 }
 
-function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "cover" }) {
+function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "row" | "cover" }) {
   const sizeClass = size === "cover"
     ? "aspect-square w-full rounded-none"
     : size === "lg"
       ? "h-24 w-24 rounded-xl"
+      : size === "row"
+        ? "h-16 w-16 rounded-lg"
       : "h-10 w-10 rounded-lg";
   return (
     <div

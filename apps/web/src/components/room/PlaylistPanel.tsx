@@ -105,8 +105,8 @@ export function PlaylistPanel({
   }
 
   return (
-    <section className="flex w-full flex-col gap-5" data-testid="network-playlist-panel">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-4">
+    <section className="flex w-full flex-col gap-4" data-testid="network-playlist-panel">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-3">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Playlists</p>
           <h2 className="text-lg font-bold text-foreground">网络歌单</h2>
@@ -131,7 +131,7 @@ export function PlaylistPanel({
       </div>
 
       {playlists.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="flex flex-col gap-2">
           {playlists.map((playlist) => (
             <PlaylistCard
               key={playlist.id}
@@ -142,7 +142,7 @@ export function PlaylistPanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center">
+        <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center">
           <p className="text-sm text-foreground-muted">当前房间还没有网络歌单。</p>
           <Button
             className="mt-4"
@@ -174,31 +174,26 @@ function PlaylistCard({ playlist, onOpen, onDelete }: { playlist: Playlist; onOp
   const providerName = getProviderName(playlist);
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-surface-border bg-surface/35 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover">
+    <article className="group relative flex min-w-0 items-center rounded-xl border border-surface-border bg-surface/35 p-2 text-left transition hover:border-accent/40 hover:bg-surface-hover sm:p-2.5">
       <button
         aria-label={`打开歌单 ${playlist.title}`}
-        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
+        className="flex min-w-0 flex-1 items-center gap-3 pr-10 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
         onClick={onOpen}
         type="button"
       >
-        <div className="relative overflow-hidden">
-          <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="cover" />
-          <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80 backdrop-blur-sm">
-            {providerName}
-          </span>
-          <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white/90 backdrop-blur-sm">
-            {playlist.trackIds.length} 首歌曲
-          </span>
+        <div className="relative shrink-0">
+          <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="row" />
+          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white/90">{providerName}</span>
         </div>
-        <div className="space-y-1.5 px-4 py-3.5 pr-12">
+        <div className="min-w-0 flex-1 space-y-1">
           <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
           <p className="truncate text-xs text-foreground-muted">{playlist.description || "暂无简介"}</p>
-          <p className="text-xs text-foreground-muted">{playlist.isCollaborative ? "协作歌单" : "个人歌单"}</p>
+          <p className="truncate text-xs text-foreground-muted">{playlist.trackIds.length} 首歌曲 · {playlist.isCollaborative ? "协作歌单" : "个人歌单"}</p>
         </div>
       </button>
       <Button
         aria-label={`删除歌单 ${playlist.title}`}
-        className="absolute right-3 top-3 h-8 w-8 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
         onClick={(event) => {
           event.stopPropagation();
           onDelete();
@@ -245,12 +240,12 @@ function PlaylistDetail({
 }) {
   return (
     <section className="flex w-full flex-col" data-testid="network-playlist-detail">
-      <Button className="mb-6 self-start gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
+      <Button className="mb-4 self-start gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
         <ArrowLeftIcon />
         返回歌单
       </Button>
 
-      <div className="flex flex-col gap-6 border-b border-surface-border pb-7 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-4 border-b border-surface-border pb-5 sm:flex-row sm:items-end">
         <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="lg" />
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Network playlist</p>
@@ -328,7 +323,7 @@ function PlaylistDetail({
               </Button>
             </div>
           );
-        }) : <div className="px-6 py-14 text-center text-sm text-foreground-muted">这个歌单还没有歌曲。</div>}
+        }) : <div className="px-6 py-8 text-center text-sm text-foreground-muted">这个歌单还没有歌曲。</div>}
       </div>
     </section>
   );
@@ -376,11 +371,13 @@ function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCance
   );
 }
 
-function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "cover" }) {
+function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "row" | "cover" }) {
   const sizeClass = size === "cover"
     ? "aspect-square w-full rounded-none"
     : size === "lg"
       ? "h-24 w-24 rounded-xl"
+      : size === "row"
+        ? "h-16 w-16 rounded-lg"
       : "h-10 w-10 rounded-lg";
 
   return (

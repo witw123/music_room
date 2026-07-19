@@ -86,7 +86,7 @@ function LocalStorageTabPanelBase({
   };
 
   return (
-    <div className="animate-fade-in flex w-full flex-col gap-8">
+    <div className="animate-fade-in flex w-full flex-col gap-5">
       <div className="flex flex-col gap-3 border-b border-surface-border pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-foreground">本地音乐</p>

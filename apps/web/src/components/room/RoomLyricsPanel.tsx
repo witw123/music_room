@@ -8,13 +8,15 @@ type RoomLyricsPanelProps = {
   status: "idle" | "loading" | "ready" | "error";
   positionMs: number;
   isPlaying: boolean;
+  className?: string;
 };
 
 export function RoomLyricsPanel({
   lyrics,
   status,
   positionMs,
-  isPlaying
+  isPlaying,
+  className
 }: RoomLyricsPanelProps) {
   const lines = useMemo(() => parseRoomLyrics(lyrics), [lyrics]);
   const activeIndex = getActiveRoomLyricIndex(lines, positionMs);
@@ -29,7 +31,7 @@ export function RoomLyricsPanel({
   return (
     <section
       aria-label="歌词"
-      className="pointer-events-auto relative z-20 flex h-[min(34svh,18rem)] max-h-[18rem] min-h-[8rem] w-full max-w-[min(100%,34rem)] flex-none flex-col overflow-hidden px-3 animate-fade-in sm:px-6"
+      className={`pointer-events-auto relative z-20 flex h-[min(34svh,18rem)] max-h-[18rem] min-h-[8rem] w-full max-w-[min(100%,34rem)] flex-none flex-col overflow-hidden px-3 animate-fade-in sm:px-6 ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">

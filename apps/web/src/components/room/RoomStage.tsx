@@ -11,6 +11,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { listRoomPlaylistTrackIndex } from "@/features/playlist/local-playlist";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
+import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
 
@@ -205,7 +206,7 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] px-3 sm:px-5 md:px-8 ${
+      className={`relative flex h-full w-full min-h-0 flex-col px-3 sm:px-5 md:px-8 ${
         isLyricsOpen ? "min-h-[min(68svh,38rem)]" : ""
       } ${
         ultraCompactStage ? "py-2" : compactStage ? "py-3" : "py-4 sm:py-5 md:py-6"
@@ -334,7 +335,7 @@ function RoomStageBase({
         </div>
       </div>
 
-      <div className="relative z-20 h-full min-h-0 overflow-hidden">
+      <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
         <Button
           aria-label={isLyricsOpen ? "关闭歌词" : "打开歌词"}
           className={`pointer-events-auto absolute left-0 top-1/2 z-40 h-8 w-8 -translate-y-1/2 rounded-xl border backdrop-blur-md sm:left-2 sm:h-9 sm:w-9 md:left-4 ${
@@ -353,7 +354,7 @@ function RoomStageBase({
           <span aria-hidden="true" className="text-xs font-semibold leading-none sm:text-sm">词</span>
         </Button>
         <div
-          className={`relative flex h-full min-h-0 items-center justify-center ${
+          className={`relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center ${
             ultraCompactStage
               ? "-translate-y-[12%]"
               : compactStage
@@ -362,49 +363,32 @@ function RoomStageBase({
           }`}
         >
           <div
-            className="pointer-events-none group relative flex min-h-0 w-full items-center justify-center"
-            style={{ "--record-size": recordSize } as CSSProperties}
+            className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
+            style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
           >
             <VinylAuraVisualizer isPlaying={isPlaying} />
 
             <div
-              className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out ${isPlaying ? "animate-spin-slow" : ""}`}
+              className="relative flex items-center justify-center overflow-visible"
               style={{ width: "var(--record-size)", height: "var(--record-size)" }}
             >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
-              <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="absolute rounded-full border border-white/[0.02]"
-                  style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
-                />
-              ))}
-              <div className="relative z-10 flex items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
-                <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
+              <div
+                className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out ${isPlaying ? "animate-spin-slow" : ""}`}
+              >
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+                <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="absolute rounded-full border border-white/[0.02]"
+                    style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
+                  />
+                ))}
+                <div className="relative z-10 flex items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
+                  <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
+                </div>
               </div>
-            </div>
-
-            <div
-              className={`absolute flex flex-col items-center transition-transform duration-500 ease-out ${
-                isPlaying ? "rotate-[20deg]" : "-rotate-[15deg]"
-              }`}
-              style={{
-                zIndex: 30,
-                right: "calc(var(--record-size) * -0.17)",
-                top: "calc(var(--record-size) * 0.03)",
-                width: "calc(var(--record-size) * 0.11)",
-                height: "calc(var(--record-size) * 0.66)",
-                transformOrigin: "calc(var(--record-size) * 0.08) calc(var(--record-size) * 0.08)"
-              }}
-            >
-              <div className="absolute top-0 z-10 flex items-center justify-center rounded-full border-2 border-[#111] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl" style={{ width: "16%", height: "16%" }}>
-                <div className="h-[42%] w-[42%] rounded-full bg-[#111] shadow-inner" />
-              </div>
-              <div className="h-[78%] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[12%] shadow-lg" style={{ width: "28%" }} />
-              <div className="relative ml-[-35%] h-[24%] w-[105%] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl">
-                <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-              </div>
+              <VinylTonearm isPlaying={isPlaying} />
             </div>
 
             <div
@@ -414,14 +398,12 @@ function RoomStageBase({
             />
           </div>
         </div>
-      </div>
-
-      <div
-        className={`relative z-30 flex flex-col items-center pb-2 ${
-          ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-4 pt-4"
-        }`}
-      >
-        <div className={`flex w-full flex-col items-center text-center ${compactStage ? "gap-1.5" : "gap-2 md:gap-3"}`}>
+        <div
+          className={`relative z-30 flex shrink-0 flex-col items-center pb-2 ${
+          ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-2 pt-2"
+          }`}
+        >
+          <div className={`flex w-full flex-col items-center text-center ${compactStage ? "gap-1.5" : "gap-2 md:gap-3"}`}>
           {currentTrack ? (
             <>
               <div className={`flex flex-wrap items-center justify-center ${compactStage ? "mb-0.5 gap-1.5" : "mb-1 gap-2 sm:gap-3"}`}>
@@ -472,15 +454,16 @@ function RoomStageBase({
               ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`
               : "从曲库添加音乐，或导入本地音频，马上开始这场协作收听。"}
           </p>
+          </div>
+          {isLyricsOpen ? (
+            <RoomLyricsPanel
+              isPlaying={isPlaying}
+              lyrics={lyricsText}
+              positionMs={lyricsPositionMs}
+              status={lyricsStatus}
+            />
+          ) : null}
         </div>
-        {isLyricsOpen ? (
-          <RoomLyricsPanel
-            isPlaying={isPlaying}
-            lyrics={lyricsText}
-            positionMs={lyricsPositionMs}
-            status={lyricsStatus}
-          />
-        ) : null}
       </div>
       <ConfirmDialog
         confirmLabel="解散房间"
