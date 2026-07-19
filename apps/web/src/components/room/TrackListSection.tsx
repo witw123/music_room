@@ -158,7 +158,7 @@ function TrackListSectionBase({
                     <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
                   </div>
 
-                  <div className="flex min-w-max flex-nowrap items-center justify-end gap-1">
+                  <div className="row-span-2 flex min-w-max self-center flex-nowrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
@@ -240,9 +240,13 @@ function TrackListSectionBase({
                     </Button>
                   </div>
 
-                  <div className="col-start-2 col-end-4 min-w-0 space-y-0.5">
-                    <p className="truncate text-xs text-foreground-muted">
-                      {track.artist} · {track.album ?? "未知专辑"} · {formatDuration(track.durationMs)}
+                  <div className="col-start-2 col-end-3 min-w-0 space-y-0.5">
+                    <p className="flex min-w-0 items-center gap-1 text-xs text-foreground-muted">
+                      <span className="min-w-0 max-w-[40%] truncate">{track.artist}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="min-w-0 max-w-[45%] truncate">{track.album ?? "未知专辑"}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="shrink-0 tabular-nums">{formatDuration(track.durationMs)}</span>
                     </p>
                     <p className="truncate text-[10px] text-foreground-muted/60">
                       <span

@@ -4,6 +4,8 @@ const indexedDbMocks = vi.hoisted(() => ({
   deleteCachedLibraryTrackFile: vi.fn(),
   deleteOriginalAssetForTrack: vi.fn(),
   deleteLocalAudioCacheFileRecord: vi.fn(),
+  getAssetManifest: vi.fn(),
+  getAssetUnits: vi.fn(),
   getLocalAudioDirectory: vi.fn(),
   getLocalAudioFileRecord: vi.fn(),
   getLocalAudioCacheFileRecord: vi.fn(),
@@ -20,6 +22,7 @@ vi.mock("@/lib/indexeddb", () => indexedDbMocks);
 
 import {
   ensureLocalAudioDirectoryWriteAccess,
+  getOriginalAssetFile,
   saveCachedAudioFileToLocalDirectory
 } from "./local-audio-storage";
 
@@ -51,6 +54,38 @@ describe("local audio cache persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue(null);
+  });
+
+  it("rebuilds an owner source file from a complete original asset", async () => {
+    indexedDbMocks.getAssetManifest.mockResolvedValue({
+      kind: "original",
+      complete: true,
+      manifest: {
+        assetId: "asset_1",
+        kind: "original",
+        fileHash: "hash_1",
+        mimeType: "audio/mpeg",
+        sizeBytes: 5,
+        unitSize: 1024 * 1024,
+        unitCount: 2,
+        merkleRoot: "root_1"
+      }
+    });
+    indexedDbMocks.getAssetUnits.mockResolvedValue([
+      { unitIndex: 1, payload: new Uint8Array([3, 4]).buffer },
+      { unitIndex: 0, payload: new Uint8Array([1, 2]).buffer }
+    ]);
+
+    const file = await getOriginalAssetFile({
+      assetId: "asset_1",
+      fileHash: "hash_1",
+      title: "Song",
+      mimeType: "audio/mpeg"
+    });
+
+    expect(file).not.toBeNull();
+    expect(file?.name).toBe("Song [hash_1].mp3");
+    expect([...new Uint8Array(await file!.arrayBuffer())]).toEqual([1, 2, 3, 4]);
   });
 
   it("keeps IndexedDB as the normal fallback when no folder is configured", async () => {

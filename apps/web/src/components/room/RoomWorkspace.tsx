@@ -3,11 +3,13 @@
 import { memo, type ReactNode } from "react";
 import type {
   AuthSession,
+  NeteaseTrackCandidate,
   Playlist,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomMediaConnectionState,
   RoomSnapshot,
+  QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -36,6 +38,8 @@ type RoomWorkspaceProps = {
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
+  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
@@ -89,6 +93,8 @@ function RoomWorkspaceBase({
   onSaveTrackToLocal,
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
+  onImportNeteaseTrack,
+  onImportQqMusicTrack,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onDeletePlaylist,
@@ -183,6 +189,8 @@ function RoomWorkspaceBase({
               onSaveTrackToLocal={onSaveTrackToLocal}
               onSavePlaylistFromQueue={onSavePlaylistFromQueue}
               onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
+              onImportNeteaseTrack={onImportNeteaseTrack}
+              onImportQqMusicTrack={onImportQqMusicTrack}
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
               onDeletePlaylist={onDeletePlaylist}

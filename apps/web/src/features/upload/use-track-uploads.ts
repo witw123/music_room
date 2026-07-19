@@ -32,6 +32,7 @@ import {
   getLocalAudioCacheFile,
   getLocalAudioFile,
   getLocalAudioStorageState,
+  getOriginalAssetFile,
   saveAudioFileToLocalDirectory,
   supportsLocalAudioDirectory
 } from "./local-audio-storage";
@@ -254,6 +255,17 @@ export function useTrackUploads(options: {
         const localFile = await getLocalAudioFile(track.fileHash);
         if (localFile) {
           file = localFile;
+        }
+      }
+      if (!file && track.originalAsset) {
+        const originalFile = await getOriginalAssetFile({
+          assetId: track.originalAsset.assetId,
+          fileHash: track.fileHash,
+          title: track.title,
+          mimeType: track.mimeType ?? track.originalAsset.mimeType
+        });
+        if (originalFile) {
+          file = originalFile;
         }
       }
       if (!file) {

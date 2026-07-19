@@ -10,10 +10,12 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import {
+  cleanupLocalAudioCacheFiles,
   chooseLocalAudioDirectory,
   getLocalAudioStorageState,
   type LocalAudioStorageState
 } from "@/features/upload/local-audio-storage";
+import { cleanupOrphanedLocalAudioStorage, listCachedLibraryTrackSummaries } from "@/lib/indexeddb";
 
 const NeteaseSourcePanel = dynamic(
   () => import("@/components/room/NeteaseSourcePanel").then((mod) => mod.NeteaseSourcePanel),
@@ -78,19 +80,31 @@ export function ProviderAccountsPage() {
             </div>
           ) : null}
         </section>
-        <LocalStorageLocationCard />
+        <LocalStorageManagementCard />
       </div>
     </main>
   );
 }
 
-function LocalStorageLocationCard() {
+function LocalStorageManagementCard() {
   const [state, setState] = useState<LocalAudioStorageState | null>(null);
-  const [pending, setPending] = useState(false);
+  const [usageBytes, setUsageBytes] = useState<number | null>(null);
+  const [cachedTrackCount, setCachedTrackCount] = useState(0);
+  const [pendingAction, setPendingAction] = useState<"choose" | "clean" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const pending = pendingAction !== null;
 
   const refresh = async () => {
-    setState(await getLocalAudioStorageState());
+    const [nextState, summaries, estimate] = await Promise.all([
+      getLocalAudioStorageState(),
+      listCachedLibraryTrackSummaries(),
+      typeof navigator !== "undefined" && navigator.storage
+        ? navigator.storage.estimate()
+        : Promise.resolve(null)
+    ]);
+    setState(nextState);
+    setCachedTrackCount(summaries.length);
+    setUsageBytes(estimate?.usage ?? null);
   };
 
   useEffect(() => {
@@ -99,7 +113,7 @@ function LocalStorageLocationCard() {
 
   const choose = async () => {
     if (pending) return;
-    setPending(true);
+    setPendingAction("choose");
     setMessage(null);
     try {
       const name = await chooseLocalAudioDirectory();
@@ -108,30 +122,91 @@ function LocalStorageLocationCard() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   };
 
+  const clean = async () => {
+    if (pending) return;
+    setPendingAction("clean");
+    setMessage(null);
+    try {
+      const summaries = await listCachedLibraryTrackSummaries();
+      const result = await cleanupOrphanedLocalAudioStorage({
+        preserveTrackIds: summaries.flatMap((summary) => summary.sourceTrackIds)
+      });
+      const deletedCacheFiles = await cleanupLocalAudioCacheFiles();
+      await refresh();
+      setMessage(
+        result.deletedCacheCount > 0 || result.deletedAssetCount > 0 || deletedCacheFiles > 0
+          ? `已清理 ${result.deletedCacheCount + deletedCacheFiles} 个缓存文件和 ${result.deletedAssetCount} 个播放资产。`
+          : "没有发现可清理的无效存储。"
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "清理无效存储失败，请重试。");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const mergedCount = state
+    ? new Set([...state.cachedFileHashes, ...state.savedFileHashes]).size
+    : null;
+
   return (
-    <section className="mt-4 rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="mt-8 border-b border-surface-border pb-5" data-testid="local-storage-management">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">本地歌曲保存位置</h2>
-          <p className="mt-1 text-xs leading-5 text-foreground-muted">
-            下载歌曲、缓存歌曲和保存歌曲会统一显示在“我的歌单”的本地歌单中。
+          <h2 className="text-sm font-semibold text-foreground">本地音乐</h2>
+          <p className="mt-1 truncate text-xs text-foreground-muted" title={state?.directoryName ?? undefined}>
+            本地目录 {formatBytes(usageBytes)} · {cachedTrackCount} 首记录
           </p>
-          <p className="mt-2 truncate text-xs text-foreground-muted/80">
-            {state?.directoryName ? `当前目录：${state.directoryName}` : "尚未选择本地目录"}
+          <p className="mt-1 truncate text-xs text-foreground-muted/80">
+            {state?.directoryName
+              ? `Music Room：${state.directoryName} · 已合并 ${mergedCount ?? 0} 首`
+              : state?.supported
+                ? "尚未选择 Music Room 根文件夹"
+                : "当前浏览器保存时将使用下载"}
           </p>
         </div>
-        <Button disabled={pending || state?.supported === false} onClick={() => void choose()} size="sm" type="button">
-          {pending ? "选择中…" : state?.directoryName ? "更改保存位置" : "选择保存位置"}
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {state?.supported ? (
+            <Button
+              data-testid="choose-local-folder-button"
+              disabled={pending}
+              onClick={() => void choose()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {pendingAction === "choose" ? "选择中…" : state.directoryName ? "更改根文件夹" : "选择根文件夹"}
+            </Button>
+          ) : null}
+          <Button
+            data-testid="clean-local-storage-button"
+            disabled={pending}
+            onClick={() => void clean()}
+            size="sm"
+            title="清理无效的本机音频数据"
+            type="button"
+            variant="outline"
+          >
+            {pendingAction === "clean" ? "清理中…" : "清理无效存储"}
+          </Button>
+        </div>
       </div>
       {state?.supported === false ? <p className="mt-3 text-xs text-amber-300">当前浏览器不支持选择本地文件夹，请使用 Chrome 或 Edge。</p> : null}
       {message ? <p className="mt-3 text-xs text-foreground-muted" role="status">{message}</p> : null}
     </section>
   );
+}
+
+function formatBytes(value: number | null) {
+  if (value === null) return "不可用";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(2)} GB`;
 }
 
 function PanelLoading({ label }: { label: string }) {

@@ -7,6 +7,8 @@ import {
   getLocalAudioDirectory,
   getLocalAudioFileRecord,
   getLocalAudioCacheFileRecord,
+  getAssetManifest,
+  getAssetUnits,
   listCachedLibraryTracks,
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
@@ -116,6 +118,40 @@ export async function getLocalAudioFile(fileHash: string) {
   } catch {
     return null;
   }
+}
+
+export async function getOriginalAssetFile(input: {
+  assetId: string;
+  fileHash: string;
+  title: string;
+  mimeType: string;
+}) {
+  const assetRecord = await getAssetManifest(input.assetId);
+  if (
+    !assetRecord ||
+    assetRecord.manifest.kind !== "original" ||
+    !assetRecord.complete ||
+    assetRecord.manifest.fileHash !== input.fileHash
+  ) {
+    return null;
+  }
+
+  const unitIndexes = Array.from({ length: assetRecord.manifest.unitCount }, (_, index) => index);
+  const units = await getAssetUnits(input.assetId, unitIndexes);
+  if (units.length !== unitIndexes.length) {
+    return null;
+  }
+
+  units.sort((left, right) => left.unitIndex - right.unitIndex);
+  return new File(
+    units.map((unit) => unit.payload),
+    buildLocalAudioFileName({
+      title: input.title,
+      mimeType: input.mimeType,
+      fileHash: input.fileHash
+    }),
+    { type: input.mimeType }
+  );
 }
 
 export async function getLocalAudioCacheFile(fileHash: string) {

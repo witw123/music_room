@@ -4,12 +4,14 @@ import { memo, useCallback, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import type {
   AuthSession,
+  NeteaseTrackCandidate,
   Playlist,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
+  QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
@@ -41,6 +43,8 @@ type RoomDashboardViewProps = {
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
+  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
@@ -128,6 +132,8 @@ function RoomDashboardViewBase({
   onSaveTrackToLocal,
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
+  onImportNeteaseTrack,
+  onImportQqMusicTrack,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onDeletePlaylist,
@@ -283,6 +289,8 @@ function RoomDashboardViewBase({
               onImportCachedTrack={onImportCachedTrack}
               onSavePlaylistFromQueue={onSavePlaylistFromQueue}
               onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
+              onImportNeteaseTrack={onImportNeteaseTrack}
+              onImportQqMusicTrack={onImportQqMusicTrack}
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
               onDeletePlaylist={onDeletePlaylist}

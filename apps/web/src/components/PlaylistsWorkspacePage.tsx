@@ -17,16 +17,19 @@ import {
   listLocalPlaylists,
   listMergedLocalPlaylistTracks,
   listRoomPlaylistTrackIndex,
+  hashAudioBlob,
   toLocalPlaylistTrackInput,
   updateLocalPlaylist,
   type LocalPlaylistRecord
 } from "@/features/playlist/local-playlist";
 import {
   chooseLocalAudioDirectory,
+  ensureLocalAudioDirectoryWriteAccess,
+  saveAudioFileToLocalDirectory,
   type LocalAudioStorageState,
   getLocalAudioStorageState
 } from "@/features/upload/local-audio-storage";
-import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { formatDuration } from "@/lib/music-room-ui";
 import { useRouter } from "next/navigation";
@@ -107,7 +110,7 @@ export function PlaylistsWorkspacePage() {
           const detail = source.provider === "netease"
             ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
             : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
-          return [playlist.id, detail.artworkUrl ?? playlist.coverUrl] as const;
+          return [playlist.id, detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? playlist.coverUrl] as const;
         } catch {
           return [playlist.id, playlist.coverUrl] as const;
         }
@@ -245,6 +248,16 @@ export function PlaylistsWorkspacePage() {
             selection={selectedPlaylist}
             pending={pending}
             onBack={() => setSelectedPlaylist(null)}
+            onArtworkResolved={selectedPlaylist.kind === "network"
+              ? (artworkUrl) => setNetworkArtworkById((current) => ({ ...current, [selectedPlaylist.playlist.id]: artworkUrl }))
+              : undefined}
+            onTrackUpdated={(track) => setLocalTracks((current) => {
+              const index = current.findIndex((item) => item.id === track.id);
+              if (index < 0) return [...current, track];
+              const next = [...current];
+              next[index] = track;
+              return next;
+            })}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
             onDelete={selectedPlaylist.kind === "local"
               ? () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
@@ -360,8 +373,10 @@ function LocalTrackRow({
   isPlayable,
   isQueued,
   onAddToQueue,
+  onDownload,
   onPlay,
   onRemove,
+  isDownloading = false,
   draggable = false,
   isDragTarget = false,
   onDragStart,
@@ -375,8 +390,10 @@ function LocalTrackRow({
   isPlayable: boolean;
   isQueued: boolean;
   onAddToQueue: () => void;
+  onDownload?: () => void;
   onPlay: () => void;
   onRemove?: () => void;
+  isDownloading?: boolean;
   draggable?: boolean;
   isDragTarget?: boolean;
   onDragStart?: () => void;
@@ -416,6 +433,24 @@ function LocalTrackRow({
       <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
       <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
       <div className="flex shrink-0 items-center gap-1">
+        {onDownload ? (
+          <Button
+            aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
+            className="h-8 w-8"
+            disabled={track.availableOffline || isDownloading}
+            onClick={onDownload}
+            size="icon"
+            title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"}
+            type="button"
+            variant="ghost"
+          >
+            {isDownloading ? (
+              <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3a9 9 0 1 0 9 9" /></svg>
+            ) : (
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+            )}
+          </Button>
+        ) : null}
         <Button
           aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
           className="h-8 w-8"
@@ -545,6 +580,8 @@ function PlaylistDetailView({
   selection,
   onBack,
   onDelete,
+  onArtworkResolved,
+  onTrackUpdated,
   onUpdateTracks,
   pending
 }: {
@@ -555,6 +592,8 @@ function PlaylistDetailView({
   selection: PlaylistSelection;
   onBack: () => void;
   onDelete?: () => void;
+  onArtworkResolved?: (artworkUrl: string) => void;
+  onTrackUpdated?: (track: LocalPlaylistTrackRecord) => void;
   onUpdateTracks: (trackIds: string[]) => void;
   pending: boolean;
 }) {
@@ -569,12 +608,14 @@ function PlaylistDetailView({
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
-  const [addTrackId, setAddTrackId] = useState("");
+  const [downloadTrackId, setDownloadTrackId] = useState<string | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setRemoteTracks([]);
     setRemoteError(null);
+    setDownloadMessage(null);
     if (isLocal || !networkProvider || !networkPlaylistId) {
       setRemoteLoading(false);
       return;
@@ -589,7 +630,7 @@ function PlaylistDetailView({
         if (cancelled) return;
         setRemoteTracks(detail.tracks.map((track) => {
           const trackId = `provider:${track.provider}:${track.providerTrackId}`;
-          return roomTrackIndex.get(trackId) ?? toProviderTrackRecord(track);
+          return mergeProviderTrackRecord(toProviderTrackRecord(track), roomTrackIndex.get(trackId));
         }));
       })
       .catch((error) => {
@@ -615,7 +656,7 @@ function PlaylistDetailView({
   const remoteTrackMap = new Map(remoteTracks.map((track) => [track.id, track]));
   const localTrackMap = new Map(localTracks.map((track) => [track.id, track]));
   const networkTracks = (networkPlaylist?.trackIds ?? []).map((trackId, index) => ({
-    track: roomTrackIndex.get(trackId) ?? remoteTrackMap.get(trackId) ?? localTrackMap.get(trackId),
+    track: remoteTrackMap.get(trackId) ?? roomTrackIndex.get(trackId) ?? localTrackMap.get(trackId),
     index,
     trackId
   }));
@@ -624,8 +665,6 @@ function PlaylistDetailView({
     : networkTracks;
   const currentTrackIds = rows.map(({ track, trackId }) => track?.id ?? trackId);
   const canEditTracks = !pending;
-  const candidateTracks = [...remoteTracks, ...localTracks]
-    .filter((track, index, list) => !currentTrackIds.includes(track.id) && list.findIndex((candidate) => candidate.id === track.id) === index);
 
   function reorderTracks(targetTrackId: string) {
     if (!draggingTrackId || draggingTrackId === targetTrackId || !canEditTracks) return;
@@ -640,10 +679,50 @@ function PlaylistDetailView({
     onUpdateTracks(nextTrackIds);
   }
 
-  function addSelectedTrack() {
-    if (!addTrackId || !canEditTracks || currentTrackIds.includes(addTrackId)) return;
-    setAddTrackId("");
-    onUpdateTracks([...currentTrackIds, addTrackId]);
+  async function downloadNetworkTrack(track: LocalPlaylistTrackRecord) {
+    if (isLocal || !networkProvider || !track.providerTrackId || track.availableOffline || downloadTrackId) return;
+    setDownloadTrackId(track.id);
+    setDownloadMessage(null);
+    try {
+      const resolvedTrack = await resolveProviderArtwork(track, networkProvider);
+      if (resolvedTrack.artworkUrl) onArtworkResolved?.(resolvedTrack.artworkUrl);
+      await ensureLocalAudioDirectoryWriteAccess();
+      const response = networkProvider === "netease"
+        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId!)
+        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId!);
+      const fileHash = await hashAudioBlob(response.blob);
+      const mimeType = response.contentType.startsWith("audio/") ? response.contentType : "audio/mpeg";
+      const saved = await saveAudioFileToLocalDirectory({
+        file: response.blob,
+        fileHash,
+        title: resolvedTrack.title,
+        mimeType
+      });
+      const lyricPayload = resolvedTrack.lyrics
+        ? null
+        : await (networkProvider === "netease"
+          ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId!)
+          : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId!)
+        ).catch(() => null);
+      const updatedTrack: LocalPlaylistTrackRecord = {
+        ...resolvedTrack,
+        fileHash,
+        fileName: saved.fileName,
+        sizeBytes: response.blob.size,
+        mimeType,
+        lyrics: resolvedTrack.lyrics ?? lyricPayload?.plainLyric ?? null,
+        availableOffline: true,
+        updatedAt: new Date().toISOString()
+      };
+      await upsertLocalPlaylistTrack(updatedTrack);
+      onTrackUpdated?.(updatedTrack);
+      setRemoteTracks((current) => current.map((item) => item.id === updatedTrack.id ? updatedTrack : item));
+      setDownloadMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+    } catch (error) {
+      setDownloadMessage(error instanceof Error ? error.message : "歌曲下载失败，请重试。" );
+    } finally {
+      setDownloadTrackId(null);
+    }
   }
   const playableTracks = rows
     .map((row) => row.track)
@@ -680,24 +759,7 @@ function PlaylistDetailView({
         </Button>
       </div>
 
-      {canEditTracks && candidateTracks.length ? (
-        <div className="mt-5 flex flex-col gap-2 rounded-xl border border-surface-border bg-surface/25 p-3 sm:flex-row sm:items-center">
-          <label className="sr-only" htmlFor="playlist-add-track">添加歌曲</label>
-          <select
-            className="min-w-0 flex-1 rounded-lg border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-            id="playlist-add-track"
-            onChange={(event) => setAddTrackId(event.target.value)}
-            value={addTrackId}
-          >
-            <option value="">选择要加入的歌曲</option>
-            {candidateTracks.map((track) => <option key={track.id} value={track.id}>{track.title} · {track.artist}</option>)}
-          </select>
-          <Button disabled={!addTrackId || pending} onClick={addSelectedTrack} size="sm" type="button">
-            <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
-            添加歌曲
-          </Button>
-        </div>
-      ) : null}
+      {downloadMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{downloadMessage}</p> : null}
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-surface-border bg-surface/25">
         <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
@@ -745,6 +807,8 @@ function PlaylistDetailView({
               isDragTarget={dragOverTrackId === track.id}
               key={`${selection.kind}:${track.id}`}
               onAddToQueue={() => player.addToQueue(track)}
+              onDownload={!isLocal && networkProvider && track.providerTrackId ? () => void downloadNetworkTrack(track) : undefined}
+              isDownloading={downloadTrackId === track.id}
               onDragEnd={() => {
                 setDraggingTrackId(null);
                 setDragOverTrackId(null);
@@ -810,6 +874,38 @@ function toProviderTrackRecord(track: ProviderTrack): LocalPlaylistTrackRecord {
     createdAt: now,
     updatedAt: now
   };
+}
+
+function mergeProviderTrackRecord(
+  providerTrack: LocalPlaylistTrackRecord,
+  existing?: LocalPlaylistTrackRecord
+): LocalPlaylistTrackRecord {
+  if (!existing) return providerTrack;
+  return {
+    ...existing,
+    title: providerTrack.title,
+    artist: providerTrack.artist,
+    album: providerTrack.album,
+    durationMs: providerTrack.durationMs,
+    artworkUrl: providerTrack.artworkUrl ?? existing.artworkUrl,
+    provider: providerTrack.provider,
+    providerTrackId: providerTrack.providerTrackId
+  };
+}
+
+async function resolveProviderArtwork(
+  track: LocalPlaylistTrackRecord,
+  provider: "netease" | "qqmusic"
+) {
+  if (track.artworkUrl || !track.providerTrackId) return track;
+  try {
+    const providerTrack = provider === "netease"
+      ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+      : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    return mergeProviderTrackRecord(toProviderTrackRecord(providerTrack), track);
+  } catch {
+    return track;
+  }
 }
 
 function PlaylistEditorDialog({

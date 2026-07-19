@@ -92,9 +92,11 @@ export function RoomAppShell({
           onChooseLocalFolder={uploads.chooseLocalFolder}
           onImportCachedTrack={uploads.importCachedTrack}
           onSaveTrackToLocal={uploads.saveTrackToLocal}
-          onSavePlaylistFromQueue={roomActions.savePlaylistFromQueue}
-          onLoadPlaylistIntoRoom={roomActions.loadPlaylistIntoRoom}
-          onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
+           onSavePlaylistFromQueue={roomActions.savePlaylistFromQueue}
+           onLoadPlaylistIntoRoom={roomActions.loadPlaylistIntoRoom}
+           onImportNeteaseTrack={uploads.handleNeteaseTrackImport}
+           onImportQqMusicTrack={uploads.handleQqMusicTrackImport}
+           onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
           onUpdatePlaylistTracks={roomActions.updatePlaylistTracks}
           onDeletePlaylist={roomActions.deletePlaylist}
           connectedPeersCount={workspaceViewModel.connectedPeersCount}

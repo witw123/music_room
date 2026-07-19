@@ -90,24 +90,11 @@ function RoomStageBase({
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
-  const recordSize = isLyricsOpen
-    ? ultraCompactStage
-      ? "clamp(6.5rem, min(15vh, 30vw), 8rem)"
-      : compactStage
-        ? "clamp(7rem, min(18vh, 32vw), 9.5rem)"
-        : "clamp(9rem, min(26vh, 32vw), 14rem)"
-    : ultraCompactStage
-      ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
-      : compactStage
-        ? "clamp(8rem, min(22vh, 38vw), 11rem)"
-        : "clamp(11rem, min(34vh, 42vw), 20rem)";
-  const contentPositionClass = isLyricsOpen
-    ? ultraCompactStage
-      ? "-translate-y-[12%]"
-      : compactStage
-        ? "-translate-y-[10%]"
-        : "-translate-y-[8%]"
-    : "translate-y-0";
+  const recordSize = ultraCompactStage
+    ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
+    : compactStage
+      ? "clamp(8rem, min(22vh, 38vw), 11rem)"
+      : "clamp(11rem, min(34vh, 42vw), 20rem)";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -342,10 +329,11 @@ function RoomStageBase({
 
       <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible">
         <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center">
-          <div className={`flex w-full flex-col items-center ${contentPositionClass} transition-transform duration-500 ease-out motion-reduce:transition-none`}>
-            <div
-              className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
-            >
+          <div className="flex w-full flex-col items-center gap-5 sm:gap-7">
+            {!isLyricsOpen ? (
+              <div
+                className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
+              >
           <div
             className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
             style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
@@ -389,35 +377,38 @@ function RoomStageBase({
               }`}
             />
           </div>
-            </div>
+              </div>
+            ) : null}
             <div
-              className={`relative z-30 flex shrink-0 flex-col items-center pb-2 ${
-                ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-2 pt-2"
+              className={`relative z-30 flex shrink-0 flex-col items-center gap-3 pb-2 sm:gap-4 ${
+                ultraCompactStage ? "pt-0" : compactStage ? "pt-1" : "pt-2"
               }`}
             >
-          <div className={`flex w-full flex-col items-center text-center ${compactStage ? "gap-1.5" : "gap-2 md:gap-3"}`}>
+          <div className={`flex w-full flex-col items-center text-center ${isLyricsOpen ? "gap-1.5" : compactStage ? "gap-2" : "gap-3 md:gap-4"}`}>
           {currentTrack ? (
             <>
-              <div className={`flex flex-wrap items-center justify-center ${compactStage ? "mb-0.5 gap-1.5" : "mb-1 gap-2 sm:gap-3"}`}>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
-                    isPlaying
-                      ? "border border-accent/30 bg-accent/20 text-accent"
-                      : "border border-white/10 bg-white/10 text-white/[0.55]"
-                  }`}
-                >
-                  {isPlaying ? "正在播放" : "准备就绪"}
-                </span>
-                {currentSourceOwnerNickname ? (
-                  <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                    当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
+              {!isLyricsOpen ? (
+                <div className={`flex flex-wrap items-center justify-center ${compactStage ? "mb-0.5 gap-1.5" : "mb-1 gap-2 sm:gap-3"}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
+                      isPlaying
+                        ? "border border-accent/30 bg-accent/20 text-accent"
+                        : "border border-white/10 bg-white/10 text-white/[0.55]"
+                    }`}
+                  >
+                    {isPlaying ? "正在播放" : "准备就绪"}
                   </span>
-                ) : null}
-              </div>
+                  {currentSourceOwnerNickname ? (
+                    <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
 
               <h2
                 className={`max-w-[18ch] font-extrabold tracking-tight text-white drop-shadow-lg ${
@@ -449,6 +440,7 @@ function RoomStageBase({
           </div>
           {isLyricsOpen ? (
             <RoomLyricsPanel
+              visibleLines={7}
               isPlaying={isPlaying}
               lyrics={lyricsText}
               positionMs={lyricsPositionMs}

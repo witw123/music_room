@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type {
   NeteaseAccountStatus,
   NeteaseTrackCandidate,
+  Playlist,
   ProviderAlbumDetail,
   ProviderLyrics,
   ProviderPlaylistDetail,
@@ -24,7 +25,12 @@ import {
 } from "@/features/upload/local-audio-storage";
 import {
   hashAudioBlob,
-  toLocalPlaylistTrackInput
+  isDefaultLocalPlaylist,
+  listLocalPlaylists,
+  localPlaylistTrackId,
+  toLocalPlaylistTrackInput,
+  updateLocalPlaylist,
+  type LocalPlaylistRecord
 } from "@/features/playlist/local-playlist";
 import { upsertLocalPlaylistTrack } from "@/lib/indexeddb";
 import { useRouter } from "next/navigation";
@@ -34,6 +40,9 @@ type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
+type PlaylistPickerOption =
+  | { kind: "local"; playlist: LocalPlaylistRecord }
+  | { kind: "network"; playlist: Playlist };
 
 const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
@@ -61,6 +70,9 @@ export function ProviderSearchPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
+  const [playlistPickerOptions, setPlaylistPickerOptions] = useState<PlaylistPickerOption[]>([]);
+  const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -132,7 +144,7 @@ export function ProviderSearchPage() {
 
   async function getTrackLyrics(track: Track) {
     try {
-      return provider === "netease"
+      return track.provider === "netease"
         ? await musicRoomApi.getNeteaseLyrics(track.providerTrackId)
         : await musicRoomApi.getQqMusicLyrics(track.providerTrackId);
     } catch {
@@ -140,14 +152,64 @@ export function ProviderSearchPage() {
     }
   }
 
-  async function importToPlaylist(track: Track) {
+  async function resolveTrackArtwork(track: Track) {
+    if (track.artworkUrl) return track;
+    try {
+      return track.provider === "netease"
+        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    } catch {
+      return track;
+    }
+  }
+
+  async function openPlaylistPicker(track: Track) {
     if (pending) return;
-    setPending(`import-playlist:${track.providerTrackId}`);
+    setPlaylistPickerTrack(track);
+    setPlaylistPickerLoading(true);
+    setPlaylistPickerOptions(listLocalPlaylists().map((playlist) => ({ kind: "local", playlist })));
+    setErrorMessage(null);
+    setPending(`playlist-picker:${track.providerTrackId}`);
+    try {
+      const networkPlaylists = await musicRoomApi.listMyPlaylists();
+      setPlaylistPickerOptions([
+        ...listLocalPlaylists().map((playlist) => ({ kind: "local" as const, playlist })),
+        ...networkPlaylists.map((playlist) => ({ kind: "network" as const, playlist }))
+      ]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? `网络歌单加载失败：${error.message}` : "网络歌单加载失败，可先选择本地歌单。" );
+    } finally {
+      setPlaylistPickerLoading(false);
+      setPending(null);
+    }
+  }
+
+  async function addTrackToPlaylist(option: PlaylistPickerOption) {
+    const track = playlistPickerTrack;
+    if (!track || pending) return;
+    setPending(`add-playlist:${option.kind}:${option.playlist.id}:${track.providerTrackId}`);
     setErrorMessage(null);
     try {
-      const lyrics = await getTrackLyrics(track);
-      await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({ track, lyrics }));
-      setStatusMessage(`《${track.title}》已加入本地歌单。`);
+      const resolvedTrack = await resolveTrackArtwork(track);
+      const trackId = localPlaylistTrackId(resolvedTrack);
+      if (option.kind === "local") {
+        const lyrics = await getTrackLyrics(resolvedTrack);
+        await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({ track: resolvedTrack, lyrics }));
+        const currentPlaylist = listLocalPlaylists().find((playlist) => playlist.id === option.playlist.id);
+        if (!currentPlaylist) throw new Error("本地歌单不存在，请刷新后重试。");
+        if (!isDefaultLocalPlaylist(currentPlaylist) && !currentPlaylist.trackIds.includes(trackId)) {
+          updateLocalPlaylist(currentPlaylist.id, { trackIds: [...currentPlaylist.trackIds, trackId] });
+        }
+        setStatusMessage(`《${resolvedTrack.title}》已加入“${currentPlaylist.title}”。`);
+      } else if (option.playlist.trackIds.includes(trackId)) {
+        setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
+      } else {
+        await musicRoomApi.updatePlaylist(option.playlist.id, {
+          trackIds: [...option.playlist.trackIds, trackId]
+        });
+        setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
+      }
+      setPlaylistPickerTrack(null);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
     } finally {
@@ -160,21 +222,22 @@ export function ProviderSearchPage() {
     setPending(`download:${track.providerTrackId}`);
     setErrorMessage(null);
     try {
+      const resolvedTrack = await resolveTrackArtwork(track);
       await ensureLocalAudioDirectoryWriteAccess();
-      const response = provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(track.providerTrackId)
-        : await musicRoomApi.downloadQqMusicTrack(track.providerTrackId);
+      const response = resolvedTrack.provider === "netease"
+        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
+        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
       const fileHash = await hashAudioBlob(response.blob);
-      const lyrics = await getTrackLyrics(track);
+      const lyrics = await getTrackLyrics(resolvedTrack);
       const mimeType = response.contentType.startsWith("audio/") ? response.contentType : "audio/mpeg";
       const saved = await saveAudioFileToLocalDirectory({
         file: response.blob,
         fileHash,
-        title: track.title,
+        title: resolvedTrack.title,
         mimeType
       });
       await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({
-        track,
+        track: resolvedTrack,
         lyrics,
         fileHash,
         fileName: saved.fileName,
@@ -182,7 +245,7 @@ export function ProviderSearchPage() {
         mimeType,
         availableOffline: true
       }));
-      setStatusMessage(`《${track.title}》已下载到本地目录。`);
+      setStatusMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
     } finally {
@@ -232,7 +295,7 @@ export function ProviderSearchPage() {
       await musicRoomApi.createPlaylist({
         title: detail.title,
         description: detail.description,
-        coverUrl: detail.artworkUrl,
+        coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
         isCollaborative: false,
         tags: ["network", `network:${detail.provider}:${detail.providerPlaylistId}`],
         trackIds: detail.tracks.map((track) => `provider:${track.provider}:${track.providerTrackId}`)
@@ -361,7 +424,7 @@ export function ProviderSearchPage() {
                 onLyrics={loadLyrics}
                 onAlbum={loadAlbumForTrack}
                 onDownload={downloadToLocal}
-                onImportPlaylist={importToPlaylist}
+                onImportPlaylist={openPlaylistPicker}
               />
             ) : null}
             {contentTab === "playlists" ? (
@@ -378,6 +441,18 @@ export function ProviderSearchPage() {
         {statusMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{errorMessage}</p> : null}
       </div>
+      {playlistPickerTrack ? (
+        <PlaylistPickerDialog
+          loading={playlistPickerLoading}
+          options={playlistPickerOptions}
+          pending={pending !== null}
+          track={playlistPickerTrack}
+          onClose={() => {
+            if (!pending) setPlaylistPickerTrack(null);
+          }}
+          onSelect={(option) => void addTrackToPlaylist(option)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -413,7 +488,7 @@ function SongsResults({
                 {pending === `download:${track.providerTrackId}` ? "下载中…" : "下载"}
               </Button>
               <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onImportPlaylist(track)} size="sm" variant="ghost" type="button">
-                {pending === `import-playlist:${track.providerTrackId}` ? "导入中…" : "导入歌单"}
+                {pending?.startsWith(`playlist-picker:${track.providerTrackId}`) ? "选择中…" : "加入歌单"}
               </Button>
               <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onLyrics(track)} size="sm" variant="ghost" type="button">
                 {pending === `lyrics:${track.providerTrackId}` ? "加载中…" : "查看歌词"}
@@ -428,6 +503,116 @@ function SongsResults({
         {lyrics ? (
           <div className="mt-3 max-h-[32rem] overflow-y-auto whitespace-pre-wrap text-xs leading-6 text-foreground-muted">{lyrics.plainLyric ?? "暂无歌词"}</div>
         ) : <p className="mt-3 text-xs leading-6 text-foreground-muted">从左侧歌曲查看歌词。</p>}
+      </div>
+    </section>
+  );
+}
+
+function PlaylistPickerDialog({
+  loading,
+  options,
+  pending,
+  track,
+  onClose,
+  onSelect
+}: {
+  loading: boolean;
+  options: PlaylistPickerOption[];
+  pending: boolean;
+  track: Track;
+  onClose: () => void;
+  onSelect: (option: PlaylistPickerOption) => void;
+}) {
+  const localOptions = options.filter((option) => option.kind === "local");
+  const networkOptions = options.filter((option) => option.kind === "network");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={onClose} role="presentation">
+      <div
+        aria-labelledby="playlist-picker-title"
+        className="max-h-[min(86vh,680px)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-foreground" id="playlist-picker-title">选择目标歌单</h2>
+            <p className="mt-1 truncate text-xs text-foreground-muted">《{track.title}》 · {track.artist}</p>
+          </div>
+          <Button aria-label="关闭" disabled={pending} onClick={onClose} size="icon" type="button" variant="ghost">
+            <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </Button>
+        </div>
+
+        {loading ? <p className="mt-6 text-center text-sm text-foreground-muted">正在加载可用歌单…</p> : null}
+        {!loading && options.length === 0 ? (
+          <div className="mt-6 text-center">
+            <p className="text-sm text-foreground-muted">还没有可添加的歌单。</p>
+            <Link className="mt-3 inline-block text-sm text-accent hover:text-accent/80" href="/app/playlists">前往歌单页创建</Link>
+          </div>
+        ) : null}
+
+        {localOptions.length ? (
+          <PlaylistPickerSection
+            label="本地歌单"
+            options={localOptions}
+            pending={pending}
+            onSelect={onSelect}
+          />
+        ) : null}
+        {networkOptions.length ? (
+          <PlaylistPickerSection
+            label="网络歌单"
+            options={networkOptions}
+            pending={pending}
+            onSelect={onSelect}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PlaylistPickerSection({
+  label,
+  options,
+  pending,
+  onSelect
+}: {
+  label: string;
+  options: PlaylistPickerOption[];
+  pending: boolean;
+  onSelect: (option: PlaylistPickerOption) => void;
+}) {
+  return (
+    <section className="mt-5 first:mt-6">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">{label}</h3>
+      <div className="space-y-2">
+        {options.map((option) => {
+          const playlist = option.playlist;
+          const isLocal = option.kind === "local";
+          return (
+            <button
+              className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-background/60 px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={pending}
+              key={`${option.kind}:${playlist.id}`}
+              onClick={() => onSelect(option)}
+              type="button"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                <svg aria-hidden="true" fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="17"><path d="M4 19.5V5.8a1.8 1.8 0 0 1 2.4-1.7l12 4.5a1.8 1.8 0 0 1 1.2 1.7v8.2" /><circle cx="8" cy="19" r="2.5" /><circle cx="18" cy="17" r="2.5" /></svg>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">{playlist.title}</span>
+                <span className="mt-1 block truncate text-xs text-foreground-muted">
+                  {isLocal ? (isDefaultLocalPlaylist(playlist) ? "本地保存的歌曲" : "本机歌单") : `${playlist.trackIds.length} 首歌曲`}
+                </span>
+              </span>
+              <svg aria-hidden="true" className="shrink-0 text-foreground-muted" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m9 18 6-6-6-6" /></svg>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
