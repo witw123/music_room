@@ -14,16 +14,8 @@ import type {
 import { formatDuration } from "@/lib/music-room-ui";
 import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
-import {
-  hashAudioBlob,
-  toLocalPlaylistTrackInput
-} from "@/features/playlist/local-playlist";
-import {
-  ensureLocalAudioDirectoryWriteAccess,
-  saveAudioFileToLocalDirectory
-} from "@/features/upload/local-audio-storage";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 import { PlaylistPanel } from "./PlaylistPanel";
 
 type Provider = "netease" | "qqmusic";
@@ -57,9 +49,7 @@ function LocalStorageTabPanelBase({
   playlists,
   activeSession,
   localStorageSummary,
-  onChooseLocalFolder,
   onImportCachedTrack,
-  onRefreshLocalStorage,
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
@@ -105,10 +95,9 @@ function LocalStorageTabPanelBase({
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
         <LocalPlaylistSearch
-          hasLocalFolder={!!localStorageSummary.localFolderName}
-          localTracks={localStorageSummary.localPlaylistTracks}
-          onChooseLocalFolder={onChooseLocalFolder}
-          onRefreshLocalStorage={onRefreshLocalStorage}
+          roomTracks={tracks}
+          onImportNeteaseTrack={onImportNeteaseTrack}
+          onImportQqMusicTrack={onImportQqMusicTrack}
         />
         <LocalPlaylistSection
           localTracks={localStorageSummary.localPlaylistTracks}
@@ -140,15 +129,13 @@ function LocalStorageTabPanelBase({
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
 function LocalPlaylistSearch({
-  hasLocalFolder,
-  localTracks,
-  onChooseLocalFolder,
-  onRefreshLocalStorage
+  roomTracks,
+  onImportNeteaseTrack,
+  onImportQqMusicTrack
 }: {
-  hasLocalFolder: boolean;
-  localTracks: LocalPlaylistTrackRecord[];
-  onChooseLocalFolder: () => Promise<void>;
-  onRefreshLocalStorage: () => Promise<void>;
+  roomTracks: TrackMeta[];
+  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [provider, setProvider] = useState<Provider>(enabledSearchProviders[0] ?? "netease");
@@ -183,7 +170,7 @@ function LocalPlaylistSearch({
   if (enabledSearchProviders.length === 0) {
     return (
       <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid="local-playlist-search">
-        <span className="text-sm font-semibold text-foreground">搜索歌曲并下载</span>
+        <span className="text-sm font-semibold text-foreground">搜索歌曲并导入曲库</span>
         <span className="text-xs text-foreground-muted">网易云音乐和 QQ 音乐当前未启用，请先在服务端配置对应平台。</span>
       </section>
     );
@@ -191,10 +178,11 @@ function LocalPlaylistSearch({
 
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
   const isConnected = account?.connected === true;
-  const importedTrackIds = new Set(
-    localTracks
-      .filter((track) => track.provider === provider && track.providerTrackId)
-      .map((track) => track.providerTrackId)
+  const libraryTrackIds = new Set(
+    roomTracks
+      .filter((track) => track.sourceType === provider && track.sourceRef?.provider === provider)
+      .map((track) => track.sourceRef?.trackId)
+      .filter((trackId): trackId is string => !!trackId)
   );
 
   const searchTracks = async (event: FormEvent<HTMLFormElement>) => {
@@ -217,71 +205,24 @@ function LocalPlaylistSearch({
     }
   };
 
-  const downloadTrack = async (candidate: ProviderTrack) => {
+  const importTrack = async (candidate: ProviderTrack) => {
     if (pending) return;
-    setPending(`download:${candidate.providerTrackId}`);
+    setPending(`import:${candidate.providerTrackId}`);
     setErrorMessage(null);
     setMessage(null);
     try {
-      let hasWriteAccess = hasLocalFolder && await ensureLocalAudioDirectoryWriteAccess();
-      if (!hasWriteAccess) {
-        await onChooseLocalFolder();
-        hasWriteAccess = await ensureLocalAudioDirectoryWriteAccess();
+      if (candidate.provider === "netease") {
+        await onImportNeteaseTrack(candidate);
+      } else {
+        await onImportQqMusicTrack(candidate);
       }
-      if (!hasWriteAccess) {
-        throw new Error("请先选择本地歌曲保存位置。");
-      }
-
-      const detail = await (candidate.provider === "netease"
-        ? musicRoomApi.getNeteaseTrack(candidate.providerTrackId)
-        : musicRoomApi.getQqMusicTrack(candidate.providerTrackId)
-      ).catch(() => null);
-      const track = detail
-        ? {
-            ...candidate,
-            ...detail,
-            artworkUrl: detail.artworkUrl ?? candidate.artworkUrl
-          }
-        : candidate;
-      const source = candidate.provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
-        : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
-      const fileHash = await hashAudioBlob(source.blob);
-      const mimeType = normalizeLocalDownloadMimeType(source.contentType || source.blob.type);
-      const lyrics = await getProviderLyrics(track);
-      const saved = await saveAudioFileToLocalDirectory({
-        file: source.blob,
-        fileHash,
-        title: track.title,
-        mimeType
-      });
-      await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({
-        track,
-        lyrics,
-        fileHash,
-        fileName: saved.fileName,
-        sizeBytes: source.blob.size,
-        mimeType,
-        availableOffline: true
-      }));
-      await onRefreshLocalStorage();
-      setMessage(`《${track.title}》已下载到本地歌单。`);
+      setMessage(`《${candidate.title}》已导入曲库。`);
     } catch (error) {
       setErrorMessage(toLocalSearchErrorMessage(error));
     } finally {
       setPending(null);
     }
   };
-
-  async function getProviderLyrics(track: ProviderTrack) {
-    try {
-      return track.provider === "netease"
-        ? await musicRoomApi.getNeteaseLyrics(track.providerTrackId)
-        : await musicRoomApi.getQqMusicLyrics(track.providerTrackId);
-    } catch {
-      return null;
-    }
-  }
 
   async function enrichSearchResults(items: ProviderTrack[]) {
     const missingArtwork = items.filter((track) => !track.artworkUrl);
@@ -336,8 +277,8 @@ function LocalPlaylistSearch({
         className="flex items-center justify-between gap-3 text-left"
       >
         <span>
-          <span className="block text-sm font-semibold text-foreground">搜索歌曲并下载</span>
-          <span className="mt-1 block text-xs text-foreground-muted">从网易云音乐或 QQ 音乐下载到本地目录</span>
+          <span className="block text-sm font-semibold text-foreground">搜索歌曲并导入曲库</span>
+          <span className="mt-1 block text-xs text-foreground-muted">从网易云音乐或 QQ 音乐导入当前房间曲库</span>
         </span>
         <span className={`shrink-0 text-xs text-foreground-muted transition-transform ${isExpanded ? "rotate-180" : ""}`} aria-hidden="true">⌄</span>
       </button>
@@ -345,7 +286,7 @@ function LocalPlaylistSearch({
       {isExpanded ? (
         <div className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface/35 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex gap-1" role="tablist" aria-label="下载平台">
+            <div className="flex gap-1" role="tablist" aria-label="导入平台">
               {enabledSearchProviders.map((item) => (
                 <button
                   key={item}
@@ -393,8 +334,8 @@ function LocalPlaylistSearch({
           {results.length > 0 ? (
             <div className="divide-y divide-surface-border border border-surface-border bg-background/40">
               {results.map((track) => {
-                const isDownloaded = importedTrackIds.has(track.providerTrackId);
-                const isPending = pending === `download:${track.providerTrackId}`;
+                const isInLibrary = libraryTrackIds.has(track.providerTrackId);
+                const isPending = pending === `import:${track.providerTrackId}`;
                 return (
                   <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
                     {track.artworkUrl ? (
@@ -409,11 +350,11 @@ function LocalPlaylistSearch({
                     </div>
                     <button
                       type="button"
-                      disabled={pending !== null || isDownloaded}
-                      onClick={() => void downloadTrack(track)}
+                      disabled={pending !== null || isInLibrary}
+                      onClick={() => void importTrack(track)}
                       className="shrink-0 border border-accent/35 bg-accent/10 px-2.5 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isDownloaded ? "已下载" : isPending ? "下载中…" : "下载"}
+                      {isInLibrary ? "已在曲库" : isPending ? "导入中…" : "导入曲库"}
                     </button>
                   </article>
                 );
@@ -424,11 +365,6 @@ function LocalPlaylistSearch({
       ) : null}
     </section>
   );
-}
-
-function normalizeLocalDownloadMimeType(value: string) {
-  const type = value.split(";", 1)[0]?.trim().toLowerCase();
-  return type === "audio/flac" || type === "audio/x-flac" ? "audio/flac" : "audio/mpeg";
 }
 
 function toLocalSearchErrorMessage(error: unknown) {

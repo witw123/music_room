@@ -39,6 +39,10 @@ let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
 let localPlaylists = [createDefaultLocalPlaylist()];
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
+  const normalized = ensureDefaultLocalPlaylistRecords(localPlaylists);
+  if (normalized !== localPlaylists) {
+    localPlaylists = normalized;
+  }
   return localPlaylists;
 }
 
@@ -50,13 +54,19 @@ export async function restoreLocalPlaylistsFromRepository() {
   try {
     const persisted = await repository.listPlaylists();
     if (persisted.length > 0) {
-      const playlists = persisted.map(fromRepositoryPlaylist);
+      const playlists = ensureDefaultLocalPlaylistRecords(persisted.map(fromRepositoryPlaylist));
       localPlaylists = playlists;
+      if (!persisted.some((playlist) => playlist.id === defaultLocalPlaylistId)) {
+        const defaultPlaylist = playlists.find((playlist) => playlist.id === defaultLocalPlaylistId);
+        if (defaultPlaylist) {
+          await repository.writePlaylist(toRepositoryPlaylist(defaultPlaylist));
+        }
+      }
       return playlists;
     }
 
-    const existing = localPlaylists;
-    await flushLocalPlaylistPersistence();
+    const existing = ensureDefaultLocalPlaylistRecords(localPlaylists);
+    localPlaylists = existing;
     for (const playlist of existing) {
       await repository.writePlaylist(toRepositoryPlaylist(playlist));
     }
@@ -85,6 +95,9 @@ export function createLocalPlaylist(input: { title: string; description?: string
 }
 
 export function deleteLocalPlaylist(playlistId: string) {
+  if (playlistId === defaultLocalPlaylistId) {
+    return listLocalPlaylists();
+  }
   writeLocalPlaylists(listLocalPlaylists().filter((playlist) => playlist.id !== playlistId));
 }
 
@@ -433,11 +446,24 @@ function createLocalPlaylistId() {
   return `local-playlist-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
+function ensureDefaultLocalPlaylistRecords(playlists: LocalPlaylistRecord[]) {
+  const defaultPlaylist = playlists.find((playlist) => playlist.id === defaultLocalPlaylistId);
+  if (defaultPlaylist) {
+    if (defaultPlaylist.isAggregate === true) return playlists;
+    return playlists.map((playlist) => playlist.id === defaultLocalPlaylistId
+      ? { ...playlist, isAggregate: true }
+      : playlist
+    );
+  }
+  return [createDefaultLocalPlaylist(), ...playlists];
+}
+
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
-  localPlaylists = playlists;
+  const nextPlaylists = ensureDefaultLocalPlaylistRecords(playlists);
+  localPlaylists = nextPlaylists;
   localPlaylistPersistencePromise = localPlaylistPersistencePromise
     .catch(() => undefined)
-    .then(() => mirrorLocalPlaylistsToRepository(playlists))
+    .then(() => mirrorLocalPlaylistsToRepository(nextPlaylists))
     .catch(() => undefined);
 }
 

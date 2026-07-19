@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import type {
   Playlist
 } from "@music-room/shared";
@@ -27,6 +27,7 @@ import {
 import {
   chooseLocalAudioDirectory,
   ensureLocalAudioDirectoryWriteAccess,
+  normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory,
   type LocalAudioStorageState,
   getLocalAudioStorageState
@@ -76,6 +77,7 @@ export function PlaylistsWorkspacePage() {
   const [newPlaylistDescription, setNewPlaylistDescription] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<PlaylistDeleteTarget | null>(null);
   const [moveTarget, setMoveTarget] = useState<TrackMoveRequest | null>(null);
+  const refreshVersion = useRef(0);
   const player = useLocalPlayer();
 
   useEffect(() => {
@@ -83,20 +85,44 @@ export function PlaylistsWorkspacePage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   const refresh = async () => {
+    const version = ++refreshVersion.current;
     await flushLocalPlaylistPersistence();
     const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
-    const [tracks, localPlaylistRecords, playlists, storage, roomTracks] = await Promise.all([
+    const [tracks, localPlaylistRecords, storage, roomTracks] = await Promise.all([
       listMergedLocalPlaylistTracks(),
       restoreLocalPlaylistsFromRepository(),
-      musicRoomApi.listMyPlaylists(),
       getLocalAudioStorageState(),
       listRoomPlaylistTrackIndex()
     ]);
+    if (version !== refreshVersion.current) return scannedTrackCount;
     setLocalTracks(tracks);
     setLocalPlaylists(localPlaylistRecords);
-    setNetworkPlaylists(playlists);
     setStorageState(storage);
     setRoomTrackIndex(roomTracks);
+    setSelectedPlaylist((current) => {
+      if (!current) return null;
+      if (current.kind === "local") {
+        const playlist = localPlaylistRecords.find((item) => item.id === current.playlist.id);
+        return playlist ? { kind: "local", playlist } : null;
+      }
+      const playlist = networkPlaylists.find((item) => item.id === current.playlist.id);
+      return playlist ? { kind: "network", playlist } : null;
+    });
+    try {
+      const playlists = await musicRoomApi.listMyPlaylists();
+      if (version === refreshVersion.current) {
+        setNetworkPlaylists(playlists);
+        setSelectedPlaylist((current) => {
+          if (!current || current.kind !== "network") return current;
+          const playlist = playlists.find((item) => item.id === current.playlist.id);
+          return playlist ? { kind: "network", playlist } : null;
+        });
+      }
+    } catch {
+      if (version === refreshVersion.current && networkPlaylists.length === 0) {
+        setMessage("网络歌单加载失败，本地歌单仍可正常使用。");
+      }
+    }
     return scannedTrackCount;
   };
 
@@ -267,6 +293,9 @@ export function PlaylistsWorkspacePage() {
     setStatusMessage(null);
     try {
       if (target.kind === "local") {
+        if (isDefaultLocalPlaylist(target.playlist)) {
+          throw new Error("默认本地歌单不能删除。请删除其中的歌曲或创建其他本地歌单。 ");
+        }
         deleteLocalPlaylist(target.playlist.id);
       } else {
         await musicRoomApi.deletePlaylist(target.playlist.id);
@@ -455,7 +484,9 @@ export function PlaylistsWorkspacePage() {
                     {localPlaylists.map((playlist) => (
                       <LocalPlaylistCard
                         key={playlist.id}
-                        onDelete={() => setDeleteTarget({ kind: "local", playlist })}
+                        onDelete={isDefaultLocalPlaylist(playlist)
+                          ? undefined
+                          : () => setDeleteTarget({ kind: "local", playlist })}
                         onOpen={() => setSelectedPlaylist({ kind: "local", playlist })}
                         playlist={playlist}
                         tracks={tracksForLocalPlaylist(playlist, localTracks)}
@@ -889,26 +920,37 @@ function PlaylistDetailView({
         ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId!)
         : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId!);
       const fileHash = await hashAudioBlob(response.blob);
-      const mimeType = response.contentType.startsWith("audio/") ? response.contentType : "audio/mpeg";
-      const saved = await saveAudioFileToLocalDirectory({
-        file: response.blob,
-        fileHash,
-        title: resolvedTrack.title,
-        mimeType
-      });
+      const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
       const lyricPayload = resolvedTrack.lyrics
         ? null
         : await (provider === "netease"
           ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId!)
           : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId!)
         ).catch(() => null);
+      const lyrics = resolvedTrack.lyrics ?? lyricPayload?.plainLyric ?? null;
+      const saved = await saveAudioFileToLocalDirectory({
+        file: response.blob,
+        fileHash,
+        title: resolvedTrack.title,
+        mimeType,
+        track: {
+          artist: resolvedTrack.artist,
+          album: resolvedTrack.album,
+          artworkUrl: resolvedTrack.artworkUrl,
+          lyrics,
+          provider,
+          providerTrackId: resolvedTrack.providerTrackId,
+          durationMs: resolvedTrack.durationMs,
+          sizeBytes: response.blob.size
+        }
+      });
       const updatedTrack: LocalPlaylistTrackRecord = {
         ...resolvedTrack,
         fileHash,
         fileName: saved.fileName,
         sizeBytes: response.blob.size,
         mimeType,
-        lyrics: resolvedTrack.lyrics ?? lyricPayload?.plainLyric ?? null,
+        lyrics,
         availableOffline: true,
         updatedAt: new Date().toISOString()
       };

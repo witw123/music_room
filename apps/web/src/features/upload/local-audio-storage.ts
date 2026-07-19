@@ -394,6 +394,16 @@ export async function saveAudioFileToLocalDirectory(input: {
   title: string;
   mimeType: string;
   trackId?: string;
+  track?: {
+    artist: string;
+    album?: string | null;
+    artworkUrl?: string | null;
+    lyrics?: string | null;
+    provider?: "netease" | "qqmusic" | "local_upload";
+    providerTrackId?: string | null;
+    durationMs: number;
+    sizeBytes?: number;
+  };
 }) {
   const directory = await getWritableLocalAudioDirectory();
   if (!directory) {
@@ -403,6 +413,7 @@ export async function saveAudioFileToLocalDirectory(input: {
   const fileName = buildLocalAudioFileName(input);
   const repository = await LocalRepository.open(directory.handle);
   await deleteLocalAudioCacheFile(input.fileHash);
+  const existingTrack = await repository.readTrack(input.fileHash);
   const relativePath = await repository.writeManagedSource({
     file: input.file,
     fileHash: input.fileHash,
@@ -412,11 +423,20 @@ export async function saveAudioFileToLocalDirectory(input: {
   const trackAssets = input.trackId
     ? await getTrackAssetManifests(input.trackId)
     : null;
+  let originalAsset = existingTrack?.originalAsset ?? null;
+  let playbackAsset = existingTrack?.playbackAsset ?? null;
   if (trackAssets?.original) {
-    await repository.writeOriginalManifest(trackAssets.original, relativePath);
+    originalAsset = {
+      assetId: trackAssets.original.assetId,
+      manifestPath: await repository.writeOriginalManifest(trackAssets.original, relativePath)
+    };
   }
   if (trackAssets?.playback) {
-    await persistPlaybackAssetToLocalRepository(repository, trackAssets.playback);
+    playbackAsset = {
+      assetId: trackAssets.playback.assetId,
+      profileId: trackAssets.playback.profileId,
+      manifestPath: await persistPlaybackAssetToLocalRepository(repository, trackAssets.playback)
+    };
   }
 
   await saveLocalAudioFileRecord({
@@ -425,7 +445,29 @@ export async function saveAudioFileToLocalDirectory(input: {
     relativePath,
     storageKind: "saved"
   });
-  await persistCachedTrackRecord(input.fileHash, relativePath, "library");
+  if (input.track) {
+    const sizeBytes = input.track.sizeBytes ?? input.file.size;
+    await repository.writeTrack(createRepositoryTrackRecord({
+      fileHash: input.fileHash,
+      title: input.title,
+      artist: input.track.artist,
+      album: input.track.album,
+      artworkUrl: input.track.artworkUrl,
+      lyrics: input.track.lyrics,
+      provider: input.track.provider,
+      providerTrackId: input.track.providerTrackId,
+      mimeType: input.mimeType,
+      durationMs: input.track.durationMs,
+      sizeBytes,
+      source: { kind: "managed", relativePath, sizeBytes },
+      originalAsset,
+      playbackAsset,
+      retention: "library",
+      createdAt: existingTrack?.createdAt
+    }));
+  } else {
+    await persistCachedTrackRecord(input.fileHash, relativePath, "library");
+  }
   await deleteCachedLibraryTrackFile(input.fileHash);
   if (input.trackId) {
     await deleteOriginalAssetForTrack(input.trackId);
@@ -590,6 +632,14 @@ export function buildLocalAudioFileName(input: {
   const extension = inferFileExtension(input.mimeType);
   const suffix = input.fileHash.slice(0, 8);
   return `${baseName} [${suffix}]${extension ? `.${extension}` : ""}`;
+}
+
+export function normalizeLocalAudioMimeType(value: string | undefined) {
+  const type = value?.split(";", 1)[0]?.trim().toLowerCase();
+  if (!type?.startsWith("audio/")) return "audio/mpeg";
+  if (type === "audio/x-flac") return "audio/flac";
+  if (type === "audio/mp3") return "audio/mpeg";
+  return type;
 }
 
 async function requestDirectoryPermission(
