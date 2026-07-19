@@ -188,7 +188,6 @@ export function mapErrorStatus(code: ErrorCode): number {
     case errorCodes.roomNotFound:
       return HttpStatus.NOT_FOUND;
     case errorCodes.playbackVersionConflict:
-    case errorCodes.roomDownloadBusy:
     case errorCodes.trackOwnerOffline:
       return HttpStatus.CONFLICT;
     case errorCodes.unauthorizedRoomAction:

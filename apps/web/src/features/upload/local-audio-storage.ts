@@ -23,12 +23,6 @@ import {
 import { LocalRepository } from "./local-repository";
 import { hydrateLocalRepository } from "./local-repository-hydration";
 
-export const localAudioSubdirectories = {
-  local: "local",
-  cache: "cache",
-  saved: "saved"
-} as const;
-
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {
     mode?: "read" | "readwrite";
@@ -79,7 +73,6 @@ export async function chooseLocalAudioDirectory() {
     schemaVersion: repository.manifest.schemaVersion
   });
   await hydrateLocalRepository(repository);
-  await migrateLegacyLocalAudioFiles(repository, handle);
   await migrateIndexedDbCacheToLocalDirectory();
   return handle.name;
 }
@@ -113,8 +106,8 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   }
 
   const [availableSavedFiles, availableCachedFiles] = await Promise.all([
-    filterReadableLocalFiles(directory.handle, files, ["local", "saved"], true),
-    filterReadableLocalFiles(directory.handle, cachedFiles, ["local", "cache"], false)
+    filterReadableLocalFiles(directory.handle, files, true),
+    filterReadableLocalFiles(directory.handle, cachedFiles, false)
   ]);
   return {
     supported: supportsLocalAudioDirectory(),
@@ -163,21 +156,9 @@ export async function getLocalAudioFile(fileHash: string) {
   const repositoryFile = fileRecord.relativePath && repository
     ? await repository.readPath(fileRecord.relativePath)
     : null;
-  const savedFile = repositoryFile
-    ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "local")
-    ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "saved");
-  if (savedFile) {
-    return savedFile;
-  }
-
-  // Records created before the subfolder layout point directly at the old
-  // selected directory. Keep them readable until the user saves them again.
-  try {
-    const file = await getFileByPath(directory.handle, fileRecord.fileName);
-    return file;
-  } catch {
-    return null;
-  }
+  if (repositoryFile) return repositoryFile;
+  if (fileRecord.source !== "directory-scan") return null;
+  return getFileByPath(directory.handle, fileRecord.fileName).catch(() => null);
 }
 
 export async function getOriginalAssetFile(input: {
@@ -280,8 +261,7 @@ export async function getLocalAudioCacheFile(fileHash: string) {
   const repositoryFile = fileRecord.relativePath && repository
     ? await repository.readPath(fileRecord.relativePath)
     : null;
-  const localFile = repositoryFile ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "local");
-  return localFile ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "cache");
+  return repositoryFile;
 }
 
 export async function saveAudioFileToLocalDirectory(input: {
@@ -417,15 +397,6 @@ export async function deleteLocalAudioCacheFile(fileHash: string) {
   if (repository && fileRecord.relativePath) {
     await repository.removePath(fileRecord.relativePath);
   }
-  for (const kind of ["local", "cache"] as const) {
-    const cacheDirectory = await getStorageSubdirectory(directory.handle, kind, false);
-    if (!cacheDirectory) continue;
-    try {
-      await cacheDirectory.removeEntry(fileRecord.fileName);
-    } catch (error) {
-      if ((error as DOMException).name !== "NotFoundError") return false;
-    }
-  }
   await deleteLocalAudioCacheFileRecord(fileHash);
   if (!(await getLocalAudioFileRecord(fileHash, "saved"))) {
     if (repository) {
@@ -447,61 +418,6 @@ async function migrateIndexedDbCacheToLocalDirectory() {
       });
     } catch {
       // Keep the IndexedDB copy when a single file cannot be migrated.
-    }
-  }
-}
-
-async function migrateLegacyLocalAudioFiles(
-  repository: LocalRepository,
-  root: FileSystemDirectoryHandle
-) {
-  const [savedFiles, cachedFiles] = await Promise.all([
-    listLocalAudioFiles("saved"),
-    listLocalAudioCacheFiles()
-  ]);
-
-  for (const record of savedFiles) {
-    if (record.relativePath || record.source === "directory-scan") continue;
-    const file = await readLocalAudioFile(root, record.fileName, "local")
-      ?? await readLocalAudioFile(root, record.fileName, "saved")
-      ?? await getFileByPath(root, record.fileName).catch(() => null);
-    if (!file) continue;
-    const relativePath = await repository.writeManagedSource({
-      file,
-      fileHash: record.fileHash,
-      mimeType: file.type || inferFileMimeType(record.fileName)
-    });
-    await saveLocalAudioFileRecord({ ...record, relativePath });
-    await removeLegacyAudioFile(root, record.fileName, ["local", "saved"]);
-  }
-
-  for (const record of cachedFiles) {
-    if (record.relativePath) continue;
-    const file = await readLocalAudioFile(root, record.fileName, "local")
-      ?? await readLocalAudioFile(root, record.fileName, "cache");
-    if (!file) continue;
-    const relativePath = await repository.writeCachedSource({
-      file,
-      fileHash: record.fileHash,
-      mimeType: file.type || inferFileMimeType(record.fileName)
-    });
-    await saveLocalAudioCacheFileRecord({ ...record, relativePath });
-    await removeLegacyAudioFile(root, record.fileName, ["local", "cache"]);
-  }
-}
-
-async function removeLegacyAudioFile(
-  root: FileSystemDirectoryHandle,
-  fileName: string,
-  kinds: ReadonlyArray<keyof typeof localAudioSubdirectories>
-) {
-  for (const kind of kinds) {
-    const directory = await getStorageSubdirectory(root, kind, false);
-    if (!directory) continue;
-    try {
-      await directory.removeEntry(fileName);
-    } catch (error) {
-      if ((error as DOMException).name !== "NotFoundError") return;
     }
   }
 }
@@ -589,35 +505,6 @@ function asPermissionedHandle(handle: FileSystemDirectoryHandle) {
   return handle as PermissionedDirectoryHandle;
 }
 
-async function getStorageSubdirectory(
-  handle: FileSystemDirectoryHandle,
-  kind: keyof typeof localAudioSubdirectories,
-  create: boolean
-) {
-  try {
-    return await handle.getDirectoryHandle(localAudioSubdirectories[kind], { create });
-  } catch {
-    return null;
-  }
-}
-
-async function readLocalAudioFile(
-  root: FileSystemDirectoryHandle,
-  fileName: string,
-  kind: keyof typeof localAudioSubdirectories
-) {
-  try {
-    const directory = await getStorageSubdirectory(root, kind, false);
-    if (!directory) {
-      return null;
-    }
-    const fileHandle = await directory.getFileHandle(fileName);
-    return await fileHandle.getFile();
-  } catch {
-    return null;
-  }
-}
-
 async function collectSelectedLocalAudioFiles(
   directory: FileSystemDirectoryHandle,
   parentPath: string,
@@ -633,13 +520,8 @@ async function collectSelectedLocalAudioFiles(
       continue;
     }
 
-    // These directories belong to Music Room and are indexed separately.
-    if (
-      !parentPath &&
-      (entry.name === ".music-room" || Object.values(localAudioSubdirectories).includes(
-        entry.name as (typeof localAudioSubdirectories)[keyof typeof localAudioSubdirectories]
-      ))
-    ) {
+    // Music Room's managed files are indexed separately.
+    if (!parentPath && entry.name === ".music-room") {
       continue;
     }
     await collectSelectedLocalAudioFiles(entry, fileName, files);
@@ -652,22 +534,20 @@ function isAudioFile(file: File) {
 
 async function filterReadableLocalFiles(
   root: FileSystemDirectoryHandle,
-  records: ReadonlyArray<{ fileHash: string; fileName: string; relativePath?: string }>,
-  kinds: ReadonlyArray<keyof typeof localAudioSubdirectories>,
-  checkRootFallback: boolean
+  records: ReadonlyArray<{
+    fileHash: string;
+    fileName: string;
+    relativePath?: string;
+    source?: "directory-scan";
+  }>,
+  allowExternalRootFiles: boolean
 ) {
   const repository = await LocalRepository.open(root).catch(() => null);
   const available = await Promise.all(records.map(async (record) => {
     if (record.relativePath && repository && await repository.readPath(record.relativePath)) {
       return record.fileHash;
     }
-    for (const kind of kinds) {
-      if (await readLocalAudioFile(root, record.fileName, kind)) {
-        return record.fileHash;
-      }
-    }
-
-    if (checkRootFallback) {
+    if (allowExternalRootFiles && record.source === "directory-scan") {
       try {
         await getFileByPath(root, record.fileName);
         return record.fileHash;
@@ -681,7 +561,7 @@ async function filterReadableLocalFiles(
 }
 
 async function getFileByPath(root: FileSystemDirectoryHandle, fileName: string) {
-  const parts = fileName.split(/[\\/]/).filter(Boolean);
+  const parts = splitLocalPath(fileName);
   if (parts.length === 0) {
     throw new Error("本地文件路径为空。");
   }
@@ -691,6 +571,18 @@ async function getFileByPath(root: FileSystemDirectoryHandle, fileName: string) 
     directory = await directory.getDirectoryHandle(part);
   }
   return directory.getFileHandle(parts[parts.length - 1]).then((handle) => handle.getFile());
+}
+
+function splitLocalPath(fileName: string) {
+  const normalized = fileName.replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/") || /^[a-zA-Z]:\//.test(normalized)) {
+    throw new Error("本地文件路径必须是相对路径。");
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.some((part) => part === "." || part === ".." || part.includes("\0"))) {
+    throw new Error("本地文件路径包含非法片段。");
+  }
+  return parts;
 }
 
 function inferFileExtension(mimeType: string) {
@@ -711,15 +603,6 @@ function inferFileExtension(mimeType: string) {
     default:
       return "";
   }
-}
-
-function inferFileMimeType(fileName: string) {
-  const extension = fileName.split(".").pop()?.toLowerCase();
-  if (extension === "flac") return "audio/flac";
-  if (extension === "wav") return "audio/wav";
-  if (extension === "m4a" || extension === "aac") return "audio/mp4";
-  if (extension === "ogg" || extension === "opus") return "audio/ogg";
-  return "audio/mpeg";
 }
 
 function sanitizeFileName(value: string) {

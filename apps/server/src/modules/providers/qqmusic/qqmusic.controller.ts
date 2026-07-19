@@ -2,6 +2,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Headers,
   HttpException,
   HttpStatus,
@@ -26,17 +27,12 @@ import {
   qqMusicTrackIdSchema
 } from "./qqmusic.schemas";
 import { QqMusicService } from "./qqmusic.service";
-import {
-  RoomDownloadLockService,
-  type RoomDownloadLease
-} from "../../room/services/room-download-lock.service";
 
 @Controller("v1/providers/qqmusic")
 export class QqMusicController {
   constructor(
     private readonly service: QqMusicService,
-    private readonly auth: AuthService,
-    private readonly roomDownloadLock: RoomDownloadLockService
+    private readonly auth: AuthService
   ) {}
 
   @Get("account")
@@ -75,11 +71,36 @@ export class QqMusicController {
     return this.service.getTrack(await this.user(token), qqMusicTrackIdSchema.parse(id));
   }
 
+  @Get("tracks/:trackId/audio-url")
+  @Header("Cache-Control", "no-store")
+  async audioUrl(
+    @Param("trackId") id: string,
+    @Query("quality") quality: string | undefined,
+    @Headers("x-session-token") token?: string
+  ) {
+    const parsedId = qqMusicTrackIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, "Invalid QQ Music track id."),
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    const parsedQuality = qqMusicQualitySchema.safeParse(
+      quality ?? process.env.QQMUSIC_DEFAULT_QUALITY ?? "exhigh"
+    );
+    if (!parsedQuality.success) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, "Invalid QQ Music audio quality."),
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    return this.service.resolveAudio(await this.user(token), parsedId.data, parsedQuality.data);
+  }
+
   @Get("tracks/:trackId/audio")
   async audio(
     @Param("trackId") id: string,
     @Query("quality") quality: string | undefined,
-    @Query("roomId") roomId: string | undefined,
     @Headers("range") range: string | undefined,
     @Headers("x-session-token") token: string | undefined,
     @Req() request: Request,
@@ -103,22 +124,8 @@ export class QqMusicController {
       );
     }
 
-    const downloadLease = roomId?.trim()
-      ? await this.roomDownloadLock.acquire(roomId.trim(), userId, {
-          provider: "qqmusic",
-          trackId: parsedId.data
-        })
-      : null;
-
-    try {
-      const result = await this.service.openAudio(userId, parsedId.data, parsedQuality.data, range);
-      await this.streamAudio(request, response, result, downloadLease, parsedId.data);
-    } catch (error) {
-      if (downloadLease) {
-        await this.roomDownloadLock.release(downloadLease);
-      }
-      throw error;
-    }
+    const result = await this.service.openAudio(userId, parsedId.data, parsedQuality.data, range);
+    await this.streamAudio(request, response, result, parsedId.data);
   }
 
   @Get("tracks/:trackId/lyrics")
@@ -172,7 +179,6 @@ export class QqMusicController {
     request: Request,
     response: Response,
     result: Awaited<ReturnType<QqMusicService["openAudio"]>>,
-    downloadLease: RoomDownloadLease | null,
     trackId: string
   ) {
     const upstream = result.upstream;
@@ -193,22 +199,10 @@ export class QqMusicController {
 
     if (!upstream.body) {
       response.end();
-      if (downloadLease) {
-        await this.roomDownloadLock.release(downloadLease);
-      }
       return;
     }
 
     const { Readable } = await import("node:stream");
-    const stopKeepAlive = downloadLease
-      ? this.roomDownloadLock.startKeepAlive(downloadLease)
-      : null;
-    const release = () => {
-      stopKeepAlive?.();
-      if (downloadLease) {
-        void this.roomDownloadLock.release(downloadLease);
-      }
-    };
     let bytes = 0;
     const limiter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
@@ -223,15 +217,11 @@ export class QqMusicController {
     limiter.on("error", () => {
       void upstream.body?.cancel().catch(() => undefined);
       if (!response.destroyed) response.destroy();
-      release();
     });
     Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response);
-    response.once("finish", release);
-    response.once("close", release);
     request.on("close", () => {
       if (!response.writableEnded) {
         void upstream.body?.cancel().catch(() => undefined);
-        release();
       }
     });
   }

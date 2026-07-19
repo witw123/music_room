@@ -16,7 +16,7 @@ import {
 } from "@/lib/indexeddb";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "./audio-utils";
-import { prepareAudioAssets } from "./audio-asset-builder";
+import { getReusableAudioAssets, prepareAudioAssets } from "./audio-asset-builder";
 import {
   applySelectedTrackFilesResult,
   buildRegisterTrackPayload,
@@ -80,11 +80,18 @@ export function useUploadPipelineActions({
         | "ownerNickname"
       > & Partial<
         Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef">
-      > & { lyrics?: string | null };
+      >;
       roomId: string;
       file: File | Blob;
+      lyrics?: string | null;
     }) => {
-      await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord(input));
+      await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord({
+        ...input,
+        track: {
+          ...input.track,
+          lyrics: input.lyrics ?? null
+        }
+      }));
       await saveCachedAudioFileToLocalDirectory({
         file: input.file,
         fileHash: input.track.fileHash,
@@ -121,24 +128,34 @@ export function useUploadPipelineActions({
         createObjectUrl: (file) => URL.createObjectURL(file),
         revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
         buildTrackMeta: async (file, objectUrl) => {
-          const assets = await prepareAudioAssets({
-            file,
-            onProgress: ({ stage, completed, total }) => {
-              const labels = {
-                inspecting: "正在检查音频资源",
-                hashing: "正在校验源文件",
-                "persisting-original": "正在保存源文件",
-                decoding: "正在解码音频",
-                encoding: "正在生成播放分片",
-                "persisting-playback": "正在保存播放分片"
-              } as const;
-              const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-              setStatusMessage(`${labels[stage]} ${percent}%`);
-            }
-          });
-          const cachedMetadata = metadataByFileHash?.get(assets.fileHash);
-          const provider = cachedMetadata?.provider;
-          const providerTrackId = cachedMetadata?.providerTrackId;
+          const cachedMetadata = files.length === 1 && metadataByFileHash?.size === 1
+            ? metadataByFileHash.values().next().value
+            : undefined;
+          const reusedAssets = cachedMetadata
+            ? await getReusableAudioAssets({
+                fileHash: cachedMetadata.fileHash,
+                sizeBytes: cachedMetadata.sizeBytes,
+                durationMs: cachedMetadata.durationMs
+              })
+            : null;
+          const assets = reusedAssets ?? await prepareAudioAssets({
+              file,
+              onProgress: ({ stage, completed, total }) => {
+                const labels = {
+                  inspecting: "正在检查音频资源",
+                  hashing: "正在校验源文件",
+                  "persisting-original": "正在保存源文件",
+                  decoding: "正在解码音频",
+                  encoding: "正在生成播放分片",
+                  "persisting-playback": "正在保存播放分片"
+                } as const;
+                const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                setStatusMessage(`${labels[stage]} ${percent}%`);
+              }
+            });
+          const resolvedCachedMetadata = metadataByFileHash?.get(assets.fileHash);
+          const provider = resolvedCachedMetadata?.provider;
+          const providerTrackId = resolvedCachedMetadata?.providerTrackId;
           let sourceType: TrackSourceType = "local_upload";
           let sourceRef: RemoteTrackSourceRef | undefined;
           if (
@@ -148,20 +165,20 @@ export function useUploadPipelineActions({
             sourceType = provider;
             sourceRef = { provider, trackId: providerTrackId };
           }
-          const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, cachedMetadata
+          const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, resolvedCachedMetadata
             ? {
                 type: sourceType,
                 metadata: {
-                  title: cachedMetadata.title,
-                  artist: cachedMetadata.artist,
-                  album: cachedMetadata.album ?? null,
-                  artworkUrl: cachedMetadata.artworkUrl ?? null
+                  title: resolvedCachedMetadata.title,
+                  artist: resolvedCachedMetadata.artist,
+                  album: resolvedCachedMetadata.album ?? null,
+                  artworkUrl: resolvedCachedMetadata.artworkUrl ?? null
                 },
                 ...(sourceRef ? { sourceRef } : {})
               }
             : undefined);
-          return cachedMetadata
-            ? { ...draft, lyrics: cachedMetadata.lyrics ?? null }
+          return resolvedCachedMetadata
+            ? { ...draft, lyrics: resolvedCachedMetadata.lyrics ?? null }
             : draft;
         },
         buildRegisterTrackPayload,
@@ -213,7 +230,7 @@ export function useUploadPipelineActions({
     (candidate: NeteaseTrackCandidate) => importProviderTrack({
       activeSession,
       candidate,
-      download: () => musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, roomSnapshot?.room.id),
+      download: () => musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh"),
       inFlightUploadHashesRef,
       origin: "netease-import",
       persistTrackIntoLibrary,
@@ -238,7 +255,7 @@ export function useUploadPipelineActions({
     (candidate: QqMusicTrackCandidate) => importProviderTrack({
       activeSession,
       candidate,
-      download: () => musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, roomSnapshot?.room.id),
+      download: () => musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh"),
       inFlightUploadHashesRef,
       origin: "qqmusic-import",
       persistTrackIntoLibrary,
@@ -305,13 +322,8 @@ async function importProviderTrack(input: {
   }
 
   const importKey = `${activeSession.userId}:${sourceType}:${candidate.providerTrackId}`;
-  const importLock = `${activeSession.userId}:${sourceType}:active`;
-  if (
-    inFlightUploadHashesRef.current.has(importLock) ||
-    inFlightUploadHashesRef.current.has(importKey)
-  ) return;
+  if (inFlightUploadHashesRef.current.has(importKey)) return;
 
-  inFlightUploadHashesRef.current.add(importLock);
   inFlightUploadHashesRef.current.add(importKey);
   let objectUrl: string | null = null;
   let retainedObjectUrl = false;
@@ -392,7 +404,6 @@ async function importProviderTrack(input: {
     setStatusMessage(`导入失败：${toProviderImportErrorMessage(error)}`);
     throw error;
   } finally {
-    inFlightUploadHashesRef.current.delete(importLock);
     inFlightUploadHashesRef.current.delete(importKey);
     if (objectUrl && !retainedObjectUrl) URL.revokeObjectURL(objectUrl);
   }
@@ -426,9 +437,6 @@ function sanitizeFileName(value: string, sourceType: TrackSourceType) {
 
 function toProviderImportErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
-    if (error.code === "ROOM_DOWNLOAD_BUSY") {
-      return "房间内已有成员正在下载，请稍后再试。";
-    }
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") {
       return "该歌曲没有可用的公开音频，可能受付费、VIP 或版权限制。";
     }

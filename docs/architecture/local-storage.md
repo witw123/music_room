@@ -337,26 +337,19 @@ IndexedDB 中的 `Blob`、`assetUnits`、缓存摘要和目录句柄都不能成
 只有不在保留集合中、超过最短保留时间且位于 `cache` 或无引用资产目录中的文件，
 才能移入 `trash`。清理成功后再删除对应的目录记录和 IndexedDB 索引。
 
-## 11. 旧版本迁移
+## 11. 新仓库初始化
 
-首次选择目录时按以下顺序迁移：
+首次选择目录时只初始化或打开 `.music-room/repository.json`，然后恢复该仓库的
+catalog、播放资产和本地歌单。浏览器 IndexedDB 中尚未写入仓库的缓存文件可以复制
+到新仓库的 `cache`，复制失败时保留浏览器缓存。
 
-1. 若存在 `.music-room/repository.json`，按 `schemaVersion` 执行升级；
-2. 识别现有 `local/`、`cache/`、`saved/` 和根目录音频文件；
-3. 通过实际内容 SHA-256 建立新的 `fileHash`；
-4. `localAudioFiles` / `localAudioCacheFiles` 决定文件的保留策略；
-5. `cachedTrackLibrary` 的元数据迁移为 `catalog/tracks/*.json`；
-6. IndexedDB 中完整的播放资产迁移到 `assets/playback`；
-7. `localStorage` 的 `music-room-local-playlists` 迁移到 `catalog/playlists`；
-8. 每个文件写入并校验成功后，旧文件才允许进入 `trash`；
-9. 迁移失败的单个文件保留原位置，并在仓库索引中标记迁移错误。
-
-迁移期间不能清空旧 IndexedDB 数据。只有新仓库能够完整读取后，才允许删除
-旧的重复 Blob 和废弃目录。
+Music Room 不读取、迁移或删除目录中的 `local/`、`cache/`、`saved/` 等旧目录。
+这些目录和根目录下的其他音频一样，均属于用户文件；目录扫描会按外部文件处理，
+不会把它们当作 Music Room 的存储目录。
 
 ## 12. 与当前代码的对应关系
 
-当前 `localAudioDirectory` 只保存目录句柄；它应继续保留，但新增仓库 ID、格式版本
+当前 `localAudioDirectory` 只保存目录句柄；它应继续保留仓库 ID、格式版本
 和最后一次校验结果。`cachedTrackLibrary`、`assetManifests`、`assetUnits`、
 `trackAssetLinks`、`transcodeJobs` 和 `localPlaylistTracks` 都应改为由仓库适配层
 读写并回填，而不是继续各自定义一套文件规则。

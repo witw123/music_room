@@ -262,59 +262,35 @@ export class NeteaseService {
     };
   }
 
+  async resolveAudio(userId: string, trackId: string, quality: NeteaseQuality) {
+    this.assertEnabled();
+    this.assertRateLimit(`audio:${userId}`, 6, 60_000);
+    const source = await this.resolveAudioSource(userId, trackId, quality);
+    const mimeType = resolveAudioMimeType(source.type, source.url.pathname);
+    return {
+      provider: "netease" as const,
+      providerTrackId: trackId,
+      url: source.url.toString(),
+      mimeType,
+      fileType: mimeType === "audio/flac" ? "flac" as const : "mp3" as const
+    };
+  }
+
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
     this.assertEnabled();
     this.assertRateLimit(`audio:${userId}`, 6, 60_000);
-    const cookie = await this.getCookie(userId);
     const parsedQuality = neteaseQualitySchema.safeParse(quality);
-    const selectedQuality = parsedQuality.success ? parsedQuality.data : this.defaultQuality();
-    const bitrates = this.bitratesForQuality(selectedQuality);
-
-    let response = await this.callProvider(userId, () =>
-      this.api.getAudioUrl({
-        trackId,
-        bitrate: bitrates[0],
-        cookie
-      })
+    const source = await this.resolveAudioSource(
+      userId,
+      trackId,
+      parsedQuality.success ? parsedQuality.data : this.defaultQuality()
     );
-    let audio = readAudioRecord(response);
-    if (!audio?.url && bitrates.length > 1) {
-      response = await this.callProvider(userId, () =>
-        this.api.getAudioUrl({
-          trackId,
-          bitrate: bitrates[1],
-          cookie
-        })
-      );
-      audio = readAudioRecord(response);
-    }
-
-    if (!audio?.url) {
-      throw new HttpException(
-        createApiErrorResponse(errorCodes.neteaseTrackNotFound, "NetEase audio is unavailable."),
-        HttpStatus.NOT_FOUND
-      );
-    }
-
-    let url: URL;
-    try {
-      url = normalizeNeteaseAudioUrl(audio.url);
-    } catch {
-      throw this.unavailableError();
-    }
-    if (!isAllowedAudioHost(url.hostname)) {
-      throw new HttpException(
-        createApiErrorResponse(errorCodes.neteaseUnavailable, "NetEase returned an unsupported audio URL."),
-        HttpStatus.BAD_GATEWAY
-      );
-    }
-
     const headers = new Headers();
     if (range) {
       headers.set("range", range);
     }
     const upstream = await fetchProviderUrl(
-      url,
+      source.url,
       { headers },
       this.requestTimeoutMs(),
       isAllowedAudioHost,
@@ -330,7 +306,7 @@ export class NeteaseService {
       );
     }
 
-    const mimeType = resolveAudioMimeType(audio.type, upstream.headers.get("content-type"));
+    const mimeType = resolveAudioMimeType(source.type, upstream.headers.get("content-type"));
     if (!mimeType) {
       await upstream.body.cancel().catch(() => undefined);
       throw new HttpException(
@@ -355,6 +331,46 @@ export class NeteaseService {
       fileType: mimeType === "audio/flac" ? "flac" : "mp3",
       maxBytes: this.maxImportBytes()
     };
+  }
+
+  private async resolveAudioSource(
+    userId: string,
+    trackId: string,
+    quality: NeteaseQuality
+  ) {
+    const cookie = await this.getCookie(userId);
+    const bitrates = this.bitratesForQuality(quality);
+    let response = await this.callProvider(userId, () =>
+      this.api.getAudioUrl({ trackId, bitrate: bitrates[0], cookie })
+    );
+    let audio = readAudioRecord(response);
+    if (!audio?.url && bitrates.length > 1) {
+      response = await this.callProvider(userId, () =>
+        this.api.getAudioUrl({ trackId, bitrate: bitrates[1], cookie })
+      );
+      audio = readAudioRecord(response);
+    }
+
+    if (!audio?.url) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.neteaseTrackNotFound, "NetEase audio is unavailable."),
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    let url: URL;
+    try {
+      url = normalizeNeteaseAudioUrl(audio.url);
+    } catch {
+      throw this.unavailableError();
+    }
+    if (!isAllowedAudioHost(url.hostname)) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.neteaseUnavailable, "NetEase returned an unsupported audio URL."),
+        HttpStatus.BAD_GATEWAY
+      );
+    }
+    return { url, type: audio.type };
   }
 
   private async getCookie(userId: string) {

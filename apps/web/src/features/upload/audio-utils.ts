@@ -9,6 +9,7 @@ import type {
 } from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
+import { readEmbeddedAudioMetadata } from "./audio-metadata";
 
 type CapturedAudioGraph = {
   context: AudioContext | null;
@@ -65,22 +66,41 @@ export async function buildTrackMeta(
   }
 ) {
   const fileHash = preparedAssets?.fileHash ?? await hashFile(file);
-  const durationMs = preparedAssets?.playbackAsset.durationMs ?? await readDuration(objectUrl);
-  const title = source?.metadata?.title ?? file.name.replace(/\.[^/.]+$/, "");
-  const codec = file.type.split("/")[1]?.trim() || null;
+  const embeddedMetadata = source?.type === undefined || source.type === "local_upload"
+    ? await readEmbeddedAudioMetadata(file)
+    : null;
+  const durationMs = preparedAssets?.playbackAsset.durationMs
+    ?? embeddedMetadata?.durationMs
+    ?? await readDuration(objectUrl);
+  const title = truncateMetadataText(
+    source?.metadata?.title
+      ?? embeddedMetadata?.title
+      ?? file.name.replace(/\.[^/.]+$/, "")
+  ) ?? "未命名歌曲";
+  const artist = truncateMetadataText(
+    source?.metadata?.artist
+      ?? embeddedMetadata?.artist
+      ?? "本地上传"
+  ) ?? "本地上传";
+  const album = truncateMetadataText(source?.metadata?.album ?? embeddedMetadata?.album);
+  const codec = truncateMetadataText(
+    embeddedMetadata?.codec
+      ?? file.type.split("/")[1]?.trim()
+  );
   const sourceType = source?.type ?? "local_upload";
 
   return {
     title,
-    artist: source?.metadata?.artist ?? "本地上传",
-    album: source?.metadata?.album ?? null,
+    artist,
+    album,
     durationMs,
-    bitrate: null,
+    bitrate: embeddedMetadata?.bitrate ?? null,
     sizeBytes: file.size,
     codec,
     mimeType: file.type || null,
     fileHash,
-    artworkUrl: source?.metadata?.artworkUrl ?? null,
+    artworkUrl: source?.metadata?.artworkUrl ?? embeddedMetadata?.artworkUrl ?? null,
+    lyrics: embeddedMetadata?.lyrics ?? null,
     ownerSessionId: session.userId,
     ownerNickname: session.nickname,
     sourceType,
@@ -92,6 +112,11 @@ export async function buildTrackMeta(
         }
       : {})
   };
+}
+
+function truncateMetadataText(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized.slice(0, 240) : null;
 }
 
 async function hashFile(file: File) {

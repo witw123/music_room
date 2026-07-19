@@ -14,6 +14,7 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import { listSelectedLocalAudioFiles } from "@/features/upload/local-audio-storage";
+import { readEmbeddedAudioMetadata } from "@/features/upload/audio-metadata";
 import { getConfiguredLocalRepository } from "@/features/upload/local-audio-storage";
 import {
   createRepositoryTrackRecord,
@@ -35,6 +36,7 @@ export type LocalPlaylistRecord = {
 const localPlaylistsStorageKey = "music-room-local-playlists";
 const defaultLocalPlaylistId = "local-default";
 const directoryScanSource = "directory-scan" as const;
+let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
   const fallback = [createDefaultLocalPlaylist()];
@@ -56,6 +58,7 @@ export function listLocalPlaylists(): LocalPlaylistRecord[] {
 }
 
 export async function restoreLocalPlaylistsFromRepository() {
+  await flushLocalPlaylistPersistence();
   const repository = await getConfiguredLocalRepository();
   if (!repository) return listLocalPlaylists();
 
@@ -67,10 +70,15 @@ export async function restoreLocalPlaylistsFromRepository() {
   }
 
   const existing = listLocalPlaylists();
-  await Promise.all(existing.map((playlist) =>
-    repository.writePlaylist(toRepositoryPlaylist(playlist))
-  ));
+  await flushLocalPlaylistPersistence();
+  for (const playlist of existing) {
+    await repository.writePlaylist(toRepositoryPlaylist(playlist));
+  }
   return existing;
+}
+
+export async function flushLocalPlaylistPersistence() {
+  await localPlaylistPersistencePromise;
 }
 
 export function createLocalPlaylist(input: { title: string; description?: string | null }) {
@@ -238,8 +246,8 @@ export async function syncSelectedLocalDirectoryTracks() {
           durationMs: metadata.durationMs,
           mimeType: file.type || inferAudioMimeType(file.name),
           sizeBytes: file.size,
-          artworkUrl: null,
-          lyrics: null,
+          artworkUrl: metadata.artworkUrl,
+          lyrics: metadata.lyrics,
           provider: "local_upload" as const,
           providerTrackId: null,
           fileHash,
@@ -285,8 +293,8 @@ export async function syncSelectedLocalDirectoryTracks() {
 
   const repository = await getConfiguredLocalRepository();
   if (repository) {
-    await Promise.all(scannedTracks.map(({ track, fileName }) =>
-      repository.writeTrack(createRepositoryTrackRecord({
+    for (const { track, fileName } of scannedTracks) {
+      await repository.writeTrack(createRepositoryTrackRecord({
         fileHash: track.fileHash!,
         title: track.title,
         artist: track.artist,
@@ -303,8 +311,8 @@ export async function syncSelectedLocalDirectoryTracks() {
           sizeBytes: track.sizeBytes
         },
         retention: "library"
-      }))
-    ));
+      }));
+    }
   }
 
   return scannedTracks.length;
@@ -406,25 +414,20 @@ async function readDirectoryTrackMetadata(file: File) {
     title: file.name.replace(/\.[^/.]+$/, ""),
     artist: "本地歌曲",
     album: null as string | null,
-    durationMs: 0
+    durationMs: 0,
+    artworkUrl: null as string | null,
+    lyrics: null as string | null
   };
 
-  try {
-    const { parseBlob } = await import("music-metadata");
-    const metadata = await parseBlob(file, { duration: true, skipCovers: true });
-    return {
-      title: metadata.common.title?.trim() || fallback.title,
-      artist: metadata.common.artist?.trim()
-        || metadata.common.artists?.join(" / ").trim()
-        || fallback.artist,
-      album: metadata.common.album?.trim() || fallback.album,
-      durationMs: Number.isFinite(metadata.format.duration)
-        ? Math.round((metadata.format.duration ?? 0) * 1_000)
-        : fallback.durationMs
-    };
-  } catch {
-    return fallback;
-  }
+  const metadata = await readEmbeddedAudioMetadata(file);
+  return {
+    title: metadata.title ?? fallback.title,
+    artist: metadata.artist ?? fallback.artist,
+    album: metadata.album ?? fallback.album,
+    durationMs: metadata.durationMs ?? fallback.durationMs,
+    artworkUrl: metadata.artworkUrl ?? fallback.artworkUrl,
+    lyrics: metadata.lyrics ?? fallback.lyrics
+  };
 }
 
 function inferAudioMimeType(fileName: string) {
@@ -456,7 +459,10 @@ function isLocalPlaylistRecord(value: unknown): value is LocalPlaylistRecord {
 
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
   writeLocalPlaylistsToBrowser(playlists);
-  void mirrorLocalPlaylistsToRepository(playlists);
+  localPlaylistPersistencePromise = localPlaylistPersistencePromise
+    .catch(() => undefined)
+    .then(() => mirrorLocalPlaylistsToRepository(playlists));
+  void localPlaylistPersistencePromise.catch(() => undefined);
 }
 
 function writeLocalPlaylistsToBrowser(playlists: LocalPlaylistRecord[]) {
@@ -473,14 +479,14 @@ async function mirrorLocalPlaylistsToRepository(playlists: LocalPlaylistRecord[]
   if (!repository) return;
   const activeIds = new Set(playlists.map((playlist) => playlist.id));
   const persisted = await repository.listPlaylists();
-  await Promise.all(
-    persisted
-      .filter((playlist) => !activeIds.has(playlist.id))
-      .map((playlist) => repository.deletePlaylist(playlist.id))
-  );
-  await Promise.all(playlists.map((playlist) =>
-    repository.writePlaylist(toRepositoryPlaylist(playlist))
-  ));
+  for (const playlist of persisted) {
+    if (!activeIds.has(playlist.id)) {
+      await repository.deletePlaylist(playlist.id);
+    }
+  }
+  for (const playlist of playlists) {
+    await repository.writePlaylist(toRepositoryPlaylist(playlist));
+  }
 }
 
 function toRepositoryPlaylist(playlist: LocalPlaylistRecord): LocalRepositoryPlaylistRecord {

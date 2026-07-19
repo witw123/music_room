@@ -11,6 +11,7 @@ import {
   type NeteaseSearchResponse,
   type NeteaseTrackCandidate,
   type ProviderAlbumDetail,
+  type ProviderAudioResolveResponse,
   type ProviderLyrics,
   type ProviderPlaylistDetail,
   type ProviderPlaylistListResponse,
@@ -310,13 +311,23 @@ export const musicRoomApi = {
     request<ProviderPlaylistDetail>(`/v1/providers/netease/playlists/${encodeURIComponent(playlistId)}`),
   getNeteaseAlbum: (albumId: string) =>
     request<ProviderAlbumDetail>(`/v1/providers/netease/albums/${encodeURIComponent(albumId)}`),
+  resolveNeteaseAudio: (
+    trackId: string,
+    quality: "standard" | "high" | "exhigh" = "exhigh"
+  ) =>
+    request<ProviderAudioResolveResponse>(
+      `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`
+    ),
   downloadNeteaseTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",
-    signal?: AbortSignal,
-    roomId?: string
+    signal?: AbortSignal
   ) =>
-    requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?${buildAudioQuery(quality, roomId)}`, { signal }, { throttleImport: true }),
+    downloadWithDirectFallback({
+      resolve: () => musicRoomApi.resolveNeteaseAudio(trackId, quality),
+      fallback: () => requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }, { throttleImport: true }),
+      signal
+    }),
   getQqMusicAccount: () => request<QqMusicAccountStatus>("/v1/providers/qqmusic/account"),
   startQqMusicQrLogin: () => request<QqMusicQrStartResponse>("/v1/providers/qqmusic/account/qr/start", { method: "POST" }),
   getQqMusicQrStatus: (attemptId: string) => request<QqMusicQrStatusResponse>(`/v1/providers/qqmusic/account/qr/${encodeURIComponent(attemptId)}/status`),
@@ -343,13 +354,23 @@ export const musicRoomApi = {
     request<ProviderPlaylistDetail>(`/v1/providers/qqmusic/playlists/${encodeURIComponent(playlistId)}`),
   getQqMusicAlbum: (albumId: string) =>
     request<ProviderAlbumDetail>(`/v1/providers/qqmusic/albums/${encodeURIComponent(albumId)}`),
+  resolveQqMusicAudio: (
+    trackId: string,
+    quality: "standard" | "high" | "exhigh" = "exhigh"
+  ) =>
+    request<ProviderAudioResolveResponse>(
+      `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`
+    ),
   downloadQqMusicTrack: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh",
-    signal?: AbortSignal,
-    roomId?: string
+    signal?: AbortSignal
   ) =>
-    requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?${buildAudioQuery(quality, roomId)}`, { signal }, { throttleImport: true }),
+    downloadWithDirectFallback({
+      resolve: () => musicRoomApi.resolveQqMusicAudio(trackId, quality),
+      fallback: () => requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }, { throttleImport: true }),
+      signal
+    }),
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),
   createPlaylist: (payload: {
@@ -398,10 +419,30 @@ export const musicRoomApi = {
     })
 };
 
-function buildAudioQuery(quality: "standard" | "high" | "exhigh", roomId?: string) {
-  const params = new URLSearchParams({ quality });
-  if (roomId?.trim()) {
-    params.set("roomId", roomId.trim());
+async function downloadWithDirectFallback(input: {
+  resolve: () => Promise<ProviderAudioResolveResponse>;
+  fallback: () => Promise<{ blob: Blob; contentType: string }>;
+  signal?: AbortSignal;
+}) {
+  try {
+    const resolved = await input.resolve();
+    const response = await fetch(resolved.url, {
+      signal: input.signal,
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`Direct provider download failed: ${response.status}`);
+    }
+    return {
+      blob: await importBandwidthGovernor.readResponse(response, input.signal),
+      contentType: response.headers.get("content-type") ?? resolved.mimeType ?? "application/octet-stream"
+    };
+  } catch (error) {
+    if (input.signal?.aborted) {
+      throw error;
+    }
+    return input.fallback();
   }
-  return params.toString();
 }

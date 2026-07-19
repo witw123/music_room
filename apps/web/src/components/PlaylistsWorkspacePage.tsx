@@ -11,6 +11,7 @@ import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import {
   createLocalPlaylist,
   deleteLocalPlaylist,
+  flushLocalPlaylistPersistence,
   isDefaultLocalPlaylist,
   listLocalPlaylists,
   restoreLocalPlaylistsFromRepository,
@@ -82,6 +83,7 @@ export function PlaylistsWorkspacePage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   const refresh = async () => {
+    await flushLocalPlaylistPersistence();
     const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
     const [tracks, localPlaylistRecords, playlists, storage, roomTracks] = await Promise.all([
       listMergedLocalPlaylistTracks(),

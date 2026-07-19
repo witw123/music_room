@@ -22,7 +22,7 @@ import {
   ensureLocalAudioDirectoryWriteAccess,
   saveAudioFileToLocalDirectory
 } from "@/features/upload/local-audio-storage";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/music-room-api";
 import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 import { PlaylistPanel } from "./PlaylistPanel";
 
@@ -35,7 +35,6 @@ const enabledSearchProviders: Provider[] = [
 ];
 
 type LocalStorageTabPanelProps = {
-  roomId: string;
   tracks: TrackMeta[];
   playlists: Playlist[];
   activeSession: AuthSession | null;
@@ -54,7 +53,6 @@ type LocalStorageTabPanelProps = {
 };
 
 function LocalStorageTabPanelBase({
-  roomId,
   tracks,
   playlists,
   activeSession,
@@ -107,7 +105,6 @@ function LocalStorageTabPanelBase({
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
         <LocalPlaylistSearch
-          roomId={roomId}
           hasLocalFolder={!!localStorageSummary.localFolderName}
           localTracks={localStorageSummary.localPlaylistTracks}
           onChooseLocalFolder={onChooseLocalFolder}
@@ -143,13 +140,11 @@ function LocalStorageTabPanelBase({
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
 function LocalPlaylistSearch({
-  roomId,
   hasLocalFolder,
   localTracks,
   onChooseLocalFolder,
   onRefreshLocalStorage
 }: {
-  roomId: string;
   hasLocalFolder: boolean;
   localTracks: LocalPlaylistTrackRecord[];
   onChooseLocalFolder: () => Promise<void>;
@@ -249,8 +244,8 @@ function LocalPlaylistSearch({
           }
         : candidate;
       const source = candidate.provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, roomId)
-        : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, roomId);
+        ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
+        : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
       const fileHash = await hashAudioBlob(source.blob);
       const mimeType = normalizeLocalDownloadMimeType(source.contentType || source.blob.type);
       const lyrics = await getProviderLyrics(track);
@@ -437,9 +432,6 @@ function normalizeLocalDownloadMimeType(value: string) {
 }
 
 function toLocalSearchErrorMessage(error: unknown) {
-  if (error instanceof MusicRoomApiError && error.code === "ROOM_DOWNLOAD_BUSY") {
-    return "房间内已有成员正在下载，请稍后再试。";
-  }
   if (error instanceof Error && error.message) return error.message;
   return "音乐平台暂时不可用，请稍后重试。";
 }

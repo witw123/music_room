@@ -14,6 +14,7 @@ import { LocalRepository, type LocalRepositoryTrackRecord } from "./local-reposi
 export async function hydrateLocalRepository(repository: LocalRepository) {
   const records = await repository.listTracks();
   let restoredTrackCount = 0;
+  let restoredOriginalAssetCount = 0;
   let restoredPlaybackAssetCount = 0;
 
   for (const record of records) {
@@ -39,6 +40,12 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
     restoredTrackCount += 1;
   }
 
+  for (const manifest of await repository.listOriginalAssets()) {
+    if (await restoreOriginalAsset(manifest)) {
+      restoredOriginalAssetCount += 1;
+    }
+  }
+
   for (const manifest of await repository.listPlaybackAssets()) {
     if (await restorePlaybackAsset(repository, manifest)) {
       restoredPlaybackAssetCount += 1;
@@ -49,7 +56,20 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
     await upsertLocalPlaylistTrack(providerTrack);
   }
 
-  return { restoredTrackCount, restoredPlaybackAssetCount };
+  return { restoredTrackCount, restoredOriginalAssetCount, restoredPlaybackAssetCount };
+}
+
+async function restoreOriginalAsset(
+  record: Awaited<ReturnType<LocalRepository["listOriginalAssets"]>>[number]
+) {
+  if (!record || record.manifest.kind !== "original") return false;
+
+  try {
+    await putAssetManifest(record.manifest, { complete: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function restoreTrackSummary(record: LocalRepositoryTrackRecord) {

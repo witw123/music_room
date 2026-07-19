@@ -23,7 +23,6 @@ vi.mock("@/lib/indexeddb", () => indexedDbMocks);
 
 import {
   ensureLocalAudioDirectoryWriteAccess,
-  getLocalAudioFile,
   getOriginalAssetFile,
   saveCachedAudioFileToLocalDirectory
 } from "./local-audio-storage";
@@ -62,25 +61,6 @@ describe("local audio cache persistence", () => {
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue(null);
     indexedDbMocks.getLocalAudioFileRecord.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrackSummary.mockResolvedValue(null);
-  });
-
-  it("reads files saved by the previous root-directory layout", async () => {
-    const { handle } = createDirectoryHandle({
-      queryPermission: "granted",
-      requestPermission: "granted"
-    });
-    const legacyFile = new File(["legacy audio"], "Song [hash_1].mp3", { type: "audio/mpeg" });
-    handle.getFileHandle.mockResolvedValue({
-      getFile: vi.fn().mockResolvedValue(legacyFile)
-    });
-    indexedDbMocks.getLocalAudioDirectory.mockResolvedValue({ handle, name: "Music Room" });
-    indexedDbMocks.getLocalAudioFileRecord.mockResolvedValue({
-      fileHash: "hash_1",
-      fileName: legacyFile.name,
-      storageKind: "saved"
-    });
-
-    await expect(getLocalAudioFile("hash_1")).resolves.toBe(legacyFile);
   });
 
   it("rebuilds an owner source file from a complete original asset", async () => {

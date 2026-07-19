@@ -331,7 +331,6 @@ export function NeteaseSourcePanel({
 
 function toProviderErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
-    if (error.code === "ROOM_DOWNLOAD_BUSY") return "房间内已有成员正在下载，请稍后再试。";
     if (error.code === "NETEASE_ACCOUNT_REQUIRED") return "请先绑定网易云账号。";
     if (error.code === "NETEASE_AUTH_EXPIRED") return "网易云登录已失效，请重新绑定。";
     if (error.code === "NETEASE_DISABLED") return "网易云功能当前未启用。";

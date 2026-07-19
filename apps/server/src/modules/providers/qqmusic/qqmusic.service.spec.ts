@@ -117,7 +117,7 @@ describe("QqMusicService", () => {
     const service = new QqMusicService(api as never, accounts as never, {} as never);
 
     await expect(service.getTrack("user_1", "requested-mid")).rejects.toMatchObject({
-      response: expect.objectContaining({ code: "QQ_MUSIC_TRACK_NOT_FOUND" })
+      response: expect.objectContaining({ code: "QQMUSIC_TRACK_NOT_FOUND" })
     });
   });
 });

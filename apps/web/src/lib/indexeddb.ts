@@ -387,6 +387,23 @@ export async function getAssetManifest(assetId: string) {
   return record ?? null;
 }
 
+export async function getCompleteAssetPairForSourceFileHash(fileHash: string) {
+  const records = await musicRoomDatabase.assetManifests
+    .where("sourceFileHash")
+    .equals(fileHash)
+    .toArray();
+  const original = records.find(
+    (record) => record.complete && record.manifest.kind === "original"
+  );
+  const playback = records.find(
+    (record) =>
+      record.complete &&
+      record.manifest.kind === "playback" &&
+      record.manifest.profileId === playbackProfileId
+  );
+  return original && playback ? { original, playback } : null;
+}
+
 export async function deleteAudioAsset(assetId: string) {
   await musicRoomDatabase.transaction(
     "rw",

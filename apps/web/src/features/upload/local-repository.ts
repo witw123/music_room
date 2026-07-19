@@ -269,6 +269,12 @@ export class LocalRepository {
     );
   }
 
+  async listOriginalAssets() {
+    return this.listJsonFilesRecursively<LocalRepositoryOriginalManifest>(
+      `${localRepositoryDirectoryName}/assets/original`
+    );
+  }
+
   async writePlaybackAsset(input: {
     manifest: PlaybackAssetManifest;
     units: Array<{ descriptor: AssetUnitDescriptor; payload: ArrayBuffer }>;

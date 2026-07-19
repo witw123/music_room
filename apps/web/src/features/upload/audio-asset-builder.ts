@@ -15,6 +15,7 @@ import {
 import { createSHA256 } from "hash-wasm";
 import {
   deleteAudioAsset,
+  getCompleteAssetPairForSourceFileHash,
   getAssetManifest,
   putAssetManifest,
   putLocallyGeneratedAssetUnits,
@@ -118,8 +119,16 @@ export async function prepareAudioAssets(input: {
     const createdAssetIds = [source.originalAsset.assetId, playback.playbackAsset.assetId]
       .filter((assetId) => !preexistingAssetIds.has(assetId));
     try {
-      await persistOriginalAsset(input, source);
-      await persistPlaybackAsset(input, playback);
+      const [existingOriginal, existingPlayback] = await Promise.all([
+        getAssetManifest(source.originalAsset.assetId),
+        getAssetManifest(playback.playbackAsset.assetId)
+      ]);
+      if (!existingOriginal?.complete) {
+        await persistOriginalAsset(input, source);
+      }
+      if (!existingPlayback?.complete) {
+        await persistPlaybackAsset(input, playback);
+      }
       await persistAudioAssetsToLocalRepository({
         file: input.file,
         originalAsset: source.originalAsset,
@@ -153,6 +162,34 @@ export async function prepareAudioAssets(input: {
     });
     throw error;
   }
+}
+
+export async function getReusableAudioAssets(input: {
+  fileHash: string;
+  sizeBytes?: number;
+  durationMs?: number;
+}): Promise<PreparedAudioAssets | null> {
+  const pair = await getCompleteAssetPairForSourceFileHash(input.fileHash);
+  if (!pair) return null;
+
+  const originalAsset = pair.original.manifest;
+  const playbackAsset = pair.playback.manifest;
+  if (
+    originalAsset.kind !== "original" ||
+    playbackAsset.kind !== "playback" ||
+    originalAsset.fileHash !== input.fileHash ||
+    playbackAsset.sourceFileHash !== input.fileHash ||
+    (input.sizeBytes !== undefined && input.sizeBytes > 0 && originalAsset.sizeBytes !== input.sizeBytes) ||
+    (input.durationMs !== undefined && input.durationMs > 0 && playbackAsset.durationMs !== input.durationMs)
+  ) {
+    return null;
+  }
+
+  return {
+    fileHash: input.fileHash,
+    originalAsset,
+    playbackAsset
+  };
 }
 
 async function prepareOriginalAsset(input: {

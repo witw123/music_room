@@ -4,6 +4,16 @@ import { qqMusicTrackCandidateSchema } from "./qqmusic";
 
 export const providerSchema = z.enum(["netease", "qqmusic"]);
 
+export const providerAudioResolveResponseSchema = z
+  .object({
+    provider: providerSchema,
+    providerTrackId: z.string().trim().min(1),
+    url: z.string().url(),
+    mimeType: z.enum(["audio/mpeg", "audio/flac"]).nullable(),
+    fileType: z.enum(["mp3", "flac"])
+  })
+  .strict();
+
 export const providerLyricsSchema = z
   .object({
     provider: providerSchema,
@@ -53,6 +63,7 @@ export const providerPlaylistListResponseSchema = z
   .strict();
 
 export type ProviderLyrics = z.infer<typeof providerLyricsSchema>;
+export type ProviderAudioResolveResponse = z.infer<typeof providerAudioResolveResponseSchema>;
 export type ProviderPlaylistSummary = z.infer<typeof providerPlaylistSummarySchema>;
 export type ProviderPlaylistDetail = z.infer<typeof providerPlaylistDetailSchema>;
 export type ProviderAlbumDetail = z.infer<typeof providerAlbumDetailSchema>;
