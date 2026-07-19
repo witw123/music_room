@@ -885,11 +885,12 @@ function PlaylistDetailView({
       setDownloadTrackId(null);
     }
   }
-  const playableTracks = rows
+  const sequenceTracks = rows
     .map((row) => row.track)
-    .filter((track): track is LocalPlaylistTrackRecord => Boolean(track && player.isTrackPlayable(track)))
+    .filter((track): track is LocalPlaylistTrackRecord => Boolean(track))
     .filter((track, index, list) => list.findIndex((candidate) => candidate.id === track.id) === index);
-  const playableIndexById = new Map(playableTracks.map((track, index) => [track.id, index]));
+  const playableTracks = sequenceTracks.filter((track) => player.isTrackPlayable(track));
+  const sequenceIndexById = new Map(sequenceTracks.map((track, index) => [track.id, index]));
 
   return (
     <section className="mt-5" data-testid="playlist-detail">
@@ -914,7 +915,7 @@ function PlaylistDetailView({
             删除
           </Button>
         ) : null}
-        <Button disabled={playableTracks.length === 0} onClick={() => void player.playTracks(playableTracks, 0)} type="button">
+        <Button disabled={playableTracks.length === 0} onClick={() => void player.playTracks(sequenceTracks, 0)} type="button">
           <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
           播放全部
         </Button>
@@ -982,8 +983,8 @@ function PlaylistDetailView({
               onMove={(event) => onMoveTrack?.(track, getAnchoredDialogAnchor(event.currentTarget))}
                onRemove={canEditTracks ? () => onUpdateTracks(currentTrackIds.filter((itemTrackId) => itemTrackId !== trackId)) : undefined}
               onPlay={() => {
-                const playableIndex = playableIndexById.get(track.id);
-                if (playableIndex !== undefined) void player.playTracks(playableTracks, playableIndex);
+                const sequenceIndex = sequenceIndexById.get(track.id);
+                if (sequenceIndex !== undefined) void player.playTracks(sequenceTracks, sequenceIndex);
               }}
               track={track}
               draggable={canEditTracks}

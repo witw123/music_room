@@ -124,7 +124,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isTrackPlayable = useCallback(
-    (track: LocalPlaylistTrackRecord) => Boolean(track.availableOffline && track.fileHash),
+    (track: LocalPlaylistTrackRecord) => Boolean(track.fileHash && (track.availableOffline || track.fileName)),
     []
   );
 
@@ -192,7 +192,10 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     let file: Blob | null = null;
 
     for (let offset = 0; offset < candidateCount; offset += 1) {
-      const candidateIndex = (normalizedStartIndex + offset) % nextRecords.length;
+      const candidateIndex = playbackMode === "shuffle"
+        ? (normalizedStartIndex + offset) % nextRecords.length
+        : normalizedStartIndex + offset;
+      if (candidateIndex >= nextRecords.length) break;
       const candidate = nextRecords[candidateIndex];
       const candidateFile = await loadAudioFile(candidate);
       if (requestId !== playRequestRef.current) return;
@@ -252,14 +255,38 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    await playRecords([track], 0, "direct");
+    const nextQueue = [...queueRef.current, track];
+    queueRef.current = nextQueue;
+    setQueueRecords(nextQueue);
+    await playRecords(nextQueue, nextQueue.length - 1, "queue");
   }, [playRecords]);
 
   const playTracks = useCallback(async (
     tracksToPlay: LocalPlaylistTrackRecord[],
     startIndex = 0
   ) => {
-    await playRecords(tracksToPlay, startIndex, "playlist");
+    const uniqueTracks = tracksToPlay.filter((track, index, list) =>
+      list.findIndex((candidate) => candidate.id === track.id) === index
+    );
+    if (uniqueTracks.length === 0) return;
+
+    const normalizedStartIndex = Math.min(Math.max(0, startIndex), uniqueTracks.length - 1);
+    const nextQueue = [...queueRef.current];
+    const queueIds = new Set(nextQueue.map((track) => track.id));
+    for (const track of uniqueTracks) {
+      if (!queueIds.has(track.id)) {
+        nextQueue.push(track);
+        queueIds.add(track.id);
+      }
+    }
+    queueRef.current = nextQueue;
+    setQueueRecords(nextQueue);
+
+    const selectedTrackId = uniqueTracks[normalizedStartIndex]?.id;
+    const queueIndex = nextQueue.findIndex((track) => track.id === selectedTrackId);
+    if (queueIndex >= 0) {
+      await playRecords(nextQueue, queueIndex, "queue");
+    }
   }, [playRecords]);
 
   const addToQueue = useCallback((track: LocalPlaylistTrackRecord) => {
@@ -293,7 +320,15 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const onPlay = useCallback(() => {
     const record = currentRecordRef.current;
     const audio = audioRef.current;
-    if (!record || !audio) return;
+    if (!audio) return;
+
+    if (!record) {
+      const firstQueueIndex = queueRef.current.findIndex((track) => Boolean(track.fileHash));
+      if (firstQueueIndex >= 0) {
+        void playRecords(queueRef.current, firstQueueIndex, "queue");
+      }
+      return;
+    }
 
     void audio.play()
       .then(() => {
@@ -305,7 +340,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         }));
       })
       .catch(() => undefined);
-  }, [createPlaybackSnapshot]);
+  }, [createPlaybackSnapshot, playRecords]);
 
   const onPause = useCallback((positionMs?: number) => {
     const record = currentRecordRef.current;
@@ -341,12 +376,27 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     return nextPlayback;
   }, [audioDurationMs, createPlaybackSnapshot]);
 
+  const stopAtEnd = useCallback(() => {
+    const record = currentRecordRef.current;
+    const audio = audioRef.current;
+    if (!record) return;
+
+    const durationMs = audioDurationMs || record.durationMs;
+    if (audio && durationMs > 0) {
+      audio.currentTime = durationMs / 1000;
+      audio.pause();
+    }
+    setProgressMs(durationMs);
+    setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: durationMs }));
+  }, [audioDurationMs, createPlaybackSnapshot]);
+
   const findPlayableIndex = useCallback((startIndex: number, direction: 1 | -1) => {
     const records = playbackRecordsRef.current;
     if (records.length < 2) return -1;
 
-    for (let offset = 1; offset <= records.length; offset += 1) {
-      const index = (startIndex + direction * offset + records.length) % records.length;
+    for (let offset = 1; offset < records.length; offset += 1) {
+      const index = startIndex + direction * offset;
+      if (index < 0 || index >= records.length) break;
       if (isTrackPlayable(records[index])) return index;
     }
     return -1;
@@ -375,8 +425,10 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         nextIndex,
         playbackSequenceKindRef.current
       );
+    } else {
+      stopAtEnd();
     }
-  }, [findPlayableIndex, playRecords]);
+  }, [findPlayableIndex, playRecords, stopAtEnd]);
 
   const onCyclePlaybackMode = useCallback(() => {
     setPlaybackMode((mode) => mode === "sequence" ? "shuffle" : mode === "shuffle" ? "single" : "sequence");
@@ -399,6 +451,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       const selected = playable[Math.floor(Math.random() * playable.length)];
       if (selected) {
         void playRecords(records, selected.index, playbackSequenceKindRef.current);
+      } else if (isTrackPlayable(records[currentIndexRef.current])) {
+        void playRecords(records, currentIndexRef.current, playbackSequenceKindRef.current);
       }
       return;
     }
@@ -535,7 +589,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     currentQueueItemId: currentRecord && queueRecords.some((track) => track.id === currentRecord.id)
       ? buildLocalQueueItemId(currentRecord.id)
       : null,
-    canControlPlayback: Boolean(currentRecord),
+    canControlPlayback: Boolean(currentRecord || queueRecords.length > 0),
     canSeekPlayback: Boolean(currentRecord),
     playbackMode,
     isTrackPlayable,
