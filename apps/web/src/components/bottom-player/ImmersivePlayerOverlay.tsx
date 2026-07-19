@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import type { TrackMeta } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
+import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;
   isPlaying: boolean;
+  positionMs: number;
   currentTrack: TrackMeta | null;
   onClose: () => void;
 };
@@ -15,6 +17,7 @@ type ImmersivePlayerOverlayProps = {
 export function ImmersivePlayerOverlay({
   isOpen,
   isPlaying,
+  positionMs,
   currentTrack,
   onClose
 }: ImmersivePlayerOverlayProps) {
@@ -74,6 +77,8 @@ export function ImmersivePlayerOverlay({
 
           <ImmersiveLyrics
             isOpen={isOpen}
+            isPlaying={isPlaying}
+            positionMs={positionMs}
             sourceProvider={sourceProvider}
             sourceTrackId={sourceTrackId}
           />
@@ -134,27 +139,29 @@ function ImmersiveVinyl({ artworkUrl, isPlaying }: { artworkUrl: string | null; 
 
 function ImmersiveLyrics({
   isOpen,
+  isPlaying,
+  positionMs,
   sourceProvider,
   sourceTrackId
 }: {
   isOpen: boolean;
+  isPlaying: boolean;
+  positionMs: number;
   sourceProvider: "netease" | "qqmusic" | undefined;
   sourceTrackId: string | undefined;
 }) {
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
-  const [translatedLyric, setTranslatedLyric] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
     if (!isOpen || !sourceProvider || !sourceTrackId) {
       setPlainLyric(null);
-      setTranslatedLyric(null);
-      setIsLoading(false);
+      setLyricsStatus("idle");
       return;
     }
 
     let cancelled = false;
-    setIsLoading(true);
+    setLyricsStatus("loading");
     const request = sourceProvider === "netease"
       ? musicRoomApi.getNeteaseLyrics(sourceTrackId)
       : musicRoomApi.getQqMusicLyrics(sourceTrackId);
@@ -162,38 +169,30 @@ function ImmersiveLyrics({
       .then((lyrics) => {
         if (cancelled) return;
         setPlainLyric(lyrics.plainLyric);
-        setTranslatedLyric(lyrics.translatedLyric);
+        setLyricsStatus("ready");
       })
       .catch(() => {
         if (!cancelled) {
           setPlainLyric(null);
-          setTranslatedLyric(null);
+          setLyricsStatus("error");
         }
       })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
 
     return () => {
       cancelled = true;
     };
   }, [isOpen, sourceProvider, sourceTrackId]);
 
-  const lines = plainLyric?.split(/\r?\n/).filter(Boolean) ?? [];
-  const translatedLines = translatedLyric?.split(/\r?\n/).filter(Boolean) ?? [];
+  if (!isOpen) return null;
 
   return (
-    <div className="mt-10 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] pt-6 sm:mt-12 sm:pt-7">
-      <div className="max-h-[min(42vh,28rem)] space-y-5 overflow-y-auto pr-3 text-base leading-7 text-foreground-muted sm:text-lg sm:leading-8">
-        {lines.length ? lines.map((line, index) => (
-          <p key={`${index}:${line}`}>
-            <span className="block">{line}</span>
-            {translatedLines[index] ? <span className="block text-sm text-foreground-muted/55 sm:text-base">{translatedLines[index]}</span> : null}
-          </p>
-        )) : (
-          <p className="text-sm text-foreground-muted/60">{isLoading ? "正在读取歌词..." : "暂无可用歌词"}</p>
-        )}
-      </div>
+    <div className="mt-8 min-h-0 border-t border-white/[0.08] pt-5 sm:mt-10 sm:pt-6">
+      <RoomLyricsPanel
+        isPlaying={isPlaying}
+        lyrics={plainLyric}
+        positionMs={positionMs}
+        status={lyricsStatus}
+      />
     </div>
   );
 }

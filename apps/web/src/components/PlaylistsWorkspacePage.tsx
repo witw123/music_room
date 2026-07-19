@@ -214,7 +214,7 @@ export function PlaylistsWorkspacePage() {
             onBack={() => setSelectedPlaylist(null)}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
             onDelete={selectedPlaylist.kind === "local"
-              ? isDefaultLocalPlaylist(selectedPlaylist.playlist) ? undefined : () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
+              ? () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
               : () => setDeleteTarget({ kind: "network", playlist: selectedPlaylist.playlist })}
           />
         ) : (
@@ -252,18 +252,20 @@ export function PlaylistsWorkspacePage() {
                     新建本地歌单
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {localPlaylists.map((playlist) => (
-                    <LocalPlaylistCard
-                      folderName={storageState?.directoryName ?? null}
-                      key={playlist.id}
-                      onDelete={isDefaultLocalPlaylist(playlist) ? undefined : () => setDeleteTarget({ kind: "local", playlist })}
-                      onOpen={() => setSelectedPlaylist({ kind: "local", playlist })}
-                      playlist={playlist}
-                      tracks={tracksForLocalPlaylist(playlist, localTracks)}
-                    />
-                  ))}
-                </div>
+                {localPlaylists.length ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {localPlaylists.map((playlist) => (
+                      <LocalPlaylistCard
+                        folderName={storageState?.directoryName ?? null}
+                        key={playlist.id}
+                        onDelete={() => setDeleteTarget({ kind: "local", playlist })}
+                        onOpen={() => setSelectedPlaylist({ kind: "local", playlist })}
+                        playlist={playlist}
+                        tracks={tracksForLocalPlaylist(playlist, localTracks)}
+                      />
+                    ))}
+                  </div>
+                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center text-sm text-foreground-muted">当前没有本地歌单，可使用右上角按钮新建。</div>}
               </section>
             ) : (
               <section className="mt-6 flex flex-col gap-4" data-testid="network-playlists">

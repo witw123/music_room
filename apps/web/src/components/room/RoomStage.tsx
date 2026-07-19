@@ -353,22 +353,16 @@ function RoomStageBase({
           <span aria-hidden="true" className="text-xs font-semibold leading-none sm:text-sm">词</span>
         </Button>
         <div
-          className={`relative z-20 min-h-0 overflow-hidden ${
-            isLyricsOpen
-              ? "grid grid-rows-[minmax(0,1fr)_minmax(7.5rem,38%)] gap-1"
-              : "flex h-full flex-col items-center justify-center"
+          className={`relative flex h-full min-h-0 items-center justify-center ${
+            ultraCompactStage
+              ? "-translate-y-[12%]"
+              : compactStage
+                ? "-translate-y-[10%]"
+                : "-translate-y-[8%]"
           }`}
         >
           <div
-            className={`pointer-events-none group relative flex min-h-0 w-full items-center justify-center ${
-              isLyricsOpen ? "" : "h-full"
-            } ${
-              !isLyricsOpen && ultraCompactStage
-                ? "-translate-y-8"
-                : !isLyricsOpen && compactStage
-                  ? "-translate-y-4"
-                  : ""
-            }`}
+            className="pointer-events-none group relative flex min-h-0 w-full items-center justify-center"
             style={{ "--record-size": recordSize } as CSSProperties}
           >
             <VinylAuraVisualizer isPlaying={isPlaying} />
@@ -420,14 +414,6 @@ function RoomStageBase({
             />
           </div>
         </div>
-        {isLyricsOpen ? (
-          <RoomLyricsPanel
-            isPlaying={isPlaying}
-            lyrics={lyricsText}
-            positionMs={lyricsPositionMs}
-            status={lyricsStatus}
-          />
-        ) : null}
       </div>
 
       <div
@@ -487,6 +473,14 @@ function RoomStageBase({
               : "从曲库添加音乐，或导入本地音频，马上开始这场协作收听。"}
           </p>
         </div>
+        {isLyricsOpen ? (
+          <RoomLyricsPanel
+            isPlaying={isPlaying}
+            lyrics={lyricsText}
+            positionMs={lyricsPositionMs}
+            status={lyricsStatus}
+          />
+        ) : null}
       </div>
       <ConfirmDialog
         confirmLabel="解散房间"

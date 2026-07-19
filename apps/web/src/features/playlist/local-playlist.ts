@@ -37,10 +37,7 @@ export function listLocalPlaylists(): LocalPlaylistRecord[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return fallback;
     const records = parsed.filter(isLocalPlaylistRecord);
-    const hasDefault = records.some((playlist) => playlist.id === defaultLocalPlaylistId);
-    const next = hasDefault ? records : [fallback[0], ...records];
-    if (!hasDefault) writeLocalPlaylists(next);
-    return next;
+    return records;
   } catch {
     return fallback;
   }
@@ -61,7 +58,6 @@ export function createLocalPlaylist(input: { title: string; description?: string
 }
 
 export function deleteLocalPlaylist(playlistId: string) {
-  if (playlistId === defaultLocalPlaylistId) return;
   writeLocalPlaylists(listLocalPlaylists().filter((playlist) => playlist.id !== playlistId));
 }
 

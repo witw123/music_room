@@ -89,7 +89,7 @@ function LocalStorageTabPanelBase({
     <div className="animate-fade-in flex w-full flex-col gap-8">
       <div className="flex flex-col gap-3 border-b border-surface-border pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-foreground">我的歌单</p>
+          <p className="text-xs font-semibold text-foreground">本地音乐</p>
           <p className="mt-1 truncate text-[10px] text-foreground-muted" title={localStorageSummary.localFolderName ?? undefined}>
             本地目录 {formatBytes(localStorageSummary.usageBytes)} · {localStorageSummary.cachedTrackCount} 首记录
           </p>
@@ -136,7 +136,7 @@ function LocalStorageTabPanelBase({
       <div className="flex w-full max-w-xl gap-1 rounded-xl border border-surface-border bg-surface/40 p-1" role="tablist" aria-label="歌单类型">
         <button
           aria-selected={playlistTab === "local"}
-          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${playlistTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
           onClick={() => setPlaylistTab("local")}
           role="tab"
           type="button"
@@ -145,7 +145,7 @@ function LocalStorageTabPanelBase({
         </button>
         <button
           aria-selected={playlistTab === "network"}
-          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${playlistTab === "network" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "network" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
           onClick={() => setPlaylistTab("network")}
           role="tab"
           type="button"
@@ -168,10 +168,6 @@ function LocalStorageTabPanelBase({
         />
       </section> : null}
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
-        <div className="border-b border-surface-border pb-3">
-          <p className="text-sm font-semibold text-foreground">网络歌单</p>
-          <p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单，可将已准备好的曲目加入当前房间。</p>
-        </div>
         <PlaylistPanel
           activeSession={activeSession}
           canCreatePlaylist={!!activeSession}

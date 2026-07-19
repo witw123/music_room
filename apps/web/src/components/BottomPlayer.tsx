@@ -385,6 +385,7 @@ function BottomPlayerBase({
     <ImmersivePlayerOverlay
       isOpen={isImmersiveOpen}
       isPlaying={isPlaying}
+      positionMs={boundedProgressMs}
       currentTrack={currentTrack}
       onClose={() => setIsImmersiveOpen(false)}
     />

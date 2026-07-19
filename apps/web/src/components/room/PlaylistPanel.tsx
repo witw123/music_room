@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { AuthSession, Playlist, TrackMeta } from "@music-room/shared";
-import { normalizePlaylistTitle } from "@/lib/music-room-ui";
+import { formatDuration, normalizePlaylistTitle } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 
 type PlaylistPanelProps = {
@@ -28,195 +28,399 @@ export function PlaylistPanel({
   onUpdatePlaylistTracks,
   onDeletePlaylist
 }: PlaylistPanelProps) {
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
-  const [playlistEditId, setPlaylistEditId] = useState<string | null>(null);
-  const [playlistEditTitle, setPlaylistEditTitle] = useState("");
-  const [, startTransition] = useTransition();
+  const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [isPending, startTransition] = useTransition();
   const trackMap = new Map(tracks.map((track) => [track.id, track]));
+  const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
+
+  const saveCurrentQueue = () => {
+    if (!activeSession || !canCreatePlaylist || isPending) return;
+    const nextTitle = normalizePlaylistTitle(playlistTitle);
+    startTransition(async () => {
+      await onSavePlaylistFromQueue(nextTitle);
+      setPlaylistTitle(nextTitle);
+      setIsCreateOpen(false);
+    });
+  };
+
+  const deletePlaylist = (playlistId: string) => {
+    if (isPending) return;
+    startTransition(async () => {
+      await onDeletePlaylist(playlistId);
+      setSelectedPlaylistId(null);
+    });
+  };
+
+  const startRename = (playlist: Playlist) => {
+    setEditingPlaylistId(playlist.id);
+    setEditingTitle(playlist.title);
+  };
+
+  const cancelRename = () => {
+    setEditingPlaylistId(null);
+    setEditingTitle("");
+  };
+
+  const saveRename = (playlist: Playlist) => {
+    if (!editingTitle.trim() || isPending) return;
+    const nextTitle = normalizePlaylistTitle(editingTitle, playlist.title);
+    startTransition(async () => {
+      await onUpdatePlaylistTitle(playlist.id, nextTitle);
+      cancelRename();
+    });
+  };
+
+  if (selectedPlaylist) {
+    return (
+      <PlaylistDetail
+        editingPlaylistId={editingPlaylistId}
+        editingTitle={editingTitle}
+        isPending={isPending}
+        onBack={() => {
+          cancelRename();
+          setSelectedPlaylistId(null);
+        }}
+        onDelete={() => deletePlaylist(selectedPlaylist.id)}
+        onLoad={() => startTransition(() => void onLoadPlaylistIntoRoom(selectedPlaylist.id))}
+        onStartRename={() => startRename(selectedPlaylist)}
+        onCancelRename={cancelRename}
+        onSaveRename={() => saveRename(selectedPlaylist)}
+        onEditingTitleChange={setEditingTitle}
+        onRemoveTrack={(trackId) =>
+          startTransition(() =>
+            void onUpdatePlaylistTracks(
+              selectedPlaylist.id,
+              selectedPlaylist.trackIds.filter((id) => id !== trackId)
+            )
+          )
+        }
+        playlist={selectedPlaylist}
+        trackMap={trackMap}
+      />
+    );
+  }
 
   return (
-    <section className="flex w-full flex-col gap-6">
-      <div className="flex items-end justify-between border-b border-surface-border pb-4">
+    <section className="flex w-full flex-col gap-5" data-testid="network-playlist-panel">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-4">
         <div>
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
-            Playlists
-          </p>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Playlists</p>
           <h2 className="text-lg font-bold text-foreground">网络歌单</h2>
+          <p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p>
         </div>
-        <span className="rounded-md border border-surface-border bg-surface px-2 py-0.5 text-xs font-medium text-foreground-muted">
-          {playlists.length} 个
-        </span>
-      </div>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-foreground-muted">新歌单名称</span>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 rounded-lg border border-surface-border bg-black/40 px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 transition-[background-color,border-color,box-shadow,color] duration-150 ease-out focus:outline-none focus:ring-1 focus:ring-accent"
-            value={playlistTitle}
-            onChange={(event) => setPlaylistTitle(event.target.value)}
-            placeholder="例如：Tonight Selects"
-          />
+        <div className="flex items-center gap-2">
+          <span className="rounded-md border border-surface-border bg-surface px-2 py-1 text-xs font-medium text-foreground-muted">
+            {playlists.length} 个
+          </span>
           <Button
-            size="sm"
-            disabled={!activeSession || !canCreatePlaylist}
-            onClick={() =>
-              startTransition(async () => {
-                const nextTitle = normalizePlaylistTitle(playlistTitle);
-                await onSavePlaylistFromQueue(nextTitle);
-                setPlaylistTitle(nextTitle);
-              })
-            }
+            aria-label="保存当前队列为歌单"
+            disabled={!activeSession || !canCreatePlaylist || isPending}
+            onClick={() => setIsCreateOpen(true)}
+            size="icon"
+            title="保存当前队列为歌单"
             type="button"
+            variant="outline"
           >
-            保存
+            <PlusIcon />
           </Button>
         </div>
-      </label>
+      </div>
 
-      <div className="mt-2 flex flex-col gap-3">
-        {playlists.length > 0 ? (
-          playlists.map((playlist) => (
-            <div
+      {playlists.length > 0 ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {playlists.map((playlist) => (
+            <PlaylistCard
               key={playlist.id}
-              className="flex flex-col gap-3 rounded-xl border border-surface-border p-4 transition-colors hover:border-surface-hover hover:bg-surface/30"
-            >
-              {playlistEditId === playlist.id ? (
-                <>
-                  <label className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-foreground-muted">重命名歌单</span>
-                    <input
-                      className="w-full rounded-md border border-surface-border bg-black/40 px-3 py-2 text-sm text-foreground transition-[background-color,border-color,box-shadow,color] duration-150 ease-out focus:outline-none focus:ring-1 focus:ring-accent"
-                      value={playlistEditTitle}
-                      onChange={(event) => setPlaylistEditTitle(event.target.value)}
-                    />
-                  </label>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setPlaylistEditId(null);
-                        setPlaylistEditTitle("");
-                      }}
-                      type="button"
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={!playlistEditTitle.trim()}
-                      onClick={() =>
-                        startTransition(async () => {
-                          await onUpdatePlaylistTitle(
-                            playlist.id,
-                            normalizePlaylistTitle(playlistEditTitle, playlist.title)
-                          );
-                          setPlaylistEditId(null);
-                          setPlaylistEditTitle("");
-                        })
-                      }
-                      type="button"
-                    >
-                      保存
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-1">
-                    <strong className="truncate text-sm font-semibold text-foreground">
-                      {playlist.title}
-                    </strong>
-                    <p className="text-[10px] text-foreground-muted">
-                      {playlist.trackIds.length} 首曲目 · {playlist.isCollaborative ? "协作" : "个人"}
-                    </p>
-                  </div>
+              onDelete={() => deletePlaylist(playlist.id)}
+              onOpen={() => setSelectedPlaylistId(playlist.id)}
+              playlist={playlist}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-surface-border px-6 py-14 text-center">
+          <p className="text-sm text-foreground-muted">当前房间还没有网络歌单。</p>
+          <Button
+            className="mt-4"
+            disabled={!activeSession || !canCreatePlaylist || isPending}
+            onClick={() => setIsCreateOpen(true)}
+            size="sm"
+            type="button"
+          >
+            <PlusIcon />
+            保存当前队列
+          </Button>
+        </div>
+      )}
 
-                  {playlist.trackIds.length > 0 ? (
-                    <div className="flex flex-col gap-2 rounded-lg border border-surface-border bg-background/40 p-3">
-                      {playlist.trackIds.map((trackId) => {
-                        const track = trackMap.get(trackId);
-                        return (
-                          <div key={`${playlist.id}:${trackId}`} className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium text-foreground">
-                                {track?.title ?? trackId}
-                              </p>
-                              <p className="truncate text-[10px] text-foreground-muted">
-                                {track?.artist ?? "曲目信息不可用"}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-[11px] text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                              onClick={() =>
-                                startTransition(() =>
-                                  void onUpdatePlaylistTracks(
-                                    playlist.id,
-                                    playlist.trackIds.filter((id) => id !== trackId)
-                                  )
-                                )
-                              }
-                              type="button"
-                            >
-                              删歌
-                            </Button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-surface-border px-3 py-2 text-xs text-foreground-muted">
-                      这个歌单里还没有曲目。
-                    </div>
-                  )}
+      {isCreateOpen ? (
+        <SavePlaylistDialog
+          isPending={isPending}
+          onCancel={() => setIsCreateOpen(false)}
+          onSubmit={saveCurrentQueue}
+          onTitleChange={setPlaylistTitle}
+          title={playlistTitle}
+        />
+      ) : null}
+    </section>
+  );
+}
 
-                  <div className="mt-1 flex items-center gap-2 border-t border-surface-border pt-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1 px-2 text-xs"
-                      onClick={() => startTransition(() => void onLoadPlaylistIntoRoom(playlist.id))}
-                      type="button"
-                    >
-                      加入房间
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="px-2 text-xs"
-                      onClick={() => {
-                        setPlaylistEditId(playlist.id);
-                        setPlaylistEditTitle(playlist.title);
-                      }}
-                      type="button"
-                    >
-                      改名
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="px-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                      onClick={() => startTransition(() => void onDeletePlaylist(playlist.id))}
-                      type="button"
-                    >
-                      删除
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="rounded-xl border-2 border-dashed border-surface-border px-4 py-6 text-center">
-            <p className="text-xs text-foreground-muted/70">
-              把当前队列保存成歌单，以便之后快速重新载入房间。
-            </p>
+function PlaylistCard({ playlist, onOpen, onDelete }: { playlist: Playlist; onOpen: () => void; onDelete: () => void }) {
+  const providerName = getProviderName(playlist);
+
+  return (
+    <article className="group relative overflow-hidden rounded-2xl border border-surface-border bg-surface/35 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover">
+      <button
+        aria-label={`打开歌单 ${playlist.title}`}
+        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
+        onClick={onOpen}
+        type="button"
+      >
+        <div className="relative overflow-hidden">
+          <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="cover" />
+          <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80 backdrop-blur-sm">
+            {providerName}
+          </span>
+          <span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white/90 backdrop-blur-sm">
+            {playlist.trackIds.length} 首歌曲
+          </span>
+        </div>
+        <div className="space-y-1.5 px-4 py-3.5 pr-12">
+          <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
+          <p className="truncate text-xs text-foreground-muted">{playlist.description || "暂无简介"}</p>
+          <p className="text-xs text-foreground-muted">{playlist.isCollaborative ? "协作歌单" : "个人歌单"}</p>
+        </div>
+      </button>
+      <Button
+        aria-label={`删除歌单 ${playlist.title}`}
+        className="absolute right-3 top-3 h-8 w-8 bg-black/55 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+        size="icon"
+        title="删除歌单"
+        type="button"
+        variant="ghost"
+      >
+        <TrashIcon />
+      </Button>
+    </article>
+  );
+}
+
+function PlaylistDetail({
+  playlist,
+  trackMap,
+  editingPlaylistId,
+  editingTitle,
+  isPending,
+  onBack,
+  onLoad,
+  onStartRename,
+  onCancelRename,
+  onSaveRename,
+  onEditingTitleChange,
+  onRemoveTrack,
+  onDelete
+}: {
+  playlist: Playlist;
+  trackMap: Map<string, TrackMeta>;
+  editingPlaylistId: string | null;
+  editingTitle: string;
+  isPending: boolean;
+  onBack: () => void;
+  onLoad: () => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onSaveRename: () => void;
+  onEditingTitleChange: (value: string) => void;
+  onRemoveTrack: (trackId: string) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <section className="flex w-full flex-col" data-testid="network-playlist-detail">
+      <Button className="mb-6 self-start gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
+        <ArrowLeftIcon />
+        返回歌单
+      </Button>
+
+      <div className="flex flex-col gap-6 border-b border-surface-border pb-7 sm:flex-row sm:items-end">
+        <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Network playlist</p>
+          <h2 className="mt-2 truncate text-2xl font-bold text-foreground sm:text-3xl">{playlist.title}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-foreground-muted">{playlist.description || "暂无简介"}</p>
+          <p className="mt-3 text-xs text-foreground-muted">
+            {playlist.trackIds.length} 首歌曲 · {getProviderName(playlist)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button disabled={isPending || playlist.trackIds.length === 0} onClick={onLoad} size="sm" type="button">
+            <PlayIcon />
+            加入房间
+          </Button>
+          <Button aria-label="重命名歌单" disabled={isPending} onClick={onStartRename} size="icon" title="重命名歌单" type="button" variant="outline">
+            <EditIcon />
+          </Button>
+          <Button aria-label="删除歌单" className="text-red-300 hover:bg-red-500/10 hover:text-red-200" disabled={isPending} onClick={onDelete} size="icon" title="删除歌单" type="button" variant="ghost">
+            <TrashIcon />
+          </Button>
+        </div>
+      </div>
+
+      {editingPlaylistId === playlist.id ? (
+        <div className="mt-5 flex flex-col gap-2 rounded-xl border border-surface-border bg-surface/25 p-3 sm:flex-row sm:items-center">
+          <label className="sr-only" htmlFor="room-playlist-title">歌单名称</label>
+          <input
+            autoFocus
+            className="min-w-0 flex-1 rounded-lg border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            id="room-playlist-title"
+            maxLength={160}
+            onChange={(event) => onEditingTitleChange(event.target.value)}
+            value={editingTitle}
+          />
+          <div className="flex shrink-0 gap-2">
+            <Button disabled={isPending} onClick={onCancelRename} size="sm" type="button" variant="ghost">取消</Button>
+            <Button disabled={isPending || !editingTitle.trim()} onClick={onSaveRename} size="sm" type="button">保存</Button>
           </div>
-        )}
+        </div>
+      ) : null}
+
+      <div className="mt-6 overflow-hidden rounded-2xl border border-surface-border bg-surface/25">
+        <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
+          <span>#</span>
+          <span>标题</span>
+          <span className="hidden sm:block">专辑</span>
+          <span className="hidden text-right sm:block">时长</span>
+          <span aria-hidden="true" />
+        </div>
+        {playlist.trackIds.length > 0 ? playlist.trackIds.map((trackId, index) => {
+          const track = trackMap.get(trackId);
+          return (
+            <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-surface-border px-4 py-3 last:border-b-0 sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]" key={`${playlist.id}:${trackId}`}>
+              <span className="text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
+              <div className="flex min-w-0 items-center gap-3">
+                <Artwork artworkUrl={track?.artworkUrl ?? null} title={track?.title ?? trackId} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{track?.title ?? trackId}</p>
+                  <p className="mt-1 truncate text-xs text-foreground-muted">{track?.artist ?? "曲目信息不可用"}</p>
+                </div>
+              </div>
+              <span className="hidden truncate text-xs text-foreground-muted sm:block">{track?.album ?? "未知专辑"}</span>
+              <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{track ? formatDuration(track.durationMs) : "--:--"}</span>
+              <Button
+                aria-label={`从歌单移除${track ? `《${track.title}》` : "歌曲"}`}
+                className="h-8 w-8 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                disabled={isPending}
+                onClick={() => onRemoveTrack(trackId)}
+                size="icon"
+                title="从歌单移除"
+                type="button"
+                variant="ghost"
+              >
+                <TrashIcon />
+              </Button>
+            </div>
+          );
+        }) : <div className="px-6 py-14 text-center text-sm text-foreground-muted">这个歌单还没有歌曲。</div>}
       </div>
     </section>
   );
+}
+
+function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" role="presentation">
+      <form
+        aria-labelledby="room-save-playlist-title"
+        className="w-full max-w-md rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground" id="room-save-playlist-title">保存当前队列</h2>
+            <p className="mt-1 text-xs text-foreground-muted">把当前房间队列保存成网络歌单，之后可以再次载入房间。</p>
+          </div>
+          <Button aria-label="关闭" onClick={onCancel} size="icon" type="button" variant="ghost">
+            <CloseIcon />
+          </Button>
+        </div>
+        <label className="mt-5 block text-xs font-medium text-foreground-muted" htmlFor="room-new-playlist-title">歌单名称</label>
+        <input
+          autoFocus
+          className="mt-2 w-full rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          id="room-new-playlist-title"
+          maxLength={160}
+          onChange={(event) => onTitleChange(event.target.value)}
+          placeholder="例如：Tonight Selects"
+          required
+          value={title}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button disabled={isPending} onClick={onCancel} type="button" variant="ghost">取消</Button>
+          <Button disabled={isPending || !title.trim()} type="submit">{isPending ? "保存中…" : "保存歌单"}</Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "cover" }) {
+  const sizeClass = size === "cover"
+    ? "aspect-square w-full rounded-none"
+    : size === "lg"
+      ? "h-24 w-24 rounded-xl"
+      : "h-10 w-10 rounded-lg";
+
+  return (
+    <div
+      aria-label={`${title} 封面`}
+      className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden border border-surface-border bg-surface text-lg font-bold text-foreground-muted`}
+      style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
+    >
+      {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
+    </div>
+  );
+}
+
+function getProviderName(playlist: Playlist) {
+  const sourceTag = playlist.tags.find((tag) => tag.startsWith("network:"));
+  if (sourceTag?.startsWith("network:qqmusic:")) return "QQ 音乐";
+  if (sourceTag?.startsWith("network:netease:")) return "网易云音乐";
+  return "网络歌单";
+}
+
+function PlusIcon() {
+  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M12 5v14M5 12h14" /></svg>;
+}
+
+function ArrowLeftIcon() {
+  return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /></svg>;
+}
+
+function PlayIcon() {
+  return <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>;
+}
+
+function EditIcon() {
+  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="m4 16-.7 4.7L8 20l11.3-11.3a2.1 2.1 0 0 0-3-3L4 16Z" /><path d="m14.8 7.2 2 2" /></svg>;
+}
+
+function TrashIcon() {
+  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>;
+}
+
+function CloseIcon() {
+  return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>;
 }
