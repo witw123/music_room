@@ -63,12 +63,12 @@ function TrackListSectionBase({
     }
   };
   return (
-    <section className="relative flex w-full flex-col gap-8">
-      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-8 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out hover:border-accent/40 hover:bg-accent/10 sm:p-12">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
+    <section className="relative flex w-full flex-col gap-4">
+      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-accent/20 bg-accent/5 p-5 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out hover:border-accent/40 hover:bg-accent/10 sm:p-7">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
           <svg
-            width="28"
-            height="28"
+            width="24"
+            height="24"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -81,8 +81,8 @@ function TrackListSectionBase({
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
         </div>
-        <span className="mb-1 text-base font-semibold text-foreground">导入本地音频</span>
-        <span className="text-sm text-foreground-muted">点击选择文件，或直接拖拽到这里</span>
+        <span className="mb-1 text-sm font-semibold text-foreground">导入本地音频</span>
+        <span className="text-xs text-foreground-muted">点击选择文件，或直接拖拽到这里</span>
         <input
           data-testid="track-upload-input"
           type="file"
@@ -94,10 +94,10 @@ function TrackListSectionBase({
         />
       </label>
 
-      <div className="flex justify-end border-b border-surface-border pb-4">
+      <div className="flex justify-end border-b border-surface-border pb-2">
         <div
           aria-label="曲库来源筛选"
-          className="grid w-full max-w-[420px] grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1"
+          className="grid w-full max-w-[360px] grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1"
           role="group"
         >
           {[
@@ -109,7 +109,7 @@ function TrackListSectionBase({
               key={option.value}
               aria-pressed={trackFilter === option.value}
               data-testid={`library-filter-${option.value}`}
-              className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[11px] font-semibold transition-colors sm:px-3 ${
+              className={`flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-2.5 ${
                 trackFilter === option.value
                   ? "bg-accent text-white shadow-sm"
                   : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
@@ -130,7 +130,7 @@ function TrackListSectionBase({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-2 flex flex-col gap-1.5">
         {visibleTracks.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
             {visibleTracks.map((track) => {
@@ -148,14 +148,14 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid gap-4 border-b border-surface-border px-4 py-4 transition-colors last:border-b-0 hover:bg-surface-hover lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  className="group grid gap-2 border-b border-surface-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:px-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                 >
-                  <div className="min-w-0 space-y-1">
-                    <h3 className="truncate font-semibold text-foreground">{track.title}</h3>
+                  <div className="min-w-0 space-y-0.5">
+                    <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
                     <p className="truncate text-xs text-foreground-muted">
                       {track.artist}  {formatDuration(track.durationMs)}
                     </p>
-                    <p className="mt-1 text-[10px] text-foreground-muted/60">
+                    <p className="mt-0.5 text-[10px] text-foreground-muted/60">
                       <span
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
                           isUploadedLocally
@@ -168,21 +168,24 @@ function TrackListSectionBase({
                   </div>
 
                   <div
-                    className="flex flex-wrap items-center justify-start gap-2 sm:justify-end"
+                    className="flex flex-wrap items-center justify-start gap-1 sm:justify-end"
                   >
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-9 shrink-0 whitespace-nowrap px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 shrink-0 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         disabled={pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
                         }
+                        aria-label={`删除《${track.title}》`}
+                        title="删除"
                         type="button"
+                        size="icon"
                       >
-                        删除
+                        <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
                       </Button>
                     ) : null}
 
@@ -191,12 +194,19 @@ function TrackListSectionBase({
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
                         variant={isSavedLocally ? "ghost" : "outline"}
-                        className="h-9 shrink-0 whitespace-nowrap px-3"
+                        className="h-8 w-8 shrink-0 p-0"
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
+                        aria-label={isSavedLocally ? `《${track.title}》已保存到本地` : `保存《${track.title}》到本地`}
+                        title={isSavedLocally ? "已保存到本地" : "保存到本地"}
                         type="button"
+                        size="icon"
                       >
-                        {isSavedLocally ? "已保存" : "保存到本地"}
+                        {isSavedLocally ? (
+                          <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m5 12 4 4L19 6" /></svg>
+                        ) : (
+                          <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" /></svg>
+                        )}
                       </Button>
                     ) : null}
 
@@ -204,22 +214,26 @@ function TrackListSectionBase({
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
                       variant="outline"
-                      className="h-9 shrink-0 justify-center whitespace-nowrap bg-background/50 px-3"
+                      className="h-8 w-8 shrink-0 bg-background/50 p-0"
                       disabled={pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
+                      aria-label={`将《${track.title}》加入队列`}
+                      title="加入队列"
                       type="button"
+                      size="icon"
                     >
-                      加入队列
+                      <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M12 5v14M5 12h14" /></svg>
                     </Button>
 
                     <Button
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-9 w-9 shrink-0 px-0 hover:bg-accent/10 hover:text-accent"
+                      className="h-8 w-8 shrink-0 p-0 hover:bg-accent/10 hover:text-accent"
                       disabled={!canControlPlayback || pendingAction !== null}
                       onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"
+                      aria-label={`播放《${track.title}》`}
                       title="立即播放"
                     >
                       <svg

@@ -175,7 +175,7 @@ function RoomDashboardViewBase({
   }, [handleTabChange]);
 
   return (
-    <div className="relative flex min-h-[calc(100dvh-112px)] w-full min-w-0 flex-col overflow-x-clip overflow-y-visible lg:h-[calc(100dvh-80px)] lg:min-h-0 lg:flex-row lg:gap-0 lg:overflow-hidden">
+    <div className="relative flex min-h-[calc(100dvh-112px)] w-full min-w-0 flex-col overflow-x-clip overflow-y-visible lg:grid lg:h-[calc(100dvh-80px)] lg:min-h-0 lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0 lg:overflow-hidden">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
           <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" />
@@ -183,7 +183,7 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ LEFT: Immersive Stage ══════ */}
-      <div className="relative z-10 flex min-h-[min(38svh,25rem)] w-full min-w-0 shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:flex-[3] lg:min-w-0 lg:overflow-hidden">
+      <div className="relative z-10 flex min-h-[min(40svh,26rem)] w-full min-w-0 shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
 
         {/* Vinyl + Track Info */}
         <div className="lg:flex-[2] lg:min-h-0">
@@ -210,8 +210,8 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ RIGHT: Management Panel ══════ */}
-      <div className="material-surface relative z-20 flex w-full min-w-0 min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:flex-[2] lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.08] rounded-t-[24px] px-4 pb-3 pt-3 sm:px-6 sm:pt-5 lg:rounded-none">
+      <div className="material-surface relative z-20 flex w-full min-w-0 min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 rounded-t-[24px] border-b border-white/[0.08] px-3 pb-2.5 pt-2.5 sm:px-5 sm:pt-4 lg:rounded-none">
           <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
             <span
               aria-hidden="true"
@@ -247,7 +247,7 @@ function RoomDashboardViewBase({
 
         <div
           aria-labelledby={`room-tab-${activeTab}`}
-          className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 lg:pb-32"
+          className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pt-4 lg:pb-32"
           id={`room-panel-${activeTab}`}
           role="tabpanel"
         >

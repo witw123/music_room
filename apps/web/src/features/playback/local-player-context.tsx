@@ -42,7 +42,6 @@ type LocalPlayerContextValue = {
   syncProgressFromAudio: () => void;
   syncDurationFromAudio: () => void;
   tracks: TrackMeta[];
-  availableTracks: TrackMeta[];
   queue: QueueItem[];
   currentQueueItemId: string | null;
   canControlPlayback: boolean;
@@ -50,7 +49,6 @@ type LocalPlayerContextValue = {
   playbackMode: PlaybackMode;
   isTrackPlayable: (track: LocalPlaylistTrackRecord) => boolean;
   addToQueue: (track: LocalPlaylistTrackRecord) => void;
-  addTrackToQueue: (trackId: string) => void;
   playTrack: (track: LocalPlaylistTrackRecord) => Promise<void>;
   playTracks: (tracks: LocalPlaylistTrackRecord[], startIndex?: number) => Promise<void>;
   onPlay: () => void;
@@ -270,11 +268,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addTrackToQueue = useCallback((trackId: string) => {
-    const track = [...libraryRecords, ...queueRef.current].find((candidate) => candidate.id === trackId);
-    if (track) addToQueue(track);
-  }, [addToQueue, libraryRecords]);
-
   const onPlay = useCallback(() => {
     const record = currentRecordRef.current;
     const audio = audioRef.current;
@@ -491,14 +484,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     );
     return records.map(toTrackMeta);
   }, [libraryRecords, queueRecords]);
-  const availableTracks = useMemo(() => {
-    const records = [...libraryRecords, ...queueRecords]
-      .filter((track, index, list) =>
-        list.findIndex((candidate) => candidate.id === track.id) === index
-      )
-      .filter(isTrackPlayable);
-    return records.map(toTrackMeta);
-  }, [isTrackPlayable, libraryRecords, queueRecords]);
   const queue = useMemo(
     () => queueRecords.map((track, position) => ({
       id: buildLocalQueueItemId(track.id),
@@ -524,7 +509,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     syncProgressFromAudio,
     syncDurationFromAudio,
     tracks,
-    availableTracks,
     queue,
     currentQueueItemId: currentRecord && queueRecords.some((track) => track.id === currentRecord.id)
       ? buildLocalQueueItemId(currentRecord.id)
@@ -534,7 +518,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     playbackMode,
     isTrackPlayable,
     addToQueue,
-    addTrackToQueue,
     playTrack,
     playTracks,
     onPlay,
@@ -548,8 +531,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     onReorderQueue
   }), [
     audioDurationMs,
-    addTrackToQueue,
-    availableTracks,
     currentRecord,
     currentTrack,
     addToQueue,

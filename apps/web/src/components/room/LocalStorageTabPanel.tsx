@@ -49,6 +49,7 @@ function LocalStorageTabPanelBase({
   const [isCleaning, setIsCleaning] = useState(false);
   const [isChoosingFolder, setIsChoosingFolder] = useState(false);
   const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
+  const [playlistTab, setPlaylistTab] = useState<"local" | "network">("local");
 
   const handleClean = async () => {
     if (isCleaning) return;
@@ -132,7 +133,27 @@ function LocalStorageTabPanelBase({
           </Button>
         </div>
       </div>
-      <section className="flex flex-col gap-3" data-testid="local-playlist-section">
+      <div className="flex w-full max-w-xl gap-1 rounded-xl border border-surface-border bg-surface/40 p-1" role="tablist" aria-label="歌单类型">
+        <button
+          aria-selected={playlistTab === "local"}
+          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${playlistTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          onClick={() => setPlaylistTab("local")}
+          role="tab"
+          type="button"
+        >
+          本地歌单
+        </button>
+        <button
+          aria-selected={playlistTab === "network"}
+          className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${playlistTab === "network" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          onClick={() => setPlaylistTab("network")}
+          role="tab"
+          type="button"
+        >
+          网络歌单
+        </button>
+      </div>
+      {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
         <div className="border-b border-surface-border pb-3">
           <p className="text-sm font-semibold text-foreground">本地歌单</p>
           <p className="mt-1 text-xs text-foreground-muted">本地目录中的下载歌曲、缓存歌曲和已保存歌曲。</p>
@@ -145,8 +166,8 @@ function LocalStorageTabPanelBase({
           onImportCachedTrack={handleImportCachedTrack}
           pendingCachedImport={pendingCachedImport}
         />
-      </section>
-      <section className="flex flex-col gap-3" data-testid="network-playlist-section">
+      </section> : null}
+      {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
         <div className="border-b border-surface-border pb-3">
           <p className="text-sm font-semibold text-foreground">网络歌单</p>
           <p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单，可将已准备好的曲目加入当前房间。</p>
@@ -162,7 +183,7 @@ function LocalStorageTabPanelBase({
           playlists={playlists}
           tracks={tracks}
         />
-      </section>
+      </section> : null}
     </div>
   );
 }

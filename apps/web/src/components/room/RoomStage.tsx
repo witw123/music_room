@@ -87,11 +87,17 @@ function RoomStageBase({
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
-  const recordSize = ultraCompactStage
-    ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
-    : compactStage
-      ? "clamp(8rem, min(22vh, 38vw), 11rem)"
-      : "clamp(11rem, min(34vh, 42vw), 20rem)";
+  const recordSize = isLyricsOpen
+    ? ultraCompactStage
+      ? "clamp(6.5rem, min(15vh, 30vw), 8rem)"
+      : compactStage
+        ? "clamp(7rem, min(18vh, 32vw), 9.5rem)"
+        : "clamp(9rem, min(26vh, 32vw), 14rem)"
+    : ultraCompactStage
+      ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
+      : compactStage
+        ? "clamp(8rem, min(22vh, 38vw), 11rem)"
+        : "clamp(11rem, min(34vh, 42vw), 20rem)";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -199,7 +205,9 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] px-4 sm:px-5 md:px-8 ${
+      className={`relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] px-3 sm:px-5 md:px-8 ${
+        isLyricsOpen ? "min-h-[min(68svh,38rem)]" : ""
+      } ${
         ultraCompactStage ? "py-2" : compactStage ? "py-3" : "py-4 sm:py-5 md:py-6"
       }`}
     >
@@ -326,10 +334,10 @@ function RoomStageBase({
         </div>
       </div>
 
-      <div className="relative z-20 min-h-0 overflow-x-clip overflow-y-visible">
+      <div className="relative z-20 h-full min-h-0 overflow-hidden">
         <Button
           aria-label={isLyricsOpen ? "关闭歌词" : "打开歌词"}
-          className={`pointer-events-auto absolute left-1 top-1/2 z-40 h-11 w-11 -translate-y-1/2 rounded-2xl border backdrop-blur-md sm:left-2 md:left-4 ${
+          className={`pointer-events-auto absolute left-0 top-1/2 z-40 h-8 w-8 -translate-y-1/2 rounded-xl border backdrop-blur-md sm:left-2 sm:h-9 sm:w-9 md:left-4 ${
             isLyricsOpen
               ? "border-accent/40 bg-accent/20 text-accent"
               : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10 hover:text-white"
@@ -342,15 +350,25 @@ function RoomStageBase({
           type="button"
           variant="ghost"
         >
-          <span aria-hidden="true" className="text-lg font-semibold leading-none">词</span>
+          <span aria-hidden="true" className="text-xs font-semibold leading-none sm:text-sm">词</span>
         </Button>
         <div
-          className={`relative flex h-full flex-col items-center justify-center ${isLyricsOpen ? "gap-3" : ""} ${
-            ultraCompactStage ? "-translate-y-8" : compactStage ? "-translate-y-4" : ""
+          className={`relative z-20 min-h-0 overflow-hidden ${
+            isLyricsOpen
+              ? "grid grid-rows-[minmax(0,1fr)_minmax(7.5rem,38%)] gap-1"
+              : "flex h-full flex-col items-center justify-center"
           }`}
         >
           <div
-            className="pointer-events-none group relative flex items-center justify-center"
+            className={`pointer-events-none group relative flex min-h-0 w-full items-center justify-center ${
+              isLyricsOpen ? "" : "h-full"
+            } ${
+              !isLyricsOpen && ultraCompactStage
+                ? "-translate-y-8"
+                : !isLyricsOpen && compactStage
+                  ? "-translate-y-4"
+                  : ""
+            }`}
             style={{ "--record-size": recordSize } as CSSProperties}
           >
             <VinylAuraVisualizer isPlaying={isPlaying} />

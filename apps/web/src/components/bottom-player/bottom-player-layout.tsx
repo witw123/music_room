@@ -32,8 +32,6 @@ type LayoutProps = {
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
-  availableTracks?: TrackMeta[];
-  onAddToQueue?: (trackId: string) => void | Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isImmersiveOpen: boolean;
@@ -250,8 +248,6 @@ export function MobileBottomPlayerLayout({
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
-  availableTracks,
-  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
@@ -285,8 +281,6 @@ export function MobileBottomPlayerLayout({
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
-            availableTracks={availableTracks}
-            onAddToQueue={onAddToQueue}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />
@@ -403,8 +397,6 @@ export function DesktopBottomPlayerLayout({
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
-  availableTracks,
-  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
@@ -494,8 +486,6 @@ export function DesktopBottomPlayerLayout({
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
-            availableTracks={availableTracks}
-            onAddToQueue={onAddToQueue}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />

@@ -26,7 +26,6 @@ type BottomPlayerControllerProps = {
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
-  onAddToQueue: (trackId: string) => void | Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
@@ -50,7 +49,6 @@ function BottomPlayerControllerBase({
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
-  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue
 }: BottomPlayerControllerProps) {
@@ -138,8 +136,6 @@ function BottomPlayerControllerBase({
       canReorderQueue={canReorderQueue}
       canRemoveQueue={canRemoveQueue}
       onPlayQueueItem={onPlayQueueItem}
-      availableTracks={roomSnapshot?.tracks ?? []}
-      onAddToQueue={onAddToQueue}
       onRemoveQueueItem={onRemoveQueueItem}
       onReorderQueue={onReorderQueue}
     />

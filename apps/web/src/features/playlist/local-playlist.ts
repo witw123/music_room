@@ -11,6 +11,79 @@ import {
 
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
+export type LocalPlaylistRecord = {
+  id: string;
+  title: string;
+  description: string | null;
+  trackIds: string[];
+  isAggregate?: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const localPlaylistsStorageKey = "music-room-local-playlists";
+const defaultLocalPlaylistId = "local-default";
+
+export function listLocalPlaylists(): LocalPlaylistRecord[] {
+  const fallback = [createDefaultLocalPlaylist()];
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    const raw = window.localStorage.getItem(localPlaylistsStorageKey);
+    if (!raw) {
+      writeLocalPlaylists(fallback);
+      return fallback;
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return fallback;
+    const records = parsed.filter(isLocalPlaylistRecord);
+    const hasDefault = records.some((playlist) => playlist.id === defaultLocalPlaylistId);
+    const next = hasDefault ? records : [fallback[0], ...records];
+    if (!hasDefault) writeLocalPlaylists(next);
+    return next;
+  } catch {
+    return fallback;
+  }
+}
+
+export function createLocalPlaylist(input: { title: string; description?: string | null }) {
+  const now = new Date().toISOString();
+  const playlist: LocalPlaylistRecord = {
+    id: createLocalPlaylistId(),
+    title: input.title.trim(),
+    description: input.description?.trim() || null,
+    trackIds: [],
+    createdAt: now,
+    updatedAt: now
+  };
+  writeLocalPlaylists([...listLocalPlaylists(), playlist]);
+  return playlist;
+}
+
+export function deleteLocalPlaylist(playlistId: string) {
+  if (playlistId === defaultLocalPlaylistId) return;
+  writeLocalPlaylists(listLocalPlaylists().filter((playlist) => playlist.id !== playlistId));
+}
+
+export function updateLocalPlaylist(playlistId: string, input: { trackIds?: string[]; title?: string; description?: string | null }) {
+  const current = listLocalPlaylists().find((playlist) => playlist.id === playlistId);
+  if (!current) return null;
+  const updated: LocalPlaylistRecord = {
+    ...current,
+    title: input.title?.trim() || current.title,
+    description: input.description === undefined ? current.description : input.description?.trim() || null,
+    trackIds: input.trackIds ?? current.trackIds,
+    isAggregate: input.trackIds === undefined ? current.isAggregate : false,
+    updatedAt: new Date().toISOString()
+  };
+  writeLocalPlaylists(listLocalPlaylists().map((playlist) => playlist.id === playlistId ? updated : playlist));
+  return updated;
+}
+
+export function isDefaultLocalPlaylist(playlist: LocalPlaylistRecord) {
+  return playlist.id === defaultLocalPlaylistId;
+}
+
 export async function hashAudioBlob(blob: Blob) {
   const hasher = await createSHA256();
   hasher.init();
@@ -126,4 +199,44 @@ function fromCachedSummary(
     createdAt: summary.cachedAt,
     updatedAt: summary.cachedAt
   };
+}
+
+function createDefaultLocalPlaylist(): LocalPlaylistRecord {
+  const timestamp = new Date(0).toISOString();
+  return {
+    id: defaultLocalPlaylistId,
+    title: "本地歌单",
+    description: "本地目录中保存的歌曲",
+    trackIds: [],
+    isAggregate: true,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+function createLocalPlaylistId() {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  return `local-playlist-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+}
+
+function isLocalPlaylistRecord(value: unknown): value is LocalPlaylistRecord {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<LocalPlaylistRecord>;
+  return typeof item.id === "string"
+    && typeof item.title === "string"
+    && (typeof item.description === "string" || item.description === null)
+    && Array.isArray(item.trackIds)
+    && item.trackIds.every((trackId) => typeof trackId === "string")
+    && (item.isAggregate === undefined || typeof item.isAggregate === "boolean")
+    && typeof item.createdAt === "string"
+    && typeof item.updatedAt === "string";
+}
+
+function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(localPlaylistsStorageKey, JSON.stringify(playlists));
+  } catch {
+    // Private browsing or storage quotas can reject local metadata writes.
+  }
 }

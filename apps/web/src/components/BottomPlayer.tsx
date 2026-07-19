@@ -47,8 +47,6 @@ type BottomPlayerProps = {
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
-  availableTracks?: TrackMeta[];
-  onAddToQueue?: (trackId: string) => void | Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
@@ -85,8 +83,6 @@ function BottomPlayerBase({
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
-  availableTracks,
-  onAddToQueue,
   onRemoveQueueItem,
   onReorderQueue
 }: BottomPlayerProps) {
@@ -329,8 +325,6 @@ function BottomPlayerBase({
         canReorderQueue={canReorderQueue}
         canRemoveQueue={canRemoveQueue}
         onPlayQueueItem={onPlayQueueItem}
-        availableTracks={availableTracks}
-        onAddToQueue={onAddToQueue}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
@@ -360,8 +354,6 @@ function BottomPlayerBase({
         canReorderQueue={canReorderQueue}
         canRemoveQueue={canRemoveQueue}
         onPlayQueueItem={onPlayQueueItem}
-        availableTracks={availableTracks}
-        onAddToQueue={onAddToQueue}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
