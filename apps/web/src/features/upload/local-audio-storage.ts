@@ -35,12 +35,21 @@ type PermissionedDirectoryHandle = FileSystemDirectoryHandle & {
   requestPermission: (descriptor?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
 };
 
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values: () => AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>;
+};
+
 export type LocalAudioStorageState = {
   supported: boolean;
   directoryName: string | null;
   savedFileHashes: string[];
   cachedFileHashes: string[];
   permission: PermissionState | null;
+};
+
+export type SelectedLocalAudioFile = {
+  file: File;
+  fileName: string;
 };
 
 export function supportsLocalAudioDirectory() {
@@ -98,6 +107,20 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   };
 }
 
+export async function listSelectedLocalAudioFiles(): Promise<SelectedLocalAudioFile[] | null> {
+  const directory = await getLocalAudioDirectory();
+  if (!directory) return [];
+
+  const permission = await asPermissionedHandle(directory.handle)
+    .queryPermission({ mode: "read" })
+    .catch(() => "denied" as PermissionState);
+  if (permission !== "granted") return null;
+
+  const files: SelectedLocalAudioFile[] = [];
+  await collectSelectedLocalAudioFiles(directory.handle, "", files);
+  return files;
+}
+
 export async function ensureLocalAudioDirectoryWriteAccess() {
   return !!(await getWritableLocalAudioDirectory());
 }
@@ -127,8 +150,8 @@ export async function getLocalAudioFile(fileHash: string) {
   // Records created before the subfolder layout point directly at the old
   // selected directory. Keep them readable until the user saves them again.
   try {
-    const fileHandle = await directory.handle.getFileHandle(fileRecord.fileName);
-    return await fileHandle.getFile();
+    const file = await getFileByPath(directory.handle, fileRecord.fileName);
+    return file;
   } catch {
     return null;
   }
@@ -414,6 +437,38 @@ async function readLocalAudioFile(
   }
 }
 
+async function collectSelectedLocalAudioFiles(
+  directory: FileSystemDirectoryHandle,
+  parentPath: string,
+  files: SelectedLocalAudioFile[]
+) {
+  for await (const entry of (directory as IterableDirectoryHandle).values()) {
+    const fileName = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+    if (entry.kind === "file") {
+      const file = await entry.getFile();
+      if (isAudioFile(file)) {
+        files.push({ file, fileName });
+      }
+      continue;
+    }
+
+    // These directories belong to Music Room and are indexed separately.
+    if (
+      !parentPath &&
+      Object.values(localAudioSubdirectories).includes(
+        entry.name as (typeof localAudioSubdirectories)[keyof typeof localAudioSubdirectories]
+      )
+    ) {
+      continue;
+    }
+    await collectSelectedLocalAudioFiles(entry, fileName, files);
+  }
+}
+
+function isAudioFile(file: File) {
+  return file.type.startsWith("audio/") || /\.(aac|flac|m4a|mp3|ogg|opus|wav|webm)$/i.test(file.name);
+}
+
 async function filterReadableLocalFiles(
   root: FileSystemDirectoryHandle,
   records: ReadonlyArray<{ fileHash: string; fileName: string }>,
@@ -429,7 +484,7 @@ async function filterReadableLocalFiles(
 
     if (checkRootFallback) {
       try {
-        await root.getFileHandle(record.fileName);
+        await getFileByPath(root, record.fileName);
         return record.fileHash;
       } catch {
         // The record points to a file that is no longer present.
@@ -438,6 +493,19 @@ async function filterReadableLocalFiles(
     return null;
   }));
   return available.filter((fileHash): fileHash is string => !!fileHash);
+}
+
+async function getFileByPath(root: FileSystemDirectoryHandle, fileName: string) {
+  const parts = fileName.split(/[\\/]/).filter(Boolean);
+  if (parts.length === 0) {
+    throw new Error("本地文件路径为空。");
+  }
+
+  let directory = root;
+  for (const part of parts.slice(0, -1)) {
+    directory = await directory.getDirectoryHandle(part);
+  }
+  return directory.getFileHandle(parts[parts.length - 1]).then((handle) => handle.getFile());
 }
 
 function inferFileExtension(mimeType: string) {

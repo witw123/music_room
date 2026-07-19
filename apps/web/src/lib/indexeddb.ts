@@ -101,6 +101,7 @@ export type LocalAudioFileRecord = {
   fileHash: string;
   fileName: string;
   storageKind?: LocalAudioStorageKind;
+  source?: "directory-scan";
   savedAt: string;
 };
 
@@ -125,6 +126,7 @@ export type LocalPlaylistTrackRecord = {
   fileHash: string | null;
   fileName: string | null;
   availableOffline: boolean;
+  source?: "directory-scan";
   createdAt: string;
   updatedAt: string;
 };

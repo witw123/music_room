@@ -15,6 +15,7 @@ import {
   listLocalPlaylists,
   listMergedLocalPlaylistTracks,
   listRoomPlaylistTrackIndex,
+  syncSelectedLocalDirectoryTracks,
   hashAudioBlob,
   providerTrackKey,
   toProviderTrackRecord,
@@ -80,6 +81,7 @@ export function PlaylistsWorkspacePage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   const refresh = async () => {
+    const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
     const [tracks, localPlaylistRecords, playlists, storage, roomTracks] = await Promise.all([
       listMergedLocalPlaylistTracks(),
       listLocalPlaylists(),
@@ -92,6 +94,7 @@ export function PlaylistsWorkspacePage() {
     setNetworkPlaylists(playlists);
     setStorageState(storage);
     setRoomTrackIndex(roomTracks);
+    return scannedTrackCount;
   };
 
   useEffect(() => {
@@ -209,7 +212,8 @@ export function PlaylistsWorkspacePage() {
     setStatusMessage(null);
     try {
       await chooseLocalAudioDirectory();
-      await refresh();
+      const scannedTrackCount = await refresh();
+      setStatusMessage(`本地目录已更新，识别到 ${scannedTrackCount} 首歌曲。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
     } finally {

@@ -1,14 +1,19 @@
 import { createSHA256 } from "hash-wasm";
 import type { NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@music-room/shared";
 import {
+  deleteLocalAudioFileRecord,
+  deleteLocalPlaylistTrack,
   listCachedLibraryTrackHashes,
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
   listLocalPlaylistTracks,
+  saveLocalAudioFileRecord,
+  upsertLocalPlaylistTrack,
   type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
+import { listSelectedLocalAudioFiles } from "@/features/upload/local-audio-storage";
 
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -24,6 +29,7 @@ export type LocalPlaylistRecord = {
 
 const localPlaylistsStorageKey = "music-room-local-playlists";
 const defaultLocalPlaylistId = "local-default";
+const directoryScanSource = "directory-scan" as const;
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
   const fallback = [createDefaultLocalPlaylist()];
@@ -191,6 +197,72 @@ export async function listMergedLocalPlaylistTracks() {
   return [...reconciledExplicit, ...derived];
 }
 
+export async function syncSelectedLocalDirectoryTracks() {
+  const selectedFiles = await listSelectedLocalAudioFiles();
+  if (!selectedFiles) return 0;
+
+  const scannedTracks = await Promise.all(
+    selectedFiles.map(async ({ file, fileName }) => {
+      const fileHash = buildDirectoryFileHash(fileName, file);
+      const metadata = await readDirectoryTrackMetadata(file);
+      const now = new Date().toISOString();
+      return {
+        track: {
+          id: `local-file:${fileHash}`,
+          title: metadata.title,
+          artist: metadata.artist,
+          album: metadata.album,
+          durationMs: metadata.durationMs,
+          mimeType: file.type || inferAudioMimeType(file.name),
+          sizeBytes: file.size,
+          artworkUrl: null,
+          lyrics: null,
+          provider: "local_upload" as const,
+          providerTrackId: null,
+          fileHash,
+          fileName,
+          availableOffline: true,
+          source: directoryScanSource,
+          createdAt: now,
+          updatedAt: now
+        } satisfies LocalPlaylistTrackRecord,
+        fileHash,
+        fileName
+      };
+    })
+  );
+
+  const currentHashes = new Set(scannedTracks.map((item) => item.fileHash));
+  const [existingTracks, existingFiles] = await Promise.all([
+    listLocalPlaylistTracks(),
+    listLocalAudioFiles("saved")
+  ]);
+  const staleTracks = existingTracks.filter((track) =>
+    track.source === directoryScanSource && !!track.fileHash && !currentHashes.has(track.fileHash)
+  );
+  const staleFiles = existingFiles.filter((file) =>
+    file.source === directoryScanSource && !currentHashes.has(file.fileHash)
+  );
+
+  await Promise.all([
+    ...staleTracks.map((track) => deleteLocalPlaylistTrack(track.id)),
+    ...staleFiles.map((file) => deleteLocalAudioFileRecord(file.fileHash, "saved"))
+  ]);
+  await Promise.all(
+    scannedTracks.flatMap(({ track, fileHash, fileName }) => [
+      upsertLocalPlaylistTrack(track),
+      saveLocalAudioFileRecord({
+        fileHash,
+        fileName,
+        storageKind: "saved",
+        source: directoryScanSource
+      })
+    ])
+  );
+
+  return scannedTracks.length;
+}
+
 export async function listRoomPlaylistTrackIndex() {
   const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
     listLocalPlaylistTracks(),
@@ -280,6 +352,45 @@ function createDefaultLocalPlaylist(): LocalPlaylistRecord {
     createdAt: timestamp,
     updatedAt: timestamp
   };
+}
+
+function buildDirectoryFileHash(fileName: string, file: File) {
+  return `local-directory:${fileName}:${file.size}:${file.lastModified}`;
+}
+
+async function readDirectoryTrackMetadata(file: File) {
+  const fallback = {
+    title: file.name.replace(/\.[^/.]+$/, ""),
+    artist: "本地歌曲",
+    album: null as string | null,
+    durationMs: 0
+  };
+
+  try {
+    const { parseBlob } = await import("music-metadata");
+    const metadata = await parseBlob(file, { duration: true, skipCovers: true });
+    return {
+      title: metadata.common.title?.trim() || fallback.title,
+      artist: metadata.common.artist?.trim()
+        || metadata.common.artists?.join(" / ").trim()
+        || fallback.artist,
+      album: metadata.common.album?.trim() || fallback.album,
+      durationMs: Number.isFinite(metadata.format.duration)
+        ? Math.round((metadata.format.duration ?? 0) * 1_000)
+        : fallback.durationMs
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function inferAudioMimeType(fileName: string) {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (extension === "flac") return "audio/flac";
+  if (extension === "wav") return "audio/wav";
+  if (extension === "m4a" || extension === "aac") return "audio/mp4";
+  if (extension === "ogg" || extension === "opus") return "audio/ogg";
+  return "audio/mpeg";
 }
 
 function createLocalPlaylistId() {

@@ -208,7 +208,7 @@ function LocalPlaylistSearch({
       const response = provider === "netease"
         ? await musicRoomApi.searchNeteaseTracks(query)
         : await musicRoomApi.searchQqMusicTracks(query);
-      setResults(response.items);
+      setResults(await enrichSearchResults(response.items));
       if (response.items.length === 0) setMessage("没有找到匹配的歌曲。");
     } catch (error) {
       setErrorMessage(toLocalSearchErrorMessage(error));
@@ -232,10 +232,17 @@ function LocalPlaylistSearch({
         throw new Error("请先选择本地歌曲保存位置。");
       }
 
-      const track = await (candidate.provider === "netease"
+      const detail = await (candidate.provider === "netease"
         ? musicRoomApi.getNeteaseTrack(candidate.providerTrackId)
         : musicRoomApi.getQqMusicTrack(candidate.providerTrackId)
-      ).catch(() => candidate);
+      ).catch(() => null);
+      const track = detail
+        ? {
+            ...candidate,
+            ...detail,
+            artworkUrl: detail.artworkUrl ?? candidate.artworkUrl
+          }
+        : candidate;
       const source = candidate.provider === "netease"
         ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
         : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
@@ -274,6 +281,50 @@ function LocalPlaylistSearch({
     } catch {
       return null;
     }
+  }
+
+  async function enrichSearchResults(items: ProviderTrack[]) {
+    const missingArtwork = items.filter((track) => !track.artworkUrl);
+    const albumIds = [...new Set(
+      missingArtwork
+        .map((track) => track.providerAlbumId)
+        .filter((albumId): albumId is string => !!albumId)
+    )].slice(0, 12);
+    const artworkByAlbumId = new Map<string, string>();
+
+    await Promise.all(albumIds.map(async (albumId) => {
+      try {
+        const album = provider === "netease"
+          ? await musicRoomApi.getNeteaseAlbum(albumId)
+          : await musicRoomApi.getQqMusicAlbum(albumId);
+        if (album.artworkUrl) artworkByAlbumId.set(albumId, album.artworkUrl);
+      } catch {
+        // Search results remain usable when a provider album endpoint is unavailable.
+      }
+    }));
+
+    const tracksWithoutAlbum = missingArtwork
+      .filter((track) => !track.providerAlbumId)
+      .slice(0, 6);
+    const artworkByTrackId = new Map<string, string>();
+    await Promise.all(tracksWithoutAlbum.map(async (track) => {
+      try {
+        const detail = track.provider === "netease"
+          ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+          : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+        if (detail.artworkUrl) artworkByTrackId.set(track.providerTrackId, detail.artworkUrl);
+      } catch {
+        // Keep the search candidate when detail lookup fails.
+      }
+    }));
+
+    return items.map((track) => ({
+      ...track,
+      artworkUrl: track.artworkUrl
+        ?? (track.providerAlbumId ? artworkByAlbumId.get(track.providerAlbumId) : undefined)
+        ?? artworkByTrackId.get(track.providerTrackId)
+        ?? null
+    }));
   }
 
   return (
