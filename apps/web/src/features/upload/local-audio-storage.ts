@@ -120,7 +120,7 @@ export async function getLocalAudioFile(fileHash: string) {
 
   const savedFile = await readLocalAudioFile(directory.handle, fileRecord.fileName, "local")
     ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "saved");
-  if (savedFile || fileRecord.storageKind === "saved") {
+  if (savedFile) {
     return savedFile;
   }
 

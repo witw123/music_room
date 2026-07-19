@@ -26,6 +26,7 @@ import {
   getLocalAudioFile
 } from "@/features/upload/local-audio-storage";
 import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 const localQueueOwnerId = "local-playlist";
 
@@ -197,7 +198,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         : normalizedStartIndex + offset;
       if (candidateIndex >= nextRecords.length) break;
       const candidate = nextRecords[candidateIndex];
-      const candidateFile = await loadAudioFile(candidate);
+      const candidateFile = await loadAudioFile(candidate).catch(() => null);
       if (requestId !== playRequestRef.current) return;
       if (candidateFile) {
         selectedIndex = candidateIndex;
@@ -231,8 +232,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     audio.pause();
     audio.src = objectUrl;
     audio.load();
-    try {
-      await audio.play();
+    const playResult = await roomAudioOutput.playElement(audio, { force: true });
+    if (playResult.ok) {
       if (requestId !== playRequestRef.current) return;
       const startedAt = new Date(Date.now() - audio.currentTime * 1000).toISOString();
       setPlayback(createPlaybackSnapshot({
@@ -241,9 +242,10 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         positionMs: audio.currentTime * 1000,
         startedAt
       }));
-    } catch {
+    } else {
       if (requestId !== playRequestRef.current) return;
-      // Browsers can reject autoplay after an asynchronous local-file read.
+      // Keep the selected track visible so the next explicit play click can
+      // retry after a browser autoplay policy rejection.
       setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: 0 }));
     }
   }, [createPlaybackSnapshot, loadAudioFile, playbackMode]);
@@ -330,16 +332,16 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    void audio.play()
-      .then(() => {
+    void roomAudioOutput.playElement(audio, { force: true })
+      .then((result) => {
+        if (!result.ok) return;
         setPlayback(createPlaybackSnapshot({
           record,
           status: "playing",
           positionMs: audio.currentTime * 1000,
           startedAt: new Date(Date.now() - audio.currentTime * 1000).toISOString()
         }));
-      })
-      .catch(() => undefined);
+      });
   }, [createPlaybackSnapshot, playRecords]);
 
   const onPause = useCallback((positionMs?: number) => {
@@ -390,44 +392,47 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: durationMs }));
   }, [audioDurationMs, createPlaybackSnapshot]);
 
-  const findPlayableIndex = useCallback((startIndex: number, direction: 1 | -1) => {
+  const findPlayableIndex = useCallback(async (startIndex: number, direction: 1 | -1) => {
     const records = playbackRecordsRef.current;
     if (records.length < 2) return -1;
 
     for (let offset = 1; offset < records.length; offset += 1) {
       const index = startIndex + direction * offset;
       if (index < 0 || index >= records.length) break;
-      if (isTrackPlayable(records[index])) return index;
+      const candidate = records[index];
+      if (isTrackPlayable(candidate) || await loadAudioFile(candidate).catch(() => null)) return index;
     }
     return -1;
-  }, [isTrackPlayable]);
+  }, [isTrackPlayable, loadAudioFile]);
 
   const onPrev = useCallback(() => {
     if (progressRef.current > 3000) {
       void onSeek(0);
       return;
     }
-    const nextIndex = findPlayableIndex(currentIndexRef.current, -1);
-    if (nextIndex >= 0) {
-      void playRecords(
-        playbackRecordsRef.current,
-        nextIndex,
-        playbackSequenceKindRef.current
-      );
-    }
+    void findPlayableIndex(currentIndexRef.current, -1).then((nextIndex) => {
+      if (nextIndex >= 0) {
+        void playRecords(
+          playbackRecordsRef.current,
+          nextIndex,
+          playbackSequenceKindRef.current
+        );
+      }
+    });
   }, [findPlayableIndex, onSeek, playRecords]);
 
   const onNext = useCallback(() => {
-    const nextIndex = findPlayableIndex(currentIndexRef.current, 1);
-    if (nextIndex >= 0) {
-      void playRecords(
-        playbackRecordsRef.current,
-        nextIndex,
-        playbackSequenceKindRef.current
-      );
-    } else {
-      stopAtEnd();
-    }
+    void findPlayableIndex(currentIndexRef.current, 1).then((nextIndex) => {
+      if (nextIndex >= 0) {
+        void playRecords(
+          playbackRecordsRef.current,
+          nextIndex,
+          playbackSequenceKindRef.current
+        );
+      } else {
+        stopAtEnd();
+      }
+    });
   }, [findPlayableIndex, playRecords, stopAtEnd]);
 
   const onCyclePlaybackMode = useCallback(() => {
