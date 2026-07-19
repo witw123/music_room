@@ -158,13 +158,13 @@ function TrackListSectionBase({
                     <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
                   </div>
 
-                  <div className="row-span-2 flex min-w-max self-center justify-self-end flex-nowrap items-center justify-end gap-1">
+                  <div className="col-start-3 row-span-2 flex min-w-max self-center justify-self-end flex-nowrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-8 w-8 shrink-0 !rounded-none p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive"
                         disabled={pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
@@ -182,8 +182,8 @@ function TrackListSectionBase({
                       <Button
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
-                        variant={isSavedLocally ? "ghost" : "outline"}
-                        className="h-8 w-8 shrink-0 !rounded-none p-0"
+                        variant="ghost"
+                        className={`h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent ${isSavedLocally ? "text-accent hover:text-accent" : ""}`}
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
                         aria-label={isSavedLocally ? `《${track.title}》已保存到本地` : `保存《${track.title}》到本地`}
@@ -202,8 +202,8 @@ function TrackListSectionBase({
                     <Button
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
-                      variant="outline"
-                      className="h-8 w-8 shrink-0 !rounded-none bg-background/50 p-0"
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground"
                       disabled={pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       aria-label={`将《${track.title}》加入队列`}
@@ -218,24 +218,15 @@ function TrackListSectionBase({
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-8 w-8 shrink-0 !rounded-none p-0 hover:bg-accent/10 hover:text-accent"
+                      className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 text-foreground-muted hover:bg-transparent hover:text-accent disabled:opacity-100 disabled:text-foreground-muted/45"
                       disabled={!canControlPlayback || pendingAction !== null}
                       onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"
                       aria-label={`播放《${track.title}》`}
                       title="立即播放"
                     >
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polygon points="5 3 19 12 5 21 5 3" />
+                      <svg aria-hidden="true" fill="currentColor" height="17" viewBox="0 0 24 24" width="17">
+                        <path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10-6.8a1.1 1.1 0 0 0 0-1.8l-10-6.8C8.9 3.9 8 4.4 8 5.2Z" />
                       </svg>
                     </Button>
                   </div>

@@ -196,7 +196,7 @@ function RoomDashboardViewBase({
       <div className="relative z-10 flex h-[min(52svh,34rem)] max-h-[60svh] min-h-[min(40svh,26rem)] w-full min-w-0 shrink-0 flex-col lg:h-full lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
 
         {/* Vinyl + Track Info */}
-        <div className="lg:flex-[2] lg:min-h-0">
+        <div className="flex h-full min-h-0 flex-1 flex-col lg:flex-[2] lg:min-h-0">
           <RoomStage
             roomSnapshot={roomSnapshot}
             currentTrack={currentTrack}
