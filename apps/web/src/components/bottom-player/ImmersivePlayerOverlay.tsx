@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import type { TrackMeta } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
@@ -117,7 +116,6 @@ export function ImmersivePlayerOverlay({
 function ImmersiveVinyl({ artworkUrl, isPlaying, palette }: { artworkUrl: string | null; isPlaying: boolean; palette: ArtworkPalette }) {
   return (
     <div className="relative flex aspect-square h-[min(34dvh,14rem)] w-auto max-w-full items-center justify-center sm:h-[min(40dvh,20rem)] lg:h-[min(68dvh,34rem)]">
-      <VinylAuraVisualizer isPlaying={isPlaying} />
       <div
         className="relative flex aspect-square w-[86%] items-center justify-center overflow-visible"
       >
@@ -208,7 +206,7 @@ function ImmersiveLyrics({
   return (
     <div className="mt-2 min-h-0 border-t border-white/[0.08] pt-3 sm:mt-4 sm:pt-4">
       <RoomLyricsPanel
-        className="h-[min(34svh,15rem)] max-h-[15rem] min-h-[6rem] sm:h-[min(40svh,22rem)] sm:max-h-[22rem] sm:min-h-[9rem]"
+        visibleLines={5}
         isPlaying={isPlaying}
         lyrics={plainLyric}
         positionMs={positionMs}

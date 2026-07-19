@@ -348,6 +348,7 @@ function BottomPlayerBase({
         onToggleLyrics={onToggleLyrics}
         artworkAccent={artworkPalette.accent}
         artworkAccentSoft={artworkPalette.accentSoft}
+        artworkUrl={currentTrack?.artworkUrl ?? null}
       />
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
@@ -381,6 +382,7 @@ function BottomPlayerBase({
         onToggleLyrics={onToggleLyrics}
         artworkAccent={artworkPalette.accent}
         artworkAccentSoft={artworkPalette.accentSoft}
+        artworkUrl={currentTrack?.artworkUrl ?? null}
       />
       </div>
 

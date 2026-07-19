@@ -1,12 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import type { AuthSession, Playlist } from "@music-room/shared";
-import { normalizePlaylistTitle } from "@/lib/music-room-ui";
+import { useEffect, useState, useTransition } from "react";
+import type {
+  AuthSession,
+  NeteaseTrackCandidate,
+  Playlist,
+  QqMusicTrackCandidate,
+  TrackMeta
+} from "@music-room/shared";
+import { formatDuration, normalizePlaylistTitle } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { musicRoomApi } from "@/lib/music-room-api";
+
+type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
+type PlaylistTrackInfo = Pick<TrackMeta, "id" | "title" | "artist" | "album" | "durationMs" | "artworkUrl">;
 
 type PlaylistPanelProps = {
   playlists: Playlist[];
+  tracks: TrackMeta[];
   activeSession: AuthSession | null;
   canCreatePlaylist: boolean;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
@@ -18,6 +30,7 @@ type PlaylistPanelProps = {
 
 export function PlaylistPanel({
   playlists,
+  tracks,
   activeSession,
   canCreatePlaylist,
   onSavePlaylistFromQueue,
@@ -28,7 +41,48 @@ export function PlaylistPanel({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
   const [isPending, startTransition] = useTransition();
+  const [remoteTracks, setRemoteTracks] = useState<PlaylistTrackInfo[]>([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
   const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
+  const selectedSource = selectedPlaylist ? getNetworkPlaylistSource(selectedPlaylist) : null;
+  const selectedProvider = selectedSource?.provider ?? null;
+  const selectedProviderPlaylistId = selectedSource?.playlistId ?? null;
+  const roomTrackMap = new Map(tracks.map((track) => [track.id, toPlaylistTrackInfo(track)]));
+  const remoteTrackMap = new Map(remoteTracks.map((track) => [track.id, track]));
+  const selectedPlaylistTracks = selectedPlaylist
+    ? selectedPlaylist.trackIds.map((trackId) => roomTrackMap.get(trackId) ?? remoteTrackMap.get(trackId) ?? null)
+    : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    setRemoteTracks([]);
+    setRemoteError(null);
+
+    if (!selectedPlaylistId || !selectedProvider || !selectedProviderPlaylistId) {
+      setRemoteLoading(false);
+      return;
+    }
+
+    setRemoteLoading(true);
+    const request = selectedProvider === "netease"
+      ? musicRoomApi.getNeteasePlaylist(selectedProviderPlaylistId)
+      : musicRoomApi.getQqMusicPlaylist(selectedProviderPlaylistId);
+    void request
+      .then((detail) => {
+        if (!cancelled) setRemoteTracks(detail.tracks.map(toPlaylistTrackInfo));
+      })
+      .catch((error) => {
+        if (!cancelled) setRemoteError(error instanceof Error ? error.message : "网络歌曲信息加载失败。");
+      })
+      .finally(() => {
+        if (!cancelled) setRemoteLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlaylistId, selectedProvider, selectedProviderPlaylistId]);
 
   const saveCurrentQueue = () => {
     if (!activeSession || !canCreatePlaylist || isPending) return;
@@ -57,34 +111,28 @@ export function PlaylistPanel({
         }}
         onLoad={() => startTransition(() => void onLoadPlaylistIntoRoom(selectedPlaylist.id))}
         playlist={selectedPlaylist}
+        remoteError={remoteError}
+        remoteLoading={remoteLoading}
+        tracks={selectedPlaylistTracks}
       />
     );
   }
 
   return (
-    <section className="flex w-full flex-col gap-4" data-testid="network-playlist-panel">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-3">
-        <div>
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Playlists</p>
-          <h2 className="text-lg font-bold text-foreground">网络歌单</h2>
-          <p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-md border border-surface-border bg-surface px-2 py-1 text-xs font-medium text-foreground-muted">
-            {playlists.length} 个
-          </span>
-          <Button
-            aria-label="保存当前队列为歌单"
-            disabled={!activeSession || !canCreatePlaylist || isPending}
-            onClick={() => setIsCreateOpen(true)}
-            size="icon"
-            title="保存当前队列为歌单"
-            type="button"
-            variant="outline"
-          >
-            <PlusIcon />
-          </Button>
-        </div>
+    <section className="flex w-full flex-col gap-3" data-testid="network-playlist-panel">
+      <div className="flex justify-end">
+        <Button
+          aria-label="保存当前队列为歌单"
+          className="h-8 w-8"
+          disabled={!activeSession || !canCreatePlaylist || isPending}
+          onClick={() => setIsCreateOpen(true)}
+          size="icon"
+          title="保存当前队列为歌单"
+          type="button"
+          variant="outline"
+        >
+          <PlusIcon />
+        </Button>
       </div>
 
       {playlists.length > 0 ? (
@@ -164,12 +212,18 @@ function PlaylistDetail({
   playlist,
   isPending,
   onBack,
-  onLoad
+  onLoad,
+  tracks,
+  remoteLoading,
+  remoteError
 }: {
   playlist: Playlist;
   isPending: boolean;
   onBack: () => void;
   onLoad: () => void;
+  tracks: Array<PlaylistTrackInfo | null>;
+  remoteLoading: boolean;
+  remoteError: string | null;
 }) {
   return (
     <section className="flex w-full flex-col" data-testid="network-playlist-detail">
@@ -195,6 +249,27 @@ function PlaylistDetail({
           <ImportIcon />
           导入
         </Button>
+      </div>
+
+      <div className="mt-4 overflow-hidden border border-surface-border bg-surface" data-testid="network-playlist-tracks">
+        {remoteLoading ? <p className="px-3 py-4 text-xs text-foreground-muted">正在加载歌曲信息…</p> : null}
+        {remoteError ? <p className="px-3 py-4 text-xs text-amber-200">歌曲信息加载失败，当前显示已保存的歌曲索引。</p> : null}
+        {tracks.length > 0 ? tracks.map((track, index) => (
+          <article className="grid gap-2 border-b border-surface-border px-3 py-2.5 last:border-b-0 transition-colors hover:bg-surface-hover sm:px-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" key={`${playlist.id}:${playlist.trackIds[index]}`}>
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-[10px] text-foreground-muted/60">{String(index + 1).padStart(2, "0")}</span>
+              <div className="min-w-0 space-y-0.5">
+                <h3 className="truncate text-sm font-semibold text-foreground">{track?.title ?? playlist.trackIds[index]}</h3>
+                <p className="truncate text-xs text-foreground-muted">
+                  {track ? `${track.artist} · ${formatDuration(track.durationMs)}` : "歌曲信息不可用"}
+                </p>
+                {track?.album ? <p className="truncate text-[10px] text-foreground-muted/60">{track.album}</p> : null}
+              </div>
+            </div>
+          </article>
+        )) : (
+          <p className="px-3 py-8 text-center text-xs text-foreground-muted">这个歌单还没有歌曲。</p>
+        )}
       </div>
     </section>
   );
@@ -260,6 +335,26 @@ function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null
       {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
     </div>
   );
+}
+
+function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSource | null {
+  const sourceTag = playlist.tags.find((tag) => tag.startsWith("network:"));
+  if (!sourceTag) return null;
+  const [, provider, ...playlistIdParts] = sourceTag.split(":");
+  if (provider !== "netease" && provider !== "qqmusic") return null;
+  const playlistId = playlistIdParts.join(":").trim();
+  return playlistId ? { provider, playlistId } : null;
+}
+
+function toPlaylistTrackInfo(track: TrackMeta | ProviderTrack): PlaylistTrackInfo {
+  return {
+    id: "provider" in track ? `provider:${track.provider}:${track.providerTrackId}` : track.id,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    durationMs: track.durationMs,
+    artworkUrl: track.artworkUrl
+  };
 }
 
 function PlusIcon() {

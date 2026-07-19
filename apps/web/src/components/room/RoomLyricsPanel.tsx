@@ -9,6 +9,7 @@ type RoomLyricsPanelProps = {
   positionMs: number;
   isPlaying: boolean;
   className?: string;
+  visibleLines?: number;
 };
 
 export function RoomLyricsPanel({
@@ -16,12 +17,14 @@ export function RoomLyricsPanel({
   status,
   positionMs,
   isPlaying,
-  className
+  className,
+  visibleLines = 3
 }: RoomLyricsPanelProps) {
   const lines = useMemo(() => parseRoomLyrics(lyrics), [lyrics]);
   const activeIndex = getActiveRoomLyricIndex(lines, positionMs);
   const activeLineRef = useRef<HTMLParagraphElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const isFiveLineView = visibleLines === 5;
 
   useEffect(() => {
     const activeLine = activeLineRef.current;
@@ -37,7 +40,7 @@ export function RoomLyricsPanel({
   return (
     <section
       aria-label="歌词"
-      className={`pointer-events-auto relative z-20 flex h-[min(34svh,18rem)] max-h-[18rem] min-h-[8rem] w-full max-w-[min(100%,34rem)] flex-none flex-col overflow-hidden px-3 animate-fade-in sm:px-6 ${className ?? ""}`}
+      className={`pointer-events-auto relative z-20 flex w-full max-w-[min(100%,34rem)] flex-none flex-col overflow-hidden px-3 animate-fade-in sm:px-6 ${isFiveLineView ? "h-64 max-h-64 min-h-64 sm:h-[20.5rem] sm:max-h-[20.5rem] sm:min-h-[20.5rem]" : "h-[min(34svh,18rem)] max-h-[18rem] min-h-[8rem]"} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
@@ -47,7 +50,7 @@ export function RoomLyricsPanel({
         {status === "loading" ? (
           <p className="flex h-full items-center justify-center text-sm text-white/45">正在获取歌词…</p>
         ) : lines.length > 0 ? (
-          <div className="flex min-h-full flex-col justify-center gap-2 py-6 text-left sm:gap-3 sm:py-8">
+          <div className={`flex min-h-full flex-col justify-center text-left ${isFiveLineView ? "gap-0 py-2 sm:gap-1 sm:py-4" : "gap-2 py-6 sm:gap-3 sm:py-8"}`}>
             {lines.map((line, index) => {
               const isActive = index === activeIndex;
               return (

@@ -365,7 +365,14 @@ function RoomStageBase({
                     style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
                   />
                 ))}
-                <div className="relative z-10 flex items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
+                {currentTrack?.artworkUrl ? (
+                  <div
+                    aria-hidden="true"
+                    className="relative z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+                    style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
+                  />
+                ) : null}
+                <div className="relative z-20 flex items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
                   <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
                 </div>
               </div>

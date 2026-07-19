@@ -154,10 +154,6 @@ function LocalStorageTabPanelBase({
         </button>
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
-        <div className="border-b border-surface-border pb-3">
-          <p className="text-sm font-semibold text-foreground">本地歌单</p>
-          <p className="mt-1 text-xs text-foreground-muted">本地目录中的下载歌曲、缓存歌曲和已保存歌曲。</p>
-        </div>
         <LocalPlaylistSection
           localTracks={localStorageSummary.localPlaylistTracks}
           fallbackTracks={localStorageSummary.cachedLibraryTracks}
@@ -177,6 +173,7 @@ function LocalStorageTabPanelBase({
           onUpdatePlaylistTitle={onUpdatePlaylistTitle}
           onUpdatePlaylistTracks={onUpdatePlaylistTracks}
           playlists={playlists}
+          tracks={tracks}
         />
       </section> : null}
     </div>

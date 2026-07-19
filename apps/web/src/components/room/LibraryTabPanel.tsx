@@ -31,7 +31,7 @@ function LibraryTabPanelBase({
   onPlayTrack
 }: LibraryTabPanelProps) {
   return (
-    <div className="animate-fade-in flex w-full flex-col gap-8">
+    <div className="animate-fade-in flex w-full flex-col gap-4">
       <TrackListSection
         tracks={tracks}
         uploadedTracks={uploadedTracks}

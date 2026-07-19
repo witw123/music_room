@@ -40,18 +40,21 @@ type LayoutProps = {
   onToggleLyrics?: () => void;
   artworkAccent: string;
   artworkAccentSoft: string;
+  artworkUrl: string | null;
 };
 
 export function VinylBadge({
   isPlaying,
   compact = false,
   accentColor = "rgb(0 112 243)",
-  accentSoft = "rgba(0, 112, 243, 0.16)"
+  accentSoft = "rgba(0, 112, 243, 0.16)",
+  artworkUrl = null
 }: {
   isPlaying: boolean;
   compact?: boolean;
   accentColor?: string;
   accentSoft?: string;
+  artworkUrl?: string | null;
 }) {
   const shellSize = compact ? "h-10 w-10" : "h-12 w-12";
   const centerSize = compact ? "h-3.5 w-3.5" : "h-4 w-4";
@@ -72,8 +75,15 @@ export function VinylBadge({
             style={{ width: `${100 - index * 18}%`, height: `${100 - index * 18}%` }}
           />
         ))}
+        {artworkUrl ? (
+          <div
+            aria-hidden="true"
+            className="relative z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_12px_rgba(0,0,0,0.4)]"
+            style={{ backgroundImage: `url("${artworkUrl}")` }}
+          />
+        ) : null}
         <div
-          className={`relative z-10 flex ${centerSize} items-center justify-center rounded-full border shadow-inner`}
+          className={`relative z-20 flex ${centerSize} items-center justify-center rounded-full border shadow-inner`}
           style={{ borderColor: accentSoft, backgroundColor: accentSoft, color: accentColor }}
         >
           <div className="h-1.5 w-1.5 rounded-full border border-white/5 bg-black shadow-inner" />
@@ -294,13 +304,20 @@ export function MobileBottomPlayerLayout({
   isLyricsOpen = false,
   onToggleLyrics,
   artworkAccent,
-  artworkAccentSoft
+  artworkAccentSoft,
+  artworkUrl
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
       <div className="grid min-h-[5.5rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
-          <VinylBadge accentColor={artworkAccent} accentSoft={artworkAccentSoft} isPlaying={isPlaying} compact />
+          <VinylBadge
+            accentColor={artworkAccent}
+            accentSoft={artworkAccentSoft}
+            artworkUrl={artworkUrl}
+            isPlaying={isPlaying}
+            compact
+          />
         </button>
 
         <div className="min-w-0">
@@ -451,13 +468,19 @@ export function DesktopBottomPlayerLayout({
   isLyricsOpen = false,
   onToggleLyrics,
   artworkAccent,
-  artworkAccentSoft
+  artworkAccentSoft,
+  artworkUrl
 }: LayoutProps) {
   return (
     <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
-        <VinylBadge accentColor={artworkAccent} accentSoft={artworkAccentSoft} isPlaying={isPlaying} />
+        <VinylBadge
+          accentColor={artworkAccent}
+          accentSoft={artworkAccentSoft}
+          artworkUrl={artworkUrl}
+          isPlaying={isPlaying}
+        />
         </button>
 
         <div className="min-w-0 flex-1">

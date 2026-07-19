@@ -63,12 +63,12 @@ function TrackListSectionBase({
     }
   };
   return (
-    <section className="relative flex w-full flex-col gap-4">
-      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-accent/20 bg-accent/5 p-5 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out hover:border-accent/40 hover:bg-accent/10 sm:p-7">
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
+    <section className="relative flex w-full flex-col gap-3">
+      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-accent/20 bg-accent/5 p-4 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out hover:border-accent/40 hover:bg-accent/10 sm:p-5">
+        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
           <svg
-            width="24"
-            height="24"
+            width="21"
+            height="21"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -94,10 +94,10 @@ function TrackListSectionBase({
         />
       </label>
 
-      <div className="flex justify-end border-b border-surface-border pb-2">
+      <div className="border-b border-surface-border pb-1">
         <div
           aria-label="曲库来源筛选"
-          className="grid w-full max-w-[360px] grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1"
+          className="grid w-full grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1"
           role="group"
         >
           {[
@@ -130,10 +130,10 @@ function TrackListSectionBase({
         </div>
       </div>
 
-      <div className="mt-2 flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
         {visibleTracks.length > 0 ? (
           <div className="overflow-hidden border border-surface-border bg-surface">
-            {visibleTracks.map((track) => {
+            {visibleTracks.map((track, index) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
                 activeSessionUserId: activeSession?.userId
@@ -148,14 +148,14 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid gap-2 border-b border-surface-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:px-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  className="group grid grid-cols-[1.5rem_2.75rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-surface-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[2rem_3rem_minmax(0,1.35fr)_minmax(8rem,0.8fr)_5rem_auto] sm:gap-3 sm:px-3.5"
                 >
+                  <span className="text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
+                  <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
                   <div className="min-w-0 space-y-0.5">
                     <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
-                    <p className="truncate text-xs text-foreground-muted">
-                      {track.artist}  {formatDuration(track.durationMs)}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-foreground-muted/60">
+                    <p className="truncate text-xs text-foreground-muted">{track.artist}</p>
+                    <p className="truncate text-[10px] text-foreground-muted/60">
                       <span
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
                           isUploadedLocally
@@ -166,6 +166,9 @@ function TrackListSectionBase({
                       {track.ownerNickname} 上传
                     </p>
                   </div>
+
+                  <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
+                  <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
 
                   <div className="flex flex-wrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
@@ -277,6 +280,18 @@ function TrackListSectionBase({
 }
 
 export const TrackListSection = memo(TrackListSectionBase);
+
+function TrackArtwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
+  return (
+    <div
+      aria-label={`${title} 封面`}
+      className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-background text-sm font-semibold text-foreground-muted"
+      style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
+    >
+      {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
+    </div>
+  );
+}
 
 export function canDeleteLibraryTrack(input: {
   track: Pick<TrackMeta, "ownerSessionId">;
