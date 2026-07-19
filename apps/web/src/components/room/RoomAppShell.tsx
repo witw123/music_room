@@ -84,10 +84,16 @@ export function RoomAppShell({
           canDisbandRoom={workspaceViewModel.canDisbandRoom}
           uploadedTracks={uploads.uploadedTracks}
           localStorageSummary={uploads.localStorageSummary}
+          playlists={pageState.playlists}
           onCleanLocalStorage={uploads.cleanLocalStorage}
           onChooseLocalFolder={uploads.chooseLocalFolder}
           onImportCachedTrack={uploads.importCachedTrack}
           onSaveTrackToLocal={uploads.saveTrackToLocal}
+          onSavePlaylistFromQueue={roomActions.savePlaylistFromQueue}
+          onLoadPlaylistIntoRoom={roomActions.loadPlaylistIntoRoom}
+          onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
+          onUpdatePlaylistTracks={roomActions.updatePlaylistTracks}
+          onDeletePlaylist={roomActions.deletePlaylist}
           connectedPeersCount={workspaceViewModel.connectedPeersCount}
           mediaConnectionState={pageState.mediaConnectionState}
           mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}

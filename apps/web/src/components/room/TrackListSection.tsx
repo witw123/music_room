@@ -94,14 +94,10 @@ function TrackListSectionBase({
         />
       </label>
 
-      <div className="flex flex-col gap-3 border-b border-surface-border pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold text-foreground">曲库来源</p>
-          <p className="mt-1 text-[10px] text-foreground-muted">按上传成员筛选房间里的歌曲</p>
-        </div>
+      <div className="flex justify-end border-b border-surface-border pb-4">
         <div
           aria-label="曲库来源筛选"
-          className="grid grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1 sm:min-w-[330px]"
+          className="grid w-full max-w-[420px] grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1"
           role="group"
         >
           {[
@@ -152,7 +148,7 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid gap-4 border-b border-surface-border px-4 py-4 transition-colors last:border-b-0 hover:bg-surface-hover lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)_auto] lg:items-center"
+                  className="group grid gap-4 border-b border-surface-border px-4 py-4 transition-colors last:border-b-0 hover:bg-surface-hover lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                 >
                   <div className="min-w-0 space-y-1">
                     <h3 className="truncate font-semibold text-foreground">{track.title}</h3>
@@ -167,21 +163,7 @@ function TrackListSectionBase({
                             : "bg-blue-500"
                         }`}
                       />
-                      {isSavedLocally
-                        ? "已保存到本地文件夹"
-                        : isUploadedLocally
-                          ? "浏览器已缓存源文件"
-                        : "房间可用"}{" "}
                       {track.ownerNickname} 上传
-                    </p>
-                  </div>
-
-                  <div className="min-w-0 text-xs text-foreground-muted">
-                    <p className="truncate">
-                      {isUploadedLocally ? "本机上传源" : "房间歌曲"}
-                    </p>
-                    <p className="mt-1 truncate text-[11px] text-foreground-muted/70">
-                      仅保存本人上传歌曲
                     </p>
                   </div>
 

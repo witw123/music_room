@@ -3,6 +3,7 @@
 import { memo, type ReactNode } from "react";
 import type {
   AuthSession,
+  Playlist,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomMediaConnectionState,
@@ -28,10 +29,16 @@ type RoomWorkspaceProps = {
   canDisbandRoom: boolean;
   uploadedTracks: Record<string, UploadedTrack>;
   localStorageSummary: LocalStorageSummary;
+  playlists: Playlist[];
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
+  onSavePlaylistFromQueue: (title: string) => Promise<void>;
+  onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
+  onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
+  onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
+  onDeletePlaylist: (playlistId: string) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -73,10 +80,16 @@ function RoomWorkspaceBase({
   canDisbandRoom,
   uploadedTracks,
   localStorageSummary,
+  playlists,
   onCleanLocalStorage,
   onChooseLocalFolder,
   onImportCachedTrack,
   onSaveTrackToLocal,
+  onSavePlaylistFromQueue,
+  onLoadPlaylistIntoRoom,
+  onUpdatePlaylistTitle,
+  onUpdatePlaylistTracks,
+  onDeletePlaylist,
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
@@ -159,10 +172,16 @@ function RoomWorkspaceBase({
               currentSourceOwnerNickname={currentSourceOwnerNickname}
               uploadedTracks={uploadedTracks}
               localStorageSummary={localStorageSummary}
+              playlists={playlists}
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
               onImportCachedTrack={onImportCachedTrack}
               onSaveTrackToLocal={onSaveTrackToLocal}
+              onSavePlaylistFromQueue={onSavePlaylistFromQueue}
+              onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
+              onUpdatePlaylistTitle={onUpdatePlaylistTitle}
+              onUpdatePlaylistTracks={onUpdatePlaylistTracks}
+              onDeletePlaylist={onDeletePlaylist}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}

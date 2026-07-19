@@ -1,43 +1,41 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { BottomPlayer } from "@/components/BottomPlayer";
+import { useLocalPlayer } from "@/features/playback/local-player-context";
 
 export function AppPersistentPlayer() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [volume, setVolume] = useState(0.8);
-  const [seekDraft, setSeekDraft] = useState<number | null>(null);
+  const player = useLocalPlayer();
 
   return (
     <BottomPlayer
-      audioRef={audioRef}
-      playback={null}
-      canControlPlayback={false}
-      canSeekPlayback={false}
-      progressMs={0}
-      seekDraft={seekDraft}
-      setSeekDraft={setSeekDraft}
-      audioDurationMs={0}
-      volume={volume}
-      setVolume={setVolume}
-      syncProgressFromAudio={() => undefined}
-      syncDurationFromAudio={() => undefined}
-      currentTrack={null}
+      audioRef={player.audioRef}
+      playback={player.playback}
+      canControlPlayback={player.canControlPlayback}
+      canSeekPlayback={player.canSeekPlayback}
+      progressMs={player.progressMs}
+      seekDraft={player.seekDraft}
+      setSeekDraft={player.setSeekDraft}
+      audioDurationMs={player.audioDurationMs}
+      volume={player.volume}
+      setVolume={player.setVolume}
+      syncProgressFromAudio={player.syncProgressFromAudio}
+      syncDurationFromAudio={player.syncDurationFromAudio}
+      currentTrack={player.currentTrack}
       visualizerSamples={[]}
       visualizerReducedMotion={true}
-      onPlay={() => undefined}
-      onPause={() => undefined}
-      onSeek={async () => null}
-      onPrev={() => undefined}
-      onNext={() => undefined}
-      onCyclePlaybackMode={() => undefined}
-      queue={[]}
-      tracks={[]}
-      currentQueueItemId={null}
-      canReorderQueue={false}
-      onPlayQueueItem={async () => undefined}
-      onRemoveQueueItem={async () => undefined}
-      onReorderQueue={async () => undefined}
+      onPlay={player.onPlay}
+      onPause={player.onPause}
+      onSeek={player.onSeek}
+      onPrev={player.onPrev}
+      onNext={player.onNext}
+      onCyclePlaybackMode={player.onCyclePlaybackMode}
+      queue={player.queue}
+      tracks={player.tracks}
+      currentQueueItemId={player.currentQueueItemId}
+      canReorderQueue={true}
+      onPlayQueueItem={player.onPlayQueueItem}
+      onRemoveQueueItem={player.onRemoveQueueItem}
+      onReorderQueue={player.onReorderQueue}
     />
   );
 }

@@ -12,6 +12,11 @@ export type CachedLibraryTrackRecord = {
   fileHash: string;
   title: string;
   artist: string;
+  album?: string | null;
+  artworkUrl?: string | null;
+  lyrics?: string | null;
+  provider?: "netease" | "qqmusic" | "local_upload";
+  providerTrackId?: string | null;
   mimeType: string;
   durationMs: number;
   sizeBytes: number;
@@ -105,6 +110,25 @@ export type LocalAudioCacheFileRecord = {
   cachedAt: string;
 };
 
+export type LocalPlaylistTrackRecord = {
+  id: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  durationMs: number;
+  mimeType: string;
+  sizeBytes: number;
+  artworkUrl: string | null;
+  lyrics: string | null;
+  provider: "netease" | "qqmusic" | "local_upload";
+  providerTrackId: string | null;
+  fileHash: string | null;
+  fileName: string | null;
+  availableOffline: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export class MusicRoomDatabase extends Dexie {
   cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
@@ -115,6 +139,7 @@ export class MusicRoomDatabase extends Dexie {
   localAudioDirectory!: Table<LocalAudioDirectoryRecord, string>;
   localAudioFiles!: Table<LocalAudioFileRecord, string>;
   localAudioCacheFiles!: Table<LocalAudioCacheFileRecord, string>;
+  localPlaylistTracks!: Table<LocalPlaylistTrackRecord, string>;
 
   constructor() {
     super("music-room");
@@ -312,6 +337,9 @@ export class MusicRoomDatabase extends Dexie {
       localAudioDirectory: "&id",
       localAudioFiles: "&fileHash, savedAt",
       localAudioCacheFiles: "&fileHash, cachedAt"
+    });
+    this.version(15).stores({
+      localPlaylistTracks: "&id, provider, providerTrackId, fileHash, updatedAt"
     });
   }
 }
@@ -677,6 +705,29 @@ export async function saveLocalAudioCacheFileRecord(input: Omit<LocalAudioCacheF
 
 export async function deleteLocalAudioCacheFileRecord(fileHash: string) {
   await musicRoomDatabase.localAudioCacheFiles.delete(fileHash);
+}
+
+export async function upsertLocalPlaylistTrack(
+  input: Omit<LocalPlaylistTrackRecord, "createdAt" | "updatedAt"> & {
+    createdAt?: string;
+    updatedAt?: string;
+  }
+) {
+  const existing = await musicRoomDatabase.localPlaylistTracks.get(input.id);
+  const now = new Date().toISOString();
+  await musicRoomDatabase.localPlaylistTracks.put({
+    ...input,
+    createdAt: input.createdAt ?? existing?.createdAt ?? now,
+    updatedAt: input.updatedAt ?? now
+  });
+}
+
+export async function listLocalPlaylistTracks() {
+  return musicRoomDatabase.localPlaylistTracks.orderBy("updatedAt").reverse().toArray();
+}
+
+export async function deleteLocalPlaylistTrack(id: string) {
+  await musicRoomDatabase.localPlaylistTracks.delete(id);
 }
 
 export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord, "savedAt"> & {

@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
+import { musicRoomApi } from "@/lib/music-room-api";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 
@@ -34,14 +36,60 @@ export function ImmersivePlayerOverlay({
   onNext,
   onTogglePlay
 }: ImmersivePlayerOverlayProps) {
-  if (!isOpen) return null;
+  const [lyrics, setLyrics] = useState<{ plain: string | null; translated: string | null } | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    const sourceProvider = currentTrack?.sourceRef?.provider;
+    const sourceTrackId = currentTrack?.sourceRef?.trackId;
+    if (!isOpen || !sourceProvider || !sourceTrackId) {
+      setLyrics(null);
+      setLyricsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLyricsLoading(true);
+    const request = sourceProvider === "netease"
+      ? musicRoomApi.getNeteaseLyrics(sourceTrackId)
+      : musicRoomApi.getQqMusicLyrics(sourceTrackId);
+    void request
+      .then((response) => {
+        if (!cancelled) setLyrics({ plain: response.plainLyric, translated: response.translatedLyric });
+      })
+      .catch(() => {
+        if (!cancelled) setLyrics(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLyricsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.sourceRef?.provider, currentTrack?.sourceRef?.trackId, isOpen]);
 
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
   const artworkUrl = currentTrack?.artworkUrl ?? null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex min-h-screen flex-col overflow-y-auto bg-[#07101b] text-foreground" role="dialog" aria-modal="true" aria-label="沉浸式播放">
+    <div
+      aria-hidden={!isOpen}
+      className={`fixed inset-0 z-[50] flex min-h-screen flex-col overflow-y-auto bg-[#07101b] text-foreground transition-[opacity,transform,visibility] duration-500 ease-out motion-reduce:transition-none ${isOpen ? "visible translate-y-0 opacity-100" : "pointer-events-none invisible translate-y-3 opacity-0"}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="沉浸式播放"
+    >
       <header className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-4 py-4 sm:px-8">
         <Button variant="ghost" size="icon" className="h-9 w-9 text-foreground-muted hover:text-foreground" onClick={onClose} aria-label="退出沉浸式播放" title="退出沉浸式播放">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
@@ -73,12 +121,23 @@ export function ImmersivePlayerOverlay({
             {currentTrack?.album ? <p className="mt-2 truncate text-xs text-foreground-muted/70">专辑 · {currentTrack.album}</p> : null}
           </div>
 
-          <section className="min-h-[210px] border-y border-white/[0.08] py-5" aria-label="歌词占位">
+          <section className="min-h-[210px] border-y border-white/[0.08] py-5" aria-label="歌词">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">歌词</h2>
-              <span className="font-mono text-[10px] text-foreground-muted">即将支持</span>
+              <span className="font-mono text-[10px] text-foreground-muted">{lyricsLoading ? "读取中" : "同步歌词"}</span>
             </div>
-            <p className="mt-8 text-sm leading-7 text-foreground-muted/60">歌词内容将在接入歌词数据后显示。</p>
+            {lyrics?.plain ? (
+              <div className="mt-5 max-h-[250px] space-y-2 overflow-y-auto pr-2 text-sm leading-7 text-foreground-muted">
+                {lyrics.plain.split(/\r?\n/).filter(Boolean).map((line, index) => (
+                  <p key={`${index}:${line}`}>
+                    {line}
+                    {lyrics.translated?.split(/\r?\n/)[index] ? <span className="ml-2 text-xs text-foreground-muted/60">{lyrics.translated.split(/\r?\n/)[index]}</span> : null}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-8 text-sm leading-7 text-foreground-muted/60">{lyricsLoading ? "正在读取歌词..." : "暂无可用歌词"}</p>
+            )}
           </section>
 
           <div className="flex flex-col gap-3">

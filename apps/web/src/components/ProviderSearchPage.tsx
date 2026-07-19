@@ -13,10 +13,20 @@ import type {
   QqMusicTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { AppSidebar } from "@/components/AppSidebar";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { formatDuration } from "@/lib/music-room-ui";
+import {
+  ensureLocalAudioDirectoryWriteAccess,
+  saveAudioFileToLocalDirectory
+} from "@/features/upload/local-audio-storage";
+import {
+  hashAudioBlob,
+  toLocalPlaylistTrackInput
+} from "@/features/playlist/local-playlist";
+import { upsertLocalPlaylistTrack } from "@/lib/indexeddb";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 
@@ -33,7 +43,7 @@ const enabledProviders: Provider[] = [
 export function ProviderSearchPage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/search" });
-  const { activeSession, hydrated } = useSessionIdentity({
+  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -50,6 +60,7 @@ export function ProviderSearchPage() {
   const [contentTab, setContentTab] = useState<ContentTab>("songs");
   const [pending, setPending] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -65,6 +76,7 @@ export function ProviderSearchPage() {
     setPlaylist(null);
     setAlbum(null);
     setErrorMessage(null);
+    setStatusMessage(null);
     const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
     void load()
       .then((nextAccount) => {
@@ -94,6 +106,7 @@ export function ProviderSearchPage() {
         : await musicRoomApi.searchQqMusicTracks(query);
       setResults(response.items);
       setLyrics(null);
+      setStatusMessage(null);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
     } finally {
@@ -110,6 +123,66 @@ export function ProviderSearchPage() {
         ? await musicRoomApi.getNeteaseLyrics(track.providerTrackId)
         : await musicRoomApi.getQqMusicLyrics(track.providerTrackId);
       setLyrics(nextLyrics);
+    } catch (error) {
+      setErrorMessage(toProviderErrorMessage(error, provider));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function getTrackLyrics(track: Track) {
+    try {
+      return provider === "netease"
+        ? await musicRoomApi.getNeteaseLyrics(track.providerTrackId)
+        : await musicRoomApi.getQqMusicLyrics(track.providerTrackId);
+    } catch {
+      return null;
+    }
+  }
+
+  async function importToPlaylist(track: Track) {
+    if (pending) return;
+    setPending(`import-playlist:${track.providerTrackId}`);
+    setErrorMessage(null);
+    try {
+      const lyrics = await getTrackLyrics(track);
+      await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({ track, lyrics }));
+      setStatusMessage(`《${track.title}》已加入本地歌单。`);
+    } catch (error) {
+      setErrorMessage(toProviderErrorMessage(error, provider));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function downloadToLocal(track: Track) {
+    if (pending) return;
+    setPending(`download:${track.providerTrackId}`);
+    setErrorMessage(null);
+    try {
+      await ensureLocalAudioDirectoryWriteAccess();
+      const response = provider === "netease"
+        ? await musicRoomApi.downloadNeteaseTrack(track.providerTrackId)
+        : await musicRoomApi.downloadQqMusicTrack(track.providerTrackId);
+      const fileHash = await hashAudioBlob(response.blob);
+      const lyrics = await getTrackLyrics(track);
+      const mimeType = response.contentType.startsWith("audio/") ? response.contentType : "audio/mpeg";
+      const saved = await saveAudioFileToLocalDirectory({
+        file: response.blob,
+        fileHash,
+        title: track.title,
+        mimeType
+      });
+      await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({
+        track,
+        lyrics,
+        fileHash,
+        fileName: saved.fileName,
+        sizeBytes: response.blob.size,
+        mimeType,
+        availableOffline: true
+      }));
+      setStatusMessage(`《${track.title}》已下载到本地目录。`);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
     } finally {
@@ -186,6 +259,15 @@ export function ProviderSearchPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
+      <AppSidebar activeItem="search" activeSession={activeSession} onLogout={async () => {
+        try {
+          await musicRoomApi.logout();
+        } catch {
+          // Clear local identity below even if the server is unavailable.
+        }
+        clearIdentity();
+        router.replace(authEntryHref as Route);
+      }} />
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -251,7 +333,15 @@ export function ProviderSearchPage() {
             </div>
 
             {contentTab === "songs" ? (
-              <SongsResults results={results} pending={pending} lyrics={lyrics} onLyrics={loadLyrics} onAlbum={loadAlbumForTrack} />
+              <SongsResults
+                results={results}
+                pending={pending}
+                lyrics={lyrics}
+                onLyrics={loadLyrics}
+                onAlbum={loadAlbumForTrack}
+                onDownload={downloadToLocal}
+                onImportPlaylist={importToPlaylist}
+              />
             ) : null}
             {contentTab === "playlists" ? (
               <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onOpen={loadPlaylist} />
@@ -264,6 +354,7 @@ export function ProviderSearchPage() {
           <div className="mt-10 rounded-2xl border border-surface-border bg-surface/35 p-8 text-sm text-foreground-muted">当前没有启用网易云或 QQ 音乐。</div>
         )}
 
+        {statusMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{errorMessage}</p> : null}
       </div>
     </main>
@@ -275,13 +366,17 @@ function SongsResults({
   pending,
   lyrics,
   onLyrics,
-  onAlbum
+  onAlbum,
+  onDownload,
+  onImportPlaylist
 }: {
   results: Track[];
   pending: string | null;
   lyrics: ProviderLyrics | null;
   onLyrics: (track: Track) => Promise<void>;
   onAlbum: (track: Track) => Promise<void>;
+  onDownload: (track: Track) => Promise<void>;
+  onImportPlaylist: (track: Track) => Promise<void>;
 }) {
   return (
     <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
@@ -293,6 +388,12 @@ function SongsResults({
               <p className="mt-1 truncate text-xs text-foreground-muted">{track.artist} · {track.album ?? "未知专辑"} · {formatDuration(track.durationMs)}</p>
             </div>
             <div className="flex w-full shrink-0 flex-wrap items-center gap-1 sm:w-auto">
+              <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onDownload(track)} size="sm" variant="ghost" type="button">
+                {pending === `download:${track.providerTrackId}` ? "下载中…" : "下载"}
+              </Button>
+              <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onImportPlaylist(track)} size="sm" variant="ghost" type="button">
+                {pending === `import-playlist:${track.providerTrackId}` ? "导入中…" : "导入歌单"}
+              </Button>
               <Button className="flex-1 sm:flex-none" disabled={pending !== null} onClick={() => void onLyrics(track)} size="sm" variant="ghost" type="button">
                 {pending === `lyrics:${track.providerTrackId}` ? "加载中…" : "查看歌词"}
               </Button>

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
 import { AppSidebar } from "@/components/AppSidebar";
+import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -37,16 +38,18 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-black">
-      <AppSidebar
-        activeSession={activeSession}
-        hasBottomPlayer
-        onLogout={handleLogout}
-      />
-      <div key={pathname} className="app-route-transition">
-        {children}
+    <LocalPlayerProvider>
+      <div className="min-h-screen bg-black">
+        <AppSidebar
+          activeSession={activeSession}
+          hasBottomPlayer
+          onLogout={handleLogout}
+        />
+        <div key={pathname} className="app-route-transition">
+          {children}
+        </div>
+        <AppPersistentPlayer />
       </div>
-      <AppPersistentPlayer />
-    </div>
+    </LocalPlayerProvider>
   );
 }

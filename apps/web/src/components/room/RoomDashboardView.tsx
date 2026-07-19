@@ -4,6 +4,7 @@ import { memo, useCallback, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import type {
   AuthSession,
+  Playlist,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomMediaConnectionState,
@@ -33,10 +34,16 @@ type RoomDashboardViewProps = {
   currentSourceOwnerNickname: string | null;
   uploadedTracks: Record<string, UploadedTrack>;
   localStorageSummary: LocalStorageSummary;
+  playlists: Playlist[];
   onCleanLocalStorage: () => Promise<void>;
   onChooseLocalFolder: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
+  onSavePlaylistFromQueue: (title: string) => Promise<void>;
+  onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
+  onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
+  onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
+  onDeletePlaylist: (playlistId: string) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -60,7 +67,7 @@ type RoomDashboardViewProps = {
 
 const tabLabels: Record<TabId, string> = {
   library: "曲库",
-  local: "本地存储",
+  local: "我的歌单",
   members: "成员"
 };
 
@@ -82,7 +89,7 @@ const LocalStorageTabPanel = dynamic(
   {
     loading: () => (
       <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-        正在加载本地存储…
+        正在加载我的歌单…
       </div>
     )
   }
@@ -112,11 +119,17 @@ function RoomDashboardViewBase({
   currentSourceOwnerNickname,
   uploadedTracks,
   localStorageSummary,
+  playlists,
   onCleanLocalStorage,
   onChooseLocalFolder,
   onImportCachedTrack,
   onSaveTrackToLocal,
-  connectedPeersCount,
+  onSavePlaylistFromQueue,
+  onLoadPlaylistIntoRoom,
+  onUpdatePlaylistTitle,
+  onUpdatePlaylistTracks,
+  onDeletePlaylist,
+  connectedPeersCount: _connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
   localMemberState,
@@ -199,27 +212,6 @@ function RoomDashboardViewBase({
       {/* ══════ RIGHT: Management Panel ══════ */}
       <div className="material-surface relative z-20 flex w-full min-w-0 min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:flex-[2] lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
         <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.08] rounded-t-[24px] px-4 pb-3 pt-3 sm:px-6 sm:pt-5 lg:rounded-none">
-          <div className="mb-3 hidden grid-cols-3 gap-2 text-[10px] font-medium text-foreground-muted lg:grid">
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
-              <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">Audio</span>
-              <strong className="mt-1 block truncate text-xs font-semibold text-white">
-                {localMemberState?.playbackStatus.label ?? mediaConnectionState}
-              </strong>
-            </div>
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
-              <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">Peers</span>
-              <strong className="mt-1 block truncate text-xs font-semibold text-white">
-                Data {connectedPeersCount} / Media {mediaConnectedPeersCount}
-              </strong>
-            </div>
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
-              <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">ICE</span>
-              <strong className="mt-1 block truncate text-xs font-semibold text-white">
-                {iceConfigSource}
-              </strong>
-            </div>
-          </div>
-
           <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
             <span
               aria-hidden="true"
@@ -277,10 +269,17 @@ function RoomDashboardViewBase({
           {activeTab === "local" ? (
             <LocalStorageTabPanel
               tracks={roomSnapshot.tracks}
+              playlists={playlists}
+              activeSession={activeSession}
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
               onChooseLocalFolder={onChooseLocalFolder}
               onImportCachedTrack={onImportCachedTrack}
+              onSavePlaylistFromQueue={onSavePlaylistFromQueue}
+              onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
+              onUpdatePlaylistTitle={onUpdatePlaylistTitle}
+              onUpdatePlaylistTracks={onUpdatePlaylistTracks}
+              onDeletePlaylist={onDeletePlaylist}
             />
           ) : null}
 

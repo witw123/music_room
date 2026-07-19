@@ -37,12 +37,15 @@ import {
 } from "./local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
+import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
+import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 
 export type LocalStorageSummary = {
   usageBytes: number | null;
   quotaBytes: number | null;
   cachedTrackCount: number;
   cachedLibraryTracks: CachedLibraryTrack[];
+  localPlaylistTracks: LocalPlaylistTrackRecord[];
   localFolderName: string | null;
   localCachedFileHashes: string[];
   localSavedFileHashes: string[];
@@ -82,6 +85,7 @@ export function useTrackUploads(options: {
     quotaBytes: null,
     cachedTrackCount: 0,
     cachedLibraryTracks: [],
+    localPlaylistTracks: [],
     localFolderName: null,
     localCachedFileHashes: [],
     localSavedFileHashes: [],
@@ -95,9 +99,10 @@ export function useTrackUploads(options: {
     .join("|");
 
   const refreshCacheLibrary = useCallback(async () => {
-    const [snapshot, localStorageState] = await Promise.all([
+    const [snapshot, localStorageState, localPlaylistTracks] = await Promise.all([
       loadCacheLibrarySnapshot({ listCachedLibraryTrackSummaries }),
-      getLocalAudioStorageState()
+      getLocalAudioStorageState(),
+      listMergedLocalPlaylistTracks()
     ]);
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
     setCacheLibraryVersion((current) => current + 1);
@@ -119,6 +124,7 @@ export function useTrackUploads(options: {
       cachedLibraryTracks: snapshot.tracks.filter((track) =>
         localCachedFileHashes.has(track.fileHash)
       ),
+      localPlaylistTracks,
       localFolderName: localStorageState.directoryName,
       localCachedFileHashes: localStorageState.cachedFileHashes,
       localSavedFileHashes: localStorageState.savedFileHashes,
@@ -156,7 +162,9 @@ export function useTrackUploads(options: {
 
   const importCachedTrack = useCallback(async (cachedTrack: CachedLibraryTrack) => {
     try {
-      const localFile = await getLocalAudioCacheFile(cachedTrack.fileHash);
+      const localFile =
+        (await getLocalAudioCacheFile(cachedTrack.fileHash)) ??
+        (await getLocalAudioFile(cachedTrack.fileHash));
       const indexedDbRecord = localFile
         ? null
         : await getCachedLibraryTrack(cachedTrack.fileHash);

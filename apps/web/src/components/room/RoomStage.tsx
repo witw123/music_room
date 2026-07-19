@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, type CSSProperties } from "react";
 import type {
   RoomMediaConnectionState,
   RoomMember,
@@ -8,8 +8,11 @@ import type {
 import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
+import { musicRoomApi } from "@/lib/music-room-api";
+import { listRoomPlaylistTrackIndex } from "@/features/playlist/local-playlist";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RoomLyricsPanel } from "./RoomLyricsPanel";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -73,10 +76,22 @@ function RoomStageBase({
   const [isCopying, setIsCopying] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+  const [lyricsText, setLyricsText] = useState<string | null>(null);
+  const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const compactStage = viewportHeight !== null && viewportHeight < 900;
   const ultraCompactStage = viewportHeight !== null && viewportHeight < 760;
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
+  const playback = roomSnapshot.room.playback;
+  const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
+  const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
+  const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
+  const recordSize = ultraCompactStage
+    ? "clamp(7.5rem, min(20vh, 34vw), 9.5rem)"
+    : compactStage
+      ? "clamp(8rem, min(22vh, 38vw), 11rem)"
+      : "clamp(11rem, min(34vh, 42vw), 20rem)";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
@@ -109,6 +124,78 @@ function RoomStageBase({
     window.addEventListener("resize", updateViewportHeight);
     return () => window.removeEventListener("resize", updateViewportHeight);
   }, []);
+
+  useEffect(() => {
+    const basePositionMs = playback.positionMs;
+    const startedAtMs = playback.startedAt ? Date.parse(playback.startedAt) : Number.NaN;
+    const updatePosition = () => {
+      const elapsedMs = isPlaying && Number.isFinite(startedAtMs)
+        ? Math.max(0, Date.now() - startedAtMs)
+        : 0;
+      setLyricsPositionMs(Math.max(0, basePositionMs + elapsedMs));
+    };
+
+    updatePosition();
+    if (!isPlaying || !Number.isFinite(startedAtMs)) return;
+
+    const timer = window.setInterval(updatePosition, 250);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, playback.currentTrackId, playback.positionMs, playback.startedAt]);
+
+  useEffect(() => {
+    if (!isLyricsOpen || !currentTrack) {
+      setLyricsText(null);
+      setLyricsStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setLyricsStatus("loading");
+    setLyricsText(null);
+
+    const loadLyrics = async () => {
+      let localLyrics: string | null = null;
+      try {
+        const index = await listRoomPlaylistTrackIndex();
+        const records = [...index.values()];
+        const localRecord = index.get(currentTrack.id) ?? records.find((record) =>
+          record.fileHash === currentTrack.fileHash ||
+          (record.provider === sourceProvider && record.providerTrackId === sourceTrackId)
+        );
+        localLyrics = localRecord?.lyrics?.trim() || null;
+      } catch {
+        // A provider request below can still supply lyrics when local storage is unavailable.
+      }
+      if (localLyrics) {
+        if (!cancelled) {
+          setLyricsText(localLyrics);
+          setLyricsStatus("ready");
+        }
+        return;
+      }
+
+      if (!sourceProvider || !sourceTrackId) {
+        if (!cancelled) setLyricsStatus("ready");
+        return;
+      }
+
+      const response = sourceProvider === "netease"
+        ? await musicRoomApi.getNeteaseLyrics(sourceTrackId)
+        : await musicRoomApi.getQqMusicLyrics(sourceTrackId);
+      if (!cancelled) {
+        setLyricsText(response.plainLyric?.trim() || null);
+        setLyricsStatus("ready");
+      }
+    };
+
+    void loadLyrics().catch(() => {
+      if (!cancelled) setLyricsStatus("error");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, isLyricsOpen, sourceProvider, sourceTrackId]);
 
   return (
     <section
@@ -240,22 +327,37 @@ function RoomStageBase({
       </div>
 
       <div className="relative z-20 min-h-0 overflow-x-clip overflow-y-visible">
+        <Button
+          aria-label={isLyricsOpen ? "关闭歌词" : "打开歌词"}
+          className={`pointer-events-auto absolute left-1 top-1/2 z-40 h-11 w-11 -translate-y-1/2 rounded-2xl border backdrop-blur-md sm:left-2 md:left-4 ${
+            isLyricsOpen
+              ? "border-accent/40 bg-accent/20 text-accent"
+              : "border-white/10 bg-white/5 text-white/55 hover:bg-white/10 hover:text-white"
+          }`}
+          data-testid="room-lyrics-toggle"
+          disabled={!currentTrack}
+          onClick={() => setIsLyricsOpen((value) => !value)}
+          size="icon"
+          title={isLyricsOpen ? "关闭歌词" : "打开歌词"}
+          type="button"
+          variant="ghost"
+        >
+          <span aria-hidden="true" className="text-lg font-semibold leading-none">词</span>
+        </Button>
         <div
-          className={`pointer-events-none flex h-full items-center justify-center ${
+          className={`relative flex h-full flex-col items-center justify-center ${isLyricsOpen ? "gap-3" : ""} ${
             ultraCompactStage ? "-translate-y-8" : compactStage ? "-translate-y-4" : ""
           }`}
         >
-          <div className="group relative flex items-center justify-center">
+          <div
+            className="pointer-events-none group relative flex items-center justify-center"
+            style={{ "--record-size": recordSize } as CSSProperties}
+          >
             <VinylAuraVisualizer isPlaying={isPlaying} />
 
             <div
-              className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out ${
-                ultraCompactStage
-                  ? "h-[clamp(7.5rem,20vh,9.5rem)] w-[clamp(7.5rem,20vh,9.5rem)]"
-                  : compactStage
-                    ? "h-[clamp(8rem,22vh,11rem)] w-[clamp(8rem,22vh,11rem)]"
-                    : "h-[clamp(11rem,34vh,20rem)] w-[clamp(11rem,34vh,20rem)]"
-              } ${isPlaying ? "animate-spin-slow" : ""}`}
+              className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out ${isPlaying ? "animate-spin-slow" : ""}`}
+              style={{ width: "var(--record-size)", height: "var(--record-size)" }}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
               <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
@@ -266,22 +368,29 @@ function RoomStageBase({
                   style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
                 />
               ))}
-              <div className="relative z-10 flex h-[clamp(3.5rem,9vh,5rem)] w-[clamp(3.5rem,9vh,5rem)] items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner">
-                <div className="h-[clamp(1rem,2.4vh,1.25rem)] w-[clamp(1rem,2.4vh,1.25rem)] rounded-full border border-white/5 bg-black shadow-inner" />
+              <div className="relative z-10 flex items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
+                <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
               </div>
             </div>
 
             <div
-              className={`absolute right-[clamp(-2.4rem,-5vh,-1rem)] top-[clamp(0.5rem,1.8vh,0.75rem)] flex h-[clamp(7rem,21vh,12rem)] w-[clamp(1.75rem,4.2vh,2rem)] origin-[14px_14px] flex-col items-center transition-transform duration-500 ease-out ${
+              className={`absolute flex flex-col items-center transition-transform duration-500 ease-out ${
                 isPlaying ? "rotate-[20deg]" : "-rotate-[15deg]"
               }`}
-              style={{ zIndex: 30 }}
+              style={{
+                zIndex: 30,
+                right: "calc(var(--record-size) * -0.17)",
+                top: "calc(var(--record-size) * 0.03)",
+                width: "calc(var(--record-size) * 0.11)",
+                height: "calc(var(--record-size) * 0.66)",
+                transformOrigin: "calc(var(--record-size) * 0.08) calc(var(--record-size) * 0.08)"
+              }}
             >
-              <div className="absolute top-0 z-10 flex h-[clamp(1.75rem,4.2vh,2rem)] w-[clamp(1.75rem,4.2vh,2rem)] items-center justify-center rounded-full border-2 border-[#111] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl">
-                <div className="h-[clamp(0.75rem,1.8vh,0.8rem)] w-[clamp(0.75rem,1.8vh,0.8rem)] rounded-full bg-[#111] shadow-inner" />
+              <div className="absolute top-0 z-10 flex items-center justify-center rounded-full border-2 border-[#111] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl" style={{ width: "16%", height: "16%" }}>
+                <div className="h-[42%] w-[42%] rounded-full bg-[#111] shadow-inner" />
               </div>
-              <div className="h-full w-[clamp(0.6rem,1.5vh,0.65rem)] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[clamp(1.75rem,4.2vh,2rem)] shadow-lg" />
-              <div className="relative ml-[clamp(-0.9rem,-2vh,-0.75rem)] h-[clamp(2.25rem,5.4vh,2.5rem)] w-[clamp(1.25rem,3vh,1.5rem)] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl">
+              <div className="h-[78%] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[12%] shadow-lg" style={{ width: "28%" }} />
+              <div className="relative ml-[-35%] h-[24%] w-[105%] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl">
                 <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
               </div>
             </div>
@@ -293,6 +402,14 @@ function RoomStageBase({
             />
           </div>
         </div>
+        {isLyricsOpen ? (
+          <RoomLyricsPanel
+            isPlaying={isPlaying}
+            lyrics={lyricsText}
+            positionMs={lyricsPositionMs}
+            status={lyricsStatus}
+          />
+        ) : null}
       </div>
 
       <div

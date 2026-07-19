@@ -1,11 +1,19 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { musicRoomApi } from "@/lib/music-room-api";
+import { AppSidebar } from "@/components/AppSidebar";
+import { Button } from "@/components/ui/button";
+import {
+  chooseLocalAudioDirectory,
+  getLocalAudioStorageState,
+  type LocalAudioStorageState
+} from "@/features/upload/local-audio-storage";
 
 const NeteaseSourcePanel = dynamic(
   () => import("@/components/room/NeteaseSourcePanel").then((mod) => mod.NeteaseSourcePanel),
@@ -21,7 +29,7 @@ export function ProviderAccountsPage() {
   const router = useRouter();
   const redirectTo = "/app/profile";
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo });
-  const { activeSession, hydrated } = useSessionIdentity({
+  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -39,6 +47,15 @@ export function ProviderAccountsPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
+      <AppSidebar activeItem="profile" activeSession={activeSession} onLogout={async () => {
+        try {
+          await musicRoomApi.logout();
+        } catch {
+          // Clear local identity below even if the server is unavailable.
+        }
+        clearIdentity();
+        router.replace(authEntryHref as Route);
+      }} />
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Profile</p>
@@ -61,8 +78,59 @@ export function ProviderAccountsPage() {
             </div>
           ) : null}
         </section>
+        <LocalStorageLocationCard />
       </div>
     </main>
+  );
+}
+
+function LocalStorageLocationCard() {
+  const [state, setState] = useState<LocalAudioStorageState | null>(null);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setState(await getLocalAudioStorageState());
+  };
+
+  useEffect(() => {
+    void refresh().catch(() => setMessage("无法读取本地目录状态。"));
+  }, []);
+
+  const choose = async () => {
+    if (pending) return;
+    setPending(true);
+    setMessage(null);
+    try {
+      const name = await chooseLocalAudioDirectory();
+      await refresh();
+      setMessage(`本地歌曲保存位置已设置为“${name}”。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <section className="mt-4 rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">本地歌曲保存位置</h2>
+          <p className="mt-1 text-xs leading-5 text-foreground-muted">
+            下载歌曲、缓存歌曲和保存歌曲会统一显示在“我的歌单”的本地歌单中。
+          </p>
+          <p className="mt-2 truncate text-xs text-foreground-muted/80">
+            {state?.directoryName ? `当前目录：${state.directoryName}` : "尚未选择本地目录"}
+          </p>
+        </div>
+        <Button disabled={pending || state?.supported === false} onClick={() => void choose()} size="sm" type="button">
+          {pending ? "选择中…" : state?.directoryName ? "更改保存位置" : "选择保存位置"}
+        </Button>
+      </div>
+      {state?.supported === false ? <p className="mt-3 text-xs text-amber-300">当前浏览器不支持选择本地文件夹，请使用 Chrome 或 Edge。</p> : null}
+      {message ? <p className="mt-3 text-xs text-foreground-muted" role="status">{message}</p> : null}
+    </section>
   );
 }
 

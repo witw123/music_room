@@ -35,7 +35,7 @@ type CacheLibraryTrackUpsertInput = {
     | "sizeBytes"
     | "fileHash"
     | "ownerNickname"
-  >;
+  > & Partial<Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef">>;
   roomId: string;
   file: File | Blob;
 };
@@ -101,6 +101,10 @@ export function buildCachedLibraryTrackUpsertRecord(
     fileHash: input.track.fileHash,
     title: input.track.title,
     artist: input.track.artist ?? "未知艺术家",
+    ...(input.track.album !== undefined ? { album: input.track.album } : {}),
+    ...(input.track.artworkUrl !== undefined ? { artworkUrl: input.track.artworkUrl } : {}),
+    ...(input.track.sourceType ? { provider: input.track.sourceType } : {}),
+    ...(input.track.sourceRef?.trackId ? { providerTrackId: input.track.sourceRef.trackId } : {}),
     mimeType: input.track.mimeType || file.type || "audio/mpeg",
     durationMs: input.track.durationMs,
     sizeBytes: input.track.sizeBytes ?? file.size,

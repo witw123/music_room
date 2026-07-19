@@ -17,6 +17,7 @@ import {
 } from "@/lib/indexeddb";
 
 export const localAudioSubdirectories = {
+  local: "local",
   cache: "cache",
   saved: "saved"
 } as const;
@@ -101,7 +102,8 @@ export async function getLocalAudioFile(fileHash: string) {
     return null;
   }
 
-  const savedFile = await readLocalAudioFile(directory.handle, fileRecord.fileName, "saved");
+  const savedFile = await readLocalAudioFile(directory.handle, fileRecord.fileName, "local")
+    ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "saved");
   if (savedFile || fileRecord.storageKind === "saved") {
     return savedFile;
   }
@@ -132,7 +134,8 @@ export async function getLocalAudioCacheFile(fileHash: string) {
     return null;
   }
 
-  return readLocalAudioFile(directory.handle, fileRecord.fileName, "cache");
+  const localFile = await readLocalAudioFile(directory.handle, fileRecord.fileName, "local");
+  return localFile ?? await readLocalAudioFile(directory.handle, fileRecord.fileName, "cache");
 }
 
 export async function saveAudioFileToLocalDirectory(input: {
@@ -149,7 +152,7 @@ export async function saveAudioFileToLocalDirectory(input: {
 
   const fileName = buildLocalAudioFileName(input);
   await deleteLocalAudioCacheFile(input.fileHash);
-  await writeLocalAudioFile(directory.handle, "saved", fileName, input.file);
+  await writeLocalAudioFile(directory.handle, "local", fileName, input.file);
 
   await saveLocalAudioFileRecord({
     fileHash: input.fileHash,
@@ -175,7 +178,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   }
 
   const fileName = buildLocalAudioFileName(input);
-  await writeLocalAudioFile(directory.handle, "cache", fileName, input.file);
+  await writeLocalAudioFile(directory.handle, "local", fileName, input.file);
   await saveLocalAudioCacheFileRecord({
     fileHash: input.fileHash,
     fileName
@@ -203,14 +206,13 @@ export async function deleteLocalAudioCacheFile(fileHash: string) {
     return false;
   }
 
-  const cacheDirectory = await getStorageSubdirectory(directory.handle, "cache", false);
-  if (cacheDirectory) {
+  for (const kind of ["local", "cache"] as const) {
+    const cacheDirectory = await getStorageSubdirectory(directory.handle, kind, false);
+    if (!cacheDirectory) continue;
     try {
       await cacheDirectory.removeEntry(fileRecord.fileName);
     } catch (error) {
-      if ((error as DOMException).name !== "NotFoundError") {
-        return false;
-      }
+      if ((error as DOMException).name !== "NotFoundError") return false;
     }
   }
   await deleteLocalAudioCacheFileRecord(fileHash);
@@ -307,6 +309,7 @@ function asPermissionedHandle(handle: FileSystemDirectoryHandle) {
 }
 
 async function ensureLocalAudioSubdirectories(handle: FileSystemDirectoryHandle) {
+  await handle.getDirectoryHandle(localAudioSubdirectories.local, { create: true });
   await handle.getDirectoryHandle(localAudioSubdirectories.cache, { create: true });
   await handle.getDirectoryHandle(localAudioSubdirectories.saved, { create: true });
 }

@@ -34,7 +34,8 @@ type LayoutProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  onOpenImmersive: () => void;
+  isImmersiveOpen: boolean;
+  onToggleImmersive: () => void;
 };
 
 export function VinylBadge({
@@ -249,12 +250,13 @@ export function MobileBottomPlayerLayout({
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
-  onOpenImmersive
+  isImmersiveOpen,
+  onToggleImmersive
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
       <div className="grid min-h-[5.5rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
-        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onOpenImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
+        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
           <VinylBadge isPlaying={isPlaying} compact />
         </button>
 
@@ -364,6 +366,7 @@ export function MobileBottomPlayerLayout({
           </div>
 
           <VolumeControl volume={volume} onChange={applyVolume} />
+          <ImmersiveToggleButton isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
         </div>
       </div>
     </div>
@@ -396,12 +399,13 @@ export function DesktopBottomPlayerLayout({
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
-  onOpenImmersive
+  isImmersiveOpen,
+  onToggleImmersive
 }: LayoutProps) {
   return (
     <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
       <div className="flex min-w-0 items-center gap-3">
-        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onOpenImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
+        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
           <VinylBadge isPlaying={isPlaying} />
         </button>
 
@@ -505,7 +509,26 @@ export function DesktopBottomPlayerLayout({
         </div>
 
         <VolumeControl volume={volume} onChange={applyVolume} />
+        <ImmersiveToggleButton isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
       </div>
     </div>
+  );
+}
+
+function ImmersiveToggleButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
+      title={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
+      onClick={onToggle}
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10 ${isOpen ? "text-accent" : "text-foreground-muted"}`}
+    >
+      {isOpen ? (
+        <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M9 15H4v5" /><path d="m4 20 6-6" /><path d="M15 9h5V4" /><path d="m20 4-6 6" /></svg>
+      ) : (
+        <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 9V4h5" /><path d="m4 4 6 6" /><path d="M20 15v5h-5" /><path d="m20 20-6-6" /></svg>
+      )}
+    </button>
   );
 }

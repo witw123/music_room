@@ -327,7 +327,8 @@ function BottomPlayerBase({
         onPlayQueueItem={onPlayQueueItem}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
-        onOpenImmersive={() => setIsImmersiveOpen(true)}
+        isImmersiveOpen={isImmersiveOpen}
+        onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
       />
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
@@ -355,7 +356,8 @@ function BottomPlayerBase({
         onPlayQueueItem={onPlayQueueItem}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
-        onOpenImmersive={() => setIsImmersiveOpen(true)}
+        isImmersiveOpen={isImmersiveOpen}
+        onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
       />
       </div>
 
