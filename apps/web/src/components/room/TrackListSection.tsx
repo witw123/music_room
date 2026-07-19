@@ -132,8 +132,8 @@ function TrackListSectionBase({
 
       <div className="flex flex-col gap-1.5">
         {visibleTracks.length > 0 ? (
-          <div className="overflow-hidden border border-surface-border bg-surface">
-            {visibleTracks.map((track, index) => {
+          <div className="overflow-hidden rounded-xl border border-surface-border bg-surface">
+            {visibleTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
                 activeSessionUserId: activeSession?.userId
@@ -148,30 +148,15 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid grid-cols-[1.5rem_2.75rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-surface-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[2rem_3rem_minmax(0,1.35fr)_minmax(8rem,0.8fr)_5rem_auto] sm:gap-3 sm:px-3.5"
+                  className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-3.5"
                 >
-                  <span className="text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
-                  <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
-                  <div className="min-w-0 space-y-0.5">
-                    <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
-                    <p className="truncate text-xs text-foreground-muted">
-                      {track.artist}
-                      <span className="sm:hidden"> · {formatDuration(track.durationMs)}</span>
-                    </p>
-                    <p className="truncate text-[10px] text-foreground-muted/60">
-                      <span
-                        className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
-                          isUploadedLocally
-                            ? "bg-green-500"
-                            : "bg-blue-500"
-                        }`}
-                      />
-                      {track.ownerNickname} 上传
-                    </p>
+                  <div className="row-span-2">
+                    <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
                   </div>
 
-                  <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
-                  <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
+                  </div>
 
                   <div className="flex min-w-max flex-nowrap items-center justify-end gap-1">
                     {canDeleteTrack ? (
@@ -253,6 +238,22 @@ function TrackListSectionBase({
                         <polygon points="5 3 19 12 5 21 5 3" />
                       </svg>
                     </Button>
+                  </div>
+
+                  <div className="col-start-2 col-end-4 min-w-0 space-y-0.5">
+                    <p className="truncate text-xs text-foreground-muted">
+                      {track.artist} · {track.album ?? "未知专辑"} · {formatDuration(track.durationMs)}
+                    </p>
+                    <p className="truncate text-[10px] text-foreground-muted/60">
+                      <span
+                        className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
+                          isUploadedLocally
+                            ? "bg-green-500"
+                            : "bg-blue-500"
+                        }`}
+                      />
+                      {track.ownerNickname} 上传
+                    </p>
                   </div>
                 </article>
               );

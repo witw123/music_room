@@ -340,10 +340,12 @@ function RoomStageBase({
         </div>
       </div>
 
-      <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center justify-center overflow-visible">
-          <div
-            className={`relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center ${contentPositionClass} transition-transform duration-500 ease-out motion-reduce:transition-none`}
-          >
+      <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible">
+        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center">
+          <div className={`flex w-full flex-col items-center ${contentPositionClass} transition-transform duration-500 ease-out motion-reduce:transition-none`}>
+            <div
+              className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
+            >
           <div
             className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
             style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
@@ -387,12 +389,12 @@ function RoomStageBase({
               }`}
             />
           </div>
-        </div>
-        <div
-          className={`relative z-30 ${contentPositionClass} flex shrink-0 flex-col items-center pb-2 transition-transform duration-500 ease-out motion-reduce:transition-none ${
-          ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-2 pt-2"
-          }`}
-        >
+            </div>
+            <div
+              className={`relative z-30 flex shrink-0 flex-col items-center pb-2 ${
+                ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-2 pt-2"
+              }`}
+            >
           <div className={`flex w-full flex-col items-center text-center ${compactStage ? "gap-1.5" : "gap-2 md:gap-3"}`}>
           {currentTrack ? (
             <>
@@ -453,6 +455,8 @@ function RoomStageBase({
               status={lyricsStatus}
             />
           ) : null}
+            </div>
+          </div>
         </div>
       </div>
       <ConfirmDialog
