@@ -13,27 +13,39 @@ type EncodeResponse =
   | { id: number; ok: true; payload: ArrayBuffer }
   | { id: number; ok: false; error: string };
 
+type OpusEncoder = Awaited<ReturnType<typeof createOpusEncoder>>;
+
+let encoder: OpusEncoder | null = null;
+let encoderConfig: string | null = null;
+
+async function getEncoder(request: EncodeRequest) {
+  const nextConfig = `${request.sampleRate}:${request.channels.length}:${request.bitrateKbps}`;
+  if (encoder && encoderConfig === nextConfig) {
+    return encoder;
+  }
+
+  encoder?.free();
+  encoder = null;
+  encoderConfig = null;
+  const nextEncoder = await createOpusEncoder({
+    sampleRate: request.sampleRate,
+    channels: request.channels.length,
+    bitrate: request.bitrateKbps,
+    application: "audio"
+  });
+  encoder = nextEncoder;
+  encoderConfig = nextConfig;
+  return encoder;
+}
+
 self.onmessage = async (event: MessageEvent<EncodeRequest>) => {
   const request = event.data;
   try {
-    const encoder = await createOpusEncoder({
-      sampleRate: request.sampleRate,
-      channels: request.channels.length,
-      bitrate: request.bitrateKbps,
-      application: "audio"
-    });
-    try {
-      const head = encoder.encode(request.channels);
-      const tail = encoder.flush();
-      const encoded = new Uint8Array(head.byteLength + tail.byteLength);
-      encoded.set(head, 0);
-      encoded.set(tail, head.byteLength);
-      const payload = encoded.buffer;
-      const response: EncodeResponse = { id: request.id, ok: true, payload };
-      self.postMessage(response, { transfer: [payload] });
-    } finally {
-      encoder.free();
-    }
+    const opusEncoder = await getEncoder(request);
+    const encoded = opusEncoder.encodeIndependent(request.channels);
+    const payload = encoded.buffer as ArrayBuffer;
+    const response: EncodeResponse = { id: request.id, ok: true, payload };
+    self.postMessage(response, { transfer: [payload] });
   } catch (error) {
     const response: EncodeResponse = {
       id: request.id,

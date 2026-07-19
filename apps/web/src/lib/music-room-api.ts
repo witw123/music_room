@@ -436,7 +436,7 @@ async function downloadWithDirectFallback(input: {
       throw new Error(`Direct provider download failed: ${response.status}`);
     }
     return {
-      blob: await importBandwidthGovernor.readResponse(response, input.signal),
+      blob: await response.blob(),
       contentType: response.headers.get("content-type") ?? resolved.mimeType ?? "application/octet-stream"
     };
   } catch (error) {

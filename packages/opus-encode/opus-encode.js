@@ -10,7 +10,7 @@
  * @param {number} [opts.channels=1] - 1 or 2
  * @param {number} [opts.bitrate=64] - kbps
  * @param {string} [opts.application='audio'] - 'voip', 'audio', or 'lowdelay'
- * @returns {{ encode, flush, free }}
+ * @returns {{ encode, encodeIndependent, flush, free }}
  *
  * encode(channels: Float32Array[]) -> Uint8Array (Ogg pages for this chunk)
  * flush() -> Uint8Array (complete Ogg Opus file)
@@ -55,7 +55,88 @@ export default async function opus(opts) {
 		oggPage(opusTags(), serial, pageSeq++, 0n, 0x00)
 	]
 
-	return { encode: encodeChunk, flush, free }
+	return { encode: encodeChunk, encodeIndependent, flush, free }
+
+	// Encode a standalone Ogg Opus unit while reusing the initialized libopus
+	// instance. Room playback decodes each unit independently, so the codec and
+	// Ogg stream state must be reset for every unit.
+	function encodeIndependent(channels) {
+		enc.encoderCTL(4028, 0) // OPUS_RESET_STATE
+		enc.setBitrate(bitrate)
+
+		let segmentSerial = (Math.random() * 0xFFFFFFFF) >>> 0
+		let segmentPageSeq = 0
+		let segmentGranule = 0
+		let segmentPcmBuf = new Int16Array(0)
+		let segmentHeaderSent = false
+		let segmentHeaderPages = [
+			oggPage(opusHead(nch, PRE_SKIP, rate), segmentSerial, segmentPageSeq++, 0n, 0x02),
+			oggPage(opusTags(), segmentSerial, segmentPageSeq++, 0n, 0x00)
+		]
+
+		const head = encodeIndependentChunk(channels)
+		const tail = flushIndependent()
+		return concat([head, tail])
+
+		function encodeIndependentChunk(inputChannels) {
+			let len = inputChannels[0].length
+			let outLen = Math.round(len * ratio)
+			let resampled = new Int16Array(outLen * nch)
+
+			for (let i = 0; i < outLen; i++) {
+				let srcF = i / ratio
+				for (let c = 0; c < nch; c++) {
+					let s = ratio === 1 ? inputChannels[c][i] : lanczos(inputChannels[c], srcF, len)
+					s = s < -1 ? -1 : s > 1 ? 1 : s
+					resampled[i * nch + c] = Math.round(s * 0x7FFF)
+				}
+			}
+
+			let previous = segmentPcmBuf
+			segmentPcmBuf = new Int16Array(previous.length + resampled.length)
+			segmentPcmBuf.set(previous)
+			segmentPcmBuf.set(resampled, previous.length)
+
+			let frameSamples = FRAME_SIZE * nch
+			let pages = []
+			if (!segmentHeaderSent) {
+				pages.push(...segmentHeaderPages)
+				segmentHeaderSent = true
+			}
+
+			while (segmentPcmBuf.length >= frameSamples) {
+				let frame = segmentPcmBuf.slice(0, frameSamples)
+				segmentPcmBuf = segmentPcmBuf.slice(frameSamples)
+				let packet = enc.encode(i16toU8(frame), FRAME_SIZE)
+				segmentGranule += FRAME_SIZE
+				pages.push(oggPage(packet, segmentSerial, segmentPageSeq++, BigInt(segmentGranule), 0x00))
+			}
+
+			return concat(pages)
+		}
+
+		function flushIndependent() {
+			let pages = []
+			if (!segmentHeaderSent) {
+				pages.push(...segmentHeaderPages)
+				segmentHeaderSent = true
+			}
+
+			let frameSamples = FRAME_SIZE * nch
+			if (segmentPcmBuf.length > 0) {
+				let padded = new Int16Array(frameSamples)
+				padded.set(segmentPcmBuf)
+				segmentPcmBuf = new Int16Array(0)
+				let packet = enc.encode(i16toU8(padded), FRAME_SIZE)
+				segmentGranule += FRAME_SIZE
+				pages.push(oggPage(packet, segmentSerial, segmentPageSeq++, BigInt(segmentGranule), 0x04))
+			} else {
+				pages.push(oggPage(new Uint8Array(0), segmentSerial, segmentPageSeq++, BigInt(segmentGranule), 0x04))
+			}
+
+			return concat(pages)
+		}
+	}
 
 	function encodeChunk(channels) {
 		let len = channels[0].length

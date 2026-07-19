@@ -466,7 +466,7 @@ function RoomStageBase({
 
             <RoomLyricsPanel
               className={isLyricsOpen ? "max-w-[42rem]" : "max-w-[36rem]"}
-              visibleLines={isLyricsOpen ? 5 : 3}
+              visibleLines={isLyricsOpen ? 7 : 3}
               isPlaying={isPlaying}
               lyrics={lyricsText}
               positionMs={lyricsPositionMs}

@@ -371,6 +371,7 @@ async function importProviderTrack(input: {
     objectUrl = URL.createObjectURL(file);
     assets ??= await prepareAudioAssets({
       file,
+      knownDurationMs: candidate.durationMs,
       onProgress: ({ stage, completed, total }) => {
         const labels = {
           inspecting: "正在检查音频资源",

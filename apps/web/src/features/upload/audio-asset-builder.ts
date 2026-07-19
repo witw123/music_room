@@ -75,6 +75,7 @@ export function resolveSupportedUploadFormat(file: Pick<File, "name" | "type">) 
 
 export async function prepareAudioAssets(input: {
   file: File;
+  knownDurationMs?: number;
   signal?: AbortSignal;
   onProgress?: (progress: AssetPreparationProgress) => void;
 }): Promise<PreparedAudioAssets> {
@@ -85,7 +86,7 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
-  await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
+  await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress, input.knownDurationMs);
   const sourcePromise = prepareOriginalAsset(input);
   const playbackPromise = preparePlaybackAsset({
     ...input,
@@ -369,10 +370,18 @@ export function resolveEncodingConcurrency(unitCount: number, hardwareConcurrenc
 
 async function assertFileFitsDecodeMemoryBudget(
   file: File,
-  onProgress?: (progress: AssetPreparationProgress) => void
+  onProgress?: (progress: AssetPreparationProgress) => void,
+  knownDurationMs?: number
 ) {
   onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
   try {
+    if (typeof knownDurationMs === "number" && Number.isFinite(knownDurationMs) && knownDurationMs > 0) {
+      assertDecodedPcmWithinMemoryBudget({
+        durationSeconds: knownDurationMs / 1_000,
+        channels: 2
+      });
+      return;
+    }
     const { parseBlob } = await import("music-metadata");
     const metadata = await parseBlob(file, { duration: true, skipCovers: true });
     const durationSeconds = metadata.format.duration;

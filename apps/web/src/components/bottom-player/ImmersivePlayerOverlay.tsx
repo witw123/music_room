@@ -207,7 +207,7 @@ function ImmersiveLyrics({
   return (
     <div className="mt-2 min-h-0 border-t border-white/[0.08] pt-3 sm:mt-4 sm:pt-4">
       <RoomLyricsPanel
-        visibleLines={5}
+        visibleLines={7}
         isPlaying={isPlaying}
         lyrics={plainLyric}
         positionMs={positionMs}

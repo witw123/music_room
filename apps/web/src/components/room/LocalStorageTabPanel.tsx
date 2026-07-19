@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState, type FormEvent } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import type {
   AuthSession,
@@ -148,10 +148,12 @@ function NetworkPlaylistSearch({
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const searchRequestRef = useRef(0);
 
   useEffect(() => {
     if (!isExpanded || enabledSearchProviders.length === 0) return;
     let cancelled = false;
+    searchRequestRef.current += 1;
     setAccount(null);
     setResults([]);
     setErrorMessage(null);
@@ -167,6 +169,7 @@ function NetworkPlaylistSearch({
       });
     return () => {
       cancelled = true;
+      searchRequestRef.current += 1;
     };
   }, [isExpanded, provider]);
 
@@ -199,7 +202,15 @@ function NetworkPlaylistSearch({
       const response = provider === "netease"
         ? await musicRoomApi.searchNeteaseTracks(query)
         : await musicRoomApi.searchQqMusicTracks(query);
-      setResults(await enrichSearchResults(response.items));
+      const requestId = ++searchRequestRef.current;
+      setResults(response.items);
+      void enrichSearchResults(response.items)
+        .then((enrichedResults) => {
+          if (searchRequestRef.current === requestId) {
+            setResults(enrichedResults);
+          }
+        })
+        .catch(() => undefined);
       if (response.items.length === 0) setMessage("没有找到匹配的歌曲。");
     } catch (error) {
       setErrorMessage(toLocalSearchErrorMessage(error));
