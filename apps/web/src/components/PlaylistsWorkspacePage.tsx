@@ -10,9 +10,13 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import {
   createLocalPlaylist,
+  defaultLocalPlaylistId,
   deleteLocalPlaylist,
+  ensureDefaultLocalPlaylist,
   flushLocalPlaylistPersistence,
+  importLocalPlaylistDirectoryTracks,
   listLocalPlaylists,
+  mergeLocalPlaylists,
   restoreLocalPlaylistsFromRepository,
   listMergedLocalPlaylistTracks,
   listRoomPlaylistTrackIndex,
@@ -33,6 +37,11 @@ import {
 } from "@/features/upload/local-audio-storage";
 import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
+import {
+  isLocalPlaylistMirror,
+  localPlaylistIdFromMirror,
+  syncLocalPlaylistToDatabase
+} from "@/lib/local-playlist-database";
 import { formatDuration } from "@/lib/music-room-ui";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -63,6 +72,7 @@ export function PlaylistsWorkspacePage() {
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylistRecord[]>([]);
   const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>([]);
+  const [localPlaylistDatabaseIds, setLocalPlaylistDatabaseIds] = useState<Record<string, string>>({});
   const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
   const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSelection | null>(null);
@@ -87,12 +97,30 @@ export function PlaylistsWorkspacePage() {
     const version = ++refreshVersion.current;
     await flushLocalPlaylistPersistence();
     const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
-    const [tracks, localPlaylistRecords, storage, roomTracks] = await Promise.all([
+    const [tracks, restoredLocalPlaylists, storage, roomTracks] = await Promise.all([
       listMergedLocalPlaylistTracks(),
       restoreLocalPlaylistsFromRepository(),
       getLocalAudioStorageState(),
       listRoomPlaylistTrackIndex()
     ]);
+    let initialDatabasePlaylists: Playlist[] = [];
+    try {
+      initialDatabasePlaylists = await musicRoomApi.listMyPlaylists();
+    } catch {
+      // The local repository can still be opened while the server retries its database connection.
+    }
+    const mergedLocalPlaylists = mergeLocalPlaylistsWithDatabase(
+      restoredLocalPlaylists,
+      initialDatabasePlaylists.filter(isLocalPlaylistMirror)
+    );
+    mergeLocalPlaylists(mergedLocalPlaylists);
+    let localPlaylistRecords: LocalPlaylistRecord[];
+    localPlaylistRecords = ensureDefaultLocalPlaylist({
+      trackIds: tracks
+        .filter((track) => track.source === "directory-scan" && track.availableOffline)
+        .map((track) => track.id),
+      sourceDirectoryName: storage.directoryName
+    });
     if (version !== refreshVersion.current) return scannedTrackCount;
     setLocalTracks(tracks);
     setLocalPlaylists(localPlaylistRecords);
@@ -108,9 +136,15 @@ export function PlaylistsWorkspacePage() {
       return playlist ? { kind: "network", playlist } : null;
     });
     try {
-      const playlists = await musicRoomApi.listMyPlaylists();
+      let playlists = initialDatabasePlaylists;
+      if (playlists.length === 0) playlists = await musicRoomApi.listMyPlaylists();
+      const localPlaylistDatabaseIds = await syncLocalPlaylistsToDatabase(localPlaylistRecords, playlists);
+      if (Object.keys(localPlaylistDatabaseIds).length > 0) {
+        playlists = await musicRoomApi.listMyPlaylists();
+      }
       if (version === refreshVersion.current) {
-        setNetworkPlaylists(playlists);
+        setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
+        setNetworkPlaylists(playlists.filter((playlist) => !isLocalPlaylistMirror(playlist)));
         setSelectedPlaylist((current) => {
           if (!current || current.kind !== "network") return current;
           const playlist = playlists.find((item) => item.id === current.playlist.id);
@@ -119,7 +153,7 @@ export function PlaylistsWorkspacePage() {
       }
     } catch {
       if (version === refreshVersion.current && networkPlaylists.length === 0) {
-        setMessage("网络歌单加载失败，本地歌单仍可正常使用。");
+        setMessage("歌单数据库加载失败，请稍后重试；本地音频仍可使用。");
       }
     }
     return scannedTrackCount;
@@ -276,15 +310,16 @@ export function PlaylistsWorkspacePage() {
     try {
       let playlist: LocalPlaylistRecord | Playlist;
       if (kind === "local") {
-        await ensureLocalAudioDirectoryWriteAccess();
-        await syncSelectedLocalDirectoryTracks();
-        const availableTracks = (await listMergedLocalPlaylistTracks())
-          .filter((track) => track.availableOffline)
-          .map((track) => track.id);
+        if (!await ensureLocalAudioDirectoryWriteAccess()) {
+          throw new Error("请先选择 Music Room 的项目根目录。 ");
+        }
+        const imported = await importLocalPlaylistDirectoryTracks();
         playlist = createLocalPlaylist({
           title,
           description: newPlaylistDescription,
-          trackIds: availableTracks
+          trackIds: imported.tracks.map((track) => track.id),
+          sourceDirectoryId: imported.sourceDirectoryId,
+          sourceDirectoryName: imported.directoryName
         });
       } else {
         playlist = await musicRoomApi.createPlaylist({
@@ -319,7 +354,14 @@ export function PlaylistsWorkspacePage() {
     setStatusMessage(null);
     try {
       if (target.kind === "local") {
+        if (target.playlist.id === defaultLocalPlaylistId) {
+          throw new Error("默认本地歌单不能删除。 ");
+        }
         deleteLocalPlaylist(target.playlist.id);
+        const databasePlaylistId = localPlaylistDatabaseIds[target.playlist.id];
+        if (databasePlaylistId) {
+          await musicRoomApi.deletePlaylist(databasePlaylistId);
+        }
       } else {
         await musicRoomApi.deletePlaylist(target.playlist.id);
       }
@@ -345,6 +387,7 @@ export function PlaylistsWorkspacePage() {
       if (target.kind === "local") {
         const updated = updateLocalPlaylist(target.playlist.id, { trackIds });
         if (!updated) throw new Error("本地歌单不存在，请刷新后重试。");
+        await syncLocalPlaylistToDatabase(updated, localPlaylistDatabaseIds[target.playlist.id]);
         await refresh();
         setSelectedPlaylist({ kind: "local", playlist: updated });
       } else {
@@ -377,7 +420,8 @@ export function PlaylistsWorkspacePage() {
         if (!targetPlaylist) throw new Error("目标本地歌单不存在，请刷新后重试。");
         await upsertLocalPlaylistTrack(request.track);
         if (!targetPlaylist.trackIds.includes(trackId)) {
-          updateLocalPlaylist(targetPlaylist.id, { trackIds: [...targetPlaylist.trackIds, trackId] });
+          const updatedTarget = updateLocalPlaylist(targetPlaylist.id, { trackIds: [...targetPlaylist.trackIds, trackId] });
+          if (updatedTarget) await syncLocalPlaylistToDatabase(updatedTarget, localPlaylistDatabaseIds[targetPlaylist.id]);
         }
       } else {
         if (!request.track.providerTrackId || request.track.provider === "local_upload") {
@@ -397,6 +441,7 @@ export function PlaylistsWorkspacePage() {
         updatedSource = updateLocalPlaylist(sourcePlaylist.id, {
           trackIds: sourcePlaylist.trackIds.filter((id) => id !== trackId)
         }) ?? sourcePlaylist;
+        await syncLocalPlaylistToDatabase(updatedSource, localPlaylistDatabaseIds[sourcePlaylist.id]);
         await refresh();
         setSelectedPlaylist({ kind: "local", playlist: updatedSource });
       } else {
@@ -461,9 +506,11 @@ export function PlaylistsWorkspacePage() {
             })}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
             onMoveTrack={(track, anchor) => setMoveTarget({ anchor, track, source: selectedPlaylist })}
-            onDelete={selectedPlaylist.kind === "local"
+            onDelete={selectedPlaylist.kind === "local" && selectedPlaylist.playlist.id !== defaultLocalPlaylistId
               ? () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
-              : () => setDeleteTarget({ kind: "network", playlist: selectedPlaylist.playlist })}
+              : selectedPlaylist.kind === "network"
+                ? () => setDeleteTarget({ kind: "network", playlist: selectedPlaylist.playlist })
+                : undefined}
           />
         ) : (
           <>
@@ -505,7 +552,7 @@ export function PlaylistsWorkspacePage() {
                     {localPlaylists.map((playlist) => (
                       <LocalPlaylistCard
                         key={playlist.id}
-                        onDelete={() => setDeleteTarget({ kind: "local", playlist })}
+                        onDelete={playlist.id === defaultLocalPlaylistId ? undefined : () => setDeleteTarget({ kind: "local", playlist })}
                         onOpen={() => setSelectedPlaylist({ kind: "local", playlist })}
                         playlist={playlist}
                         tracks={tracksForLocalPlaylist(playlist, localTracks)}
@@ -583,6 +630,46 @@ export function PlaylistsWorkspacePage() {
       </div>
     </main>
   );
+}
+
+function mergeLocalPlaylistsWithDatabase(
+  localPlaylists: LocalPlaylistRecord[],
+  databasePlaylists: Playlist[]
+) {
+  const merged = new Map(localPlaylists.map((playlist) => [playlist.id, playlist]));
+  for (const databasePlaylist of databasePlaylists) {
+    const localId = localPlaylistIdFromMirror(databasePlaylist);
+    if (!localId || merged.has(localId)) continue;
+    merged.set(localId, {
+      id: localId,
+      title: databasePlaylist.title,
+      description: databasePlaylist.description,
+      trackIds: databasePlaylist.trackIds,
+      sourceDirectoryId: null,
+      sourceDirectoryName: null,
+      createdAt: databasePlaylist.createdAt,
+      updatedAt: databasePlaylist.updatedAt
+    });
+  }
+  return [...merged.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+async function syncLocalPlaylistsToDatabase(
+  localPlaylists: LocalPlaylistRecord[],
+  databasePlaylists: Playlist[]
+) {
+  const databaseByLocalId = new Map(
+    databasePlaylists
+      .map((playlist) => [localPlaylistIdFromMirror(playlist), playlist] as const)
+      .filter((entry): entry is readonly [string, Playlist] => !!entry[0])
+  );
+  const ids: Record<string, string> = {};
+  for (const playlist of localPlaylists) {
+    const existing = databaseByLocalId.get(playlist.id);
+    const synced = await syncLocalPlaylistToDatabase(playlist, existing?.id, existing);
+    ids[playlist.id] = synced.id;
+  }
+  return ids;
 }
 
 function LocalTrackRow({
@@ -846,6 +933,8 @@ function PlaylistDetailView({
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [downloadTrackId, setDownloadTrackId] = useState<string | null>(null);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ completed: 0, total: 0 });
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -923,9 +1012,22 @@ function PlaylistDetailView({
     onUpdateTracks(nextTrackIds);
   }
 
+  const sequenceTracks = rows
+    .map((row) => row.track)
+    .filter((track): track is LocalPlaylistTrackRecord => Boolean(track))
+    .filter((track, index, list) => list.findIndex((candidate) => candidate.id === track.id) === index);
+  const playableTracks = sequenceTracks.filter((track) => player.isTrackPlayable(track));
+  const downloadableTracks = sequenceTracks.filter((track) =>
+    (track.provider === "netease" || track.provider === "qqmusic") &&
+    !!track.providerTrackId &&
+    !track.availableOffline
+  );
+  const showBatchDownload = sequenceTracks.length > 0 && (!isLocal || downloadableTracks.length > 0);
+  const sequenceIndexById = new Map(sequenceTracks.map((track, index) => [track.id, index]));
+
   async function downloadTrack(track: LocalPlaylistTrackRecord) {
     const provider = track.provider === "netease" || track.provider === "qqmusic" ? track.provider : null;
-    if (!provider || !track.providerTrackId || track.availableOffline || downloadTrackId) return;
+    if (!provider || !track.providerTrackId || track.availableOffline || downloadTrackId) return false;
     setDownloadTrackId(track.id);
     setDownloadMessage(null);
     try {
@@ -977,18 +1079,38 @@ function PlaylistDetailView({
       onTrackUpdated?.(updatedTrack);
       setRemoteTracks((current) => current.map((item) => item.id === updatedTrack.id ? updatedTrack : item));
       setDownloadMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+      return true;
     } catch (error) {
       setDownloadMessage(error instanceof Error ? error.message : "歌曲下载失败，请重试。" );
+      return false;
     } finally {
       setDownloadTrackId(null);
     }
   }
-  const sequenceTracks = rows
-    .map((row) => row.track)
-    .filter((track): track is LocalPlaylistTrackRecord => Boolean(track))
-    .filter((track, index, list) => list.findIndex((candidate) => candidate.id === track.id) === index);
-  const playableTracks = sequenceTracks.filter((track) => player.isTrackPlayable(track));
-  const sequenceIndexById = new Map(sequenceTracks.map((track, index) => [track.id, index]));
+
+  async function downloadAllTracks() {
+    if (isDownloadingAll || downloadTrackId || downloadableTracks.length === 0) return;
+    setIsDownloadingAll(true);
+    setDownloadProgress({ completed: 0, total: downloadableTracks.length });
+    setDownloadMessage(null);
+    let downloadedCount = 0;
+    let failedCount = 0;
+    try {
+      for (let index = 0; index < downloadableTracks.length; index += 1) {
+        const downloaded = await downloadTrack(downloadableTracks[index]);
+        if (downloaded) downloadedCount += 1;
+        else failedCount += 1;
+        setDownloadProgress({ completed: index + 1, total: downloadableTracks.length });
+      }
+      setDownloadMessage(
+        failedCount > 0
+          ? `已下载 ${downloadedCount} 首，${failedCount} 首下载失败。`
+          : `已下载 ${downloadedCount} 首歌曲。`
+      );
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  }
 
   return (
     <section className="mt-5" data-testid="playlist-detail">
@@ -1011,6 +1133,17 @@ function PlaylistDetailView({
           <Button aria-label="删除网络歌单" className="text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={onDelete} size="sm" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>
             删除
+          </Button>
+        ) : null}
+        {showBatchDownload ? (
+          <Button
+            disabled={isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0}
+            onClick={() => void downloadAllTracks()}
+            type="button"
+            variant="outline"
+          >
+            <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+            {isDownloadingAll ? `下载中 ${downloadProgress.completed}/${downloadProgress.total}` : downloadableTracks.length > 0 ? "一键下载" : "已全部下载"}
           </Button>
         ) : null}
         <Button disabled={playableTracks.length === 0} onClick={() => void player.playTracks(sequenceTracks, 0)} type="button">
@@ -1278,7 +1411,7 @@ function PlaylistEditorDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground" id={titleId}>{isLocal ? "新建本地歌单" : "新建网络歌单"}</h2>
-            <p className="mt-1 text-xs text-foreground-muted">{isLocal ? "创建前需要选择项目根目录，已识别的本地歌曲会加入新歌单。" : "网络歌单无需本地目录，可从搜索页保存网易云音乐或 QQ 音乐歌单。"}</p>
+            <p className="mt-1 text-xs text-foreground-muted">{isLocal ? "创建时选择本地歌曲目录，歌单会直接读取所选目录中的歌曲。" : "网络歌单无需本地目录，可从搜索页保存网易云音乐或 QQ 音乐歌单。"}</p>
           </div>
           <Button aria-label="关闭" onClick={onCancel} size="icon" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>

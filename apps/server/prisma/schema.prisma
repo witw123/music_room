@@ -42,6 +42,7 @@ model User {
   lastLoginAt    DateTime?
   neteaseAccount NeteaseAccount?
   qqMusicAccount QqMusicAccount?
+  favoriteAlbums UserFavoriteAlbum[]
   adminSessions  AdminSession[]
   userSessions   UserSession[]
   auditLogs      AdminAuditLog[]
@@ -133,6 +134,26 @@ model Playlist {
 
   @@index([ownerId, updatedAt])
   @@index([roomId])
+}
+
+model UserFavoriteAlbum {
+  id              String   @id
+  userId          String
+  provider        String
+  providerAlbumId String
+  title           String
+  artist          String
+  artworkUrl      String?
+  description     String?
+  releaseTime     String?
+  trackCount      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, providerAlbumId])
+  @@index([userId, updatedAt])
 }
 
 model OperationalIncident {

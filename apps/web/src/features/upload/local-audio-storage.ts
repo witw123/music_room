@@ -10,6 +10,7 @@ import {
   deleteLocalAudioCacheFileRecord,
   getLocalAudioDirectory,
   getLocalAudioFileRecord,
+  getLocalPlaylistDirectory,
   getLocalAudioCacheFileRecord,
   getAssetManifest,
   getAssetUnits,
@@ -143,18 +144,71 @@ export async function listSelectedLocalAudioFiles(): Promise<SelectedLocalAudioF
   return files;
 }
 
+export async function chooseLocalAudioSourceDirectory() {
+  const picker = typeof window === "undefined"
+    ? undefined
+    : (window as DirectoryPickerWindow).showDirectoryPicker;
+  if (!picker) {
+    throw new Error("当前浏览器不支持选择本地文件夹，请使用 Chrome 或 Edge。 ");
+  }
+  return picker({ mode: "read" });
+}
+
+export async function listLocalAudioFilesInDirectory(directory: FileSystemDirectoryHandle): Promise<SelectedLocalAudioFile[] | null> {
+  const permission = await asPermissionedHandle(directory)
+    .queryPermission({ mode: "read" })
+    .catch(() => "denied" as PermissionState);
+  if (permission !== "granted") return null;
+
+  const files: SelectedLocalAudioFile[] = [];
+  try {
+    await collectSelectedLocalAudioFiles(directory, "", files);
+  } catch {
+    return null;
+  }
+  return files;
+}
+
 export async function ensureLocalAudioDirectoryWriteAccess() {
   return !!(await getWritableLocalAudioDirectory());
 }
 
-export async function getLocalAudioFile(fileHash: string) {
-  const [directory, fileRecord] = await Promise.all([
-    getLocalAudioDirectory(),
-    getLocalAudioFileRecord(fileHash, "saved")
-  ]);
-  if (!directory || !fileRecord) {
+export async function getLocalAudioFile(
+  fileHash: string,
+  sourceDirectoryId?: string | null,
+  sourceFileName?: string | null
+) {
+  const fileRecord = await getLocalAudioFileRecord(fileHash, "saved");
+
+  if (sourceDirectoryId) {
+    const sourceDirectory = await getLocalPlaylistDirectory(sourceDirectoryId);
+    if (!sourceDirectory) return null;
+    const permission = await asPermissionedHandle(sourceDirectory.handle)
+      .queryPermission({ mode: "read" })
+      .catch(() => "denied" as PermissionState);
+    if (permission !== "granted") return null;
+    const fileName = sourceFileName ?? fileRecord?.fileName;
+    return fileName
+      ? getFileByPath(sourceDirectory.handle, fileName).catch(() => null)
+      : null;
+  }
+
+  if (!fileRecord) {
     return null;
   }
+
+  if (fileRecord.sourceDirectoryId) {
+    const sourceDirectory = await getLocalPlaylistDirectory(fileRecord.sourceDirectoryId);
+    if (!sourceDirectory) return null;
+    const permission = await asPermissionedHandle(sourceDirectory.handle)
+      .queryPermission({ mode: "read" })
+      .catch(() => "denied" as PermissionState);
+    if (permission !== "granted") return null;
+    return getFileByPath(sourceDirectory.handle, fileRecord.fileName).catch(() => null);
+  }
+
+  const directory = await getLocalAudioDirectory();
+  if (!directory) return null;
 
   const permission = await asPermissionedHandle(directory.handle)
     .queryPermission({ mode: "read" })

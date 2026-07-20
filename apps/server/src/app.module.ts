@@ -17,6 +17,7 @@ import { MetricsModule } from "./common/metrics/metrics.module";
 import { NeteaseModule } from "./modules/providers/netease/netease.module";
 import { QqMusicModule } from "./modules/providers/qqmusic/qqmusic.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { FavoritesModule } from "./modules/favorites/favorites.module";
 
 @Module({
   imports: [
@@ -42,7 +43,8 @@ import { AdminModule } from "./modules/admin/admin.module";
     TrackModule,
     NeteaseModule,
     QqMusicModule,
-    AdminModule
+    AdminModule,
+    FavoritesModule
   ]
 })
 export class AppModule {}

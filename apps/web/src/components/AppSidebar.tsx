@@ -12,7 +12,7 @@ import {
   storeAwayRoomId
 } from "@/lib/away-room";
 
-export type AppNavItemId = "home" | "search" | "playlists" | "profile";
+export type AppNavItemId = "home" | "search" | "playlists" | "favorites" | "profile";
 
 type AppSidebarProps = {
   activeSession: AuthSession | null;
@@ -28,10 +28,11 @@ const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: Ico
   { id: "home", label: "首页", href: "/app", icon: "home" },
   { id: "search", label: "搜索", href: "/app/search", icon: "search" },
   { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
+  { id: "favorites", label: "收藏", href: "/app/favorites", icon: "favorite" },
   { id: "profile", label: "个人中心", href: "/app/profile", icon: "profile" }
 ];
 
-type IconName = "home" | "search" | "playlist" | "profile" | "logout";
+type IconName = "home" | "search" | "playlist" | "favorite" | "profile" | "logout";
 
 export function AppSidebar({
   activeSession,
@@ -180,6 +181,9 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
   if (pathname?.startsWith("/app/playlists")) {
     return "playlists";
   }
+  if (pathname?.startsWith("/app/favorites")) {
+    return "favorites";
+  }
   if (pathname?.startsWith("/app/profile")) {
     return "profile";
   }
@@ -278,6 +282,14 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
       <svg {...commonProps}>
         <circle cx="12" cy="8" r="3.5" />
         <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+      </svg>
+    );
+  }
+
+  if (name === "favorite") {
+    return (
+      <svg {...commonProps}>
+        <path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" />
       </svg>
     );
   }

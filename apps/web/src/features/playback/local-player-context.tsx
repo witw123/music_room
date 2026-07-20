@@ -164,7 +164,11 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const loadAudioFile = useCallback(async (track: LocalPlaylistTrackRecord) => {
     if (!track.fileHash) return null;
 
-    const localFile = await getLocalAudioFile(track.fileHash);
+    const localFile = await getLocalAudioFile(
+      track.fileHash,
+      track.sourceDirectoryId,
+      track.fileName
+    );
     if (localFile) return localFile;
 
     const cachedFile = await getLocalAudioCacheFile(track.fileHash);

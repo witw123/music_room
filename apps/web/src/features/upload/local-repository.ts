@@ -82,6 +82,8 @@ export type LocalRepositoryPlaylistRecord = {
   id: string;
   title: string;
   description: string | null;
+  sourceDirectoryId?: string | null;
+  sourceDirectoryName?: string | null;
   trackRefs: Array<
     | { kind: "content"; fileHash: string; trackId?: string }
     | { kind: "provider"; provider: "netease" | "qqmusic"; trackId: string }

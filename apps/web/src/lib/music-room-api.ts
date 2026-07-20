@@ -10,7 +10,9 @@ import {
   type NeteaseQrStatusResponse,
   type NeteaseSearchResponse,
   type NeteaseTrackCandidate,
+  type ProviderAlbumListResponse,
   type ProviderAlbumDetail,
+  type ProviderAlbumFavorite,
   type ProviderAudioResolveResponse,
   type ProviderLyrics,
   type ProviderPlaylistDetail,
@@ -307,6 +309,22 @@ export const musicRoomApi = {
     });
     return request<ProviderPlaylistListResponse>(`/v1/providers/netease/playlists?${params.toString()}`);
   },
+  searchNeteasePlaylists: (keywords: string, options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      keywords,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderPlaylistListResponse>(`/v1/providers/netease/search/playlists?${params.toString()}`);
+  },
+  searchNeteaseAlbums: (keywords: string, options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      keywords,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderAlbumListResponse>(`/v1/providers/netease/search/albums?${params.toString()}`);
+  },
   getNeteasePlaylist: (playlistId: string) =>
     request<ProviderPlaylistDetail>(`/v1/providers/netease/playlists/${encodeURIComponent(playlistId)}`),
   getNeteaseAlbum: (albumId: string) =>
@@ -340,6 +358,22 @@ export const musicRoomApi = {
     });
     return request<QqMusicSearchResponse>(`/v1/providers/qqmusic/search?${params.toString()}`);
   },
+  searchQqMusicPlaylists: (keywords: string, options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      keywords,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderPlaylistListResponse>(`/v1/providers/qqmusic/search/playlists?${params.toString()}`);
+  },
+  searchQqMusicAlbums: (keywords: string, options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      keywords,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderAlbumListResponse>(`/v1/providers/qqmusic/search/albums?${params.toString()}`);
+  },
   getQqMusicTrack: (trackId: string) => request<QqMusicTrackCandidate>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}`),
   getQqMusicLyrics: (trackId: string) =>
     request<ProviderLyrics>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/lyrics`),
@@ -354,6 +388,17 @@ export const musicRoomApi = {
     request<ProviderPlaylistDetail>(`/v1/providers/qqmusic/playlists/${encodeURIComponent(playlistId)}`),
   getQqMusicAlbum: (albumId: string) =>
     request<ProviderAlbumDetail>(`/v1/providers/qqmusic/albums/${encodeURIComponent(albumId)}`),
+  listFavoriteAlbums: () => request<ProviderAlbumFavorite[]>("/v1/favorites/albums"),
+  saveFavoriteAlbum: (album: Omit<ProviderAlbumFavorite, "id" | "createdAt" | "updatedAt">) =>
+    request<ProviderAlbumFavorite>("/v1/favorites/albums", {
+      method: "PUT",
+      body: JSON.stringify(album)
+    }),
+  deleteFavoriteAlbum: (provider: "netease" | "qqmusic", providerAlbumId: string) =>
+    request<{ ok: boolean }>(
+      `/v1/favorites/albums/${provider}/${encodeURIComponent(providerAlbumId)}`,
+      { method: "DELETE" }
+    ),
   resolveQqMusicAudio: (
     trackId: string,
     quality: "standard" | "high" | "exhigh" = "exhigh"

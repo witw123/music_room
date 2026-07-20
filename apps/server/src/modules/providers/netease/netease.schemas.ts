@@ -97,7 +97,11 @@ export const neteaseSearchBodySchema = z
   .object({
     code: z.number().int(),
     result: z
-      .object({ songs: z.array(neteaseApiSongSchema).optional() })
+      .object({
+        songs: z.array(neteaseApiSongSchema).optional(),
+        albums: z.array(z.record(z.unknown())).optional(),
+        playlists: z.array(z.record(z.unknown())).optional()
+      })
       .strip()
       .optional()
       .nullable()

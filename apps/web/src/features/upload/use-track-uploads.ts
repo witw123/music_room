@@ -165,7 +165,11 @@ export function useTrackUploads(options: {
     try {
       const localFile =
         (await getLocalAudioCacheFile(cachedTrack.fileHash)) ??
-        (await getLocalAudioFile(cachedTrack.fileHash));
+        (await getLocalAudioFile(
+          cachedTrack.fileHash,
+          cachedTrack.sourceDirectoryId,
+          cachedTrack.sourceFileName
+        ));
       const indexedDbRecord = localFile
         ? null
         : await getCachedLibraryTrack(cachedTrack.fileHash);

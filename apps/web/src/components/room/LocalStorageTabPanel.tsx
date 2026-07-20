@@ -415,6 +415,8 @@ function LocalPlaylistSection({
       lyrics: track.lyrics,
       provider: track.provider,
       providerTrackId: track.providerTrackId,
+      sourceDirectoryId: track.sourceDirectoryId,
+      sourceFileName: track.fileName,
       mimeType: track.mimeType,
       durationMs: track.durationMs,
       sizeBytes: track.sizeBytes,

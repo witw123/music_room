@@ -77,6 +77,28 @@ export class NeteaseController {
     return this.service.getTrack(userId, neteaseTrackIdSchema.parse(trackId));
   }
 
+  @Get("search/playlists")
+  async searchPlaylists(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    return this.service.searchPlaylists(
+      await this.getCurrentUserId(sessionToken),
+      parseRequestBody(neteaseSearchQuerySchema, query)
+    );
+  }
+
+  @Get("search/albums")
+  async searchAlbums(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    return this.service.searchAlbums(
+      await this.getCurrentUserId(sessionToken),
+      parseRequestBody(neteaseSearchQuerySchema, query)
+    );
+  }
+
   @Get("tracks/:trackId/audio-url")
   @Header("Cache-Control", "no-store")
   async audioUrl(

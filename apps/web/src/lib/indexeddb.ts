@@ -98,6 +98,13 @@ export type LocalAudioDirectoryRecord = {
   updatedAt: string;
 };
 
+export type LocalPlaylistDirectoryRecord = {
+  id: string;
+  handle: FileSystemDirectoryHandle;
+  name: string;
+  updatedAt: string;
+};
+
 export type LocalAudioStorageKind = "cache" | "saved";
 
 export type LocalAudioFileRecord = {
@@ -106,6 +113,7 @@ export type LocalAudioFileRecord = {
   relativePath?: string;
   storageKind?: LocalAudioStorageKind;
   source?: "directory-scan";
+  sourceDirectoryId?: string;
   savedAt: string;
 };
 
@@ -130,8 +138,24 @@ export type LocalPlaylistTrackRecord = {
   providerTrackId: string | null;
   fileHash: string | null;
   fileName: string | null;
+  sourceDirectoryId?: string | null;
   availableOffline: boolean;
   source?: "directory-scan";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FavoriteProviderAlbumRecord = {
+  id: string;
+  userId: string;
+  provider: "netease" | "qqmusic";
+  providerAlbumId: string;
+  title: string;
+  artist: string;
+  artworkUrl: string | null;
+  description: string | null;
+  releaseTime: string | null;
+  trackCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -144,9 +168,11 @@ export class MusicRoomDatabase extends Dexie {
   trackAssetLinks!: Table<TrackAssetLinkRecord, string>;
   transcodeJobs!: Table<TranscodeJobRecord, string>;
   localAudioDirectory!: Table<LocalAudioDirectoryRecord, string>;
+  localPlaylistDirectories!: Table<LocalPlaylistDirectoryRecord, string>;
   localAudioFiles!: Table<LocalAudioFileRecord, string>;
   localAudioCacheFiles!: Table<LocalAudioCacheFileRecord, string>;
   localPlaylistTracks!: Table<LocalPlaylistTrackRecord, string>;
+  favoriteProviderAlbums!: Table<FavoriteProviderAlbumRecord, string>;
 
   constructor() {
     super("music-room");
@@ -347,6 +373,12 @@ export class MusicRoomDatabase extends Dexie {
     });
     this.version(15).stores({
       localPlaylistTracks: "&id, provider, providerTrackId, fileHash, updatedAt"
+    });
+    this.version(16).stores({
+      localPlaylistDirectories: "&id, name, updatedAt"
+    });
+    this.version(17).stores({
+      favoriteProviderAlbums: "&id, userId, provider, providerAlbumId, updatedAt"
     });
   }
 }
@@ -827,6 +859,23 @@ export async function saveLocalAudioDirectory(input: {
   });
 }
 
+export async function getLocalPlaylistDirectory(id: string) {
+  return (await musicRoomDatabase.localPlaylistDirectories.get(id)) ?? null;
+}
+
+export async function saveLocalPlaylistDirectory(input: Omit<LocalPlaylistDirectoryRecord, "updatedAt"> & {
+  updatedAt?: string;
+}) {
+  await musicRoomDatabase.localPlaylistDirectories.put({
+    ...input,
+    updatedAt: input.updatedAt ?? new Date().toISOString()
+  });
+}
+
+export async function deleteLocalPlaylistDirectory(id: string) {
+  await musicRoomDatabase.localPlaylistDirectories.delete(id);
+}
+
 export async function listLocalAudioFiles(storageKind: LocalAudioStorageKind = "saved") {
   const records = await musicRoomDatabase.localAudioFiles.orderBy("savedAt").reverse().toArray();
   return records.filter((record) => (record.storageKind ?? "saved") === storageKind);
@@ -902,6 +951,59 @@ export async function listLocalPlaylistTracks() {
 
 export async function deleteLocalPlaylistTrack(id: string) {
   await musicRoomDatabase.localPlaylistTracks.delete(id);
+}
+
+export function favoriteProviderAlbumId(
+  userId: string,
+  provider: FavoriteProviderAlbumRecord["provider"],
+  providerAlbumId: string
+) {
+  return `${userId}:${provider}:${providerAlbumId}`;
+}
+
+export async function upsertFavoriteProviderAlbum(
+  input: Omit<FavoriteProviderAlbumRecord, "id" | "createdAt" | "updatedAt"> & {
+    createdAt?: string;
+    updatedAt?: string;
+  }
+) {
+  const id = favoriteProviderAlbumId(input.userId, input.provider, input.providerAlbumId);
+  const existing = await musicRoomDatabase.favoriteProviderAlbums.get(id);
+  const now = new Date().toISOString();
+  await musicRoomDatabase.favoriteProviderAlbums.put({
+    ...input,
+    id,
+    createdAt: input.createdAt ?? existing?.createdAt ?? now,
+    updatedAt: input.updatedAt ?? now
+  });
+}
+
+export async function deleteFavoriteProviderAlbum(
+  userId: string,
+  provider: FavoriteProviderAlbumRecord["provider"],
+  providerAlbumId: string
+) {
+  await musicRoomDatabase.favoriteProviderAlbums.delete(
+    favoriteProviderAlbumId(userId, provider, providerAlbumId)
+  );
+}
+
+export async function listFavoriteProviderAlbums(userId: string) {
+  const records = await musicRoomDatabase.favoriteProviderAlbums
+    .where("userId")
+    .equals(userId)
+    .toArray();
+  return records.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export async function getFavoriteProviderAlbum(
+  userId: string,
+  provider: FavoriteProviderAlbumRecord["provider"],
+  providerAlbumId: string
+) {
+  return musicRoomDatabase.favoriteProviderAlbums.get(
+    favoriteProviderAlbumId(userId, provider, providerAlbumId)
+  );
 }
 
 export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord, "savedAt"> & {

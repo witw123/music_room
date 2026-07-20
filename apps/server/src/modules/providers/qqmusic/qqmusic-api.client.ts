@@ -42,15 +42,16 @@ export class QqMusicApiClient {
       return { status: "connected" as const, session: { cookie, userId: readString(session.uin ?? session.loginUin), nickname: null, avatarUrl: null } };
     });
   }
-  async searchTracks(input: { keywords: string; limit: number; offset: number; cookie: string }) {
+  async searchTracks(input: { keywords: string; limit: number; offset: number; cookie: string; kind?: "song" | "album" | "playlist" }) {
     return this.call(async () => {
-      const response = await getSearchByKey({ params: { key: input.keywords, w: input.keywords, p: Math.floor(input.offset / input.limit) + 1, n: input.limit }, option: { headers: { Cookie: input.cookie } } }) as ApiResponse;
+      const kind = input.kind ?? "song";
+      const response = await getSearchByKey({ params: { key: input.keywords, w: input.keywords, p: Math.floor(input.offset / input.limit) + 1, n: input.limit, remoteplace: `txt.yqq.${kind}` }, option: { headers: { Cookie: input.cookie } } }) as ApiResponse;
       assertProviderStatus(response.status);
       const body = asRecord(response.body);
       const responseBody = asRecord(body?.response) ?? body;
       const data = asRecord(responseBody?.data) ?? responseBody;
-      const song = asRecord(data?.song) ?? data;
-      const list = song?.list;
+      const section = asRecord(data?.[kind]) ?? data;
+      const list = section?.list ?? section?.itemlist;
       if (!Array.isArray(list)) throw new QqMusicApiError("invalid-response");
       return list;
     });

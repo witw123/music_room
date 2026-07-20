@@ -71,6 +71,28 @@ export class QqMusicController {
     return this.service.getTrack(await this.user(token), qqMusicTrackIdSchema.parse(id));
   }
 
+  @Get("search/playlists")
+  async searchPlaylists(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") token?: string
+  ) {
+    return this.service.searchPlaylists(
+      await this.user(token),
+      parseRequestBody(qqMusicSearchQuerySchema, query)
+    );
+  }
+
+  @Get("search/albums")
+  async searchAlbums(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") token?: string
+  ) {
+    return this.service.searchAlbums(
+      await this.user(token),
+      parseRequestBody(qqMusicSearchQuerySchema, query)
+    );
+  }
+
   @Get("tracks/:trackId/audio-url")
   @Header("Cache-Control", "no-store")
   async audioUrl(

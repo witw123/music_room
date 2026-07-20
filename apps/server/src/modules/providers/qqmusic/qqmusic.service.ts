@@ -2,6 +2,8 @@ import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   ProviderAlbumDetail,
+  ProviderAlbumListResponse,
+  ProviderAlbumSummary,
   ProviderLyrics,
   ProviderPlaylistDetail,
   ProviderPlaylistListResponse,
@@ -51,6 +53,30 @@ export class QqMusicService {
     this.assertEnabled(); this.assertRateLimit(`search:${userId}`, 30); const cookie = await this.getCookie(userId);
     const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie }));
     return { items: records.map((record) => this.toTrackCandidate(record)).filter((value): value is QqMusicTrackCandidate => !!value), limit: query.limit, offset: query.offset };
+  }
+
+  async searchPlaylists(userId: string, query: QqMusicSearchQuery): Promise<ProviderPlaylistListResponse> {
+    this.assertEnabled();
+    this.assertRateLimit(`search:${userId}`, 30);
+    const cookie = await this.getCookie(userId);
+    const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie, kind: "playlist" }));
+    return {
+      items: records.map((record) => this.toPlaylistSummary(record)).filter((value): value is ProviderPlaylistSummary => !!value),
+      limit: query.limit,
+      offset: query.offset
+    };
+  }
+
+  async searchAlbums(userId: string, query: QqMusicSearchQuery): Promise<ProviderAlbumListResponse> {
+    this.assertEnabled();
+    this.assertRateLimit(`search:${userId}`, 30);
+    const cookie = await this.getCookie(userId);
+    const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie, kind: "album" }));
+    return {
+      items: records.map((record) => this.toAlbumSummary(record)).filter((value): value is ProviderAlbumSummary => !!value),
+      limit: query.limit,
+      offset: query.offset
+    };
   }
   async getTrack(userId: string, trackId: string) {
     this.assertEnabled(); const cookie = await this.getCookie(userId); const records = await this.callProvider(() => this.api.searchTracks({ keywords: trackId, limit: 20, offset: 0, cookie }));
@@ -207,6 +233,26 @@ export class QqMusicService {
       artworkUrl: readHttpUrl(playlist.logo ?? playlist.coverUrl ?? playlist.picUrl),
       creatorName: readString(playlist.nickname ?? playlist.creatorName ?? asRecord(playlist.creator)?.name),
       trackCount: readNumber(playlist.songnum ?? playlist.songNum ?? playlist.total) ?? (Array.isArray(playlist.songlist) ? playlist.songlist.length : 0)
+    };
+  }
+
+  private toAlbumSummary(value: unknown): ProviderAlbumSummary | null {
+    const album = asRecord(value);
+    const id = readString(album?.albummid ?? album?.albumMid ?? album?.albumid ?? album?.mid);
+    const title = readString(album?.albumname ?? album?.albumName ?? album?.name ?? album?.title);
+    if (!album || !id || !title) return null;
+    const singer = Array.isArray(album.singer)
+      ? album.singer.map((item) => readString(asRecord(item)?.name)).filter(Boolean).join(" / ")
+      : readString(album.singername ?? album.singerName ?? album.artist);
+    return {
+      provider: "qqmusic",
+      providerAlbumId: id,
+      title,
+      artist: singer || "未知歌手",
+      description: readString(album.desc ?? album.description),
+      artworkUrl: readHttpUrl(album.albumPic ?? album.album_pic ?? album.picUrl) ?? buildQqAlbumArtwork(id),
+      releaseTime: readString(album.pubtime ?? album.pubTime ?? album.publishTime),
+      trackCount: readNumber(album.songnum ?? album.songNum ?? album.total) ?? 0
     };
   }
   private async getCookie(userId: string) { try { return await this.accounts.getCookieOrThrow(userId); } catch { throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAccountRequired, "QQ Music account is required."), HttpStatus.CONFLICT); } }

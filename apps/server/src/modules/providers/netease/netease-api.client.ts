@@ -139,10 +139,22 @@ export class NeteaseApiClient {
   }
 
   async searchTracks(input: { keywords: string; limit: number; offset: number; cookie: string }) {
+    return this.search({ ...input, type: 1 });
+  }
+
+  async searchAlbums(input: { keywords: string; limit: number; offset: number; cookie: string }) {
+    return this.search({ ...input, type: 10 });
+  }
+
+  async searchPlaylists(input: { keywords: string; limit: number; offset: number; cookie: string }) {
+    return this.search({ ...input, type: 1_000 });
+  }
+
+  private async search(input: { keywords: string; limit: number; offset: number; cookie: string; type: number }) {
     return this.call(async () => {
       const request = withProviderOptions({
         keywords: input.keywords,
-        type: 1,
+        type: input.type,
         limit: input.limit,
         offset: input.offset,
         cookie: input.cookie

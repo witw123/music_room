@@ -9,11 +9,16 @@ import {
   listLocalAudioFiles,
   listLocalPlaylistTracks,
   saveLocalAudioFileRecord,
+  saveLocalPlaylistDirectory,
   upsertLocalPlaylistTrack,
   type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
-import { listSelectedLocalAudioFiles } from "@/features/upload/local-audio-storage";
+import {
+  chooseLocalAudioSourceDirectory,
+  listLocalAudioFilesInDirectory,
+  listSelectedLocalAudioFiles
+} from "@/features/upload/local-audio-storage";
 import { readEmbeddedAudioMetadata } from "@/features/upload/audio-metadata";
 import { getConfiguredLocalRepository } from "@/features/upload/local-audio-storage";
 import {
@@ -28,16 +33,28 @@ export type LocalPlaylistRecord = {
   title: string;
   description: string | null;
   trackIds: string[];
+  sourceDirectoryId?: string | null;
+  sourceDirectoryName?: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-const removedDefaultLocalPlaylistId = "local-default";
+export const defaultLocalPlaylistId = "local-default";
+const defaultLocalPlaylistTitle = "项目根目录";
 const directoryScanSource = "directory-scan" as const;
 let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
 let localPlaylists: LocalPlaylistRecord[] = [];
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
+  return localPlaylists;
+}
+
+export function mergeLocalPlaylists(records: LocalPlaylistRecord[]) {
+  const byId = new Map(localPlaylists.map((playlist) => [playlist.id, playlist]));
+  for (const record of records) {
+    if (!byId.has(record.id)) byId.set(record.id, record);
+  }
+  localPlaylists = [...byId.values()];
   return localPlaylists;
 }
 
@@ -51,18 +68,49 @@ export async function restoreLocalPlaylistsFromRepository() {
 
   try {
     const persisted = await repository.listPlaylists();
-    const removedDefault = persisted.find((playlist) => playlist.id === removedDefaultLocalPlaylistId);
-    if (removedDefault) {
-      await repository.deletePlaylist(removedDefault.id);
-    }
-    localPlaylists = persisted
-      .filter((playlist) => playlist.id !== removedDefaultLocalPlaylistId)
-      .map(fromRepositoryPlaylist);
+    localPlaylists = persisted.map(fromRepositoryPlaylist);
     return localPlaylists;
   } catch {
     localPlaylists = [];
     return localPlaylists;
   }
+}
+
+export function ensureDefaultLocalPlaylist(input: {
+  trackIds: string[];
+  sourceDirectoryName: string | null;
+}) {
+  const current = listLocalPlaylists().find((playlist) => playlist.id === defaultLocalPlaylistId);
+  if (!current) {
+    const now = new Date().toISOString();
+    const playlist: LocalPlaylistRecord = {
+      id: defaultLocalPlaylistId,
+      title: defaultLocalPlaylistTitle,
+      description: "项目根目录中的本地歌曲",
+      trackIds: [...new Set(input.trackIds)],
+      sourceDirectoryName: input.sourceDirectoryName,
+      createdAt: now,
+      updatedAt: now
+    };
+    writeLocalPlaylists([...listLocalPlaylists(), playlist]);
+    return listLocalPlaylists();
+  }
+
+  const nextTrackIds = [...new Set(input.trackIds)];
+  const tracksChanged = !sameStringArray(current.trackIds, nextTrackIds);
+  const sourceChanged = current.sourceDirectoryName !== input.sourceDirectoryName;
+  const updated: LocalPlaylistRecord = {
+    ...current,
+    trackIds: nextTrackIds,
+    sourceDirectoryName: input.sourceDirectoryName,
+    updatedAt: tracksChanged || sourceChanged
+      ? new Date().toISOString()
+      : current.updatedAt
+  };
+  if (tracksChanged || sourceChanged) {
+    writeLocalPlaylists(listLocalPlaylists().map((playlist) => playlist.id === current.id ? updated : playlist));
+  }
+  return listLocalPlaylists();
 }
 
 export async function flushLocalPlaylistPersistence() {
@@ -73,6 +121,8 @@ export function createLocalPlaylist(input: {
   title: string;
   description?: string | null;
   trackIds?: string[];
+  sourceDirectoryId?: string | null;
+  sourceDirectoryName?: string | null;
 }) {
   const now = new Date().toISOString();
   const playlist: LocalPlaylistRecord = {
@@ -80,6 +130,8 @@ export function createLocalPlaylist(input: {
     title: input.title.trim(),
     description: input.description?.trim() || null,
     trackIds: [...new Set(input.trackIds ?? [])],
+    sourceDirectoryId: input.sourceDirectoryId ?? null,
+    sourceDirectoryName: input.sourceDirectoryName ?? null,
     createdAt: now,
     updatedAt: now
   };
@@ -305,6 +357,61 @@ export async function syncSelectedLocalDirectoryTracks() {
   return scannedTracks.length;
 }
 
+export async function importLocalPlaylistDirectoryTracks() {
+  const directory = await chooseLocalAudioSourceDirectory();
+  const selectedFiles = await listLocalAudioFilesInDirectory(directory);
+  if (!selectedFiles) {
+    throw new Error("无法读取所选本地目录，请重新授权后重试。 ");
+  }
+
+  const sourceDirectoryId = createLocalPlaylistSourceId();
+  await saveLocalPlaylistDirectory({
+    id: sourceDirectoryId,
+    handle: directory,
+    name: directory.name
+  });
+
+  const importedTracks: LocalPlaylistTrackRecord[] = [];
+  for (const { file, fileName } of selectedFiles) {
+    const fileHash = await hashAudioBlob(file);
+    const metadata = await readDirectoryTrackMetadata(file);
+    const mimeType = file.type || inferAudioMimeType(file.name);
+    const now = new Date().toISOString();
+    const track: LocalPlaylistTrackRecord = {
+      id: `local-file:${sourceDirectoryId}:${fileHash}`,
+      title: metadata.title,
+      artist: metadata.artist,
+      album: metadata.album,
+      durationMs: metadata.durationMs,
+      mimeType,
+      sizeBytes: file.size,
+      artworkUrl: metadata.artworkUrl,
+      lyrics: metadata.lyrics,
+      provider: "local_upload",
+      providerTrackId: null,
+      fileHash,
+      fileName,
+      sourceDirectoryId,
+      availableOffline: true,
+      createdAt: now,
+      updatedAt: now
+    };
+    await saveLocalAudioFileRecord({
+      fileHash,
+      fileName,
+      storageKind: "saved",
+      sourceDirectoryId
+    });
+    await upsertLocalPlaylistTrack(track);
+    importedTracks.push(track);
+  }
+  return {
+    sourceDirectoryId,
+    directoryName: directory.name,
+    tracks: importedTracks
+  };
+}
+
 export async function listRoomPlaylistTrackIndex() {
   const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
     listLocalPlaylistTracks(),
@@ -418,8 +525,13 @@ function createLocalPlaylistId() {
   return `local-playlist-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
+function createLocalPlaylistSourceId() {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  return `local-playlist-source-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+}
+
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
-  const nextPlaylists = playlists.filter((playlist) => playlist.id !== removedDefaultLocalPlaylistId);
+  const nextPlaylists = [...playlists];
   localPlaylists = nextPlaylists;
   localPlaylistPersistencePromise = localPlaylistPersistencePromise
     .catch(() => undefined)
@@ -448,6 +560,8 @@ function toRepositoryPlaylist(playlist: LocalPlaylistRecord): LocalRepositoryPla
     id: playlist.id,
     title: playlist.title,
     description: playlist.description,
+    sourceDirectoryId: playlist.sourceDirectoryId ?? null,
+    sourceDirectoryName: playlist.sourceDirectoryName ?? null,
     trackRefs: playlist.trackIds.map((trackId) => {
       const providerMatch = /^provider:(netease|qqmusic):(.+)$/.exec(trackId);
       if (providerMatch) {
@@ -473,6 +587,8 @@ function fromRepositoryPlaylist(record: LocalRepositoryPlaylistRecord): LocalPla
     id: record.id,
     title: record.title,
     description: record.description,
+    sourceDirectoryId: record.sourceDirectoryId ?? null,
+    sourceDirectoryName: record.sourceDirectoryName ?? null,
     trackIds: record.trackRefs.map((trackRef) =>
       trackRef.kind === "provider"
         ? providerTrackKey(trackRef.provider, trackRef.trackId)
@@ -481,4 +597,8 @@ function fromRepositoryPlaylist(record: LocalRepositoryPlaylistRecord): LocalPla
     createdAt: record.createdAt,
     updatedAt: record.updatedAt
   };
+}
+
+function sameStringArray(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }

@@ -6,6 +6,8 @@ import {
 import { randomUUID } from "node:crypto";
 import type {
   ProviderAlbumDetail,
+  ProviderAlbumListResponse,
+  ProviderAlbumSummary,
   ProviderLyrics,
   ProviderPlaylistDetail,
   ProviderPlaylistListResponse,
@@ -167,6 +169,34 @@ export class NeteaseService {
     };
   }
 
+  async searchPlaylists(userId: string, query: NeteaseSearchQuery): Promise<ProviderPlaylistListResponse> {
+    this.assertEnabled();
+    this.assertRateLimit(`search:${userId}`, 30, 60_000);
+    const cookie = await this.getCookie(userId);
+    const response = await this.callProvider(userId, () => this.api.searchPlaylists({ ...query, cookie }));
+    return {
+      items: (response.result?.playlists ?? [])
+        .map((item) => this.toPlaylistSummary(item))
+        .filter((item): item is ProviderPlaylistSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
+  }
+
+  async searchAlbums(userId: string, query: NeteaseSearchQuery): Promise<ProviderAlbumListResponse> {
+    this.assertEnabled();
+    this.assertRateLimit(`search:${userId}`, 30, 60_000);
+    const cookie = await this.getCookie(userId);
+    const response = await this.callProvider(userId, () => this.api.searchAlbums({ ...query, cookie }));
+    return {
+      items: (response.result?.albums ?? [])
+        .map((item) => this.toAlbumSummary(item))
+        .filter((item): item is ProviderAlbumSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
+  }
+
   async getTrack(userId: string, trackId: string) {
     this.assertEnabled();
     const cookie = await this.getCookie(userId);
@@ -248,16 +278,10 @@ export class NeteaseService {
     const tracks = (Array.isArray(album.songs) ? album.songs : Array.isArray(body.songs) ? body.songs : [])
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is NeteaseTrackCandidate => !!item);
-    const artistRecord = asRecord(album.artist);
+    const summary = this.toAlbumSummary({ ...album, id: album.id ?? albumId });
+    if (!summary) throw this.unavailableError();
     return {
-      provider: "netease",
-      providerAlbumId: readString(album.id) ?? albumId,
-      title: readString(album.name) ?? "未命名专辑",
-      artist: readString(album.artist) ?? readString(artistRecord?.name) ?? readArtistNames(album.artists),
-      description: readString(album.description) ?? readString(album.briefDesc),
-      artworkUrl: readHttpUrl(album.picUrl),
-      releaseTime: readString(album.publishTime) ?? readString(album.company),
-      trackCount: readNumber(album.size) ?? tracks.length,
+      ...summary,
       tracks
     };
   }
@@ -438,6 +462,24 @@ export class NeteaseService {
       artworkUrl: readHttpUrl(playlist.coverImgUrl ?? playlist.coverImgUrlStr),
       creatorName: readString(asRecord(playlist.creator)?.nickname),
       trackCount: readNumber(playlist.trackCount) ?? readNumber(playlist.trackNumber) ?? (Array.isArray(playlist.tracks) ? playlist.tracks.length : 0),
+    };
+  }
+
+  private toAlbumSummary(value: unknown): ProviderAlbumSummary | null {
+    const album = asRecord(value);
+    const id = readString(album?.id ?? album?.albumId);
+    const title = readString(album?.name ?? album?.albumName);
+    if (!album || !id || !title) return null;
+    const artistRecord = asRecord(album.artist);
+    return {
+      provider: "netease",
+      providerAlbumId: id,
+      title,
+      artist: readString(album.artist) ?? readString(artistRecord?.name) ?? readString(album.artistName) ?? readArtistNames(album.artists),
+      description: readString(album.description) ?? readString(album.briefDesc),
+      artworkUrl: readHttpUrl(album.picUrl ?? album.blurPicUrl),
+      releaseTime: readString(album.publishTime) ?? readString(album.company),
+      trackCount: readNumber(album.size) ?? readNumber(album.trackCount) ?? 0
     };
   }
 

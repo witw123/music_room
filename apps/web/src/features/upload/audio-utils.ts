@@ -34,6 +34,8 @@ export type CachedLibraryTrack = {
   lyrics?: string | null;
   provider?: "netease" | "qqmusic" | "local_upload";
   providerTrackId?: string | null;
+  sourceDirectoryId?: string | null;
+  sourceFileName?: string | null;
   mimeType: string;
   durationMs: number;
   sizeBytes: number;
