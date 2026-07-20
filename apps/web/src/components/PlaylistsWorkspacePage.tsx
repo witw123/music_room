@@ -104,8 +104,10 @@ export function PlaylistsWorkspacePage() {
       listRoomPlaylistTrackIndex()
     ]);
     let initialDatabasePlaylists: Playlist[] = [];
+    let databasePlaylistsLoaded = false;
     try {
       initialDatabasePlaylists = await musicRoomApi.listMyPlaylists();
+      databasePlaylistsLoaded = true;
     } catch {
       // The local repository can still be opened while the server retries its database connection.
     }
@@ -135,27 +137,51 @@ export function PlaylistsWorkspacePage() {
       const playlist = networkPlaylistsRef.current.find((item) => item.id === current.playlist.id);
       return playlist ? { kind: "network", playlist } : null;
     });
-    try {
-      let playlists = initialDatabasePlaylists;
-      if (playlists.length === 0) playlists = await musicRoomApi.listMyPlaylists();
-      const localPlaylistDatabaseIds = await syncLocalPlaylistsToDatabase(localPlaylistRecords, playlists);
-      if (Object.keys(localPlaylistDatabaseIds).length > 0) {
-        playlists = await musicRoomApi.listMyPlaylists();
+    const applyDatabasePlaylists = (playlists: Playlist[]) => {
+      if (version !== refreshVersion.current) return;
+      const nextNetworkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
+      networkPlaylistsRef.current = nextNetworkPlaylists;
+      setNetworkPlaylists(nextNetworkPlaylists);
+      setSelectedPlaylist((current) => {
+        if (!current || current.kind !== "network") return current;
+        const playlist = playlists.find((item) => item.id === current.playlist.id);
+        return playlist ? { kind: "network", playlist } : null;
+      });
+    };
+
+    if (databasePlaylistsLoaded) {
+      applyDatabasePlaylists(initialDatabasePlaylists);
+    }
+
+    if (!databasePlaylistsLoaded) {
+      try {
+        const playlists = await musicRoomApi.listMyPlaylists();
+        applyDatabasePlaylists(playlists);
+        initialDatabasePlaylists = playlists;
+        databasePlaylistsLoaded = true;
+      } catch {
+        if (version === refreshVersion.current && networkPlaylistsRef.current.length === 0) {
+          setMessage("歌单数据库加载失败，请稍后重试；本地音频仍可使用。");
+        }
       }
+    }
+
+    if (databasePlaylistsLoaded) {
+      const { ids: localPlaylistDatabaseIds, failed } =
+        await syncLocalPlaylistsToDatabase(localPlaylistRecords, initialDatabasePlaylists);
       if (version === refreshVersion.current) {
         setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
-        const nextNetworkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
-        networkPlaylistsRef.current = nextNetworkPlaylists;
-        setNetworkPlaylists(nextNetworkPlaylists);
-        setSelectedPlaylist((current) => {
-          if (!current || current.kind !== "network") return current;
-          const playlist = playlists.find((item) => item.id === current.playlist.id);
-          return playlist ? { kind: "network", playlist } : null;
-        });
+        if (failed) {
+          setMessage("部分本地歌单同步失败，但网络歌单仍可用。");
+        }
       }
-    } catch {
-      if (version === refreshVersion.current && networkPlaylistsRef.current.length === 0) {
-        setMessage("歌单数据库加载失败，请稍后重试；本地音频仍可使用。");
+
+      if (Object.keys(localPlaylistDatabaseIds).length > 0) {
+        try {
+          applyDatabasePlaylists(await musicRoomApi.listMyPlaylists());
+        } catch {
+          // The first successful response is still valid for displaying network playlists.
+        }
       }
     }
     return scannedTrackCount;
@@ -672,12 +698,17 @@ async function syncLocalPlaylistsToDatabase(
       .filter((entry): entry is readonly [string, Playlist] => !!entry[0])
   );
   const ids: Record<string, string> = {};
+  let failed = false;
   for (const playlist of localPlaylists) {
-    const existing = databaseByLocalId.get(playlist.id);
-    const synced = await syncLocalPlaylistToDatabase(playlist, existing?.id, existing);
-    ids[playlist.id] = synced.id;
+    try {
+      const existing = databaseByLocalId.get(playlist.id);
+      const synced = await syncLocalPlaylistToDatabase(playlist, existing?.id, existing);
+      ids[playlist.id] = synced.id;
+    } catch {
+      failed = true;
+    }
   }
-  return ids;
+  return { ids, failed };
 }
 
 function LocalTrackRow({
