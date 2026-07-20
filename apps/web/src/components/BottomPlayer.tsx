@@ -300,7 +300,7 @@ function BottomPlayerBase({
   return (
     <>
     <footer
-      className="fixed inset-x-3 bottom-3 z-[60] box-border flex min-h-[6.5rem] flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-background-secondary/95 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[background-color,border-color] duration-700 sm:px-4 lg:inset-x-0 lg:bottom-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3"
+      className="fixed inset-x-3 bottom-3 z-[60] box-border flex min-h-0 flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 pb-[calc(env(safe-area-inset-bottom)_+_0.5rem)] pt-2 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[background-color,border-color] duration-700 sm:px-4 sm:pt-3 lg:inset-x-0 lg:bottom-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3"
       style={playerStyle}
       data-testid="bottom-player"
     >

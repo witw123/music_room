@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type AnchoredDialogAnchor = {
   top: number;
@@ -38,7 +39,12 @@ export function AnchoredDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState(() => getFallbackPosition(anchor));
+
+  useEffect(() => {
+    setPortalRoot(document.body);
+  }, []);
 
   useLayoutEffect(() => {
     const updatePosition = () => {
@@ -81,15 +87,17 @@ export function AnchoredDialog({
     };
   }, [anchor]);
 
-  return (
+  if (!portalRoot) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 overflow-hidden bg-black/75 px-4 py-6 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] overflow-hidden bg-black/75 px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm"
       onMouseDown={onClose}
       role="presentation"
     >
       <div
         aria-labelledby={ariaLabelledBy}
-        className={`fixed z-[51] max-h-[calc(100dvh-1.5rem)] w-[min(28rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6 ${className ?? ""}`}
+        className={`fixed z-[81] max-h-[calc(100dvh-1.5rem)] w-[min(28rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6 ${className ?? ""}`}
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -98,7 +106,8 @@ export function AnchoredDialog({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    portalRoot
   );
 }
 

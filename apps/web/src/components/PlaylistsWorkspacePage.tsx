@@ -499,7 +499,7 @@ export function PlaylistsWorkspacePage() {
   return (
     <main className="relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-8 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Playlists</p>
@@ -572,7 +572,7 @@ export function PlaylistsWorkspacePage() {
 
             {activeTab === "local" ? (
               <section className="mt-4 flex flex-col gap-3" data-testid="local-playlists">
-                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-2">
+                <div className="flex flex-col items-stretch gap-3 border-b border-surface-border pb-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-lg font-bold text-foreground">本地歌单</p>
                     <p className="mt-1 text-xs text-foreground-muted">每个本地歌单读取各自选择的目录</p>
@@ -599,7 +599,7 @@ export function PlaylistsWorkspacePage() {
               </section>
             ) : (
               <section className="mt-4 flex flex-col gap-3" data-testid="network-playlists">
-                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-2">
+                <div className="flex flex-col items-stretch gap-3 border-b border-surface-border pb-2 sm:flex-row sm:items-end sm:justify-between">
                   <div><p className="text-lg font-bold text-foreground">网络歌单</p><p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p></div>
                   <Button onClick={() => void openCreateDialog("network")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>

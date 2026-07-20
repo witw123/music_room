@@ -18,8 +18,10 @@
     margin: 0;
     background-color: #000000;
     color: var(--foreground);
+    overflow-x: hidden;
     min-height: 100vh;
     min-height: 100dvh;
+    -webkit-tap-highlight-color: transparent;
   }
 
   input:-webkit-autofill,

@@ -396,9 +396,9 @@ export function ProviderSearchPage() {
 
   return (
     <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-[#111214] pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-4 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <form className="flex h-12 min-w-0 flex-1 items-center gap-1 rounded-xl border border-white/[0.12] bg-[#191a1d] p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
+      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
+        <header className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-[#191a1d] p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:flex-1 sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
             <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
             <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
             <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌单或专辑</label>
@@ -419,7 +419,7 @@ export function ProviderSearchPage() {
             ) : null}
             <button aria-label="搜索" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-accent/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40" disabled={!isConnected || !keywords.trim() || pending !== null} title="搜索" type="submit"><Icon name="search" /></button>
           </form>
-          <div className="flex items-center gap-3 text-xs text-white/45">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3 text-xs text-white/45 sm:w-auto sm:justify-end">
             <span>{isConnected ? `${providerName} · ${account?.nickname ?? "已连接"}` : `${providerName}未连接`}</span>
             <Link className="text-accent hover:text-accent-hover" href="/app/profile">管理账号</Link>
           </div>

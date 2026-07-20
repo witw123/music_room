@@ -336,7 +336,7 @@ export function MobileBottomPlayerLayout({
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
-      <div className="grid min-h-[5.5rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
+      <div className="grid min-h-[4.25rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 sm:gap-x-3 sm:gap-y-1.5">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
           <VinylBadge
             accentColor={artworkAccent}
@@ -362,7 +362,7 @@ export function MobileBottomPlayerLayout({
           </div>
         </div>
 
-        <div className="col-span-2 flex items-center gap-2">
+        <div className="col-span-2 flex items-center gap-1.5 sm:gap-2">
           <PlayerQueueDrawer
             queue={queue}
             tracks={tracks}
@@ -374,7 +374,7 @@ export function MobileBottomPlayerLayout({
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />
-          <span className="w-[44px] shrink-0 text-right text-[11px] tabular-nums text-foreground-muted">
+          <span className="w-[38px] shrink-0 text-right text-[10px] tabular-nums text-foreground-muted sm:w-[44px] sm:text-[11px]">
             {formatDuration(boundedProgressMs)}
           </span>
           <div className="flex-1">
@@ -388,12 +388,12 @@ export function MobileBottomPlayerLayout({
               onKeyUp={commitSeek}
             />
           </div>
-          <span className="w-[44px] shrink-0 text-[11px] tabular-nums text-foreground-muted">
+          <span className="w-[38px] shrink-0 text-[10px] tabular-nums text-foreground-muted sm:w-[44px] sm:text-[11px]">
             {formatDuration(currentTrackDuration)}
           </span>
         </div>
 
-        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
+        <div className="col-span-2 grid min-h-[2.25rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 sm:min-h-[2.5rem] sm:gap-3">
           <div className="flex shrink-0 justify-start">
             {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
             <PlaybackModeButton

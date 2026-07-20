@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { RoomSnapshot } from "@music-room/shared";
@@ -273,7 +274,7 @@ export function RoomsHomePage({
       ) : null}
 
       {effectiveAwayRoomId ? (
-        <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-20 sm:px-6 lg:px-8 md:mx-0 md:max-w-[1600px]">
+        <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-4 sm:px-6 sm:pt-20 lg:px-8 md:mx-0 md:max-w-[1600px]">
           <div
             className="flex flex-col gap-3 rounded-2xl border border-amber-300/45 bg-amber-300/10 px-4 py-3 text-amber-100 shadow-[0_12px_36px_rgba(251,191,36,0.12)] sm:flex-row sm:items-center sm:justify-between"
             data-testid="away-room-banner"
@@ -301,7 +302,7 @@ export function RoomsHomePage({
 
 
 
-      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-16 sm:px-6 sm:pt-20 md:mx-0 md:max-w-[1600px] md:gap-5 lg:px-8">
+      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-8 sm:px-6 sm:pt-20 md:mx-0 md:max-w-[1600px] md:gap-5 lg:px-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
@@ -628,8 +629,16 @@ function RoomDialog({
   onClose: () => void;
   children: ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={onClose} role="presentation">
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalRoot(document.body);
+  }, []);
+
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm" onMouseDown={onClose} role="presentation">
       <div
         aria-modal="true"
         className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
@@ -645,6 +654,7 @@ function RoomDialog({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    portalRoot
   );
 }

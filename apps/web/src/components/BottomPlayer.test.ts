@@ -17,8 +17,8 @@ describe("BottomPlayer source", () => {
       "utf8"
     );
 
-    expect(source).toContain("min-h-[6.5rem]");
-    expect(layoutSource).toContain("min-h-[5.5rem]");
+    expect(source).toContain("min-h-0");
+    expect(layoutSource).toContain("min-h-[4.25rem]");
     expect(layoutSource).toContain('w-[5.4rem]');
     expect(layoutSource).toContain('w-[44px]');
   });
