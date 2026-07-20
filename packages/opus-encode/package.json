@@ -9,7 +9,13 @@
     ".": "./opus-encode.js",
     "./package.json": "./package.json"
   },
-  "files": ["opus-encode.js", "opus-encode.d.ts", "LICENSE"],
+  "files": [
+    "opus-encode.js",
+    "opus-encode.d.ts",
+    "opusscript_native_wasm.cjs",
+    "opusscript_native_wasm.wasm",
+    "LICENSE"
+  ],
   "keywords": ["opus", "ogg", "audio", "encode", "encoder", "wasm"],
   "publishConfig": { "access": "public" },
   "license": "MIT",

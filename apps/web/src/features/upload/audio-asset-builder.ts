@@ -645,13 +645,7 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
       this.pcm.append(channels);
       return;
     }
-    const { resample } = await import("wave-resampler");
-    this.pcm.append(channels.map((channel) => Float32Array.from(resample(
-      channel,
-      sampleRate,
-      opusSampleRate,
-      { method: "sinc", LPF: true, LPFType: "FIR", LPFOrder: 71, sincFilterSize: 12 }
-    ))));
+    this.pcm.append(await resampleChannelsToOpus(channels, sampleRate));
   }
 }
 
@@ -1098,12 +1092,19 @@ function decodeWavSample(
 
 async function resampleWavChannels(channels: Float32Array[], sampleRate: number) {
   if (sampleRate === opusSampleRate) return channels;
+  return resampleChannelsToOpus(channels, sampleRate);
+}
+
+async function resampleChannelsToOpus(channels: Float32Array[], sampleRate: number) {
   const { resample } = await import("wave-resampler");
+  const options = sampleRate > opusSampleRate
+    ? { method: "linear" as const, LPF: true as const, LPFType: "IIR" as const, LPFOrder: 4 }
+    : { method: "linear" as const, LPF: false as const };
   return channels.map((channel) => Float32Array.from(resample(
     channel,
     sampleRate,
     opusSampleRate,
-    { method: "sinc", LPF: true, LPFType: "FIR", LPFOrder: 71, sincFilterSize: 12 }
+    options
   )));
 }
 

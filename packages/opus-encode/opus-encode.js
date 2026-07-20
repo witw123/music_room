@@ -1,3 +1,8 @@
+import createWasmModule from "./opusscript_native_wasm.cjs"
+
+const maxFrameSize = 48000 * 60 / 1000
+const maxPacketSize = 1276 * 3
+
 /**
  * Ogg Opus encoder — browser + Node
  * Uses opusscript (libopus 1.4 WASM) for Opus frame encoding,
@@ -32,10 +37,7 @@ export default async function opus(opts) {
 	let FRAME_SIZE = 960 // 20ms at 48kHz
 	let ratio = OPUS_RATE / rate
 
-	// The WASM build resolves its binary relative to the worker URL, which is not
-	// emitted by Next.js. The asm.js backend is self-contained and uses the same
-	// libopus implementation without a runtime asset request.
-	let enc = new OpusScript(OPUS_RATE, nch, appConst, { wasm: false })
+	let enc = await createOpusScript(OpusScript, OPUS_RATE, nch, appConst)
 	enc.setBitrate(bitrate)
 
 	let serial = (Math.random() * 0xFFFFFFFF) >>> 0
@@ -213,6 +215,83 @@ export default async function opus(opts) {
 		if (enc) { enc.delete(); enc = null }
 		pcmBuf = null
 		headerPages = null
+	}
+}
+
+let browserWasmModulePromise = null
+
+async function createOpusScript(OpusScript, samplingRate, channels, application) {
+	// Dedicated workers can use the native WebAssembly build, but opusscript's
+	// default loader cannot resolve its .wasm file after Next bundles the worker.
+	// Feed the binary explicitly and keep asm.js as a compatibility fallback.
+	if (typeof self !== "undefined") {
+		try {
+			if (!browserWasmModulePromise) {
+				browserWasmModulePromise = (async () => {
+					const response = await fetch(new URL("./opusscript_native_wasm.wasm", import.meta.url))
+					if (!response.ok) throw new Error(`Unable to load Opus WASM (${response.status}).`)
+					return createWasmModule({ wasmBinary: await response.arrayBuffer() })
+				})()
+			}
+			return new BrowserOpusScript(
+				await browserWasmModulePromise,
+				samplingRate,
+				channels,
+				application
+			)
+		} catch {
+			return new OpusScript(samplingRate, channels, application, { wasm: false })
+		}
+	}
+	return new OpusScript(samplingRate, channels, application, { wasm: true })
+}
+
+class BrowserOpusScript {
+	constructor(native, samplingRate, channels, application) {
+		this.native = native
+		this.channels = channels
+		this.handler = new native.OpusScriptHandler(samplingRate, channels, application)
+		this.inPCMLength = maxFrameSize * channels * 2
+		this.inPCMPointer = native._malloc(this.inPCMLength)
+		this.inPCM = native.HEAPU16.subarray(
+			this.inPCMPointer,
+			this.inPCMPointer + this.inPCMLength
+		)
+		this.inOpusPointer = native._malloc(maxPacketSize)
+		this.outOpusPointer = native._malloc(maxPacketSize)
+	}
+
+	encode(buffer, frameSize) {
+		this.inPCM.set(buffer)
+		const length = this.handler._encode(
+			this.inPCM.byteOffset,
+			buffer.length,
+			this.outOpusPointer,
+			frameSize
+		)
+		if (length < 0) throw new Error("Encode error: " + length)
+		return new Uint8Array(
+			this.native.HEAPU8.buffer,
+			this.outOpusPointer,
+			length
+		).slice()
+	}
+
+	encoderCTL(control, value) {
+		const result = this.handler._encoder_ctl(control, value)
+		if (result < 0) throw new Error("Encoder CTL error: " + result)
+	}
+
+	setBitrate(bitrate) {
+		this.encoderCTL(4002, bitrate)
+	}
+
+	delete() {
+		this.native.OpusScriptHandler.destroy_handler(this.handler)
+		this.native._free(this.inPCMPointer)
+		this.native._free(this.inOpusPointer)
+		this.native._free(this.outOpusPointer)
+		this.handler = null
 	}
 }
 
