@@ -172,7 +172,9 @@ export function PlaylistsWorkspacePage() {
       if (version === refreshVersion.current) {
         setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
         if (failed) {
-          setMessage("部分本地歌单同步失败，但网络歌单仍可用。");
+          console.warn("Some local playlist mirrors could not be synchronized.");
+        } else {
+          setMessage(null);
         }
       }
 

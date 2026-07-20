@@ -1,5 +1,5 @@
-import type { Playlist } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { errorCodes, type Playlist } from "@music-room/shared";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 
 export const localPlaylistMirrorTagPrefix = "local-playlist:";
@@ -28,12 +28,17 @@ export async function syncLocalPlaylistToDatabase(
     ) {
       return existing;
     }
-    return musicRoomApi.updatePlaylist(databasePlaylistId, {
-      title: playlist.title,
-      description: playlist.description,
-      trackIds: playlist.trackIds,
-      tags
-    });
+    try {
+      return await musicRoomApi.updatePlaylist(databasePlaylistId, {
+        title: playlist.title,
+        description: playlist.description,
+        trackIds: playlist.trackIds,
+        tags
+      });
+    } catch (error) {
+      // A deleted server mirror must be recreated so the local playlist can converge again.
+      if (!isMissingPlaylistError(error)) throw error;
+    }
   }
   return musicRoomApi.createPlaylist({
     title: playlist.title,
@@ -42,6 +47,10 @@ export async function syncLocalPlaylistToDatabase(
     tags,
     isCollaborative: false
   });
+}
+
+function isMissingPlaylistError(error: unknown) {
+  return error instanceof MusicRoomApiError && error.code === errorCodes.roomNotFound;
 }
 
 function sameStringArray(left: string[], right: string[]) {
