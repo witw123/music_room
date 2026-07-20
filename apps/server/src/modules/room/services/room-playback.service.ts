@@ -1,4 +1,4 @@
-import type { PlaybackMode, PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
+import type { GaplessTransition, PlaybackMode, PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 
@@ -13,7 +13,7 @@ export class RoomPlaybackService {
   async updatePlayback(
     record: RoomRecord,
     input: {
-      action: "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
+      action: "play" | "pause" | "seek" | "next" | "prev" | "gapless-next" | "set-mode";
       trackId?: string;
       queueItemId?: string;
       playbackAssetId?: string;
@@ -22,6 +22,29 @@ export class RoomPlaybackService {
     }
   ): Promise<PlaybackSnapshot> {
     const playback = record.room.playback;
+
+    if (input.action === "gapless-next") {
+      const transition = await this.resolveGaplessTransition(record);
+      if (
+        !transition ||
+        transition.trackId !== input.trackId ||
+        transition.queueItemId !== (input.queueItemId ?? null) ||
+        Date.now() < Date.parse(transition.transitionAt)
+      ) {
+        throw new Error("Gapless transition is not ready.");
+      }
+      await this.applyTrackPlayback(
+        record,
+        transition.trackId,
+        0,
+        transition.queueItemId,
+        transition.playbackAssetId,
+        {
+          startAt: transition.transitionAt,
+          preserveMediaEpoch: this.canPreserveMediaEpoch(playback, transition)
+        }
+      );
+    }
 
     if (input.action === "set-mode") {
       if (!input.playbackMode) {
@@ -149,7 +172,8 @@ export class RoomPlaybackService {
       sourcePeerId:
         record.room.playback.sourceSessionId && storedSourcePeerId
           ? resolvedPresence.get(record.room.playback.sourceSessionId) ?? null
-          : null
+          : null,
+      gaplessNext: await this.resolveGaplessTransition(record, resolvedPresence)
     };
   }
 
@@ -158,7 +182,11 @@ export class RoomPlaybackService {
     trackId: string,
     positionMs: number,
     queueItemId: string | null,
-    requestedPlaybackAssetId?: string
+    requestedPlaybackAssetId?: string,
+    options?: {
+      startAt?: string;
+      preserveMediaEpoch?: boolean;
+    }
   ) {
     const playback = record.room.playback;
     const track = record.tracks.find((item) => item.id === trackId);
@@ -188,12 +216,12 @@ export class RoomPlaybackService {
     playback.sourcePeerId = sourceCandidate.peerId;
     playback.sourceTrackId = trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
-    const startAt = new Date().toISOString();
+    const startAt = options?.startAt ?? new Date().toISOString();
     playback.startAt = startAt;
     playback.startedAt = startAt;
     // Queue-item switches need a media epoch bump so clients remount local
     // playback even when the underlying track asset is unchanged.
-    if (isTrackSwitch || isQueueItemSwitch || isSwitchingSource) {
+    if ((isTrackSwitch || isQueueItemSwitch || isSwitchingSource) && !options?.preserveMediaEpoch) {
       playback.mediaEpoch += 1;
     }
   }
@@ -394,6 +422,33 @@ export class RoomPlaybackService {
     return true;
   }
 
+  async advanceGaplessIfDue(record: RoomRecord): Promise<boolean> {
+    const playback = record.room.playback;
+    const transitionAtMs = this.getGaplessTransitionAt(record);
+    if (transitionAtMs === null || Date.now() < transitionAtMs) {
+      return false;
+    }
+
+    const transition = await this.resolveGaplessTransition(record);
+    if (!transition) {
+      return false;
+    }
+
+    await this.applyTrackPlayback(
+      record,
+      transition.trackId,
+      0,
+      transition.queueItemId,
+      transition.playbackAssetId,
+      {
+        startAt: transition.transitionAt,
+        preserveMediaEpoch: this.canPreserveMediaEpoch(playback, transition)
+      }
+    );
+    this.bumpPlaybackVersion(playback);
+    return true;
+  }
+
   clearPlayback(playback: PlaybackSnapshot, options?: { bumpVersion?: boolean }) {
     playback.status = "paused";
     playback.currentTrackId = null;
@@ -560,6 +615,84 @@ export class RoomPlaybackService {
     }
 
     return record.queue.findIndex((item) => item.trackId === currentTrackId);
+  }
+
+  private async resolveGaplessTransition(
+    record: RoomRecord,
+    activePresence?: Map<string, string>
+  ): Promise<GaplessTransition | null> {
+    const playback = record.room.playback;
+    if (
+      playback.status !== "playing" ||
+      playback.playbackMode !== "sequence" ||
+      !playback.currentTrackId ||
+      !playback.startAt ||
+      !playback.sourceSessionId
+    ) {
+      return null;
+    }
+
+    const transitionAtMs = this.getGaplessTransitionAt(record);
+    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+    const currentIndex = this.getCurrentQueueIndex(record);
+    const nextQueueItem = currentIndex >= 0 ? record.queue[currentIndex + 1] : undefined;
+    const nextTrack = nextQueueItem
+      ? record.tracks.find((track) => track.id === nextQueueItem.trackId)
+      : undefined;
+    if (
+      !currentTrack ||
+      transitionAtMs === null ||
+      !nextQueueItem ||
+      !nextTrack?.playbackAsset ||
+      nextTrack.durationMs <= 0
+    ) {
+      return null;
+    }
+
+    const presence = activePresence ?? await this.roomPresenceService.getActivePresence(
+      record.room.id,
+      record.room.members
+    );
+    const nextSource = this.pickTrackSourceCandidate(nextTrack, presence);
+    if (!nextSource || nextSource.sessionId !== playback.sourceSessionId) {
+      return null;
+    }
+
+    return {
+      trackId: nextTrack.id,
+      queueItemId: nextQueueItem.id,
+      playbackAssetId: nextTrack.playbackAsset.assetId,
+      durationMs: nextTrack.durationMs,
+      transitionAt: new Date(transitionAtMs).toISOString(),
+      sourceSessionId: nextSource.sessionId,
+      sourcePeerId: nextSource.peerId
+    };
+  }
+
+  private getGaplessTransitionAt(record: RoomRecord) {
+    const playback = record.room.playback;
+    if (
+      playback.status !== "playing" ||
+      playback.playbackMode !== "sequence" ||
+      !playback.currentTrackId ||
+      !playback.startAt ||
+      !playback.sourceSessionId
+    ) {
+      return null;
+    }
+
+    const currentDurationMs = this.getTrackDurationMs(record, playback.currentTrackId);
+    const startAtMs = Date.parse(playback.startAt);
+    if (currentDurationMs <= 0 || !Number.isFinite(startAtMs)) {
+      return null;
+    }
+
+    return startAtMs + Math.max(0, currentDurationMs - playback.positionMs);
+  }
+
+  private canPreserveMediaEpoch(playback: PlaybackSnapshot, transition: GaplessTransition) {
+    return playback.sourceSessionId === transition.sourceSessionId &&
+      playback.sourcePeerId === transition.sourcePeerId;
   }
 
   private bumpPlaybackVersion(playback: PlaybackSnapshot) {

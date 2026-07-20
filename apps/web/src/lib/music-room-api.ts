@@ -288,7 +288,7 @@ export const musicRoomApi = {
   updatePlayback: (
     roomId: string,
     payload: {
-      action: "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
+      action: "play" | "pause" | "seek" | "next" | "prev" | "gapless-next" | "set-mode";
       trackId?: string;
       queueItemId?: string;
       playbackAssetId?: string;

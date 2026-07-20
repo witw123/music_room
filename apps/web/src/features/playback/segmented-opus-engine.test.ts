@@ -368,6 +368,45 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("pre-schedules the next timeline even when the queue repeats the same asset", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    const transitionAt = new Date(serverNowMs + 11_000).toISOString();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex),
+      gaplessNext: {
+        transition: {
+          trackId: "track_2",
+          queueItemId: "queue_2",
+          playbackAssetId: manifest.assetId,
+          durationMs: manifest.durationMs,
+          transitionAt,
+          sourceSessionId: "user_a",
+          sourcePeerId: "peer_a"
+        },
+        manifest,
+        getUnit: async (unitIndex) => unit(unitIndex)
+      }
+    });
+
+    expect(sources).toHaveLength(manifest.unitCount * 2);
+    expect(sources.slice(manifest.unitCount).map((source) => source.starts[0]?.when)).toEqual([
+      21,
+      23,
+      25,
+      27,
+      29
+    ]);
+    engine.destroy();
+  });
+
   it("reuses decoded units when pausing and resuming the same track", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

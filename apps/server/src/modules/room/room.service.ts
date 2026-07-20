@@ -647,7 +647,7 @@ export class RoomService {
   async updatePlayback(
     roomId: string,
     input: {
-      action: "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
+      action: "play" | "pause" | "seek" | "next" | "prev" | "gapless-next" | "set-mode";
       trackId?: string;
       queueItemId?: string;
       playbackAssetId?: string;
@@ -735,8 +735,8 @@ export class RoomService {
   }
 
   /**
-   * Server watchdog entry: advance rooms whose current track has passed durationMs
-   * without a client next call (e.g. source tab suspended).
+   * Server watchdog entry: advance rooms at a scheduled gapless transition or after
+   * the current track has passed durationMs without a client next call.
    */
   async advanceEndedPlaybacks(): Promise<
     Array<{ roomId: string; playback: import("@music-room/shared").PlaybackSnapshot }>
@@ -759,7 +759,8 @@ export class RoomService {
       try {
         // Re-load so CAS uses the freshest revision under concurrent host controls.
         const record = await this.roomRecordRepository.getRoomRecord(listed.room.id);
-        const didAdvance = await this.roomPlaybackService.advanceIfTrackEnded(record);
+        const didGaplessAdvance = await this.roomPlaybackService.advanceGaplessIfDue(record);
+        const didAdvance = didGaplessAdvance || await this.roomPlaybackService.advanceIfTrackEnded(record);
         if (!didAdvance) {
           continue;
         }

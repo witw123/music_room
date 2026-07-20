@@ -19,7 +19,7 @@ import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
 
-type PlaybackAction = "play" | "pause" | "seek" | "next" | "prev" | "set-mode";
+type PlaybackAction = "play" | "pause" | "seek" | "next" | "prev" | "gapless-next" | "set-mode";
 
 type PlaybackRateLimitBucket = {
   timestamps: number[];

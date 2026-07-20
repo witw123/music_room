@@ -131,7 +131,7 @@ export const reorderQueueRequestSchema = z
 
 export const updatePlaybackRequestSchema = z
   .object({
-    action: z.enum(["play", "pause", "seek", "next", "prev", "set-mode"]),
+    action: z.enum(["play", "pause", "seek", "next", "prev", "gapless-next", "set-mode"]),
     trackId: stringId.optional(),
     queueItemId: stringId.optional(),
     playbackAssetId: z.string().regex(/^[a-f0-9]{64}$/).optional(),

@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { RoomService } from "../room/room.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 
-const WATCHDOG_INTERVAL_MS = 2_000;
+const WATCHDOG_INTERVAL_MS = 100;
 
 @Injectable()
 export class PlaybackService implements OnModuleInit, OnModuleDestroy {
@@ -42,7 +42,7 @@ export class PlaybackService implements OnModuleInit, OnModuleDestroy {
       for (const item of advanced) {
         this.roomRealtimePublisher.emitPlaybackPatch(item.roomId, item.playback);
         this.logger.log(
-          `watchdog advanced ended track room=${item.roomId} revision=${item.playback.playbackRevision} status=${item.playback.status}`
+          `watchdog advanced playback room=${item.roomId} revision=${item.playback.playbackRevision} status=${item.playback.status}`
         );
       }
     } catch (error) {

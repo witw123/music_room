@@ -1,7 +1,7 @@
 "use client";
 
 import type { AudioAssetUnitRecord } from "@/lib/indexeddb";
-import type { PlaybackAssetManifest, PlaybackSnapshot } from "@music-room/shared";
+import type { GaplessTransition, PlaybackAssetManifest, PlaybackSnapshot } from "@music-room/shared";
 import { roomAudioOutput } from "./room-audio-output";
 import {
   playbackUnitIndexAt,
@@ -20,6 +20,11 @@ type SyncInput = {
   serverNowMs: number;
   volume: number;
   getUnit: (unitIndex: number) => Promise<AudioAssetUnitRecord | null>;
+  gaplessNext?: {
+    transition: GaplessTransition;
+    manifest: PlaybackAssetManifest;
+    getUnit: (unitIndex: number) => Promise<AudioAssetUnitRecord | null>;
+  } | null;
 };
 
 type SyncResult = {
@@ -43,10 +48,10 @@ const assetOperationTimeoutMs = 5_000;
 
 export class SegmentedOpusEngine {
   private timelineKey: string | null = null;
-  private readonly scheduled = new Map<number, ScheduledSource>();
-  private readonly completed = new Set<number>();
-  private readonly decoded = new Map<number, Promise<AudioBuffer>>();
-  private readonly unitRecords = new Map<number, AudioAssetUnitRecord>();
+  private readonly scheduled = new Map<string, ScheduledSource>();
+  private readonly completed = new Set<string>();
+  private readonly decoded = new Map<string, Promise<AudioBuffer>>();
+  private readonly unitRecords = new Map<string, AudioAssetUnitRecord>();
   private wasmDecoder: import("ogg-opus-decoder").OggOpusDecoder | null = null;
   private mixBus: GainNode | null = null;
   private playbackGate: GainNode | null = null;
@@ -58,6 +63,11 @@ export class SegmentedOpusEngine {
   private masterGainContext: AudioContext | null = null;
   private contextAnchorTime: number | null = null;
   private playbackAnchorPositionMs = 0;
+  private pendingTransition: {
+    assetId: string;
+    transitionAt: string;
+    contextTime: number;
+  } | null = null;
   private timelineStarted = false;
   private revision = 0;
   private destroyed = false;
@@ -111,9 +121,11 @@ export class SegmentedOpusEngine {
     if (this.destroyed) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
-    if (input.playback.status !== "playing" || !input.playback.startAt) {
+    const timelineId = input.playback.startAt;
+    if (input.playback.status !== "playing" || !timelineId) {
       this.resetTimeline({ preserveCache: true });
       this.pruneDecodedCache(
+        input.manifest.assetId,
         playbackUnitIndexAt(input.manifest, input.playback.positionMs),
         input.manifest.segmentDurationMs
       );
@@ -124,13 +136,24 @@ export class SegmentedOpusEngine {
     const timelineKey = [
       input.manifest.assetId,
       input.playback.mediaEpoch,
-      input.playback.startAt
+      timelineId
     ].join(":");
     if (timelineKey !== this.timelineKey) {
       // Pause, resume, seek, and media changes create a new room timeline.
       // Playback-order changes only bump the room revision, so keep audio
       // already scheduled for the current timeline intact.
-      this.resetTimeline({ preserveCache: true });
+      const pendingTransition = this.pendingTransition;
+      const canPromoteGapless = pendingTransition?.assetId === input.manifest.assetId &&
+        pendingTransition.transitionAt === timelineId;
+      if (canPromoteGapless) {
+        this.timelineKey = timelineKey;
+        this.contextAnchorTime = pendingTransition.contextTime;
+        this.playbackAnchorPositionMs = 0;
+        this.timelineStarted = true;
+        this.pendingTransition = null;
+      } else {
+        this.resetTimeline({ preserveCache: true });
+      }
       this.timelineKey = timelineKey;
       this.timelineGeneration += 1;
     }
@@ -143,18 +166,22 @@ export class SegmentedOpusEngine {
     }
     this.ensureMasterGain(context, input.volume);
 
-    const startAtMs = Date.parse(input.playback.startAt);
+    const startAtMs = Date.parse(timelineId);
     const elapsedMs = Math.max(0, input.serverNowMs - startAtMs);
     const roomPositionMs = Math.min(
       input.manifest.durationMs,
       input.playback.positionMs + elapsedMs
     );
     const currentIndex = playbackUnitIndexAt(input.manifest, roomPositionMs);
-    this.pruneDecodedCache(currentIndex, input.manifest.segmentDurationMs);
+    this.pruneDecodedCache(input.manifest.assetId, currentIndex, input.manifest.segmentDurationMs);
     if (
       roomPositionMs >= input.manifest.durationMs &&
       this.scheduled.size === 0 &&
-      this.completed.has(input.manifest.unitCount - 1)
+      this.completed.has(timelineUnitKey(
+        input.manifest.assetId,
+        timelineId,
+        input.manifest.unitCount - 1
+      ))
     ) {
       this.sourceHealth = "source-ended";
       return { state: "ended" as const, bufferedUnits: 0 };
@@ -177,7 +204,7 @@ export class SegmentedOpusEngine {
     // decoding on slower devices and make the source stream go silent even
     // though the audio is already cached locally.
     const units = await Promise.all(unitIndexes.map(async (unitIndex) => {
-      const cached = this.unitRecords.get(unitIndex);
+      const cached = this.unitRecords.get(unitKey(input.manifest.assetId, unitIndex));
       if (cached) {
         return cached;
       }
@@ -187,7 +214,7 @@ export class SegmentedOpusEngine {
         "Audio asset read timed out."
       );
       if (loaded) {
-        this.unitRecords.set(unitIndex, loaded);
+        this.unitRecords.set(unitKey(input.manifest.assetId, unitIndex), loaded);
       }
       return loaded;
     }));
@@ -209,7 +236,11 @@ export class SegmentedOpusEngine {
     if (contiguousUnits.length < requiredUnits) {
       if (
         this.timelineStarted &&
-        !this.scheduled.has(currentIndex) &&
+        !this.scheduled.has(timelineUnitKey(
+          input.manifest.assetId,
+          timelineId,
+          currentIndex
+        )) &&
         roomPositionMs + underrunGuardMs < input.manifest.durationMs
       ) {
         this.enterUnderrun();
@@ -241,6 +272,8 @@ export class SegmentedOpusEngine {
       });
       this.scheduleUnit({
         context,
+        assetId: input.manifest.assetId,
+        timelineId,
         decoded: currentDecoded,
         unit: currentUnit,
         roomPositionMs,
@@ -249,7 +282,16 @@ export class SegmentedOpusEngine {
     }
 
     const decodeTargets = contiguousUnits.filter(
-      (unit) => !this.scheduled.has(unit.unitIndex) && !this.completed.has(unit.unitIndex)
+      (unit) => !this.scheduled.has(timelineUnitKey(
+        input.manifest.assetId,
+        timelineId,
+        unit.unitIndex
+      )) &&
+        !this.completed.has(timelineUnitKey(
+          input.manifest.assetId,
+          timelineId,
+          unit.unitIndex
+        ))
     );
     const decodeResults = await Promise.allSettled(
       decodeTargets.map((unit) => this.getDecodedUnitWithRetry(context, unit))
@@ -262,9 +304,11 @@ export class SegmentedOpusEngine {
       if (decodeResults[index]?.status === "rejected") {
         continue;
       }
-      const decoded = await this.decoded.get(unit.unitIndex)!;
+      const decoded = await this.decoded.get(unitKey(input.manifest.assetId, unit.unitIndex))!;
       this.scheduleUnit({
         context,
+        assetId: input.manifest.assetId,
+        timelineId,
         decoded,
         unit,
         roomPositionMs,
@@ -272,7 +316,16 @@ export class SegmentedOpusEngine {
       });
     }
 
-    const bufferedUnits = this.countContiguousScheduledUnits(currentIndex);
+    const bufferedUnits = this.countContiguousScheduledUnits(
+      input.manifest.assetId,
+      timelineId,
+      currentIndex
+    );
+    if (input.gaplessNext) {
+      await this.scheduleGaplessNext(context, input.serverNowMs, input.gaplessNext);
+    } else {
+      this.pendingTransition = null;
+    }
     this.fadePlaybackGateTo(1);
     this.setBroadcastTrackEnabled(true);
     this.sampleSourceEnergy(context);
@@ -331,15 +384,20 @@ export class SegmentedOpusEngine {
 
   private scheduleUnit(input: {
     context: AudioContext;
+    assetId: string;
+    timelineId: string;
     decoded: AudioBuffer;
     unit: AudioAssetUnitRecord;
     roomPositionMs: number;
     currentIndex: number;
+    anchorTime?: number;
+    anchorPositionMs?: number;
   }) {
-    if (this.contextAnchorTime === null || !this.masterGain) return;
+    const anchorTime = input.anchorTime ?? this.contextAnchorTime;
+    if (anchorTime === null || anchorTime === undefined || !this.masterGain) return;
     const segmentStartMs = input.unit.startMs ?? input.unit.unitIndex * 2_000;
     const desiredSegmentStart =
-      this.contextAnchorTime + (segmentStartMs - this.playbackAnchorPositionMs) / 1000;
+      anchorTime + (segmentStartMs - (input.anchorPositionMs ?? this.playbackAnchorPositionMs)) / 1000;
     const timelineOffset = input.unit.unitIndex === input.currentIndex
       ? Math.max(0, (input.roomPositionMs - segmentStartMs) / 1000)
       : 0;
@@ -347,14 +405,15 @@ export class SegmentedOpusEngine {
     const desiredAudibleStart = desiredSegmentStart + timelineOffset;
     const lateBy = Math.max(0, earliestStart - desiredAudibleStart);
     const offsetSeconds = timelineOffset + lateBy;
+    const timelineKey = timelineUnitKey(input.assetId, input.timelineId, input.unit.unitIndex);
     if (offsetSeconds >= input.decoded.duration) {
-      this.completed.add(input.unit.unitIndex);
+      this.completed.add(timelineKey);
       return;
     }
 
     if (
-      this.scheduled.has(input.unit.unitIndex) ||
-      this.completed.has(input.unit.unitIndex)
+      this.scheduled.has(timelineKey) ||
+      this.completed.has(timelineKey)
     ) {
       return;
     }
@@ -374,14 +433,13 @@ export class SegmentedOpusEngine {
     const revision = this.revision;
     source.onended = () => {
       if (revision !== this.revision) return;
-      this.scheduled.delete(input.unit.unitIndex);
-      this.completed.add(input.unit.unitIndex);
-      this.decoded.delete(input.unit.unitIndex);
+      this.scheduled.delete(timelineKey);
+      this.completed.add(timelineKey);
       source.disconnect();
       sourceGain.disconnect();
     };
     const startAt = Math.max(earliestStart, desiredAudibleStart);
-    if (input.unit.unitIndex === input.currentIndex) {
+    if (input.unit.unitIndex === input.currentIndex && input.anchorTime === undefined) {
       // Only a timeline entry point needs a fade-in. Reapplying it to every
       // 2s continuation creates a periodic dip even when the buffers are
       // sample-contiguous.
@@ -392,22 +450,74 @@ export class SegmentedOpusEngine {
       setAudioParamValueAt(sourceGain.gain, 1, startAt);
     }
     source.start(startAt, offsetSeconds);
-    this.scheduled.set(input.unit.unitIndex, { source, gain: sourceGain, revision });
+    this.scheduled.set(timelineKey, { source, gain: sourceGain, revision });
+  }
+
+  private async scheduleGaplessNext(
+    context: AudioContext,
+    serverNowMs: number,
+    input: NonNullable<SyncInput["gaplessNext"]>
+  ) {
+    const transitionContextTime = context.currentTime +
+      (Date.parse(input.transition.transitionAt) - serverNowMs) / 1000;
+    this.pendingTransition = {
+      assetId: input.manifest.assetId,
+      transitionAt: input.transition.transitionAt,
+      contextTime: transitionContextTime
+    };
+    if (transitionContextTime < context.currentTime - 0.05) return;
+
+    const unitCount = Math.min(
+      Math.max(1, Math.ceil(scheduleAheadMs / input.manifest.segmentDurationMs)),
+      input.manifest.unitCount
+    );
+    const units: AudioAssetUnitRecord[] = [];
+    for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
+      const key = unitKey(input.manifest.assetId, unitIndex);
+      const cached = this.unitRecords.get(key);
+      const loaded = cached ?? await withTimeout(
+        input.getUnit(unitIndex),
+        assetOperationTimeoutMs,
+        "Gapless next-track audio asset read timed out."
+      );
+      if (!loaded) break;
+      this.unitRecords.set(key, loaded);
+      units.push(loaded);
+    }
+    const decoded = await Promise.allSettled(
+      units.map((unit) => this.getDecodedUnitWithRetry(context, unit))
+    );
+    for (const [index, unit] of units.entries()) {
+      const result = decoded[index];
+      if (result?.status !== "fulfilled") continue;
+      this.scheduleUnit({
+        context,
+        assetId: input.manifest.assetId,
+        timelineId: input.transition.transitionAt,
+        decoded: result.value,
+        unit,
+        roomPositionMs: 0,
+        currentIndex: 0,
+        anchorTime: transitionContextTime,
+        anchorPositionMs: 0
+      });
+    }
   }
 
   private getDecodedUnit(
     context: AudioContext,
     unit: AudioAssetUnitRecord
   ) {
-    const existing = this.decoded.get(unit.unitIndex);
+    const key = unitKey(unit.assetId, unit.unitIndex);
+    const existing = this.decoded.get(key);
     if (existing) return existing;
     const decoding = this.decodeUnit(context, unit).catch((error) => {
-      if (this.decoded.get(unit.unitIndex) === decoding) {
-        this.decoded.delete(unit.unitIndex);
+      if (this.decoded.get(key) === decoding) {
+        this.decoded.delete(key);
       }
       throw error;
     });
-    this.decoded.set(unit.unitIndex, decoding);
+    this.decoded.set(key, decoding);
     return decoding;
   }
 
@@ -438,7 +548,7 @@ export class SegmentedOpusEngine {
   ) {
     return this.getDecodedUnit(context, unit).catch(async (firstError) => {
       this.lastDecodeError = formatDecodeError(firstError);
-      this.decoded.delete(unit.unitIndex);
+      this.decoded.delete(unitKey(unit.assetId, unit.unitIndex));
       try {
         return await this.getDecodedUnit(context, unit);
       } catch (retryError) {
@@ -539,21 +649,31 @@ export class SegmentedOpusEngine {
     this.masterGainContext = context;
   }
 
-  private countContiguousScheduledUnits(currentIndex: number) {
+  private countContiguousScheduledUnits(assetId: string, timelineId: string, currentIndex: number) {
     let count = 0;
     for (let unitIndex = currentIndex; ; unitIndex += 1) {
-      if (!this.scheduled.has(unitIndex) && !this.completed.has(unitIndex)) break;
+      const key = timelineUnitKey(assetId, timelineId, unitIndex);
+      if (!this.scheduled.has(key) && !this.completed.has(key)) break;
       count += 1;
     }
     return count;
   }
 
-  private pruneDecodedCache(currentIndex: number, segmentDurationMs: number) {
+  private pruneDecodedCache(assetId: string, currentIndex: number, segmentDurationMs: number) {
     const retainAheadUnitCount = Math.max(1, Math.ceil(scheduleAheadMs / segmentDurationMs) + 1);
     const lastRetainedIndex = currentIndex + retainAheadUnitCount;
-    for (const unitIndex of this.decoded.keys()) {
-      if (unitIndex < currentIndex || unitIndex > lastRetainedIndex) {
-        this.decoded.delete(unitIndex);
+    for (const key of this.decoded.keys()) {
+      const [keyAssetId, rawUnitIndex] = key.split(":");
+      const unitIndex = Number(rawUnitIndex);
+      const isScheduledForAnyTimeline = [...this.scheduled.keys()].some((scheduledKey) =>
+        scheduledKey.startsWith(`${assetId}:`) && scheduledKey.endsWith(`:${unitIndex}`)
+      );
+      if (
+        keyAssetId === assetId &&
+        (unitIndex < currentIndex || unitIndex > lastRetainedIndex) &&
+        !isScheduledForAnyTimeline
+      ) {
+        this.decoded.delete(key);
       }
     }
   }
@@ -564,6 +684,7 @@ export class SegmentedOpusEngine {
     this.stopScheduledSources();
     this.completed.clear();
     this.contextAnchorTime = null;
+    this.pendingTransition = null;
     this.timelineStarted = false;
     this.sourceHealth = "source-underrun";
     this.fadePlaybackGateTo(0);
@@ -675,6 +796,14 @@ export class SegmentedOpusEngine {
 
 function normalizeVolume(volume: number) {
   return Math.min(1, Math.max(0, volume));
+}
+
+function unitKey(assetId: string, unitIndex: number) {
+  return `${assetId}:${unitIndex}`;
+}
+
+function timelineUnitKey(assetId: string, timelineId: string, unitIndex: number) {
+  return `${assetId}:${timelineId}:${unitIndex}`;
 }
 
 function formatDecodeError(error: unknown) {

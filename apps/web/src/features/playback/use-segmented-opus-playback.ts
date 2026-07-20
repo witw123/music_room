@@ -106,6 +106,10 @@ export function useSegmentedOpusPlayback(input: {
         const runtime = runtimeRef.current;
         const currentPlaybackAsset = runtime.currentTrack?.playbackAsset;
         const currentPlayback = runtime.roomSnapshot?.room.playback;
+        const nextTransition = currentPlayback?.gaplessNext ?? null;
+        const nextTrack = nextTransition
+          ? runtime.roomSnapshot?.tracks.find((track) => track.id === nextTransition.trackId)
+          : null;
         const currentPlaybackIdentity = resolveSegmentedPlaybackIdentity({
           playback: currentPlayback,
           playbackAssetId: currentPlaybackAsset?.assetId
@@ -160,7 +164,15 @@ export function useSegmentedOpusPlayback(input: {
           playback: currentPlayback,
           serverNowMs,
           volume: runtime.volume,
-          getUnit: (unitIndex) => getAssetUnit(currentPlaybackAsset.assetId, unitIndex)
+          getUnit: (unitIndex) => getAssetUnit(currentPlaybackAsset.assetId, unitIndex),
+          gaplessNext:
+            nextTransition && nextTrack?.playbackAsset
+              ? {
+                  transition: nextTransition,
+                  manifest: nextTrack.playbackAsset,
+                  getUnit: (unitIndex) => getAssetUnit(nextTrack.playbackAsset!.assetId, unitIndex)
+                }
+              : null
         });
         const sourceHealth = engineRef.current?.getSourceHealth();
         if (cancelled || generation !== playbackGenerationRef.current) {
@@ -283,8 +295,6 @@ export function resolveSegmentedPlaybackEngineIdentity(input: {
   }
 
   return [
-    input.playbackAssetId,
-    input.playback.currentTrackId,
     input.playback.mediaEpoch
   ].join(":");
 }

@@ -1,7 +1,20 @@
 import { z } from "zod";
+import { sha256HexSchema } from "../assets/models";
 
 export const playbackModeSchema = z.enum(["sequence", "shuffle", "single"]);
 export type PlaybackMode = z.infer<typeof playbackModeSchema>;
+
+export const gaplessTransitionSchema = z.object({
+  trackId: z.string(),
+  queueItemId: z.string().nullable(),
+  playbackAssetId: sha256HexSchema,
+  durationMs: z.number().int().positive(),
+  transitionAt: z.string().datetime(),
+  sourceSessionId: z.string(),
+  sourcePeerId: z.string().nullable()
+}).strict();
+
+export type GaplessTransition = z.infer<typeof gaplessTransitionSchema>;
 
 // Server-authoritative statuses are "playing" | "paused".
 // "buffering" remains accepted for backward-compatible clients but is not written by the server.
@@ -20,7 +33,9 @@ export const playbackSnapshotSchema = z.object({
   playbackRevision: z.number().int().positive().default(1),
   mediaEpoch: z.number().int().nonnegative(),
   // Optional for snapshots persisted before room-level playback order was added.
-  playbackMode: playbackModeSchema.optional()
+  playbackMode: playbackModeSchema.optional(),
+  // The source can schedule this track before the server promotes it.
+  gaplessNext: gaplessTransitionSchema.nullable().optional()
 });
 
 export type PlaybackSnapshot = z.infer<typeof playbackSnapshotSchema>;
