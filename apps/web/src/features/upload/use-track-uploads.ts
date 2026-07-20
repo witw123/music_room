@@ -33,6 +33,7 @@ import {
   getLocalAudioFile,
   getLocalAudioStorageState,
   getOriginalAssetFile,
+  normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory,
   supportsLocalAudioDirectory
 } from "./local-audio-storage";
@@ -40,7 +41,8 @@ import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
 import {
   playlistsChangedEventName,
-  playlistsChangedStorageKey
+  playlistsChangedStorageKey,
+  musicRoomApi
 } from "@/lib/music-room-api";
 import {
   ensureDefaultLocalPlaylist,
@@ -266,53 +268,83 @@ export function useTrackUploads(options: {
 
   const saveTrackToLocal = useCallback(async (track: TrackMeta) => {
     try {
-      let file = uploadedTracks[track.id]?.file ?? null;
-      if (!file) {
-        const cachedRecord = await getCachedLibraryTrack(track.fileHash);
-        if (cachedRecord) {
-          file = toCachedLibraryFile({
-            file: cachedRecord.file,
-            title: cachedRecord.title,
-            mimeType: cachedRecord.mimeType,
-            fileHash: cachedRecord.fileHash
+      let file: Blob | null = null;
+      if (track.sourceRef) {
+        setStatusMessage(`正在从${track.sourceRef.provider === "netease" ? "网易云音乐" : "QQ 音乐"}下载《${track.title}》...`);
+        const downloaded = track.sourceRef.provider === "netease"
+          ? await musicRoomApi.downloadNeteaseTrack(track.sourceRef.trackId, "exhigh")
+          : await musicRoomApi.downloadQqMusicTrack(track.sourceRef.trackId, "exhigh");
+        const downloadedMimeType = normalizeLocalAudioMimeType(downloaded.contentType);
+        file = new File(
+          [downloaded.blob],
+          buildLocalAudioFileName({
+            title: track.title,
+            mimeType: downloadedMimeType,
+            fileHash: track.fileHash
+          }),
+          { type: downloadedMimeType }
+        );
+      } else {
+        file = uploadedTracks[track.id]?.file ?? null;
+        if (!file) {
+          const cachedRecord = await getCachedLibraryTrack(track.fileHash);
+          if (cachedRecord) {
+            file = toCachedLibraryFile({
+              file: cachedRecord.file,
+              title: cachedRecord.title,
+              mimeType: cachedRecord.mimeType,
+              fileHash: cachedRecord.fileHash
+            });
+          }
+        }
+        if (!file) {
+          const localCachedFile = await getLocalAudioCacheFile(track.fileHash);
+          if (localCachedFile) file = localCachedFile;
+        }
+        if (!file) {
+          const localFile = await getLocalAudioFile(track.fileHash);
+          if (localFile) file = localFile;
+        }
+        if (!file && track.originalAsset) {
+          const originalFile = await getOriginalAssetFile({
+            assetId: track.originalAsset.assetId,
+            fileHash: track.fileHash,
+            title: track.title,
+            mimeType: track.mimeType ?? track.originalAsset.mimeType
           });
+          if (originalFile) file = originalFile;
         }
       }
       if (!file) {
-        const localCachedFile = await getLocalAudioCacheFile(track.fileHash);
-        if (localCachedFile) {
-          file = localCachedFile;
-        }
-      }
-      if (!file) {
-        const localFile = await getLocalAudioFile(track.fileHash);
-        if (localFile) {
-          file = localFile;
-        }
-      }
-      if (!file && track.originalAsset) {
-        const originalFile = await getOriginalAssetFile({
-          assetId: track.originalAsset.assetId,
-          fileHash: track.fileHash,
-          title: track.title,
-          mimeType: track.mimeType ?? track.originalAsset.mimeType
-        });
-        if (originalFile) {
-          file = originalFile;
-        }
-      }
-      if (!file) {
-        throw new Error("当前浏览器没有这首歌的源文件，只有歌曲所有者可以保存原始音频。");
+        throw new Error(track.sourceType === "local_upload"
+          ? "本地上传歌曲没有平台下载地址，请由上传者先保存到本地后再导入。"
+          : "当前歌曲没有可用的下载地址，请稍后重试。");
       }
 
-      const mimeType = track.mimeType ?? file.type;
+      const mimeType = normalizeLocalAudioMimeType(track.mimeType ?? file.type);
+      const lyrics = track.sourceRef
+        ? (await (track.sourceRef.provider === "netease"
+          ? musicRoomApi.getNeteaseLyrics(track.sourceRef.trackId)
+          : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
+        ).catch(() => null))?.plainLyric ?? null
+        : null;
       if (supportsLocalAudioDirectory()) {
         await saveAudioFileToLocalDirectory({
           file,
           fileHash: track.fileHash,
           title: track.title,
           mimeType,
-          trackId: track.id
+          trackId: track.id,
+          track: {
+            artist: track.artist,
+            album: track.album,
+            artworkUrl: track.artworkUrl,
+            lyrics,
+            provider: track.sourceType,
+            providerTrackId: track.sourceRef?.trackId ?? null,
+            durationMs: track.durationMs,
+            sizeBytes: file.size
+          }
         });
         await refreshCacheLibrary();
         setStatusMessage(`《${track.title}》已保存到本地文件夹，浏览器缓存中的源文件已释放。`);

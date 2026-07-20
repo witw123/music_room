@@ -163,7 +163,10 @@ function TrackListSectionBase({
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
               const isSavedLocally = localSavedFileHashes.includes(track.fileHash);
-              const canSaveLocalTrack = track.ownerSessionId === activeSession?.userId || isSavedLocally;
+              const canSaveLocalTrack = !!activeSession && (
+                track.ownerSessionId === activeSession.userId ||
+                (track.sourceType !== "local_upload" && !!track.sourceRef)
+              );
               const cachedArtworkKey = track.sourceRef
                 ? providerTrackKey(track.sourceRef.provider, track.sourceRef.trackId)
                 : track.id;

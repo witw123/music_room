@@ -839,7 +839,7 @@ function LocalTrackRow({
   );
 }
 
-function LocalPlaylistCard({
+export function LocalPlaylistCard({
   onOpen,
   onChangeDirectory,
   onDelete,
@@ -847,7 +847,7 @@ function LocalPlaylistCard({
   tracks
 }: {
   onOpen: () => void;
-  onChangeDirectory: () => void;
+  onChangeDirectory?: () => void;
   onDelete?: () => void;
   playlist: LocalPlaylistRecord;
   tracks: LocalPlaylistTrackRecord[];
@@ -872,20 +872,22 @@ function LocalPlaylistCard({
           <p className="mt-1 truncate text-sm text-foreground-muted">{playlist.sourceDirectoryName ? `目录：${playlist.sourceDirectoryName}` : "项目根目录"} · {tracks.length} 首歌曲 · 已下载 {downloadedCount}</p>
         </div>
       </button>
-      <Button
-        aria-label={`更改本地歌单 ${playlist.title} 的目录`}
-        className="absolute right-12 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-accent hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
-        onClick={(event) => {
-          event.stopPropagation();
-          onChangeDirectory();
-        }}
-        size="icon"
-        title="更改目录"
-        type="button"
-        variant="ghost"
-      >
-        <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l2 2h8A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" /><path d="M3 10h18" /></svg>
-      </Button>
+      {onChangeDirectory ? (
+        <Button
+          aria-label={`更改本地歌单 ${playlist.title} 的目录`}
+          className="absolute right-12 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-accent hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+          onClick={(event) => {
+            event.stopPropagation();
+            onChangeDirectory();
+          }}
+          size="icon"
+          title="更改目录"
+          type="button"
+          variant="ghost"
+        >
+          <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l2 2h8A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" /><path d="M3 10h18" /></svg>
+        </Button>
+      ) : null}
       {onDelete ? (
         <Button
           aria-label={`删除本地歌单 ${playlist.title}`}
