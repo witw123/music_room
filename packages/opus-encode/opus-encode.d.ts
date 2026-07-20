@@ -7,7 +7,7 @@ export interface OpusEncodeOptions {
 
 export interface StreamEncoder {
 	encode(channels: Float32Array[]): Uint8Array;
-	encodeIndependent(channels: Float32Array[]): Uint8Array;
+	encodeIndependent(channels: Float32Array[]): Uint8Array | Promise<Uint8Array>;
 	flush(): Uint8Array;
 	free(): void;
 }

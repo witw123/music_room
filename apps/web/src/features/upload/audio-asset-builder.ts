@@ -449,6 +449,8 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   private readonly frameReader: CompressedFrameReader;
   private decodeError: Error | null = null;
   private pcmAppendPromise: Promise<void> = Promise.resolve();
+  private decodedSourceDurationSeconds = 0;
+  private normalizedSamples = 0;
   private eof = false;
   private lastUnitIndex = -1;
   private disposed = false;
@@ -656,12 +658,32 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   }
 
   private async appendNormalizedChannels(channels: Float32Array[], sampleRate: number) {
-    if (sampleRate === opusSampleRate) {
-      this.pcm.append(channels);
-      return;
-    }
-    this.pcm.append(await resampleChannelsToOpus(channels, sampleRate));
+    const sourceFrameCount = channels[0]?.length ?? 0;
+    if (sourceFrameCount <= 0) return;
+
+    this.decodedSourceDurationSeconds += sourceFrameCount / sampleRate;
+    const expectedTargetEnd = Math.round(this.decodedSourceDurationSeconds * opusSampleRate);
+    const expectedTargetLength = Math.max(0, expectedTargetEnd - this.normalizedSamples);
+    const normalizedChannels = sampleRate === opusSampleRate
+      ? channels
+      : await resampleChannelsToOpus(channels, sampleRate);
+    this.pcm.append(alignResampledChannels(normalizedChannels, expectedTargetLength));
+    this.normalizedSamples = expectedTargetEnd;
   }
+}
+
+function alignResampledChannels(channels: Float32Array[], targetLength: number) {
+  return channels.map((channel) => {
+    if (channel.length === targetLength) return channel;
+    if (channel.length > targetLength) return channel.slice(0, targetLength);
+
+    const aligned = new Float32Array(targetLength);
+    aligned.set(channel);
+    if (channel.length > 0) {
+      aligned.fill(channel[channel.length - 1]!, channel.length);
+    }
+    return aligned;
+  });
 }
 
 class PcmAccumulator {

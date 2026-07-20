@@ -42,7 +42,7 @@ self.onmessage = async (event: MessageEvent<EncodeRequest>) => {
   const request = event.data;
   try {
     const opusEncoder = await getEncoder(request);
-    const encoded = opusEncoder.encodeIndependent(request.channels);
+    const encoded = await opusEncoder.encodeIndependent(request.channels);
     const payload = encoded.buffer as ArrayBuffer;
     const response: EncodeResponse = { id: request.id, ok: true, payload };
     self.postMessage(response, { transfer: [payload] });
