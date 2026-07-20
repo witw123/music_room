@@ -12,6 +12,7 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
     title: track.title,
     artist: track.artist,
     album: track.album,
+    lyrics: track.lyrics ?? null,
     durationMs: track.durationMs,
     bitrate: track.bitrate,
     sizeBytes: track.sizeBytes,

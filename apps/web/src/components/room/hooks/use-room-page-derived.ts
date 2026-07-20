@@ -14,6 +14,7 @@ type StableTrackMeta = Pick<
   | "title"
   | "artist"
   | "album"
+  | "lyrics"
   | "durationMs"
   | "bitrate"
   | "sizeBytes"
@@ -38,6 +39,7 @@ function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
     previous.title === next.title &&
     previous.artist === next.artist &&
     previous.album === next.album &&
+    previous.lyrics === next.lyrics &&
     previous.durationMs === next.durationMs &&
     previous.bitrate === next.bitrate &&
     previous.sizeBytes === next.sizeBytes &&

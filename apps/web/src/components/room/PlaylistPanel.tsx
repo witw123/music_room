@@ -17,6 +17,7 @@ import {
   toCachedProviderTrack
 } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
@@ -57,6 +58,8 @@ export function PlaylistPanel({
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [cachedTracks, setCachedTracks] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
+  const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
+  const artworkRequestIdsRef = useRef(new Set<string>());
   const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
   const selectedSource = selectedPlaylist ? getNetworkPlaylistSource(selectedPlaylist) : null;
   const selectedProvider = selectedSource?.provider ?? null;
@@ -117,6 +120,69 @@ export function PlaylistPanel({
 
   useEffect(() => {
     let cancelled = false;
+    const artworkRequestIds = artworkRequestIdsRef.current;
+    const candidateById = new Map(
+      playlists.map((playlist) => [
+        playlist.id,
+        getPlaylistArtworkCandidates(playlist, cachedTracks, tracks)
+      ])
+    );
+
+    setNetworkArtworkById((current) => {
+      const next: Record<string, string[]> = {};
+      for (const playlist of playlists) {
+        const artworkUrls = uniqueArtworkUrls([
+          ...(candidateById.get(playlist.id) ?? []),
+          ...(current[playlist.id] ?? [])
+        ]);
+        if (artworkUrls.length > 0) next[playlist.id] = artworkUrls;
+      }
+      return next;
+    });
+
+    const requests = playlists
+      .map((playlist) => {
+        const source = getNetworkPlaylistSource(playlist);
+        if (!source || artworkRequestIds.has(playlist.id)) {
+          return null;
+        }
+        artworkRequestIds.add(playlist.id);
+        return { playlist, source };
+      })
+      .filter((request): request is NonNullable<typeof request> => !!request);
+
+    void Promise.all(requests.map(async ({ playlist, source }) => {
+      try {
+        const detail = source.provider === "netease"
+          ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+          : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+        const artworkUrls = uniqueArtworkUrls([
+          detail.artworkUrl,
+          ...detail.tracks.map((track) => track.artworkUrl)
+        ]);
+        if (cancelled || artworkUrls.length === 0) return;
+        setNetworkArtworkById((current) => ({
+          ...current,
+          [playlist.id]: uniqueArtworkUrls([
+            ...artworkUrls,
+            ...(current[playlist.id] ?? [])
+          ])
+        }));
+      } catch {
+        // A playlist can still render its title when the provider is unavailable.
+      }
+    }));
+
+    return () => {
+      cancelled = true;
+      for (const { playlist } of requests) {
+        artworkRequestIds.delete(playlist.id);
+      }
+    };
+  }, [cachedTracks, playlists, tracks]);
+
+  useEffect(() => {
+    let cancelled = false;
     setRemoteTracks([]);
     setRemoteError(null);
 
@@ -131,7 +197,22 @@ export function PlaylistPanel({
       : musicRoomApi.getQqMusicPlaylist(selectedProviderPlaylistId);
     void request
       .then((detail) => {
-        if (!cancelled) setRemoteTracks(detail.tracks);
+        if (!cancelled) {
+          setRemoteTracks(detail.tracks);
+          const artworkUrls = uniqueArtworkUrls([
+            detail.artworkUrl,
+            ...detail.tracks.map((track) => track.artworkUrl)
+          ]);
+          if (artworkUrls.length > 0) {
+            setNetworkArtworkById((current) => ({
+              ...current,
+              [selectedPlaylistId]: uniqueArtworkUrls([
+                ...artworkUrls,
+                ...(current[selectedPlaylistId] ?? [])
+              ])
+            }));
+          }
+        }
       })
       .catch((error) => {
         if (!cancelled) setRemoteError(error instanceof Error ? error.message : "网络歌曲信息加载失败。");
@@ -208,6 +289,7 @@ export function PlaylistPanel({
           {playlists.map((playlist) => (
             <PlaylistCard
               key={playlist.id}
+              artworkUrls={networkArtworkById[playlist.id] ?? []}
               onDelete={() => deletePlaylist(playlist.id)}
               onOpen={() => setSelectedPlaylistId(playlist.id)}
               playlist={playlist}
@@ -243,7 +325,7 @@ export function PlaylistPanel({
   );
 }
 
-function PlaylistCard({ playlist, onOpen, onDelete }: { playlist: Playlist; onOpen: () => void; onDelete: () => void }) {
+function PlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { playlist: Playlist; artworkUrls: readonly string[]; onOpen: () => void; onDelete: () => void }) {
   const source = getNetworkPlaylistSource(playlist);
   const providerName = source?.provider === "qqmusic" ? "QQ 音乐" : source?.provider === "netease" ? "网易云音乐" : "网络歌单";
 
@@ -255,7 +337,7 @@ function PlaylistCard({ playlist, onOpen, onDelete }: { playlist: Playlist; onOp
         onClick={onOpen}
         type="button"
       >
-        <Artwork artworkUrl={playlist.coverUrl} title={playlist.title} size="sm" />
+        <Artwork artworkUrls={artworkUrls} title={playlist.title} size="sm" />
         <div className="min-w-0 flex-1 space-y-1">
           <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
           <p className="truncate text-[10px] text-foreground-muted">{providerName} · {playlist.trackIds.length} 首歌曲</p>
@@ -505,7 +587,12 @@ function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCance
   );
 }
 
-function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null; title: string; size?: "sm" | "lg" | "row" | "cover" }) {
+function Artwork({ artworkUrl, artworkUrls, title, size = "sm" }: {
+  artworkUrl?: string | null;
+  artworkUrls?: readonly (string | null | undefined)[];
+  title: string;
+  size?: "sm" | "lg" | "row" | "cover";
+}) {
   const sizeClass = size === "cover"
     ? "aspect-square w-full rounded-none"
     : size === "lg"
@@ -513,14 +600,32 @@ function Artwork({ artworkUrl, title, size = "sm" }: { artworkUrl: string | null
       : size === "row"
         ? "h-16 w-16 rounded-lg"
       : "h-10 w-10 rounded-lg";
+  const sources = uniqueArtworkUrls([...(artworkUrls ?? []), artworkUrl]);
+  const sourceKey = sources.join("\u001f");
+  const [failedSourceIndex, setFailedSourceIndex] = useState(0);
+
+  useEffect(() => {
+    setFailedSourceIndex(0);
+  }, [sourceKey]);
+
+  const activeArtworkUrl = sources[failedSourceIndex] ?? null;
 
   return (
     <div
       aria-label={`${title} 封面`}
       className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden border border-surface-border bg-surface text-lg font-bold text-foreground-muted`}
-      style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
     >
-      {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
+      {activeArtworkUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          className="h-full w-full object-cover"
+          decoding="async"
+          draggable={false}
+          onError={() => setFailedSourceIndex((current) => current + 1)}
+          src={getArtworkSourceUrl(activeArtworkUrl)}
+        />
+      ) : title.slice(0, 1).toUpperCase()}
     </div>
   );
 }
@@ -532,6 +637,42 @@ function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSource | n
   if (provider !== "netease" && provider !== "qqmusic") return null;
   const playlistId = playlistIdParts.join(":").trim();
   return playlistId ? { provider, playlistId } : null;
+}
+
+function getPlaylistArtworkCandidates(
+  playlist: Playlist,
+  cachedTracks: ReadonlyMap<string, LocalPlaylistTrackRecord>,
+  roomTracks: readonly TrackMeta[]
+) {
+  const roomTrackMap = new Map<string, string | null>(
+    roomTracks.map((track) => [track.id, track.artworkUrl])
+  );
+  for (const track of roomTracks) {
+    if (track.sourceRef) {
+      roomTrackMap.set(providerTrackKey(track.sourceRef.provider, track.sourceRef.trackId), track.artworkUrl);
+    }
+  }
+
+  return uniqueArtworkUrls([
+    playlist.coverUrl,
+    ...playlist.trackIds.flatMap((trackId) => [
+      cachedTracks.get(trackId)?.artworkUrl,
+      roomTrackMap.get(trackId)
+    ])
+  ]);
+}
+
+function uniqueArtworkUrls(urls: readonly (string | null | undefined)[]) {
+  const result: string[] = [];
+  for (const value of urls) {
+    if (typeof value !== "string") continue;
+    const url = value.trim();
+    if (!url) continue;
+    const secureUrl = url.replace(/^http:\/\//i, "https://");
+    if (!result.includes(secureUrl)) result.push(secureUrl);
+    if (secureUrl !== url && !result.includes(url)) result.push(url);
+  }
+  return result;
 }
 
 function toPlaylistTrackInfo(

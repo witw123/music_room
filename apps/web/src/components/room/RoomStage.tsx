@@ -17,6 +17,7 @@ import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
+import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -105,6 +106,7 @@ function RoomStageBase({
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
   const artworkUrl = currentTrack?.artworkUrl ?? cachedArtworkUrl;
+  const artworkPalette = useArtworkPalette(artworkUrl);
   const recordSize = ultraCompactStage
     ? "clamp(9.5rem, min(26vh, 44vw), 12rem)"
     : compactStage
@@ -226,15 +228,17 @@ function RoomStageBase({
     setLyricsText(null);
 
     const loadLyrics = async () => {
-      let localLyrics: string | null = null;
+      let localLyrics: string | null = currentTrack.lyrics?.trim() || null;
       try {
-        const index = await listRoomPlaylistTrackIndex();
-        const records = [...index.values()];
-        const localRecord = index.get(currentTrack.id) ?? records.find((record) =>
-          record.fileHash === currentTrack.fileHash ||
-          (record.provider === sourceProvider && record.providerTrackId === sourceTrackId)
-        );
-        localLyrics = localRecord?.lyrics?.trim() || null;
+        if (!localLyrics) {
+          const index = await listRoomPlaylistTrackIndex();
+          const records = [...index.values()];
+          const localRecord = index.get(currentTrack.id) ?? records.find((record) =>
+            record.fileHash === currentTrack.fileHash ||
+            (record.provider === sourceProvider && record.providerTrackId === sourceTrackId)
+          );
+          localLyrics = localRecord?.lyrics?.trim() || null;
+        }
       } catch {
         // A provider request below can still supply lyrics when local storage is unavailable.
       }
@@ -417,7 +421,7 @@ function RoomStageBase({
             className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
             style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
           >
-            <VinylAuraVisualizer isPlaying={isPlaying} />
+            <VinylAuraVisualizer accentColor={artworkPalette.accent} isPlaying={isPlaying} />
 
             <div
               className="relative flex items-center justify-center overflow-visible"
@@ -428,7 +432,12 @@ function RoomStageBase({
                 style={{ animationPlayState: isPlaying ? "running" : "paused" }}
               >
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
-                <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
+                <div
+                  className="absolute inset-0 rounded-full"
+                  style={{
+                    background: `conic-gradient(from 0deg at 50% 50%, ${artworkPalette.accentSoft} 0deg, transparent 90deg, ${artworkPalette.accentSoft} 180deg, transparent 270deg, ${artworkPalette.accentSoft} 360deg)`
+                  }}
+                />
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div
                     key={index}
@@ -443,11 +452,19 @@ function RoomStageBase({
                     style={{ backgroundImage: `url("${artworkUrl}")` }}
                   />
                 ) : null}
-                <div className="absolute z-20 flex aspect-square items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner" style={{ width: "26%", height: "26%" }}>
+                <div
+                  className="absolute z-20 flex aspect-square items-center justify-center rounded-full border shadow-inner"
+                  style={{
+                    width: "26%",
+                    height: "26%",
+                    borderColor: artworkPalette.border,
+                    backgroundColor: artworkPalette.accentSoft
+                  }}
+                >
                   <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
                 </div>
               </div>
-              <VinylTonearm isPlaying={isPlaying} />
+              <VinylTonearm accentColor={artworkPalette.accent} isPlaying={isPlaying} />
             </div>
 
           </div>

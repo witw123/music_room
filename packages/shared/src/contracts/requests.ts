@@ -72,6 +72,7 @@ export const registerTrackRequestSchema = z
     title: trimmedString(240),
     artist: trimmedString(240),
     album: z.string().trim().max(240).nullable(),
+    lyrics: z.string().trim().max(100_000).nullable().optional(),
     durationMs: z.number().int().nonnegative(),
     bitrate: z.number().int().positive().max(10_000_000).nullable(),
     sizeBytes: z.number().int().nonnegative().nullable().optional(),

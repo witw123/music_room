@@ -49,12 +49,24 @@ export function listLocalPlaylists(): LocalPlaylistRecord[] {
   return localPlaylists;
 }
 
+/** Keep playlist cards stable across repository restores and both playlist views. */
+export function sortLocalPlaylists(playlists: readonly LocalPlaylistRecord[]) {
+  return [...playlists].sort((left, right) => {
+    const createdOrder = left.createdAt.localeCompare(right.createdAt);
+    if (createdOrder !== 0) return createdOrder;
+
+    const updatedOrder = left.updatedAt.localeCompare(right.updatedAt);
+    if (updatedOrder !== 0) return updatedOrder;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 export function mergeLocalPlaylists(records: LocalPlaylistRecord[]) {
   const byId = new Map(localPlaylists.map((playlist) => [playlist.id, playlist]));
   for (const record of records) {
     if (!byId.has(record.id)) byId.set(record.id, record);
   }
-  localPlaylists = [...byId.values()];
+  localPlaylists = sortLocalPlaylists([...byId.values()]);
   return localPlaylists;
 }
 
@@ -68,7 +80,7 @@ export async function restoreLocalPlaylistsFromRepository() {
 
   try {
     const persisted = await repository.listPlaylists();
-    localPlaylists = persisted.map(fromRepositoryPlaylist);
+    localPlaylists = sortLocalPlaylists(persisted.map(fromRepositoryPlaylist));
     return localPlaylists;
   } catch {
     localPlaylists = [];
@@ -94,7 +106,7 @@ export function ensureDefaultLocalPlaylist(input: {
       updatedAt: now
     };
     writeLocalPlaylists([...listLocalPlaylists(), playlist]);
-    return listLocalPlaylists();
+    return sortLocalPlaylists(listLocalPlaylists());
   }
 
   const nextTrackIds = [...new Set(input.trackIds)];
@@ -118,7 +130,7 @@ export function ensureDefaultLocalPlaylist(input: {
   if (tracksChanged || sourceChanged) {
     writeLocalPlaylists(listLocalPlaylists().map((playlist) => playlist.id === current.id ? updated : playlist));
   }
-  return listLocalPlaylists();
+  return sortLocalPlaylists(listLocalPlaylists());
 }
 
 export function getDefaultLocalPlaylistTrackIds(
@@ -618,7 +630,7 @@ function createLocalPlaylistSourceId() {
 }
 
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
-  const nextPlaylists = [...playlists];
+  const nextPlaylists = sortLocalPlaylists(playlists);
   localPlaylists = nextPlaylists;
   localPlaylistPersistencePromise = localPlaylistPersistencePromise
     .catch(() => undefined)

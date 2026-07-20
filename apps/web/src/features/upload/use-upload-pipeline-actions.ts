@@ -167,9 +167,15 @@ export function useUploadPipelineActions({
                 ...(sourceRef ? { sourceRef } : {})
               }
             : undefined);
-          return resolvedCachedMetadata
-            ? { ...draft, lyrics: resolvedCachedMetadata.lyrics ?? null }
-            : draft;
+          const lyrics = draft.lyrics?.trim()
+            || resolvedCachedMetadata?.lyrics?.trim()
+            || await resolveImportedLyrics({
+              title: draft.title,
+              artist: draft.artist,
+              sourceType,
+              sourceTrackId: sourceRef?.trackId
+            });
+          return { ...draft, lyrics: lyrics || null };
         },
         buildRegisterTrackPayload,
         registerTrack: (registerRoomId, payload) =>
@@ -341,6 +347,13 @@ async function importProviderTrack(input: {
       return;
     }
 
+    const lyricsPromise = resolveImportedLyrics({
+      title: candidate.title,
+      artist: candidate.artist,
+      sourceType,
+      sourceTrackId: candidate.providerTrackId
+    });
+
     const cachedTrack = await getCachedLibraryTrackByProviderTrack(
       sourceType,
       candidate.providerTrackId
@@ -389,9 +402,10 @@ async function importProviderTrack(input: {
       metadata: candidate,
       sourceRef
     });
+    const lyrics = cachedTrack?.lyrics?.trim() || await lyricsPromise;
     const registered = await musicRoomApi.registerTrack(
       roomSnapshot.room.id,
-      buildRegisterTrackPayload(draft)
+      buildRegisterTrackPayload({ ...draft, lyrics: lyrics || null })
     );
     registeredTrackId = registered.id;
     shouldRollbackRegisteredTrack = !existingTrack;
@@ -455,6 +469,90 @@ function normalizeImportedMimeType(value: string) {
 
 function sanitizeFileName(value: string, sourceType: TrackSourceType) {
   return value.replace(/[\\/:*?"<>|]+/g, " ").trim() || `${sourceType}-track`;
+}
+
+async function resolveImportedLyrics(input: {
+  title: string;
+  artist: string;
+  sourceType: TrackSourceType;
+  sourceTrackId?: string;
+}) {
+  const preferredProviders = input.sourceType === "local_upload"
+    ? (["netease", "qqmusic"] as const)
+    : ([input.sourceType] as const);
+
+  if (input.sourceTrackId && input.sourceType !== "local_upload") {
+    const direct = await requestProviderLyrics(input.sourceType, input.sourceTrackId);
+    if (direct) return direct;
+  }
+
+  const keyword = `${input.title} ${input.artist}`.trim();
+  const searchResults = await Promise.all(
+    preferredProviders.map(async (provider) => {
+      try {
+        const response = provider === "netease"
+          ? await musicRoomApi.searchNeteaseTracks(keyword, { limit: 10 })
+          : await musicRoomApi.searchQqMusicTracks(keyword, { limit: 10 });
+        return {
+          provider,
+          track: findMatchingProviderTrack(response.items, input)
+        };
+      } catch {
+        return { provider, track: null };
+      }
+    })
+  );
+
+  const matches = searchResults
+    .filter((result): result is typeof result & { track: NonNullable<typeof result.track> } => !!result.track)
+    .sort((left, right) => right.track.score - left.track.score);
+  const lyricResults = await Promise.all(
+    matches.map(async ({ provider, track }) => ({
+      lyrics: await requestProviderLyrics(provider, track.providerTrackId),
+      score: track.score
+    }))
+  );
+  return lyricResults
+    .sort((left, right) => right.score - left.score)
+    .find((result) => result.lyrics)?.lyrics ?? null;
+}
+
+async function requestProviderLyrics(
+  provider: "netease" | "qqmusic",
+  trackId: string
+) {
+  try {
+    const response = provider === "netease"
+      ? await musicRoomApi.getNeteaseLyrics(trackId)
+      : await musicRoomApi.getQqMusicLyrics(trackId);
+    const lyrics = response.plainLyric?.trim();
+    return lyrics ? lyrics.slice(0, 100_000) : null;
+  } catch {
+    return null;
+  }
+}
+
+function findMatchingProviderTrack(
+  tracks: Array<{ title: string; artist: string; providerTrackId: string }>,
+  input: Pick<Parameters<typeof resolveImportedLyrics>[0], "title" | "artist">
+) {
+  const normalizedTitle = normalizeLyricsMatchText(input.title);
+  const normalizedArtist = normalizeLyricsMatchText(input.artist);
+  return tracks
+    .map((track) => {
+      const titleMatches = normalizeLyricsMatchText(track.title) === normalizedTitle;
+      const artistMatches = normalizeLyricsMatchText(track.artist) === normalizedArtist;
+      return {
+        ...track,
+        score: titleMatches ? 10 + (artistMatches ? 5 : 0) : 0
+      };
+    })
+    .filter((track) => track.score > 0)
+    .sort((left, right) => right.score - left.score)[0] ?? null;
+}
+
+function normalizeLyricsMatchText(value: string) {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function toProviderImportErrorMessage(error: unknown) {

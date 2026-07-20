@@ -249,10 +249,14 @@ export function useRoomPlaybackActions({
   const handlePlayTrack = useCallback(
     async (trackId?: string) => {
       const targetTrackId = trackId ?? currentPlaybackTrackId ?? null;
-      const queueItem = trackId ? await addToQueue(trackId) : null;
-      if (trackId && !queueItem) {
-        return;
-      }
+      const existingQueueItem = trackId
+        ? roomSnapshot?.queue.find((item) => item.trackId === trackId) ?? null
+        : null;
+      const queueItem = trackId && !existingQueueItem
+        ? await addToQueue(trackId)
+        : existingQueueItem;
+      if (trackId && !queueItem) return;
+
       await armPlaybackStart({
         reason: trackId ? "track-change" : "user-play",
         trackId: queueItem?.trackId ?? targetTrackId,
@@ -269,7 +273,8 @@ export function useRoomPlaybackActions({
       armPlaybackStart,
       currentPlaybackTrackId,
       playQueueItem,
-      playTrack
+      playTrack,
+      roomSnapshot?.queue
     ]
   );
 

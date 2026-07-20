@@ -18,6 +18,18 @@ export type ArtworkPalette = {
   accentGlow: string;
 };
 
+/** Convert one of the palette's rgb/rgba values to a canvas-safe rgba value. */
+export function withAlpha(color: string, alpha: number) {
+  const match = color.match(/rgba?\(([^)]+)\)/i);
+  if (!match) return color;
+
+  const channels = match[1].split(/[\s,]+/).filter(Boolean).slice(0, 3);
+  if (channels.length !== 3) return color;
+
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  return `rgba(${channels.join(", ")}, ${clampedAlpha})`;
+}
+
 const baseColor: Rgb = { r: 5, g: 8, b: 13 };
 const fallbackPalette: ArtworkPalette = {
   background: "rgb(5 8 13)",
@@ -59,7 +71,7 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
   return palette;
 }
 
-function getArtworkSourceUrl(artworkUrl: string) {
+export function getArtworkSourceUrl(artworkUrl: string) {
   if (!isQqMusicArtworkUrl(artworkUrl)) return artworkUrl;
   return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(artworkUrl)}`;
 }

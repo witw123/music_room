@@ -24,6 +24,7 @@ import {
   syncSelectedLocalDirectoryTracks,
   hashAudioBlob,
   providerTrackKey,
+  sortLocalPlaylists,
   toProviderTrackRecord,
   updateLocalPlaylist,
   type LocalPlaylistRecord
@@ -657,7 +658,7 @@ function mergeLocalPlaylistsWithDatabase(
       updatedAt: databasePlaylist.updatedAt
     });
   }
-  return [...merged.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return sortLocalPlaylists([...merged.values()]);
 }
 
 async function syncLocalPlaylistsToDatabase(

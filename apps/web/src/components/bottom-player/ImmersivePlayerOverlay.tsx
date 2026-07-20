@@ -104,6 +104,7 @@ export function ImmersivePlayerOverlay({
             isOpen={isOpen}
             isPlaying={isPlaying}
             positionMs={positionMs}
+            roomLyrics={currentTrack?.lyrics ?? null}
             sourceProvider={sourceProvider}
             sourceTrackId={sourceTrackId}
           />
@@ -160,12 +161,14 @@ function ImmersiveLyrics({
   isOpen,
   isPlaying,
   positionMs,
+  roomLyrics,
   sourceProvider,
   sourceTrackId
 }: {
   isOpen: boolean;
   isPlaying: boolean;
   positionMs: number;
+  roomLyrics: string | null;
   sourceProvider: "netease" | "qqmusic" | undefined;
   sourceTrackId: string | undefined;
 }) {
@@ -173,9 +176,21 @@ function ImmersiveLyrics({
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
-    if (!isOpen || !sourceProvider || !sourceTrackId) {
+    if (!isOpen) {
       setPlainLyric(null);
       setLyricsStatus("idle");
+      return;
+    }
+
+    if (roomLyrics?.trim()) {
+      setPlainLyric(roomLyrics.trim());
+      setLyricsStatus("ready");
+      return;
+    }
+
+    if (!sourceProvider || !sourceTrackId) {
+      setPlainLyric(null);
+      setLyricsStatus("ready");
       return;
     }
 
@@ -200,7 +215,7 @@ function ImmersiveLyrics({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, sourceProvider, sourceTrackId]);
+  }, [isOpen, roomLyrics, sourceProvider, sourceTrackId]);
 
   if (!isOpen) return null;
 

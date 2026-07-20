@@ -3,15 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { audioVisualizerStore } from "@/features/playback/audio-visualizer-store";
 import { resolveCanvasFrameDelayMs } from "@/features/playback/render-scheduler";
+import { withAlpha } from "@/components/bottom-player/artwork-colors";
 
 type VinylAuraVisualizerProps = {
   isPlaying: boolean;
+  accentColor?: string;
   reducedMotion?: boolean;
   maxDevicePixelRatio?: number;
 };
 
 export function VinylAuraVisualizer({
   isPlaying,
+  accentColor = "rgb(0 112 243)",
   reducedMotion = false,
   maxDevicePixelRatio = 1.5
 }: VinylAuraVisualizerProps) {
@@ -119,10 +122,10 @@ export function VinylAuraVisualizer({
 
       // Main Halo Aura
       const grad1 = context.createRadialGradient(centerX, centerY, minRadius * 0.5, centerX, centerY, blobRadius * 1.5);
-      grad1.addColorStop(0, `rgba(0, 112, 243, 0)`); // Inner hole is transparent so vinyl sits cleanly
-      grad1.addColorStop(0.3, `rgba(0, 112, 243, ${0.4 + smoothedAverage * 0.6})`); // Peak color ring
-      grad1.addColorStop(0.7, `rgba(50, 145, 255, ${0.15 + smoothedAverage * 0.3})`); // Smooth brand-blue falloff
-      grad1.addColorStop(1, "rgba(0, 112, 243, 0)");
+      grad1.addColorStop(0, withAlpha(accentColor, 0)); // Inner hole is transparent so vinyl sits cleanly
+      grad1.addColorStop(0.3, withAlpha(accentColor, 0.4 + smoothedAverage * 0.6)); // Peak color ring
+      grad1.addColorStop(0.7, withAlpha(accentColor, 0.15 + smoothedAverage * 0.3)); // Smooth palette falloff
+      grad1.addColorStop(1, withAlpha(accentColor, 0));
       
       context.fillStyle = grad1;
       context.beginPath();
@@ -166,13 +169,13 @@ export function VinylAuraVisualizer({
       
       context.closePath();
       context.lineWidth = 15 + smoothedPeak * 20;
-      context.strokeStyle = `rgba(50, 145, 255, ${0.3 + smoothedPeak * 0.5})`;
+      context.strokeStyle = withAlpha(accentColor, 0.3 + smoothedPeak * 0.5);
       const lineBlur = context.filter;
       context.filter = "blur(12px)";
       context.stroke();
       context.filter = lineBlur;
       
-      context.fillStyle = `rgba(0, 112, 243, ${0.1 + smoothedAverage * 0.3})`;
+      context.fillStyle = withAlpha(accentColor, 0.1 + smoothedAverage * 0.3);
       context.fill();
       context.restore();
 
@@ -189,7 +192,7 @@ export function VinylAuraVisualizer({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [isPageVisible, isPlaying, reducedMotion, maxDevicePixelRatio]);
+  }, [accentColor, isPageVisible, isPlaying, reducedMotion, maxDevicePixelRatio]);
 
   return (
     <canvas
