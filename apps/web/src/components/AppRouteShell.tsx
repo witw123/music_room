@@ -59,9 +59,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
           hasBottomPlayer={Boolean(awayRoomId)}
           onLogout={handleLogout}
         />
-        <div key={pathname} className="app-route-transition">
-          {children}
-        </div>
+        <div>{children}</div>
         {awayRoomId ? null : <AppPersistentPlayer />}
       </div>
     </LocalPlayerProvider>

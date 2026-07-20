@@ -275,13 +275,13 @@ async function preparePlaybackAsset(input: {
   const bitrate = channels === 1 ? 96_000 as const : 192_000 as const;
   const durationMs = wavSource?.durationMs ?? compressedSource?.durationMs ?? Math.max(1, Math.round(audioBuffer!.duration * 1000));
   const sourceSampleRate = wavSource?.sampleRate ?? compressedSource?.sampleRate ?? audioBuffer!.sampleRate;
-  const unitCount = Math.ceil(durationMs / segmentDurationMs);
+  const estimatedUnitCount = Math.ceil(durationMs / segmentDurationMs);
   const encodedUnits: Array<{
     payload: ArrayBuffer;
     descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
-  } | undefined> = new Array(unitCount);
-  const leafHashes: Array<string | undefined> = new Array(unitCount);
-  const concurrency = resolveEncodingConcurrency(unitCount);
+  } | undefined> = new Array(estimatedUnitCount);
+  const leafHashes: Array<string | undefined> = new Array(estimatedUnitCount);
+  const concurrency = resolveEncodingConcurrency(estimatedUnitCount);
   const encoders = Array.from({ length: concurrency }, () => new OpusSegmentEncoder());
   let nextUnitIndex = 0;
   let completedUnits = 0;
@@ -290,13 +290,14 @@ async function preparePlaybackAsset(input: {
     await Promise.all(encoders.map(async (encoder) => {
       while (true) {
         const unitIndex = nextUnitIndex++;
-        if (unitIndex >= unitCount) return;
+        if (unitIndex >= estimatedUnitCount) return;
         throwIfAborted(input.signal);
         const segment = wavSource
           ? await wavSource.getSegment(unitIndex)
           : compressedSource
             ? await compressedSource.getSegment(unitIndex)
             : slicePcmSegment(audioBuffer!, unitIndex);
+        if (!segment) return;
         const payload = await encoder.encode({
           sampleRate: sourceSampleRate,
           channels: segment.channels,
@@ -317,7 +318,7 @@ async function preparePlaybackAsset(input: {
           }
         };
         completedUnits += 1;
-        input.onProgress?.({ stage: "encoding", completed: completedUnits, total: unitCount });
+        input.onProgress?.({ stage: "encoding", completed: completedUnits, total: estimatedUnitCount });
       }
     }));
   } finally {
@@ -325,14 +326,35 @@ async function preparePlaybackAsset(input: {
     await compressedSource?.dispose();
   }
 
-  const completeLeafHashes = leafHashes.map((hash) => {
+  const completeEncodedUnits = encodedUnits.filter(
+    (unit): unit is NonNullable<typeof unit> => unit !== undefined
+  );
+  if (completeEncodedUnits.length === 0) {
+    throw new Error("压缩音频没有解码出可用音频。");
+  }
+  const resolvedDurationMs = Math.max(
+    1,
+    Math.min(durationMs, compressedSource?.durationMs ?? durationMs)
+  );
+  const completeLeafHashes = completeEncodedUnits.map((unit) => {
+    const hash = leafHashes[unit.descriptor.unitIndex];
     if (!hash) throw new Error("Playback encoding did not produce every segment hash.");
+    unit.descriptor.durationMs = Math.max(
+      1,
+      Math.min(
+        segmentDurationMs,
+        resolvedDurationMs - unit.descriptor.unitIndex * segmentDurationMs
+      )
+    );
     return hash;
   });
-  const completeEncodedUnits = encodedUnits.map((unit) => {
-    if (!unit) throw new Error("Playback encoding did not produce every segment.");
-    return unit;
-  });
+  if (completedUnits !== completeEncodedUnits.length || estimatedUnitCount !== completeEncodedUnits.length) {
+    input.onProgress?.({
+      stage: "encoding",
+      completed: completeEncodedUnits.length,
+      total: completeEncodedUnits.length
+    });
+  }
   const tree = await buildMerkleTree(completeLeafHashes);
   const fileHash = await input.fileHash;
   const manifestWithoutId = {
@@ -344,10 +366,10 @@ async function preparePlaybackAsset(input: {
     sampleRate: opusSampleRate as 48000,
     channels,
     bitrate,
-    durationMs,
+    durationMs: resolvedDurationMs,
     segmentDurationMs: segmentDurationMs as 2000,
     seekPrerollMs: seekPrerollMs as 80,
-    unitCount,
+    unitCount: completeEncodedUnits.length,
     merkleRoot: tree.root,
     encoder: { name: "@audio/opus-encode" as const, version: playbackEncoderVersion }
   };
@@ -410,7 +432,7 @@ type CompressedPlaybackSource = {
   channels: 1 | 2;
   sampleRate: 48_000;
   durationMs: number;
-  getSegment: (unitIndex: number) => Promise<EncodablePlaybackSegment>;
+  getSegment: (unitIndex: number) => Promise<EncodablePlaybackSegment | null>;
   dispose: () => Promise<void>;
 };
 
@@ -456,14 +478,14 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   private disposed = false;
   private drainingSegments: Promise<void> | null = null;
   private readonly pendingSegments = new Map<number, {
-    resolve: (segment: EncodablePlaybackSegment) => void;
+    resolve: (segment: EncodablePlaybackSegment | null) => void;
     reject: (error: Error) => void;
   }>();
 
   constructor(
     public readonly channels: 1 | 2,
     private readonly sourceSampleRate: number,
-    public readonly durationMs: number,
+    public durationMs: number,
     frameReader: CompressedFrameReader,
     decoder: StreamingAudioDecoder,
     encodedChunkConstructor: EncodedAudioChunkLike
@@ -492,7 +514,7 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
       return Promise.reject(new Error("压缩音频播放片段已在读取中。"));
     }
 
-    const segment = new Promise<EncodablePlaybackSegment>((resolve, reject) => {
+    const segment = new Promise<EncodablePlaybackSegment | null>((resolve, reject) => {
       this.pendingSegments.set(unitIndex, { resolve, reject });
     });
     this.drainSegments();
@@ -546,13 +568,18 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     }
   }
 
-  private async readSegment(unitIndex: number): Promise<EncodablePlaybackSegment> {
+  private async readSegment(unitIndex: number): Promise<EncodablePlaybackSegment | null> {
     if (this.disposed) throw new Error("音频转码已取消。");
     if (unitIndex !== this.lastUnitIndex + 1) {
       throw new Error("压缩音频转码必须按顺序读取播放片段。");
     }
 
     const contentStart = unitIndex * this.targetSegmentSamples;
+    if (this.eof && this.pcm.endSample <= contentStart) {
+      this.resolveDurationFromDecodedAudio();
+      this.lastUnitIndex = unitIndex;
+      return null;
+    }
     const declaredDurationSamples = Math.ceil((this.durationMs / 1000) * opusSampleRate);
     const expectedContentEnd = Math.min(
       declaredDurationSamples,
@@ -564,17 +591,15 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
 
     let contentEnd = expectedContentEnd;
     if (this.pcm.endSample < expectedContentEnd) {
-      const shortfall = expectedContentEnd - this.pcm.endSample;
-      const tailToleranceSamples = Math.round(opusSampleRate * 0.25);
-      const isFinalSegment = expectedContentEnd === declaredDurationSamples;
-      if (
-        !this.eof ||
-        !isFinalSegment ||
-        this.pcm.endSample <= contentStart ||
-        shortfall > tailToleranceSamples
-      ) {
+      if (!this.eof) {
         throw new Error("压缩音频解码提前结束。");
       }
+      if (this.pcm.endSample <= contentStart) {
+        this.resolveDurationFromDecodedAudio();
+        this.lastUnitIndex = unitIndex;
+        return null;
+      }
+      this.resolveDurationFromDecodedAudio();
       contentEnd = this.pcm.endSample;
     }
 
@@ -591,6 +616,14 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     this.lastUnitIndex = unitIndex;
     this.pcm.trimBefore(Math.max(0, contentEnd - this.prerollSamples));
     return { channels: output, trimStartSamples: 0 };
+  }
+
+  private resolveDurationFromDecodedAudio() {
+    if (this.pcm.endSample <= 0) return;
+    this.durationMs = Math.max(
+      1,
+      Math.min(this.durationMs, Math.round((this.pcm.endSample / opusSampleRate) * 1000))
+    );
   }
 
   private async decodeUntil(targetSample: number) {
