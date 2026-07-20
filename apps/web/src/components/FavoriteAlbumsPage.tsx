@@ -96,7 +96,7 @@ export function FavoriteAlbumsPage() {
           </section>
 
           <aside className="min-h-[320px] rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
-            {detail ? <><div className="flex items-start gap-3"><Artwork alt={detail.title} src={detail.artworkUrl} /><div className="min-w-0"><h2 className="truncate text-base font-semibold text-white/90">{detail.title}</h2><p className="mt-1 text-xs text-white/40">{detail.artist} · {detail.tracks.length} 首</p></div></div><p className="mt-4 text-xs leading-6 text-white/40">{detail.description || "暂无简介"}</p><div className="mt-5 max-h-[32rem] overflow-y-auto divide-y divide-white/[0.07]">{detail.tracks.map((track, index) => <p className="py-2 text-xs text-white/55" key={track.providerTrackId}>{String(index + 1).padStart(2, "0")}　{track.title} · {track.artist}</p>)}</div></> : <div className="flex h-full min-h-[280px] flex-col items-center justify-center text-center"><p className="text-sm text-white/55">选择专辑查看详情</p><p className="mt-2 text-xs text-white/30">专辑歌曲会显示在这里。</p></div>}
+            {detail ? <><div className="flex items-start gap-3"><Artwork alt={detail.title} src={detail.artworkUrl} /><div className="min-w-0"><h2 className="truncate text-base font-semibold text-white/90">{detail.title}</h2><p className="mt-1 text-xs text-white/40">{detail.artist} · {detail.tracks.length} 首</p></div></div><p className="mt-4 text-xs leading-6 text-white/40">{detail.description || "暂无简介"}</p><div className="mt-5 max-h-[32rem] overflow-y-auto divide-y divide-white/[0.07]">{detail.tracks.map((track, index) => <p className="py-2 text-xs text-white/55" key={track.providerTrackId}>{String(index + 1).padStart(2, "0")} {track.title} · {track.artist}</p>)}</div></> : <div className="flex h-full min-h-[280px] flex-col items-center justify-center text-center"><p className="text-sm text-white/55">选择专辑查看详情</p><p className="mt-2 text-xs text-white/30">专辑歌曲会显示在这里。</p></div>}
           </aside>
         </div>
         {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
@@ -106,6 +106,8 @@ export function FavoriteAlbumsPage() {
 }
 
 function Artwork({ alt, src }: { alt: string; src: string | null }) {
+  // External provider artwork is intentionally rendered without Next image optimization.
+  // eslint-disable-next-line @next/next/no-img-element
   return src ? <img alt={alt} className="aspect-square w-full object-cover" loading="lazy" src={src} /> : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-3xl text-white/20">♪</span>;
 }
 

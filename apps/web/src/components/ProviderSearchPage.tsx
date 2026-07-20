@@ -666,6 +666,8 @@ function SearchTab({ active, onClick, children }: { active: boolean; onClick: ()
 
 function Artwork({ alt, src, size, className = "" }: { alt: string; src: string | null | undefined; size: "sm" | "md" | "lg"; className?: string }) {
   const sizes = { sm: "h-10 w-10 rounded-lg", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
+  // External provider artwork is intentionally rendered without Next image optimization.
+  // eslint-disable-next-line @next/next/no-img-element
   return src ? <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={src} /> : <span aria-label={alt} className={`flex items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-white/25 ${sizes[size]} ${className}`}><Icon name="music" /></span>;
 }
 

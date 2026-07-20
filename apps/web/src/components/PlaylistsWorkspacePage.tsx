@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import type {
   Playlist
 } from "@music-room/shared";
@@ -87,13 +87,14 @@ export function PlaylistsWorkspacePage() {
   const [deleteTarget, setDeleteTarget] = useState<PlaylistDeleteTarget | null>(null);
   const [moveTarget, setMoveTarget] = useState<TrackMoveRequest | null>(null);
   const refreshVersion = useRef(0);
+  const networkPlaylistsRef = useRef<Playlist[]>([]);
   const player = useLocalPlayer();
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
   }, [activeSession, authEntryHref, hydrated, router]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     await flushLocalPlaylistPersistence();
     const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
@@ -132,7 +133,7 @@ export function PlaylistsWorkspacePage() {
         const playlist = localPlaylistRecords.find((item) => item.id === current.playlist.id);
         return playlist ? { kind: "local", playlist } : null;
       }
-      const playlist = networkPlaylists.find((item) => item.id === current.playlist.id);
+      const playlist = networkPlaylistsRef.current.find((item) => item.id === current.playlist.id);
       return playlist ? { kind: "network", playlist } : null;
     });
     try {
@@ -144,7 +145,9 @@ export function PlaylistsWorkspacePage() {
       }
       if (version === refreshVersion.current) {
         setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
-        setNetworkPlaylists(playlists.filter((playlist) => !isLocalPlaylistMirror(playlist)));
+        const nextNetworkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
+        networkPlaylistsRef.current = nextNetworkPlaylists;
+        setNetworkPlaylists(nextNetworkPlaylists);
         setSelectedPlaylist((current) => {
           if (!current || current.kind !== "network") return current;
           const playlist = playlists.find((item) => item.id === current.playlist.id);
@@ -152,17 +155,17 @@ export function PlaylistsWorkspacePage() {
         });
       }
     } catch {
-      if (version === refreshVersion.current && networkPlaylists.length === 0) {
+      if (version === refreshVersion.current && networkPlaylistsRef.current.length === 0) {
         setMessage("歌单数据库加载失败，请稍后重试；本地音频仍可使用。");
       }
     }
     return scannedTrackCount;
-  };
+  }, []);
 
   useEffect(() => {
     if (!activeSession) return;
     void refresh().catch(() => setMessage("歌单数据加载失败，请刷新重试。"));
-  }, [activeSession]);
+  }, [activeSession, refresh]);
 
   useEffect(() => {
     let cancelled = false;
