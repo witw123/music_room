@@ -88,6 +88,7 @@ export function ensureDefaultLocalPlaylist(input: {
       title: defaultLocalPlaylistTitle,
       description: "项目根目录中的本地歌曲",
       trackIds: [...new Set(input.trackIds)],
+      sourceDirectoryId: null,
       sourceDirectoryName: input.sourceDirectoryName,
       createdAt: now,
       updatedAt: now
@@ -101,6 +102,7 @@ export function ensureDefaultLocalPlaylist(input: {
   const sourceChanged = current.sourceDirectoryName !== input.sourceDirectoryName;
   const updated: LocalPlaylistRecord = {
     ...current,
+    sourceDirectoryId: null,
     trackIds: nextTrackIds,
     sourceDirectoryName: input.sourceDirectoryName,
     updatedAt: tracksChanged || sourceChanged
@@ -111,6 +113,20 @@ export function ensureDefaultLocalPlaylist(input: {
     writeLocalPlaylists(listLocalPlaylists().map((playlist) => playlist.id === current.id ? updated : playlist));
   }
   return listLocalPlaylists();
+}
+
+export function getDefaultLocalPlaylistTrackIds(
+  tracks: readonly LocalPlaylistTrackRecord[],
+  savedFileHashes: ReadonlySet<string>
+) {
+  return tracks
+    .filter((track) =>
+      track.availableOffline &&
+      !!track.fileHash &&
+      !track.sourceDirectoryId &&
+      savedFileHashes.has(track.fileHash)
+    )
+    .map((track) => track.id);
 }
 
 export async function flushLocalPlaylistPersistence() {
@@ -143,7 +159,13 @@ export function deleteLocalPlaylist(playlistId: string) {
   writeLocalPlaylists(listLocalPlaylists().filter((playlist) => playlist.id !== playlistId));
 }
 
-export function updateLocalPlaylist(playlistId: string, input: { trackIds?: string[]; title?: string; description?: string | null }) {
+export function updateLocalPlaylist(playlistId: string, input: {
+  trackIds?: string[];
+  title?: string;
+  description?: string | null;
+  sourceDirectoryId?: string | null;
+  sourceDirectoryName?: string | null;
+}) {
   const current = listLocalPlaylists().find((playlist) => playlist.id === playlistId);
   if (!current) return null;
   const updated: LocalPlaylistRecord = {
@@ -151,6 +173,12 @@ export function updateLocalPlaylist(playlistId: string, input: { trackIds?: stri
     title: input.title?.trim() || current.title,
     description: input.description === undefined ? current.description : input.description?.trim() || null,
     trackIds: input.trackIds ?? current.trackIds,
+    sourceDirectoryId: input.sourceDirectoryId === undefined
+      ? current.sourceDirectoryId ?? null
+      : input.sourceDirectoryId,
+    sourceDirectoryName: input.sourceDirectoryName === undefined
+      ? current.sourceDirectoryName ?? null
+      : input.sourceDirectoryName,
     updatedAt: new Date().toISOString()
   };
   writeLocalPlaylists(listLocalPlaylists().map((playlist) => playlist.id === playlistId ? updated : playlist));
@@ -357,23 +385,67 @@ export async function syncSelectedLocalDirectoryTracks() {
   return scannedTracks.length;
 }
 
-export async function importLocalPlaylistDirectoryTracks() {
+export async function importLocalPlaylistDirectoryTracks(existingSourceDirectoryId?: string | null) {
   const directory = await chooseLocalAudioSourceDirectory();
   const selectedFiles = await listLocalAudioFilesInDirectory(directory);
   if (!selectedFiles) {
     throw new Error("无法读取所选本地目录，请重新授权后重试。 ");
   }
 
-  const sourceDirectoryId = createLocalPlaylistSourceId();
+  const sourceDirectoryId = existingSourceDirectoryId || createLocalPlaylistSourceId();
   await saveLocalPlaylistDirectory({
     id: sourceDirectoryId,
     handle: directory,
     name: directory.name
   });
 
+  const selectedFilesWithHashes = await Promise.all(
+    selectedFiles.map(async (entry) => ({
+      ...entry,
+      fileHash: await hashAudioBlob(entry.file)
+    }))
+  );
+  const currentHashes = new Set(selectedFilesWithHashes.map((entry) => entry.fileHash));
+  const [existingTracks, existingFiles] = await Promise.all([
+    listLocalPlaylistTracks(),
+    listLocalAudioFiles("saved")
+  ]);
+  const staleFileHashes = new Set(
+    existingFiles
+      .filter((file) =>
+        file.sourceDirectoryId === sourceDirectoryId &&
+        !currentHashes.has(file.fileHash)
+      )
+      .map((file) => file.fileHash)
+  );
+  const sharedStaleFileHashes = new Set(
+    existingTracks
+      .filter((track) =>
+        !!track.fileHash &&
+        staleFileHashes.has(track.fileHash) &&
+        track.sourceDirectoryId !== sourceDirectoryId
+      )
+      .map((track) => track.fileHash!)
+  );
+  await Promise.all([
+    ...existingTracks
+      .filter((track) =>
+        track.sourceDirectoryId === sourceDirectoryId &&
+        !!track.fileHash &&
+        !currentHashes.has(track.fileHash)
+      )
+      .map((track) => deleteLocalPlaylistTrack(track.id)),
+    ...existingFiles
+      .filter((file) =>
+        file.sourceDirectoryId === sourceDirectoryId &&
+        !currentHashes.has(file.fileHash) &&
+        !sharedStaleFileHashes.has(file.fileHash)
+      )
+      .map((file) => deleteLocalAudioFileRecord(file.fileHash, "saved"))
+  ]);
+
   const importedTracks: LocalPlaylistTrackRecord[] = [];
-  for (const { file, fileName } of selectedFiles) {
-    const fileHash = await hashAudioBlob(file);
+  for (const { file, fileName, fileHash } of selectedFilesWithHashes) {
     const metadata = await readDirectoryTrackMetadata(file);
     const mimeType = file.type || inferAudioMimeType(file.name);
     const now = new Date().toISOString();

@@ -29,7 +29,6 @@ import {
   restoreLocalPlaylistsFromRepository,
   localPlaylistTrackId,
   toProviderTrackRecord,
-  toLocalPlaylistTrackInput,
   updateLocalPlaylist,
   type LocalPlaylistRecord
 } from "@/features/playlist/local-playlist";
@@ -46,7 +45,7 @@ type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
 type PlaylistPickerOption =
-  | { kind: "local"; playlist: LocalPlaylistRecord }
+  | { kind: "local"; playlist: LocalPlaylistRecord; databasePlaylist?: Playlist }
   | { kind: "network"; playlist: Playlist };
 
 const enabledProviders: Provider[] = [
@@ -186,16 +185,6 @@ export function ProviderSearchPage() {
     }
   }
 
-  async function getTrackLyrics(track: Track) {
-    try {
-      return track.provider === "netease"
-        ? await musicRoomApi.getNeteaseLyrics(track.providerTrackId)
-        : await musicRoomApi.getQqMusicLyrics(track.providerTrackId);
-    } catch {
-      return null;
-    }
-  }
-
   async function resolveTrackArtwork(track: Track) {
     if (track.artworkUrl) return track;
     try {
@@ -219,11 +208,20 @@ export function ProviderSearchPage() {
     try {
       const networkPlaylists = await musicRoomApi.listMyPlaylists();
       const databaseLocalPlaylists = networkPlaylists.filter(isLocalPlaylistMirror);
+      const databaseLocalById = new Map<string, Playlist>();
+      for (const databasePlaylist of databaseLocalPlaylists) {
+        const localId = localPlaylistIdFromMirror(databasePlaylist);
+        if (localId) databaseLocalById.set(localId, databasePlaylist);
+      }
       const availableLocalPlaylists = mergeLocalPlaylists(
         mergeLocalPlaylistsWithDatabase(listLocalPlaylists(), databaseLocalPlaylists)
       );
       setPlaylistPickerOptions([
-        ...availableLocalPlaylists.map((item) => ({ kind: "local" as const, playlist: item })),
+        ...availableLocalPlaylists.map((item) => ({
+          kind: "local" as const,
+          playlist: item,
+          databasePlaylist: databaseLocalById.get(item.id)
+        })),
         ...networkPlaylists
           .filter((item) => !isLocalPlaylistMirror(item))
           .map((item) => ({ kind: "network" as const, playlist: item }))
@@ -245,15 +243,17 @@ export function ProviderSearchPage() {
       const resolvedTrack = await resolveTrackArtwork(track);
       const trackId = localPlaylistTrackId(resolvedTrack);
       if (option.kind === "local") {
-        const trackLyrics = await getTrackLyrics(resolvedTrack);
-        await upsertLocalPlaylistTrack(toLocalPlaylistTrackInput({ track: resolvedTrack, lyrics: trackLyrics }));
+        await upsertLocalPlaylistTrack(toProviderTrackRecord(resolvedTrack));
         const currentPlaylist = listLocalPlaylists().find((item) => item.id === option.playlist.id);
         if (!currentPlaylist) throw new Error("本地歌单不存在，请刷新后重试。");
         if (!currentPlaylist.trackIds.includes(trackId)) {
           const updatedPlaylist = updateLocalPlaylist(currentPlaylist.id, { trackIds: [...currentPlaylist.trackIds, trackId] });
           if (!updatedPlaylist) throw new Error("本地歌单更新失败，请重试。");
-          const databasePlaylists = await musicRoomApi.listMyPlaylists();
-          const databasePlaylist = databasePlaylists.find((item) => localPlaylistIdFromMirror(item) === updatedPlaylist.id);
+          let databasePlaylist = option.databasePlaylist;
+          if (!databasePlaylist) {
+            const databasePlaylists = await musicRoomApi.listMyPlaylists();
+            databasePlaylist = databasePlaylists.find((item) => localPlaylistIdFromMirror(item) === updatedPlaylist.id);
+          }
           await syncLocalPlaylistToDatabase(updatedPlaylist, databasePlaylist?.id, databasePlaylist);
         }
         setStatusMessage(`《${resolvedTrack.title}》已加入“${currentPlaylist.title}”。`);
@@ -395,7 +395,7 @@ export function ProviderSearchPage() {
   if (!hydrated || !activeSession) return <div className="min-h-screen bg-[#111214]" />;
 
   return (
-    <main className="min-h-screen bg-[#111214] pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-[#111214] pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-4 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <form className="flex h-12 min-w-0 flex-1 items-center gap-1 rounded-xl border border-white/[0.12] bg-[#191a1d] p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>

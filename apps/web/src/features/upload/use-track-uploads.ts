@@ -38,7 +38,18 @@ import {
 } from "./local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
-import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
+import {
+  playlistsChangedEventName,
+  playlistsChangedStorageKey
+} from "@/lib/music-room-api";
+import {
+  ensureDefaultLocalPlaylist,
+  getDefaultLocalPlaylistTrackIds,
+  listMergedLocalPlaylistTracks,
+  restoreLocalPlaylistsFromRepository,
+  syncSelectedLocalDirectoryTracks
+} from "@/features/playlist/local-playlist";
+import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 
 export type LocalStorageSummary = {
@@ -46,6 +57,7 @@ export type LocalStorageSummary = {
   quotaBytes: number | null;
   cachedTrackCount: number;
   cachedLibraryTracks: CachedLibraryTrack[];
+  localPlaylists: LocalPlaylistRecord[];
   localPlaylistTracks: LocalPlaylistTrackRecord[];
   localFolderName: string | null;
   localCachedFileHashes: string[];
@@ -86,6 +98,7 @@ export function useTrackUploads(options: {
     quotaBytes: null,
     cachedTrackCount: 0,
     cachedLibraryTracks: [],
+    localPlaylists: [],
     localPlaylistTracks: [],
     localFolderName: null,
     localCachedFileHashes: [],
@@ -95,16 +108,30 @@ export function useTrackUploads(options: {
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
+  const localDirectoryScanAttemptedRef = useRef(false);
   const roomTrackIdsKey = [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])]
     .sort()
     .join("|");
 
   const refreshCacheLibrary = useCallback(async () => {
-    const [snapshot, localStorageState, localPlaylistTracks] = await Promise.all([
+    let localStorageState = await getLocalAudioStorageState();
+    if (localStorageState.directoryName && !localDirectoryScanAttemptedRef.current) {
+      localDirectoryScanAttemptedRef.current = true;
+      await syncSelectedLocalDirectoryTracks().catch(() => undefined);
+      localStorageState = await getLocalAudioStorageState();
+    }
+    const [snapshot, localPlaylistTracks] = await Promise.all([
       loadCacheLibrarySnapshot({ listCachedLibraryTrackSummaries }),
-      getLocalAudioStorageState(),
       listMergedLocalPlaylistTracks()
     ]);
+    await restoreLocalPlaylistsFromRepository();
+    const localPlaylists = ensureDefaultLocalPlaylist({
+      trackIds: getDefaultLocalPlaylistTrackIds(
+        localPlaylistTracks,
+        new Set(localStorageState.savedFileHashes)
+      ),
+      sourceDirectoryName: localStorageState.directoryName
+    });
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
     setCacheLibraryVersion((current) => current + 1);
     const localCachedFileHashes = localStorageState.directoryName
@@ -125,6 +152,7 @@ export function useTrackUploads(options: {
       cachedLibraryTracks: snapshot.tracks.filter((track) =>
         localCachedFileHashes.has(track.fileHash)
       ),
+      localPlaylists,
       localPlaylistTracks,
       localFolderName: localStorageState.directoryName,
       localCachedFileHashes: localStorageState.cachedFileHashes,
@@ -226,6 +254,7 @@ export function useTrackUploads(options: {
   const chooseLocalFolder = useCallback(async () => {
     try {
       const folderName = await chooseLocalAudioDirectory();
+      localDirectoryScanAttemptedRef.current = false;
       await refreshCacheLibrary();
       setStatusMessage(`Music Room 本地存储仓库已设置为“${folderName}”，仅点击“保存到本地”的歌曲会写入该目录。`);
     } catch (error) {
@@ -339,12 +368,24 @@ export function useTrackUploads(options: {
         void refreshCacheLibrary();
       }
     };
+    const refreshWhenPlaylistsChange = () => {
+      void refreshCacheLibrary();
+    };
+    const refreshWhenPlaylistStorageChanges = (event: StorageEvent) => {
+      if (event.key === playlistsChangedStorageKey) {
+        refreshWhenPlaylistsChange();
+      }
+    };
     const refreshInterval = window.setInterval(refreshWhenActive, 10_000);
     window.addEventListener("focus", refreshWhenActive);
+    window.addEventListener(playlistsChangedEventName, refreshWhenPlaylistsChange);
+    window.addEventListener("storage", refreshWhenPlaylistStorageChanges);
     document.addEventListener("visibilitychange", refreshWhenActive);
     return () => {
       window.clearInterval(refreshInterval);
       window.removeEventListener("focus", refreshWhenActive);
+      window.removeEventListener(playlistsChangedEventName, refreshWhenPlaylistsChange);
+      window.removeEventListener("storage", refreshWhenPlaylistStorageChanges);
       document.removeEventListener("visibilitychange", refreshWhenActive);
     };
   }, [refreshCacheLibrary, roomSnapshot?.room.id]);

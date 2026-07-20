@@ -20,6 +20,7 @@ import {
   playlistsChangedEventName,
   playlistsChangedStorageKey
 } from "@/lib/music-room-api";
+import { isLocalPlaylistMirror } from "@/lib/local-playlist-database";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -115,7 +116,7 @@ export function useRoomPageRoomActions({
     try {
       const nextPlaylists = await musicRoomApi.listMyPlaylists();
       if (version === playlistRefreshVersionRef.current) {
-        setPlaylists(nextPlaylists);
+        setPlaylists(nextPlaylists.filter((playlist) => !isLocalPlaylistMirror(playlist)));
       }
     } catch {
       // Keep the last successful list when a background refresh is temporarily unavailable.

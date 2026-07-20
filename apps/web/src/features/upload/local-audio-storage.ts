@@ -198,13 +198,13 @@ export async function getLocalAudioFile(
   }
 
   if (fileRecord.sourceDirectoryId) {
-    const sourceDirectory = await getLocalPlaylistDirectory(fileRecord.sourceDirectoryId);
-    if (!sourceDirectory) return null;
-    const permission = await asPermissionedHandle(sourceDirectory.handle)
+    const rootDirectory = await getLocalAudioDirectory();
+    if (!rootDirectory) return null;
+    const permission = await asPermissionedHandle(rootDirectory.handle)
       .queryPermission({ mode: "read" })
       .catch(() => "denied" as PermissionState);
     if (permission !== "granted") return null;
-    return getFileByPath(sourceDirectory.handle, fileRecord.fileName).catch(() => null);
+    return getFileByPath(rootDirectory.handle, sourceFileName ?? fileRecord.fileName).catch(() => null);
   }
 
   const directory = await getLocalAudioDirectory();
