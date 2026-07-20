@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  maxOriginalAssetSizeBytes,
   originalAssetManifestSchema,
   playbackAssetManifestSchema
 } from "../assets/models";
@@ -73,9 +72,9 @@ export const registerTrackRequestSchema = z
     title: trimmedString(240),
     artist: trimmedString(240),
     album: z.string().trim().max(240).nullable(),
-    durationMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000),
+    durationMs: z.number().int().nonnegative(),
     bitrate: z.number().int().positive().max(10_000_000).nullable(),
-    sizeBytes: z.number().int().nonnegative().max(maxOriginalAssetSizeBytes).nullable().optional(),
+    sizeBytes: z.number().int().nonnegative().nullable().optional(),
     codec: z.string().trim().max(80).nullable().optional(),
     mimeType: z.string().trim().max(120).nullable().optional(),
     fileHash: trimmedString(256),
@@ -136,7 +135,7 @@ export const updatePlaybackRequestSchema = z
     trackId: stringId.optional(),
     queueItemId: stringId.optional(),
     playbackAssetId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-    positionMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000).optional(),
+    positionMs: z.number().int().nonnegative().optional(),
     playbackMode: playbackModeSchema.optional(),
     actorPeerId: stringId.optional(),
     expectedVersion: z.number().int().positive()

@@ -35,7 +35,6 @@ type RoomWorkspaceProps = {
   localStorageSummary: LocalStorageSummary;
   playlists: Playlist[];
   onCleanLocalStorage: () => Promise<void>;
-  onChooseLocalFolder: () => Promise<void>;
   onRefreshLocalStorage: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
@@ -93,7 +92,6 @@ function RoomWorkspaceBase({
   localStorageSummary,
   playlists,
   onCleanLocalStorage,
-  onChooseLocalFolder,
   onRefreshLocalStorage,
   onImportCachedTrack,
   onSaveTrackToLocal,
@@ -194,7 +192,6 @@ function RoomWorkspaceBase({
               localStorageSummary={localStorageSummary}
               playlists={playlists}
               onCleanLocalStorage={onCleanLocalStorage}
-              onChooseLocalFolder={onChooseLocalFolder}
               onRefreshLocalStorage={onRefreshLocalStorage}
               onImportCachedTrack={onImportCachedTrack}
               onSaveTrackToLocal={onSaveTrackToLocal}

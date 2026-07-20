@@ -124,12 +124,12 @@ export class SegmentedOpusEngine {
     const timelineKey = [
       input.manifest.assetId,
       input.playback.mediaEpoch,
-      input.playback.startAt,
-      input.playback.playbackRevision
+      input.playback.startAt
     ].join(":");
     if (timelineKey !== this.timelineKey) {
-      // Pause, resume, and seek all create a new room timeline. Keep decoded
-      // units and the output graph so the new timeline can start immediately.
+      // Pause, resume, seek, and media changes create a new room timeline.
+      // Playback-order changes only bump the room revision, so keep audio
+      // already scheduled for the current timeline intact.
       this.resetTimeline({ preserveCache: true });
       this.timelineKey = timelineKey;
       this.timelineGeneration += 1;

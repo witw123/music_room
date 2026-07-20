@@ -96,7 +96,6 @@ export function RoomAppShell({
           localStorageSummary={uploads.localStorageSummary}
           playlists={pageState.playlists}
           onCleanLocalStorage={uploads.cleanLocalStorage}
-          onChooseLocalFolder={uploads.chooseLocalFolder}
           onRefreshLocalStorage={uploads.refreshCacheLibrary}
           onImportCachedTrack={uploads.importCachedTrack}
           onSaveTrackToLocal={uploads.saveTrackToLocal}

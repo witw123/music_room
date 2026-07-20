@@ -337,6 +337,37 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("keeps scheduled audio when only playback order changes", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    const scheduledSources = [...sources];
+
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        playbackMode: "shuffle",
+        playbackRevision: 2
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    expect(scheduledSources.every((source) => !source.stopped)).toBe(true);
+    engine.destroy();
+  });
+
   it("reuses decoded units when pausing and resuming the same track", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

@@ -184,6 +184,43 @@ export class QqMusicService {
     };
   }
 
+  async openArtwork(rawUrl: string) {
+    this.assertEnabled();
+    let url: URL;
+    try {
+      url = normalizeQqMusicArtworkUrl(rawUrl);
+    } catch {
+      throw this.unavailableError();
+    }
+    if (!isAllowedHost(url.hostname)) throw this.unavailableError();
+
+    const upstream = await fetchProviderUrl(
+      url,
+      { headers: new Headers({ accept: "image/*" }) },
+      this.requestTimeoutMs(),
+      isAllowedHost,
+      { allowSyntheticDns: true }
+    ).catch(() => null);
+    if (!upstream?.ok || !upstream.body) throw this.unavailableError();
+
+    const mimeType = resolveArtworkMime(upstream.headers.get("content-type"));
+    if (!mimeType) {
+      await upstream.body.cancel().catch(() => undefined);
+      throw this.unavailableError();
+    }
+    const contentLength = Number(upstream.headers.get("content-length") ?? "0");
+    if (contentLength > this.maxArtworkBytes()) {
+      await upstream.body.cancel().catch(() => undefined);
+      throw this.unavailableError();
+    }
+    return {
+      upstream,
+      mimeType,
+      contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null,
+      maxBytes: this.maxArtworkBytes()
+    };
+  }
+
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
     this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6);
     const selected = qqMusicQualitySchema.safeParse(quality).success ? quality as QqMusicQuality : this.defaultQuality();
@@ -273,6 +310,7 @@ export class QqMusicService {
   }
   private requestTimeoutMs() { const value = Number(process.env.QQMUSIC_REQUEST_TIMEOUT_MS ?? 15_000); return Number.isFinite(value) ? Math.max(1_000, Math.floor(value)) : 15_000; }
   private maxImportBytes() { const value = Number(process.env.QQMUSIC_MAX_IMPORT_BYTES ?? 209_715_200); return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 209_715_200; }
+  private maxArtworkBytes() { const value = Number(process.env.QQMUSIC_MAX_ARTWORK_BYTES ?? 10_485_760); return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 10_485_760; }
 }
 function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
@@ -358,6 +396,18 @@ function unwrapData(value: unknown): Record<string, any> | null {
 function buildQqAlbumArtwork(albumMid: string) { return albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : null; }
 function readDuration(value: unknown) { const n = Number(value); return Number.isFinite(n) && n > 0 ? (n < 10_000 ? Math.round(n * 1_000) : Math.round(n)) : 0; }
 function resolveMime(contentType: string | null, url: string) { const type = `${contentType ?? ""} ${url}`.toLowerCase(); return type.includes("flac") ? "audio/flac" : type.includes("mp3") || type.includes("mpeg") ? "audio/mpeg" : null; }
+function resolveArtworkMime(contentType: string | null) {
+  const mimeType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  return mimeType?.startsWith("image/") ? mimeType : null;
+}
+function normalizeQqMusicArtworkUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:") throw new Error("QQ Music artwork must use HTTPS.");
+  if (url.port || url.username || url.password || !isAllowedHost(url.hostname)) {
+    throw new Error("QQ Music returned an unsupported artwork URL.");
+  }
+  return url;
+}
 function normalizeQqMusicAudioUrl(value: string) {
   const url = new URL(value);
   if (url.protocol === "http:") {

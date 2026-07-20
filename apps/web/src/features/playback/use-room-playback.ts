@@ -573,7 +573,6 @@ function getPlaybackClockSessionKey(playback: PlaybackSnapshot | null | undefine
   return [
     playback.currentTrackId ?? "none",
     playback.mediaEpoch,
-    playback.playbackRevision ?? playback.queueVersion,
     playback.startedAt ?? "stopped",
     playback.status
   ].join("|");

@@ -12,6 +12,7 @@ export type RoomRealtimeEventKind =
 export type RoomChangeKind =
   | "presence-only"
   | "catalog-only"
+  | "playback-control"
   | "playback-timeline"
   | "playback-topology"
   | "transport-topology";
@@ -50,12 +51,13 @@ export function resolvePlaybackTimelineKey(playback: PlaybackLike) {
     return null;
   }
 
-  const playbackRevision =
-    typeof playback.playbackRevision === "number"
-      ? playback.playbackRevision
-      : playback.queueVersion;
   const mediaEpoch = typeof playback.mediaEpoch === "number" ? playback.mediaEpoch : "none";
-  return [playback.currentTrackId, playbackRevision, mediaEpoch].join("|");
+  return [
+    playback.currentTrackId,
+    mediaEpoch,
+    playback.startAt ?? playback.startedAt ?? "stopped",
+    playback.status
+  ].join("|");
 }
 
 export function resolvePlaybackSourceResetReason(input: {
@@ -119,6 +121,19 @@ export function classifyRoomPlaybackChange(input: {
 
   if (!previousPlayback || !nextPlayback) {
     return eventKind === "presence" ? "presence-only" : "catalog-only";
+  }
+
+  const isPlaybackModeOnlyChange =
+    previousPlayback.playbackMode !== nextPlayback.playbackMode &&
+    previousPlayback.status === nextPlayback.status &&
+    previousPlayback.currentTrackId === nextPlayback.currentTrackId &&
+    previousPlayback.currentQueueItemId === nextPlayback.currentQueueItemId &&
+    previousPlayback.startAt === nextPlayback.startAt &&
+    previousPlayback.startedAt === nextPlayback.startedAt &&
+    previousPlayback.positionMs === nextPlayback.positionMs &&
+    previousPlayback.mediaEpoch === nextPlayback.mediaEpoch;
+  if (isPlaybackModeOnlyChange) {
+    return "playback-control";
   }
 
   if (

@@ -93,6 +93,58 @@ export class QqMusicController {
     );
   }
 
+  @Get("artwork")
+  async artwork(
+    @Query("url") rawUrl: string | undefined,
+    @Req() request: Request,
+    @Res() response: Response
+  ) {
+    if (!rawUrl?.trim()) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, "QQ Music artwork URL is required."),
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    const result = await this.service.openArtwork(rawUrl);
+    const upstream = result.upstream;
+    response
+      .status(upstream.status)
+      .setHeader("Content-Type", result.mimeType)
+      .setHeader("Cache-Control", "public, max-age=86400")
+      .setHeader("X-Content-Type-Options", "nosniff");
+    const length = upstream.headers.get("content-length") ??
+      (result.contentLength ? String(result.contentLength) : null);
+    if (length) response.setHeader("Content-Length", length);
+
+    if (!upstream.body) {
+      response.end();
+      return;
+    }
+
+    const { Readable } = await import("node:stream");
+    let bytes = 0;
+    const limiter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        bytes += chunk.byteLength;
+        if (bytes > result.maxBytes) {
+          callback(new Error("QQ Music artwork exceeded the configured proxy size."));
+          return;
+        }
+        callback(null, chunk);
+      }
+    });
+    limiter.on("error", () => {
+      void upstream.body?.cancel().catch(() => undefined);
+      if (!response.destroyed) response.destroy();
+    });
+    Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response);
+    request.on("close", () => {
+      if (!response.writableEnded) {
+        void upstream.body?.cancel().catch(() => undefined);
+      }
+    });
+  }
+
   @Get("tracks/:trackId/audio-url")
   @Header("Cache-Control", "no-store")
   async audioUrl(

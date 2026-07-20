@@ -165,12 +165,15 @@ export function useRoomPageDerived({
         return null;
       }
 
-      const playbackTimelineRevision =
-        typeof playbackRevision === "number" ? playbackRevision : playbackQueueVersion;
       const mediaEpoch = typeof playbackMediaEpoch === "number" ? playbackMediaEpoch : "none";
-      return [currentPlaybackTrackId, playbackTimelineRevision, mediaEpoch].join("|");
+      return [
+        currentPlaybackTrackId,
+        mediaEpoch,
+        roomPlayback?.startAt ?? roomPlayback?.startedAt ?? "stopped",
+        playbackStatus
+      ].join("|");
     },
-    [currentPlaybackTrackId, playbackMediaEpoch, playbackQueueVersion, playbackRevision]
+    [currentPlaybackTrackId, playbackMediaEpoch, playbackStatus, roomPlayback?.startAt, roomPlayback?.startedAt]
   );
   const playbackTopologySnapshot = useMemo(
     () =>

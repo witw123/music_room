@@ -14,7 +14,7 @@ describe("playback media session key", () => {
     };
 
     expect(createPlaybackMediaSessionKey(base)).toBe(
-      "track_1|asset_1|4|9|2026-07-15T00:00:00.000Z|peer_a|remote_1"
+      "track_1|asset_1|4|2026-07-15T00:00:00.000Z|peer_a|remote_1"
     );
     expect(createPlaybackMediaSessionKey({ ...base })).toBe(createPlaybackMediaSessionKey(base));
   });
@@ -32,7 +32,7 @@ describe("playback media session key", () => {
     expect(createPlaybackMediaSessionKey({ ...base, remoteTrackId: "remote_2" })).not.toBe(
       createPlaybackMediaSessionKey(base)
     );
-    expect(createPlaybackMediaSessionKey({ ...base, playbackRevision: 10 })).not.toBe(
+    expect(createPlaybackMediaSessionKey({ ...base, playbackRevision: 10 })).toBe(
       createPlaybackMediaSessionKey(base)
     );
   });

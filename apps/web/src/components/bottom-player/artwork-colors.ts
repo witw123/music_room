@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiBaseUrl } from "@/lib/api-client";
 
 type Rgb = {
   r: number;
@@ -46,7 +47,7 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
     image.onerror = () => {
       if (!cancelled) setPalette(fallbackPalette);
     };
-    image.src = artworkUrl;
+    image.src = getArtworkSourceUrl(artworkUrl);
 
     return () => {
       cancelled = true;
@@ -56,6 +57,26 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
   }, [artworkUrl]);
 
   return palette;
+}
+
+function getArtworkSourceUrl(artworkUrl: string) {
+  if (!isQqMusicArtworkUrl(artworkUrl)) return artworkUrl;
+  return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(artworkUrl)}`;
+}
+
+function isQqMusicArtworkUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (
+      hostname === "qq.com" ||
+      hostname.endsWith(".qq.com") ||
+      hostname === "gtimg.cn" ||
+      hostname.endsWith(".gtimg.cn")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function extractArtworkPalette(image: HTMLImageElement): ArtworkPalette {

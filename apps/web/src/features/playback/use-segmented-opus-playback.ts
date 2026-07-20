@@ -260,8 +260,7 @@ export function resolveSegmentedPlaybackIdentity(input: {
     input.playbackAssetId,
     input.playback.currentTrackId,
     input.playback.mediaEpoch,
-    input.playback.startAt ?? "none",
-    input.playback.playbackRevision
+    input.playback.startAt ?? "none"
   ].join(":");
 }
 

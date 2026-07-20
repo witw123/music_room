@@ -39,7 +39,6 @@ type RoomDashboardViewProps = {
   localStorageSummary: LocalStorageSummary;
   playlists: Playlist[];
   onCleanLocalStorage: () => Promise<void>;
-  onChooseLocalFolder: () => Promise<void>;
   onRefreshLocalStorage: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
@@ -130,7 +129,6 @@ function RoomDashboardViewBase({
   localStorageSummary,
   playlists,
   onCleanLocalStorage,
-  onChooseLocalFolder,
   onRefreshLocalStorage,
   onImportCachedTrack,
   onSaveTrackToLocal,
@@ -295,7 +293,6 @@ function RoomDashboardViewBase({
               activeSession={activeSession}
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
-              onChooseLocalFolder={onChooseLocalFolder}
               onRefreshLocalStorage={onRefreshLocalStorage}
               onImportCachedTrack={onImportCachedTrack}
               onSavePlaylistFromQueue={onSavePlaylistFromQueue}

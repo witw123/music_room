@@ -98,12 +98,18 @@ export function ensureDefaultLocalPlaylist(input: {
   }
 
   const nextTrackIds = [...new Set(input.trackIds)];
-  const tracksChanged = !sameStringArray(current.trackIds, nextTrackIds);
+  const nextTrackIdSet = new Set(nextTrackIds);
+  // Keep the user's established order stable; only append files that appeared since the last scan.
+  const orderedTrackIds = [
+    ...current.trackIds.filter((trackId) => nextTrackIdSet.has(trackId)),
+    ...nextTrackIds.filter((trackId) => !current.trackIds.includes(trackId))
+  ];
+  const tracksChanged = !sameStringArray(current.trackIds, orderedTrackIds);
   const sourceChanged = current.sourceDirectoryName !== input.sourceDirectoryName;
   const updated: LocalPlaylistRecord = {
     ...current,
     sourceDirectoryId: null,
-    trackIds: nextTrackIds,
+    trackIds: orderedTrackIds,
     sourceDirectoryName: input.sourceDirectoryName,
     updatedAt: tracksChanged || sourceChanged
       ? new Date().toISOString()
@@ -299,11 +305,24 @@ export async function syncSelectedLocalDirectoryTracks() {
   const selectedFiles = await listSelectedLocalAudioFiles();
   if (!selectedFiles) return 0;
 
+  const [existingTracks, existingFiles] = await Promise.all([
+    listLocalPlaylistTracks(),
+    listLocalAudioFiles("saved")
+  ]);
+  const existingByHash = new Map(
+    existingTracks
+      .filter((track) => !!track.fileHash)
+      .map((track) => [track.fileHash!, track])
+  );
+  const scanTimestamp = Date.now();
+
   const scannedTracks = await Promise.all(
-    selectedFiles.map(async ({ file, fileName }) => {
+    selectedFiles.map(async ({ file, fileName }, index) => {
       const fileHash = await hashAudioBlob(file);
       const metadata = await readDirectoryTrackMetadata(file);
-      const now = new Date().toISOString();
+      const existing = existingByHash.get(fileHash);
+      // IndexedDB returns tracks by updatedAt descending, so earlier scan entries get later timestamps.
+      const now = existing?.updatedAt ?? new Date(scanTimestamp - index).toISOString();
       return {
         track: {
           id: `local-file:${fileHash}`,
@@ -321,7 +340,7 @@ export async function syncSelectedLocalDirectoryTracks() {
           fileName,
           availableOffline: true,
           source: directoryScanSource,
-          createdAt: now,
+          createdAt: existing?.createdAt ?? now,
           updatedAt: now
         } satisfies LocalPlaylistTrackRecord,
         fileHash,
@@ -331,10 +350,6 @@ export async function syncSelectedLocalDirectoryTracks() {
   );
 
   const currentHashes = new Set(scannedTracks.map((item) => item.fileHash));
-  const [existingTracks, existingFiles] = await Promise.all([
-    listLocalPlaylistTracks(),
-    listLocalAudioFiles("saved")
-  ]);
   const staleTracks = existingTracks.filter((track) =>
     track.source === directoryScanSource && !!track.fileHash && !currentHashes.has(track.fileHash)
   );

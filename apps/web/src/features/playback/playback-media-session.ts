@@ -25,7 +25,6 @@ export function createPlaybackMediaSessionKey(input: {
     input.trackId ?? "none",
     input.playbackAssetId ?? "none",
     input.mediaEpoch ?? "none",
-    input.playbackRevision ?? "none",
     input.startAt ?? "none",
     input.sourcePeerId ?? "none",
     input.remoteTrackId ?? "none"

@@ -29,7 +29,6 @@ import {
   type LocalPlaylistRecord
 } from "@/features/playlist/local-playlist";
 import {
-  chooseLocalAudioDirectory,
   ensureLocalAudioDirectoryWriteAccess,
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory,
@@ -63,9 +62,11 @@ type TrackMoveRequest = {
 };
 
 export function PlaylistsWorkspacePage({
-  playlistView = "network"
+  playlistView = "network",
+  embedded = false
 }: {
   playlistView?: "local" | "network";
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({
@@ -317,14 +318,26 @@ export function PlaylistsWorkspacePage({
     try {
       let playlist: LocalPlaylistRecord | Playlist;
       if (kind === "local") {
-        const imported = await importLocalPlaylistDirectoryTracks();
         playlist = createLocalPlaylist({
           title,
-          description: newPlaylistDescription,
-          trackIds: imported.tracks.map((track) => track.id),
-          sourceDirectoryId: imported.sourceDirectoryId,
-          sourceDirectoryName: imported.directoryName
+          description: newPlaylistDescription
         });
+        try {
+          const imported = await importLocalPlaylistDirectoryTracks();
+          const updated = updateLocalPlaylist(playlist.id, {
+            trackIds: imported.tracks.map((track) => track.id),
+            sourceDirectoryId: imported.sourceDirectoryId,
+            sourceDirectoryName: imported.directoryName
+          });
+          if (updated) {
+            playlist = updated;
+            await syncLocalPlaylistToDatabase(updated);
+          }
+        } catch (error) {
+          if (!(error instanceof Error && error.name === "AbortError")) {
+            setMessage(error instanceof Error ? error.message : "目录读取失败，可稍后重试。 ");
+          }
+        }
       } else {
         playlist = await musicRoomApi.createPlaylist({
           title,
@@ -345,40 +358,6 @@ export function PlaylistsWorkspacePage({
       setStatusMessage(kind === "local" ? "本地歌单已创建。" : "网络歌单已创建。可从搜索页保存网易云或 QQ 音乐歌单。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "创建歌单失败，请重试。");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function changeLocalPlaylistDirectory(playlist: LocalPlaylistRecord) {
-    if (pending) return;
-    setPending(true);
-    setMessage(null);
-    setStatusMessage(null);
-    try {
-      if (playlist.id === defaultLocalPlaylistId) {
-        await chooseLocalAudioDirectory();
-      } else {
-        const imported = await importLocalPlaylistDirectoryTracks(playlist.sourceDirectoryId);
-        const updated = updateLocalPlaylist(playlist.id, {
-          trackIds: imported.tracks.map((track) => track.id),
-          sourceDirectoryId: imported.sourceDirectoryId,
-          sourceDirectoryName: imported.directoryName
-        });
-        if (!updated) throw new Error("本地歌单不存在，请刷新后重试。 ");
-        await syncLocalPlaylistToDatabase(updated, localPlaylistDatabaseIds[playlist.id]);
-      }
-      await refresh();
-      setSelectedPlaylist((current) => {
-        if (!current || current.kind !== "local" || current.playlist.id !== playlist.id) {
-          return current;
-        }
-        const next = listLocalPlaylists().find((item) => item.id === playlist.id);
-        return next ? { kind: "local", playlist: next } : null;
-      });
-      setStatusMessage(`本地歌单“${playlist.title}”的目录已更新。`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "更改本地歌单目录失败，请重试。 ");
     } finally {
       setPending(false);
     }
@@ -499,12 +478,18 @@ export function PlaylistsWorkspacePage({
     }
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-screen bg-black" />;
+  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-screen bg-black" />;
+
+  const WorkspaceShell = embedded ? "section" : "main";
 
   return (
-    <main className="relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
-      <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
+    <WorkspaceShell className={embedded
+      ? "relative w-full text-foreground selection:bg-accent/30 selection:text-white"
+      : "relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28"}>
+      {!embedded ? <AppPageBackground /> : null}
+      <div className={embedded
+        ? "relative z-10 flex w-full flex-col pb-4"
+        : "relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20"}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
@@ -546,9 +531,6 @@ export function PlaylistsWorkspacePage({
             })}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
             onMoveTrack={(track, anchor) => setMoveTarget({ anchor, track, source: selectedPlaylist })}
-            onChangeDirectory={selectedPlaylist.kind === "local"
-              ? () => void changeLocalPlaylistDirectory(selectedPlaylist.playlist)
-              : undefined}
             onDelete={selectedPlaylist.kind === "local" && selectedPlaylist.playlist.id !== defaultLocalPlaylistId
               ? () => setDeleteTarget({ kind: "local", playlist: selectedPlaylist.playlist })
               : selectedPlaylist.kind === "network"
@@ -574,7 +556,6 @@ export function PlaylistsWorkspacePage({
                     {localPlaylists.map((playlist) => (
                       <LocalPlaylistCard
                         key={playlist.id}
-                        onChangeDirectory={() => void changeLocalPlaylistDirectory(playlist)}
                         onDelete={playlist.id === defaultLocalPlaylistId ? undefined : () => setDeleteTarget({ kind: "local", playlist })}
                         onOpen={() => setSelectedPlaylist({ kind: "local", playlist })}
                         playlist={playlist}
@@ -651,7 +632,7 @@ export function PlaylistsWorkspacePage({
           />
         ) : null}
       </div>
-    </main>
+    </WorkspaceShell>
   );
 }
 
@@ -841,13 +822,11 @@ function LocalTrackRow({
 
 export function LocalPlaylistCard({
   onOpen,
-  onChangeDirectory,
   onDelete,
   playlist,
   tracks
 }: {
   onOpen: () => void;
-  onChangeDirectory?: () => void;
   onDelete?: () => void;
   playlist: LocalPlaylistRecord;
   tracks: LocalPlaylistTrackRecord[];
@@ -872,22 +851,6 @@ export function LocalPlaylistCard({
           <p className="mt-1 truncate text-sm text-foreground-muted">{playlist.sourceDirectoryName ? `目录：${playlist.sourceDirectoryName}` : "项目根目录"} · {tracks.length} 首歌曲 · 已下载 {downloadedCount}</p>
         </div>
       </button>
-      {onChangeDirectory ? (
-        <Button
-          aria-label={`更改本地歌单 ${playlist.title} 的目录`}
-          className="absolute right-12 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-accent hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
-          onClick={(event) => {
-            event.stopPropagation();
-            onChangeDirectory();
-          }}
-          size="icon"
-          title="更改目录"
-          type="button"
-          variant="ghost"
-        >
-          <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l2 2h8A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" /><path d="M3 10h18" /></svg>
-        </Button>
-      ) : null}
       {onDelete ? (
         <Button
           aria-label={`删除本地歌单 ${playlist.title}`}
@@ -947,7 +910,6 @@ function PlaylistDetailView({
   player,
   selection,
   onBack,
-  onChangeDirectory,
   onDelete,
   onArtworkResolved,
   onTrackUpdated,
@@ -961,7 +923,6 @@ function PlaylistDetailView({
   player: ReturnType<typeof useLocalPlayer>;
   selection: PlaylistSelection;
   onBack: () => void;
-  onChangeDirectory?: () => void;
   onDelete?: () => void;
   onArtworkResolved?: (artworkUrl: string) => void;
   onTrackUpdated?: (track: LocalPlaylistTrackRecord) => void;
@@ -1177,12 +1138,6 @@ function PlaylistDetailView({
           {remoteLoading ? <p className="mt-2 text-xs text-accent">正在同步平台歌单详情…</p> : null}
           {remoteError ? <p className="mt-2 text-xs text-amber-300">{remoteError} 当前显示已保存的歌曲索引。</p> : null}
         </div>
-        {isLocal && onChangeDirectory ? (
-          <Button onClick={onChangeDirectory} size="sm" type="button" variant="outline">
-            <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l2 2h8A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" /><path d="M3 10h18" /></svg>
-            更改目录
-          </Button>
-        ) : null}
         {onDelete ? (
           <Button aria-label="删除网络歌单" className="text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={onDelete} size="sm" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>

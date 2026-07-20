@@ -138,14 +138,12 @@ export function PlaybackModeButton({
   mode,
   onCycle,
   disabled = false,
-  accentColor = "rgb(0 148 255)",
-  accentSoft = "rgba(0, 148, 255, 0.16)"
+  accentColor = "rgb(0 148 255)"
 }: {
   mode: PlaybackMode;
   onCycle: () => void;
   disabled?: boolean;
   accentColor?: string;
-  accentSoft?: string;
 }) {
   const label = playbackModeLabels[mode];
   const nextMode = getNextPlaybackMode(mode);
@@ -159,8 +157,8 @@ export function PlaybackModeButton({
       aria-label={`当前为${label}，点击切换到${playbackModeLabels[nextMode]}`}
       title={`当前：${label}，点击切换`}
       onClick={onCycle}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
-      style={{ color: accentColor, ...(disabled ? {} : { backgroundColor: accentSoft }) }}
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-200 transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ color: accentColor }}
     >
       <PlaybackModeIcon mode={mode} />
       <span className="sr-only">{label}</span>
@@ -412,7 +410,6 @@ export function MobileBottomPlayerLayout({
               onCycle={onCyclePlaybackMode}
               disabled={!canControlPlayback}
               accentColor={artworkAccent}
-              accentSoft={artworkAccentSoft}
             />
           </div>
 
@@ -544,7 +541,6 @@ export function DesktopBottomPlayerLayout({
           onCycle={onCyclePlaybackMode}
           disabled={!canControlPlayback}
           accentColor={artworkAccent}
-          accentSoft={artworkAccentSoft}
         />
         <Button
           data-testid="player-prev-button"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TrackMeta } from "@music-room/shared";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/music-room-ui";
 import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
@@ -13,7 +14,6 @@ type LocalPlaylistPanelProps = {
   localTracks: LocalPlaylistTrackRecord[];
   roomTracks: TrackMeta[];
   localFolderName: string | null;
-  onChooseLocalFolder: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 };
@@ -23,7 +23,6 @@ export function LocalPlaylistPanel({
   localTracks,
   roomTracks,
   localFolderName,
-  onChooseLocalFolder,
   onImportCachedTrack,
   pendingCachedImport
 }: LocalPlaylistPanelProps) {
@@ -42,7 +41,6 @@ export function LocalPlaylistPanel({
       <LocalPlaylistDetail
         localFolderName={localFolderName}
         onBack={() => setSelectedPlaylistId(null)}
-        onChooseLocalFolder={onChooseLocalFolder}
         onImportCachedTrack={onImportCachedTrack}
         pendingCachedImport={pendingCachedImport}
         playlist={selectedPlaylist}
@@ -65,17 +63,9 @@ export function LocalPlaylistPanel({
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
           <span className="font-mono text-[10px] text-foreground-muted">{localPlaylists.length} 个歌单</span>
-          <Button
-            aria-label="选择项目根目录"
-            className="h-8 w-8"
-            onClick={() => void onChooseLocalFolder()}
-            size="icon"
-            title="选择项目根目录"
-            type="button"
-            variant="outline"
-          >
-            <FolderIcon />
-          </Button>
+          <Link className="text-[10px] font-semibold text-accent hover:text-accent/80" href="/app/profile/playlists">
+            创建歌单
+          </Link>
         </div>
       </div>
 
@@ -98,10 +88,9 @@ export function LocalPlaylistPanel({
       ) : (
         <div className="rounded-lg border border-dashed border-surface-border px-4 py-4">
           <p className="text-xs text-foreground-muted">当前没有本地歌单。</p>
-          <Button className="mt-3" onClick={() => void onChooseLocalFolder()} size="sm" type="button">
-            <FolderIcon />
-            选择项目根目录
-          </Button>
+          <Link className="mt-3 inline-flex items-center border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/20" href="/app/profile/playlists">
+            创建本地歌单
+          </Link>
         </div>
       )}
     </section>
@@ -142,7 +131,6 @@ function LocalPlaylistDetail({
   roomTracks,
   localFolderName,
   onBack,
-  onChooseLocalFolder,
   onImportCachedTrack,
   pendingCachedImport
 }: {
@@ -151,7 +139,6 @@ function LocalPlaylistDetail({
   roomTracks: TrackMeta[];
   localFolderName: string | null;
   onBack: () => void;
-  onChooseLocalFolder: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 }) {
@@ -164,17 +151,9 @@ function LocalPlaylistDetail({
           <BackIcon />
           返回本地歌单
         </Button>
-        <Button
-          aria-label="选择项目根目录"
-          onClick={() => void onChooseLocalFolder()}
-          size="sm"
-          title="选择项目根目录"
-          type="button"
-          variant="outline"
-        >
-          <FolderIcon />
-          {localFolderName ? "更改项目根目录" : "选择项目根目录"}
-        </Button>
+        <Link className="text-xs font-semibold text-accent hover:text-accent/80" href="/app/profile/playlists">
+          管理歌单
+        </Link>
       </div>
 
       <div className="flex items-center gap-3 border-b border-surface-border pb-4">
@@ -294,10 +273,6 @@ function toCachedLibraryTrack(track: LocalPlaylistTrackRecord): CachedLibraryTra
     lastSourceRoomId: null,
     lastOwnerNickname: null
   };
-}
-
-function FolderIcon() {
-  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l2 2h8A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" /><path d="M3 10h18" /></svg>;
 }
 
 function BackIcon() {

@@ -32,7 +32,6 @@ type LocalStorageTabPanelProps = {
   activeSession: AuthSession | null;
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
-  onChooseLocalFolder: () => Promise<void>;
   onRefreshLocalStorage: () => Promise<void>;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
@@ -49,7 +48,6 @@ function LocalStorageTabPanelBase({
   playlists,
   activeSession,
   localStorageSummary,
-  onChooseLocalFolder,
   onImportCachedTrack,
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
@@ -100,7 +98,6 @@ function LocalStorageTabPanelBase({
           localTracks={localStorageSummary.localPlaylistTracks}
           roomTracks={tracks}
           localFolderName={localStorageSummary.localFolderName}
-          onChooseLocalFolder={onChooseLocalFolder}
           onImportCachedTrack={handleImportCachedTrack}
           pendingCachedImport={pendingCachedImport}
         />

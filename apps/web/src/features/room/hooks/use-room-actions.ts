@@ -84,6 +84,10 @@ type PlaybackMutationTarget = Pick<
   "currentTrackId" | "currentQueueItemId"
 >;
 
+type PlaybackMutationOptions = {
+  refreshSnapshotOnSuccess?: boolean;
+};
+
 export function shouldRetryPlaybackMutationAfterConflict(
   expectedTarget: PlaybackMutationTarget,
   latestPlayback: PlaybackMutationTarget
@@ -174,7 +178,8 @@ export function useRoomActions({
       roomId: string,
       expectedVersion: number,
       requestPlayback: (nextExpectedVersion: number) => Promise<PlaybackSnapshot>,
-      retryTarget?: PlaybackMutationTarget
+      retryTarget?: PlaybackMutationTarget,
+      options?: PlaybackMutationOptions
     ) => {
       const execute = async () => {
         if (latestPlaybackStateRef.current.roomId !== roomId) {
@@ -199,7 +204,9 @@ export function useRoomActions({
               roomId,
               playback
             });
-            void syncRoomSnapshot(roomId).catch(() => undefined);
+            if (options?.refreshSnapshotOnSuccess !== false) {
+              void syncRoomSnapshot(roomId).catch(() => undefined);
+            }
             return playback;
           } catch (error) {
             const isVersionConflict =
@@ -700,7 +707,9 @@ export function useRoomActions({
             playbackMode,
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          })
+          }),
+        undefined,
+        { refreshSnapshotOnSuccess: false }
       );
 
       if (nextPlayback) {

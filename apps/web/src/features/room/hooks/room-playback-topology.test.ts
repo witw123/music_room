@@ -59,9 +59,18 @@ describe("room-playback-topology", () => {
       resolvePlaybackTimelineKey({
         ...basePlayback,
         playbackRevision: 9,
+        startAt: "2026-04-19T00:00:45.000Z",
+        startedAt: "2026-04-19T00:00:45.000Z",
         positionMs: 45_000
       })
     );
+
+    expect(
+      resolvePlaybackTimelineKey({
+        ...basePlayback,
+        playbackMode: "shuffle"
+      })
+    ).toBe(resolvePlaybackTimelineKey(basePlayback));
   });
 
   it("classifies presence and library patches without playback topology changes as non-topology events", () => {
@@ -84,6 +93,20 @@ describe("room-playback-topology", () => {
         }
       })
     ).toBe("catalog-only");
+  });
+
+  it("classifies playback-order changes without resetting the timeline", () => {
+    expect(
+      classifyRoomPlaybackChange({
+        eventKind: "playback",
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback,
+          playbackMode: "shuffle",
+          playbackRevision: 8
+        }
+      })
+    ).toBe("playback-control");
   });
 
   it("classifies media epoch changes as topology resets", () => {

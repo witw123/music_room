@@ -1,9 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  assertDecodedPcmWithinMemoryBudget,
-  estimateDecodedPcmBytes,
-  maxDecodedPcmBytes,
   playbackEncoderVersion,
   playbackProfileId,
   resolveEncodingConcurrency,
@@ -12,14 +9,14 @@ import {
 } from "./audio-asset-builder";
 
 describe("audio asset preparation", () => {
-  it("uses one browser decode path for every supported upload format", () => {
+  it("uses bounded decoding paths for supported upload formats", () => {
     const source = readFileSync(new URL("./audio-asset-builder.ts", import.meta.url), "utf8");
 
-    expect(source).toContain("const audioBuffer = await decodeAudioFile(input.file);");
-    expect(source).toContain("return await encodePlaybackAsset(input, audioBuffer);");
-    expect(source).not.toContain("AudioDecoder");
-    expect(source).not.toContain("resolveWavPlaybackSource");
-    expect(source).not.toContain("resolveCompressedPlaybackSource");
+    expect(source).toContain("resolveWavPlaybackSource");
+    expect(source).toContain("resolveCompressedPlaybackSource");
+    expect(source).toContain("compressedDecodeWindowBytes");
+    expect(source).not.toContain("maxDecodedPcmBytes");
+    expect(source).not.toContain("assertFileFitsDecodeMemoryBudget");
   });
 
   it("publishes the server-compatible playback profile", () => {
@@ -54,14 +51,6 @@ describe("audio asset preparation", () => {
     expect(laterSegment.channels[0]).toHaveLength(48_000 * 2 + 3_840);
     expect(laterSegment.trimStartSamples).toBe(0);
     expect(laterSegment.channels[0]?.[0]).toBe(48_000 * 2 - 3_840);
-  });
-
-  it("rejects audio whose decoded PCM would exceed the browser memory budget", () => {
-    expect(estimateDecodedPcmBytes({ durationSeconds: 600, channels: 2 }))
-      .toBeLessThan(maxDecodedPcmBytes);
-    expect(() =>
-      assertDecodedPcmWithinMemoryBudget({ durationSeconds: 720, channels: 2 })
-    ).toThrow(/256 MB/);
   });
 
   it("bounds segment encoding concurrency by work and available CPU", () => {
