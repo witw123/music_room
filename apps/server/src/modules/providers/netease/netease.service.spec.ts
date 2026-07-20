@@ -33,7 +33,8 @@ describe("NeteaseService", () => {
               fee: 1,
               dt: 123000,
               artists: [{ name: "Artist A" }, { name: "Artist B" }],
-              album: { name: "Album", picUrl: "https://example.com/cover.jpg" },
+              album: { name: "Album", picUrl: null },
+              al: { name: "Album", picUrl: "http://p1.music.126.net/abc/cover.jpg" },
               h: { br: 320000 }
             }
           ]
@@ -67,7 +68,7 @@ describe("NeteaseService", () => {
           artist: "Artist A / Artist B",
           album: "Album",
           durationMs: 123000,
-          artworkUrl: "https://example.com/cover.jpg"
+          artworkUrl: "https://p1.music.126.net/abc/cover.jpg"
         }
       ],
       limit: 20,
@@ -189,7 +190,7 @@ describe("NeteaseService", () => {
       getUserPlaylists: jest.fn().mockResolvedValue({ playlist: [{ id: 11, name: "Favorites", trackCount: 1 }] }),
       getPlaylist: jest.fn().mockResolvedValue({ playlist: { id: 11, name: "Favorites", tracks: [{ id: 7, name: "Song", ar: [{ name: "Artist" }] }], trackIds: [{ id: 7 }, { id: 8 }] } }),
       getPlaylistTracks: jest.fn().mockResolvedValue({ songs: [{ id: 8, name: "Song 2", ar: [{ name: "Artist" }] }] }),
-      getAlbum: jest.fn().mockResolvedValue({ album: { id: 22, name: "Album", artist: { name: "Artist" }, songs: [{ id: 7, name: "Song" }] } })
+      getAlbum: jest.fn().mockResolvedValue({ album: { id: 22, name: "Album", artist: { name: "Artist" }, data: { songList: [{ id: 7, name: "Song" }] } } })
     };
     const accounts = {
       getCookieOrThrow: jest.fn().mockResolvedValue("cookie"),

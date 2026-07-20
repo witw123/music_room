@@ -83,6 +83,7 @@ describe("QqMusicService", () => {
     process.env.QQMUSIC_ENABLED = "true";
     const api = {
       getLyrics: jest.fn().mockResolvedValue({ lyric: "plain", trans: "translated" }),
+      searchTracks: jest.fn().mockResolvedValue([{ albumMID: "alb1", albumName: "Album", singerName: "Artist" }]),
       getUserPlaylists: jest.fn().mockResolvedValue({ data: { playlists: [{ dissid: "1", dissname: "Favorites", songnum: 1 }] } }),
       getPlaylist: jest.fn().mockResolvedValue({ cdlist: [{ disstid: "1", dissname: "Favorites", songlist: [{ songmid: "song1", songname: "Song", singername: "Artist" }] }] }),
       getAlbum: jest.fn().mockResolvedValue({ info: { albumMid: "alb1", albumName: "Album", singerName: "Artist" }, songs: { albumSonglist: { data: { songList: [{ songInfo: { mid: "song1", name: "Song", singer: [{ name: "Artist" }], album: { mid: "alb1", name: "Album" } } }] } } } })
@@ -99,6 +100,9 @@ describe("QqMusicService", () => {
       plainLyric: "plain",
       translatedLyric: "translated",
       romanizedLyric: null
+    });
+    await expect(service.searchAlbums("user_1", { keywords: "Album", limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerAlbumId: "alb1", title: "Album", artist: "Artist" }]
     });
     await expect(service.listPlaylists("user_1", { limit: 30, offset: 0 })).resolves.toMatchObject({ items: [{ providerPlaylistId: "1", title: "Favorites" }] });
     await expect(service.getPlaylist("user_1", "1")).resolves.toMatchObject({ tracks: [{ providerTrackId: "song1", title: "Song" }] });

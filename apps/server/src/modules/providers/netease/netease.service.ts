@@ -275,7 +275,7 @@ export class NeteaseService {
     const body = await this.callProvider(userId, () => this.api.getAlbum({ albumId, cookie }));
     const album = asRecord(body.album) ?? asRecord(body);
     if (!album) throw this.unavailableError();
-    const tracks = (Array.isArray(album.songs) ? album.songs : Array.isArray(body.songs) ? body.songs : [])
+    const tracks = readNeteaseTrackArray(album, body)
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is NeteaseTrackCandidate => !!item);
     const summary = this.toAlbumSummary({ ...album, id: album.id ?? albumId });
@@ -434,8 +434,13 @@ export class NeteaseService {
     const artistNames = artists
       .map((artist) => readString(asRecord(artist)?.name))
       .filter((name): name is string => !!name);
-    const album = asRecord(song?.album) ?? asRecord(song?.al);
-    const artworkUrl = readString(album?.picUrl);
+    const albumRecord = asRecord(song?.album);
+    const legacyAlbumRecord = asRecord(song?.al);
+    const album = albumRecord ?? legacyAlbumRecord;
+    const artworkUrl = readNeteaseArtworkUrl(
+      albumRecord?.picUrl,
+      legacyAlbumRecord?.picUrl
+    );
     return {
       provider: "netease",
       providerTrackId: trackId,
@@ -446,7 +451,7 @@ export class NeteaseService {
       album: readString(album?.name),
       ...(readString(album?.id) ? { providerAlbumId: readString(album?.id)! } : {}),
       durationMs: readNumber(song?.duration) ?? readNumber(song?.dt) ?? 0,
-      artworkUrl: artworkUrl && /^https?:\/\//.test(artworkUrl) ? artworkUrl : null
+      artworkUrl
     };
   }
 
@@ -614,6 +619,41 @@ function readLyricText(value: unknown) {
 function readHttpUrl(value: unknown) {
   const result = readString(value);
   return result && /^https?:\/\//.test(result) ? result : null;
+}
+
+function readNeteaseTrackArray(...values: unknown[]): unknown[] {
+  const queue = [...values];
+  const visited = new Set<Record<string, unknown>>();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (Array.isArray(current)) return current;
+    const record = asRecord(current);
+    if (!record || visited.has(record)) continue;
+    visited.add(record);
+    for (const key of ["songs", "songList", "songlist", "list", "data", "result"]) {
+      const nested = record[key];
+      if (Array.isArray(nested)) return nested;
+      if (nested && typeof nested === "object") queue.push(nested);
+    }
+  }
+  return [];
+}
+
+function readNeteaseArtworkUrl(...values: unknown[]) {
+  for (const value of values) {
+    const result = readString(value);
+    if (!result) continue;
+    const normalized = result.startsWith("//")
+      ? `https:${result}`
+      : result.replace(/^http:\/\//i, "https://");
+    try {
+      const url = new URL(normalized);
+      if (url.protocol === "https:" && url.hostname) return url.toString();
+    } catch {
+      // Ignore malformed provider artwork URLs and try the next field.
+    }
+  }
+  return null;
 }
 
 function readArtistNames(value: unknown) {

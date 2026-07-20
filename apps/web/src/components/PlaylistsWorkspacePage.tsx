@@ -117,7 +117,7 @@ export function PlaylistsWorkspacePage() {
     let localPlaylistRecords: LocalPlaylistRecord[];
     localPlaylistRecords = ensureDefaultLocalPlaylist({
       trackIds: tracks
-        .filter((track) => track.source === "directory-scan" && track.availableOffline)
+        .filter((track) => track.availableOffline)
         .map((track) => track.id),
       sourceDirectoryName: storage.directoryName
     });

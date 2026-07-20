@@ -149,9 +149,7 @@ export class QqMusicService {
     const cookie = await this.getCookie(userId);
     const body = await this.callProvider(() => this.api.getAlbum({ albumId, cookie }));
     const info = unwrapData(body.info);
-    const songsEnvelope = asRecord(body.songs);
-    const songsData = unwrapData(songsEnvelope?.albumSonglist ?? songsEnvelope);
-    const tracks = (Array.isArray(songsData?.songList) ? songsData.songList : Array.isArray(songsData?.songlist) ? songsData.songlist : Array.isArray(songsData?.list) ? songsData.list : [])
+    const tracks = readTrackArray(body.songs)
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is QqMusicTrackCandidate => !!item);
     return {
@@ -217,7 +215,7 @@ export class QqMusicService {
         ? r.singers.map((s) => readString(asRecord(s)?.name)).filter(Boolean).join(" / ")
         : readString(r.singername ?? r.singerName ?? r.artist) ?? "未知歌手";
     const pay = asRecord(r.pay); const payPlay = Number(pay?.payplay ?? pay?.pay_play); const file = asRecord(r.file); const quality = Number(r.sizeflac ?? file?.size_flac) > 0 ? "lossless" : Number(r.size320 ?? file?.size_320mp3) > 0 ? "high" : Number(r.size128 ?? file?.size_128mp3) > 0 ? "standard" : null;
-    const album = asRecord(r.album); const albumMid = readString(r.albummid ?? r.albumMid ?? album?.mid ?? album?.albummid);
+    const album = asRecord(r.album); const albumMid = readString(r.albummid ?? r.albumMid ?? r.albumMID ?? album?.mid ?? album?.albummid ?? album?.albumMid ?? album?.albumMID);
     const artworkUrl = readHttpUrl(r.albumPic ?? r.album_pic ?? r.picUrl) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
     return { provider: "qqmusic", providerTrackId: id, access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
   }
@@ -238,7 +236,7 @@ export class QqMusicService {
 
   private toAlbumSummary(value: unknown): ProviderAlbumSummary | null {
     const album = asRecord(value);
-    const id = readString(album?.albummid ?? album?.albumMid ?? album?.albumid ?? album?.mid);
+    const id = readString(album?.albummid ?? album?.albumMid ?? album?.albumMID ?? album?.albumid ?? album?.albumId ?? album?.mid);
     const title = readString(album?.albumname ?? album?.albumName ?? album?.name ?? album?.title);
     if (!album || !id || !title) return null;
     const singer = Array.isArray(album.singer)
@@ -250,9 +248,9 @@ export class QqMusicService {
       title,
       artist: singer || "未知歌手",
       description: readString(album.desc ?? album.description),
-      artworkUrl: readHttpUrl(album.albumPic ?? album.album_pic ?? album.picUrl) ?? buildQqAlbumArtwork(id),
-      releaseTime: readString(album.pubtime ?? album.pubTime ?? album.publishTime),
-      trackCount: readNumber(album.songnum ?? album.songNum ?? album.total) ?? 0
+      artworkUrl: readHttpUrl(album.albumPic ?? album.album_pic ?? album.albumPicUrl ?? album.picUrl) ?? buildQqAlbumArtwork(id),
+      releaseTime: readString(album.pubtime ?? album.pubTime ?? album.publicTime ?? album.publishTime),
+      trackCount: readNumber(album.songnum ?? album.songNum ?? album.song_count ?? album.total) ?? 0
     };
   }
   private async getCookie(userId: string) { try { return await this.accounts.getCookieOrThrow(userId); } catch { throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAccountRequired, "QQ Music account is required."), HttpStatus.CONFLICT); } }
@@ -278,11 +276,21 @@ function readQqTrackId(record: Record<string, any>) {
   return legacyId && !/^\d+$/.test(legacyId) ? legacyId : null;
 }
 function readTrackArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  const record = asRecord(value);
-  if (Array.isArray(record?.list)) return record.list;
-  const data = asRecord(record?.data);
-  return Array.isArray(data?.list) ? data.list : [];
+  const queue = [value];
+  const visited = new Set<Record<string, any>>();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (Array.isArray(current)) return current;
+    const record = asRecord(current);
+    if (!record || visited.has(record)) continue;
+    visited.add(record);
+    for (const key of ["songlist", "songList", "songs", "list", "albumSonglist", "data", "result"]) {
+      const nested = record[key];
+      if (Array.isArray(nested)) return nested;
+      if (nested && typeof nested === "object") queue.push(nested);
+    }
+  }
+  return [];
 }
 function readNumber(value: unknown) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
 function readLyricText(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }

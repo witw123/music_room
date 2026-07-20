@@ -126,6 +126,16 @@ describe("QqMusicApiClient", () => {
     await expect(client.searchTracks({ keywords: "song", limit: 20, offset: 20, cookie: "secret" })).resolves.toEqual([{ songmid: "song-mid-2" }]);
   });
 
+  it("reads QQ albumList search results", async () => {
+    mockedGetSearchByKey.mockResolvedValue({
+      status: 200,
+      body: { response: { data: { albumList: [{ albumMID: "album-mid", albumName: "Album" }] } } }
+    } as never);
+
+    await expect(new QqMusicApiClient().searchTracks({ keywords: "album", limit: 20, offset: 0, cookie: "secret", kind: "album" }))
+      .resolves.toEqual([{ albumMID: "album-mid", albumName: "Album" }]);
+  });
+
   it("does not turn QQ upstream playlist errors into an empty playlist", async () => {
     mockedGetUserPlaylists.mockResolvedValue({ status: 502, body: { error: "获取用户歌单失败" } } as never);
     await expect(new QqMusicApiClient().getUserPlaylists({ userId: "123", limit: 30, offset: 0, cookie: "secret" })).rejects.toMatchObject({ kind: "unavailable" });

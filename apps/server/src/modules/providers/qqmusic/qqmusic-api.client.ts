@@ -50,9 +50,8 @@ export class QqMusicApiClient {
       const body = asRecord(response.body);
       const responseBody = asRecord(body?.response) ?? body;
       const data = asRecord(responseBody?.data) ?? responseBody;
-      const section = asRecord(data?.[kind]) ?? data;
-      const list = section?.list ?? section?.itemlist;
-      if (!Array.isArray(list)) throw new QqMusicApiError("invalid-response");
+      const list = readSearchResultList(data ?? {}, kind);
+      if (!list) throw new QqMusicApiError("invalid-response");
       return list;
     });
   }
@@ -134,6 +133,17 @@ function readCookie(session: any) {
 }
 function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
+
+function readSearchResultList(data: Record<string, any>, kind: "song" | "album" | "playlist") {
+  const candidates = [data[kind], data[`${kind}List`], data[`${kind}list`]];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+    const section = asRecord(candidate);
+    const list = section?.list ?? section?.itemlist ?? section?.songList;
+    if (Array.isArray(list)) return list;
+  }
+  return null;
+}
 
 function readProviderBody(value: unknown): Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new QqMusicApiError("invalid-response");
