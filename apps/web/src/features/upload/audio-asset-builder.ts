@@ -44,7 +44,7 @@ const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
 const wavHeaderProbeBytes = 1024 * 1024;
 const compressedDecodeWindowBytes = 4 * 1024 * 1024;
-const compressedDecodeBatchFrames = 192;
+const compressedDecodeBatchFrames = 384;
 export { playbackEncoderVersion, playbackProfileId };
 
 export type PreparedAudioAssets = {
@@ -281,7 +281,7 @@ async function preparePlaybackAsset(input: {
     descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
   } | undefined> = new Array(unitCount);
   const leafHashes: Array<string | undefined> = new Array(unitCount);
-  const concurrency = compressedSource ? 1 : resolveEncodingConcurrency(unitCount);
+  const concurrency = resolveEncodingConcurrency(unitCount);
   const encoders = Array.from({ length: concurrency }, () => new OpusSegmentEncoder());
   let nextUnitIndex = 0;
   let completedUnits = 0;
@@ -452,7 +452,11 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   private eof = false;
   private lastUnitIndex = -1;
   private disposed = false;
-  private operation: Promise<unknown> = Promise.resolve();
+  private drainingSegments: Promise<void> | null = null;
+  private readonly pendingSegments = new Map<number, {
+    resolve: (segment: EncodablePlaybackSegment) => void;
+    reject: (error: Error) => void;
+  }>();
 
   constructor(
     public readonly channels: 1 | 2,
@@ -473,20 +477,71 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   }
 
   getSegment(unitIndex: number) {
-    const run = this.operation.then(() => this.readSegment(unitIndex));
-    this.operation = run.catch(() => undefined);
-    return run;
+    if (this.disposed) {
+      return Promise.reject(new Error("音频转码已取消。"));
+    }
+    if (this.decodeError) {
+      return Promise.reject(this.decodeError);
+    }
+    if (!Number.isInteger(unitIndex) || unitIndex < 0 || unitIndex <= this.lastUnitIndex) {
+      return Promise.reject(new Error("压缩音频转码必须按顺序读取播放片段。"));
+    }
+    if (this.pendingSegments.has(unitIndex)) {
+      return Promise.reject(new Error("压缩音频播放片段已在读取中。"));
+    }
+
+    const segment = new Promise<EncodablePlaybackSegment>((resolve, reject) => {
+      this.pendingSegments.set(unitIndex, { resolve, reject });
+    });
+    this.drainSegments();
+    return segment;
   }
 
   async dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    const error = new Error("音频转码已取消。");
+    for (const pending of this.pendingSegments.values()) {
+      pending.reject(error);
+    }
+    this.pendingSegments.clear();
     try {
       this.decoder.close();
     } catch {
       // Decoder may already be closed after a fatal codec error.
     }
     await this.frameReader.dispose?.();
+  }
+
+  private drainSegments() {
+    if (this.drainingSegments) return;
+    this.drainingSegments = this.drainPendingSegments().finally(() => {
+      this.drainingSegments = null;
+      if (!this.disposed && this.pendingSegments.has(this.lastUnitIndex + 1)) {
+        this.drainSegments();
+      }
+    });
+  }
+
+  private async drainPendingSegments() {
+    while (!this.disposed) {
+      const unitIndex = this.lastUnitIndex + 1;
+      const pending = this.pendingSegments.get(unitIndex);
+      if (!pending) return;
+      this.pendingSegments.delete(unitIndex);
+      try {
+        pending.resolve(await this.readSegment(unitIndex));
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error("压缩音频转码失败。");
+        this.decodeError ??= failure;
+        pending.reject(failure);
+        for (const remaining of this.pendingSegments.values()) {
+          remaining.reject(failure);
+        }
+        this.pendingSegments.clear();
+        return;
+      }
+    }
   }
 
   private async readSegment(unitIndex: number): Promise<EncodablePlaybackSegment> {

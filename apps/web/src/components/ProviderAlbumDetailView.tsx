@@ -84,7 +84,7 @@ export function ProviderAlbumTrackTable({ tracks }: { tracks: Track[] }) {
           <span className="relative pb-4 text-sm font-semibold text-white">歌曲 <span className="text-white/35">{tracks.length}</span><span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /></span>
           <span className="pb-4 text-sm text-white/35">详情</span>
         </div>
-        <label className="mb-2 flex h-9 w-full max-w-[220px] items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-3 text-white/45 sm:w-auto">
+        <label className="mb-2 flex h-9 w-full max-w-[220px] items-center gap-2 rounded-full border border-white/[0.1] bg-black px-3 text-white/45 sm:w-auto">
           <Icon name="search" />
           <span className="sr-only">搜索专辑歌曲</span>
           <input aria-label="搜索专辑歌曲" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/35" onChange={(event) => setQuery(event.target.value)} placeholder="搜索" type="search" value={query} />
@@ -112,7 +112,7 @@ function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
     // External provider artwork is intentionally rendered without Next image optimization.
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} className="aspect-square w-full rounded-2xl object-cover" loading="lazy" src={src} />
-  ) : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-white/[0.04] text-3xl text-white/20">♪</span>;
+  ) : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-black text-3xl text-white/20">♪</span>;
 }
 
 function Icon({ name, filled = false }: { name: "arrow-left" | "heart" | "search"; filled?: boolean }) {

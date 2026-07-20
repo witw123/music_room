@@ -490,19 +490,21 @@ export function PlaylistsWorkspacePage({
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
         : "relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20"}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-              {playlistView === "local" ? "本地歌单" : "歌单"}
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">
-              {playlistView === "local" ? "每个本地歌单读取各自选择的目录。" : "保存的网易云音乐与 QQ 音乐歌单。"}
-            </p>
+        {!embedded ? (
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+                {playlistView === "local" ? "本地歌单" : "歌单"}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">
+                {playlistView === "local" ? "每个本地歌单读取各自选择的目录。" : "保存的网易云音乐与 QQ 音乐歌单。"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link className="text-sm text-accent hover:text-accent/80" href="/app/search">去搜索音乐</Link>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link className="text-sm text-accent hover:text-accent/80" href="/app/search">去搜索音乐</Link>
-          </div>
-        </div>
+        ) : null}
 
         {selectedPlaylist ? (
           <PlaylistDetailView

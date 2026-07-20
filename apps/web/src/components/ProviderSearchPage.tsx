@@ -351,13 +351,13 @@ export function ProviderSearchPage() {
     if (albumId) await loadAlbumById(albumId, track.provider);
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-screen bg-[#111214]" />;
+  if (!hydrated || !activeSession) return <div className="min-h-screen bg-black" />;
 
   return (
-    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-[#111214] pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-[#191a1d] p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:flex-1 sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
+          <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:flex-1 sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
             <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
             <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
             <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌单或专辑</label>
@@ -372,7 +372,7 @@ export function ProviderSearchPage() {
               value={keywords}
             />
             {enabledProviders.length > 1 ? (
-              <select aria-label="选择音乐平台" className="hidden h-9 rounded-lg border border-white/[0.08] bg-[#202226] px-2 text-xs text-white/75 outline-none sm:block" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
+              <select aria-label="选择音乐平台" className="hidden h-9 rounded-lg border border-white/[0.08] bg-black px-2 text-xs text-white/75 outline-none sm:block" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
                 {enabledProviders.map((item) => <option key={item} value={item}>{item === "netease" ? "网易云" : "QQ 音乐"}</option>)}
               </select>
             ) : null}
@@ -410,7 +410,7 @@ export function ProviderSearchPage() {
             ) : null}
           </>
         ) : (
-          <div className="mt-10 rounded-2xl border border-white/[0.1] bg-white/[0.04] p-8 text-sm text-white/55">当前没有启用音乐平台。</div>
+          <div className="mt-10 rounded-2xl border border-white/[0.1] bg-black p-8 text-sm text-white/55">当前没有启用音乐平台。</div>
         )}
 
         {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
@@ -449,7 +449,7 @@ function SongsResults({
 }) {
   return (
     <section className="mt-7">
-      {results.length ? <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025]">
+      {results.length ? <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
         <div className="hidden grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_64px] gap-3 border-b border-white/[0.08] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 md:grid">
           <span>#</span><span>单曲</span><span>歌手</span><span>专辑</span><span>时长</span><span className="text-right">操作</span>
         </div>
@@ -522,7 +522,7 @@ function PlaylistsContent({
     <section className="mt-7">
       {playlists.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {playlists.map((item) => (
-          <button className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] text-left transition hover:border-accent/50 hover:bg-white/[0.06]" key={`${item.provider}-${item.providerPlaylistId}`} onClick={() => void onOpen(item)} type="button">
+          <button className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-black text-left transition hover:border-accent/50 hover:bg-white/[0.06]" key={`${item.provider}-${item.providerPlaylistId}`} onClick={() => void onOpen(item)} type="button">
             <Artwork alt={item.title} src={item.artworkUrl} className="aspect-[1.5] w-full rounded-none" size="lg" />
             <span className="block truncate px-4 pt-4 text-sm font-medium text-white/85">{item.title}</span>
             <span className="block truncate px-4 pb-4 pt-1 text-xs text-white/40">{item.creatorName ?? "网络歌单"} · {item.trackCount} 首</span>
@@ -563,7 +563,7 @@ function AlbumsContent({
     );
   }
 
-  return <section className="mt-7">{albums.length ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{albums.map((item) => { const favoriteId = albumKey(item.provider, item.providerAlbumId); return <article className="group min-w-0" key={`${item.provider}-${item.providerAlbumId}`}><button className="block w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] text-left transition hover:border-accent/50 hover:bg-white/[0.06]" onClick={() => void onOpen(item)} type="button"><Artwork alt={item.title} src={item.artworkUrl} className="aspect-square w-full rounded-none" size="lg" /><span className="block truncate px-3 pt-3 text-sm font-medium text-white/85">{item.title}</span><span className="block truncate px-3 pb-4 pt-1 text-xs text-white/40">{item.artist}</span></button><button aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`} className={`mt-2 flex items-center gap-1.5 px-1 text-xs ${favoriteAlbumIds.has(favoriteId) ? "text-accent-hover" : "text-white/35 hover:text-white/70"}`} disabled={pending !== null} onClick={() => void onToggleFavorite(item)} type="button"><Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />{favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}</button></article>; })}</div> : <SearchEmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" />}</section>;
+  return <section className="mt-7">{albums.length ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{albums.map((item) => { const favoriteId = albumKey(item.provider, item.providerAlbumId); return <article className="group min-w-0" key={`${item.provider}-${item.providerAlbumId}`}><button className="block w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-black text-left transition hover:border-accent/50 hover:bg-white/[0.06]" onClick={() => void onOpen(item)} type="button"><Artwork alt={item.title} src={item.artworkUrl} className="aspect-square w-full rounded-none" size="lg" /><span className="block truncate px-3 pt-3 text-sm font-medium text-white/85">{item.title}</span><span className="block truncate px-3 pb-4 pt-1 text-xs text-white/40">{item.artist}</span></button><button aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`} className={`mt-2 flex items-center gap-1.5 px-1 text-xs ${favoriteAlbumIds.has(favoriteId) ? "text-accent-hover" : "text-white/35 hover:text-white/70"}`} disabled={pending !== null} onClick={() => void onToggleFavorite(item)} type="button"><Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />{favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}</button></article>; })}</div> : <SearchEmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" />}</section>;
 }
 
 function albumKey(provider: Provider, providerAlbumId: string) {
@@ -580,7 +580,7 @@ function PlaylistPickerDialog({ anchor, loading, options, pending, track, onClos
 }
 
 function PlaylistPickerSection({ label, options, pending, onSelect }: { label: string; options: PlaylistPickerOption[]; pending: boolean; onSelect: (option: PlaylistPickerOption) => void }) {
-  return <section className="mt-5 first:mt-6"><h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">{label}</h3><div className="space-y-2">{options.map((option) => { const item = option.playlist; return <button className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-background/60 px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={pending} key={`${option.kind}:${item.id}`} onClick={() => onSelect(option)} type="button"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"><Icon name="music" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{item.title}</span><span className="mt-1 block truncate text-xs text-foreground-muted">{item.trackIds.length} 首歌曲</span></span><Icon name="chevron-right" /></button>; })}</div></section>;
+  return <section className="mt-5 first:mt-6"><h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">{label}</h3><div className="space-y-2">{options.map((option) => { const item = option.playlist; return <button className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-black px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={pending} key={`${option.kind}:${item.id}`} onClick={() => onSelect(option)} type="button"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"><Icon name="music" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{item.title}</span><span className="mt-1 block truncate text-xs text-foreground-muted">{item.trackIds.length} 首歌曲</span></span><Icon name="chevron-right" /></button>; })}</div></section>;
 }
 
 function SearchTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
@@ -595,7 +595,7 @@ function Artwork({ alt, src, size, className = "" }: { alt: string; src: string 
 }
 
 function SearchEmptyState({ title, description }: { title: string; description: string }) {
-  return <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-white/[0.025] px-6 text-center"><Icon name="search" /><p className="mt-4 text-sm font-medium text-white/60">{title}</p><p className="mt-2 text-xs text-white/30">{description}</p></div>;
+  return <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center"><Icon name="search" /><p className="mt-4 text-sm font-medium text-white/60">{title}</p><p className="mt-2 text-xs text-white/30">{description}</p></div>;
 }
 
 function Icon({ name, filled = false }: { name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add"; filled?: boolean }) {

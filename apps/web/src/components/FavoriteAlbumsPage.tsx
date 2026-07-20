@@ -73,14 +73,14 @@ export function FavoriteAlbumsPage() {
     }
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-screen bg-[#111214]" />;
+  if (!hydrated || !activeSession) return <div className="min-h-screen bg-black" />;
 
   const detailItem = detail
     ? items.find((item) => item.provider === detail.provider && item.providerAlbumId === detail.providerAlbumId) ?? null
     : null;
 
   return (
-    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-[#111214] pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:px-10 md:pt-14">
         {detail && detailItem ? (
           <ProviderAlbumDetailView
@@ -119,7 +119,7 @@ export function FavoriteAlbumsPage() {
                   ))}
                 </div>
               ) : (
-                <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-white/[0.025] px-6 text-center">
+                <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center">
                   <HeartIcon />
                   <p className="mt-4 text-sm font-medium text-white/60">还没有收藏专辑</p>
                   <p className="mt-2 text-xs text-white/30">在搜索页打开专辑并点击收藏。</p>
@@ -139,7 +139,7 @@ function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
     // External provider artwork is intentionally rendered without Next image optimization.
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} className="aspect-square w-full rounded-2xl object-cover" loading="lazy" src={src} />
-  ) : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-white/[0.04] text-3xl text-white/20">♪</span>;
+  ) : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-black text-3xl text-white/20">♪</span>;
 }
 
 function HeartIcon({ filled = false }: { filled?: boolean }) {
