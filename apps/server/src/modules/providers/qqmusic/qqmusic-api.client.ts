@@ -45,7 +45,17 @@ export class QqMusicApiClient {
   async searchTracks(input: { keywords: string; limit: number; offset: number; cookie: string; kind?: "song" | "album" | "playlist" }) {
     return this.call(async () => {
       const kind = input.kind ?? "song";
-      const response = await getSearchByKey({ params: { key: input.keywords, w: input.keywords, p: Math.floor(input.offset / input.limit) + 1, n: input.limit, remoteplace: `txt.yqq.${kind}` }, option: { headers: { Cookie: input.cookie } } }) as ApiResponse;
+      const response = await getSearchByKey({
+        params: {
+          key: input.keywords,
+          w: input.keywords,
+          p: Math.floor(input.offset / input.limit) + 1,
+          n: input.limit,
+          t: kind === "album" ? 8 : kind === "playlist" ? 5 : 0,
+          remoteplace: kind === "playlist" ? "txt.yqq.songlist" : `txt.yqq.${kind}`
+        },
+        option: { headers: { Cookie: input.cookie } }
+      }) as ApiResponse;
       assertProviderStatus(response.status);
       const body = asRecord(response.body);
       const responseBody = asRecord(body?.response) ?? body;
@@ -135,14 +145,47 @@ function asRecord(value: unknown): Record<string, any> | null { return value && 
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
 
 function readSearchResultList(data: Record<string, any>, kind: "song" | "album" | "playlist") {
-  const candidates = [data[kind], data[`${kind}List`], data[`${kind}list`]];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate;
-    const section = asRecord(candidate);
-    const list = section?.list ?? section?.itemlist ?? section?.songList;
-    if (Array.isArray(list)) return list;
+  const candidateKeys = kind === "song"
+    ? ["song", "songList", "songlist"]
+    : kind === "album"
+      ? ["album", "albumList", "albumlist"]
+      : ["playlist", "playlistList", "playlistlist", "songlist", "songList", "diss", "dissList", "disslist", "cdlist"];
+  const listKeys = ["list", "itemlist", "songList", "songlist", "albumList", "albumlist", "playlistList", "playlistlist", "dissList", "disslist", "cdlist"];
+  const queue: unknown[] = [data];
+  const visited = new Set<Record<string, any>>();
+  let emptyList: unknown[] | null = null;
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const record = asRecord(current);
+    if (!record || visited.has(record)) continue;
+    visited.add(record);
+
+    for (const key of candidateKeys) {
+      const candidate = record[key];
+      if (Array.isArray(candidate)) {
+        if (candidate.length > 0) return candidate;
+        emptyList ??= candidate;
+        continue;
+      }
+      const section = asRecord(candidate);
+      if (!section) continue;
+      for (const listKey of listKeys) {
+        const list = section[listKey];
+        if (!Array.isArray(list)) continue;
+        if (list.length > 0) return list;
+        emptyList ??= list;
+      }
+      queue.push(section);
+    }
+
+    for (const key of ["data", "result", "response"]) {
+      const nested = asRecord(record[key]);
+      if (nested) queue.push(nested);
+    }
   }
-  return null;
+
+  return emptyList;
 }
 
 function readProviderBody(value: unknown): Record<string, any> {

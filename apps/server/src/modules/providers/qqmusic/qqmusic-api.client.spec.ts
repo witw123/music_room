@@ -126,6 +126,19 @@ describe("QqMusicApiClient", () => {
     await expect(client.searchTracks({ keywords: "song", limit: 20, offset: 20, cookie: "secret" })).resolves.toEqual([{ songmid: "song-mid-2" }]);
   });
 
+  it("uses QQ search types and reads a result envelope", async () => {
+    mockedGetSearchByKey.mockResolvedValue({
+      status: 200,
+      body: { response: { data: { result: { albumList: [{ albumMID: "album-mid", albumName: "Album" }] } } } }
+    } as never);
+
+    await expect(new QqMusicApiClient().searchTracks({ keywords: "album", limit: 20, offset: 0, cookie: "secret", kind: "album" }))
+      .resolves.toEqual([{ albumMID: "album-mid", albumName: "Album" }]);
+    expect(mockedGetSearchByKey).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ t: 8, remoteplace: "txt.yqq.album" })
+    }));
+  });
+
   it("reads QQ albumList search results", async () => {
     mockedGetSearchByKey.mockResolvedValue({
       status: 200,

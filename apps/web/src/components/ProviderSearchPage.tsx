@@ -38,6 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import { ProviderAlbumDetailView, ProviderAlbumTrackTable } from "@/components/ProviderAlbumDetailView";
 
 type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -275,15 +276,15 @@ export function ProviderSearchPage() {
 
   async function loadPlaylist(item: ProviderPlaylistSummary) {
     if (pending) return;
-    setPending(`playlist:${item.providerPlaylistId}`);
+    setPending(`playlist:${item.provider}:${item.providerPlaylistId}`);
     setErrorMessage(null);
     try {
-      const detail = provider === "netease"
+      const detail = item.provider === "netease"
         ? await musicRoomApi.getNeteasePlaylist(item.providerPlaylistId)
         : await musicRoomApi.getQqMusicPlaylist(item.providerPlaylistId);
       setPlaylist(detail);
     } catch (error) {
-      setErrorMessage(toProviderErrorMessage(error, provider));
+      setErrorMessage(toProviderErrorMessage(error, item.provider));
     } finally {
       setPending(null);
     }
@@ -317,18 +318,18 @@ export function ProviderSearchPage() {
     }
   }
 
-  async function loadAlbumById(id: string) {
+  async function loadAlbumById(id: string, itemProvider: Provider = provider) {
     if (!id || pending || !isConnected) return;
-    setPending(`album:${id}`);
+    setPending(`album:${itemProvider}:${id}`);
     setErrorMessage(null);
     setContentTab("albums");
     try {
-      const detail = provider === "netease"
+      const detail = itemProvider === "netease"
         ? await musicRoomApi.getNeteaseAlbum(id)
         : await musicRoomApi.getQqMusicAlbum(id);
       setAlbum(detail);
     } catch (error) {
-      setErrorMessage(toProviderErrorMessage(error, provider));
+      setErrorMessage(toProviderErrorMessage(error, itemProvider));
     } finally {
       setPending(null);
     }
@@ -367,7 +368,7 @@ export function ProviderSearchPage() {
   }
 
   async function loadAlbumForTrack(track: Track) {
-    if (track.providerAlbumId) await loadAlbumById(track.providerAlbumId);
+    if (track.providerAlbumId) await loadAlbumById(track.providerAlbumId, track.provider);
   }
 
   if (!hydrated || !activeSession) return <div className="min-h-screen bg-[#111214]" />;
@@ -403,16 +404,9 @@ export function ProviderSearchPage() {
           </div>
         </header>
 
-        <div className="mt-12 flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">Music library</p>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">{keywords.trim() || "搜索"}</h1>
-          </div>
-        </div>
-
         {enabledProviders.length > 0 ? (
           <>
-            <div className="mt-9 flex items-center gap-7 border-b border-white/[0.1]" role="tablist" aria-label="搜索结果类型">
+            <div className="mt-10 flex items-center gap-7 border-b border-white/[0.1]" role="tablist" aria-label="搜索结果类型">
               <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
               <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
               <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
@@ -432,7 +426,7 @@ export function ProviderSearchPage() {
               <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
             ) : null}
             {contentTab === "albums" ? (
-              <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={loadAlbumById} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} />
+              <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} />
             ) : null}
           </>
         ) : (
@@ -475,11 +469,11 @@ function SongsResults({
 }) {
   return (
     <section className="mt-7">
-      <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025]">
+      {results.length ? <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025]">
         <div className="hidden grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_64px] gap-3 border-b border-white/[0.08] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 md:grid">
           <span>#</span><span>单曲</span><span>歌手</span><span>专辑</span><span>时长</span><span className="text-right">操作</span>
         </div>
-        {results.length ? results.map((track, index) => (
+        {results.map((track, index) => (
           <article className="grid gap-3 border-b border-white/[0.07] px-4 py-4 last:border-0 md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_64px] md:items-center md:gap-3 md:px-5" key={`${track.provider}-${track.providerTrackId}`}>
             <span className="hidden text-sm tabular-nums text-white/25 md:block">{String(index + 1).padStart(2, "0")}</span>
             <div className="flex min-w-0 items-center gap-3">
@@ -496,8 +490,8 @@ function SongsResults({
               <Button aria-label={`加入歌单 ${track.title}`} disabled={pending !== null} onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" variant="ghost" type="button"><Icon name="playlist-add" /></Button>
             </div>
           </article>
-        )) : <EmptyState title="还没有搜索结果" description="输入关键词后按回车开始搜索。" />}
-      </div>
+        ))}
+      </div> : <SearchEmptyState title="还没有搜索结果" description="输入关键词后按回车开始搜索。" />}
     </section>
   );
 }
@@ -540,22 +534,22 @@ function PlaylistsContent({
             </div>
           </div>
         </div>
-        <CollectionTrackTable tracks={playlist.tracks} />
+        <ProviderAlbumTrackTable tracks={playlist.tracks} />
       </section>
     );
   }
 
   return (
     <section className="mt-7">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {playlists.length ? playlists.map((item) => (
+      {playlists.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {playlists.map((item) => (
           <button className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] text-left transition hover:border-accent/50 hover:bg-white/[0.06]" key={`${item.provider}-${item.providerPlaylistId}`} onClick={() => void onOpen(item)} type="button">
             <Artwork alt={item.title} src={item.artworkUrl} className="aspect-[1.5] w-full rounded-none" size="lg" />
             <span className="block truncate px-4 pt-4 text-sm font-medium text-white/85">{item.title}</span>
             <span className="block truncate px-4 pb-4 pt-1 text-xs text-white/40">{item.creatorName ?? "网络歌单"} · {item.trackCount} 首</span>
           </button>
-        )) : <div className="sm:col-span-2 xl:col-span-3"><EmptyState title="还没有歌单结果" description="在搜索框输入关键词，再打开歌单标签。" /></div>}
-      </div>
+        ))}
+      </div> : <SearchEmptyState title="还没有歌单结果" description="在搜索框输入关键词，再打开歌单标签。" />}
     </section>
   );
 }
@@ -573,71 +567,24 @@ function AlbumsContent({
   album: ProviderAlbumDetail | null;
   pending: string | null;
   favoriteAlbumIds: Set<string>;
-  onOpen: (albumId: string) => Promise<void>;
+  onOpen: (item: ProviderAlbumSummary) => Promise<void>;
   onBack: () => void;
   onToggleFavorite: (album: ProviderAlbumSummary | ProviderAlbumDetail) => Promise<void>;
 }) {
   if (album) {
     const favoriteId = albumKey(album.provider, album.providerAlbumId);
     return (
-      <section className="mt-7">
-        <button className="inline-flex items-center gap-2 text-xs font-semibold text-white/50 transition hover:text-white" onClick={onBack} type="button"><Icon name="arrow-left" />返回专辑</button>
-        <div className="mt-5 grid gap-8 border-b border-white/[0.1] pb-9 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <Artwork alt={album.title} src={album.artworkUrl} className="aspect-square w-full" size="lg" />
-          <div className="flex min-w-0 flex-col justify-end">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">Album</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">{album.title}</h2>
-            <p className="mt-3 text-sm text-white/55">{album.artist} · {album.releaseTime || "发行时间未知"}</p>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/45">{album.description || "暂无专辑简介"}</p>
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <Button aria-pressed={favoriteAlbumIds.has(favoriteId)} disabled={pending !== null} onClick={() => void onToggleFavorite(album)} size="sm" type="button"><Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />{favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏专辑"}</Button>
-              <span className="px-2 text-xs text-white/35">{album.tracks.length} 首歌曲</span>
-            </div>
-          </div>
-        </div>
-        <CollectionTrackTable tracks={album.tracks} />
-      </section>
+      <ProviderAlbumDetailView
+        album={album}
+        isFavorite={favoriteAlbumIds.has(favoriteId)}
+        onBack={onBack}
+        onToggleFavorite={() => onToggleFavorite(album)}
+        pending={pending}
+      />
     );
   }
 
-  return <section className="mt-7 grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{albums.length ? albums.map((item) => { const favoriteId = albumKey(item.provider, item.providerAlbumId); return <article className="group min-w-0" key={`${item.provider}-${item.providerAlbumId}`}><button className="block w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] text-left transition hover:border-accent/50 hover:bg-white/[0.06]" onClick={() => void onOpen(item.providerAlbumId)} type="button"><Artwork alt={item.title} src={item.artworkUrl} className="aspect-square w-full rounded-none" size="lg" /><span className="block truncate px-3 pt-3 text-sm font-medium text-white/85">{item.title}</span><span className="block truncate px-3 pb-4 pt-1 text-xs text-white/40">{item.artist}</span></button><button aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`} className={`mt-2 flex items-center gap-1.5 px-1 text-xs ${favoriteAlbumIds.has(favoriteId) ? "text-accent-hover" : "text-white/35 hover:text-white/70"}`} disabled={pending !== null} onClick={() => void onToggleFavorite(item)} type="button"><Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />{favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}</button></article>; }) : <div className="col-span-full"><EmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" /></div>}</section>;
-}
-
-function CollectionTrackTable({ tracks }: { tracks: Track[] }) {
-  const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
-  const visibleTracks = normalizedQuery
-    ? tracks.filter((track) => `${track.title} ${track.artist} ${track.album ?? ""}`.toLowerCase().includes(normalizedQuery))
-    : tracks;
-
-  return (
-    <section className="mt-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.1]">
-        <div className="flex items-center gap-6">
-          <span className="relative pb-4 text-sm font-semibold text-white">歌曲 <span className="text-white/35">{tracks.length}</span><span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /></span>
-          <span className="pb-4 text-sm text-white/35">详情</span>
-        </div>
-        <label className="mb-2 flex h-9 w-full max-w-[220px] items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-3 text-white/45 sm:w-auto">
-          <Icon name="search" />
-          <span className="sr-only">搜索详情歌曲</span>
-          <input aria-label="搜索详情歌曲" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/35" onChange={(event) => setQuery(event.target.value)} placeholder="搜索" type="search" value={query} />
-        </label>
-      </div>
-      <div className="mt-4 hidden grid-cols-[42px_minmax(0,1.5fr)_minmax(180px,0.8fr)_90px] gap-4 px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/30 md:grid">
-        <span>#</span><span>标题</span><span>歌手</span><span className="text-right">时长</span>
-      </div>
-      <div className="mt-2 divide-y divide-white/[0.07]">
-        {visibleTracks.length ? visibleTracks.map((track, index) => (
-          <div className="grid gap-2 px-4 py-4 md:grid-cols-[42px_minmax(0,1.5fr)_minmax(180px,0.8fr)_90px] md:items-center md:gap-4" key={track.providerTrackId}>
-            <span className="text-xs tabular-nums text-white/30">{String(index + 1).padStart(2, "0")}</span>
-            <div className="min-w-0"><p className="truncate text-sm text-white/85">{track.title}</p><p className="mt-1 truncate text-xs text-white/35 md:hidden">{track.artist} · {track.album ?? "未知专辑"}</p></div>
-            <span className="hidden truncate text-xs text-white/50 md:block">{track.artist}</span>
-            <span className="text-xs tabular-nums text-white/40 md:text-right">{formatDuration(track.durationMs)}</span>
-          </div>
-        )) : <p className="px-4 py-10 text-center text-xs text-white/35">没有匹配的歌曲。</p>}
-      </div>
-    </section>
-  );
+  return <section className="mt-7">{albums.length ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{albums.map((item) => { const favoriteId = albumKey(item.provider, item.providerAlbumId); return <article className="group min-w-0" key={`${item.provider}-${item.providerAlbumId}`}><button className="block w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] text-left transition hover:border-accent/50 hover:bg-white/[0.06]" onClick={() => void onOpen(item)} type="button"><Artwork alt={item.title} src={item.artworkUrl} className="aspect-square w-full rounded-none" size="lg" /><span className="block truncate px-3 pt-3 text-sm font-medium text-white/85">{item.title}</span><span className="block truncate px-3 pb-4 pt-1 text-xs text-white/40">{item.artist}</span></button><button aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`} className={`mt-2 flex items-center gap-1.5 px-1 text-xs ${favoriteAlbumIds.has(favoriteId) ? "text-accent-hover" : "text-white/35 hover:text-white/70"}`} disabled={pending !== null} onClick={() => void onToggleFavorite(item)} type="button"><Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />{favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}</button></article>; })}</div> : <SearchEmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" />}</section>;
 }
 
 function albumKey(provider: Provider, providerAlbumId: string) {
@@ -671,8 +618,8 @@ function Artwork({ alt, src, size, className = "" }: { alt: string; src: string 
   return src ? <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={src} /> : <span aria-label={alt} className={`flex items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-white/25 ${sizes[size]} ${className}`}><Icon name="music" /></span>;
 }
 
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return <div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.12] px-6 text-center"><Icon name="search" /><p className="mt-4 text-sm font-medium text-white/60">{title}</p><p className="mt-2 text-xs text-white/30">{description}</p></div>;
+function SearchEmptyState({ title, description }: { title: string; description: string }) {
+  return <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-white/[0.025] px-6 text-center"><Icon name="search" /><p className="mt-4 text-sm font-medium text-white/60">{title}</p><p className="mt-2 text-xs text-white/30">{description}</p></div>;
 }
 
 function Icon({ name, filled = false }: { name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add"; filled?: boolean }) {

@@ -190,7 +190,7 @@ describe("NeteaseService", () => {
       getUserPlaylists: jest.fn().mockResolvedValue({ playlist: [{ id: 11, name: "Favorites", trackCount: 1 }] }),
       getPlaylist: jest.fn().mockResolvedValue({ playlist: { id: 11, name: "Favorites", tracks: [{ id: 7, name: "Song", ar: [{ name: "Artist" }] }], trackIds: [{ id: 7 }, { id: 8 }] } }),
       getPlaylistTracks: jest.fn().mockResolvedValue({ songs: [{ id: 8, name: "Song 2", ar: [{ name: "Artist" }] }] }),
-      getAlbum: jest.fn().mockResolvedValue({ album: { id: 22, name: "Album", artist: { name: "Artist" }, data: { songList: [{ id: 7, name: "Song" }] } } })
+      getAlbum: jest.fn().mockResolvedValue({ album: { id: 22, name: "Album", artist: { name: "Artist" }, songs: [] }, songs: [{ id: 7, name: "Song", ar: [{ name: "Artist" }], al: { id: 22, name: "Album" } }] })
     };
     const accounts = {
       getCookieOrThrow: jest.fn().mockResolvedValue("cookie"),

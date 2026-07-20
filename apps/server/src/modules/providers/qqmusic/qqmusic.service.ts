@@ -130,15 +130,11 @@ export class QqMusicService {
     this.assertEnabled();
     const cookie = await this.getCookie(userId);
     const body = await this.callProvider(() => this.api.getPlaylist({ playlistId, cookie }));
-    const data = asRecord(body.data);
-    const playlist = (Array.isArray(body.cdlist) ? asRecord(body.cdlist[0]) : null)
-      ?? (Array.isArray(data?.cdlist) ? asRecord(data.cdlist[0]) : null)
-      ?? asRecord(body.playlist)
-      ?? asRecord(data?.playlist);
+    const playlist = readFirstRecord(body, ["cdlist", "playlist", "playlists", "disslist", "dissList", "list"]);
     if (!playlist) throw this.unavailableError();
     const summary = this.toPlaylistSummary(playlist);
     if (!summary) throw this.unavailableError();
-    const tracks = readTrackArray(playlist.songlist ?? playlist.songList ?? playlist.songs)
+    const tracks = readTrackArray(playlist)
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is QqMusicTrackCandidate => !!item);
     return { ...summary, tracks };
@@ -154,13 +150,13 @@ export class QqMusicService {
       .filter((item): item is QqMusicTrackCandidate => !!item);
     return {
       provider: "qqmusic",
-      providerAlbumId: readString(info?.albumMid ?? info?.albummid ?? info?.albumid) ?? albumId,
+      providerAlbumId: readString(info?.albumMid ?? info?.albummid ?? info?.albumMID ?? info?.albumid ?? info?.albumID ?? info?.id) ?? albumId,
       title: readString(info?.albumName ?? info?.albumname ?? info?.name) ?? "未命名专辑",
       artist: readString(info?.singerName ?? info?.singername ?? info?.artist) ?? "未知歌手",
       description: readString(info?.desc ?? info?.description),
-      artworkUrl: readHttpUrl(info?.albumPic ?? info?.album_pic ?? info?.picUrl) ?? buildQqAlbumArtwork(readString(info?.albumMid ?? info?.albummid) ?? albumId),
-      releaseTime: readString(info?.pubTime ?? info?.publishTime),
-      trackCount: readNumber(info?.songNum ?? info?.songnum) ?? tracks.length,
+      artworkUrl: readHttpUrl(info?.albumPic ?? info?.album_pic ?? info?.albumPicUrl ?? info?.picUrl ?? info?.picurl) ?? buildQqAlbumArtwork(readString(info?.albumMid ?? info?.albummid ?? info?.albumMID) ?? albumId),
+      releaseTime: readString(info?.pubTime ?? info?.publishTime ?? info?.time_public ?? info?.aDate),
+      trackCount: readNumber(info?.songNum ?? info?.songnum ?? info?.cur_song_num ?? info?.total) ?? tracks.length,
       tracks
     };
   }
@@ -221,22 +217,22 @@ export class QqMusicService {
   }
   private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
     const playlist = asRecord(value);
-    const id = readString(playlist?.dissid ?? playlist?.disstid ?? playlist?.tid ?? playlist?.id);
+    const id = readString(playlist?.dissid ?? playlist?.disstid ?? playlist?.dissId ?? playlist?.dissID ?? playlist?.playlistId ?? playlist?.tid ?? playlist?.id);
     if (!playlist || !id) return null;
     return {
       provider: "qqmusic",
       providerPlaylistId: id,
       title: readString(playlist.dissname ?? playlist.name ?? playlist.title) ?? "未命名歌单",
       description: readString(playlist.desc ?? playlist.description),
-      artworkUrl: readHttpUrl(playlist.logo ?? playlist.coverUrl ?? playlist.picUrl),
+      artworkUrl: readHttpUrl(playlist.logo ?? playlist.coverUrl ?? playlist.picUrl ?? playlist.imgurl ?? playlist.imgUrl),
       creatorName: readString(playlist.nickname ?? playlist.creatorName ?? asRecord(playlist.creator)?.name),
-      trackCount: readNumber(playlist.songnum ?? playlist.songNum ?? playlist.total) ?? (Array.isArray(playlist.songlist) ? playlist.songlist.length : 0)
+      trackCount: readNumber(playlist.songnum ?? playlist.songNum ?? playlist.song_count ?? playlist.total) ?? (Array.isArray(playlist.songlist) ? playlist.songlist.length : 0)
     };
   }
 
   private toAlbumSummary(value: unknown): ProviderAlbumSummary | null {
     const album = asRecord(value);
-    const id = readString(album?.albummid ?? album?.albumMid ?? album?.albumMID ?? album?.albumid ?? album?.albumId ?? album?.mid);
+    const id = readString(album?.albummid ?? album?.albumMid ?? album?.albumMID ?? album?.album_mid ?? album?.albumid ?? album?.albumId ?? album?.albumID ?? album?.mid);
     const title = readString(album?.albumname ?? album?.albumName ?? album?.name ?? album?.title);
     if (!album || !id || !title) return null;
     const singer = Array.isArray(album.singer)
@@ -278,19 +274,60 @@ function readQqTrackId(record: Record<string, any>) {
 function readTrackArray(value: unknown): unknown[] {
   const queue = [value];
   const visited = new Set<Record<string, any>>();
+  let emptyList: unknown[] = [];
   while (queue.length > 0) {
     const current = queue.shift();
-    if (Array.isArray(current)) return current;
+    if (Array.isArray(current)) {
+      if (current.length > 0) return current;
+      emptyList = current;
+      continue;
+    }
     const record = asRecord(current);
     if (!record || visited.has(record)) continue;
     visited.add(record);
     for (const key of ["songlist", "songList", "songs", "list", "albumSonglist", "data", "result"]) {
       const nested = record[key];
-      if (Array.isArray(nested)) return nested;
+      if (Array.isArray(nested)) {
+        if (nested.length > 0) return nested;
+        emptyList = nested;
+        continue;
+      }
       if (nested && typeof nested === "object") queue.push(nested);
     }
   }
-  return [];
+  return emptyList;
+}
+function readFirstRecord(value: unknown, keys: string[]): Record<string, any> | null {
+  const queue = [value];
+  const visited = new Set<Record<string, any>>();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const record = asRecord(current);
+    if (!record || visited.has(record)) continue;
+    visited.add(record);
+    for (const key of keys) {
+      const candidate = record[key];
+      if (Array.isArray(candidate)) {
+        const item = candidate.map(asRecord).find((entry): entry is Record<string, any> => !!entry);
+        if (item) return item;
+      } else if (asRecord(candidate)) {
+        const candidateRecord = asRecord(candidate);
+        if (candidateRecord) {
+          if (hasPlaylistIdentity(candidateRecord)) return candidateRecord;
+          queue.push(candidateRecord);
+        }
+      }
+    }
+    for (const key of ["data", "result", "response"]) {
+      const nested = asRecord(record[key]);
+      if (nested) queue.push(nested);
+    }
+  }
+  return null;
+}
+function hasPlaylistIdentity(value: Record<string, any>) {
+  return ["dissid", "disstid", "dissId", "dissID", "playlistId", "tid", "id", "dissname", "name", "title"]
+    .some((key) => readString(value[key]) !== null);
 }
 function readNumber(value: unknown) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
 function readLyricText(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }

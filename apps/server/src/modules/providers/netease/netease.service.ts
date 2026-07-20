@@ -275,7 +275,7 @@ export class NeteaseService {
     const body = await this.callProvider(userId, () => this.api.getAlbum({ albumId, cookie }));
     const album = asRecord(body.album) ?? asRecord(body);
     if (!album) throw this.unavailableError();
-    const tracks = readNeteaseTrackArray(album, body)
+    const tracks = readNeteaseTrackArray(body, album)
       .map((item) => this.toTrackCandidate(item))
       .filter((item): item is NeteaseTrackCandidate => !!item);
     const summary = this.toAlbumSummary({ ...album, id: album.id ?? albumId });
@@ -624,19 +624,28 @@ function readHttpUrl(value: unknown) {
 function readNeteaseTrackArray(...values: unknown[]): unknown[] {
   const queue = [...values];
   const visited = new Set<Record<string, unknown>>();
+  let emptyList: unknown[] = [];
   while (queue.length > 0) {
     const current = queue.shift();
-    if (Array.isArray(current)) return current;
+    if (Array.isArray(current)) {
+      if (current.length > 0) return current;
+      emptyList = current;
+      continue;
+    }
     const record = asRecord(current);
     if (!record || visited.has(record)) continue;
     visited.add(record);
     for (const key of ["songs", "songList", "songlist", "list", "data", "result"]) {
       const nested = record[key];
-      if (Array.isArray(nested)) return nested;
+      if (Array.isArray(nested)) {
+        if (nested.length > 0) return nested;
+        emptyList = nested;
+        continue;
+      }
       if (nested && typeof nested === "object") queue.push(nested);
     }
   }
-  return [];
+  return emptyList;
 }
 
 function readNeteaseArtworkUrl(...values: unknown[]) {
