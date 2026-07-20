@@ -551,14 +551,29 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     }
 
     const contentStart = unitIndex * this.targetSegmentSamples;
-    const contentEnd = Math.min(
-      Math.ceil((this.durationMs / 1000) * opusSampleRate),
+    const declaredDurationSamples = Math.ceil((this.durationMs / 1000) * opusSampleRate);
+    const expectedContentEnd = Math.min(
+      declaredDurationSamples,
       contentStart + this.targetSegmentSamples
     );
     const desiredStart = Math.max(0, contentStart - this.prerollSamples);
-    await this.decodeUntil(contentEnd);
-    if (this.pcm.endSample < contentEnd) {
-      throw this.decodeError ?? new Error("压缩音频解码提前结束。");
+    await this.decodeUntil(expectedContentEnd);
+    if (this.decodeError) throw this.decodeError;
+
+    let contentEnd = expectedContentEnd;
+    if (this.pcm.endSample < expectedContentEnd) {
+      const shortfall = expectedContentEnd - this.pcm.endSample;
+      const tailToleranceSamples = Math.round(opusSampleRate * 0.25);
+      const isFinalSegment = expectedContentEnd === declaredDurationSamples;
+      if (
+        !this.eof ||
+        !isFinalSegment ||
+        this.pcm.endSample <= contentStart ||
+        shortfall > tailToleranceSamples
+      ) {
+        throw new Error("压缩音频解码提前结束。");
+      }
+      contentEnd = this.pcm.endSample;
     }
 
     const channels = this.pcm.slice(desiredStart, contentEnd);
