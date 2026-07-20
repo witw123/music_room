@@ -10,6 +10,7 @@ import {
   getUserPlaylists,
   songListDetail
 } from "@sansenjian/qq-music-api/services";
+import { fetchProviderUrl } from "../provider-fetch";
 
 export type QqMusicApiErrorKind = "auth-expired" | "unavailable" | "invalid-response";
 export class QqMusicApiError extends Error {
@@ -61,8 +62,58 @@ export class QqMusicApiClient {
       const responseBody = asRecord(body?.response) ?? body;
       const data = asRecord(responseBody?.data) ?? responseBody;
       const list = readSearchResultList(data ?? {}, kind);
-      if (!list) throw new QqMusicApiError("invalid-response");
+      if (!list) {
+        // QQ currently omits the album section for some valid searches. Let
+        // the service recover albums from the song section in that case.
+        if (kind === "album") return [];
+        throw new QqMusicApiError("invalid-response");
+      }
       return list;
+    });
+  }
+  async searchPlaylists(input: { keywords: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const url = new URL("https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist");
+      url.search = new URLSearchParams({
+        remoteplace: "txt.yqq.center",
+        searchid: String(Date.now()),
+        page_no: String(Math.floor(input.offset / input.limit)),
+        num_per_page: String(input.limit),
+        query: input.keywords,
+        format: "json",
+        inCharset: "utf8",
+        outCharset: "utf-8",
+        platform: "yqq"
+      }).toString();
+      const response = await fetchProviderUrl(
+        url,
+        {
+          headers: {
+            Cookie: input.cookie,
+            Host: "c.y.qq.com",
+            Referer: "https://y.qq.com/portal/search.html"
+          }
+        },
+        requestTimeoutMs(),
+        isAllowedHost,
+        { allowSyntheticDns: true }
+      );
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new QqMusicApiError("unavailable");
+      }
+      const body = asRecord(parseJson(await response.text()));
+      if (!body) {
+        throw new QqMusicApiError("invalid-response");
+      }
+      if (Number(body.code) !== 0 || Number(body.subcode) !== 0) {
+        throw new QqMusicApiError("unavailable");
+      }
+      const data = asRecord(body.data);
+      if (!data || !Array.isArray(data.list)) {
+        throw new QqMusicApiError("invalid-response");
+      }
+      return data.list;
     });
   }
   async getAudioUrl(input: { trackId: string; quality: "standard" | "high" | "exhigh"; cookie: string }) {
@@ -199,4 +250,20 @@ function readProviderBody(value: unknown): Record<string, any> {
 function assertProviderStatus(status: unknown) {
   const code = Number(status);
   if (Number.isFinite(code) && code >= 400) throw new QqMusicApiError("unavailable");
+}
+
+function parseJson(value: string) {
+  const text = value.trim();
+  const jsonp = /^\w+\((.*)\)$/s.exec(text);
+  return JSON.parse(jsonp?.[1] ?? text) as unknown;
+}
+
+function requestTimeoutMs() {
+  const value = Number(process.env.QQMUSIC_REQUEST_TIMEOUT_MS ?? 15_000);
+  return Number.isFinite(value) ? Math.max(1_000, Math.floor(value)) : 15_000;
+}
+
+function isAllowedHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  return host === "qq.com" || host.endsWith(".qq.com") || host === "gtimg.cn" || host.endsWith(".gtimg.cn");
 }

@@ -59,7 +59,7 @@ export class QqMusicService {
     this.assertEnabled();
     this.assertRateLimit(`search:${userId}`, 30);
     const cookie = await this.getCookie(userId);
-    const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie, kind: "playlist" }));
+    const records = await this.callProvider(() => this.api.searchPlaylists({ ...query, cookie }));
     return {
       items: records.map((record) => this.toPlaylistSummary(record)).filter((value): value is ProviderPlaylistSummary => !!value),
       limit: query.limit,
@@ -72,8 +72,19 @@ export class QqMusicService {
     this.assertRateLimit(`search:${userId}`, 30);
     const cookie = await this.getCookie(userId);
     const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie, kind: "album" }));
+    const albumItems = records
+      .map((record) => this.toAlbumSummary(record))
+      .filter((value): value is ProviderAlbumSummary => !!value);
+    const fallbackRecords = albumItems.length > 0
+      ? []
+      : await this.callProvider(() => this.api.searchTracks({ ...query, cookie, kind: "song" }));
+    const items = albumItems.length > 0
+      ? dedupeAlbums(albumItems)
+      : dedupeAlbums(fallbackRecords
+        .map((record) => this.toAlbumSummary(record))
+        .filter((value): value is ProviderAlbumSummary => !!value));
     return {
-      items: records.map((record) => this.toAlbumSummary(record)).filter((value): value is ProviderAlbumSummary => !!value),
+      items,
       limit: query.limit,
       offset: query.offset
     };
@@ -223,7 +234,7 @@ export class QqMusicService {
       provider: "qqmusic",
       providerPlaylistId: id,
       title: readString(playlist.dissname ?? playlist.name ?? playlist.title) ?? "未命名歌单",
-      description: readString(playlist.desc ?? playlist.description),
+      description: readString(playlist.desc ?? playlist.description ?? playlist.introduction),
       artworkUrl: readHttpUrl(playlist.logo ?? playlist.coverUrl ?? playlist.picUrl ?? playlist.imgurl ?? playlist.imgUrl),
       creatorName: readString(playlist.nickname ?? playlist.creatorName ?? asRecord(playlist.creator)?.name),
       trackCount: readNumber(playlist.songnum ?? playlist.songNum ?? playlist.song_count ?? playlist.total) ?? (Array.isArray(playlist.songlist) ? playlist.songlist.length : 0)
@@ -330,8 +341,14 @@ function hasPlaylistIdentity(value: Record<string, any>) {
     .some((key) => readString(value[key]) !== null);
 }
 function readNumber(value: unknown) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
+function dedupeAlbums(albums: ProviderAlbumSummary[]) {
+  return [...new Map(albums.map((album) => [album.providerAlbumId, album])).values()];
+}
 function readLyricText(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }
-function readHttpUrl(value: unknown) { const result = readString(value); return result && /^https?:\/\//.test(result) ? result : null; }
+function readHttpUrl(value: unknown) {
+  const result = readString(value);
+  return result && /^https?:\/\//.test(result) ? result.replace(/^http:/i, "https:") : null;
+}
 function unwrapData(value: unknown): Record<string, any> | null {
   const record = asRecord(value);
   if (!record) return null;

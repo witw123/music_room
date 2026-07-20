@@ -368,7 +368,23 @@ export function ProviderSearchPage() {
   }
 
   async function loadAlbumForTrack(track: Track) {
-    if (track.providerAlbumId) await loadAlbumById(track.providerAlbumId, track.provider);
+    let albumId = track.providerAlbumId;
+    if (!albumId) {
+      if (pending) return;
+      setPending(`track:${track.provider}:${track.providerTrackId}`);
+      setErrorMessage(null);
+      try {
+        const detail = track.provider === "netease"
+          ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+          : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+        albumId = detail.providerAlbumId;
+      } catch (error) {
+        setErrorMessage(toProviderErrorMessage(error, track.provider));
+      } finally {
+        setPending(null);
+      }
+    }
+    if (albumId) await loadAlbumById(albumId, track.provider);
   }
 
   if (!hydrated || !activeSession) return <div className="min-h-screen bg-[#111214]" />;
@@ -498,7 +514,6 @@ function SongsResults({
 
 function TrackAlbumLink({ track, pending, onAlbum, className = "" }: { track: Track; pending: string | null; onAlbum: (track: Track) => Promise<void>; className?: string }) {
   if (!track.album) return <span className={`${className} text-white/30`}>未知专辑</span>;
-  if (!track.providerAlbumId) return <span className={className}>{track.album}</span>;
   return <button className={`${className} truncate text-left text-accent/80 transition hover:text-accent`} disabled={pending !== null} onClick={() => void onAlbum(track)} title={`查看专辑 ${track.album}`} type="button">{track.album}</button>;
 }
 

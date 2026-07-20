@@ -1,5 +1,6 @@
 import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getLyric, getQQLoginQr, getSearchByKey, getUserPlaylists, songListDetail } from "@sansenjian/qq-music-api/services";
 import { QqMusicApiClient } from "./qqmusic-api.client";
+import { fetchProviderUrl } from "../provider-fetch";
 
 jest.mock("@sansenjian/qq-music-api/services", () => ({
   checkQQLoginQr: jest.fn(),
@@ -12,6 +13,9 @@ jest.mock("@sansenjian/qq-music-api/services", () => ({
   getAlbumInfo: jest.fn(),
   getAlbumSongs: jest.fn()
 }));
+jest.mock("../provider-fetch", () => ({
+  fetchProviderUrl: jest.fn()
+}));
 
 const mockedGetQQLoginQr = getQQLoginQr as jest.MockedFunction<typeof getQQLoginQr>;
 const mockedCheckQQLoginQr = checkQQLoginQr as jest.MockedFunction<typeof checkQQLoginQr>;
@@ -21,6 +25,7 @@ const mockedGetUserPlaylists = getUserPlaylists as jest.MockedFunction<typeof ge
 const mockedSongListDetail = songListDetail as jest.MockedFunction<typeof songListDetail>;
 const mockedGetAlbumInfo = getAlbumInfo as jest.MockedFunction<typeof getAlbumInfo>;
 const mockedGetAlbumSongs = getAlbumSongs as jest.MockedFunction<typeof getAlbumSongs>;
+const mockedFetchProviderUrl = fetchProviderUrl as jest.MockedFunction<typeof fetchProviderUrl>;
 
 describe("QqMusicApiClient", () => {
   beforeEach(() => {
@@ -147,6 +152,27 @@ describe("QqMusicApiClient", () => {
 
     await expect(new QqMusicApiClient().searchTracks({ keywords: "album", limit: 20, offset: 0, cookie: "secret", kind: "album" }))
       .resolves.toEqual([{ albumMID: "album-mid", albumName: "Album" }]);
+  });
+
+  it("searches QQ playlists through the current songlist endpoint", async () => {
+    mockedFetchProviderUrl.mockResolvedValue(new Response(JSON.stringify({
+      code: 0,
+      subcode: 0,
+      data: { list: [{ dissid: "playlist-id", dissname: "Playlist", imgurl: "https://img.qq.com/cover.jpg" }] }
+    })));
+
+    await expect(new QqMusicApiClient().searchPlaylists({ keywords: "song", limit: 20, offset: 0, cookie: "secret" }))
+      .resolves.toEqual([{ dissid: "playlist-id", dissname: "Playlist", imgurl: "https://img.qq.com/cover.jpg" }]);
+    expect(mockedFetchProviderUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: "c.y.qq.com",
+        pathname: "/soso/fcgi-bin/client_music_search_songlist"
+      }),
+      expect.objectContaining({ headers: expect.objectContaining({ Cookie: "secret" }) }),
+      expect.any(Number),
+      expect.any(Function),
+      { allowSyntheticDns: true }
+    );
   });
 
   it("does not turn QQ upstream playlist errors into an empty playlist", async () => {

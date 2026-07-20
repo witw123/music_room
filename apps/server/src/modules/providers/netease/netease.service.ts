@@ -436,7 +436,10 @@ export class NeteaseService {
       .filter((name): name is string => !!name);
     const albumRecord = asRecord(song?.album);
     const legacyAlbumRecord = asRecord(song?.al);
-    const album = albumRecord ?? legacyAlbumRecord;
+    const albumName = readString(albumRecord?.name) ?? readString(legacyAlbumRecord?.name);
+    const providerAlbumId =
+      readString(albumRecord?.id ?? albumRecord?.albumId) ??
+      readString(legacyAlbumRecord?.id ?? legacyAlbumRecord?.albumId);
     const artworkUrl = readNeteaseArtworkUrl(
       albumRecord?.picUrl,
       legacyAlbumRecord?.picUrl
@@ -448,8 +451,8 @@ export class NeteaseService {
       quality: resolveTrackQuality(song),
       title,
       artist: artistNames.join(" / ") || "未知歌手",
-      album: readString(album?.name),
-      ...(readString(album?.id) ? { providerAlbumId: readString(album?.id)! } : {}),
+      album: albumName,
+      ...(providerAlbumId ? { providerAlbumId } : {}),
       durationMs: readNumber(song?.duration) ?? readNumber(song?.dt) ?? 0,
       artworkUrl
     };

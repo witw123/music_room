@@ -110,6 +110,22 @@ describe("QqMusicService", () => {
     expect(api.getUserPlaylists).toHaveBeenCalledWith({ userId: "123", limit: 30, offset: 0, cookie: "cookie" });
   });
 
+  it("recovers QQ albums from song search results when album search is empty", async () => {
+    process.env.QQMUSIC_ENABLED = "true";
+    const api = {
+      searchTracks: jest.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ albummid: "alb1", albumname: "Album", singername: "Artist" }])
+    };
+    const accounts = { getCookieOrThrow: jest.fn().mockResolvedValue("cookie") };
+    const service = new QqMusicService(api as never, accounts as never, {} as never);
+
+    await expect(service.searchAlbums("user_1", { keywords: "Album", limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerAlbumId: "alb1", title: "Album", artist: "Artist" }]
+    });
+    expect(api.searchTracks.mock.calls.map(([input]) => input.kind)).toEqual(["album", "song"]);
+  });
+
   it("does not replace a missing QQ track with an unrelated search result", async () => {
     process.env.QQMUSIC_ENABLED = "true";
     const api = {
