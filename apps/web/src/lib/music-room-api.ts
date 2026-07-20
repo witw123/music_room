@@ -45,6 +45,27 @@ export type QueueMutationResponse = {
   playback: PlaybackSnapshot;
 };
 
+export const playlistsChangedEventName = "music-room-playlists-changed";
+export const playlistsChangedStorageKey = "music-room-playlists-version";
+
+let playlistsChangeSequence = 0;
+
+function notifyPlaylistsChanged() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new Event(playlistsChangedEventName));
+  try {
+    window.localStorage.setItem(
+      playlistsChangedStorageKey,
+      `${Date.now()}-${++playlistsChangeSequence}`
+    );
+  } catch {
+    // The same-tab event still keeps the current page in sync when storage is unavailable.
+  }
+}
+
 export function extractApiErrorMessage(rawBody: string) {
   const trimmed = rawBody.trim();
   if (!trimmed) {
@@ -429,6 +450,9 @@ export const musicRoomApi = {
     request<Playlist>("/v1/playlists", {
       method: "POST",
       body: JSON.stringify(payload)
+    }).then((playlist) => {
+      notifyPlaylistsChanged();
+      return playlist;
     }),
   updatePlaylist: (
     playlistId: string,
@@ -443,10 +467,16 @@ export const musicRoomApi = {
     request<Playlist>(`/v1/playlists/${playlistId}`, {
       method: "PATCH",
       body: JSON.stringify(payload)
+    }).then((playlist) => {
+      notifyPlaylistsChanged();
+      return playlist;
     }),
   deletePlaylist: (playlistId: string) =>
     request<{ ok: boolean }>(`/v1/playlists/${playlistId}`, {
       method: "DELETE"
+    }).then((result) => {
+      notifyPlaylistsChanged();
+      return result;
     }),
   importPlaylistToRoom: (playlistId: string, payload: { roomId: string }) =>
     request<QueueMutationResponse>(`/v1/playlists/${playlistId}/import-to-room`, {
@@ -461,6 +491,9 @@ export const musicRoomApi = {
     request<Playlist>("/v1/playlists/from-room", {
       method: "POST",
       body: JSON.stringify(payload)
+    }).then((playlist) => {
+      notifyPlaylistsChanged();
+      return playlist;
     })
 };
 

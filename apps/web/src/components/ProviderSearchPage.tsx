@@ -25,6 +25,7 @@ import {
 import { formatDuration } from "@/lib/music-room-ui";
 import {
   listLocalPlaylists,
+  mergeLocalPlaylists,
   restoreLocalPlaylistsFromRepository,
   localPlaylistTrackId,
   toProviderTrackRecord,
@@ -217,8 +218,12 @@ export function ProviderSearchPage() {
     setPending(`playlist-picker:${track.providerTrackId}`);
     try {
       const networkPlaylists = await musicRoomApi.listMyPlaylists();
+      const databaseLocalPlaylists = networkPlaylists.filter(isLocalPlaylistMirror);
+      const availableLocalPlaylists = mergeLocalPlaylists(
+        mergeLocalPlaylistsWithDatabase(listLocalPlaylists(), databaseLocalPlaylists)
+      );
       setPlaylistPickerOptions([
-        ...listLocalPlaylists().map((item) => ({ kind: "local" as const, playlist: item })),
+        ...availableLocalPlaylists.map((item) => ({ kind: "local" as const, playlist: item })),
         ...networkPlaylists
           .filter((item) => !isLocalPlaylistMirror(item))
           .map((item) => ({ kind: "network" as const, playlist: item }))
@@ -604,6 +609,28 @@ function AlbumsContent({
 
 function albumKey(provider: Provider, providerAlbumId: string) {
   return `${provider}:${providerAlbumId}`;
+}
+
+function mergeLocalPlaylistsWithDatabase(
+  localPlaylists: LocalPlaylistRecord[],
+  databasePlaylists: Playlist[]
+) {
+  const merged = new Map(localPlaylists.map((playlist) => [playlist.id, playlist]));
+  for (const databasePlaylist of databasePlaylists) {
+    const localId = localPlaylistIdFromMirror(databasePlaylist);
+    if (!localId || merged.has(localId)) continue;
+    merged.set(localId, {
+      id: localId,
+      title: databasePlaylist.title,
+      description: databasePlaylist.description,
+      trackIds: databasePlaylist.trackIds,
+      sourceDirectoryId: null,
+      sourceDirectoryName: null,
+      createdAt: databasePlaylist.createdAt,
+      updatedAt: databasePlaylist.updatedAt
+    });
+  }
+  return [...merged.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 function PlaylistPickerDialog({ anchor, loading, options, pending, track, onClose, onSelect }: { anchor: AnchoredDialogAnchor; loading: boolean; options: PlaylistPickerOption[]; pending: boolean; track: Track; onClose: () => void; onSelect: (option: PlaylistPickerOption) => void }) {

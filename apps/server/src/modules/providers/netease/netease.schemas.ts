@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+const neteaseApiAlbumSchema = z
+  .object({
+    id: z.union([z.string(), z.number().int()]).optional().nullable(),
+    albumId: z.union([z.string(), z.number().int()]).optional().nullable(),
+    name: z.string().optional(),
+    picUrl: z.string().optional().nullable()
+  })
+  .strip();
+
 const neteaseApiSongSchema = z
   .object({
     id: z.union([z.string(), z.number().int()]),
@@ -13,16 +22,8 @@ const neteaseApiSongSchema = z
     ar: z
       .array(z.object({ name: z.string().optional() }).strip())
       .optional(),
-    album: z
-      .object({ name: z.string().optional(), picUrl: z.string().optional().nullable() })
-      .strip()
-      .optional()
-      .nullable(),
-    al: z
-      .object({ name: z.string().optional(), picUrl: z.string().optional().nullable() })
-      .strip()
-      .optional()
-      .nullable(),
+    album: neteaseApiAlbumSchema.optional().nullable(),
+    al: neteaseApiAlbumSchema.optional().nullable(),
     h: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
     m: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
     l: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),

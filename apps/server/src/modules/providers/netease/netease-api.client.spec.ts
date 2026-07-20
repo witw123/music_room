@@ -193,6 +193,22 @@ describe("NeteaseApiClient", () => {
     ).rejects.toMatchObject({ kind: "invalid-response" });
   });
 
+  it("preserves the album id from NetEase song search results", async () => {
+    mockedSearch.mockResolvedValue({
+      status: 200,
+      body: {
+        code: 200,
+        result: {
+          songs: [{ id: 7, name: "Song", al: { id: 22, name: "Album", picUrl: null } }]
+        }
+      },
+      cookie: []
+    } as never);
+
+    await expect(new NeteaseApiClient().searchTracks({ keywords: "song", limit: 20, offset: 0, cookie: "secret" }))
+      .resolves.toMatchObject({ result: { songs: [{ al: { id: 22 } }] } });
+  });
+
   it("validates login profile, song detail, and audio URL shapes", async () => {
     mockedLoginStatus.mockResolvedValue({
       status: 200,

@@ -2,6 +2,8 @@
 
 import {
   useCallback,
+  useEffect,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -13,7 +15,11 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import type { Route } from "next";
-import { musicRoomApi } from "@/lib/music-room-api";
+import {
+  musicRoomApi,
+  playlistsChangedEventName,
+  playlistsChangedStorageKey
+} from "@/lib/music-room-api";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -93,6 +99,7 @@ export function useRoomPageRoomActions({
     setPeerId(nextPeerId);
   }, [peerStorageKey, setPeerId]);
   const getCurrentPeerId = useCallback(() => peerId || null, [peerId]);
+  const playlistRefreshVersionRef = useRef(0);
 
   const refreshAvailableRooms = useCallback(async () => {
     try {
@@ -104,13 +111,45 @@ export function useRoomPageRoomActions({
   }, [setAvailableRooms]);
 
   const refreshPlaylists = useCallback(async () => {
+    const version = ++playlistRefreshVersionRef.current;
     try {
       const nextPlaylists = await musicRoomApi.listMyPlaylists();
-      setPlaylists(nextPlaylists);
+      if (version === playlistRefreshVersionRef.current) {
+        setPlaylists(nextPlaylists);
+      }
     } catch {
-      setPlaylists([]);
+      // Keep the last successful list when a background refresh is temporarily unavailable.
     }
   }, [setPlaylists]);
+
+  useEffect(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    const refreshFromExternalChange = () => {
+      void refreshPlaylists();
+    };
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === playlistsChangedStorageKey) {
+        refreshFromExternalChange();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshFromExternalChange();
+      }
+    };
+
+    window.addEventListener(playlistsChangedEventName, refreshFromExternalChange);
+    window.addEventListener("storage", handleStorageChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener(playlistsChangedEventName, refreshFromExternalChange);
+      window.removeEventListener("storage", handleStorageChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activeSession, refreshPlaylists]);
 
   const handleTrackDeleted = useCallback(
     async (trackId: string) => {
