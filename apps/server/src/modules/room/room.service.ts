@@ -246,6 +246,34 @@ export class RoomService {
     return record.room;
   }
 
+  async updateRoom(
+    roomId: string,
+    sessionId: string,
+    input: {
+      visibility: Room["visibility"];
+      name: string;
+      description?: string | null;
+      password?: string;
+    }
+  ) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    if (record.room.hostId !== sessionId) {
+      throw new Error("Only the host can update this room.");
+    }
+
+    const password = input.password?.trim();
+    record.room.visibility = input.visibility;
+    record.room.name = input.name.trim();
+    record.room.description = input.description?.trim() || null;
+    if (input.password !== undefined) {
+      record.passwordHash = password ? hashRoomPassword(password) : null;
+      record.room.hasPassword = Boolean(password);
+    }
+    this.incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.room;
+  }
+
   async deleteRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     await this.assertCanDeleteRoomRecord(record, sessionId);

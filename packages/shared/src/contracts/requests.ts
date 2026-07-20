@@ -46,6 +46,20 @@ export const createRoomRequestSchema = z
   })
   .strict();
 
+export const updateRoomRequestSchema = z
+  .object({
+    visibility: z.enum(["private", "public"]),
+    name: trimmedString(120),
+    description: optionalNullableText(500),
+    password: z
+      .string()
+      .trim()
+      .max(128)
+      .refine((value) => value.length === 0 || value.length >= 4, "密码至少 4 位。")
+      .optional()
+  })
+  .strict();
+
 export const joinRoomByCodeRequestSchema = z
   .object({
     joinCode: trimmedString(16).transform((value) => value.toUpperCase()),
@@ -176,6 +190,7 @@ export const createPlaylistFromRoomRequestSchema = z
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>;
+export type UpdateRoomRequest = z.infer<typeof updateRoomRequestSchema>;
 export type JoinRoomByCodeRequest = z.infer<typeof joinRoomByCodeRequestSchema>;
 export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;

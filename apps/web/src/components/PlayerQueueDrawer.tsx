@@ -15,6 +15,8 @@ type PlayerQueueDrawerProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  accentColor?: string;
+  accentSoft?: string;
 };
 
 export function PlayerQueueDrawer({
@@ -26,7 +28,9 @@ export function PlayerQueueDrawer({
   canRemoveQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
-  onReorderQueue
+  onReorderQueue,
+  accentColor = "rgb(0 148 255)",
+  accentSoft = "rgba(0, 148, 255, 0.16)"
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
@@ -70,14 +74,18 @@ export function PlayerQueueDrawer({
         variant="ghost"
         size="icon"
         data-testid="player-queue-button"
-        className={`relative h-8 w-8 sm:h-10 sm:w-10 ${isOpen ? 'bg-accent/20 text-accent' : 'text-foreground-muted hover:text-foreground'}`}
+        className="relative h-8 w-8 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"
+        style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
         title="播放队列"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
         {queue.length > 0 && (
-          <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+          <span
+            className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500"
+            style={{ backgroundColor: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
+          >
             {queue.length}
           </span>
         )}

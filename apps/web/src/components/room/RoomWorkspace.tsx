@@ -10,7 +10,8 @@ import type {
   RoomMediaConnectionState,
   RoomSnapshot,
   QqMusicTrackCandidate,
-  TrackMeta
+  TrackMeta,
+  UpdateRoomRequest
 } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
@@ -44,6 +45,7 @@ type RoomWorkspaceProps = {
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
+  onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
@@ -101,6 +103,7 @@ function RoomWorkspaceBase({
   onImportQqMusicTrack,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
+  onUpdateRoom,
   onDeletePlaylist,
   connectedPeersCount,
   mediaConnectionState,
@@ -201,6 +204,7 @@ function RoomWorkspaceBase({
               onImportQqMusicTrack={onImportQqMusicTrack}
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
+              onUpdateRoom={onUpdateRoom}
               onDeletePlaylist={onDeletePlaylist}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}

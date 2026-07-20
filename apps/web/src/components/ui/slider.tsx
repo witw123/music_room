@@ -5,10 +5,11 @@ export interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputEle
   max: number
   min?: number
   containerStyle?: React.CSSProperties
+  accentColor?: string
 }
 
 export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
-  ({ className = "", containerStyle, value, max, min = 0, ...props }, ref) => {
+  ({ className = "", containerStyle, value, max, min = 0, accentColor = "rgb(0 112 243)", ...props }, ref) => {
     const percentage = max > min ? ((value - min) / (max - min)) * 100 : 0
     
     return (
@@ -16,9 +17,13 @@ export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
         {/* Track background */}
         <div className="absolute inset-x-0 h-1.5 bg-white/10 rounded-full overflow-hidden">
           {/* Fill indicator */}
-          <div 
-            className="h-full bg-accent group-hover:bg-accent-hover transition-colors rounded-full"
-            style={{ width: `${percentage}%` }}
+          <div
+            className="h-full rounded-full transition-[width,background-color,box-shadow]"
+            style={{
+              width: `${percentage}%`,
+              backgroundColor: accentColor,
+              boxShadow: `0 0 8px ${accentColor}`
+            }}
           />
         </div>
         {/* Thumb */}

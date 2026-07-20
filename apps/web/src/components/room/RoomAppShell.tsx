@@ -106,6 +106,7 @@ export function RoomAppShell({
            onImportQqMusicTrack={uploads.handleQqMusicTrackImport}
            onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
           onUpdatePlaylistTracks={roomActions.updatePlaylistTracks}
+          onUpdateRoom={roomActions.updateRoom}
           onDeletePlaylist={roomActions.deletePlaylist}
           connectedPeersCount={workspaceViewModel.connectedPeersCount}
           mediaConnectionState={pageState.mediaConnectionState}

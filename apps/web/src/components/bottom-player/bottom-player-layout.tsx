@@ -137,11 +137,15 @@ const playbackModeLabels: Record<PlaybackMode, string> = {
 export function PlaybackModeButton({
   mode,
   onCycle,
-  disabled = false
+  disabled = false,
+  accentColor = "rgb(0 148 255)",
+  accentSoft = "rgba(0, 148, 255, 0.16)"
 }: {
   mode: PlaybackMode;
   onCycle: () => void;
   disabled?: boolean;
+  accentColor?: string;
+  accentSoft?: string;
 }) {
   const label = playbackModeLabels[mode];
   const nextMode = getNextPlaybackMode(mode);
@@ -156,6 +160,7 @@ export function PlaybackModeButton({
       title={`当前：${label}，点击切换`}
       onClick={onCycle}
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ color: accentColor, ...(disabled ? {} : { backgroundColor: accentSoft }) }}
     >
       <PlaybackModeIcon mode={mode} />
       <span className="sr-only">{label}</span>
@@ -185,8 +190,8 @@ export function LyricsToggleButton({
       title={isOpen ? "关闭歌词" : "打开歌词"}
       onClick={onToggle}
       disabled={disabled}
-      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${isOpen ? "bg-accent/15 text-accent" : "text-zinc-200"}`}
-      style={isOpen ? { color: accentColor, backgroundColor: accentSoft } : undefined}
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
     >
       词
     </button>
@@ -216,11 +221,13 @@ function VolumeIcon({ volume }: { volume: number }) {
 function VolumeControl({
   volume,
   onChange,
-  accentColor = "rgb(0 148 255)"
+  accentColor = "rgb(0 148 255)",
+  accentSoft = "rgba(0, 148, 255, 0.16)"
 }: {
   volume: number;
   onChange: (value: number) => void;
   accentColor?: string;
+  accentSoft?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -293,6 +300,7 @@ function VolumeControl({
         title={`音量 ${percentage}%`}
         onClick={() => setIsOpen((current) => !current)}
         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+        style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
       >
         <VolumeIcon volume={volume} />
       </button>
@@ -367,6 +375,8 @@ export function MobileBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
+            accentColor={artworkAccent}
+            accentSoft={artworkAccentSoft}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
@@ -382,6 +392,7 @@ export function MobileBottomPlayerLayout({
               data-testid="player-seek-slider"
               value={boundedProgressMs}
               max={currentTrackDuration || 1}
+              accentColor={artworkAccent}
               disabled={!currentTrackDuration || !canSeekPlayback}
               onChange={(event) => setSeekDraft(Number(event.target.value))}
               onPointerUp={commitSeek}
@@ -400,6 +411,8 @@ export function MobileBottomPlayerLayout({
               mode={playbackMode}
               onCycle={onCyclePlaybackMode}
               disabled={!canControlPlayback}
+              accentColor={artworkAccent}
+              accentSoft={artworkAccentSoft}
             />
           </div>
 
@@ -412,6 +425,7 @@ export function MobileBottomPlayerLayout({
               onClick={onPrev}
               title="上一首"
               className="h-8 w-8 shrink-0 sm:h-9 sm:w-9"
+              style={{ color: artworkAccent }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -425,6 +439,7 @@ export function MobileBottomPlayerLayout({
                   ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
                   : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
               }`}
+              style={canControlPlayback ? { backgroundColor: artworkAccent, color: "#fff", boxShadow: `0 0 18px ${artworkAccentSoft}` } : undefined}
               disabled={!canControlPlayback}
               onClick={onTogglePlay}
               title={isPlaying ? "暂停" : "播放"}
@@ -449,6 +464,7 @@ export function MobileBottomPlayerLayout({
               onClick={onNext}
               title="下一首"
               className="h-8 w-8 shrink-0 sm:h-9 sm:w-9"
+              style={{ color: artworkAccent }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
@@ -456,8 +472,8 @@ export function MobileBottomPlayerLayout({
             </Button>
           </div>
 
-          <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} />
-          <ImmersiveToggleButton accentColor={artworkAccent} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+          <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
+          <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
         </div>
       </div>
     </div>
@@ -527,6 +543,8 @@ export function DesktopBottomPlayerLayout({
           mode={playbackMode}
           onCycle={onCyclePlaybackMode}
           disabled={!canControlPlayback}
+          accentColor={artworkAccent}
+          accentSoft={artworkAccentSoft}
         />
         <Button
           data-testid="player-prev-button"
@@ -535,6 +553,7 @@ export function DesktopBottomPlayerLayout({
           disabled={!canControlPlayback || !playbackTrackId}
           onClick={onPrev}
           title="上一首"
+          style={{ color: artworkAccent }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -548,6 +567,7 @@ export function DesktopBottomPlayerLayout({
               ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
               : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
           }`}
+          style={canControlPlayback ? { backgroundColor: artworkAccent, color: "#fff", boxShadow: `0 0 18px ${artworkAccentSoft}` } : undefined}
           disabled={!canControlPlayback}
           onClick={onTogglePlay}
           title={isPlaying ? "暂停" : "播放"}
@@ -571,6 +591,7 @@ export function DesktopBottomPlayerLayout({
           disabled={!canControlPlayback || !playbackTrackId}
           onClick={onNext}
           title="下一首"
+          style={{ color: artworkAccent }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
@@ -584,6 +605,8 @@ export function DesktopBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
+            accentColor={artworkAccent}
+            accentSoft={artworkAccentSoft}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
@@ -599,6 +622,7 @@ export function DesktopBottomPlayerLayout({
               data-testid="player-seek-slider"
               value={boundedProgressMs}
               max={currentTrackDuration || 1}
+              accentColor={artworkAccent}
               disabled={!currentTrackDuration || !canSeekPlayback}
               onChange={(event) => setSeekDraft(Number(event.target.value))}
               onPointerUp={commitSeek}
@@ -610,22 +634,22 @@ export function DesktopBottomPlayerLayout({
           </span>
         </div>
 
-        <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} />
-        <ImmersiveToggleButton accentColor={artworkAccent} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+        <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
+        <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
       </div>
     </div>
   );
 }
 
-function ImmersiveToggleButton({ isOpen, onToggle, accentColor }: { isOpen: boolean; onToggle: () => void; accentColor?: string }) {
+function ImmersiveToggleButton({ isOpen, onToggle, accentColor, accentSoft }: { isOpen: boolean; onToggle: () => void; accentColor?: string; accentSoft?: string }) {
   return (
     <button
       type="button"
       aria-label={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       title={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       onClick={onToggle}
-      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10 ${isOpen ? "text-accent" : "text-foreground-muted"}`}
-      style={isOpen && accentColor ? { color: accentColor } : undefined}
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+      style={accentColor ? { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) } : undefined}
     >
       {isOpen ? (
         <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M9 15H4v5" /><path d="m4 20 6-6" /><path d="M15 9h5V4" /><path d="m20 4-6 6" /></svg>

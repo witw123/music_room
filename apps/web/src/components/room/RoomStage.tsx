@@ -1,9 +1,11 @@
-import { memo, useEffect, useState, type CSSProperties } from "react";
+import { memo, useEffect, useState, type CSSProperties, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import type {
   RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
-  TrackMeta
+  TrackMeta,
+  UpdateRoomRequest
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
@@ -32,6 +34,7 @@ type RoomStageProps = {
   onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
+  onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
   socket: RoomSocket | null;
@@ -75,9 +78,18 @@ function RoomStageBase({
   onAwayRoom,
   onLeaveRoom,
   onDeleteRoom,
+  onUpdateRoom,
   isLyricsOpen
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
+  const [showEditRoom, setShowEditRoom] = useState(false);
+  const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
+  const [editRoomForm, setEditRoomForm] = useState<UpdateRoomRequest>({
+    visibility: roomSnapshot.room.visibility,
+    name: roomSnapshot.room.name ?? "",
+    description: roomSnapshot.room.description ?? "",
+    password: ""
+  });
   const [isCopying, setIsCopying] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
@@ -125,6 +137,34 @@ function RoomStageBase({
       setShowDeleteConfirmation(false);
     } finally {
       setIsDeletingRoom(false);
+    }
+  };
+
+  const openEditRoom = () => {
+    setEditRoomForm({
+      visibility: roomSnapshot.room.visibility,
+      name: roomSnapshot.room.name ?? "",
+      description: roomSnapshot.room.description ?? "",
+      password: ""
+    });
+    setShowSettings(false);
+    setShowEditRoom(true);
+  };
+
+  const handleUpdateRoom = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isUpdatingRoom || !editRoomForm.name.trim()) return;
+    setIsUpdatingRoom(true);
+    try {
+      const updated = await onUpdateRoom({
+        visibility: editRoomForm.visibility,
+        name: editRoomForm.name.trim(),
+        description: editRoomForm.description?.trim() || null,
+        password: editRoomForm.password?.trim() ?? ""
+      });
+      if (updated) setShowEditRoom(false);
+    } finally {
+      setIsUpdatingRoom(false);
     }
   };
 
@@ -312,6 +352,16 @@ function RoomStageBase({
 
           {showSettings ? (
             <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
+              {canDeleteRoom ? (
+                <button
+                  data-testid="edit-room-button"
+                  className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  onClick={openEditRoom}
+                  type="button"
+                >
+                  编辑房间
+                </button>
+              ) : null}
               <button
                 data-testid="away-room-button"
                 className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-200 transition-colors hover:bg-amber-300/10 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/40"
@@ -485,8 +535,89 @@ function RoomStageBase({
         pending={isDeletingRoom}
         title="确认解散房间？"
       />
+      <RoomEditDialog
+        form={editRoomForm}
+        onChange={setEditRoomForm}
+        onClose={() => {
+          if (!isUpdatingRoom) setShowEditRoom(false);
+        }}
+        onSubmit={handleUpdateRoom}
+        open={showEditRoom}
+        pending={isUpdatingRoom}
+      />
     </section>
   );
 }
 
 export const RoomStage = memo(RoomStageBase);
+
+function RoomEditDialog({
+  form,
+  onChange,
+  onClose,
+  onSubmit,
+  open,
+  pending
+}: {
+  form: UpdateRoomRequest;
+  onChange: Dispatch<SetStateAction<UpdateRoomRequest>>;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  open: boolean;
+  pending: boolean;
+}) {
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={() => !pending && onClose()} role="presentation">
+      <div
+        aria-labelledby="edit-room-dialog-title"
+        aria-modal="true"
+        className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground" id="edit-room-dialog-title">编辑房间</h2>
+            <p className="mt-1.5 text-sm leading-6 text-foreground-muted">修改房间信息后立即同步给当前成员。</p>
+          </div>
+          <button aria-label="关闭" className="rounded-lg px-2 py-1 text-xl leading-none text-foreground-muted hover:bg-white/10 hover:text-foreground" disabled={pending} onClick={onClose} type="button">×</button>
+        </div>
+        <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+          <div className="flex gap-2 rounded-xl border border-white/10 bg-black/20 p-1" role="tablist" aria-label="房间可见性">
+            {(["public", "private"] as const).map((visibility) => (
+              <button
+                aria-selected={form.visibility === visibility}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${form.visibility === visibility ? "bg-accent text-white" : "text-foreground-muted hover:bg-white/10"}`}
+                key={visibility}
+                onClick={() => onChange((current) => ({ ...current, visibility }))}
+                role="tab"
+                type="button"
+              >
+                {visibility === "public" ? "公开房间" : "私密房间"}
+              </button>
+            ))}
+          </div>
+          <label className="flex flex-col gap-2 text-sm text-foreground">
+            房间名称
+            <input autoFocus className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent" maxLength={120} onChange={(event) => onChange((current) => ({ ...current, name: event.target.value }))} required value={form.name} />
+          </label>
+          <label className="flex flex-col gap-2 text-sm text-foreground">
+            房间简介 <span className="text-xs text-foreground-muted">可选</span>
+            <textarea className="min-h-20 resize-y rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent" maxLength={500} onChange={(event) => onChange((current) => ({ ...current, description: event.target.value }))} value={form.description ?? ""} />
+          </label>
+          <label className="flex flex-col gap-2 text-sm text-foreground">
+            房间密码 <span className="text-xs text-foreground-muted">留空表示移除密码，至少 4 位</span>
+            <input className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent" maxLength={128} minLength={4} onChange={(event) => onChange((current) => ({ ...current, password: event.target.value }))} placeholder="留空表示无需密码" type="password" value={form.password ?? ""} />
+          </label>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button disabled={pending} onClick={onClose} type="button" variant="ghost">取消</Button>
+            <Button disabled={pending || !form.name.trim() || (!!form.password?.trim() && form.password.trim().length < 4)} type="submit">{pending ? "保存中…" : "保存修改"}</Button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}

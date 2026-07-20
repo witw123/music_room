@@ -53,7 +53,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
 
   return (
     <LocalPlayerProvider>
-      <div className="min-h-screen bg-black">
+      <div className="h-screen min-h-screen overflow-hidden bg-black">
         <AppSidebar
           activeSession={activeSession}
           hasBottomPlayer={Boolean(awayRoomId)}

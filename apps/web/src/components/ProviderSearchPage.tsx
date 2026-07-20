@@ -18,19 +18,12 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import {
-  isLocalPlaylistMirror,
-  localPlaylistIdFromMirror,
-  syncLocalPlaylistToDatabase
+  isLocalPlaylistMirror
 } from "@/lib/local-playlist-database";
 import { formatDuration } from "@/lib/music-room-ui";
 import {
-  listLocalPlaylists,
-  mergeLocalPlaylists,
-  restoreLocalPlaylistsFromRepository,
   localPlaylistTrackId,
-  toProviderTrackRecord,
-  updateLocalPlaylist,
-  type LocalPlaylistRecord
+  toProviderTrackRecord
 } from "@/features/playlist/local-playlist";
 import {
   upsertLocalPlaylistTrack
@@ -44,9 +37,7 @@ type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
-type PlaylistPickerOption =
-  | { kind: "local"; playlist: LocalPlaylistRecord; databasePlaylist?: Playlist }
-  | { kind: "network"; playlist: Playlist };
+type PlaylistPickerOption = { kind: "network"; playlist: Playlist };
 
 const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
@@ -198,36 +189,21 @@ export function ProviderSearchPage() {
 
   async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
     if (pending) return;
-    await restoreLocalPlaylistsFromRepository();
     setPlaylistPickerTrack(track);
     setPlaylistPickerAnchor(anchor);
     setPlaylistPickerLoading(true);
-    setPlaylistPickerOptions(listLocalPlaylists().map((item) => ({ kind: "local", playlist: item })));
+    setPlaylistPickerOptions([]);
     setErrorMessage(null);
     setPending(`playlist-picker:${track.providerTrackId}`);
     try {
       const networkPlaylists = await musicRoomApi.listMyPlaylists();
-      const databaseLocalPlaylists = networkPlaylists.filter(isLocalPlaylistMirror);
-      const databaseLocalById = new Map<string, Playlist>();
-      for (const databasePlaylist of databaseLocalPlaylists) {
-        const localId = localPlaylistIdFromMirror(databasePlaylist);
-        if (localId) databaseLocalById.set(localId, databasePlaylist);
-      }
-      const availableLocalPlaylists = mergeLocalPlaylists(
-        mergeLocalPlaylistsWithDatabase(listLocalPlaylists(), databaseLocalPlaylists)
-      );
-      setPlaylistPickerOptions([
-        ...availableLocalPlaylists.map((item) => ({
-          kind: "local" as const,
-          playlist: item,
-          databasePlaylist: databaseLocalById.get(item.id)
-        })),
-        ...networkPlaylists
+      setPlaylistPickerOptions(
+        networkPlaylists
           .filter((item) => !isLocalPlaylistMirror(item))
           .map((item) => ({ kind: "network" as const, playlist: item }))
-      ]);
+      );
     } catch (error) {
-      setErrorMessage(error instanceof Error ? `网络歌单加载失败：${error.message}` : "网络歌单加载失败，可先选择本地歌单。");
+      setErrorMessage(error instanceof Error ? `歌单加载失败：${error.message}` : "歌单加载失败，请稍后重试。");
     } finally {
       setPlaylistPickerLoading(false);
       setPending(null);
@@ -242,33 +218,16 @@ export function ProviderSearchPage() {
     try {
       const resolvedTrack = await resolveTrackArtwork(track);
       const trackId = localPlaylistTrackId(resolvedTrack);
-      if (option.kind === "local") {
+      try {
         await upsertLocalPlaylistTrack(toProviderTrackRecord(resolvedTrack));
-        const currentPlaylist = listLocalPlaylists().find((item) => item.id === option.playlist.id);
-        if (!currentPlaylist) throw new Error("本地歌单不存在，请刷新后重试。");
-        if (!currentPlaylist.trackIds.includes(trackId)) {
-          const updatedPlaylist = updateLocalPlaylist(currentPlaylist.id, { trackIds: [...currentPlaylist.trackIds, trackId] });
-          if (!updatedPlaylist) throw new Error("本地歌单更新失败，请重试。");
-          let databasePlaylist = option.databasePlaylist;
-          if (!databasePlaylist) {
-            const databasePlaylists = await musicRoomApi.listMyPlaylists();
-            databasePlaylist = databasePlaylists.find((item) => localPlaylistIdFromMirror(item) === updatedPlaylist.id);
-          }
-          await syncLocalPlaylistToDatabase(updatedPlaylist, databasePlaylist?.id, databasePlaylist);
-        }
-        setStatusMessage(`《${resolvedTrack.title}》已加入“${currentPlaylist.title}”。`);
+      } catch {
+        // The network playlist remains authoritative when local metadata storage is unavailable.
+      }
+      if (option.playlist.trackIds.includes(trackId)) {
+        setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
       } else {
-        try {
-          await upsertLocalPlaylistTrack(toProviderTrackRecord(resolvedTrack));
-        } catch {
-          // The network playlist remains authoritative when local metadata storage is unavailable.
-        }
-        if (option.playlist.trackIds.includes(trackId)) {
-          setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
-        } else {
-          await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
-          setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
-        }
+        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
+        setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
       }
       setPlaylistPickerTrack(null);
       setPlaylistPickerAnchor(null);
@@ -611,37 +570,12 @@ function albumKey(provider: Provider, providerAlbumId: string) {
   return `${provider}:${providerAlbumId}`;
 }
 
-function mergeLocalPlaylistsWithDatabase(
-  localPlaylists: LocalPlaylistRecord[],
-  databasePlaylists: Playlist[]
-) {
-  const merged = new Map(localPlaylists.map((playlist) => [playlist.id, playlist]));
-  for (const databasePlaylist of databasePlaylists) {
-    const localId = localPlaylistIdFromMirror(databasePlaylist);
-    if (!localId || merged.has(localId)) continue;
-    merged.set(localId, {
-      id: localId,
-      title: databasePlaylist.title,
-      description: databasePlaylist.description,
-      trackIds: databasePlaylist.trackIds,
-      sourceDirectoryId: null,
-      sourceDirectoryName: null,
-      createdAt: databasePlaylist.createdAt,
-      updatedAt: databasePlaylist.updatedAt
-    });
-  }
-  return [...merged.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
 function PlaylistPickerDialog({ anchor, loading, options, pending, track, onClose, onSelect }: { anchor: AnchoredDialogAnchor; loading: boolean; options: PlaylistPickerOption[]; pending: boolean; track: Track; onClose: () => void; onSelect: (option: PlaylistPickerOption) => void }) {
-  const localOptions = options.filter((option) => option.kind === "local");
-  const networkOptions = options.filter((option) => option.kind === "network");
   return <AnchoredDialog anchor={anchor} ariaLabelledBy="playlist-picker-title" className="max-w-md" onClose={onClose}>
     <div className="flex items-start justify-between gap-4"><div className="min-w-0"><h2 className="text-lg font-semibold text-foreground" id="playlist-picker-title">选择目标歌单</h2><p className="mt-1 truncate text-xs text-foreground-muted">《{track.title}》 · {track.artist}</p></div><Button aria-label="关闭" disabled={pending} onClick={onClose} size="icon" type="button" variant="ghost"><Icon name="close" /></Button></div>
     {loading ? <p className="mt-6 text-center text-sm text-foreground-muted">正在加载可用歌单…</p> : null}
     {!loading && options.length === 0 ? <div className="mt-6 text-center"><p className="text-sm text-foreground-muted">还没有可添加的歌单。</p><Link className="mt-3 inline-block text-sm text-accent hover:text-accent/80" href="/app/playlists">前往歌单页创建</Link></div> : null}
-    {localOptions.length ? <PlaylistPickerSection label="本地歌单" options={localOptions} pending={pending} onSelect={onSelect} /> : null}
-    {networkOptions.length ? <PlaylistPickerSection label="网络歌单" options={networkOptions} pending={pending} onSelect={onSelect} /> : null}
+    {options.length ? <PlaylistPickerSection label="歌单" options={options} pending={pending} onSelect={onSelect} /> : null}
   </AnchoredDialog>;
 }
 

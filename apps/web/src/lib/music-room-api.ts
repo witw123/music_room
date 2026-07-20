@@ -27,7 +27,8 @@ import {
   type Playlist,
   type QueueItem,
   type RoomSnapshot,
-  type TrackMeta
+  type TrackMeta,
+  type UpdateRoomRequest
 } from "@music-room/shared";
 
 export class MusicRoomApiError extends Error {
@@ -248,6 +249,11 @@ export const musicRoomApi = {
     }),
   getRoom: (roomId: string) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}`),
+  updateRoom: (roomId: string, input: UpdateRoomRequest) =>
+    request<RoomSnapshot>(`/v1/rooms/${roomId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   leaveRoom: (roomId: string) =>
     request(`/v1/rooms/${roomId}/leave`, {
       method: "POST"

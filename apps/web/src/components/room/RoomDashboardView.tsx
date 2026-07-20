@@ -12,7 +12,8 @@ import type {
   RoomMember,
   RoomSnapshot,
   QqMusicTrackCandidate,
-  TrackMeta
+  TrackMeta,
+  UpdateRoomRequest
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import type { LocalMemberPanelState } from "./MembersPanel";
@@ -48,6 +49,7 @@ type RoomDashboardViewProps = {
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
+  onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
@@ -138,6 +140,7 @@ function RoomDashboardViewBase({
   onImportQqMusicTrack,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
+  onUpdateRoom,
   onDeletePlaylist,
   connectedPeersCount: _connectedPeersCount,
   mediaConnectionState,
@@ -215,6 +218,7 @@ function RoomDashboardViewBase({
             mediaConnectionState={mediaConnectionState}
             mediaConnectedPeersCount={mediaConnectedPeersCount}
             iceConfigSource={iceConfigSource}
+            onUpdateRoom={onUpdateRoom}
             onCopyJoinCode={onCopyJoinCode}
             onAwayRoom={onAwayRoom}
             onLeaveRoom={onLeaveRoom}

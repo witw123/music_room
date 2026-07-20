@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -70,6 +71,18 @@ export function ProviderAccountsPage() {
           ) : null}
         </section>
         <LocalStorageManagementCard />
+        <section className="mt-8 flex flex-col gap-4 border-b border-surface-border pb-5 sm:flex-row sm:items-center sm:justify-between" data-testid="local-playlists-entry">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">本地歌单</h2>
+            <p className="mt-1 text-xs text-foreground-muted">按本地目录管理歌曲，歌单内容只读取你的本地文件。</p>
+          </div>
+          <Link className="shrink-0" href="/app/profile/playlists">
+            <Button size="sm" type="button" variant="outline">
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" /></svg>
+              管理本地歌单
+            </Button>
+          </Link>
+        </section>
       </div>
     </main>
   );

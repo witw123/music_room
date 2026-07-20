@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Headers,
+  Patch,
   Param,
   Post,
   UnauthorizedException
@@ -14,6 +15,8 @@ import {
   createRoomRequestSchema,
   joinRoomByCodeRequestSchema,
   registerTrackRequestSchema,
+  updateRoomRequestSchema,
+  type Playlist,
   type RegisterTrackRequest
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
@@ -130,6 +133,30 @@ export class RoomController {
       await this.roomService.joinRoom(roomId, userId);
     }
     return this.roomRealtimePublisher.emitTopologySnapshot(roomId);
+  }
+
+  @Patch(":roomId")
+  async updateRoom(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body()
+    body: {
+      visibility: "private" | "public";
+      name: string;
+      description?: string | null;
+      password?: string;
+    }
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(updateRoomRequestSchema, body);
+    await this.roomService.updateRoom(roomId, userId, payload);
+    let playlists: Playlist[] = [];
+    try {
+      playlists = await this.playlistService.listPlaylistsForRoom(roomId);
+    } catch {
+      // Room metadata updates do not depend on optional playlist storage.
+    }
+    return this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
   }
 
   @Post(":roomId/leave")

@@ -62,9 +62,15 @@ type TrackMoveRequest = {
   anchor: AnchoredDialogAnchor;
 };
 
-export function PlaylistsWorkspacePage() {
+export function PlaylistsWorkspacePage({
+  playlistView = "network"
+}: {
+  playlistView?: "local" | "network";
+}) {
   const router = useRouter();
-  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/playlists" });
+  const authEntryHref = buildWorkspaceAuthHref({
+    redirectTo: playlistView === "local" ? "/app/profile/playlists" : "/app/playlists"
+  });
   const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -76,7 +82,6 @@ export function PlaylistsWorkspacePage() {
   const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
   const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSelection | null>(null);
-  const [activeTab, setActiveTab] = useState<"local" | "network">("local");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -502,9 +507,12 @@ export function PlaylistsWorkspacePage() {
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Playlists</p>
-            <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">我的歌单</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">本地歌单读取本地保存的音频和平台元数据，网络歌单保存网易云音乐与 QQ 音乐的歌单信息。</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+              {playlistView === "local" ? "本地歌单" : "歌单"}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">
+              {playlistView === "local" ? "每个本地歌单读取各自选择的目录。" : "保存的网易云音乐与 QQ 音乐歌单。"}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Link className="text-sm text-accent hover:text-accent/80" href="/app/search">去搜索音乐</Link>
@@ -549,28 +557,7 @@ export function PlaylistsWorkspacePage() {
           />
         ) : (
           <>
-            <div className="mt-5 flex w-full max-w-xl gap-1 rounded-xl border border-surface-border bg-surface/40 p-1" role="tablist" aria-label="歌单类型">
-              <button
-                aria-selected={activeTab === "local"}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
-                onClick={() => setActiveTab("local")}
-                role="tab"
-                type="button"
-              >
-                本地歌单 <span className="ml-1 text-xs opacity-70">{localPlaylists.length}</span>
-              </button>
-              <button
-                aria-selected={activeTab === "network"}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === "network" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
-                onClick={() => setActiveTab("network")}
-                role="tab"
-                type="button"
-              >
-                网络歌单 <span className="ml-1 text-xs opacity-70">{networkPlaylists.length}</span>
-              </button>
-            </div>
-
-            {activeTab === "local" ? (
+            {playlistView === "local" ? (
               <section className="mt-4 flex flex-col gap-3" data-testid="local-playlists">
                 <div className="flex flex-col items-stretch gap-3 border-b border-surface-border pb-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
@@ -600,10 +587,10 @@ export function PlaylistsWorkspacePage() {
             ) : (
               <section className="mt-4 flex flex-col gap-3" data-testid="network-playlists">
                 <div className="flex flex-col items-stretch gap-3 border-b border-surface-border pb-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div><p className="text-lg font-bold text-foreground">网络歌单</p><p className="mt-1 text-xs text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p></div>
+                  <p className="text-lg font-bold text-foreground">歌单</p>
                   <Button onClick={() => void openCreateDialog("network")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
-                    新建网络歌单
+                    新建歌单
                   </Button>
                 </div>
                 {networkPlaylists.length ? (
@@ -621,7 +608,7 @@ export function PlaylistsWorkspacePage() {
                       />
                     ))}
                   </div>
-                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">从搜索页保存网易云音乐或 QQ 音乐歌单后，会显示在这里。</div>}
+                ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">从搜索页保存歌单后，会显示在这里。</div>}
               </section>
             )}
           </>

@@ -7,7 +7,8 @@ import {
   type PlaybackMode,
   type PlaybackSnapshot,
   type QueueItem,
-  type RoomSnapshot
+  type RoomSnapshot,
+  type UpdateRoomRequest
 } from "@music-room/shared";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
@@ -144,6 +145,28 @@ export function useRoomActions({
       return snapshot;
     },
     [dispatchRoomStateEvent]
+  );
+
+  const updateRoom = useCallback(
+    async (input: UpdateRoomRequest) => {
+      if (!activeSession || !roomSnapshot || roomSnapshot.room.hostId !== activeSession.userId) {
+        return false;
+      }
+
+      try {
+        const snapshot = await musicRoomApi.updateRoom(roomSnapshot.room.id, input);
+        dispatchRoomStateEvent({
+          type: "recover-snapshot",
+          snapshot
+        });
+        setStatusMessage("房间信息已更新。");
+        return true;
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+        return false;
+      }
+    },
+    [activeSession, dispatchRoomStateEvent, roomSnapshot, setStatusMessage]
   );
 
   const runPlaybackMutation = useCallback(
@@ -735,6 +758,7 @@ export function useRoomActions({
     savePlaylistFromQueue,
     updatePlaylistTitle,
     updatePlaylistTracks,
+    updateRoom,
     deletePlaylist,
     loadPlaylistIntoRoom,
     removeQueueItem,
