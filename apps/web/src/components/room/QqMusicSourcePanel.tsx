@@ -13,6 +13,10 @@ import {
   musicRoomApi
 } from "@/lib/music-room-api";
 import { Button } from "@/components/ui/button";
+import {
+  getCachedProviderAccount,
+  setCachedProviderAccount
+} from "@/features/workspace/page-data-cache";
 
 const qualityLabels = {
   standard: "标准",
@@ -39,7 +43,9 @@ export function QqMusicSourcePanel({
   onImportTrack,
   mode = "full"
 }: QqMusicSourcePanelProps) {
-  const [account, setAccount] = useState<QqMusicAccountStatus | null>(null);
+  const [account, setAccount] = useState<QqMusicAccountStatus | null>(() =>
+    activeSession ? getCachedProviderAccount(activeSession.userId, "qqmusic") ?? null : null
+  );
   const [qrSession, setQrSession] = useState<{
     attemptId: string;
     qrimg: string;
@@ -60,6 +66,7 @@ export function QqMusicSourcePanel({
     void musicRoomApi.getQqMusicAccount()
       .then((nextAccount) => {
         if (!cancelled) {
+          setCachedProviderAccount(activeSession.userId, "qqmusic", nextAccount);
           setAccount(nextAccount);
           setErrorMessage(null);
         }
@@ -76,7 +83,7 @@ export function QqMusicSourcePanel({
   }, [activeSession]);
 
   useEffect(() => {
-    if (!qrSession) {
+    if (!qrSession || !activeSession) {
       return;
     }
 
@@ -88,6 +95,7 @@ export function QqMusicSourcePanel({
         if (cancelled) return;
         if (status.status === "connected" && status.account) {
           setAccount(status.account);
+          setCachedProviderAccount(activeSession.userId, "qqmusic", status.account);
           setQrSession(null);
           setErrorMessage(null);
           setPendingAction(null);
@@ -119,11 +127,15 @@ export function QqMusicSourcePanel({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [qrSession]);
+  }, [activeSession, qrSession]);
 
   if (!activeSession) {
     return null;
   }
+
+  const displayedAccount = account ?? (
+    activeSession ? getCachedProviderAccount(activeSession.userId, "qqmusic") ?? null : null
+  );
 
   const startQrLogin = async () => {
     setPendingAction("qr");
@@ -139,7 +151,7 @@ export function QqMusicSourcePanel({
   const searchTracks = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const query = keywords.trim();
-    if (!query || pendingAction || !account?.connected) return;
+    if (!query || pendingAction || !displayedAccount?.connected) return;
     setPendingAction("search");
     setErrorMessage(null);
     try {
@@ -179,6 +191,13 @@ export function QqMusicSourcePanel({
         avatarUrl: null,
         lastValidatedAt: null
       });
+      setCachedProviderAccount(activeSession.userId, "qqmusic", {
+        connected: false,
+        qqMusicUserId: null,
+        nickname: null,
+        avatarUrl: null,
+        lastValidatedAt: null
+      });
       setResults([]);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error));
@@ -196,10 +215,10 @@ export function QqMusicSourcePanel({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">QQ 音乐</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            {account?.connected ? `已绑定 ${account.nickname ?? "QQ 音乐账号"}` : "未绑定 QQ 音乐账号"}
+            {displayedAccount?.connected ? `已绑定 ${displayedAccount.nickname ?? "QQ 音乐账号"}` : "未绑定 QQ 音乐账号"}
           </p>
         </div>
-        {account?.connected ? (
+        {displayedAccount?.connected ? (
           <Button
             variant="ghost"
             size="sm"
@@ -250,7 +269,7 @@ export function QqMusicSourcePanel({
         </div>
       ) : null}
 
-      {mode !== "account" && account?.connected ? (
+      {mode !== "account" && displayedAccount?.connected ? (
         <>
           <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void searchTracks(event)}>
             <label className="sr-only" htmlFor="qqmusic-search-input">搜索 QQ 音乐歌曲</label>

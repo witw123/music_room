@@ -13,6 +13,10 @@ import {
   musicRoomApi
 } from "@/lib/music-room-api";
 import { Button } from "@/components/ui/button";
+import {
+  getCachedProviderAccount,
+  setCachedProviderAccount
+} from "@/features/workspace/page-data-cache";
 
 const qualityLabels = {
   standard: "标准",
@@ -39,7 +43,9 @@ export function NeteaseSourcePanel({
   onImportTrack,
   mode = "full"
 }: NeteaseSourcePanelProps) {
-  const [account, setAccount] = useState<NeteaseAccountStatus | null>(null);
+  const [account, setAccount] = useState<NeteaseAccountStatus | null>(() =>
+    activeSession ? getCachedProviderAccount(activeSession.userId, "netease") ?? null : null
+  );
   const [qrSession, setQrSession] = useState<{
     attemptId: string;
     qrimg: string;
@@ -60,6 +66,7 @@ export function NeteaseSourcePanel({
     void musicRoomApi.getNeteaseAccount()
       .then((nextAccount) => {
         if (!cancelled) {
+          setCachedProviderAccount(activeSession.userId, "netease", nextAccount);
           setAccount(nextAccount);
           setErrorMessage(null);
         }
@@ -76,7 +83,7 @@ export function NeteaseSourcePanel({
   }, [activeSession]);
 
   useEffect(() => {
-    if (!qrSession) {
+    if (!qrSession || !activeSession) {
       return;
     }
 
@@ -88,6 +95,7 @@ export function NeteaseSourcePanel({
         if (cancelled) return;
         if (status.status === "connected" && status.account) {
           setAccount(status.account);
+          setCachedProviderAccount(activeSession.userId, "netease", status.account);
           setQrSession(null);
           setErrorMessage(null);
           setPendingAction(null);
@@ -119,11 +127,15 @@ export function NeteaseSourcePanel({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [qrSession]);
+  }, [activeSession, qrSession]);
 
   if (!activeSession) {
     return null;
   }
+
+  const displayedAccount = account ?? (
+    activeSession ? getCachedProviderAccount(activeSession.userId, "netease") ?? null : null
+  );
 
   const startQrLogin = async () => {
     setPendingAction("qr");
@@ -139,7 +151,7 @@ export function NeteaseSourcePanel({
   const searchTracks = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const query = keywords.trim();
-    if (!query || pendingAction || !account?.connected) return;
+    if (!query || pendingAction || !displayedAccount?.connected) return;
     setPendingAction("search");
     setErrorMessage(null);
     try {
@@ -179,6 +191,13 @@ export function NeteaseSourcePanel({
         avatarUrl: null,
         lastValidatedAt: null
       });
+      setCachedProviderAccount(activeSession.userId, "netease", {
+        connected: false,
+        neteaseUserId: null,
+        nickname: null,
+        avatarUrl: null,
+        lastValidatedAt: null
+      });
       setResults([]);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error));
@@ -196,10 +215,10 @@ export function NeteaseSourcePanel({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">网易云音乐</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            {account?.connected ? `已绑定 ${account.nickname ?? "网易云账号"}` : "未绑定网易云账号"}
+            {displayedAccount?.connected ? `已绑定 ${displayedAccount.nickname ?? "网易云账号"}` : "未绑定网易云账号"}
           </p>
         </div>
-        {account?.connected ? (
+        {displayedAccount?.connected ? (
           <Button
             variant="ghost"
             size="sm"
@@ -250,7 +269,7 @@ export function NeteaseSourcePanel({
         </div>
       ) : null}
 
-      {mode !== "account" && account?.connected ? (
+      {mode !== "account" && displayedAccount?.connected ? (
         <>
           <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void searchTracks(event)}>
             <label className="sr-only" htmlFor="netease-search-input">搜索网易云歌曲</label>

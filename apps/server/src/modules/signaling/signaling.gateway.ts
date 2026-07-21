@@ -114,7 +114,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     string,
     Map<string, { socketId: string; peerId: string; fenceToken: string }>
   >();
-  private readonly sessionLeaseTtlMs = 90_000;
+  // Browser background throttling can delay a heartbeat for about a minute.
+  // Leave enough lease slack for a few delayed ticks while still allowing a
+  // crashed client to be reclaimed without an explicit disconnect event.
+  private readonly sessionLeaseTtlMs = 180_000;
   private readonly recoveryGenerationByRoomSession = new Map<string, number>();
   private readonly recoveryGenerationByRoomPeer = new Map<string, Map<string, number>>();
   private readonly pendingPeerSignalsByRoomPeer = new Map<string, PendingPeerSignal[]>();
@@ -744,7 +747,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   @SubscribeMessage("room.unsubscribe")
-  handleRoomUnsubscribe(
+  async handleRoomUnsubscribe(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: RoomUnsubscribePayload
   ) {
@@ -772,7 +775,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
     client.leave(message.roomId);
     if (sessionId && isActiveSessionSocket) {
-      void this.updatePeerPresence(
+      await this.updatePeerPresence(
         message.roomId,
         sessionId,
         null,

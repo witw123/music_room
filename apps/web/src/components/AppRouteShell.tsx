@@ -80,16 +80,17 @@ function PersistentAppRouteViews({
   const lastChildren = useRef<ReactNode | undefined>(undefined);
 
   const cachedPage = routeCache.current.get(routeKey);
-  if (cachedPage !== undefined) {
+  if (routeCache.current.has(routeKey)) {
     // A cached route can be shown immediately while Next resolves its new RSC payload.
     visibleRoute.current = routeKey;
-  } else if (children !== lastChildren.current) {
+    lastChildren.current = cachedPage;
+  } else if (children !== null && children !== undefined && children !== lastChildren.current) {
     // Pathname can update before children during a client transition. Do not cache the
     // previous route under the new key; wait for the new page node to arrive.
     routeCache.current.set(routeKey, children);
     visibleRoute.current = routeKey;
+    lastChildren.current = children;
   }
-  lastChildren.current = children;
 
   return (
     <div className="contents">

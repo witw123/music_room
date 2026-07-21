@@ -15,6 +15,8 @@ import {
   resolveRoomRealtimeSnapshotInputs,
   resolveRoomSnapshotWatchdogAction
 } from "./room-realtime-policy";
+
+const presenceHeartbeatIntervalMs = 10_000;
 export function useRoomRealtimeConnectionEffects(input: {
   roomSnapshot: RoomSnapshot | null;
   initialRoomId: string | null;
@@ -85,8 +87,6 @@ export function useRoomRealtimeConnectionEffects(input: {
     }
   }, []);
 
-  const stopRecoveryWatchdog = useCallback(() => undefined, []);
-
   const emitPresence = useCallback(() => {
     const currentSession = activeSessionRef.current;
     const currentRoomId = currentRoomRef.current?.room.id;
@@ -104,16 +104,45 @@ export function useRoomRealtimeConnectionEffects(input: {
   const startPresenceHeartbeat = useCallback(() => {
     emitPresence();
     stopPresenceHeartbeat();
-    presenceIntervalRef.current = window.setInterval(emitPresence, 10_000);
+    presenceIntervalRef.current = window.setInterval(
+      emitPresence,
+      presenceHeartbeatIntervalMs
+    );
   }, [emitPresence, stopPresenceHeartbeat]);
 
   useEffect(() => {
     return () => {
       stopPresenceHeartbeat();
       stopRoomSnapshotWatchdog();
-      stopRecoveryWatchdog();
     };
-  }, [stopPresenceHeartbeat, stopRecoveryWatchdog, stopRoomSnapshotWatchdog]);
+  }, [stopPresenceHeartbeat, stopRoomSnapshotWatchdog]);
+
+  useEffect(() => {
+    if (
+      !snapshotRoomId ||
+      !hydrated ||
+      !activeSession?.userId ||
+      isNavigatingRoomExit
+    ) {
+      stopPresenceHeartbeat();
+      return;
+    }
+
+    // The server renews both the presence record and the realtime session
+    // lease from room.presence. Keep this running for the entire room
+    // lifetime, including the normal "already online" state. A heartbeat
+    // that only starts after an offline snapshot lets a healthy socket expire
+    // while a background tab is throttled.
+    startPresenceHeartbeat();
+    return stopPresenceHeartbeat;
+  }, [
+    activeSession?.userId,
+    hydrated,
+    isNavigatingRoomExit,
+    snapshotRoomId,
+    startPresenceHeartbeat,
+    stopPresenceHeartbeat
+  ]);
 
   useEffect(() => {
     if (
@@ -174,14 +203,12 @@ export function useRoomRealtimeConnectionEffects(input: {
     });
     presenceRepairKeyRef.current = presenceRepairAction.nextRepairKey;
     if (!presenceRepairAction.shouldStartHeartbeat) {
+      if (presenceRepairAction.shouldEmitPresence) {
+        emitPresence();
+      }
       return;
     }
-    if (presenceRepairAction.shouldStartHeartbeat) {
-      startPresenceHeartbeat();
-    }
-    if (presenceRepairAction.shouldEmitPresence) {
-      emitPresence();
-    }
+    startPresenceHeartbeat();
     if (presenceRepairAction.shouldRequestResync && snapshotRoomId) {
       void requestRoomSnapshotResync("subscribe-ack", snapshotRoomId);
     }
@@ -230,8 +257,7 @@ export function useRoomRealtimeConnectionEffects(input: {
   return {
     emitPresence,
     startPresenceHeartbeat,
-    stopPresenceHeartbeat,
-    stopRecoveryWatchdog
+    stopPresenceHeartbeat
   };
 }
 

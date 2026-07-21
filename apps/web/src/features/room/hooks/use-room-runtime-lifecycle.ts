@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction
+} from "react";
 import type { AuthSession, IceConfigResponse, RoomSnapshot } from "@music-room/shared";
 import type { Route } from "next";
 import { toUserFacingError } from "@/lib/music-room-ui";
@@ -65,6 +71,7 @@ export function useRoomRuntimeLifecycle(input: {
   roomSnapshot: RoomSnapshot | null;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
+  resubscribeRoomRef: MutableRefObject<(() => void) | null>;
   initialRecoveryAttemptRef: MutableRefObject<string | null>;
   previousInitialRoomIdRef: MutableRefObject<string | null>;
   resetPlayerSurfaceRef: MutableRefObject<() => void>;
@@ -110,6 +117,7 @@ export function useRoomRuntimeLifecycle(input: {
     peerStorageKey,
     previousInitialRoomIdRef,
     recordPeerDiagnostic,
+    resubscribeRoomRef,
     refreshAvailableRooms,
     refreshPlaylists,
     refreshSession,
@@ -129,6 +137,7 @@ export function useRoomRuntimeLifecycle(input: {
     suppressRoomRecovery,
     workspaceOnly
   } = input;
+  const lastPageResumeRecoveryAtRef = useRef(0);
 
   useEffect(() => {
     if (!activeSession) {
@@ -188,27 +197,51 @@ export function useRoomRuntimeLifecycle(input: {
   }, [activeSession, refreshAvailableRooms, refreshPlaylists]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      const nextVisible = !document.hidden;
-      setIsPageVisible(nextVisible);
-      if (nextVisible) {
-        setSchedulerMode((current) => (current === "idle" ? "normal" : current));
-        emitPresence();
-        void requestRoomSnapshotResync(
-          "visibility-visible",
-          currentRoomRef.current?.room.id ?? null
-        );
+    const handlePageVisible = () => {
+      if (document.hidden) {
+        setIsPageVisible(false);
+        return;
       }
+
+      setIsPageVisible(true);
+      setSchedulerMode((current) => (current === "idle" ? "normal" : current));
+      // visibilitychange, pageshow, focus and online can fire together when
+      // a suspended tab is resumed. Coalesce them so one resume produces one
+      // subscribe/resync round-trip instead of repeatedly replacing its own
+      // realtime lease.
+      const now = Date.now();
+      if (now - lastPageResumeRecoveryAtRef.current < 1_500) {
+        return;
+      }
+      lastPageResumeRecoveryAtRef.current = now;
+      // Background tabs can outlive the server's realtime lease while the
+      // browser keeps Socket.IO in a connected-looking state. Re-subscribe
+      // before refreshing presence so the lease and peer topology are rebuilt.
+      resubscribeRoomRef.current?.();
+      emitPresence();
+      void requestRoomSnapshotResync(
+        "visibility-visible",
+        currentRoomRef.current?.room.id ?? null
+      );
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handlePageVisible);
+    window.addEventListener("pageshow", handlePageVisible);
+    window.addEventListener("focus", handlePageVisible);
+    window.addEventListener("online", handlePageVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", handlePageVisible);
+      window.removeEventListener("pageshow", handlePageVisible);
+      window.removeEventListener("focus", handlePageVisible);
+      window.removeEventListener("online", handlePageVisible);
+    };
   }, [
     currentRoomRef,
     emitPresence,
     requestRoomSnapshotResync,
     setIsPageVisible,
-    setSchedulerMode
+    setSchedulerMode,
+    resubscribeRoomRef
   ]);
 
   useEffect(() => {

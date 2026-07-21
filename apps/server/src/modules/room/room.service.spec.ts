@@ -74,8 +74,8 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track One",
       artist: "Local Upload",
@@ -149,7 +149,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Revision Track",
       artist: "Local Upload",
@@ -189,7 +189,7 @@ describe("RoomService", () => {
 
     await roomService.joinRoom(snapshot.room.id, requester.id);
     await roomService.joinRoom(snapshot.room.id, otherMember.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track Two",
@@ -219,7 +219,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "First",
@@ -277,7 +277,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Direct playback",
       artist: "Artist",
@@ -322,7 +322,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
 
     expect(roomAfterLeave.hostId).toBe(host.id);
@@ -380,7 +380,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
     const hostTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Host Track",
       artist: "Artist",
@@ -462,7 +462,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track Three",
       artist: "Local Upload",
@@ -503,7 +503,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Queued Only",
       artist: "Artist",
@@ -565,7 +565,7 @@ describe("RoomService", () => {
       sourceType: "local_upload"
     });
 
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, firstTrack.id);
     const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, secondTrack.id);
 
@@ -601,7 +601,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Repeat",
@@ -650,7 +650,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "First",
@@ -734,7 +734,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Repeat",
@@ -792,7 +792,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Repeated Track",
       artist: "Artist",
@@ -834,7 +834,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const track = await roomService.registerTrack(snapshot.room.id, member.id, {
       title: "Member Track",
@@ -936,7 +936,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
     const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
       title: "Member Track",
       artist: "Local Upload",
@@ -950,7 +950,7 @@ describe("RoomService", () => {
       sourceType: "local_upload"
     });
 
-    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, null);
 
     await expect(
       roomService.updatePlayback(snapshot.room.id, {
@@ -972,8 +972,8 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track Four",
@@ -1039,7 +1039,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Conflict",
       artist: "Artist",
@@ -1080,8 +1080,8 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
       title: "Member Source",
@@ -1140,8 +1140,8 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
       title: "Member Source Leave",
@@ -1187,8 +1187,8 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "First",
@@ -1243,7 +1243,7 @@ describe("RoomService", () => {
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
 
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "First",
@@ -1295,7 +1295,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
     await roomService.joinRoom(snapshot.room.id, member.id);
 
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Stable Epoch",
@@ -1346,7 +1346,7 @@ describe("RoomService", () => {
 
       const host = await authService.createGuestSession("Host");
       const snapshot = await roomService.createRoom(host.id);
-      await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
       const track = await roomService.registerTrack(snapshot.room.id, host.id, {
         title: "Pause Effective",
@@ -1390,7 +1390,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "No Queue",
@@ -1440,7 +1440,7 @@ describe("RoomService", () => {
       const member = await authService.createGuestSession("Member");
       const snapshot = await roomService.createRoom(host.id);
       await roomService.joinRoom(snapshot.room.id, member.id);
-      await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+      await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
       const track = await roomService.registerTrack(snapshot.room.id, host.id, {
         title: "No Rewind",
@@ -1604,17 +1604,17 @@ describe("RoomService", () => {
 
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
-    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, null);
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
-    await roomService.clearRealtimePresence(snapshot.room.id, host.id);
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, null);
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
   });
 
@@ -1734,7 +1734,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
     const hostEntry = nextSnapshot.room.members.find((entry) => entry.id === host.id);
@@ -1778,6 +1778,55 @@ describe("RoomService", () => {
     });
   });
 
+  it("keeps the newest online state when reconnect transitions overlap", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-old", "online");
+
+    await Promise.all([
+      roomService.updatePeerPresence(snapshot.room.id, host.id, null, "reconnecting"),
+      roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-new", "online")
+    ]);
+
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(nextSnapshot.room.members.find((entry) => entry.id === host.id)).toMatchObject({
+      id: host.id,
+      peerId: "peer-new",
+      presenceState: "online"
+    });
+  });
+
+  it("serializes presence transitions for different members in one room", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    await Promise.all([
+      roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host", "online"),
+      roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member", "online")
+    ]);
+
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(nextSnapshot.room.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: host.id, peerId: "peer-host", presenceState: "online" }),
+        expect.objectContaining({ id: member.id, peerId: "peer-member", presenceState: "online" })
+      ])
+    );
+    expect(nextSnapshot.room.presenceRevision).toBe(3);
+  });
+
   it("keeps playback running while the active source is reconnecting", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
@@ -1786,7 +1835,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Disconnect Source",
       artist: "Artist",
@@ -1886,7 +1935,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Active Source",
       artist: "Artist",
@@ -1942,8 +1991,8 @@ describe("RoomService", () => {
     const member = await authService.createGuestSession("Member");
     const snapshot = await roomService.createRoom(host.id);
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
       title: "Member A",
@@ -2009,7 +2058,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Offline Source",
       artist: "Artist",
@@ -2058,7 +2107,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "First",
@@ -2120,8 +2169,8 @@ describe("RoomService", () => {
     const member = await authService.createGuestSession("Member");
     const snapshot = await roomService.createRoom(host.id);
     await roomService.joinRoom(snapshot.room.id, member.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
-    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
 
     const hostTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Host Track",
@@ -2170,7 +2219,7 @@ describe("RoomService", () => {
       actorSessionId: host.id
     });
 
-    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, null);
 
     const afterNext = await roomService.updatePlayback(snapshot.room.id, {
       action: "next",
@@ -2195,7 +2244,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const snapshot = await roomService.createRoom(host.id);
-    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Short",

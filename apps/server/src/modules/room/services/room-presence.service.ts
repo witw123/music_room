@@ -21,21 +21,21 @@ export class RoomPresenceService {
     private readonly presenceTtlSeconds: number
   ) {}
 
-  async touchRealtimePresence(roomId: string, sessionId: string, peerId: string) {
+  async setOnline(roomId: string, sessionId: string, peerId: string) {
     await this.setPresence(roomId, sessionId, {
       peerId,
       presenceState: "online"
     });
   }
 
-  async markRealtimeReconnecting(roomId: string, sessionId: string) {
+  async setReconnecting(roomId: string, sessionId: string) {
     await this.setPresence(roomId, sessionId, {
       peerId: null,
       presenceState: "reconnecting"
     });
   }
 
-  async clearRealtimePresence(roomId: string, sessionId: string) {
+  async clear(roomId: string, sessionId: string) {
     this.deleteInMemoryPresence(roomId, sessionId);
     await this.redis.delete(this.realtimePresenceKey(roomId, sessionId));
   }

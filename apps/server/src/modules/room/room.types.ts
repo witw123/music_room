@@ -125,7 +125,10 @@ export function normalizeRoomRecord(value: unknown): RoomRecord | null {
   const trackIds = new Set(tracks.map((track) => track.id));
   const queue = normalizeQueue(value.queue, trackIds);
   const candidate = {
-    room: roomResult.data,
+    room: {
+      ...roomResult.data,
+      members: normalizeRoomMembers(roomResult.data.members)
+    },
     ...(value.passwordHash === undefined || value.passwordHash === null || typeof value.passwordHash === "string"
       ? (value.passwordHash === undefined ? {} : { passwordHash: value.passwordHash })
       : {}),
@@ -212,6 +215,31 @@ function normalizeQueue(value: unknown, trackIds: Set<string>): QueueItem[] {
     const parsed = queueItemSchema.safeParse(item);
     return parsed.success && trackIds.has(parsed.data.trackId) ? [parsed.data] : [];
   });
+}
+
+function normalizeRoomMembers(members: RoomMember[]) {
+  const presencePriority: Record<RoomMember["presenceState"], number> = {
+    online: 3,
+    reconnecting: 2,
+    offline: 1
+  };
+  const byMemberId = new Map<string, RoomMember>();
+
+  for (const member of members) {
+    const current = byMemberId.get(member.id);
+    if (!current) {
+      byMemberId.set(member.id, member);
+      continue;
+    }
+
+    const currentScore = presencePriority[current.presenceState] + (current.peerId ? 1 : 0);
+    const candidateScore = presencePriority[member.presenceState] + (member.peerId ? 1 : 0);
+    if (candidateScore >= currentScore) {
+      byMemberId.set(member.id, member);
+    }
+  }
+
+  return [...byMemberId.values()];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

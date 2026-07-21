@@ -10,6 +10,10 @@ import { ProviderAlbumDetailView } from "@/components/ProviderAlbumDetailView";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
+import {
+  getCachedFavorites,
+  setCachedFavorites
+} from "@/features/workspace/page-data-cache";
 
 export function FavoriteAlbumsPage() {
   const router = useRouter();
@@ -18,7 +22,12 @@ export function FavoriteAlbumsPage() {
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const [items, setItems] = useState<ProviderAlbumFavorite[]>([]);
+  const [items, setItems] = useState<ProviderAlbumFavorite[]>(() =>
+    activeSession ? getCachedFavorites(activeSession.userId) ?? [] : []
+  );
+  const [favoritesLoaded, setFavoritesLoaded] = useState(() =>
+    Boolean(activeSession && getCachedFavorites(activeSession.userId))
+  );
   const [detail, setDetail] = useState<ProviderAlbumDetail | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -29,13 +38,25 @@ export function FavoriteAlbumsPage() {
 
   useEffect(() => {
     if (!activeSession) return;
+    const cachedItems = getCachedFavorites(activeSession.userId);
+    if (cachedItems) {
+      setItems(cachedItems);
+      setFavoritesLoaded(true);
+    }
     let cancelled = false;
     void musicRoomApi.listFavoriteAlbums()
       .then((records) => {
-        if (!cancelled) setItems(records);
+        if (!cancelled) {
+          setCachedFavorites(activeSession.userId, records);
+          setItems(records);
+          setFavoritesLoaded(true);
+        }
       })
       .catch((error) => {
-        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "收藏加载失败。");
+        if (!cancelled) {
+          setFavoritesLoaded(true);
+          setErrorMessage(error instanceof Error ? error.message : "收藏加载失败。");
+        }
       });
     return () => {
       cancelled = true;
@@ -64,7 +85,9 @@ export function FavoriteAlbumsPage() {
     setErrorMessage(null);
     try {
       await musicRoomApi.deleteFavoriteAlbum(item.provider, item.providerAlbumId);
-      setItems((current) => current.filter((candidate) => candidate.id !== item.id));
+      const nextItems = items.filter((candidate) => candidate.id !== item.id);
+      setItems(nextItems);
+      if (activeSession) setCachedFavorites(activeSession.userId, nextItems);
       if (detail?.provider === item.provider && detail.providerAlbumId === item.providerAlbumId) setDetail(null);
     } catch (error) {
       setErrorMessage(toErrorMessage(error));
@@ -117,6 +140,10 @@ export function FavoriteAlbumsPage() {
                       </div>
                     </article>
                   ))}
+                </div>
+              ) : !favoritesLoaded ? (
+                <div className="flex min-h-[430px] items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center text-sm text-white/40">
+                  正在加载收藏…
                 </div>
               ) : (
                 <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center">

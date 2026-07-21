@@ -169,7 +169,6 @@ type RoomRealtimeRuntimeInput = {
   socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
   socketDisconnectGraceTimeoutRef: MutableRefObject<number | null>;
   stopPresenceHeartbeat: () => void;
-  stopRecoveryWatchdog: () => void;
   clearSocketDisconnectGrace: () => void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
@@ -341,6 +340,12 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
 
   input.resubscribeRoomRef.current = () => {
     clearSubscribeTimers();
+    if (!socket.connected) {
+      // Socket.IO will perform the subscribe on its connect callback. Do not
+      // buffer a second room.subscribe packet while the transport is down.
+      socket.connect();
+      return;
+    }
     subscribeToRoom();
     void input.requestRoomSnapshotResyncRef.current("subscribe-ack", input.roomId);
   };
@@ -637,7 +642,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   return () => {
     clearSubscribeTimers();
     input.stopPresenceHeartbeat();
-    input.stopRecoveryWatchdog();
     input.resubscribeRoomRef.current = null;
     socket.emit("room.unsubscribe", { roomId: input.roomId });
     socket.removeAllListeners();

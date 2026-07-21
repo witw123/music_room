@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -15,16 +14,12 @@ import {
 } from "@/features/upload/local-audio-storage";
 import { cleanupOrphanedLocalAudioStorage, listCachedLibraryTrackSummaries } from "@/lib/indexeddb";
 import { LocalPlaylistsOverview } from "@/components/LocalPlaylistsOverview";
-
-const NeteaseSourcePanel = dynamic(
-  () => import("@/components/room/NeteaseSourcePanel").then((mod) => mod.NeteaseSourcePanel),
-  { loading: () => <PanelLoading label="正在加载网易云账号管理…" /> }
-);
-
-const QqMusicSourcePanel = dynamic(
-  () => import("@/components/room/QqMusicSourcePanel").then((mod) => mod.QqMusicSourcePanel),
-  { loading: () => <PanelLoading label="正在加载 QQ 音乐账号管理…" /> }
-);
+import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
+import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
+import {
+  getCachedLocalStorageData,
+  setCachedLocalStorageData
+} from "@/features/workspace/page-data-cache";
 
 export function ProviderAccountsPage() {
   const router = useRouter();
@@ -78,9 +73,10 @@ export function ProviderAccountsPage() {
 }
 
 function LocalStorageManagementCard() {
-  const [state, setState] = useState<LocalAudioStorageState | null>(null);
-  const [usageBytes, setUsageBytes] = useState<number | null>(null);
-  const [cachedTrackCount, setCachedTrackCount] = useState(0);
+  const cachedData = getCachedLocalStorageData();
+  const [state, setState] = useState<LocalAudioStorageState | null>(() => cachedData?.state ?? null);
+  const [usageBytes, setUsageBytes] = useState<number | null>(() => cachedData?.usageBytes ?? null);
+  const [cachedTrackCount, setCachedTrackCount] = useState(() => cachedData?.cachedTrackCount ?? 0);
   const [pendingAction, setPendingAction] = useState<"choose" | "clean" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const pending = pendingAction !== null;
@@ -96,6 +92,11 @@ function LocalStorageManagementCard() {
     setState(nextState);
     setCachedTrackCount(summaries.length);
     setUsageBytes(estimate?.usage ?? null);
+    setCachedLocalStorageData({
+      state: nextState,
+      cachedTrackCount: summaries.length,
+      usageBytes: estimate?.usage ?? null
+    });
   };
 
   useEffect(() => {
@@ -198,14 +199,6 @@ function formatBytes(value: number | null) {
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
   if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
   return `${(value / 1024 ** 3).toFixed(2)} GB`;
-}
-
-function PanelLoading({ label }: { label: string }) {
-  return (
-    <div className="animate-fade-in rounded-xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-      {label}
-    </div>
-  );
 }
 
 function AppPageBackground() {

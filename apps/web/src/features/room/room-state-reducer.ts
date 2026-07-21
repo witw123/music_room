@@ -1,7 +1,11 @@
 "use client";
 
 import type { PlaybackSnapshot, RoomMember, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import { shouldAcceptPresenceSnapshot, shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
+import {
+  normalizeRoomMembers,
+  shouldAcceptPresenceSnapshot,
+  shouldReplacePlaybackSnapshot
+} from "@/lib/music-room-ui";
 
 type RoomStateSource = "bootstrap" | "authoritative";
 
@@ -102,7 +106,9 @@ function shouldReplaceAuthoritativeSnapshot(
     return true;
   }
 
-  return source === "authoritative" || current.source !== "authoritative";
+  // Once an authoritative snapshot is installed, an equal-revision snapshot
+  // carries no newer room topology and must not rewind it.
+  return current.source !== "authoritative";
 }
 
 function ensurePlaybackTrackMetadata(
@@ -194,7 +200,9 @@ function normalizeSnapshot(
     room: {
       ...incomingSnapshot.room,
       roomRevision: getRoomRevision(incomingSnapshot),
-      members: shouldApplyPresence ? incomingSnapshot.room.members : currentSnapshot.room.members,
+      members: shouldApplyPresence
+        ? normalizeRoomMembers(incomingSnapshot.room.members)
+        : currentSnapshot.room.members,
       presenceRevision: shouldApplyPresence
         ? incomingSnapshot.room.presenceRevision
         : currentSnapshot.room.presenceRevision,
@@ -234,7 +242,12 @@ export function roomStateReducer(
 
       const currentRoomRevision = getRoomRevision(snapshot);
       const currentPresenceRevision = snapshot.room.presenceRevision ?? 0;
-      const shouldApplyPresence = event.presenceRevision >= currentPresenceRevision;
+      const shouldApplyPresence = shouldAcceptPresenceSnapshot(
+        snapshot.room.members,
+        currentPresenceRevision,
+        event.members,
+        event.presenceRevision
+      );
       const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
         ? event.playback
         : snapshot.room.playback;
@@ -253,7 +266,9 @@ export function roomStateReducer(
           ...snapshot,
           room: {
             ...snapshot.room,
-            members: shouldApplyPresence ? event.members : snapshot.room.members,
+            members: shouldApplyPresence
+              ? normalizeRoomMembers(event.members)
+              : snapshot.room.members,
             presenceRevision: shouldApplyPresence
               ? Math.max(currentPresenceRevision, event.presenceRevision)
               : currentPresenceRevision,
@@ -283,7 +298,12 @@ export function roomStateReducer(
       }
 
       const currentPresenceRevision = snapshot.room.presenceRevision ?? 0;
-      const shouldApplyPresence = event.presenceRevision > currentPresenceRevision;
+      const shouldApplyPresence = shouldAcceptPresenceSnapshot(
+        snapshot.room.members,
+        currentPresenceRevision,
+        event.members,
+        event.presenceRevision
+      );
       const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
         ? event.playback
         : snapshot.room.playback;
@@ -298,7 +318,9 @@ export function roomStateReducer(
           ...snapshot,
           room: {
             ...snapshot.room,
-            members: shouldApplyPresence ? event.members : snapshot.room.members,
+            members: shouldApplyPresence
+              ? normalizeRoomMembers(event.members)
+              : snapshot.room.members,
             presenceRevision: shouldApplyPresence
               ? event.presenceRevision
               : currentPresenceRevision,

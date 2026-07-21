@@ -26,7 +26,11 @@ export class RoomService {
   private readonly rooms = new Map<string, RoomRecord>();
   private readonly roomCacheTtlSeconds = 60 * 60 * 12;
   private readonly sessionRecentRoomTtlSeconds = 60 * 60 * 24 * 7;
-  private readonly presenceTtlSeconds = 60;
+  // Background tabs may have their timers coalesced into roughly one-minute
+  // ticks. Keep a few missed ticks from turning a still-connected room member
+  // offline; an actual socket disconnect still transitions through the
+  // signaling gateway's reconnect/offline cleanup path.
+  private readonly presenceTtlSeconds = 180;
   private readonly roomRegistryKey = "music-room:rooms";
   private readonly inMemoryPresence = new Map<
     string,
@@ -43,6 +47,12 @@ export class RoomService {
   private readonly roomPresenceService: RoomPresenceService;
   private readonly roomPlaybackService: RoomPlaybackService;
   private readonly roomSnapshotService: RoomSnapshotService;
+  /**
+   * Presence writes share one persisted room revision. Serialize all presence
+   * transitions per room so concurrent members cannot conflict in storage and
+   * an older disconnect cannot finish after a newer online update.
+   */
+  private readonly presenceUpdateChains = new Map<string, Promise<void>>();
 
   constructor(
     private readonly authService: AuthService,
@@ -367,106 +377,70 @@ export class RoomService {
     peerId: string | null,
     presenceState: RoomMember["presenceState"] = peerId ? "online" : "offline"
   ) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
-      roomId,
-      record.room.members
-    );
-    const currentPresence = presenceSnapshot.get(sessionId) ?? {
-      peerId: null,
-      presenceState: "offline" as const
-    };
-
-    if (
-      currentPresence.peerId === peerId &&
-      currentPresence.presenceState === presenceState
-    ) {
-      if (presenceState === "online" && peerId) {
-        await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
-      } else if (presenceState === "reconnecting") {
-        await this.roomPresenceService.markRealtimeReconnecting(roomId, sessionId);
-      } else {
-        await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
-      }
-      return record.room;
-    }
-
-    if (presenceState === "online" && peerId) {
-      await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
-      this.roomPlaybackService.handleSourcePeerOnline(record, sessionId, peerId);
-    } else if (presenceState === "reconnecting") {
-      await this.roomPresenceService.markRealtimeReconnecting(roomId, sessionId);
-    } else {
-      await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
-    }
-
-    if (presenceState === "offline") {
-      await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
-    }
-
-    this.incrementPresenceRevision(record.room);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return record.room;
-  }
-
-  async touchRealtimePresence(roomId: string, sessionId: string, peerId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
+    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      this.assertMember(record, sessionId);
+      return this.applyPeerPresenceUpdate(record, roomId, sessionId, peerId, presenceState);
+    });
   }
 
   async refreshRealtimePresence(roomId: string, sessionId: string, peerId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
-      roomId,
-      record.room.members
-    );
-    const currentPresence = presenceSnapshot.get(sessionId) ?? {
-      peerId: null,
-      presenceState: "offline" as const
-    };
-
-    if (
-      currentPresence.peerId === peerId &&
-      currentPresence.presenceState === "online"
-    ) {
-      await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
-      return {
-        room: record.room,
-        changed: false
+    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      this.assertMember(record, sessionId);
+      const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
+        roomId,
+        record.room.members
+      );
+      const currentPresence = presenceSnapshot.get(sessionId) ?? {
+        peerId: null,
+        presenceState: "offline" as const
       };
-    }
 
-    return {
-      room: await this.updatePeerPresence(roomId, sessionId, peerId, "online"),
-      changed: true
-    };
-  }
+      if (
+        currentPresence.peerId === peerId &&
+        currentPresence.presenceState === "online"
+      ) {
+      await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+        return {
+          room: record.room,
+          changed: false
+        };
+      }
 
-  async clearRealtimePresence(roomId: string, sessionId: string) {
-    await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
+      return {
+        room: await this.applyPeerPresenceUpdate(
+          record,
+          roomId,
+          sessionId,
+          peerId,
+          "online",
+          currentPresence
+        ),
+        changed: true
+      };
+    });
   }
 
   async leaveRoom(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    const leavingHost = record.room.hostId === sessionId;
-    await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
+    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      this.assertMember(record, sessionId);
+      const leavingHost = record.room.hostId === sessionId;
+      await this.roomPresenceService.clear(roomId, sessionId);
 
-    if (!leavingHost) {
-      record.room.members = record.room.members.filter((member) => member.id !== sessionId);
-    }
+      if (!leavingHost) {
+        record.room.members = record.room.members.filter((member) => member.id !== sessionId);
+      }
 
-    await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
-    this.incrementPresenceRevision(record.room);
-    this.incrementRoomRevision(record.room);
+      await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
+      this.incrementPresenceRevision(record.room);
+      this.incrementRoomRevision(record.room);
 
-    await this.roomRecordRepository.persistRecord(record);
-    await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);
-    return record.room;
+      await this.roomRecordRepository.persistRecord(record);
+      await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);
+      return record.room;
+    });
   }
 
   async rememberRecentRoom(roomId: string, sessionId: string) {
@@ -726,7 +700,7 @@ export class RoomService {
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
       if (input.actorPeerId) {
-        await this.roomPresenceService.touchRealtimePresence(
+        await this.refreshPresenceLease(
           roomId,
           input.actorSessionId,
           input.actorPeerId
@@ -863,15 +837,6 @@ export class RoomService {
     playback.playbackRevision += 1;
   }
 
-  private removeTracksOwnedBySession(record: RoomRecord, sessionId: string) {
-    const removedTrackIds = new Set(
-      record.tracks
-        .filter((track) => track.ownerSessionId === sessionId)
-        .map((track) => track.id)
-    );
-    this.removeTracksById(record, removedTrackIds);
-  }
-
   private removeTracksById(record: RoomRecord, trackIds: Set<string>) {
     if (trackIds.size === 0) {
       return;
@@ -897,6 +862,82 @@ export class RoomService {
 
   private incrementPresenceRevision(room: Room) {
     room.presenceRevision += 1;
+  }
+
+  private async refreshPresenceLease(roomId: string, sessionId: string, peerId: string) {
+    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      this.assertMember(record, sessionId);
+      await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+    });
+  }
+
+  private enqueuePresenceUpdate<T>(
+    roomId: string,
+    sessionId: string,
+    operation: () => Promise<T>
+  ) {
+    const key = roomId;
+    const previous = this.presenceUpdateChains.get(key) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(operation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined
+    );
+    this.presenceUpdateChains.set(key, settled);
+    void settled.finally(() => {
+      if (this.presenceUpdateChains.get(key) === settled) {
+        this.presenceUpdateChains.delete(key);
+      }
+    });
+    return result;
+  }
+
+  private async applyPeerPresenceUpdate(
+    record: RoomRecord,
+    roomId: string,
+    sessionId: string,
+    peerId: string | null,
+    presenceState: RoomMember["presenceState"],
+    knownPresence?: { peerId: string | null; presenceState: RoomMember["presenceState"] }
+  ) {
+    const currentPresence = knownPresence ??
+      (await this.roomPresenceService.getPresenceSnapshot(roomId, record.room.members)).get(sessionId) ?? {
+        peerId: null,
+        presenceState: "offline" as const
+      };
+
+    if (
+      currentPresence.peerId === peerId &&
+      currentPresence.presenceState === presenceState
+    ) {
+      if (presenceState === "online" && peerId) {
+        await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+      } else if (presenceState === "reconnecting") {
+        await this.roomPresenceService.setReconnecting(roomId, sessionId);
+      } else {
+        await this.roomPresenceService.clear(roomId, sessionId);
+      }
+      return record.room;
+    }
+
+    if (presenceState === "online" && peerId) {
+      await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+      this.roomPlaybackService.handleSourcePeerOnline(record, sessionId, peerId);
+    } else if (presenceState === "reconnecting") {
+      await this.roomPresenceService.setReconnecting(roomId, sessionId);
+    } else {
+      await this.roomPresenceService.clear(roomId, sessionId);
+    }
+
+    if (presenceState === "offline") {
+      await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
+    }
+
+    this.incrementPresenceRevision(record.room);
+    this.incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.room;
   }
 
   private incrementRoomRevision(room: Room) {

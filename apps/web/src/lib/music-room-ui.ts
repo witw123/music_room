@@ -43,7 +43,9 @@ export function removeTracksFromUploads<T>(
 }
 
 export function getOnlineMembers(members: RoomMember[]) {
-  return members.filter((member) => member.presenceState === "online");
+  return normalizeRoomMembers(members).filter(
+    (member) => member.presenceState === "online"
+  );
 }
 
 export function getOnlineMemberCount(members: RoomMember[]) {
@@ -51,7 +53,34 @@ export function getOnlineMemberCount(members: RoomMember[]) {
 }
 
 export function getReconnectingMemberCount(members: RoomMember[]) {
-  return members.filter((member) => member.presenceState === "reconnecting").length;
+  return normalizeRoomMembers(members).filter(
+    (member) => member.presenceState === "reconnecting"
+  ).length;
+}
+
+export function normalizeRoomMembers(members: RoomMember[]) {
+  const presencePriority: Record<RoomMember["presenceState"], number> = {
+    online: 3,
+    reconnecting: 2,
+    offline: 1
+  };
+  const byMemberId = new Map<string, RoomMember>();
+
+  for (const member of members) {
+    const current = byMemberId.get(member.id);
+    if (!current) {
+      byMemberId.set(member.id, member);
+      continue;
+    }
+
+    const currentScore = presencePriority[current.presenceState] + (current.peerId ? 1 : 0);
+    const candidateScore = presencePriority[member.presenceState] + (member.peerId ? 1 : 0);
+    if (candidateScore >= currentScore) {
+      byMemberId.set(member.id, member);
+    }
+  }
+
+  return [...byMemberId.values()];
 }
 
 export function getPresenceRevision(
@@ -71,8 +100,8 @@ export function areSameRoomMembers(
   currentMembers: RoomMember[] | null | undefined,
   incomingMembers: RoomMember[] | null | undefined
 ) {
-  const current = currentMembers ?? [];
-  const incoming = incomingMembers ?? [];
+  const current = normalizeRoomMembers(currentMembers ?? []);
+  const incoming = normalizeRoomMembers(incomingMembers ?? []);
 
   if (current.length !== incoming.length) {
     return false;

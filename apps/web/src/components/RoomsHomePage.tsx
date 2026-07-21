@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
+import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
 import {
   clearAwayRoomId,
   readAwayRoomId,
@@ -53,16 +54,6 @@ export function RoomsHomePage({
   const authEntryHref = buildWorkspaceAuthHref({
     redirectTo: workspaceEntryHref
   });
-  const [joinCode, setJoinCode] = useState("");
-  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
-  const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
-  const [joinPassword, setJoinPassword] = useState("");
-  const [dialogError, setDialogError] = useState<string | null>(null);
-  const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
   const {
     activeSession,
     hydrated,
@@ -74,6 +65,21 @@ export function RoomsHomePage({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
+  const [joinCode, setJoinCode] = useState("");
+  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>(() =>
+    activeSession ? getCachedRooms(activeSession.userId) ?? [] : []
+  );
+  const [roomsLoaded, setRoomsLoaded] = useState(() =>
+    Boolean(activeSession && getCachedRooms(activeSession.userId))
+  );
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
+  const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
+  const [joinPassword, setJoinPassword] = useState("");
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
   const effectiveAwayRoomId = awayRoomId ?? storedAwayRoomId;
 
   useEffect(() => {
@@ -110,9 +116,13 @@ export function RoomsHomePage({
     try {
       const rooms = await musicRoomApi.listRooms();
       if (activeSession) {
-        setAvailableRooms(filterRoomsForSession(rooms, activeSession.userId));
+        const nextRooms = filterRoomsForSession(rooms, activeSession.userId);
+        setCachedRooms(activeSession.userId, nextRooms);
+        setAvailableRooms(nextRooms);
+        setRoomsLoaded(true);
       }
     } catch (error) {
+      setRoomsLoaded(true);
       setStatusMessage(toUserFacingError(error));
     }
   }, [activeSession, setStatusMessage]);
@@ -120,6 +130,12 @@ export function RoomsHomePage({
   useEffect(() => {
     if (!activeSession) {
       return;
+    }
+
+    const cachedRooms = getCachedRooms(activeSession.userId);
+    if (cachedRooms) {
+      setAvailableRooms(cachedRooms);
+      setRoomsLoaded(true);
     }
 
     void refreshSession();
@@ -341,6 +357,10 @@ export function RoomsHomePage({
                   onOpen={() => openRoomDetails(item)}
                 />
               ))}
+            </div>
+          ) : !roomsLoaded ? (
+            <div className="flex min-h-[260px] items-center justify-center py-14 text-center text-sm text-foreground-muted">
+              正在加载房间…
             </div>
           ) : (
             <div className="flex min-h-[260px] flex-col items-center justify-center py-14 text-center opacity-85">

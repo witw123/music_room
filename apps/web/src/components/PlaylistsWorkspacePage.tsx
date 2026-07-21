@@ -47,6 +47,10 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import {
+  getCachedPlaylistData,
+  setCachedPlaylistData
+} from "@/features/workspace/page-data-cache";
 
 type PlaylistSelection =
   | { kind: "local"; playlist: LocalPlaylistRecord }
@@ -77,12 +81,28 @@ export function PlaylistsWorkspacePage({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
-  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylistRecord[]>([]);
-  const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>([]);
-  const [localPlaylistDatabaseIds, setLocalPlaylistDatabaseIds] = useState<Record<string, string>>({});
+  const cachedPageData = activeSession ? getCachedPlaylistData(activeSession.userId) : undefined;
+  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>(
+    () => cachedPageData?.localTracks ?? []
+  );
+  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylistRecord[]>(
+    () => cachedPageData?.localPlaylists ?? []
+  );
+  const [networkPlaylists, setNetworkPlaylists] = useState<Playlist[]>(
+    () => cachedPageData?.networkPlaylists ?? []
+  );
+  const [localPlaylistDatabaseIds, setLocalPlaylistDatabaseIds] = useState<Record<string, string>>(
+    () => cachedPageData?.localPlaylistDatabaseIds ?? {}
+  );
   const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
-  const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
+  const [roomTrackIndex, setRoomTrackIndex] = useState<Map<string, LocalPlaylistTrackRecord>>(
+    () => cachedPageData?.roomTrackIndex ?? new Map()
+  );
+  const [playlistDataLoaded, setPlaylistDataLoaded] = useState(() =>
+    playlistView === "local"
+      ? cachedPageData?.localLoaded === true
+      : cachedPageData?.networkLoaded === true
+  );
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSelection | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -95,6 +115,7 @@ export function PlaylistsWorkspacePage({
   const refreshVersion = useRef(0);
   const networkPlaylistsRef = useRef<Playlist[]>([]);
   const player = useLocalPlayer();
+  const activeUserId = activeSession?.userId ?? null;
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -135,6 +156,17 @@ export function PlaylistsWorkspacePage({
     setLocalTracks(tracks);
     setLocalPlaylists(localPlaylistRecords);
     setRoomTrackIndex(roomTracks);
+    if (activeUserId) {
+      setCachedPlaylistData(activeUserId, {
+        localTracks: tracks,
+        localPlaylists: localPlaylistRecords,
+        roomTrackIndex: roomTracks,
+        localLoaded: true
+      });
+    }
+    if (playlistView === "local") {
+      setPlaylistDataLoaded(true);
+    }
     setSelectedPlaylist((current) => {
       if (!current) return null;
       if (current.kind === "local") {
@@ -149,6 +181,13 @@ export function PlaylistsWorkspacePage({
       const nextNetworkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
       networkPlaylistsRef.current = nextNetworkPlaylists;
       setNetworkPlaylists(nextNetworkPlaylists);
+      if (activeUserId) {
+        setCachedPlaylistData(activeUserId, {
+          networkPlaylists: nextNetworkPlaylists,
+          networkLoaded: true
+        });
+      }
+      setPlaylistDataLoaded(true);
       setSelectedPlaylist((current) => {
         if (!current || current.kind !== "network") return current;
         const playlist = playlists.find((item) => item.id === current.playlist.id);
@@ -169,6 +208,7 @@ export function PlaylistsWorkspacePage({
       } catch {
         if (version === refreshVersion.current && networkPlaylistsRef.current.length === 0) {
           setMessage("歌单数据库加载失败，请稍后重试；本地音频仍可使用。");
+          setPlaylistDataLoaded(true);
         }
       }
     }
@@ -178,6 +218,9 @@ export function PlaylistsWorkspacePage({
         await syncLocalPlaylistsToDatabase(localPlaylistRecords, initialDatabasePlaylists);
       if (version === refreshVersion.current) {
         setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
+        if (activeUserId) {
+          setCachedPlaylistData(activeUserId, { localPlaylistDatabaseIds });
+        }
         if (failed) {
           console.warn("Some local playlist mirrors could not be synchronized.");
         } else {
@@ -194,12 +237,25 @@ export function PlaylistsWorkspacePage({
       }
     }
     return scannedTrackCount;
-  }, []);
+  }, [activeUserId, playlistView]);
 
   useEffect(() => {
     if (!activeSession) return;
+
+    const cached = getCachedPlaylistData(activeSession.userId);
+    if (cached) {
+      setLocalTracks(cached.localTracks);
+      setLocalPlaylists(cached.localPlaylists);
+      setNetworkPlaylists(cached.networkPlaylists);
+      networkPlaylistsRef.current = cached.networkPlaylists;
+      setLocalPlaylistDatabaseIds(cached.localPlaylistDatabaseIds);
+      setRoomTrackIndex(cached.roomTrackIndex);
+      setPlaylistDataLoaded(
+        playlistView === "local" ? cached.localLoaded : cached.networkLoaded
+      );
+    }
     void refresh().catch(() => setMessage("歌单数据加载失败，请刷新重试。"));
-  }, [activeSession, refresh]);
+  }, [activeSession, playlistView, refresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -566,6 +622,8 @@ export function PlaylistsWorkspacePage({
                       />
                     ))}
                   </div>
+                ) : !playlistDataLoaded ? (
+                  <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">正在加载本地歌单…</div>
                 ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">当前没有本地歌单，可使用右上角按钮新建。</div>}
               </section>
             ) : (
@@ -592,6 +650,8 @@ export function PlaylistsWorkspacePage({
                       />
                     ))}
                   </div>
+                ) : !playlistDataLoaded ? (
+                  <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">正在加载歌单…</div>
                 ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">从搜索页保存歌单后，会显示在这里。</div>}
               </section>
             )}

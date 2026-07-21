@@ -102,6 +102,30 @@ describe("music-room-ui helpers", () => {
     ).toBe(1);
   });
 
+  it("keeps room list and room page counts stable when a stale duplicate member is present", () => {
+    const members = [
+      {
+        id: "member",
+        nickname: "Member",
+        role: "member" as const,
+        joinedAt: new Date().toISOString(),
+        peerId: null,
+        presenceState: "offline" as const
+      },
+      {
+        id: "member",
+        nickname: "Member",
+        role: "member" as const,
+        joinedAt: new Date().toISOString(),
+        peerId: "peer-member",
+        presenceState: "online" as const
+      }
+    ];
+
+    expect(getOnlineMemberCount(members)).toBe(1);
+    expect(getReconnectingMemberCount(members)).toBe(0);
+  });
+
   it("formats milliseconds into player-friendly timestamps", () => {
     expect(formatDuration(0)).toBe("0:00");
     expect(formatDuration(61_000)).toBe("1:01");

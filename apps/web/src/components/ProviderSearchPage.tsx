@@ -32,6 +32,12 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { ProviderAlbumDetailView, ProviderAlbumTrackTable } from "@/components/ProviderAlbumDetailView";
+import {
+  getCachedFavorites,
+  getCachedProviderAccount,
+  setCachedFavorites,
+  setCachedProviderAccount
+} from "@/features/workspace/page-data-cache";
 
 type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -53,7 +59,9 @@ export function ProviderSearchPage() {
   });
   const defaultProvider = enabledProviders[0] ?? "netease";
   const [provider, setProvider] = useState<Provider>(defaultProvider);
-  const [account, setAccount] = useState<Account | null>(null);
+  const [account, setAccount] = useState<Account | null>(() =>
+    activeSession ? getCachedProviderAccount(activeSession.userId, defaultProvider) ?? null : null
+  );
   const [keywords, setKeywords] = useState("");
   const [results, setResults] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<ProviderPlaylistSummary[]>([]);
@@ -65,7 +73,10 @@ export function ProviderSearchPage() {
   const searchRequestRef = useRef(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [favoriteAlbumIds, setFavoriteAlbumIds] = useState<Set<string>>(new Set());
+  const [favoriteAlbumIds, setFavoriteAlbumIds] = useState<Set<string>>(() => {
+    const cachedItems = activeSession ? getCachedFavorites(activeSession.userId) ?? [] : [];
+    return new Set(cachedItems.map((item) => albumKey(item.provider, item.providerAlbumId)));
+  });
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<PlaylistPickerOption[]>([]);
@@ -77,10 +88,15 @@ export function ProviderSearchPage() {
 
   useEffect(() => {
     if (!activeSession) return;
+    const cachedItems = getCachedFavorites(activeSession.userId);
+    if (cachedItems) {
+      setFavoriteAlbumIds(new Set(cachedItems.map((item) => albumKey(item.provider, item.providerAlbumId))));
+    }
     let cancelled = false;
     void musicRoomApi.listFavoriteAlbums()
       .then((items) => {
         if (!cancelled) {
+          setCachedFavorites(activeSession.userId, items);
           setFavoriteAlbumIds(new Set(items.map((item) => albumKey(item.provider, item.providerAlbumId))));
         }
       })
@@ -95,7 +111,11 @@ export function ProviderSearchPage() {
   useEffect(() => {
     if (!activeSession || !enabledProviders.includes(provider)) return;
     let cancelled = false;
-    setAccount(null);
+    setAccount(
+      activeSession
+        ? getCachedProviderAccount(activeSession.userId, provider) ?? null
+        : null
+    );
     setResults([]);
     setPlaylists([]);
     setPlaylist(null);
@@ -106,7 +126,10 @@ export function ProviderSearchPage() {
     const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
     void load()
       .then((nextAccount) => {
-        if (!cancelled) setAccount(nextAccount);
+        if (!cancelled) {
+          setCachedProviderAccount(activeSession.userId, provider, nextAccount);
+          setAccount(nextAccount);
+        }
       })
       .catch((error) => {
         if (!cancelled) setErrorMessage(toProviderErrorMessage(error, provider));
@@ -339,6 +362,11 @@ export function ProviderSearchPage() {
           next.delete(id);
           return next;
         });
+        const cachedItems = getCachedFavorites(activeSession.userId) ?? [];
+        setCachedFavorites(
+          activeSession.userId,
+          cachedItems.filter((candidate) => candidate.provider !== item.provider || candidate.providerAlbumId !== item.providerAlbumId)
+        );
         setStatusMessage(`已取消收藏《${item.title}》。`);
       } else {
         await musicRoomApi.saveFavoriteAlbum({
@@ -352,6 +380,24 @@ export function ProviderSearchPage() {
           trackCount: item.trackCount
         });
         setFavoriteAlbumIds((current) => new Set(current).add(id));
+        const cachedItems = getCachedFavorites(activeSession.userId) ?? [];
+        const nextItem = {
+          id: `optimistic:${id}`,
+          provider: item.provider,
+          providerAlbumId: item.providerAlbumId,
+          title: item.title,
+          artist: item.artist,
+          artworkUrl: item.artworkUrl,
+          description: item.description,
+          releaseTime: item.releaseTime,
+          trackCount: item.trackCount,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setCachedFavorites(
+          activeSession.userId,
+          [...cachedItems.filter((candidate) => candidate.provider !== item.provider || candidate.providerAlbumId !== item.providerAlbumId), nextItem]
+        );
         setStatusMessage(`已收藏《${item.title}》。`);
       }
     } catch (error) {

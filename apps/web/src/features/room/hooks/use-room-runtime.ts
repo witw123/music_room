@@ -431,8 +431,7 @@ export function useRoomRuntime({
   const {
     emitPresence,
     startPresenceHeartbeat,
-    stopPresenceHeartbeat,
-    stopRecoveryWatchdog
+    stopPresenceHeartbeat
   } = useRoomRealtimeConnection({
     roomSnapshot,
     initialRoomId,
@@ -468,6 +467,7 @@ export function useRoomRuntime({
     roomSnapshot,
     currentRoomRef,
     activeRouteRoomIdRef,
+    resubscribeRoomRef,
     initialRecoveryAttemptRef,
     previousInitialRoomIdRef,
     resetPlayerSurfaceRef,
@@ -557,7 +557,6 @@ export function useRoomRuntime({
       socketDisconnectGraceUntilRef,
       socketDisconnectGraceTimeoutRef,
       stopPresenceHeartbeat,
-      stopRecoveryWatchdog,
       clearSocketDisconnectGrace,
       dispatchRoomStateEvent,
       setRoomRecoveryState,
@@ -594,7 +593,6 @@ export function useRoomRuntime({
     socketDisconnectGraceUntilRef,
     socketRef,
     stopPresenceHeartbeat,
-    stopRecoveryWatchdog,
     clearSocketDisconnectGrace,
     setConnectedPeers,
     setMediaConnectedPeers,
