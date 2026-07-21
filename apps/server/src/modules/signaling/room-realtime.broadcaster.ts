@@ -5,7 +5,8 @@ import type {
   RoomPlaybackPatchPayload,
   RoomPresencePatchPayload,
   RoomQueuePatchPayload,
-  RoomSnapshot
+  RoomSnapshot,
+  RoomTrackDeletedPayload
 } from "@music-room/shared";
 import type { Server } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -16,7 +17,8 @@ import {
   roomPresencePatchChannel,
   roomQueuePatchChannel,
   roomSnapshotChannel,
-  roomSnapshotMissingChannel
+  roomSnapshotMissingChannel,
+  roomTrackDeletedChannel
 } from "./room-realtime.channels";
 
 @Injectable()
@@ -126,6 +128,16 @@ export class RoomRealtimeBroadcaster {
     };
     this.server?.to(roomId).emit("room.library.patch", message);
     this.publish(roomLibraryPatchChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitTrackDeleted(roomId: string, payload: Omit<RoomTrackDeletedPayload, "roomId">) {
+    const message: RoomTrackDeletedPayload = { roomId, ...payload };
+    this.server?.to(roomId).emit("room.track.deleted", message);
+    this.publish(roomTrackDeletedChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message

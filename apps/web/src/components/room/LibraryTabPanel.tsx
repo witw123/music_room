@@ -10,6 +10,7 @@ type LibraryTabPanelProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   localSavedFileHashes: string[];
   canControlPlayback: boolean;
+  canManageAllTracks?: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
@@ -23,6 +24,7 @@ function LibraryTabPanelBase({
   uploadedTracks,
   localSavedFileHashes,
   canControlPlayback,
+  canManageAllTracks,
   activeSession,
   onFilesSelected,
   onAddToQueue,
@@ -37,6 +39,7 @@ function LibraryTabPanelBase({
         uploadedTracks={uploadedTracks}
         localSavedFileHashes={localSavedFileHashes}
         canControlPlayback={canControlPlayback}
+        canManageAllTracks={canManageAllTracks}
         activeSession={activeSession}
         onFilesSelected={onFilesSelected}
         onAddToQueue={onAddToQueue}

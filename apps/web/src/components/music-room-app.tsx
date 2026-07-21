@@ -239,7 +239,6 @@ export function MusicRoomApp({
     clearIdentity,
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
-    deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
     dispatchRoomStateEvent,
     peerId,
     peerStorageKey,

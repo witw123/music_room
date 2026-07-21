@@ -16,7 +16,7 @@ export function useRoomRuntimeMutableState(input: {
   socketRef: MutableRefObject<RoomSocket | null>;
   roomRecoveryState: RoomRecoveryState;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
-  deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
+  deleteRoomTrackArtifacts: (trackIds: string[], roomId?: string, deleteRoomSnapshot?: boolean) => Promise<void> | void;
   resetPlayerSurface: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
 }) {

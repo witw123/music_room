@@ -12,6 +12,7 @@ type TrackListSectionProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   localSavedFileHashes: string[];
   canControlPlayback: boolean;
+  canManageAllTracks?: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
@@ -41,6 +42,7 @@ function TrackListSectionBase({
   uploadedTracks,
   localSavedFileHashes,
   canControlPlayback,
+  canManageAllTracks,
   activeSession,
   onFilesSelected,
   onAddToQueue,
@@ -158,7 +160,8 @@ function TrackListSectionBase({
             {visibleTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
-                activeSessionUserId: activeSession?.userId
+                activeSessionUserId: activeSession?.userId,
+                isHost: canManageAllTracks
               });
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
@@ -326,8 +329,10 @@ function TrackArtwork({ artworkUrl, title }: { artworkUrl: string | null; title:
 export function canDeleteLibraryTrack(input: {
   track: Pick<TrackMeta, "ownerSessionId">;
   activeSessionUserId: string | null | undefined;
+  isHost?: boolean;
 }) {
   return !!(
-    input.activeSessionUserId && input.track.ownerSessionId === input.activeSessionUserId
+    input.activeSessionUserId &&
+    (input.isHost || input.track.ownerSessionId === input.activeSessionUserId)
   );
 }

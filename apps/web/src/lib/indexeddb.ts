@@ -36,12 +36,22 @@ export type CachedLibraryTrackSummaryRecord = Omit<CachedLibraryTrackRecord, "fi
 export function removeCachedLibrarySourceReferences(
   record: Pick<
     CachedLibraryTrackRecord,
-    "sourceTrackIds" | "lastSourceTrackId" | "lastSourceRoomId" | "lastOwnerNickname"
+    "sourceTrackIds" | "sourceRoomIds" | "lastSourceTrackId" | "lastSourceRoomId" | "lastOwnerNickname"
   >,
-  removedTrackIds: readonly string[]
+  removedTrackIds: readonly string[],
+  removedRoomId?: string
 ) {
   const removed = new Set(removedTrackIds);
-  const sourceTrackIds = record.sourceTrackIds.filter((trackId) => !removed.has(trackId));
+  const shouldRemoveReference = (trackId: string | undefined, index: number) =>
+    !!trackId &&
+    removed.has(trackId) &&
+    (!removedRoomId || record.sourceRoomIds[index] === removedRoomId || record.sourceRoomIds[index] === undefined);
+  const sourceTrackIds = record.sourceTrackIds.filter(
+    (trackId, index) => !shouldRemoveReference(trackId, index)
+  );
+  const sourceRoomIds = record.sourceRoomIds.filter(
+    (_, index) => !shouldRemoveReference(record.sourceTrackIds[index], index)
+  );
   const lastSourceTrackId = record.lastSourceTrackId && sourceTrackIds.includes(record.lastSourceTrackId)
     ? record.lastSourceTrackId
     : sourceTrackIds[sourceTrackIds.length - 1] ?? null;
@@ -49,6 +59,7 @@ export function removeCachedLibrarySourceReferences(
 
   return {
     sourceTrackIds,
+    sourceRoomIds,
     lastSourceTrackId,
     lastSourceRoomId: lastSourceWasRemoved ? null : record.lastSourceRoomId,
     lastOwnerNickname: lastSourceWasRemoved ? null : record.lastOwnerNickname,
@@ -1046,7 +1057,10 @@ export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord,
   });
 }
 
-export async function deleteLocalTrackDataForTracks(trackIds: readonly string[]) {
+export async function deleteLocalTrackDataForTracks(
+  trackIds: readonly string[],
+  options?: { roomId?: string }
+) {
   const uniqueTrackIds = [...new Set(trackIds.filter(Boolean))];
   if (uniqueTrackIds.length === 0) {
     return;
@@ -1091,7 +1105,11 @@ export async function deleteLocalTrackDataForTracks(trackIds: readonly string[])
           continue;
         }
 
-        const nextReferences = removeCachedLibrarySourceReferences(source, uniqueTrackIds);
+        const nextReferences = removeCachedLibrarySourceReferences(
+          source,
+          uniqueTrackIds,
+          options?.roomId
+        );
         if (nextReferences.isUnreferenced) {
           await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
           await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
@@ -1165,6 +1183,15 @@ export async function deleteLocalTrackDataForTracks(trackIds: readonly string[])
   );
 
   await cleanupDeletedLocalRepositoryData(deletedLocalFileHashes, deletedLocalAssetManifests);
+  if (options?.roomId) {
+    const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+    const repository = directory
+      ? await LocalRepository.open(directory.handle).catch(() => null)
+      : null;
+    if (repository) {
+      await repository.removeRoomTrackReferences(options.roomId, uniqueTrackIds);
+    }
+  }
 }
 
 async function cleanupDeletedLocalRepositoryData(

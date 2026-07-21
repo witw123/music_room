@@ -45,11 +45,13 @@ describe("removeCachedLibrarySourceReferences", () => {
   it("marks a cache entry unreferenced when its final track is deleted", () => {
     expect(removeCachedLibrarySourceReferences({
       sourceTrackIds: ["track_1"],
+      sourceRoomIds: ["room_1"],
       lastSourceTrackId: "track_1",
       lastSourceRoomId: "room_1",
       lastOwnerNickname: "Host"
     }, ["track_1"])).toEqual({
       sourceTrackIds: [],
+      sourceRoomIds: [],
       lastSourceTrackId: null,
       lastSourceRoomId: null,
       lastOwnerNickname: null,
@@ -60,14 +62,32 @@ describe("removeCachedLibrarySourceReferences", () => {
   it("keeps a shared file while another uploaded track still references it", () => {
     expect(removeCachedLibrarySourceReferences({
       sourceTrackIds: ["track_1", "track_2"],
+      sourceRoomIds: ["room_1", "room_2"],
       lastSourceTrackId: "track_2",
       lastSourceRoomId: "room_2",
       lastOwnerNickname: "Host"
     }, ["track_2"])).toEqual({
       sourceTrackIds: ["track_1"],
+      sourceRoomIds: ["room_1"],
       lastSourceTrackId: "track_1",
       lastSourceRoomId: null,
       lastOwnerNickname: null,
+      isUnreferenced: false
+    });
+  });
+
+  it("removes only the deleted room reference when a file is shared across rooms", () => {
+    expect(removeCachedLibrarySourceReferences({
+      sourceTrackIds: ["track_1", "track_2"],
+      sourceRoomIds: ["room_1", "room_2"],
+      lastSourceTrackId: "track_2",
+      lastSourceRoomId: "room_2",
+      lastOwnerNickname: "Host"
+    }, ["track_1"], "room_1")).toMatchObject({
+      sourceTrackIds: ["track_2"],
+      sourceRoomIds: ["room_2"],
+      lastSourceTrackId: "track_2",
+      lastSourceRoomId: "room_2",
       isUnreferenced: false
     });
   });

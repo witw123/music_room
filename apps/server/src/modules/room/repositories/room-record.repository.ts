@@ -1,8 +1,9 @@
 import { RedisService } from "../../../infra/redis/redis.service";
+import type { RoomTrackDeletion } from "@music-room/shared";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
 import {
   deserializeRoomRecord,
-  roomRecordSchema,
+  normalizeRoomRecord,
   serializePlaybackForPersistence,
   type RoomRecord
 } from "../room.types";
@@ -44,11 +45,9 @@ export class RoomRecordRepository {
         }
       }
 
-      // PostgreSQL is authoritative when it is available. Never resurrect a
-      // deleted room (a missing row) from an old process-local or Redis cache entry.
-      if (!persisted) {
-        throw new Error(`Room not found for join code: ${joinCode}`);
-      }
+      // A room created while PostgreSQL was unavailable can still exist in the
+      // Redis registry. listRecoverableRecords() migrates those records; keep
+      // join-by-code compatible during the migration window as well.
     }
 
     if (this.isRedisAvailable()) {
@@ -61,7 +60,7 @@ export class RoomRecordRepository {
         this.rooms.set(parsedRedisRecord.room.id, cloneRoomRecord(parsedRedisRecord));
         return cloneRoomRecord(parsedRedisRecord).room;
       }
-    } else if (inMemoryRecord) {
+    } else if (!this.prisma.isAvailable() && inMemoryRecord) {
       return cloneRoomRecord(inMemoryRecord).room;
     }
 
@@ -70,6 +69,7 @@ export class RoomRecordRepository {
 
   async getRoomRecord(roomId: string, options?: { allowTerminated?: boolean }) {
     const cached = this.rooms.get(roomId);
+    let persistedFound = false;
 
     if (this.prisma.isAvailable()) {
       const persisted = await this.prisma.roomState.findUnique({
@@ -77,6 +77,7 @@ export class RoomRecordRepository {
       });
 
       if (persisted) {
+        persistedFound = true;
         if (!options?.allowTerminated && await this.isRoomTerminated(roomId)) {
           throw new Error(`Room not found: ${roomId}`);
         }
@@ -92,10 +93,9 @@ export class RoomRecordRepository {
         }
       }
 
-      // Do not fall back to a stale in-memory record after a database delete.
-      if (!persisted) {
-        throw new Error(`Room not found: ${roomId}`);
-      }
+      // A room created while PostgreSQL was unavailable can still exist in the
+      // Redis registry. Do not use the process-local cache here, but allow the
+      // durable Redis mirror to be recovered and migrated.
     }
 
     if (this.isRedisAvailable()) {
@@ -108,7 +108,7 @@ export class RoomRecordRepository {
         this.rooms.set(roomId, cloneRoomRecord(parsedRedisRecord));
         return cloneRoomRecord(parsedRedisRecord);
       }
-    } else if (cached) {
+    } else if ((!this.prisma.isAvailable() || persistedFound) && cached) {
       return cloneRoomRecord(cached);
     }
 
@@ -216,7 +216,7 @@ export class RoomRecordRepository {
     if (this.isRedisAvailable()) {
       await this.redis.setJson(
         this.terminationKey(record.room.id),
-        { roomId: record.room.id, status: "PENDING" },
+        { roomId: record.room.id, status: "PENDING", trackIds: record.tracks.map((track) => track.id) },
         this.terminationTtlSeconds
       );
     }
@@ -232,18 +232,166 @@ export class RoomRecordRepository {
     }
 
     if (this.isRedisAvailable()) {
+      const previous = await this.redis
+        .getJson<{ trackIds?: unknown }>(this.terminationKey(roomId))
+        .catch(() => null);
       await this.redis.setJson(
         this.terminationKey(roomId),
-        { roomId, status: "SUCCEEDED" },
+        {
+          roomId,
+          status: "SUCCEEDED",
+          trackIds: Array.isArray(previous?.trackIds)
+            ? previous.trackIds.filter((value): value is string => typeof value === "string")
+            : []
+        },
         this.terminationTtlSeconds
       ).catch(() => undefined);
     }
   }
 
+  async recordTrackDeletion(deletion: RoomTrackDeletion) {
+    const model = this.getTrackDeletionModel();
+    if (this.prisma.isAvailable() && model) {
+      try {
+        await model.upsert({
+          where: { roomId_trackId: { roomId: deletion.roomId, trackId: deletion.trackId } },
+          create: {
+            id: `track-deletion_${deletion.roomId}_${deletion.trackId}`,
+            roomId: deletion.roomId,
+            trackId: deletion.trackId,
+            fileHash: deletion.fileHash ?? null,
+            originalAssetId: deletion.originalAssetId ?? null,
+            playbackAssetId: deletion.playbackAssetId ?? null,
+            roomRevision: deletion.roomRevision,
+            deletedAt: new Date(deletion.deletedAt),
+            expiresAt: new Date(Date.now() + this.terminationTtlSeconds * 1000)
+          },
+          update: {
+            fileHash: deletion.fileHash ?? null,
+            originalAssetId: deletion.originalAssetId ?? null,
+            playbackAssetId: deletion.playbackAssetId ?? null,
+            roomRevision: deletion.roomRevision,
+            deletedAt: new Date(deletion.deletedAt),
+            expiresAt: new Date(Date.now() + this.terminationTtlSeconds * 1000)
+          }
+        });
+        return;
+      } catch {
+        // Fall back to Redis during a rolling deployment before the new table
+        // is migrated on every database replica.
+      }
+    }
+
+    if (this.isRedisAvailable()) {
+      await Promise.all([
+        this.redis.setJson(
+          this.trackDeletionKey(deletion.roomId, deletion.trackId),
+          deletion,
+          this.terminationTtlSeconds
+        ),
+        this.redis.addToSet(this.trackDeletionsKey(deletion.roomId), deletion.trackId)
+      ]);
+    }
+  }
+
+  async listTrackDeletions(roomId: string, sinceRevision = 0): Promise<RoomTrackDeletion[]> {
+    const model = this.getTrackDeletionModel();
+    if (this.prisma.isAvailable() && model) {
+      try {
+        await model.deleteMany?.({
+          where: {
+            roomId,
+            expiresAt: { lte: new Date() }
+          }
+        });
+        const rows = await model.findMany({
+          where: { roomId, roomRevision: { gt: Math.max(0, Math.floor(sinceRevision)) } },
+          orderBy: { roomRevision: "asc" }
+        });
+        return rows.map((row) => ({
+          roomId: row.roomId,
+          trackId: row.trackId,
+          fileHash: row.fileHash ?? null,
+          originalAssetId: row.originalAssetId ?? null,
+          playbackAssetId: row.playbackAssetId ?? null,
+          roomRevision: row.roomRevision,
+          deletedAt: new Date(row.deletedAt).toISOString()
+        }));
+      } catch {
+        // Read the Redis mirror until the database migration is available.
+      }
+    }
+
+    if (this.isRedisAvailable()) {
+      const trackIds = await this.redis.getSetMembers(this.trackDeletionsKey(roomId));
+      const rows = await Promise.all(
+        trackIds.map((trackId) =>
+          this.redis
+            .getJson<RoomTrackDeletion>(this.trackDeletionKey(roomId, trackId))
+            .catch(() => null)
+        )
+      );
+      const staleTrackIds = trackIds.filter((_, index) => !rows[index]);
+      if (staleTrackIds.length > 0) {
+        await Promise.all(
+          staleTrackIds.map((trackId) =>
+            this.redis.removeFromSet(this.trackDeletionsKey(roomId), trackId).catch(() => undefined)
+          )
+        );
+      }
+      return rows
+        .filter((item): item is RoomTrackDeletion => !!item && item.roomRevision > sinceRevision)
+        .sort((left, right) => left.roomRevision - right.roomRevision);
+    }
+
+    return [];
+  }
+
+  async getRoomTermination(roomId: string) {
+    const model = this.getTombstoneModel();
+    if (this.prisma.isAvailable() && model) {
+      try {
+        const tombstone = await model.findUnique({
+          where: { roomId },
+          select: { roomId: true, status: true, trackIds: true }
+        });
+        if (tombstone) {
+          return {
+            roomId,
+            status: tombstone.status ?? "PENDING",
+            trackIds: Array.isArray(tombstone.trackIds)
+              ? tombstone.trackIds.filter((value): value is string => typeof value === "string")
+              : []
+          };
+        }
+      } catch {
+        // Fall back to the Redis termination marker during a database outage.
+      }
+    }
+
+    if (this.isRedisAvailable()) {
+      const marker = await this.redis
+        .getJson<{ roomId?: string; status?: string; trackIds?: unknown }>(this.terminationKey(roomId))
+        .catch(() => null);
+      if (marker?.status === "PENDING" || marker?.status === "SUCCEEDED") {
+        return {
+          roomId,
+          status: marker.status,
+          trackIds: Array.isArray(marker.trackIds)
+            ? marker.trackIds.filter((value): value is string => typeof value === "string")
+            : []
+        };
+      }
+    }
+
+    return null;
+  }
+
   async listRecoverableRecords() {
     const records = new Map<string, RoomRecord>();
+    const databaseAvailable = this.prisma.isAvailable();
 
-    if (this.prisma.isAvailable()) {
+    if (databaseAvailable) {
       const tombstoneModel = this.getTombstoneModel();
       const terminatedRoomIds = new Set<string>();
       if (tombstoneModel) {
@@ -261,7 +409,13 @@ export class RoomRecordRepository {
         if (terminatedRoomIds.has(item.id)) {
           continue;
         }
-        const record = parseRoomRecord(deserializeRoomRecord(item));
+        let record: RoomRecord | null = null;
+        try {
+          record = parseRoomRecord(deserializeRoomRecord(item));
+        } catch {
+          // One legacy row must not hide every other room from the directory.
+          record = null;
+        }
         if (!record) {
           continue;
         }
@@ -269,20 +423,15 @@ export class RoomRecordRepository {
         records.set(record.room.id, cloneRoomRecord(record));
       }
 
-      // The database result is complete while available. Process-local cache
-      // entries not present above represent rooms deleted by another instance.
-      return [...records.values()].sort(
-        (left, right) =>
-          new Date(right.room.playback.startedAt ?? 0).getTime() -
-          new Date(left.room.playback.startedAt ?? 0).getTime()
-      );
     }
 
-    for (const record of this.rooms.values()) {
-      if (await this.isRoomTerminated(record.room.id)) {
-        continue;
+    if (!databaseAvailable) {
+      for (const record of this.rooms.values()) {
+        if (await this.isRoomTerminated(record.room.id)) {
+          continue;
+        }
+        records.set(record.room.id, cloneRoomRecord(record));
       }
-      records.set(record.room.id, cloneRoomRecord(record));
     }
 
     const redisAvailabilityKnown = typeof (this.redis as RedisService & { isAvailable?: () => boolean }).isAvailable === "function";
@@ -301,6 +450,12 @@ export class RoomRecordRepository {
         continue;
       }
 
+      if (databaseAvailable) {
+        // This is the compatibility path for rooms written by the previous
+        // Redis-only fallback. Persist before returning so they survive the
+        // Redis room-cache TTL and are visible on every future instance.
+        await this.persistRecord(record).catch(() => undefined);
+      }
       this.rooms.set(roomId, cloneRoomRecord(record));
       records.set(roomId, cloneRoomRecord(record));
     }
@@ -352,15 +507,45 @@ export class RoomRecordRepository {
     return `music-room:room-terminated:${roomId}`;
   }
 
+  private trackDeletionsKey(roomId: string) {
+    return `music-room:room-track-deletions:${roomId}`;
+  }
+
+  private trackDeletionKey(roomId: string, trackId: string) {
+    return `music-room:room-track-deletion:${roomId}:${trackId}`;
+  }
+
   private getTombstoneModel() {
     return (this.prisma as PrismaService & {
       roomTombstone?: {
         findMany: (args: unknown) => Promise<Array<{ roomId: string }>>;
-        findUnique: (args: unknown) => Promise<{ status?: string } | null>;
+        findUnique: (args: unknown) => Promise<{
+          roomId?: string;
+          status?: string;
+          trackIds?: unknown;
+        } | null>;
         upsert: (args: unknown) => Promise<unknown>;
         updateMany: (args: unknown) => Promise<unknown>;
       };
     }).roomTombstone;
+  }
+
+  private getTrackDeletionModel() {
+    return (this.prisma as PrismaService & {
+      roomTrackDeletion?: {
+        findMany: (args: unknown) => Promise<Array<{
+          roomId: string;
+          trackId: string;
+          fileHash?: string | null;
+          originalAssetId?: string | null;
+          playbackAssetId?: string | null;
+          roomRevision: number;
+          deletedAt: Date | string;
+        }>>;
+        upsert: (args: unknown) => Promise<unknown>;
+        deleteMany?: (args: unknown) => Promise<unknown>;
+      };
+    }).roomTrackDeletion;
   }
 
   private async isRoomTerminated(roomId: string) {
@@ -457,8 +642,7 @@ function cloneRoomRecord(record: RoomRecord): RoomRecord {
 }
 
 function parseRoomRecord(value: unknown): RoomRecord | null {
-  const parsed = roomRecordSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
+  return normalizeRoomRecord(value);
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

@@ -412,6 +412,20 @@ export class LocalRepository {
     await this.touch();
   }
 
+  async removeRoomTrackReferences(roomId: string, trackIds?: readonly string[]) {
+    const removed = trackIds ? new Set(trackIds) : null;
+    const tracks = await this.listTracks();
+    for (const record of tracks) {
+      const roomRefs = record.roomRefs?.filter(
+        (ref) => ref.roomId !== roomId || (removed ? !removed.has(ref.trackId) : false)
+      ) ?? [];
+      if (roomRefs.length === (record.roomRefs?.length ?? 0)) continue;
+      await this.writeTrack({ ...record, roomRefs }, { updateCatalog: false });
+    }
+    await this.writeCatalogIndex();
+    await this.touch();
+  }
+
   async writeProviderTrack(id: string, record: unknown) {
     await this.writeJson(
       `${localRepositoryDirectoryName}/catalog/provider-tracks/${encodeURIComponent(id)}.json`,

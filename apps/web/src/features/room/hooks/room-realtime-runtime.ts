@@ -6,6 +6,7 @@ import type {
   PeerDiagnosticsSnapshot,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
+  RoomTrackDeletedPayload,
   RoomSnapshotMissingPayload,
   RoomSnapshot
 } from "@music-room/shared";
@@ -160,7 +161,7 @@ type RoomRealtimeRuntimeInput = {
   requestRoomSnapshotResyncRef: MutableRefObject<
     (reason: RoomSnapshotResyncReason, roomId?: string | null) => Promise<void>
   >;
-  deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[]) => Promise<void> | void>;
+  deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[], roomId?: string, deleteRoomSnapshot?: boolean) => Promise<void> | void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   recoveryGenerationRef: MutableRefObject<number | null>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
@@ -485,6 +486,15 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     const currentSnapshot = input.currentRoomRef.current;
+    if (currentSnapshot?.room.id === input.roomId) {
+      const nextTrackIds = new Set(tracks.map((track) => track.id));
+      const removedTrackIds = currentSnapshot.tracks
+        .map((track) => track.id)
+        .filter((trackId) => !nextTrackIds.has(trackId));
+      if (removedTrackIds.length > 0) {
+        void input.deleteRoomTrackArtifactsRef.current(removedTrackIds, input.roomId);
+      }
+    }
     input.dispatchRoomStateEvent({
       type: "server-library-patch",
       roomId: input.roomId,
@@ -507,6 +517,20 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+  });
+
+  socket.on("room.track.deleted", (payload: RoomTrackDeletedPayload) => {
+    if (payload.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
+      return;
+    }
+    void input.deleteRoomTrackArtifactsRef.current([payload.trackId], input.roomId);
+    input.dispatchRoomStateEvent({
+      type: "server-track-deleted",
+      roomId: input.roomId,
+      trackId: payload.trackId,
+      roomRevision: payload.roomRevision
+    });
+    input.lastRealtimeRoomEventAtRef.current = Date.now();
   });
 
   socket.on("peer.signal", (payload) => {
@@ -579,7 +603,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     if (roomId !== input.roomId) {
       return;
     }
-    void input.deleteRoomTrackArtifactsRef.current(trackIds);
+    void input.deleteRoomTrackArtifactsRef.current(trackIds, roomId, true);
     input.exitCurrentRoom("这个房间已被删除。");
   });
 

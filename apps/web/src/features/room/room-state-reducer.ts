@@ -51,6 +51,12 @@ export type RoomStateEvent =
       roomRevision?: number;
     }
   | {
+      type: "server-track-deleted";
+      roomId: string;
+      trackId: string;
+      roomRevision: number;
+    }
+  | {
       type: "server-playback-patch";
       roomId: string;
       playback: PlaybackSnapshot;
@@ -383,6 +389,51 @@ export function roomStateReducer(
             ...snapshot.room,
             roomRevision: Math.max(currentRevision, event.roomRevision ?? 0),
             playback: nextPlayback
+          }
+        }
+      };
+    }
+
+    case "server-track-deleted": {
+      const snapshot = current.snapshot;
+      if (!snapshot || snapshot.room.id !== event.roomId) {
+        return current;
+      }
+
+      const currentRevision = getRoomRevision(snapshot);
+      if (event.roomRevision < currentRevision) {
+        return current;
+      }
+
+      const nextTracks = snapshot.tracks.filter((track) => track.id !== event.trackId);
+      const nextQueue = snapshot.queue
+        .filter((item) => item.trackId !== event.trackId)
+        .map((item, index) => ({ ...item, position: index }));
+      const isPlayingTrack = snapshot.room.playback.currentTrackId === event.trackId;
+      return {
+        ...current,
+        snapshot: {
+          ...snapshot,
+          tracks: nextTracks,
+          queue: nextQueue,
+          room: {
+            ...snapshot.room,
+            roomRevision: Math.max(currentRevision, event.roomRevision),
+            playback: isPlayingTrack
+              ? {
+                  ...snapshot.room.playback,
+                  status: "paused",
+                  currentTrackId: null,
+                  currentQueueItemId: null,
+                  playbackAssetId: null,
+                  sourceTrackId: null,
+                  positionMs: 0,
+                  startedAt: null,
+                  startAt: null,
+                  playbackRevision: snapshot.room.playback.playbackRevision + 1,
+                  mediaEpoch: snapshot.room.playback.mediaEpoch + 1
+                }
+              : snapshot.room.playback
           }
         }
       };

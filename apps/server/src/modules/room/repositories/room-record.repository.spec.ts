@@ -491,4 +491,42 @@ describe("RoomRecordRepository", () => {
     expect(rooms.has("room_bad")).toBe(false);
     expect(rooms.has("room_valid")).toBe(true);
   });
+
+  it("migrates Redis-only rooms when PostgreSQL becomes available", async () => {
+    const record = createRoomRecord(0);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        findMany: jest.fn(async () => []),
+        findUnique: jest.fn(async () => null),
+        updateMany: jest.fn(async () => ({ count: 0 })),
+        create: jest.fn(async () => record)
+      }
+    };
+    const redis = {
+      ...createRedisMock(),
+      isAvailable: jest.fn(() => true)
+    };
+    redis.getSetMembers.mockResolvedValueOnce([record.room.id]);
+    redis.getJson.mockImplementation(async (key: string) =>
+      key === `music-room:room:${record.room.id}` ? record : null
+    );
+
+    const repository = new RoomRecordRepository(
+      new Map(),
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([record]);
+    expect(prisma.roomState.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        id: record.room.id,
+        joinCode: record.room.joinCode
+      })
+    });
+  });
 });

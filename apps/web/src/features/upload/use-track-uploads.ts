@@ -39,7 +39,10 @@ import {
 } from "./local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
-import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
+import {
+  deleteRoomSnapshotFromLocalRepository,
+  persistRoomSnapshotToLocalRepository
+} from "./local-room-storage";
 import {
   playlistsChangedEventName,
   playlistsChangedStorageKey,
@@ -249,7 +252,11 @@ export function useTrackUploads(options: {
     await refreshCacheLibrary();
   }, [refreshCacheLibrary]);
 
-  const deleteRoomTrackArtifacts = useCallback(async (trackIds: string[]) => {
+  const deleteRoomTrackArtifacts = useCallback(async (
+    trackIds: string[],
+    roomId?: string,
+    deleteRoomSnapshot = false
+  ) => {
     const removed = new Set(trackIds);
     setUploadedTracks((current) => {
       const next = { ...current };
@@ -258,7 +265,10 @@ export function useTrackUploads(options: {
       }
       return next;
     });
-    await deleteLocalTrackDataForTracks([...removed]);
+    await deleteLocalTrackDataForTracks([...removed], roomId ? { roomId } : undefined);
+    if (roomId && deleteRoomSnapshot) {
+      await deleteRoomSnapshotFromLocalRepository(roomId).catch(() => undefined);
+    }
     await cleanupLocalAudioCacheFiles();
     await refreshCacheLibrary();
   }, [refreshCacheLibrary]);

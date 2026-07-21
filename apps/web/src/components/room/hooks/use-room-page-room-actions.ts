@@ -41,8 +41,7 @@ type UseRoomPageRoomActionsInput = {
   authEntryHref: string;
   clearIdentity: () => void;
   currentPlaybackPositionRef: MutableRefObject<number>;
-  deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
-  deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
+  deleteRoomTrackArtifacts: (trackIds: string[], roomId?: string, deleteRoomSnapshot?: boolean) => Promise<void> | void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   peerId: string;
   peerStorageKey: string;
@@ -72,7 +71,6 @@ export function useRoomPageRoomActions({
   clearIdentity,
   currentPlaybackPositionRef,
   deleteRoomTrackArtifacts,
-  deleteUploadedTrackArtifacts,
   dispatchRoomStateEvent,
   peerId,
   peerStorageKey,
@@ -154,15 +152,18 @@ export function useRoomPageRoomActions({
 
   const handleTrackDeleted = useCallback(
     async (trackId: string) => {
-      await deleteUploadedTrackArtifacts(trackId);
+      await deleteRoomTrackArtifacts(
+        [trackId],
+        roomSnapshot?.room.id
+      );
     },
-    [deleteUploadedTrackArtifacts]
+    [deleteRoomTrackArtifacts, roomSnapshot?.room.id]
   );
   const handleRoomDeleted = useCallback(
-    async (trackIds: string[]) => {
-      await deleteRoomTrackArtifacts(trackIds);
+    async (trackIds: string[], roomId?: string) => {
+      await deleteRoomTrackArtifacts(trackIds, roomId ?? roomSnapshot?.room.id, true);
     },
-    [deleteRoomTrackArtifacts]
+    [deleteRoomTrackArtifacts, roomSnapshot?.room.id]
   );
 
   const resetPlayerSurface = useCallback(() => {

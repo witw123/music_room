@@ -27,6 +27,7 @@ import {
   type Playlist,
   type QueueItem,
   type RoomSnapshot,
+  type RoomSyncResponse,
   type TrackMeta,
   type UpdateRoomRequest
 } from "@music-room/shared";
@@ -249,6 +250,10 @@ export const musicRoomApi = {
     }),
   getRoom: (roomId: string) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}`),
+  syncRoom: (roomId: string, sinceRevision = 0) =>
+    request<RoomSyncResponse>(`/v1/rooms/${roomId}/sync`, {
+      headers: { "x-room-revision": String(Math.max(0, Math.floor(sinceRevision))) }
+    }),
   updateRoom: (roomId: string, input: UpdateRoomRequest) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}`, {
       method: "PATCH",

@@ -278,6 +278,7 @@ function RoomDashboardViewBase({
               localSavedFileHashes={localStorageSummary.localSavedFileHashes}
               onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}
+              canManageAllTracks={activeSession?.userId === roomSnapshot.room.hostId}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}
               onAddToQueue={onAddToQueue}

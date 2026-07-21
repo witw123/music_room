@@ -7,6 +7,8 @@ import type {
   Room,
   RoomMember,
   RoomSnapshot,
+  RoomSyncResponse,
+  RoomTrackDeletion,
   TrackMeta,
   UserProfile
 } from "@music-room/shared";
@@ -155,6 +157,53 @@ export class RoomService {
     }
 
     return this.roomSnapshotService.buildSnapshot(record, playlists);
+  }
+
+  async syncRoom(
+    roomId: string,
+    sessionId: string,
+    sinceRevision = 0
+  ): Promise<RoomSyncResponse> {
+    const termination = await this.roomRecordRepository.getRoomTermination(roomId);
+    if (termination) {
+      const deletedAt = new Date().toISOString();
+      return {
+        roomId,
+        roomDeleted: true,
+        roomRevision: 0,
+        snapshot: null,
+        deletedTracks: termination.trackIds.map((trackId) => ({
+          roomId,
+          trackId,
+          fileHash: null,
+          originalAssetId: null,
+          playbackAssetId: null,
+          roomRevision: 0,
+          deletedAt
+        }))
+      };
+    }
+
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    const isMember =
+      record.room.hostId === sessionId ||
+      record.room.members.some((member) => member.id === sessionId);
+    if (!isMember && record.room.visibility !== "public") {
+      throw new Error("Room not found.");
+    }
+
+    const snapshot = await this.roomSnapshotService.buildSnapshot(record, []);
+    const deletedTracks = await this.roomRecordRepository.listTrackDeletions(
+      roomId,
+      Math.max(0, Math.floor(sinceRevision))
+    );
+    return {
+      roomId,
+      roomDeleted: false,
+      roomRevision: snapshot.room.roomRevision ?? 0,
+      snapshot,
+      deletedTracks
+    };
   }
 
   async listRoomsForSession(sessionId: string): Promise<RoomSnapshot[]> {
@@ -503,13 +552,23 @@ export class RoomService {
       throw new Error(`Track not found in room: ${trackId}`);
     }
 
-    if (track.ownerSessionId !== sessionId) {
+    if (track.ownerSessionId !== sessionId && record.room.hostId !== sessionId) {
       throw new Error("Only the original uploader can delete this track.");
     }
 
     this.removeTracksById(record, new Set([trackId]));
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
+    const deletion: RoomTrackDeletion = {
+      roomId,
+      trackId,
+      fileHash: track.fileHash,
+      originalAssetId: track.originalAsset?.assetId ?? null,
+      playbackAssetId: track.playbackAsset?.assetId ?? null,
+      roomRevision: record.room.roomRevision ?? 0,
+      deletedAt: new Date().toISOString()
+    };
+    await this.roomRecordRepository.recordTrackDeletion(deletion).catch(() => undefined);
     return { ok: true };
   }
 

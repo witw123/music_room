@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { PlaybackSnapshot, Playlist } from "@music-room/shared";
+import type { PlaybackSnapshot, Playlist, RoomTrackDeletedPayload } from "@music-room/shared";
 import { RoomService } from "../room.service";
 import { RoomRealtimeBroadcaster } from "../../signaling/room-realtime.broadcaster";
 
@@ -67,5 +67,9 @@ export class RoomRealtimePublisher {
 
   emitRoomDeleted(roomId: string, trackIds: string[]) {
     this.roomRealtimeBroadcaster.emitRoomDeleted(roomId, trackIds);
+  }
+
+  emitTrackDeleted(roomId: string, payload: Omit<RoomTrackDeletedPayload, "roomId">) {
+    this.roomRealtimeBroadcaster.emitTrackDeleted(roomId, payload);
   }
 }

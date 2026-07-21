@@ -18,3 +18,17 @@ export async function persistRoomSnapshotToLocalRepository(snapshot: RoomSnapsho
   roomPersistenceChain = operation.then(() => undefined, () => undefined);
   return operation;
 }
+
+export async function deleteRoomSnapshotFromLocalRepository(roomId: string) {
+  const operation = roomPersistenceChain.then(async () => {
+    const directory = await getLocalAudioDirectory();
+    if (!directory) return false;
+
+    const repository = await LocalRepository.open(directory.handle);
+    await repository.removeRoomTrackReferences(roomId);
+    await repository.deleteRoom(roomId);
+    return true;
+  });
+  roomPersistenceChain = operation.then(() => undefined, () => undefined);
+  return operation;
+}

@@ -206,3 +206,19 @@ model RoomTombstone {
   @@index([status, createdAt])
   @@index([expiresAt])
 }
+
+model RoomTrackDeletion {
+  id              String   @id
+  roomId          String
+  trackId         String
+  fileHash        String?
+  originalAssetId String?
+  playbackAssetId String?
+  roomRevision    Int
+  deletedAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  @@unique([roomId, trackId])
+  @@index([roomId, roomRevision])
+  @@index([expiresAt])
+}

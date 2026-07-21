@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Headers,
+  Query,
   Patch,
   Param,
   Post,
@@ -93,6 +94,22 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getRecoverableRoomSnapshot(roomId, userId);
+  }
+
+  @Get(":roomId/sync")
+  async syncRoom(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("x-room-revision") roomRevisionHeader?: string,
+    @Query("since") sinceQuery?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const sinceRevision = Number.parseInt(roomRevisionHeader ?? sinceQuery ?? "0", 10);
+    return this.roomService.syncRoom(
+      roomId,
+      userId,
+      Number.isFinite(sinceRevision) ? sinceRevision : 0
+    );
   }
 
   @Get(":roomId")
@@ -242,9 +259,24 @@ export class RoomController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const getRoomSnapshot = this.roomService.getRoomSnapshot;
+    const beforeSnapshot = typeof getRoomSnapshot === "function"
+      ? await getRoomSnapshot.call(this.roomService, roomId, []).catch(() => null)
+      : null;
+    const deletedTrack = beforeSnapshot?.tracks.find((track) => track.id === trackId);
     const result = await this.roomService.removeTrack(roomId, userId, trackId);
     await this.playlistService.removeTrackFromPlaylists(trackId);
-    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    const librarySnapshot = await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    if (deletedTrack) {
+      this.roomRealtimePublisher.emitTrackDeleted(roomId, {
+        trackId,
+        fileHash: deletedTrack.fileHash,
+        originalAssetId: deletedTrack.originalAsset?.assetId ?? null,
+        playbackAssetId: deletedTrack.playbackAsset?.assetId ?? null,
+        roomRevision: librarySnapshot?.room.roomRevision ?? (beforeSnapshot?.room.roomRevision ?? 0) + 1,
+        deletedAt: new Date().toISOString()
+      });
+    }
     return result;
   }
 }

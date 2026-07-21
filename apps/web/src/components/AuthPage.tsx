@@ -26,7 +26,8 @@ export function AuthPage() {
     activeSession,
     hydrated,
     statusMessage,
-    setStatusMessage
+    setStatusMessage,
+    setActiveSession
   } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -50,6 +51,7 @@ export function AuthPage() {
 
     try {
       const session = await musicRoomApi.login(loginUsername.trim(), loginPassword);
+      setActiveSession(session);
       setStatusMessage(`欢迎回来，${session.nickname}。`);
       router.replace(
         (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref()) as Route
@@ -71,6 +73,7 @@ export function AuthPage() {
         registerPassword,
         registerNickname.trim()
       );
+      setActiveSession(session);
       setStatusMessage(`账号已创建，欢迎你，${session.nickname}。`);
       router.replace(
         (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref()) as Route

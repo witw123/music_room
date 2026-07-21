@@ -109,7 +109,7 @@ type UseRoomRuntimeInput = {
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
-  deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
+  deleteRoomTrackArtifacts: (trackIds: string[], roomId?: string, deleteRoomSnapshot?: boolean) => Promise<void> | void;
   socketRef: MutableRefObject<RoomSocket | null>;
   localAudibleRef: MutableRefObject<boolean | null>;
   resetPlayerSurface: () => void;
@@ -273,7 +273,29 @@ export function useRoomRuntime({
   });
   const roomSnapshotResyncController = useRef(
     createRoomSnapshotResyncController({
-      loadSnapshot: (roomId) => musicRoomApi.getRoom(roomId),
+      loadSnapshot: async (roomId) => {
+        const sinceRevision =
+          currentRoomRef.current?.room.id === roomId
+            ? currentRoomRef.current.room.roomRevision ?? 0
+            : 0;
+        const sync = await musicRoomApi.syncRoom(roomId, sinceRevision);
+        if (sync.roomDeleted) {
+          await deleteRoomTrackArtifactsRef.current(
+            sync.deletedTracks.map((track) => track.trackId),
+            roomId,
+            true
+          );
+          exitCurrentRoomRef.current("这个房间已被删除。");
+          throw new Error(`Room not found: ${roomId}`);
+        }
+        if (sync.deletedTracks.length > 0) {
+          await deleteRoomTrackArtifactsRef.current(
+            sync.deletedTracks.map((track) => track.trackId),
+            roomId
+          );
+        }
+        return sync.snapshot ?? musicRoomApi.getRoom(roomId);
+      },
       applySnapshot: (_roomId, snapshot) => {
         if (activeRouteRoomIdRef.current && snapshot.room.id !== activeRouteRoomIdRef.current) {
           return;
@@ -463,6 +485,7 @@ export function useRoomRuntime({
     setIsPageVisible,
     setSchedulerMode,
     dispatchRoomStateEvent,
+    deleteRoomTrackArtifacts,
     recordPeerDiagnostic,
     refreshSession,
     refreshAvailableRooms,

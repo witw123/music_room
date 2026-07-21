@@ -34,6 +34,26 @@ export const roomSnapshotSchema = z.object({
   playlists: z.array(playlistSchema)
 });
 
+export const roomTrackDeletionSchema = z.object({
+  roomId: z.string(),
+  trackId: z.string(),
+  fileHash: z.string().nullable().optional(),
+  originalAssetId: z.string().nullable().optional(),
+  playbackAssetId: z.string().nullable().optional(),
+  roomRevision: z.number().int().nonnegative(),
+  deletedAt: z.string().datetime()
+});
+
+export const roomSyncResponseSchema = z.object({
+  roomId: z.string(),
+  roomDeleted: z.boolean(),
+  roomRevision: z.number().int().nonnegative(),
+  snapshot: roomSnapshotSchema.nullable(),
+  deletedTracks: z.array(roomTrackDeletionSchema)
+});
+
 export type RoomMember = z.infer<typeof roomMemberSchema>;
 export type Room = z.infer<typeof roomSchema>;
 export type RoomSnapshot = z.infer<typeof roomSnapshotSchema>;
+export type RoomTrackDeletion = z.infer<typeof roomTrackDeletionSchema>;
+export type RoomSyncResponse = z.infer<typeof roomSyncResponseSchema>;

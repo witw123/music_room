@@ -85,6 +85,7 @@ export function useRoomRuntimeLifecycle(input: {
   setIsPageVisible: Dispatch<SetStateAction<boolean>>;
   setSchedulerMode: Dispatch<SetStateAction<"normal" | "conservative" | "idle">>;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
+  deleteRoomTrackArtifacts: (trackIds: string[], roomId?: string, deleteRoomSnapshot?: boolean) => Promise<void> | void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   refreshSession: () => Promise<unknown>;
   refreshAvailableRooms: () => Promise<void>;
@@ -97,6 +98,7 @@ export function useRoomRuntimeLifecycle(input: {
     authEntryHref,
     currentRoomRef,
     dispatchRoomStateEvent,
+    deleteRoomTrackArtifacts,
     emitPresence,
     hasStoredSession,
     hydrated,
@@ -325,7 +327,15 @@ export function useRoomRuntimeLifecycle(input: {
 
     void (async () => {
       try {
-        const snapshot = await musicRoomApi.recoverRoom(initialRoomId);
+        const sync = await musicRoomApi.syncRoom(initialRoomId, 0);
+        if (sync.roomDeleted) {
+          await deleteRoomTrackArtifacts(
+            sync.deletedTracks.map((track) => track.trackId),
+            initialRoomId,
+            true
+          );
+        }
+        const snapshot = sync.roomDeleted ? null : sync.snapshot;
         if (!snapshot || cancelled) {
           if (!cancelled) {
             setSuppressRoomRecovery(true);
@@ -371,6 +381,7 @@ export function useRoomRuntimeLifecycle(input: {
     isNavigatingRoomExit,
     refreshPlaylists,
     dispatchRoomStateEvent,
+    deleteRoomTrackArtifacts,
     setIsRecoveringRoom,
     setSuppressRoomRecovery,
     setStatusMessage,

@@ -20,6 +20,7 @@ import type {
   RoomPresencePatchPayload,
   RoomPresencePayload,
   RoomQueuePatchPayload,
+  RoomTrackDeletedPayload,
   RoomSubscribePayload,
   RoomSnapshot,
   RoomUnsubscribePayload
@@ -35,6 +36,7 @@ import {
   roomPresencePayloadSchema,
   roomPresencePatchPayloadSchema,
   roomQueuePatchPayloadSchema,
+  roomTrackDeletedPayloadSchema,
   roomSubscribePayloadSchema,
   roomSnapshotMissingPayloadSchema,
   roomSnapshotSchema,
@@ -56,6 +58,7 @@ import {
   roomPlaybackPatchChannel,
   roomPresencePatchChannel,
   roomQueuePatchChannel,
+  roomTrackDeletedChannel,
   roomSnapshotChannel,
   roomSnapshotMissingChannel,
   sessionReplacementChannel
@@ -373,6 +376,27 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       }
 
       this.emitPeerSignalToPeer(message.roomId, parsed.data.toPeerId, parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
+    void this.redisService.subscribe(roomTrackDeletedChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomTrackDeletedPayload;
+      };
+
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+
+      const parsed = roomTrackDeletedPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.track.deleted", parsed.data);
     }).then((unsubscribe) => {
       this.redisUnsubscribers.push(unsubscribe);
     });

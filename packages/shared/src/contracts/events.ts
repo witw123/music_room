@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { peerSignalMessageSchema } from "../p2p/models";
 import { p2pProtocolVersion, segmentedOpusCapability } from "../p2p/asset-models";
-import { roomSnapshotSchema } from "../room/models";
+import { roomSnapshotSchema, roomTrackDeletionSchema } from "../room/models";
 import { playbackSnapshotSchema } from "../playback/models";
 import { queueItemSchema, trackMetaSchema } from "../playlist/models";
 import { telemetryReportSchema, type TelemetryReport } from "./telemetry";
@@ -17,6 +17,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.queue.patch"),
   z.literal("room.presence.patch"),
   z.literal("room.library.patch"),
+  z.literal("room.track.deleted"),
   z.literal("room.session.replaced"),
   z.literal("peer.signal"),
   z.literal("room.chat"),
@@ -116,6 +117,10 @@ export const roomLibraryPatchPayloadSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+export const roomTrackDeletedPayloadSchema = roomTrackDeletionSchema.extend({
+  roomId: z.string()
+});
+
 export const roomSnapshotEventSchema = z.object({
   event: z.literal("room.snapshot"),
   payload: roomSnapshotSchema
@@ -154,6 +159,11 @@ export const roomPresencePatchEventSchema = z.object({
 export const roomLibraryPatchEventSchema = z.object({
   event: z.literal("room.library.patch"),
   payload: roomLibraryPatchPayloadSchema
+});
+
+export const roomTrackDeletedEventSchema = z.object({
+  event: z.literal("room.track.deleted"),
+  payload: roomTrackDeletedPayloadSchema
 });
 
 export const peerSignalEventSchema = z.object({
@@ -195,6 +205,7 @@ export type RoomPlaybackPatchPayload = z.infer<typeof roomPlaybackPatchPayloadSc
 export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
+export type RoomTrackDeletedPayload = z.infer<typeof roomTrackDeletedPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
 export type DiagnosticsReportPayload = TelemetryReport;
@@ -208,6 +219,7 @@ export type ServerToClientEvents = {
   "room.queue.patch": (payload: RoomQueuePatchPayload) => void;
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
+  "room.track.deleted": (payload: RoomTrackDeletedPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
   "session.revoked": () => void;

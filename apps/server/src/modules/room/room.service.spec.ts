@@ -866,7 +866,7 @@ describe("RoomService", () => {
     expect(roomAfterDelete.room.playback.currentTrackId).toBeNull();
   });
 
-  it("blocks the host from deleting another member's uploaded track", async () => {
+  it("allows the host to delete another member's uploaded track", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -893,7 +893,7 @@ describe("RoomService", () => {
 
     await expect(
       roomService.removeTrack(snapshot.room.id, host.id, track.id)
-    ).rejects.toThrow("Only the original uploader can delete this track.");
+    ).resolves.toEqual({ ok: true });
   });
 
   it("blocks other members from deleting someone else's uploaded track", async () => {

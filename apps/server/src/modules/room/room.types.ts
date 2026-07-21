@@ -48,11 +48,13 @@ export function serializePlaybackForPersistence(
 }
 
 export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecord {
-  const persistedPlayback = persisted.playback as PersistedPlayback;
+  const persistedPlayback = isRecord(persisted.playback)
+    ? (persisted.playback as PersistedPlayback)
+    : {};
   const persistedMembers = Array.isArray(persisted.members)
     ? (persisted.members as Partial<RoomMember>[])
     : [];
-  return {
+  const record = {
     room: {
       id: persisted.id,
       hostId: persisted.hostId,
@@ -89,9 +91,49 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       roomRevision: resolveRoomRevision(persisted, persistedPlayback)
     },
     passwordHash: persisted.passwordHash ?? null,
-    tracks: persisted.tracks as TrackMeta[],
-    queue: persisted.queue as QueueItem[]
+    tracks: persisted.tracks,
+    queue: persisted.queue
   };
+
+  const normalized = normalizeRoomRecord(record);
+  if (!normalized) {
+    throw new Error(`Invalid persisted room record: ${persisted.id}`);
+  }
+  return normalized;
+}
+
+/**
+ * Room records outlive the playback/provider implementation that created them.
+ * Keep the room discoverable when a legacy track contains an obsolete asset
+ * manifest, while ensuring that incompatible assets are never selected by the
+ * current playback runtime.
+ */
+export function normalizeRoomRecord(value: unknown): RoomRecord | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const roomResult = roomSchema.safeParse(value.room);
+  if (!roomResult.success) {
+    return null;
+  }
+
+  const tracks = normalizeTracks(value.tracks);
+  if (!tracks) {
+    return null;
+  }
+  const trackIds = new Set(tracks.map((track) => track.id));
+  const queue = normalizeQueue(value.queue, trackIds);
+  const candidate = {
+    room: roomResult.data,
+    ...(value.passwordHash === undefined || value.passwordHash === null || typeof value.passwordHash === "string"
+      ? (value.passwordHash === undefined ? {} : { passwordHash: value.passwordHash })
+      : {}),
+    tracks,
+    queue
+  };
+  const recordResult = roomRecordSchema.safeParse(candidate);
+  return recordResult.success ? recordResult.data : null;
 }
 
 function resolvePresenceRevision(
@@ -120,4 +162,58 @@ function resolveRoomRevision(
   return typeof rawRoomRevision === "number"
     ? Math.max(0, Math.floor(rawRoomRevision))
     : 0;
+}
+
+function normalizeTracks(value: unknown): TrackMeta[] | null {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const tracks: TrackMeta[] = [];
+  for (const track of value) {
+    const current = trackMetaSchema.safeParse(track);
+    if (current.success) {
+      tracks.push(current.data);
+      continue;
+    }
+
+    // Playback profiles and provider adapters are versioned independently of
+    // the room. A track with an obsolete asset can still be shown and replaced
+    // later, but its old asset must not be offered to the new decoder.
+    if (!isRecord(track)) {
+      return null;
+    }
+    const { originalAsset: _originalAsset, playbackAsset: _playbackAsset, ...metadata } = track;
+    const legacyCompatible = trackMetaSchema.safeParse(metadata);
+    if (legacyCompatible.success) {
+      tracks.push(legacyCompatible.data);
+      continue;
+    }
+
+    // These providers were removed from the current server, but their room
+    // metadata is still safe to keep around for directory discovery.
+    if (typeof track.sourceType === "string" && legacyProviderTypes.has(track.sourceType)) {
+      continue;
+    }
+
+    return null;
+  }
+  return tracks;
+}
+
+const legacyProviderTypes = new Set(["spotify", "kugou", "kuwo", "taihe", "migu", "baidu"]);
+
+function normalizeQueue(value: unknown, trackIds: Set<string>): QueueItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    const parsed = queueItemSchema.safeParse(item);
+    return parsed.success && trackIds.has(parsed.data.trackId) ? [parsed.data] : [];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,8 +1,82 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
 import type { AuthSession } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
+
+type SessionSnapshot = {
+  activeSession: AuthSession | null;
+  hasStoredSession: boolean;
+  hydrated: boolean;
+};
+
+const emptySessionSnapshot: SessionSnapshot = {
+  activeSession: null,
+  hasStoredSession: false,
+  hydrated: false
+};
+
+let sessionSnapshot = emptySessionSnapshot;
+let sessionProbe: Promise<void> | null = null;
+let sessionGeneration = 0;
+const sessionListeners = new Set<() => void>();
+
+function subscribeToSession(listener: () => void) {
+  sessionListeners.add(listener);
+  return () => sessionListeners.delete(listener);
+}
+
+function getSessionSnapshot() {
+  return sessionSnapshot;
+}
+
+function updateSessionSnapshot(next: SessionSnapshot) {
+  if (
+    areAuthSessionsEqual(sessionSnapshot.activeSession, next.activeSession) &&
+    sessionSnapshot.hasStoredSession === next.hasStoredSession &&
+    sessionSnapshot.hydrated === next.hydrated
+  ) {
+    return;
+  }
+
+  sessionSnapshot = next;
+  for (const listener of sessionListeners) listener();
+}
+
+function setSharedSession(session: AuthSession | null) {
+  sessionGeneration += 1;
+  updateSessionSnapshot({
+    activeSession: session,
+    hasStoredSession: Boolean(session),
+    hydrated: true
+  });
+}
+
+function ensureSessionProbe() {
+  if (sessionProbe || sessionSnapshot.hydrated) return;
+
+  const generation = sessionGeneration;
+  sessionProbe = musicRoomApi.me()
+    .then((session) => {
+      if (generation !== sessionGeneration) return;
+      updateSessionSnapshot({
+        activeSession: isStoredAuthSession(session) ? session : null,
+        hasStoredSession: isStoredAuthSession(session),
+        hydrated: true
+      });
+    })
+    .catch(() => {
+      if (generation !== sessionGeneration) return;
+      updateSessionSnapshot({
+        activeSession: null,
+        hasStoredSession: false,
+        hydrated: true
+      });
+    })
+    .finally(() => {
+      sessionProbe = null;
+    });
+}
 
 export function isStoredAuthSession(value: unknown): value is AuthSession {
   if (!value || typeof value !== "object") {
@@ -46,29 +120,25 @@ export function useSessionIdentity(options: {
   initialStatusMessage: string;
 }) {
   const { sessionStorageKey, initialStatusMessage } = options;
-  const [activeSession, setActiveSessionState] = useState<AuthSession | null>(null);
-  const [hasStoredSession, setHasStoredSession] = useState(false);
+  const { activeSession, hasStoredSession, hydrated } = useSyncExternalStore(
+    subscribeToSession,
+    getSessionSnapshot,
+    getSessionSnapshot
+  );
   const [statusMessage, setStatusMessage] = useState(initialStatusMessage);
-  const [hydrated, setHydrated] = useState(false);
 
   const persistSession = useCallback(
     (session: AuthSession | null) => {
-      if (session) {
-        setHasStoredSession(true);
-        return;
+      if (!session && typeof window !== "undefined") {
+        window.localStorage.removeItem(sessionStorageKey);
       }
-
-      window.localStorage.removeItem(sessionStorageKey);
-      setHasStoredSession(false);
     },
     [sessionStorageKey]
   );
 
   const setActiveSession = useCallback(
     (session: AuthSession | null) => {
-      setActiveSessionState((current) =>
-        areAuthSessionsEqual(current, session) ? current : session
-      );
+      setSharedSession(session);
       persistSession(session);
     },
     [persistSession]
@@ -91,29 +161,8 @@ export function useSessionIdentity(options: {
   }, [setActiveSession]);
 
   useEffect(() => {
-    window.localStorage.removeItem(sessionStorageKey);
-    let cancelled = false;
-    void musicRoomApi.me().then((session) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (isStoredAuthSession(session)) {
-        setActiveSession(session);
-      }
-      setHydrated(true);
-    }).catch(() => {
-      if (!cancelled) {
-        // A failed initial probe must not clear a session established by a
-        // concurrent login/register request.
-        setHydrated(true);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionStorageKey, setActiveSession]);
+    ensureSessionProbe();
+  }, []);
 
   useEffect(() => {
     const handleExpired = () => {
