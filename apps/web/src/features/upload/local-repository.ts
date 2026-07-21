@@ -130,6 +130,29 @@ type LocalRepositoryOriginalManifest = {
   sourcePath: string;
 };
 
+type LocalRepositoryTempWrite = {
+  storageSchemaVersion: 1;
+  id: string;
+  kind: "playback-asset";
+  targetPath: string;
+};
+
+type LocalRepositoryTrashEntry = {
+  storageSchemaVersion: 1;
+  id: string;
+  targetPath: string;
+};
+
+export type LocalRepositoryTranscodeJob = {
+  sourceFileHash: string;
+  kind: "original-reindex" | "playback-transcode";
+  profileId: string;
+  status: "queued" | "running" | "completed" | "failed";
+  progress: number;
+  errorMessage: string | null;
+  updatedAt: string;
+};
+
 type DirectoryHandleWithValues = FileSystemDirectoryHandle & {
   values?: () => AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>;
 };
@@ -163,6 +186,8 @@ export class LocalRepository {
       await writeJsonFile(dataDirectory, repositoryManifestFileName, manifest);
     }
     const repository = new LocalRepository(root, dataDirectory, manifest);
+    await repository.cleanupTemporaryWrites();
+    await repository.cleanupTrash();
     await repository.cleanupObsoletePlaybackAssets();
     return repository;
   }
@@ -191,6 +216,7 @@ export class LocalRepository {
     file: Blob;
     fileHash: string;
     mimeType: string;
+    provider?: "netease" | "qqmusic" | "local_upload";
   }, options?: { reuseExisting?: boolean }) {
     const relativePath = this.getCachedSourcePath(input);
     if (options?.reuseExisting && await getFileByPath(this.root, relativePath, false)) {
@@ -200,9 +226,14 @@ export class LocalRepository {
     return relativePath;
   }
 
-  getCachedSourcePath(input: { fileHash: string; mimeType: string }) {
+  getCachedSourcePath(input: {
+    fileHash: string;
+    mimeType: string;
+    provider?: "netease" | "qqmusic" | "local_upload";
+  }) {
     const extension = inferFileExtension(input.mimeType);
-    return `${localRepositoryDirectoryName}/cache/provider/local_upload/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
+    const provider = input.provider ?? "local_upload";
+    return `${localRepositoryDirectoryName}/cache/provider/${provider}/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
   }
 
   async writeLyrics(fileHash: string, lyrics: string) {
@@ -216,6 +247,53 @@ export class LocalRepository {
 
   getLyricsPath(fileHash: string) {
     return `${localRepositoryDirectoryName}/library/lyrics/${fileHash}.lrc`;
+  }
+
+  async writeArtworkFromUrl(input: {
+    fileHash: string;
+    artworkUrl: string;
+    retention: "library" | "cache";
+    provider?: "netease" | "qqmusic" | "local_upload";
+  }) {
+    const normalizedUrl = input.artworkUrl.trim();
+    if (!normalizedUrl) return null;
+
+    let artwork: Blob;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      try {
+        artwork = await fetch(normalizedUrl, { signal: controller.signal }).then(async (response) => {
+          if (!response.ok) throw new Error(`Artwork request failed with ${response.status}.`);
+          return response.blob();
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch {
+      return null;
+    }
+    if (artwork.size <= 0 || (artwork.type && !artwork.type.startsWith("image/"))) return null;
+
+    const extension = inferArtworkExtension(artwork.type, normalizedUrl);
+    const baseDirectory = input.retention === "library"
+      ? `${localRepositoryDirectoryName}/library/artwork`
+      : `${localRepositoryDirectoryName}/cache/artwork/${input.provider ?? "local_upload"}`;
+    const relativePath = `${baseDirectory}/${input.fileHash}${extension ? `.${extension}` : ""}`;
+    await this.writeBlob(relativePath, artwork);
+    return relativePath;
+  }
+
+  getArtworkPath(input: {
+    fileHash: string;
+    retention: "library" | "cache";
+    provider?: "netease" | "qqmusic" | "local_upload";
+    extension?: string;
+  }) {
+    const baseDirectory = input.retention === "library"
+      ? `${localRepositoryDirectoryName}/library/artwork`
+      : `${localRepositoryDirectoryName}/cache/artwork/${input.provider ?? "local_upload"}`;
+    return `${baseDirectory}/${input.fileHash}${input.extension ? `.${input.extension}` : ""}`;
   }
 
   async readPath(relativePath: string) {
@@ -250,7 +328,9 @@ export class LocalRepository {
   }
 
   async deleteOriginalAsset(assetId: string) {
-    await this.removeDirectory(`${localRepositoryDirectoryName}/assets/original/${assetId}`);
+    const targetPath = `${localRepositoryDirectoryName}/assets/original/${assetId}`;
+    await this.queueTrash(targetPath);
+    await this.removeDirectory(targetPath);
     await this.touch();
   }
 
@@ -372,14 +452,10 @@ export class LocalRepository {
                 ?? this.getOriginalManifestPath(track.originalAsset.assetId)
             }
           : existing?.originalAsset ?? null,
-        playbackAsset: track.playbackAsset
-          ? {
-              assetId: track.playbackAsset.assetId,
-              profileId: track.playbackAsset.profileId,
-              manifestPath: existing?.playbackAsset?.manifestPath
-                ?? this.getPlaybackManifestPath(track.playbackAsset.assetId, track.playbackAsset.profileId)
-            }
-          : existing?.playbackAsset ?? null,
+        playbackAsset: await this.resolveRoomPlaybackAssetReference(
+          existing?.playbackAsset,
+          track.playbackAsset
+        ),
         artworkPath: existing?.artworkPath ?? null,
         lyricsPath,
         retention: existing?.retention ?? "cache",
@@ -467,6 +543,32 @@ export class LocalRepository {
     await this.touch();
   }
 
+  async writeTranscodeJob(job: LocalRepositoryTranscodeJob) {
+    await this.writeJson(
+      `${localRepositoryDirectoryName}/jobs/${job.sourceFileHash}-${job.kind}.json`,
+      { storageSchemaVersion: 1, ...job }
+    );
+    await this.touch();
+  }
+
+  async listTranscodeJobs() {
+    return this.listJsonFiles<LocalRepositoryTranscodeJob>(
+      `${localRepositoryDirectoryName}/jobs`
+    );
+  }
+
+  async deleteTranscodeJobs(sourceFileHash: string) {
+    const jobs = await this.listTranscodeJobs();
+    await Promise.all(
+      jobs
+        .filter((job) => job.sourceFileHash === sourceFileHash)
+        .map((job) => this.removePath(
+          `${localRepositoryDirectoryName}/jobs/${job.sourceFileHash}-${job.kind}.json`
+        ))
+    );
+    await this.touch();
+  }
+
   async writeOriginalManifest(
     manifest: OriginalAssetManifest,
     sourcePath: string
@@ -500,32 +602,57 @@ export class LocalRepository {
     manifest: PlaybackAssetManifest;
     units: Array<{ descriptor: AssetUnitDescriptor; payload: ArrayBuffer }>;
   }) {
+    if (input.units.length !== input.manifest.unitCount) {
+      throw new Error("播放资产分片数量与清单不一致。");
+    }
     const basePath = this.getPlaybackAssetPath(input.manifest.assetId, input.manifest.profileId);
-    const unitDescriptors: LocalRepositoryPlaybackUnit[] = new Array(input.units.length);
-    let nextUnitIndex = 0;
-    await Promise.all(
-      Array.from({ length: Math.min(playbackWriteConcurrency, input.units.length) }, async () => {
-        while (true) {
-          const unitIndex = nextUnitIndex++;
-          if (unitIndex >= input.units.length) return;
-          const unit = input.units[unitIndex]!;
-          const fileName = `${String(unit.descriptor.unitIndex).padStart(6, "0")}.opus`;
-          const relativePath = `${basePath}/units/${fileName}`;
-          await this.writeBlob(relativePath, new Blob([new Uint8Array(unit.payload)], {
-            type: "audio/ogg"
-          }));
-          unitDescriptors[unitIndex] = {
-            descriptor: unit.descriptor,
-            relativePath
-          };
-        }
-      })
+    const existing = await this.readPlaybackAsset(
+      input.manifest.assetId,
+      input.manifest.profileId
     );
-    await this.writeJson(`${basePath}/manifest.json`, {
+    if (existing && existing.units.length === input.manifest.unitCount) {
+      return `${basePath}/manifest.json`;
+    }
+    const journalId = `playback-${input.manifest.profileId}-${input.manifest.assetId}`;
+    const journalPath = `${localRepositoryDirectoryName}/tmp/${journalId}.json`;
+    await this.writeJson(journalPath, {
       storageSchemaVersion: 1,
-      manifest: input.manifest,
-      units: unitDescriptors
-    } satisfies LocalRepositoryPlaybackManifest);
+      id: journalId,
+      kind: "playback-asset",
+      targetPath: basePath
+    } satisfies LocalRepositoryTempWrite);
+    const unitDescriptors: LocalRepositoryPlaybackUnit[] = new Array(input.units.length);
+    try {
+      let nextUnitIndex = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(playbackWriteConcurrency, input.units.length) }, async () => {
+          while (true) {
+            const unitIndex = nextUnitIndex++;
+            if (unitIndex >= input.units.length) return;
+            const unit = input.units[unitIndex]!;
+            const fileName = `${String(unit.descriptor.unitIndex).padStart(6, "0")}.opus`;
+            const relativePath = `${basePath}/units/${fileName}`;
+            await this.writeBlob(relativePath, new Blob([new Uint8Array(unit.payload)], {
+              type: "audio/ogg"
+            }));
+            unitDescriptors[unitIndex] = {
+              descriptor: unit.descriptor,
+              relativePath
+            };
+          }
+        })
+      );
+      await this.writeJson(`${basePath}/manifest.json`, {
+        storageSchemaVersion: 1,
+        manifest: input.manifest,
+        units: unitDescriptors
+      } satisfies LocalRepositoryPlaybackManifest);
+      await this.removePath(journalPath);
+    } catch (error) {
+      await this.removeDirectory(basePath).catch(() => undefined);
+      await this.removePath(journalPath).catch(() => undefined);
+      throw error;
+    }
     await this.touch();
     return `${basePath}/manifest.json`;
   }
@@ -545,9 +672,9 @@ export class LocalRepository {
   }
 
   async deletePlaybackAsset(assetId: string, profileId: string) {
-    await this.removeDirectory(
-      `${localRepositoryDirectoryName}/assets/playback/${profileId}/${assetId}`
-    );
+    const targetPath = this.getPlaybackAssetPath(assetId, profileId);
+    await this.queueTrash(targetPath);
+    await this.removeDirectory(targetPath);
     await this.touch();
   }
 
@@ -581,6 +708,68 @@ export class LocalRepository {
 
   async readPlaybackUnit(unit: LocalRepositoryPlaybackUnit) {
     return this.readPath(unit.relativePath);
+  }
+
+  private async resolveRoomPlaybackAssetReference(
+    existing: LocalRepositoryTrackRecord["playbackAsset"] | undefined,
+    incoming: TrackMeta["playbackAsset"] | undefined
+  ) {
+    const incomingReference = incoming
+      ? {
+          assetId: incoming.assetId,
+          profileId: incoming.profileId,
+          manifestPath: this.getPlaybackManifestPath(incoming.assetId, incoming.profileId)
+        }
+      : null;
+    if (!existing) return incomingReference;
+
+    const existingManifest = await this.readPlaybackAsset(existing.assetId, existing.profileId);
+    const hasUsableExistingManifest = !!existingManifest &&
+      existingManifest.units.length === existingManifest.manifest.unitCount;
+    if (!incomingReference) {
+      return hasUsableExistingManifest ? existing : null;
+    }
+    const incomingManifest = await this.readPlaybackAsset(
+      incomingReference.assetId,
+      incomingReference.profileId
+    );
+    const hasUsableIncomingManifest = !!incomingManifest &&
+      incomingManifest.units.length === incomingManifest.manifest.unitCount;
+    return hasUsableExistingManifest && !hasUsableIncomingManifest
+      ? existing
+      : incomingReference;
+  }
+
+  private async cleanupTemporaryWrites() {
+    const writes = await this.listJsonFiles<LocalRepositoryTempWrite>(
+      `${localRepositoryDirectoryName}/tmp`
+    );
+    for (const write of writes) {
+      if (write.kind !== "playback-asset" || !write.id || !write.targetPath) continue;
+      await this.removeDirectory(write.targetPath);
+      await this.removePath(`${localRepositoryDirectoryName}/tmp/${write.id}.json`);
+    }
+  }
+
+  private async queueTrash(targetPath: string) {
+    const id = globalThis.crypto?.randomUUID?.()
+      ?? `trash-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await this.writeJson(`${localRepositoryDirectoryName}/trash/${id}.json`, {
+      storageSchemaVersion: 1,
+      id,
+      targetPath
+    } satisfies LocalRepositoryTrashEntry);
+  }
+
+  private async cleanupTrash() {
+    const entries = await this.listJsonFiles<LocalRepositoryTrashEntry>(
+      `${localRepositoryDirectoryName}/trash`
+    );
+    for (const entry of entries) {
+      if (!entry.id || !entry.targetPath) continue;
+      await this.removeDirectory(entry.targetPath);
+      await this.removePath(`${localRepositoryDirectoryName}/trash/${entry.id}.json`);
+    }
   }
 
   private async writeBlob(relativePath: string, blob: Blob) {
@@ -872,4 +1061,16 @@ function inferFileExtension(mimeType: string) {
     default:
       return "";
   }
+}
+
+function inferArtworkExtension(mimeType: string, sourceUrl: string) {
+  const normalizedMimeType = mimeType.toLowerCase().split(";", 1)[0];
+  if (normalizedMimeType === "image/jpeg") return "jpg";
+  if (normalizedMimeType === "image/png") return "png";
+  if (normalizedMimeType === "image/webp") return "webp";
+  if (normalizedMimeType === "image/gif") return "gif";
+  const extension = sourceUrl.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i)?.[1]?.toLowerCase();
+  return extension && ["jpg", "jpeg", "png", "webp", "gif"].includes(extension)
+    ? extension === "jpeg" ? "jpg" : extension
+    : "bin";
 }

@@ -87,6 +87,12 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const [volume, setVolume] = useState(0.8);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("sequence");
 
+  const refreshLibraryRecords = useCallback(async () => {
+    const tracks = await listMergedLocalPlaylistTracks();
+    setLibraryRecords(tracks);
+    return tracks;
+  }, []);
+
   useEffect(() => {
     queueRef.current = queueRecords;
   }, [queueRecords]);
@@ -104,17 +110,22 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, [playbackMode]);
 
   useEffect(() => {
-    let cancelled = false;
-    void listMergedLocalPlaylistTracks()
-      .then((tracks) => {
-        if (!cancelled) setLibraryRecords(tracks);
-      })
-      .catch(() => undefined);
+    const refresh = () => {
+      void refreshLibraryRecords().catch(() => undefined);
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refresh();
+    };
+
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      cancelled = true;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [refreshLibraryRecords]);
 
   useEffect(() => {
     return () => {
@@ -254,7 +265,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [createPlaybackSnapshot, loadAudioFile, playbackMode]);
 
-  const playTrack = useCallback(async (track: LocalPlaylistTrackRecord) => {
+  const playTrack = useCallback(async (inputTrack: LocalPlaylistTrackRecord) => {
+    const track = mergeLocalTrackRecord(inputTrack, libraryRecords);
     const existingIndex = queueRef.current.findIndex((candidate) => candidate.id === track.id);
     if (existingIndex >= 0) {
       await playRecords(queueRef.current, existingIndex, "queue");
@@ -265,13 +277,14 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     queueRef.current = nextQueue;
     setQueueRecords(nextQueue);
     await playRecords(nextQueue, nextQueue.length - 1, "queue");
-  }, [playRecords]);
+  }, [libraryRecords, playRecords]);
 
   const playTracks = useCallback(async (
     tracksToPlay: LocalPlaylistTrackRecord[],
     startIndex = 0
   ) => {
-    const uniqueTracks = tracksToPlay.filter((track, index, list) =>
+    const resolvedTracks = tracksToPlay.map((track) => mergeLocalTrackRecord(track, libraryRecords));
+    const uniqueTracks = resolvedTracks.filter((track, index, list) =>
       list.findIndex((candidate) => candidate.id === track.id) === index
     );
     if (uniqueTracks.length === 0) return;
@@ -293,9 +306,10 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     if (queueIndex >= 0) {
       await playRecords(nextQueue, queueIndex, "queue");
     }
-  }, [playRecords]);
+  }, [libraryRecords, playRecords]);
 
-  const addToQueue = useCallback((track: LocalPlaylistTrackRecord) => {
+  const addToQueue = useCallback((inputTrack: LocalPlaylistTrackRecord) => {
+    const track = mergeLocalTrackRecord(inputTrack, libraryRecords);
     if (queueRef.current.some((candidate) => candidate.id === track.id)) {
       return;
     }
@@ -321,17 +335,24 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       ];
       currentIndexRef.current = 0;
     }
-  }, []);
+  }, [libraryRecords]);
 
-  const onPlay = useCallback(() => {
+  const onPlay = useCallback(async () => {
     const record = currentRecordRef.current;
     const audio = audioRef.current;
     if (!audio) return;
 
     if (!record) {
-      const firstQueueIndex = queueRef.current.findIndex((track) => Boolean(track.fileHash));
+      const records = queueRef.current.length > 0
+        ? queueRef.current
+        : await refreshLibraryRecords().catch(() => libraryRecords);
+      const firstQueueIndex = records.findIndex((track) => Boolean(track.fileHash));
       if (firstQueueIndex >= 0) {
-        void playRecords(queueRef.current, firstQueueIndex, "queue");
+        if (queueRef.current.length === 0) {
+          queueRef.current = records;
+          setQueueRecords(records);
+        }
+        await playRecords(records, firstQueueIndex, "queue");
       }
       return;
     }
@@ -346,7 +367,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
           startedAt: new Date(Date.now() - audio.currentTime * 1000).toISOString()
         }));
       });
-  }, [createPlaybackSnapshot, playRecords]);
+  }, [createPlaybackSnapshot, libraryRecords, playRecords, refreshLibraryRecords]);
 
   const onPause = useCallback((positionMs?: number) => {
     const record = currentRecordRef.current;
@@ -598,7 +619,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     currentQueueItemId: currentRecord && queueRecords.some((track) => track.id === currentRecord.id)
       ? buildLocalQueueItemId(currentRecord.id)
       : null,
-    canControlPlayback: Boolean(currentRecord || queueRecords.length > 0),
+    canControlPlayback: Boolean(currentRecord || queueRecords.length > 0 || libraryRecords.length > 0),
     canSeekPlayback: Boolean(currentRecord),
     playbackMode,
     isTrackPlayable,
@@ -640,7 +661,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     syncProgressFromAudio,
     tracks,
     volume,
-    queueRecords
+    queueRecords,
+    libraryRecords
   ]);
 
   return <LocalPlayerContext.Provider value={value}>{children}</LocalPlayerContext.Provider>;
@@ -652,6 +674,37 @@ export function useLocalPlayer() {
     throw new Error("useLocalPlayer must be used within LocalPlayerProvider");
   }
   return context;
+}
+
+function mergeLocalTrackRecord(
+  track: LocalPlaylistTrackRecord,
+  libraryRecords: readonly LocalPlaylistTrackRecord[]
+) {
+  const libraryTrack = libraryRecords.find((candidate) =>
+    candidate.id === track.id ||
+    (!!track.fileHash && candidate.fileHash === track.fileHash) ||
+    (!!track.providerTrackId &&
+      candidate.provider === track.provider &&
+      candidate.providerTrackId === track.providerTrackId)
+  );
+  if (!libraryTrack) return track;
+
+  return {
+    ...libraryTrack,
+    ...track,
+    title: track.title.trim() || libraryTrack.title,
+    artist: track.artist.trim() || libraryTrack.artist,
+    album: track.album ?? libraryTrack.album,
+    durationMs: track.durationMs || libraryTrack.durationMs,
+    mimeType: track.mimeType || libraryTrack.mimeType,
+    sizeBytes: track.sizeBytes || libraryTrack.sizeBytes,
+    artworkUrl: track.artworkUrl ?? libraryTrack.artworkUrl,
+    lyrics: track.lyrics ?? libraryTrack.lyrics,
+    fileHash: track.fileHash ?? libraryTrack.fileHash,
+    fileName: track.fileName ?? libraryTrack.fileName,
+    sourceDirectoryId: track.sourceDirectoryId ?? libraryTrack.sourceDirectoryId,
+    availableOffline: track.availableOffline || libraryTrack.availableOffline
+  };
 }
 
 function buildLocalQueueItemId(trackId: string) {

@@ -2,7 +2,6 @@
 
 import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
-import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
@@ -32,8 +31,6 @@ type BottomPlayerProps = {
   seekDraft: number | null;
   setSeekDraft: (v: number | null) => void;
   audioDurationMs: number;
-  volume: number;
-  setVolume: (v: number) => void;
   syncProgressFromAudio: () => void;
   syncDurationFromAudio: () => void;
   currentTrack: TrackMeta | null;
@@ -73,8 +70,6 @@ function BottomPlayerBase({
   seekDraft,
   setSeekDraft,
   audioDurationMs,
-  volume,
-  setVolume,
   syncProgressFromAudio,
   syncDurationFromAudio,
   currentTrack,
@@ -310,17 +305,6 @@ function BottomPlayerBase({
     startTransition
   ]);
 
-  const applyVolume = useCallback(
-    (nextVolume: number) => {
-      setVolume(nextVolume);
-      roomAudioOutput.applyVolume({
-        localAudio: audioRef.current,
-        volume: nextVolume
-      });
-    },
-    [audioRef, setVolume]
-  );
-
   const getLiveProgressMs = useCallback(
     () =>
       resolveAnchoredProgressMs({
@@ -372,10 +356,8 @@ function BottomPlayerBase({
         artist={artist}
         boundedProgressMs={boundedProgressMs}
         currentTrackDuration={currentTrackDuration}
-        volume={volume}
         setSeekDraft={setSeekDraft}
         commitSeek={commitSeek}
-        applyVolume={applyVolume}
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
@@ -408,10 +390,8 @@ function BottomPlayerBase({
         artist={artist}
         boundedProgressMs={boundedProgressMs}
         currentTrackDuration={currentTrackDuration}
-        volume={volume}
         setSeekDraft={setSeekDraft}
         commitSeek={commitSeek}
-        applyVolume={applyVolume}
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
@@ -475,11 +455,9 @@ function BottomPlayerBase({
       artist={artist}
       positionMs={boundedProgressMs}
       durationMs={currentTrackDuration}
-      volume={volume}
       artworkUrl={currentTrack?.artworkUrl ?? null}
       setSeekDraft={setSeekDraft}
       commitSeek={commitSeek}
-      applyVolume={applyVolume}
       onPrev={playPrev}
       onNext={playNext}
       onTogglePlay={togglePlayback}

@@ -70,7 +70,6 @@ function BottomPlayerControllerBase({
     audioDurationMs,
     setAudioDurationMs,
     volume,
-    setVolume,
     syncProgressFromAudio,
     syncDurationFromAudio
   } = useRoomPlayback({
@@ -120,8 +119,6 @@ function BottomPlayerControllerBase({
       seekDraft={seekDraft}
       setSeekDraft={setSeekDraft}
       audioDurationMs={audioDurationMs || progressTrack?.durationMs || currentTrack?.durationMs || 0}
-      volume={volume}
-      setVolume={setVolume}
       syncProgressFromAudio={syncProgressFromAudio}
       syncDurationFromAudio={syncDurationFromAudio}
       currentTrack={progressTrack ?? currentTrack}

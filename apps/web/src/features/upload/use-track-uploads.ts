@@ -368,7 +368,9 @@ export function useTrackUploads(options: {
             provider: track.sourceType,
             providerTrackId: track.sourceRef?.trackId ?? null,
             durationMs: track.durationMs,
-            sizeBytes: file.size
+            sizeBytes: file.size,
+            originalAsset: track.originalAsset,
+            playbackAsset: track.playbackAsset
           }
         });
         await refreshCacheLibrary();

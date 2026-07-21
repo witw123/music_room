@@ -176,7 +176,10 @@ async function importOfflineProviderTrack(input: {
     file,
     fileHash: prepared.fileHash,
     title: track.title,
-    mimeType
+    mimeType,
+    provider: source.provider,
+    originalAsset: prepared.originalAsset,
+    playbackAsset: prepared.playbackAsset
   }).catch(() => undefined);
   await persistRoomSnapshotToLocalRepository(roomSnapshot).catch(() => undefined);
   notifyCacheLibraryChanged();

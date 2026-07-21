@@ -1,7 +1,11 @@
 "use client";
 
-import type { OriginalAssetManifest } from "@music-room/shared";
+import type {
+  OriginalAssetManifest,
+  PlaybackAssetManifest
+} from "@music-room/shared";
 import {
+  deleteAudioAsset,
   deleteCachedLibraryTrackFile,
   deleteOriginalAssetForTrack,
   deleteLocalAudioCacheFileRecord,
@@ -313,6 +317,8 @@ export async function saveAudioFileToLocalDirectory(input: {
     providerTrackId?: string | null;
     durationMs: number;
     sizeBytes?: number;
+    originalAsset?: OriginalAssetManifest;
+    playbackAsset?: PlaybackAssetManifest;
   };
 }) {
   const directory = await getWritableLocalAudioDirectory();
@@ -322,17 +328,23 @@ export async function saveAudioFileToLocalDirectory(input: {
 
   const fileName = buildLocalAudioFileName(input);
   const repository = await LocalRepository.open(directory.handle);
-  await deleteLocalAudioCacheFile(input.fileHash);
   const existingTrack = await repository.readTrack(input.fileHash);
+  await deleteLocalAudioCacheFile(input.fileHash);
   const relativePath = await repository.writeManagedSource({
     file: input.file,
     fileHash: input.fileHash,
     mimeType: input.mimeType
   });
 
-  const originalAsset = input.trackId
+  const originalAsset = input.track?.originalAsset
+    ?? (input.trackId
     ? await getTrackOriginalAssetManifest(input.trackId)
-    : null;
+    : null)
+    ?? (existingTrack?.originalAsset
+      ? (await getAssetManifest(existingTrack.originalAsset.assetId).catch(() => null))?.manifest.kind === "original"
+        ? (await getAssetManifest(existingTrack.originalAsset.assetId))?.manifest as OriginalAssetManifest
+        : null
+      : null);
   let savedOriginalAsset = existingTrack?.originalAsset ?? null;
   if (originalAsset) {
     savedOriginalAsset = {
@@ -340,7 +352,37 @@ export async function saveAudioFileToLocalDirectory(input: {
       manifestPath: await repository.writeOriginalManifest(originalAsset, relativePath)
     };
   }
-  const playbackAsset = existingTrack?.playbackAsset ?? null;
+  let savedPlaybackAsset = existingTrack?.playbackAsset ?? null;
+  const playbackAsset = input.track?.playbackAsset
+    ?? (existingTrack?.playbackAsset
+      ? (await getAssetManifest(existingTrack.playbackAsset.assetId).catch(() => null))?.manifest.kind === "playback"
+        ? (await getAssetManifest(existingTrack.playbackAsset.assetId))?.manifest as PlaybackAssetManifest
+        : null
+      : null);
+  if (playbackAsset) {
+    const manifestPath = await persistPlaybackAssetToRepository(
+      repository,
+      playbackAsset
+    );
+    if (manifestPath) {
+      savedPlaybackAsset = {
+        assetId: playbackAsset.assetId,
+        profileId: playbackAsset.profileId,
+        manifestPath
+      };
+      await deleteAudioAsset(playbackAsset.assetId).catch(() => undefined);
+    }
+  }
+  const artworkPath = input.track?.artworkUrl?.trim()
+    ? await repository.writeArtworkFromUrl({
+        fileHash: input.fileHash,
+        artworkUrl: input.track.artworkUrl,
+        retention: "library",
+        provider: input.track.provider === "netease" || input.track.provider === "qqmusic"
+          ? input.track.provider
+          : "local_upload"
+      }) ?? existingTrack?.artworkPath ?? null
+    : existingTrack?.artworkPath ?? null;
   const lyricsPath = input.track?.lyrics?.trim()
     ? await repository.writeLyrics(input.fileHash, input.track.lyrics)
     : existingTrack?.lyricsPath ?? null;
@@ -370,7 +412,8 @@ export async function saveAudioFileToLocalDirectory(input: {
       sizeBytes,
       source: { kind: "managed", relativePath, sizeBytes },
       originalAsset: savedOriginalAsset,
-      playbackAsset,
+      playbackAsset: savedPlaybackAsset,
+      artworkPath,
       lyricsPath,
       retention: "library",
       createdAt: existingTrack?.createdAt
@@ -390,6 +433,9 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   fileHash: string;
   title: string;
   mimeType: string;
+  provider?: "netease" | "qqmusic" | "local_upload";
+  originalAsset?: OriginalAssetManifest;
+  playbackAsset?: PlaybackAssetManifest;
 }) {
   const directory = await getWritableLocalAudioDirectory();
   if (!directory) {
@@ -401,14 +447,19 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   const relativePath = await repository.writeCachedSource({
     file: input.file,
     fileHash: input.fileHash,
-    mimeType: input.mimeType
+    mimeType: input.mimeType,
+    provider: input.provider
   }, { reuseExisting: true });
   await saveLocalAudioCacheFileRecord({
     fileHash: input.fileHash,
     fileName,
     relativePath
   });
-  await persistCachedTrackRecord(input.fileHash, relativePath, "cache");
+  await persistCachedTrackRecord(input.fileHash, relativePath, "cache", {
+    provider: input.provider,
+    originalAsset: input.originalAsset,
+    playbackAsset: input.playbackAsset
+  });
   await deleteCachedLibraryTrackFile(input.fileHash);
   return { fileName };
 }
@@ -416,13 +467,53 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
 async function persistCachedTrackRecord(
   fileHash: string,
   relativePath: string,
-  retention: "library" | "cache"
+  retention: "library" | "cache",
+  assets?: {
+    provider?: "netease" | "qqmusic" | "local_upload";
+    originalAsset?: OriginalAssetManifest;
+    playbackAsset?: PlaybackAssetManifest;
+  }
 ) {
   const summary = await getCachedLibraryTrackSummary(fileHash);
   if (!summary) return;
   const repository = await getConfiguredLocalRepository();
   if (!repository) return;
   const existing = await repository.readTrack(fileHash);
+  let originalAsset = existing?.originalAsset ?? null;
+  if (assets?.originalAsset) {
+    originalAsset = {
+      assetId: assets.originalAsset.assetId,
+      manifestPath: await repository.writeOriginalManifest(
+        assets.originalAsset,
+        relativePath
+      )
+    };
+  }
+  let playbackAsset = existing?.playbackAsset ?? null;
+  if (assets?.playbackAsset) {
+    const manifestPath = await persistPlaybackAssetToRepository(
+      repository,
+      assets.playbackAsset
+    );
+    if (manifestPath) {
+      playbackAsset = {
+        assetId: assets.playbackAsset.assetId,
+        profileId: assets.playbackAsset.profileId,
+        manifestPath
+      };
+      await deleteAudioAsset(assets.playbackAsset.assetId).catch(() => undefined);
+    }
+  }
+  const artworkPath = summary.artworkUrl?.trim()
+    ? await repository.writeArtworkFromUrl({
+        fileHash,
+        artworkUrl: summary.artworkUrl,
+        retention,
+        provider: summary.provider === "netease" || summary.provider === "qqmusic"
+          ? summary.provider
+          : assets?.provider ?? "local_upload"
+      }) ?? existing?.artworkPath ?? null
+    : existing?.artworkPath ?? null;
   const record = {
     schemaVersion: 1 as const,
     fileHash: summary.fileHash,
@@ -443,15 +534,57 @@ async function persistCachedTrackRecord(
       relativePath,
       sizeBytes: summary.sizeBytes
     },
-    originalAsset: existing?.originalAsset ?? null,
-    playbackAsset: existing?.playbackAsset ?? null,
-    artworkPath: existing?.artworkPath ?? null,
+    originalAsset,
+    playbackAsset,
+    artworkPath,
     lyricsPath: existing?.lyricsPath ?? null,
     retention,
     createdAt: existing?.createdAt ?? summary.cachedAt,
     updatedAt: new Date().toISOString()
   };
   await repository.writeTrack(record);
+}
+
+async function persistPlaybackAssetToRepository(
+  repository: LocalRepository,
+  manifest: PlaybackAssetManifest
+) {
+  const existing = await repository.readPlaybackAsset(manifest.assetId, manifest.profileId);
+  if (existing && existing.units.length === manifest.unitCount) {
+    return repository.getPlaybackManifestPath(manifest.assetId, manifest.profileId);
+  }
+
+  const unitIndexes = Array.from({ length: manifest.unitCount }, (_, index) => index);
+  const units = await getAssetUnits(manifest.assetId, unitIndexes);
+  if (units.length !== unitIndexes.length) {
+    return null;
+  }
+
+  try {
+    return await repository.writePlaybackAsset({
+      manifest,
+      units: units.map((unit) => ({
+        descriptor: stripAssetUnitRecord(unit),
+        payload: unit.payload
+      }))
+    });
+  } catch (error) {
+    await repository.removeDirectory(
+      repository.getPlaybackAssetPath(manifest.assetId, manifest.profileId)
+    ).catch(() => undefined);
+    throw error;
+  }
+}
+
+function stripAssetUnitRecord(unit: Awaited<ReturnType<typeof getAssetUnits>>[number]) {
+  const {
+    unitId: _unitId,
+    payload: _payload,
+    lastAccessedAt: _lastAccessedAt,
+    protectedUntil: _protectedUntil,
+    ...descriptor
+  } = unit;
+  return descriptor;
 }
 
 export async function deleteLocalAudioCacheFile(fileHash: string) {

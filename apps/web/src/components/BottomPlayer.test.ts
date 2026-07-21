@@ -23,6 +23,23 @@ describe("BottomPlayer source", () => {
     expect(layoutSource).toContain('w-[44px]');
   });
 
+  it("keeps transport controls centered without a volume action", () => {
+    const layoutSource = readFileSync(
+      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      "utf8"
+    );
+    const miniPlayerSource = readFileSync(
+      new URL("./bottom-player/MiniPlayerOverlay.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(layoutSource).not.toContain("VolumeControl");
+    expect(layoutSource).not.toContain("player-volume-button");
+    expect(miniPlayerSource).not.toContain("VolumeIcon");
+    expect(miniPlayerSource).not.toContain("音量");
+    expect(miniPlayerSource).toContain("flex items-center justify-center gap-3");
+  });
+
   it("prioritizes the live display clock over the playback snapshot", () => {
     const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
 
@@ -107,7 +124,7 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain("h-full min-h-0 flex-col");
     expect(miniPlayerSource).not.toContain("overflow-y-auto");
     expect(miniPlayerSource).toContain("min-h-[84px] shrink-0");
-    expect(miniPlayerSource).toContain("text-[1.75rem] font-bold");
+    expect(miniPlayerSource).toContain("text-[1.25rem] font-bold");
     expect(miniPlayerSource).toContain("pt-0 sm:px-2 sm:pb-3 sm:pt-0");
     expect(miniPlayerSource).toContain("const ownerWindow = pipWindow ?? window");
     expect(miniPlayerSource).toContain("panel.ownerDocument.defaultView ?? window");
@@ -117,5 +134,19 @@ describe("BottomPlayer source", () => {
     expect(queueSource).toContain("const albumName = track?.album?.trim() || \"未知专辑\"");
     expect(playerSource).toContain("requestMiniPlayerWindow()");
     expect(playerSource).toContain("pipWindow={miniPlayerWindow}");
+  });
+
+  it("hydrates the persistent player from local playlist metadata", () => {
+    const localPlayerSource = readFileSync(
+      new URL("../features/playback/local-player-context.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(localPlayerSource).toContain("listMergedLocalPlaylistTracks");
+    expect(localPlayerSource).toContain("const refreshLibraryRecords = useCallback");
+    expect(localPlayerSource).toContain("mergeLocalTrackRecord");
+    expect(localPlayerSource).toContain(
+      "canControlPlayback: Boolean(currentRecord || queueRecords.length > 0 || libraryRecords.length > 0)"
+    );
   });
 });

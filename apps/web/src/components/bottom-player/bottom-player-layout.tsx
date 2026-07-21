@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -17,10 +16,8 @@ type LayoutProps = {
   artist: string;
   boundedProgressMs: number;
   currentTrackDuration: number;
-  volume: number;
   setSeekDraft: (value: number | null) => void;
   commitSeek: () => void;
-  applyVolume: (value: number) => void;
   onPrev: () => void;
   onNext: () => void;
   onTogglePlay: () => void;
@@ -198,116 +195,6 @@ export function LyricsToggleButton({
   );
 }
 
-function VolumeIcon({ volume }: { volume: number }) {
-  if (volume <= 0.01) {
-    return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M11 5 6 9H3v6h3l5 4V5Z" />
-        <path d="m19 9-5 6" />
-        <path d="m14 9 5 6" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
-      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-      <path d="M18.5 5.5a9 9 0 0 1 0 13" />
-    </svg>
-  );
-}
-
-function VolumeControl({
-  volume,
-  onChange,
-  accentColor = "rgb(0 148 255)",
-  accentSoft = "rgba(0, 148, 255, 0.16)"
-}: {
-  volume: number;
-  onChange: (value: number) => void;
-  accentColor?: string;
-  accentSoft?: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const percentage = Math.round(Math.max(0, Math.min(1, volume)) * 100);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  return (
-    <div ref={rootRef} className="relative shrink-0">
-      {isOpen ? (
-        <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
-          <div className="flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-            <div className="relative h-24 w-5 shrink-0">
-              <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="absolute inset-x-0 bottom-0 rounded-full transition-[height,background-color] duration-150"
-                  style={{
-                    height: `${percentage}%`,
-                    backgroundColor: accentColor,
-                    boxShadow: `0 0 10px ${accentColor}`
-                  }}
-                />
-              </div>
-              <div
-                aria-hidden="true"
-                className="absolute left-1/2 h-5 w-5 -translate-x-1/2 translate-y-1/2 rounded-full border border-white/20 bg-foreground shadow-[0_3px_9px_rgba(0,0,0,0.35)] transition-[bottom] duration-150"
-                style={{ bottom: `${percentage}%` }}
-              />
-              <input
-                aria-label="音量"
-                data-testid="player-volume-slider"
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
-                onChange={(event) => onChange(Number(event.target.value))}
-                onInput={(event) => onChange(Number((event.target as HTMLInputElement).value))}
-                className="absolute left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer opacity-0 focus-visible:opacity-100 focus-visible:outline-none"
-              />
-            </div>
-            <span className="mt-2 text-xs tabular-nums text-foreground-muted">{percentage}%</span>
-          </div>
-          <div className="h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-background-secondary" aria-hidden="true" />
-        </div>
-      ) : null}
-      <button
-        type="button"
-        data-testid="player-volume-button"
-        aria-expanded={isOpen}
-        aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
-        title={`音量 ${percentage}%`}
-        onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
-        style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
-      >
-        <VolumeIcon volume={volume} />
-      </button>
-    </div>
-  );
-}
-
 export function MobileBottomPlayerLayout({
   isPlaying,
   canControlPlayback,
@@ -317,10 +204,8 @@ export function MobileBottomPlayerLayout({
   artist,
   boundedProgressMs,
   currentTrackDuration,
-  volume,
   setSeekDraft,
   commitSeek,
-  applyVolume,
   onPrev,
   onNext,
   onTogglePlay,
@@ -474,7 +359,6 @@ export function MobileBottomPlayerLayout({
           </div>
 
           <div className="flex shrink-0 items-center">
-            <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
             <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
             <MiniPlayerToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isMiniOpen} onToggle={onToggleMini} />
           </div>
@@ -493,10 +377,8 @@ export function DesktopBottomPlayerLayout({
   artist,
   boundedProgressMs,
   currentTrackDuration,
-  volume,
   setSeekDraft,
   commitSeek,
-  applyVolume,
   onPrev,
   onNext,
   onTogglePlay,
@@ -639,7 +521,6 @@ export function DesktopBottomPlayerLayout({
           </span>
         </div>
 
-        <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
         <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
         <MiniPlayerToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isMiniOpen} onToggle={onToggleMini} />
       </div>

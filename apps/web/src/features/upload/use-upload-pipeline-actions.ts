@@ -37,7 +37,11 @@ import {
   buildCachedLibraryTrackUpsertRecord,
   toCachedLibraryFile
 } from "./cache-library";
-import { cleanupLocalAudioCacheFiles } from "./local-audio-storage";
+import {
+  cleanupLocalAudioCacheFiles,
+  getConfiguredLocalRepository,
+  saveAudioFileToLocalDirectory
+} from "./local-audio-storage";
 import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
 
 type UploadPipelineActionsInput = {
@@ -107,6 +111,28 @@ export function useUploadPipelineActions({
         }
       });
       await upsertCachedLibraryTrack(cachedRecord);
+      const localRepository = await getConfiguredLocalRepository();
+      if (localRepository) {
+        await saveAudioFileToLocalDirectory({
+          file: input.file,
+          fileHash: input.track.fileHash,
+          title: input.track.title,
+          mimeType: input.track.mimeType ?? "audio/mpeg",
+          trackId: input.track.id,
+          track: {
+            artist: input.track.artist,
+            album: input.track.album,
+            artworkUrl: input.track.artworkUrl,
+            lyrics: input.lyrics ?? null,
+            provider: input.track.sourceType,
+            providerTrackId: input.track.sourceRef?.trackId ?? null,
+            durationMs: input.track.durationMs,
+            sizeBytes: input.track.sizeBytes ?? input.file.size,
+            originalAsset: input.track.originalAsset,
+            playbackAsset: input.track.playbackAsset
+          }
+        }).catch(() => undefined);
+      }
       if (roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)
           ? roomSnapshot.tracks

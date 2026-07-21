@@ -35,11 +35,9 @@ type MiniPlayerOverlayProps = {
   artist: string;
   positionMs: number;
   durationMs: number;
-  volume: number;
   artworkUrl: string | null;
   setSeekDraft: (value: number | null) => void;
   commitSeek: () => void;
-  applyVolume: (value: number) => void;
   onPrev: () => void;
   onNext: () => void;
   onTogglePlay: () => void;
@@ -72,11 +70,9 @@ export function MiniPlayerOverlay({
   artist,
   positionMs,
   durationMs,
-  volume,
   artworkUrl,
   setSeekDraft,
   commitSeek,
-  applyVolume,
   onPrev,
   onNext,
   onTogglePlay,
@@ -235,16 +231,6 @@ export function MiniPlayerOverlay({
           />
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-8 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 sm:gap-12">
             <div className="flex items-center justify-center gap-3 text-white sm:gap-6" style={{ color: miniPlayerColors.accent }}>
-              <button
-                aria-label={`音量 ${Math.round(volume * 100)}%`}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:h-11 sm:w-11"
-                onClick={() => applyVolume(volume > 0.01 ? 0 : 1)}
-                style={{ color: miniPlayerColors.accent }}
-                title={volume > 0.01 ? "静音" : "恢复音量"}
-                type="button"
-              >
-                <VolumeIcon volume={volume} />
-              </button>
               <MiniTransportButton ariaLabel="上一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onPrev}>
                 <PreviousIcon />
               </MiniTransportButton>
@@ -277,8 +263,8 @@ export function MiniPlayerOverlay({
 
         <div className="flex min-h-[84px] shrink-0 items-start justify-between gap-4 px-3 pb-2 pt-2 sm:min-h-[104px] sm:px-5 sm:pb-3 sm:pt-3">
           <div className="min-w-0">
-            <h2 className="truncate text-[1.75rem] font-bold leading-[1.05] text-white sm:text-[2rem]">{title}</h2>
-            <p className="mt-1 truncate text-sm leading-tight text-white/55 sm:text-base">{artist}</p>
+            <h2 className="truncate text-[1.25rem] font-bold leading-[1.1] text-white sm:text-[1.5rem]">{title}</h2>
+            <p className="mt-1 truncate text-xs leading-tight text-white/55 sm:text-sm">{artist}</p>
           </div>
         </div>
       </div>
@@ -379,11 +365,4 @@ function PlayIcon() {
 
 function PauseIcon() {
   return <svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>;
-}
-
-function VolumeIcon({ volume }: { volume: number }) {
-  if (volume <= 0.01) {
-    return <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="m19 9-5 6" /><path d="m14 9 5 6" /></svg>;
-  }
-  return <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></svg>;
 }

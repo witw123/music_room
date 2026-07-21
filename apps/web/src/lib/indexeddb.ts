@@ -455,27 +455,50 @@ export async function getAssetManifest(
   options?: { includeLocalRepository?: boolean }
 ) {
   const record = await musicRoomDatabase.assetManifests.get(assetId);
+  if (record?.complete || options?.includeLocalRepository === false) {
+    if (record) {
+      await musicRoomDatabase.assetManifests.update(assetId, {
+        lastAccessedAt: new Date().toISOString()
+      });
+    }
+    return record ?? null;
+  }
+
+  if (!record) {
+    const repository = await getLocalRepositoryForAssetRead();
+    if (!repository) return null;
+
+    const original = await repository.readOriginalManifest(assetId);
+    if (original?.manifest.kind === "original") {
+      return createLocalAssetManifestRecord(repository, original.manifest);
+    }
+
+    const playback = await repository.readPlaybackAsset(assetId, playbackProfileId);
+    return playback?.manifest.kind === "playback"
+      ? createLocalAssetManifestRecord(repository, playback.manifest)
+      : null;
+  }
+
+  const repository = await getLocalRepositoryForAssetRead();
+  if (repository) {
+    const original = await repository.readOriginalManifest(assetId);
+    if (original?.manifest.kind === "original") {
+      return createLocalAssetManifestRecord(repository, original.manifest);
+    }
+
+    const playback = await repository.readPlaybackAsset(assetId, playbackProfileId);
+    if (playback?.manifest.kind === "playback") {
+      return createLocalAssetManifestRecord(repository, playback.manifest);
+    }
+  }
+
   if (record) {
     await musicRoomDatabase.assetManifests.update(assetId, {
       lastAccessedAt: new Date().toISOString()
     });
     return record;
   }
-
-  if (options?.includeLocalRepository === false) return null;
-
-  const repository = await getLocalRepositoryForAssetRead();
-  if (!repository) return null;
-
-  const original = await repository.readOriginalManifest(assetId);
-  if (original?.manifest.kind === "original") {
-    return createLocalAssetManifestRecord(repository, original.manifest);
-  }
-
-  const playback = await repository.readPlaybackAsset(assetId, playbackProfileId);
-  return playback?.manifest.kind === "playback"
-    ? createLocalAssetManifestRecord(repository, playback.manifest)
-    : null;
+  return null;
 }
 
 export async function getCompleteAssetPairForSourceFileHash(fileHash: string) {
@@ -761,10 +784,18 @@ export async function deleteOriginalAssetForTrack(trackId: string) {
 export async function upsertTranscodeJob(
   input: Omit<TranscodeJobRecord, "updatedAt">
 ) {
-  await musicRoomDatabase.transcodeJobs.put({
+  const record = {
     ...input,
     updatedAt: new Date().toISOString()
-  });
+  } satisfies TranscodeJobRecord;
+  await musicRoomDatabase.transcodeJobs.put(record);
+
+  const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+  if (directory) {
+    await LocalRepository.open(directory.handle)
+      .then((repository) => repository.writeTranscodeJob(record))
+      .catch(() => undefined);
+  }
 }
 
 export async function listQueuedTranscodeJobs() {
@@ -793,6 +824,10 @@ export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRec
       );
     }
   );
+}
+
+export async function releaseAssetUnitsToLocalRepository(assetId: string) {
+  await musicRoomDatabase.assetUnits.where("assetId").equals(assetId).delete();
 }
 
 export async function listCachedLibraryTracks() {
