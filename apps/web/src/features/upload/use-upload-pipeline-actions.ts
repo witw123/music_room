@@ -28,6 +28,7 @@ import {
   toCachedLibraryFile
 } from "./cache-library";
 import { cleanupLocalAudioCacheFiles } from "./local-audio-storage";
+import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -96,8 +97,17 @@ export function useUploadPipelineActions({
         }
       });
       await upsertCachedLibraryTrack(cachedRecord);
+      if (roomSnapshot?.room.id === input.roomId) {
+        const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)
+          ? roomSnapshot.tracks
+          : [...roomSnapshot.tracks, input.track as TrackMeta];
+        await persistRoomSnapshotToLocalRepository({
+          ...roomSnapshot,
+          tracks
+        });
+      }
     },
-    []
+    [roomSnapshot]
   );
 
   const handleFilesSelected = useCallback(

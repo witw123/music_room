@@ -15,12 +15,14 @@ import {
   cleanupUploadRuntimeRefs,
   syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
+import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
 
 type UploadRuntimeEffectsInput = {
   activeSession: GuestSession | null;
   cacheLibraryVersion: number;
   cacheLibraryTracksRef: MutableRefObject<Map<string, CachedLibraryTrack>>;
   roomSnapshot: RoomSnapshot | null;
+  roomCatalogKey: string;
   roomTrackIdsKey: string;
   deleteLocalTrackData: (trackIds: readonly string[]) => Promise<void>;
   setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
@@ -33,6 +35,7 @@ export function useUploadRuntimeEffects({
   cacheLibraryVersion,
   cacheLibraryTracksRef,
   roomSnapshot,
+  roomCatalogKey,
   roomTrackIdsKey,
   deleteLocalTrackData,
   setUploadedTracks,
@@ -43,6 +46,8 @@ export function useUploadRuntimeEffects({
     roomId: null,
     trackIds: new Set()
   });
+  const latestRoomSnapshotRef = useRef(roomSnapshot);
+  latestRoomSnapshotRef.current = roomSnapshot;
 
   useEffect(() => {
     uploadedTrackUrlsRef.current = syncUploadedTrackObjectUrls({
@@ -122,6 +127,15 @@ export function useUploadRuntimeEffects({
     setUploadedTracks,
     uploadedTracks
   ]);
+
+  useEffect(() => {
+    const snapshot = latestRoomSnapshotRef.current;
+    if (!snapshot?.room.id || !roomCatalogKey) {
+      return;
+    }
+
+    void persistRoomSnapshotToLocalRepository(snapshot).catch(() => undefined);
+  }, [roomCatalogKey]);
 
   useEffect(() => {
     return () => {

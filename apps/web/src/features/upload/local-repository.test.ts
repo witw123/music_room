@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import {
   createRepositoryTrackRecord,
   LocalRepository
@@ -65,6 +66,84 @@ class MemoryDirectoryHandle {
 }
 
 describe("LocalRepository", () => {
+  function buildTrack(id: string, fileHash: string, ownerSessionId: string): TrackMeta {
+    return {
+      id,
+      title: id,
+      artist: `Artist ${ownerSessionId}`,
+      album: "Album",
+      lyrics: `[00:00.00]${id}`,
+      durationMs: 1_000,
+      bitrate: 128_000,
+      sizeBytes: 5,
+      codec: "mp3",
+      mimeType: "audio/mpeg",
+      fileHash,
+      artworkUrl: `https://example.com/${id}.jpg`,
+      ownerSessionId,
+      ownerNickname: ownerSessionId,
+      sourceType: "local_upload"
+    };
+  }
+
+  function buildRoomSnapshot(tracks: TrackMeta[]): RoomSnapshot {
+    return {
+      room: {
+        id: "room-1",
+        hostId: "owner-a",
+        joinCode: "ROOM01",
+        visibility: "private",
+        members: [],
+        playback: {
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          playbackAssetId: null,
+          sourceSessionId: null,
+          sourcePeerId: null,
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 1,
+          mediaEpoch: 0
+        },
+        presenceRevision: 0,
+        roomRevision: 1
+      },
+      tracks,
+      queue: [],
+      playlists: []
+    };
+  }
+
+  it("mirrors room track metadata and keeps uploader references separate", async () => {
+    const root = new MemoryDirectoryHandle("Music Room") as unknown as FileSystemDirectoryHandle;
+    const repository = await LocalRepository.open(root);
+    const firstTrack = buildTrack("track-a", "a".repeat(64), "owner-a");
+    const secondTrack = buildTrack("track-b", "b".repeat(64), "owner-b");
+
+    await repository.writeRoomSnapshot(buildRoomSnapshot([firstTrack, secondTrack]));
+
+    const room = await repository.readRoom("room-1");
+    expect(room?.tracks.map((track) => track.id)).toEqual(["track-a", "track-b"]);
+    expect((await repository.readTrack(firstTrack.fileHash))?.roomRefs).toEqual([
+      {
+        roomId: "room-1",
+        trackId: "track-a",
+        ownerSessionId: "owner-a",
+        ownerNickname: "owner-a"
+      }
+    ]);
+    expect((await repository.readTrack(secondTrack.fileHash))?.roomRefs?.[0]?.ownerSessionId).toBe("owner-b");
+
+    await repository.writeRoomSnapshot(buildRoomSnapshot([secondTrack]));
+
+    expect(await repository.readTrack(firstTrack.fileHash)).toBeNull();
+    expect((await repository.readTrack(secondTrack.fileHash))?.roomRefs).toHaveLength(1);
+    expect((await repository.listRooms())).toHaveLength(1);
+  });
+
   it("creates a repository and persists source, track, and playlist records", async () => {
     const root = new MemoryDirectoryHandle("Music Room") as unknown as FileSystemDirectoryHandle;
     const repository = await LocalRepository.open(root);

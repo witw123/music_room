@@ -341,6 +341,12 @@ export async function saveAudioFileToLocalDirectory(input: {
     };
   }
   const playbackAsset = existingTrack?.playbackAsset ?? null;
+  const lyricsPath = input.track?.lyrics?.trim()
+    ? await repository.writeLyrics(input.fileHash, input.track.lyrics)
+    : existingTrack?.lyricsPath ?? null;
+  if (!lyricsPath && existingTrack?.lyricsPath) {
+    await repository.removePath(existingTrack.lyricsPath);
+  }
 
   await saveLocalAudioFileRecord({
     fileHash: input.fileHash,
@@ -365,6 +371,7 @@ export async function saveAudioFileToLocalDirectory(input: {
       source: { kind: "managed", relativePath, sizeBytes },
       originalAsset: savedOriginalAsset,
       playbackAsset,
+      lyricsPath,
       retention: "library",
       createdAt: existingTrack?.createdAt
     }));

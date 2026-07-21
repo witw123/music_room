@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { TrackMeta } from "@music-room/shared";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
-import { applySelectedTrackFilesResult, processSelectedTrackFiles } from "./upload-pipeline";
+import {
+  applySelectedTrackFilesResult,
+  buildRegisterTrackPayload,
+  processSelectedTrackFiles
+} from "./upload-pipeline";
 
 const buildTrack = (id: string, fileHash: string): TrackMeta => ({
   id,
@@ -21,6 +25,21 @@ const buildTrack = (id: string, fileHash: string): TrackMeta => ({
 });
 
 describe("processSelectedTrackFiles", () => {
+  it("keeps provider references and lyrics in the registration payload", () => {
+    const payload = buildRegisterTrackPayload({
+      ...buildTrack("draft", "hash"),
+      lyrics: "[00:01.00]歌词",
+      sourceType: "qqmusic",
+      sourceRef: { provider: "qqmusic", trackId: "003abc" }
+    });
+
+    expect(payload).toMatchObject({
+      lyrics: "[00:01.00]歌词",
+      sourceType: "qqmusic",
+      sourceRef: { provider: "qqmusic", trackId: "003abc" }
+    });
+  });
+
   it("registers new files and skips existing or in-flight hashes", async () => {
     const newFile = new File(["new"], "new.flac", { type: "audio/flac" });
     const existingFile = new File(["existing"], "existing.flac", { type: "audio/flac" });

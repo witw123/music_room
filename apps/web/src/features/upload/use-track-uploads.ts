@@ -39,6 +39,7 @@ import {
 } from "./local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
+import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
 import {
   playlistsChangedEventName,
   playlistsChangedStorageKey,
@@ -114,6 +115,14 @@ export function useTrackUploads(options: {
   const roomTrackIdsKey = [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])]
     .sort()
     .join("|");
+  const roomCatalogKey = roomSnapshot
+    ? JSON.stringify({
+        roomId: roomSnapshot.room.id,
+        tracks: roomSnapshot.tracks,
+        queue: roomSnapshot.queue,
+        playlists: roomSnapshot.playlists
+      })
+    : "";
 
   const refreshCacheLibrary = useCallback(async () => {
     let localStorageState = await getLocalAudioStorageState();
@@ -168,6 +177,7 @@ export function useTrackUploads(options: {
     cacheLibraryVersion,
     cacheLibraryTracksRef,
     deleteLocalTrackData: deleteLocalTrackDataForTracks,
+    roomCatalogKey,
     roomSnapshot,
     roomTrackIdsKey,
     setUploadedTracks,
@@ -257,14 +267,17 @@ export function useTrackUploads(options: {
     try {
       const folderName = await chooseLocalAudioDirectory();
       localDirectoryScanAttemptedRef.current = false;
+      if (roomSnapshot) {
+        await persistRoomSnapshotToLocalRepository(roomSnapshot);
+      }
       await refreshCacheLibrary();
-      setStatusMessage(`Music Room 本地存储仓库已设置为“${folderName}”，仅点击“保存到本地”的歌曲会写入该目录。`);
+      setStatusMessage(`Music Room 本地存储仓库已设置为“${folderName}”，房间歌曲信息会自动镜像到该目录。`);
     } catch (error) {
       setStatusMessage(error instanceof Error && error.name === "AbortError"
         ? "已取消选择本地音频文件夹。"
         : toLocalAudioErrorMessage(error));
     }
-  }, [refreshCacheLibrary, setStatusMessage]);
+  }, [refreshCacheLibrary, roomSnapshot, setStatusMessage]);
 
   const saveTrackToLocal = useCallback(async (track: TrackMeta) => {
     try {
@@ -322,12 +335,13 @@ export function useTrackUploads(options: {
       }
 
       const mimeType = normalizeLocalAudioMimeType(track.mimeType ?? file.type);
-      const lyrics = track.sourceRef
-        ? (await (track.sourceRef.provider === "netease"
-          ? musicRoomApi.getNeteaseLyrics(track.sourceRef.trackId)
-          : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
-        ).catch(() => null))?.plainLyric ?? null
-        : null;
+      const lyrics = track.lyrics?.trim()
+        || (track.sourceRef
+          ? (await (track.sourceRef.provider === "netease"
+            ? musicRoomApi.getNeteaseLyrics(track.sourceRef.trackId)
+            : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
+          ).catch(() => null))?.plainLyric ?? null
+          : null);
       if (supportsLocalAudioDirectory()) {
         await saveAudioFileToLocalDirectory({
           file,

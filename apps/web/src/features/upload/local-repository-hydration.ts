@@ -14,7 +14,10 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
   let restoredTrackCount = 0;
 
   for (const record of records) {
-    await restoreTrackSummary(record);
+    if (record.retention === "library" || record.source.kind === "managed") {
+      await restoreTrackSummary(record);
+      restoredTrackCount += 1;
+    }
     if (record.source.kind === "managed") {
       const fileName = record.source.relativePath.split("/").pop() ?? record.fileHash;
       if (record.retention === "library") {
@@ -32,8 +35,6 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
         });
       }
     }
-
-    restoredTrackCount += 1;
   }
 
   for (const providerTrack of await repository.listProviderTracks<Parameters<typeof upsertLocalPlaylistTrack>[0]>()) {
@@ -57,11 +58,11 @@ async function restoreTrackSummary(record: LocalRepositoryTrackRecord) {
     durationMs: record.durationMs,
     sizeBytes: record.sizeBytes,
     cachedAt: record.updatedAt,
-    sourceTrackIds: [],
-    sourceRoomIds: [],
-    lastSourceTrackId: null,
-    lastSourceRoomId: null,
-    lastOwnerNickname: null
+    sourceTrackIds: record.roomRefs?.map((ref) => ref.trackId) ?? [],
+    sourceRoomIds: record.roomRefs?.map((ref) => ref.roomId) ?? [],
+    lastSourceTrackId: record.roomRefs?.at(-1)?.trackId ?? null,
+    lastSourceRoomId: record.roomRefs?.at(-1)?.roomId ?? null,
+    lastOwnerNickname: record.roomRefs?.at(-1)?.ownerNickname ?? null
   };
   await upsertCachedLibraryTrackSummary(summary);
 }

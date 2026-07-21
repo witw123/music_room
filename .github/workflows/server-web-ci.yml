@@ -89,6 +89,7 @@ jobs:
           context: .
           file: Dockerfile.web
           push: true
+          no-cache: true
           build-args: |
             NEXT_PUBLIC_NETEASE_ENABLED=true
             NEXT_PUBLIC_QQMUSIC_ENABLED=true

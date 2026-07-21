@@ -6,7 +6,7 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate:deploy": "prisma migrate deploy",
-    "dev": "nest start --watch",
+    "dev": "pnpm --filter @music-room/shared build && nest start --watch",
     "build": "prisma generate && tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/generated/prisma','dist/generated/prisma',{ recursive: true })\"",
     "start": "node dist/main.js",
     "start:deploy": "prisma migrate deploy && node dist/main.js",

@@ -3,7 +3,9 @@
 import type {
   AssetUnitDescriptor,
   OriginalAssetManifest,
-  PlaybackAssetManifest
+  PlaybackAssetManifest,
+  RoomSnapshot,
+  TrackMeta
 } from "@music-room/shared";
 
 export const localRepositoryDirectoryName = ".music-room";
@@ -13,6 +15,7 @@ export const localRepositorySchemaVersion = 1 as const;
 const repositoryManifestFileName = "repository.json";
 const repositoryDirectories = [
   "catalog/tracks",
+  "catalog/rooms",
   "catalog/provider-tracks",
   "catalog/playlists",
   "library/sources",
@@ -73,6 +76,23 @@ export type LocalRepositoryTrackRecord = {
   artworkPath?: string | null;
   lyricsPath?: string | null;
   retention: "library" | "cache";
+  roomRefs?: Array<{
+    roomId: string;
+    trackId: string;
+    ownerSessionId: string;
+    ownerNickname: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LocalRepositoryRoomRecord = {
+  schemaVersion: 1;
+  roomId: string;
+  room: RoomSnapshot["room"];
+  tracks: TrackMeta[];
+  queue: RoomSnapshot["queue"];
+  playlists: RoomSnapshot["playlists"];
   createdAt: string;
   updatedAt: string;
 };
@@ -178,6 +198,19 @@ export class LocalRepository {
     return `${localRepositoryDirectoryName}/cache/provider/local_upload/${input.fileHash.slice(0, 2)}/${input.fileHash}${extension ? `.${extension}` : ""}`;
   }
 
+  async writeLyrics(fileHash: string, lyrics: string) {
+    const relativePath = this.getLyricsPath(fileHash);
+    await this.writeBlob(
+      relativePath,
+      new Blob([lyrics], { type: "text/plain;charset=utf-8" })
+    );
+    return relativePath;
+  }
+
+  getLyricsPath(fileHash: string) {
+    return `${localRepositoryDirectoryName}/library/lyrics/${fileHash}.lrc`;
+  }
+
   async readPath(relativePath: string) {
     const fileHandle = await getFileByPath(this.root, relativePath, false);
     return fileHandle ? fileHandle.getFile() : null;
@@ -214,13 +247,27 @@ export class LocalRepository {
     await this.touch();
   }
 
-  async writeTrack(record: LocalRepositoryTrackRecord) {
+  async writeTrack(
+    record: LocalRepositoryTrackRecord,
+    options?: { updateCatalog?: boolean }
+  ) {
+    const existing = await this.readTrack(record.fileHash);
+    const roomRefs = record.roomRefs ?? existing?.roomRefs;
+    const nextRecord: LocalRepositoryTrackRecord = {
+      ...record,
+      ...(roomRefs && roomRefs.length > 0 ? { roomRefs } : {})
+    };
+    if (record.roomRefs !== undefined && record.roomRefs.length === 0) {
+      delete nextRecord.roomRefs;
+    }
     await this.writeJson(
-      `${localRepositoryDirectoryName}/catalog/tracks/${record.fileHash}.json`,
-      record
+      `${localRepositoryDirectoryName}/catalog/tracks/${nextRecord.fileHash}.json`,
+      nextRecord
     );
-    await this.writeCatalogIndex();
-    await this.touch();
+    if (options?.updateCatalog !== false) {
+      await this.writeCatalogIndex();
+      await this.touch();
+    }
   }
 
   async readTrack(fileHash: string) {
@@ -229,16 +276,133 @@ export class LocalRepository {
     );
   }
 
-  async deleteTrack(fileHash: string) {
+  async deleteTrack(fileHash: string, options?: { updateCatalog?: boolean }) {
     await this.removePath(`${localRepositoryDirectoryName}/catalog/tracks/${fileHash}.json`);
-    await this.writeCatalogIndex();
-    await this.touch();
+    if (options?.updateCatalog !== false) {
+      await this.writeCatalogIndex();
+      await this.touch();
+    }
   }
 
   async listTracks() {
     return this.listJsonFiles<LocalRepositoryTrackRecord>(
       `${localRepositoryDirectoryName}/catalog/tracks`
     );
+  }
+
+  async writeRoomSnapshot(snapshot: RoomSnapshot) {
+    const now = new Date().toISOString();
+    const existingRoom = await this.readRoom(snapshot.room.id);
+    await this.writeJson(
+      `${localRepositoryDirectoryName}/catalog/rooms/${encodeURIComponent(snapshot.room.id)}.json`,
+      {
+        schemaVersion: 1,
+        roomId: snapshot.room.id,
+        room: snapshot.room,
+        tracks: snapshot.tracks,
+        queue: snapshot.queue,
+        playlists: snapshot.playlists,
+        createdAt: existingRoom?.createdAt ?? now,
+        updatedAt: now
+      } satisfies LocalRepositoryRoomRecord
+    );
+
+    const tracks = await this.listTracks();
+    const currentFileHashes = new Set(snapshot.tracks.map((track) => track.fileHash));
+    for (const record of tracks) {
+      const roomRefs = record.roomRefs?.filter((ref) => ref.roomId !== snapshot.room.id) ?? [];
+      if (roomRefs.length !== (record.roomRefs?.length ?? 0)) {
+        await this.writeTrack({ ...record, roomRefs }, { updateCatalog: false });
+      }
+      if (roomRefs.length > 0 || currentFileHashes.has(record.fileHash)) continue;
+
+      // A cache-only external record was created by a previous room mirror.
+      // Remove it once its room reference disappears, but keep managed/local-library records.
+      if (record.source.kind === "external" && record.retention === "cache") {
+        if (record.lyricsPath) {
+          await this.removePath(record.lyricsPath);
+        }
+        await this.deleteTrack(record.fileHash, { updateCatalog: false });
+      }
+    }
+
+    for (const track of snapshot.tracks) {
+      const existing = await this.readTrack(track.fileHash);
+      const existingRoomRefs = existing?.roomRefs ?? [];
+      const roomRefs = [
+        ...existingRoomRefs.filter((ref) => !(ref.roomId === snapshot.room.id && ref.trackId === track.id)),
+        {
+          roomId: snapshot.room.id,
+          trackId: track.id,
+          ownerSessionId: track.ownerSessionId,
+          ownerNickname: track.ownerNickname
+        }
+      ];
+      const lyricsPath = track.lyrics?.trim()
+        ? await this.writeLyrics(track.fileHash, track.lyrics)
+        : null;
+      if (!lyricsPath && existing?.lyricsPath) {
+        await this.removePath(existing.lyricsPath);
+      }
+      await this.writeTrack({
+        schemaVersion: 1,
+        fileHash: track.fileHash,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        artworkUrl: track.artworkUrl,
+        lyrics: track.lyrics ?? null,
+        durationMs: track.durationMs,
+        mimeType: track.mimeType ?? "audio/mpeg",
+        sizeBytes: track.sizeBytes ?? 0,
+        sourceType: track.sourceType,
+        sourceRef: track.sourceRef ?? null,
+        source: existing?.source ?? { kind: "external", relativePath: "" },
+        originalAsset: track.originalAsset
+          ? {
+              assetId: track.originalAsset.assetId,
+              manifestPath: existing?.originalAsset?.manifestPath
+                ?? this.getOriginalManifestPath(track.originalAsset.assetId)
+            }
+          : existing?.originalAsset ?? null,
+        playbackAsset: track.playbackAsset
+          ? {
+              assetId: track.playbackAsset.assetId,
+              profileId: track.playbackAsset.profileId,
+              manifestPath: existing?.playbackAsset?.manifestPath
+                ?? this.getPlaybackManifestPath(track.playbackAsset.assetId, track.playbackAsset.profileId)
+            }
+          : existing?.playbackAsset ?? null,
+        artworkPath: existing?.artworkPath ?? null,
+        lyricsPath,
+        retention: existing?.retention ?? "cache",
+        roomRefs,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now
+      }, { updateCatalog: false });
+    }
+    await this.writeCatalogIndex();
+    await this.touch();
+  }
+
+  async readRoom(roomId: string) {
+    return this.readJson<LocalRepositoryRoomRecord>(
+      `${localRepositoryDirectoryName}/catalog/rooms/${encodeURIComponent(roomId)}.json`
+    );
+  }
+
+  async listRooms() {
+    return this.listJsonFiles<LocalRepositoryRoomRecord>(
+      `${localRepositoryDirectoryName}/catalog/rooms`
+    );
+  }
+
+  async deleteRoom(roomId: string) {
+    await this.removePath(
+      `${localRepositoryDirectoryName}/catalog/rooms/${encodeURIComponent(roomId)}.json`
+    );
+    await this.writeCatalogIndex();
+    await this.touch();
   }
 
   async writeProviderTrack(id: string, record: unknown) {
@@ -401,11 +565,16 @@ export class LocalRepository {
   }
 
   private async writeCatalogIndex() {
-    const [tracks, playlists] = await Promise.all([this.listTracks(), this.listPlaylists()]);
+    const [tracks, rooms, playlists] = await Promise.all([
+      this.listTracks(),
+      this.listRooms(),
+      this.listPlaylists()
+    ]);
     await this.writeJson(`${localRepositoryDirectoryName}/catalog/index.json`, {
       schemaVersion: 1,
       updatedAt: new Date().toISOString(),
       trackHashes: tracks.map((track) => track.fileHash).sort(),
+      roomIds: rooms.map((room) => room.roomId).sort(),
       playlistIds: playlists.map((playlist) => playlist.id).sort()
     });
   }
@@ -471,7 +640,10 @@ export function createRepositoryTrackRecord(input: {
   source: LocalRepositoryTrackRecord["source"];
   originalAsset?: LocalRepositoryTrackRecord["originalAsset"];
   playbackAsset?: LocalRepositoryTrackRecord["playbackAsset"];
+  artworkPath?: string | null;
+  lyricsPath?: string | null;
   retention: LocalRepositoryTrackRecord["retention"];
+  roomRefs?: LocalRepositoryTrackRecord["roomRefs"];
   createdAt?: string;
   updatedAt?: string;
 }) {
@@ -494,9 +666,10 @@ export function createRepositoryTrackRecord(input: {
     source: input.source,
     originalAsset: input.originalAsset ?? null,
     playbackAsset: input.playbackAsset ?? null,
-    artworkPath: null,
-    lyricsPath: null,
+    artworkPath: input.artworkPath ?? null,
+    lyricsPath: input.lyricsPath ?? null,
     retention: input.retention,
+    ...(input.roomRefs ? { roomRefs: input.roomRefs } : {}),
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now
   } satisfies LocalRepositoryTrackRecord;
