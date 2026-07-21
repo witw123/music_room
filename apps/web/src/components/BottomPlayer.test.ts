@@ -88,9 +88,10 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain('data-testid="mini-player-overlay"');
     expect(miniPlayerSource).toContain('data-testid="mini-player-cover"');
     expect(miniPlayerSource).not.toContain("<MiniPlayButton");
-    expect(miniPlayerSource).toContain("backgroundColor: palette.surface");
-    expect(miniPlayerSource).toContain("borderColor: palette.border");
-    expect(miniPlayerSource).toContain("accentColor={palette.accent}");
+    expect(miniPlayerSource).not.toContain("useArtworkPalette");
+    expect(miniPlayerSource).toContain("backgroundColor: miniPlayerColors.surface");
+    expect(miniPlayerSource).toContain("borderColor: miniPlayerColors.border");
+    expect(miniPlayerSource).toContain("accentColor={miniPlayerColors.accent}");
     expect(miniPlayerSource).toContain("left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] -translate-x-1/2");
     expect(miniPlayerSource).toContain("setPosition(null)");
     expect(miniPlayerSource).toContain("group-hover:opacity-100");
@@ -98,6 +99,9 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain("onPointerMove={handlePointerMove}");
     expect(miniPlayerSource).toContain("requestMiniPlayerWindow");
     expect(miniPlayerSource).toContain("createPortal(player, pipWindow.document.body)");
+    expect(miniPlayerSource).toContain("!pipWindow ? (");
+    expect(miniPlayerSource).toContain("h-full min-h-0 flex-col");
+    expect(miniPlayerSource).not.toContain("overflow-y-auto");
     expect(miniPlayerSource).toContain("const ownerWindow = pipWindow ?? window");
     expect(miniPlayerSource).toContain("panel.ownerDocument.defaultView ?? window");
     expect(playerSource).toContain("requestMiniPlayerWindow()");

@@ -105,7 +105,7 @@ const manifest = {
   seekPrerollMs: 80,
   unitCount: 5,
   merkleRoot: "c".repeat(64),
-  encoder: { name: "@audio/opus-encode", version: "3.2.0" }
+  encoder: { name: "@audio/opus-encode", version: "3.3.0" }
 } as PlaybackAssetManifest;
 
 function playback(serverNowMs: number): PlaybackSnapshot {

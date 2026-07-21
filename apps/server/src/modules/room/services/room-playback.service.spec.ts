@@ -20,7 +20,7 @@ function playbackAsset(assetId: string, durationMs: number) {
     merkleRoot: "c".repeat(64),
     encoder: {
       name: "@audio/opus-encode" as const,
-      version: "3.2.0" as const
+      version: "3.3.0" as const
     }
   };
 }

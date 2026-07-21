@@ -198,7 +198,7 @@ describe("LocalRepository", () => {
       seekPrerollMs: 80 as const,
       unitCount: 1,
       merkleRoot: "d".repeat(64),
-      encoder: { name: "@audio/opus-encode" as const, version: "3.2.0" as const }
+      encoder: { name: "@audio/opus-encode" as const, version: "3.3.0" as const }
     };
     const descriptor = {
       assetId,
