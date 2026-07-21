@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type { QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type PlayerQueueDrawerProps = {
   queue: QueueItem[];
@@ -98,7 +99,9 @@ export function PlayerQueueDrawer({
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;
                 const isCurrent = currentQueueItemId === item.id;
+                const title = track?.title ?? "未知曲目";
                 const artistName = track?.artist?.trim() || "未知歌手";
+                const albumName = track?.album?.trim() || "未知专辑";
                 const memberName = track?.ownerNickname?.trim() || item.requestedBy?.trim() || "成员";
 
                 return (
@@ -124,13 +127,19 @@ export function PlayerQueueDrawer({
                     <span className={`w-4 text-center font-mono text-xs font-bold ${isCurrent ? "text-sky-300" : "text-zinc-400"}`}>
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <div className="flex-1 min-w-0 pr-2">
+                    <QueueArtwork artworkUrl={track?.artworkUrl ?? null} title={title} />
+                    <div className="min-w-0 flex-1 pr-2">
                        <strong className={`block truncate text-sm font-semibold ${isCurrent ? "text-sky-200" : "text-white"}`}>
-                         {track?.title ?? "未知曲目"}
+                         {title}
                        </strong>
-                       <p className="flex min-w-0 items-center gap-2 text-xs text-zinc-300">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-zinc-300">
                          <span className="min-w-0 truncate">{artistName}</span>
+                         <span aria-hidden="true" className="shrink-0 text-white/30">·</span>
+                         <span className="min-w-0 truncate">{albumName}</span>
+                       </p>
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-400">
                          <span className="shrink-0 tabular-nums">{formatDuration(track?.durationMs ?? 0)}</span>
+                         <span aria-hidden="true" className="shrink-0 text-white/25">·</span>
                          <span className="min-w-0 truncate">{memberName}上传</span>
                        </p>
                     </div>
@@ -178,6 +187,39 @@ export function PlayerQueueDrawer({
 
         </aside>
       ) : null}
+    </div>
+  );
+}
+
+function QueueArtwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
+  const source = artworkUrl?.trim() ? getArtworkSourceUrl(artworkUrl) : null;
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [source]);
+
+  return (
+    <div
+      aria-label={`${title} 封面`}
+      className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#252832] text-sm font-semibold text-white/45"
+      data-testid="queue-item-artwork"
+    >
+      {source && !hasError ? (
+        // External provider artwork is intentionally rendered without Next image optimization.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          className="h-full w-full object-cover"
+          decoding="async"
+          draggable={false}
+          loading="lazy"
+          onError={() => setHasError(true)}
+          src={source}
+        />
+      ) : (
+        <span aria-hidden="true">{title.slice(0, 1).toUpperCase() || "♪"}</span>
+      )}
     </div>
   );
 }

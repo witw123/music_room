@@ -80,6 +80,7 @@ describe("BottomPlayer source", () => {
       new URL("./bottom-player/MiniPlayerOverlay.tsx", import.meta.url),
       "utf8"
     );
+    const queueSource = readFileSync(new URL("./PlayerQueueDrawer.tsx", import.meta.url), "utf8");
 
     expect(playerSource).toContain("const [isMiniOpen, setIsMiniOpen] = useState(false)");
     expect(playerSource).toContain("<MiniPlayerOverlay");
@@ -88,10 +89,13 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain('data-testid="mini-player-overlay"');
     expect(miniPlayerSource).toContain('data-testid="mini-player-cover"');
     expect(miniPlayerSource).not.toContain("<MiniPlayButton");
-    expect(miniPlayerSource).not.toContain("useArtworkPalette");
+    expect(miniPlayerSource).toContain("useArtworkPalette");
     expect(miniPlayerSource).toContain("backgroundColor: miniPlayerColors.surface");
     expect(miniPlayerSource).toContain("borderColor: miniPlayerColors.border");
     expect(miniPlayerSource).toContain("accentColor={miniPlayerColors.accent}");
+    expect(miniPlayerSource).toContain('background: "rgb(0 112 243)"');
+    expect(miniPlayerSource).toContain("const coverBackdrop = artworkSource ? palette.accent : miniPlayerColors.background");
+    expect(miniPlayerSource).toContain("backgroundColor: coverBackdrop");
     expect(miniPlayerSource).toContain("left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] -translate-x-1/2");
     expect(miniPlayerSource).toContain("setPosition(null)");
     expect(miniPlayerSource).toContain("group-hover:opacity-100");
@@ -102,10 +106,15 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain("!pipWindow ? (");
     expect(miniPlayerSource).toContain("h-full min-h-0 flex-col");
     expect(miniPlayerSource).not.toContain("overflow-y-auto");
-    expect(miniPlayerSource).toContain("min-h-[92px] shrink-0");
-    expect(miniPlayerSource).toContain("text-[2rem] font-bold");
+    expect(miniPlayerSource).toContain("min-h-[84px] shrink-0");
+    expect(miniPlayerSource).toContain("text-[1.75rem] font-bold");
+    expect(miniPlayerSource).toContain("pt-0 sm:px-2 sm:pb-3 sm:pt-0");
     expect(miniPlayerSource).toContain("const ownerWindow = pipWindow ?? window");
     expect(miniPlayerSource).toContain("panel.ownerDocument.defaultView ?? window");
+    expect(queueSource).toContain("function QueueArtwork");
+    expect(queueSource).toContain('data-testid="queue-item-artwork"');
+    expect(queueSource).toContain("getArtworkSourceUrl");
+    expect(queueSource).toContain("const albumName = track?.album?.trim() || \"未知专辑\"");
     expect(playerSource).toContain("requestMiniPlayerWindow()");
     expect(playerSource).toContain("pipWindow={miniPlayerWindow}");
   });

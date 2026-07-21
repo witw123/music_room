@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Slider } from "@/components/ui/slider";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 
 type DocumentPictureInPictureApi = {
   requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
@@ -55,7 +55,7 @@ type FloatingPosition = {
 
 const floatingInset = 12;
 const miniPlayerColors = {
-  background: "rgb(255 122 0)",
+  background: "rgb(0 112 243)",
   surface: "rgb(24 25 28 / 0.98)",
   border: "rgb(255 255 255 / 0.16)",
   accent: "rgb(255 255 255)",
@@ -91,6 +91,7 @@ export function MiniPlayerOverlay({
     offsetY: number;
   } | null>(null);
   const [position, setPosition] = useState<FloatingPosition | null>(null);
+  const palette = useArtworkPalette(artworkUrl);
 
   useEffect(() => {
     if (!pipWindow) {
@@ -157,6 +158,7 @@ export function MiniPlayerOverlay({
 
   const panelPositionStyle = position ? { left: position.left, top: position.top } : undefined;
   const artworkSource = artworkUrl ? getArtworkSourceUrl(artworkUrl) : null;
+  const coverBackdrop = artworkSource ? palette.accent : miniPlayerColors.background;
 
   const player = (
     <section
@@ -209,11 +211,11 @@ export function MiniPlayerOverlay({
         </div>
       ) : null}
 
-      <div className={pipWindow ? "flex h-full min-h-0 flex-col p-2 sm:p-3" : "p-2 sm:p-3"}>
+      <div className={pipWindow ? "flex h-full min-h-0 flex-col px-2 pb-2 pt-0 sm:px-2 sm:pb-3 sm:pt-0" : "p-2 sm:p-3"}>
         <div
           className={`group relative overflow-hidden rounded-[16px] border border-white/10 ${pipWindow ? "min-h-0 flex-1" : "aspect-[1.25] shrink-0"}`}
           data-testid="mini-player-cover"
-          style={{ backgroundColor: miniPlayerColors.background }}
+          style={{ backgroundColor: coverBackdrop, transition: "background-color 500ms ease" }}
         >
           {artworkSource ? (
             // External provider artwork is intentionally rendered without Next image optimization.
@@ -273,10 +275,10 @@ export function MiniPlayerOverlay({
           </div>
         </div>
 
-        <div className="flex min-h-[92px] shrink-0 items-start justify-between gap-4 px-3 pb-3 pt-3 sm:min-h-[112px] sm:px-5 sm:pb-5 sm:pt-4">
+        <div className="flex min-h-[84px] shrink-0 items-start justify-between gap-4 px-3 pb-2 pt-2 sm:min-h-[104px] sm:px-5 sm:pb-3 sm:pt-3">
           <div className="min-w-0">
-            <h2 className="truncate text-[2rem] font-bold leading-[1.05] text-white sm:text-[2.5rem]">{title}</h2>
-            <p className="mt-1 truncate text-base leading-tight text-white/55 sm:text-xl">{artist}</p>
+            <h2 className="truncate text-[1.75rem] font-bold leading-[1.05] text-white sm:text-[2rem]">{title}</h2>
+            <p className="mt-1 truncate text-sm leading-tight text-white/55 sm:text-base">{artist}</p>
           </div>
         </div>
       </div>
