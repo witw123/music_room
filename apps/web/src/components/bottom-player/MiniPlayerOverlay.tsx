@@ -1,8 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Slider } from "@/components/ui/slider";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+
+type DocumentPictureInPictureApi = {
+  requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
+};
+
+type WindowWithDocumentPictureInPicture = Window & {
+  documentPictureInPicture?: DocumentPictureInPictureApi;
+};
+
+/** Request a top-level floating window when the browser supports Document PiP. */
+export function requestMiniPlayerWindow() {
+  if (typeof window === "undefined") {
+    return Promise.resolve<Window | null>(null);
+  }
+
+  const documentPictureInPicture = (window as WindowWithDocumentPictureInPicture).documentPictureInPicture;
+  return documentPictureInPicture
+    ? documentPictureInPicture.requestWindow({ width: 640, height: 760 })
+    : Promise.resolve<Window | null>(null);
+}
 
 type MiniPlayerOverlayProps = {
   isOpen: boolean;
@@ -24,6 +45,7 @@ type MiniPlayerOverlayProps = {
   onTogglePlay: () => void;
   onOpenImmersive: () => void;
   onClose: () => void;
+  pipWindow?: Window | null;
 };
 
 type FloatingPosition = {
@@ -52,7 +74,8 @@ export function MiniPlayerOverlay({
   onNext,
   onTogglePlay,
   onOpenImmersive,
-  onClose
+  onClose,
+  pipWindow = null
 }: MiniPlayerOverlayProps) {
   const panelRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{
@@ -64,8 +87,20 @@ export function MiniPlayerOverlay({
   const palette = useArtworkPalette(artworkUrl);
 
   useEffect(() => {
+    if (!pipWindow) {
+      return;
+    }
+
+    copyStylesToPictureInPictureWindow(pipWindow);
+    const handlePageHide = () => onClose();
+    pipWindow.addEventListener("pagehide", handlePageHide);
+    return () => pipWindow.removeEventListener("pagehide", handlePageHide);
+  }, [onClose, pipWindow]);
+
+  useEffect(() => {
     if (!isOpen) {
       dragRef.current = null;
+      setPosition(null);
       return;
     }
 
@@ -75,9 +110,10 @@ export function MiniPlayerOverlay({
       setPosition((current) => current ? clampFloatingPosition(current, panel) : current);
     };
 
-    window.addEventListener("resize", clampPosition);
-    return () => window.removeEventListener("resize", clampPosition);
-  }, [isOpen]);
+    const ownerWindow = pipWindow ?? window;
+    ownerWindow.addEventListener("resize", clampPosition);
+    return () => ownerWindow.removeEventListener("resize", clampPosition);
+  }, [isOpen, pipWindow]);
 
   if (!isOpen) return null;
 
@@ -116,11 +152,11 @@ export function MiniPlayerOverlay({
   const panelPositionStyle = position ? { left: position.left, top: position.top } : undefined;
   const artworkSource = artworkUrl ? getArtworkSourceUrl(artworkUrl) : null;
 
-  return (
+  const player = (
     <section
       ref={panelRef}
       aria-label="迷你播放器"
-      className={`fixed z-[70] w-[min(360px,calc(100vw-1rem))] overflow-hidden rounded-2xl border text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl ${position ? "" : "right-3 bottom-[calc(10.5rem+env(safe-area-inset-bottom))] lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"}`}
+      className={`fixed z-[70] max-h-[calc(100dvh-1.5rem)] w-[min(640px,calc(100vw-1rem))] overflow-y-auto overflow-x-hidden rounded-[18px] border text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.65)] ${position ? "" : "left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] -translate-x-1/2"}`}
       data-testid="mini-player-overlay"
       role="dialog"
       style={{
@@ -130,18 +166,22 @@ export function MiniPlayerOverlay({
       }}
     >
       <div
-        className="flex h-11 cursor-grab touch-none items-center gap-2 border-b border-white/10 px-3 active:cursor-grabbing"
+        className="flex h-14 cursor-grab touch-none items-center gap-3 border-b border-white/10 px-4 active:cursor-grabbing sm:h-[76px] sm:px-6"
+        style={{ borderColor: palette.border }}
         onPointerCancel={stopDragging}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopDragging}
       >
-        <DragHandleIcon />
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-white/75">迷你播放器</span>
+        <span style={{ color: palette.accent }}>
+          <DragHandleIcon />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-white sm:text-[21px]">迷你播放器</span>
         <button
           aria-label="打开沉浸式播放"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
           onClick={onOpenImmersive}
+          style={{ color: palette.accent }}
           title="打开沉浸式播放"
           type="button"
         >
@@ -149,8 +189,9 @@ export function MiniPlayerOverlay({
         </button>
         <button
           aria-label="关闭迷你播放器"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
           onClick={onClose}
+          style={{ color: palette.accent }}
           title="关闭迷你播放器"
           type="button"
         >
@@ -158,9 +199,10 @@ export function MiniPlayerOverlay({
         </button>
       </div>
 
-      <div className="p-2.5 sm:p-3">
+      <div className="p-2 sm:p-3">
         <div
-          className="relative aspect-[1.55] overflow-hidden rounded-xl border border-white/10 bg-black/30"
+          className="group relative aspect-[1.25] overflow-hidden rounded-[16px] border border-white/10 bg-black/30"
+          data-testid="mini-player-cover"
           style={{ backgroundColor: palette.background }}
         >
           {artworkSource ? (
@@ -168,78 +210,95 @@ export function MiniPlayerOverlay({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               alt=""
-              className="absolute inset-0 h-full w-full object-cover opacity-75"
+              className="absolute left-1/2 top-1/2 h-full w-auto max-w-full -translate-x-1/2 -translate-y-1/2 object-cover"
               src={artworkSource}
             />
           ) : null}
           <div
             aria-hidden="true"
-            className="absolute inset-0"
+            className="pointer-events-none absolute inset-0 bg-black/45 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
             style={{
-              background: `linear-gradient(180deg, ${palette.accentSoft}, transparent 30%, rgba(0,0,0,0.88) 100%)`
+              background: `linear-gradient(180deg, rgba(0,0,0,0.18), ${palette.accentSoft} 48%, rgba(0,0,0,0.8) 100%)`
             }}
           />
-          <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">正在播放</p>
-              <h2 className="mt-1 truncate text-base font-bold text-white">{title}</h2>
-              <p className="mt-0.5 truncate text-xs text-white/60">{artist}</p>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-8 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 sm:gap-12">
+            <div className="flex items-center justify-center gap-3 text-white sm:gap-6" style={{ color: palette.accent }}>
+              <button
+                aria-label={`音量 ${Math.round(volume * 100)}%`}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:h-11 sm:w-11"
+                onClick={() => applyVolume(volume > 0.01 ? 0 : 1)}
+                style={{ color: palette.accent }}
+                title={volume > 0.01 ? "静音" : "恢复音量"}
+                type="button"
+              >
+                <VolumeIcon volume={volume} />
+              </button>
+              <MiniTransportButton ariaLabel="上一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onPrev}>
+                <PreviousIcon />
+              </MiniTransportButton>
+              <MiniTransportButton ariaLabel={isPlaying ? "暂停" : "播放"} disabled={!canControlPlayback || !playbackTrackId} onClick={onTogglePlay} prominent>
+                {isPlaying ? <PauseIcon /> : <PlayIcon />}
+              </MiniTransportButton>
+              <MiniTransportButton ariaLabel="下一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onNext}>
+                <NextIcon />
+              </MiniTransportButton>
             </div>
-            <MiniPlayButton
-              disabled={!canControlPlayback || !playbackTrackId}
-              isPlaying={isPlaying}
-              onClick={onTogglePlay}
-            />
+
+            <div className="flex w-full items-center gap-2 px-3 sm:px-6">
+              <span className="w-10 shrink-0 text-right text-xs tabular-nums text-white/80">{formatTime(positionMs)}</span>
+              <Slider
+                aria-label="迷你播放器进度"
+                data-testid="mini-player-seek-slider"
+                value={positionMs}
+                max={durationMs || 1}
+                accentColor={palette.accent}
+                className="[&_.bg-white\/10]:bg-white/35"
+                disabled={!durationMs || !canSeekPlayback}
+                onChange={(event) => setSeekDraft(Number(event.target.value))}
+                onPointerUp={commitSeek}
+                onKeyUp={commitSeek}
+              />
+              <span className="w-10 shrink-0 text-xs tabular-nums text-white/80">{formatTime(durationMs)}</span>
+            </div>
           </div>
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
-          <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-white/55">{formatTime(positionMs)}</span>
-          <Slider
-            aria-label="迷你播放器进度"
-            data-testid="mini-player-seek-slider"
-            value={positionMs}
-            max={durationMs || 1}
-            accentColor={palette.accent}
-            disabled={!durationMs || !canSeekPlayback}
-            onChange={(event) => setSeekDraft(Number(event.target.value))}
-            onPointerUp={commitSeek}
-            onKeyUp={commitSeek}
-          />
-          <span className="w-9 shrink-0 text-[10px] tabular-nums text-white/55">{formatTime(durationMs)}</span>
-        </div>
-
-        <div className="mt-2 flex items-center justify-between gap-1">
-          <button
-            aria-label={`音量 ${Math.round(volume * 100)}%`}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            onClick={() => applyVolume(volume > 0.01 ? 0 : 1)}
-            title={volume > 0.01 ? "静音" : "恢复音量"}
-            type="button"
-          >
-            <VolumeIcon volume={volume} />
-          </button>
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
-            <MiniTransportButton ariaLabel="上一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onPrev}>
-              <PreviousIcon />
-            </MiniTransportButton>
-            <MiniTransportButton ariaLabel={isPlaying ? "暂停" : "播放"} disabled={!canControlPlayback || !playbackTrackId} onClick={onTogglePlay} prominent>
-              {isPlaying ? <PauseIcon /> : <PlayIcon />}
-            </MiniTransportButton>
-            <MiniTransportButton ariaLabel="下一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onNext}>
-              <NextIcon />
-            </MiniTransportButton>
+        <div className="flex min-h-[112px] items-start justify-between gap-4 px-3 pb-5 pt-5 sm:min-h-[140px] sm:px-5 sm:pb-7 sm:pt-6">
+          <div className="min-w-0">
+            <h2 className="truncate text-3xl font-bold leading-tight text-white sm:text-[2.75rem]">{title}</h2>
+            <p className="mt-1 truncate text-xl leading-tight text-white/55 sm:text-2xl">{artist}</p>
           </div>
-          <span className="w-8 shrink-0" aria-hidden="true" />
         </div>
       </div>
     </section>
   );
+
+  return pipWindow ? createPortal(player, pipWindow.document.body) : player;
+}
+
+function copyStylesToPictureInPictureWindow(pipWindow: Window) {
+  const pipDocument = pipWindow.document;
+  if (pipDocument.head.querySelector("[data-mini-player-pip-styles]")) {
+    return;
+  }
+
+  document.querySelectorAll('link[rel="stylesheet"], style').forEach((styleSheet) => {
+    pipDocument.head.appendChild(styleSheet.cloneNode(true));
+  });
+
+  const baseStyle = pipDocument.createElement("style");
+  baseStyle.dataset.miniPlayerPipStyles = "true";
+  baseStyle.textContent = `
+    :root, body { margin: 0; min-height: 100%; }
+    body { overflow: hidden; background: transparent; }
+  `;
+  pipDocument.head.appendChild(baseStyle);
 }
 
 function clampFloatingPosition(position: FloatingPosition, panel: HTMLElement): FloatingPosition {
-  const maxLeft = Math.max(floatingInset, window.innerWidth - panel.offsetWidth - floatingInset);
-  const maxTop = Math.max(floatingInset, window.innerHeight - panel.offsetHeight - floatingInset);
+  const ownerWindow = panel.ownerDocument.defaultView ?? window;
+  const maxLeft = Math.max(floatingInset, ownerWindow.innerWidth - panel.offsetWidth - floatingInset);
+  const maxTop = Math.max(floatingInset, ownerWindow.innerHeight - panel.offsetHeight - floatingInset);
   return {
     left: Math.min(Math.max(floatingInset, position.left), maxLeft),
     top: Math.min(Math.max(floatingInset, position.top), maxTop)
@@ -278,21 +337,6 @@ function MiniTransportButton({
       type="button"
     >
       {children}
-    </button>
-  );
-}
-
-function MiniPlayButton({ disabled, isPlaying, onClick }: { disabled: boolean; isPlaying: boolean; onClick: () => void }) {
-  return (
-    <button
-      aria-label={isPlaying ? "暂停" : "播放"}
-      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-black shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-      disabled={disabled}
-      onClick={onClick}
-      title={isPlaying ? "暂停" : "播放"}
-      type="button"
-    >
-      {isPlaying ? <PauseIcon /> : <PlayIcon />}
     </button>
   );
 }

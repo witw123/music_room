@@ -17,7 +17,10 @@ import {
   type PendingSeek
 } from "@/components/bottom-player/seek-state";
 import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
-import { MiniPlayerOverlay } from "@/components/bottom-player/MiniPlayerOverlay";
+import {
+  MiniPlayerOverlay,
+  requestMiniPlayerWindow
+} from "@/components/bottom-player/MiniPlayerOverlay";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 
 type BottomPlayerProps = {
@@ -106,9 +109,47 @@ function BottomPlayerBase({
   const [pendingSeek, setPendingSeek] = useState<PendingSeek | null>(null);
   const [isImmersiveOpen, setIsImmersiveOpen] = useState(false);
   const [isMiniOpen, setIsMiniOpen] = useState(false);
+  const [miniPlayerWindow, setMiniPlayerWindow] = useState<Window | null>(null);
+  const miniPlayerWindowRef = useRef<Window | null>(null);
+  const miniPlayerRequestIdRef = useRef(0);
+  const closeMiniPlayer = useCallback(() => {
+    miniPlayerRequestIdRef.current += 1;
+    miniPlayerWindowRef.current?.close();
+    miniPlayerWindowRef.current = null;
+    setMiniPlayerWindow(null);
+    setIsMiniOpen(false);
+  }, []);
   const toggleMiniPlayer = useCallback(() => {
     setIsImmersiveOpen(false);
-    setIsMiniOpen((current) => !current);
+    if (isMiniOpen) {
+      closeMiniPlayer();
+      return;
+    }
+
+    const requestId = miniPlayerRequestIdRef.current + 1;
+    miniPlayerRequestIdRef.current = requestId;
+    setIsMiniOpen(true);
+    void requestMiniPlayerWindow()
+      .then((nextWindow) => {
+        if (!nextWindow) {
+          return;
+        }
+        if (requestId !== miniPlayerRequestIdRef.current) {
+          nextWindow.close();
+          return;
+        }
+        miniPlayerWindowRef.current = nextWindow;
+        setMiniPlayerWindow(nextWindow);
+      })
+      .catch(() => {
+        // Keep the in-page fixed fallback when Document PiP is unavailable or denied.
+      });
+  }, [closeMiniPlayer, isMiniOpen]);
+
+  useEffect(() => {
+    return () => {
+      miniPlayerWindowRef.current?.close();
+    };
   }, []);
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
@@ -443,10 +484,11 @@ function BottomPlayerBase({
       onNext={playNext}
       onTogglePlay={togglePlayback}
       onOpenImmersive={() => {
-        setIsMiniOpen(false);
+        closeMiniPlayer();
         setIsImmersiveOpen(true);
       }}
-      onClose={() => setIsMiniOpen(false)}
+      onClose={closeMiniPlayer}
+      pipWindow={miniPlayerWindow}
     />
     </>
   );
