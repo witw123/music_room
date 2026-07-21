@@ -519,14 +519,91 @@ async function downloadWithDirectFallback(input: {
     if (!response.ok) {
       throw new Error(`Direct provider download failed: ${response.status}`);
     }
+    const blob = await response.blob();
+    const contentType = await resolveDownloadedAudioMimeType(
+      blob,
+      response.headers.get("content-type") ?? resolved.mimeType ?? ""
+    );
     return {
-      blob: await response.blob(),
-      contentType: response.headers.get("content-type") ?? resolved.mimeType ?? "application/octet-stream"
+      blob,
+      contentType
     };
   } catch (error) {
     if (input.signal?.aborted) {
       throw error;
     }
-    return input.fallback();
+    const fallback = await input.fallback();
+    return {
+      ...fallback,
+      contentType: await resolveDownloadedAudioMimeType(
+        fallback.blob,
+        fallback.contentType
+      )
+    };
   }
+}
+
+export async function resolveDownloadedAudioMimeType(blob: Blob, declaredType: string) {
+  if (blob.size <= 0) {
+    throw new Error("下载到的音频为空，请稍后重试。");
+  }
+
+  const normalizedDeclaredType = declaredType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  if (
+    normalizedDeclaredType === "application/json" ||
+    normalizedDeclaredType === "text/html" ||
+    normalizedDeclaredType.startsWith("text/")
+  ) {
+    throw new Error("音乐平台返回了错误信息，未获得可播放音频。");
+  }
+
+  const probe = new Uint8Array(
+    await blob.slice(0, Math.min(blob.size, 512 * 1024)).arrayBuffer()
+  );
+  if (
+    probe.length >= 4 &&
+    probe[0] === 0x66 &&
+    probe[1] === 0x4c &&
+    probe[2] === 0x61 &&
+    probe[3] === 0x43
+  ) {
+    return "audio/flac";
+  }
+
+  if (
+    probe.length >= 12 &&
+    probe[0] === 0x52 &&
+    probe[1] === 0x49 &&
+    probe[2] === 0x46 &&
+    probe[3] === 0x46 &&
+    probe[8] === 0x57 &&
+    probe[9] === 0x41 &&
+    probe[10] === 0x56 &&
+    probe[11] === 0x45
+  ) {
+    return "audio/wav";
+  }
+
+  if (
+    probe.length >= 3 &&
+    probe[0] === 0x49 &&
+    probe[1] === 0x44 &&
+    probe[2] === 0x33
+  ) {
+    return "audio/mpeg";
+  }
+
+  for (let index = 0; index + 2 < probe.length; index += 1) {
+    if (probe[index] !== 0xff || (probe[index + 1]! & 0xe0) !== 0xe0) {
+      continue;
+    }
+    const layer = (probe[index + 1]! >> 1) & 0x03;
+    const bitrateIndex = (probe[index + 2]! >> 4) & 0x0f;
+    const sampleRateIndex = (probe[index + 2]! >> 2) & 0x03;
+    if (layer !== 0 && bitrateIndex !== 0 && bitrateIndex !== 0x0f && sampleRateIndex !== 0x03) {
+      return "audio/mpeg";
+    }
+  }
+
+  throw new Error("下载内容不是有效的 MP3 或 FLAC 音频，请重试或更换音质。");
 }

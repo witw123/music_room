@@ -20,8 +20,8 @@ describe("audio asset preparation", () => {
   });
 
   it("publishes the server-compatible playback profile", () => {
-    expect(playbackProfileId).toBe("opus-music-v2");
-    expect(playbackEncoderVersion).toBe("2.0.0");
+    expect(playbackProfileId).toBe("opus-music-v3");
+    expect(playbackEncoderVersion).toBe("3.0.0");
   });
 
   it("accepts only the supported room source formats", () => {
@@ -31,7 +31,7 @@ describe("audio asset preparation", () => {
     expect(resolveSupportedUploadFormat({ name: "song.m4a", type: "audio/mp4" })).toBeNull();
   });
 
-  it("adds codec preroll without changing the room timeline", () => {
+  it("keeps seek preroll as overlap metadata without shifting the room timeline", () => {
     const channel = Float32Array.from({ length: 48_000 * 5 }, (_, index) => index);
     const audioBuffer = {
       duration: 5,
@@ -41,15 +41,15 @@ describe("audio asset preparation", () => {
       getChannelData: () => channel
     };
     const firstSegment = slicePcmSegment(audioBuffer, 0);
-    expect(firstSegment.channels[0]).toHaveLength(48_000 * 2 + 3_840);
+    expect(firstSegment.channels[0]).toHaveLength(48_000 * 2);
     expect(firstSegment.trimStartSamples).toBe(0);
     expect(firstSegment.channels[0]?.[0]).toBe(0);
-    expect(firstSegment.channels[0]?.[3_839]).toBe(0);
-    expect(firstSegment.channels[0]?.[3_840]).toBe(channel[0]);
+    expect(firstSegment.channels[0]?.[3_839]).toBe(channel[3_839]);
+    expect(firstSegment.channels[0]?.[3_840]).toBe(channel[3_840]);
 
     const laterSegment = slicePcmSegment(audioBuffer, 1);
     expect(laterSegment.channels[0]).toHaveLength(48_000 * 2 + 3_840);
-    expect(laterSegment.trimStartSamples).toBe(0);
+    expect(laterSegment.trimStartSamples).toBe(3_840);
     expect(laterSegment.channels[0]?.[0]).toBe(48_000 * 2 - 3_840);
   });
 

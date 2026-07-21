@@ -31,7 +31,7 @@ type UseRoomPlaybackActionsInput = {
   handleTrackFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   addToQueue: (trackId: string) => Promise<QueueItem | null>;
   playTrack: (trackId?: string) => Promise<unknown>;
-  playQueueItem: (queueItemId: string) => Promise<unknown>;
+  playQueueItem: (queueItemId: string, trackId?: string) => Promise<unknown>;
   prevTrack: () => Promise<unknown>;
   nextTrack: () => Promise<unknown>;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -263,7 +263,10 @@ export function useRoomPlaybackActions({
         queueItemId: queueItem?.id
       });
       if (queueItem) {
-        await playQueueItem(queueItem.id);
+        // The queue mutation updates the reducer asynchronously. Pass the
+        // resolved track id so playback can include its asset even while the
+        // callback still holds the previous room snapshot.
+        await playQueueItem(queueItem.id, queueItem.trackId);
         return;
       }
       await playTrack(trackId);

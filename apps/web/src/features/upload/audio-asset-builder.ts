@@ -36,12 +36,14 @@ import {
   parseMp3FrameHeader,
   skipMp3Id3v2
 } from "@/features/playback/codecs/mp3-frame-index";
+import { opusPreSkipSamples } from "@audio/opus-encode";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
+const opusFrameSamples = 960;
 const wavHeaderProbeBytes = 1024 * 1024;
 const compressedDecodeWindowBytes = 4 * 1024 * 1024;
 const compressedDecodeBatchFrames = 384;
@@ -199,6 +201,7 @@ export async function getReusableAudioAssets(input: {
     playbackAsset.kind !== "playback" ||
     originalAsset.fileHash !== input.fileHash ||
     playbackAsset.sourceFileHash !== input.fileHash ||
+    playbackAsset.encoder.version !== playbackEncoderVersion ||
     (input.sizeBytes !== undefined && input.sizeBytes > 0 && originalAsset.sizeBytes !== input.sizeBytes)
   ) {
     return null;
@@ -298,9 +301,10 @@ async function preparePlaybackAsset(input: {
             ? await compressedSource.getSegment(unitIndex)
             : slicePcmSegment(audioBuffer!, unitIndex);
         if (!segment) return;
+        const encodedSegment = prepareIndependentOpusSegment(segment);
         const payload = await encoder.encode({
           sampleRate: sourceSampleRate,
-          channels: segment.channels,
+          channels: encodedSegment.channels,
           bitrateKbps: channels === 1 ? 96 : 192
         });
         const contentHash = await hashAssetUnit(unitIndex, payload);
@@ -313,8 +317,8 @@ async function preparePlaybackAsset(input: {
             payloadBytes: payload.byteLength,
             startMs: unitIndex * segmentDurationMs,
             durationMs: Math.min(segmentDurationMs, durationMs - unitIndex * segmentDurationMs),
-            trimStartSamples: segment.trimStartSamples,
-            trimEndSamples: 0
+            trimStartSamples: encodedSegment.trimStartSamples,
+            trimEndSamples: encodedSegment.trimEndSamples
           }
         };
         completedUnits += 1;
@@ -406,20 +410,9 @@ export function slicePcmSegment(
   const sourceChannels = Array.from({ length: audioBuffer.numberOfChannels }, (_, channelIndex) =>
     audioBuffer.getChannelData(channelIndex).slice(start, end)
   );
-  const leadingPaddingSamples = unitIndex === 0 ? prerollSamples : 0;
   return {
-    channels: sourceChannels.map((channel) => {
-      if (leadingPaddingSamples === 0) {
-        return channel;
-      }
-      const padded = new Float32Array(leadingPaddingSamples + channel.length);
-      padded.set(channel, leadingPaddingSamples);
-      return padded;
-    }),
-    // The encoder writes the same 80ms as OpusHead pre-skip. Keep the source
-    // overlap in the encoded input so the decoder can discard it, while the
-    // published timeline remains exactly one 2s segment per unit.
-    trimStartSamples: 0
+    channels: sourceChannels,
+    trimStartSamples: unitIndex === 0 ? 0 : prerollSamples
   };
 }
 
@@ -427,6 +420,35 @@ type EncodablePlaybackSegment = {
   channels: Float32Array[];
   trimStartSamples: number;
 };
+
+function prepareIndependentOpusSegment(segment: EncodablePlaybackSegment) {
+  const inputLength = segment.channels[0]?.length ?? 0;
+  if (inputLength <= 0) {
+    throw new Error("音频片段为空。");
+  }
+
+  // Keep enough real tail context for libopus' algorithmic delay. The encoder
+  // will add frame padding after this, and the playback descriptor trims that
+  // padding back to the exact room timeline.
+  const channels = segment.channels.map((channel) => {
+    const padded = new Float32Array(channel.length + opusPreSkipSamples);
+    padded.set(channel);
+    return padded;
+  });
+  const encodedInputLength = channels[0]!.length;
+  const encodedFrameLength = Math.ceil(encodedInputLength / opusFrameSamples) * opusFrameSamples;
+  const decodedLength = Math.max(0, encodedFrameLength - opusPreSkipSamples);
+  const contentLength = Math.max(0, inputLength - segment.trimStartSamples);
+  const trimEndSamples = Math.max(
+    0,
+    decodedLength - segment.trimStartSamples - contentLength
+  );
+  return {
+    channels,
+    trimStartSamples: segment.trimStartSamples,
+    trimEndSamples
+  };
+}
 
 type CompressedPlaybackSource = {
   channels: 1 | 2;
@@ -471,8 +493,7 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   private readonly frameReader: CompressedFrameReader;
   private decodeError: Error | null = null;
   private pcmAppendPromise: Promise<void> = Promise.resolve();
-  private decodedSourceDurationSeconds = 0;
-  private normalizedSamples = 0;
+  private streamingResampler: StreamingLinearResampler | null = null;
   private eof = false;
   private lastUnitIndex = -1;
   private disposed = false;
@@ -604,18 +625,13 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     }
 
     const channels = this.pcm.slice(desiredStart, contentEnd);
-    const leadingPaddingSamples = unitIndex === 0 ? this.prerollSamples : 0;
-    const output = leadingPaddingSamples > 0
-      ? channels.map((channel) => {
-          const padded = new Float32Array(leadingPaddingSamples + channel.length);
-          padded.set(channel, leadingPaddingSamples);
-          return padded;
-        })
-      : channels;
 
     this.lastUnitIndex = unitIndex;
     this.pcm.trimBefore(Math.max(0, contentEnd - this.prerollSamples));
-    return { channels: output, trimStartSamples: 0 };
+    return {
+      channels,
+      trimStartSamples: unitIndex === 0 ? 0 : this.prerollSamples
+    };
   }
 
   private resolveDurationFromDecodedAudio() {
@@ -633,6 +649,9 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
         this.eof = true;
         await this.decoder.flush();
         await this.pcmAppendPromise;
+        if (this.streamingResampler) {
+          this.pcm.append(this.streamingResampler.finish());
+        }
         break;
       }
 
@@ -690,33 +709,98 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     this.decodeError = error instanceof Error ? error : new Error("压缩音频解码失败。");
   }
 
-  private async appendNormalizedChannels(channels: Float32Array[], sampleRate: number) {
+  private appendNormalizedChannels(channels: Float32Array[], sampleRate: number) {
     const sourceFrameCount = channels[0]?.length ?? 0;
     if (sourceFrameCount <= 0) return;
 
-    this.decodedSourceDurationSeconds += sourceFrameCount / sampleRate;
-    const expectedTargetEnd = Math.round(this.decodedSourceDurationSeconds * opusSampleRate);
-    const expectedTargetLength = Math.max(0, expectedTargetEnd - this.normalizedSamples);
-    const normalizedChannels = sampleRate === opusSampleRate
-      ? channels
-      : await resampleChannelsToOpus(channels, sampleRate);
-    this.pcm.append(alignResampledChannels(normalizedChannels, expectedTargetLength));
-    this.normalizedSamples = expectedTargetEnd;
+    if (sampleRate === opusSampleRate) {
+      this.pcm.append(channels);
+      return;
+    }
+
+    if (!this.streamingResampler) {
+      this.streamingResampler = new StreamingLinearResampler(
+        channels.length,
+        sampleRate,
+        opusSampleRate
+      );
+    }
+    if (this.streamingResampler.sourceSampleRate !== sampleRate) {
+      throw new Error("压缩音频解码块的采样率发生变化。");
+    }
+    this.pcm.append(this.streamingResampler.append(channels));
   }
 }
 
-function alignResampledChannels(channels: Float32Array[], targetLength: number) {
-  return channels.map((channel) => {
-    if (channel.length === targetLength) return channel;
-    if (channel.length > targetLength) return channel.slice(0, targetLength);
+class StreamingLinearResampler {
+  private readonly source: PcmAccumulator;
+  private outputSampleIndex = 0;
+  private finished = false;
 
-    const aligned = new Float32Array(targetLength);
-    aligned.set(channel);
-    if (channel.length > 0) {
-      aligned.fill(channel[channel.length - 1]!, channel.length);
+  constructor(
+    private readonly channels: number,
+    public readonly sourceSampleRate: number,
+    private readonly targetSampleRate: number
+  ) {
+    // Parameter properties are assigned after field initializers. Construct
+    // the accumulator here so it receives the actual channel count.
+    this.source = new PcmAccumulator(channels);
+  }
+
+  append(channels: Float32Array[]) {
+    if (this.finished) throw new Error("重采样器已经结束。");
+    this.source.append(channels);
+    return this.drain(false);
+  }
+
+  finish() {
+    this.finished = true;
+    return this.drain(true);
+  }
+
+  private drain(final: boolean) {
+    const sourceEnd = this.source.endSample;
+    const targetEnd = final
+      ? Math.round((sourceEnd * this.targetSampleRate) / this.sourceSampleRate)
+      : Number.POSITIVE_INFINITY;
+    const outputCapacity = final
+      ? Math.max(0, targetEnd - this.outputSampleIndex)
+      : Math.max(
+          0,
+          Math.ceil((sourceEnd * this.targetSampleRate) / this.sourceSampleRate) -
+            this.outputSampleIndex
+        );
+    const output = Array.from(
+      { length: this.channels },
+      () => new Float32Array(outputCapacity)
+    );
+    let outputCount = 0;
+
+    while (this.outputSampleIndex < targetEnd) {
+      const sourcePosition =
+        (this.outputSampleIndex * this.sourceSampleRate) / this.targetSampleRate;
+      const leftIndex = Math.floor(sourcePosition);
+      const rightIndex = leftIndex + 1;
+      if (!final && rightIndex >= sourceEnd) break;
+      if (sourceEnd <= 0 || leftIndex >= sourceEnd) break;
+
+      const fraction = sourcePosition - leftIndex;
+      for (let channelIndex = 0; channelIndex < this.channels; channelIndex += 1) {
+        const left = this.source.sampleAt(leftIndex, channelIndex);
+        const right = rightIndex < sourceEnd
+          ? this.source.sampleAt(rightIndex, channelIndex)
+          : left;
+        output[channelIndex]![outputCount] = left + (right - left) * fraction;
+      }
+      outputCount += 1;
+      this.outputSampleIndex += 1;
     }
-    return aligned;
-  });
+
+    const nextSourcePosition =
+      (this.outputSampleIndex * this.sourceSampleRate) / this.targetSampleRate;
+    this.source.trimBefore(Math.max(0, Math.floor(nextSourcePosition)));
+    return output.map((channel) => channel.slice(0, outputCount));
+  }
 }
 
 class PcmAccumulator {
@@ -758,6 +842,14 @@ class PcmAccumulator {
       }
     }
     return output;
+  }
+
+  sampleAt(sampleIndex: number, channelIndex: number) {
+    for (const chunk of this.chunks) {
+      if (sampleIndex < chunk.start || sampleIndex >= chunk.start + chunk.length) continue;
+      return chunk.channels[channelIndex]![sampleIndex - chunk.start]!;
+    }
+    throw new Error("重采样器读取了不可用的音频采样。");
   }
 
   trimBefore(sample: number) {
@@ -1108,17 +1200,9 @@ async function readWavPlaybackSegment(
   const channels = decodeWavPcmChannels(bytes, header);
   const normalizedChannels = await resampleWavChannels(channels, header.sampleRate);
   const targetPrerollSamples = Math.round((seekPrerollMs / 1000) * opusSampleRate);
-  const leadingPaddingSamples = unitIndex === 0 ? targetPrerollSamples : 0;
-
   return {
-    channels: leadingPaddingSamples > 0
-      ? normalizedChannels.map((channel) => {
-          const padded = new Float32Array(leadingPaddingSamples + channel.length);
-          padded.set(channel, leadingPaddingSamples);
-          return padded;
-        })
-      : normalizedChannels,
-    trimStartSamples: 0
+    channels: normalizedChannels,
+    trimStartSamples: unitIndex === 0 ? 0 : targetPrerollSamples
   };
 }
 

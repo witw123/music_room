@@ -7,7 +7,7 @@ function playbackAsset(assetId: string, durationMs: number) {
     assetId,
     kind: "playback" as const,
     sourceFileHash: "b".repeat(64),
-    profileId: "opus-music-v2" as const,
+    profileId: "opus-music-v3" as const,
     codec: "opus" as const,
     container: "audio/ogg" as const,
     sampleRate: 48_000 as const,
@@ -20,7 +20,7 @@ function playbackAsset(assetId: string, durationMs: number) {
     merkleRoot: "c".repeat(64),
     encoder: {
       name: "@audio/opus-encode" as const,
-      version: "2.0.0" as const
+      version: "3.0.0" as const
     }
   };
 }

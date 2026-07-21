@@ -11,13 +11,23 @@ import type {
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteLocalTrackDataForTracks,
+  getAssetManifest,
+  getAssetUnit,
   linkTrackAssets,
   getCachedLibraryTrackByProviderTrack,
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
+import {
+  MusicRoomApiError,
+  musicRoomApi,
+  resolveDownloadedAudioMimeType
+} from "@/lib/music-room-api";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "./audio-utils";
-import { getReusableAudioAssets, prepareAudioAssets } from "./audio-asset-builder";
+import {
+  getReusableAudioAssets,
+  playbackProfileId,
+  prepareAudioAssets
+} from "./audio-asset-builder";
 import {
   applySelectedTrackFilesResult,
   buildRegisterTrackPayload,
@@ -352,7 +362,7 @@ async function importProviderTrack(input: {
         track.sourceRef?.provider === sourceRef.provider &&
         track.sourceRef.trackId === sourceRef.trackId
     );
-    if (existingTrack) {
+    if (existingTrack && await hasUsableLocalPlaybackAsset(existingTrack)) {
       setStatusMessage(`《${candidate.title}》已在当前房间曲库中。`);
       return;
     }
@@ -364,29 +374,43 @@ async function importProviderTrack(input: {
       sourceTrackId: candidate.providerTrackId
     });
 
-    const cachedTrack = await getCachedLibraryTrackByProviderTrack(
+    let cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null = await getCachedLibraryTrackByProviderTrack(
       sourceType,
       candidate.providerTrackId
     );
-    let file: File;
+    let file: File | null = null;
     let assets: Awaited<ReturnType<typeof prepareAudioAssets>> | null = null;
     if (cachedTrack) {
       setStatusMessage(`正在使用《${candidate.title}》的浏览器缓存…`);
-      file = toCachedLibraryFile({
+      const cachedFile = toCachedLibraryFile({
         file: cachedTrack.file,
         title: candidate.title,
         mimeType: cachedTrack.mimeType,
         fileHash: cachedTrack.fileHash
       });
-      assets = await getReusableAudioAssets({
-        fileHash: cachedTrack.fileHash,
-        sizeBytes: cachedTrack.sizeBytes
-      });
-    } else {
+      try {
+        file = new File(
+          [cachedFile],
+          cachedFile.name,
+          { type: await resolveCachedAudioMimeType(cachedFile) }
+        );
+        assets = await getReusableAudioAssets({
+          fileHash: cachedTrack.fileHash,
+          sizeBytes: cachedTrack.sizeBytes
+        });
+      } catch {
+        // A previous interrupted import may have left an HTML/JSON response in
+        // the cache. Drop it and fetch a fresh provider response below.
+        cachedTrack = null;
+        file = null;
+        assets = null;
+      }
+    }
+    if (!file) {
       setStatusMessage(`正在获取《${candidate.title}》音频…`);
       const source = await download();
-      const mimeType = normalizeImportedMimeType(source.contentType);
-      const extension = mimeType === "audio/flac" ? "flac" : "mp3";
+      const mimeType = source.contentType;
+      const extension = extensionForImportedMimeType(mimeType);
       file = new File([source.blob], `${sanitizeFileName(candidate.title, sourceType)}.${extension}`, {
         type: mimeType
       });
@@ -469,12 +493,28 @@ function sourceTypeLabel(sourceType: Exclude<TrackSourceType, "local_upload">) {
   }[sourceType];
 }
 
-function normalizeImportedMimeType(value: string) {
-  const baseType = value.split(";", 1)[0]?.trim().toLowerCase();
-  if (baseType === "audio/flac" || baseType === "audio/x-flac") {
-    return "audio/flac";
+async function hasUsableLocalPlaybackAsset(track: TrackMeta) {
+  const playbackAsset = track.playbackAsset;
+  if (!playbackAsset || playbackAsset.profileId !== playbackProfileId || playbackAsset.unitCount <= 0) {
+    return false;
   }
-  return "audio/mpeg";
+
+  const manifest = await getAssetManifest(playbackAsset.assetId).catch(() => null);
+  if (!manifest?.complete) {
+    return false;
+  }
+
+  return !!(await getAssetUnit(playbackAsset.assetId, 0).catch(() => null));
+}
+
+async function resolveCachedAudioMimeType(file: File) {
+  return resolveDownloadedAudioMimeType(file, file.type);
+}
+
+function extensionForImportedMimeType(mimeType: string) {
+  if (mimeType === "audio/flac") return "flac";
+  if (mimeType === "audio/wav") return "wav";
+  return "mp3";
 }
 
 function sanitizeFileName(value: string, sourceType: TrackSourceType) {

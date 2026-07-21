@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
+import {
+  playbackEncoderVersion,
+  playbackProfileId,
+  type RoomSnapshot,
+  type TrackMeta
+} from "@music-room/shared";
 import {
   getAssetUnit,
   putAssetManifest
@@ -69,7 +74,7 @@ export function useSegmentedOpusPlayback(input: {
   const hasActivePlayback = hasActiveSegmentedPlayback({
     isCurrentSource,
     currentTrackId: roomSnapshot?.room.playback.currentTrackId,
-    hasPlaybackAsset: !!input.currentTrack?.playbackAsset
+    hasPlaybackAsset: isSupportedPlaybackAsset(input.currentTrack?.playbackAsset)
   });
   const playbackIdentity = resolveSegmentedPlaybackIdentity({
     playback: roomSnapshot?.room.playback,
@@ -127,6 +132,10 @@ export function useSegmentedOpusPlayback(input: {
           playbackGenerationRef.current += 1;
         }
         generation = playbackGenerationRef.current;
+        if (!isSupportedPlaybackAsset(currentPlaybackAsset)) {
+          setSnapshot({ ...idleSnapshot, playbackIdentity: currentPlaybackIdentity });
+          return;
+        }
         if (
           cancelled ||
           !currentPlaybackAsset ||
@@ -305,6 +314,14 @@ export function hasActiveSegmentedPlayback(input: {
   hasPlaybackAsset: boolean;
 }) {
   return input.isCurrentSource && Boolean(input.currentTrackId) && input.hasPlaybackAsset;
+}
+
+function isSupportedPlaybackAsset(asset: TrackMeta["playbackAsset"] | null | undefined) {
+  return Boolean(
+    asset &&
+      asset.profileId === playbackProfileId &&
+      asset.encoder.version === playbackEncoderVersion
+  );
 }
 
 function formatSegmentedPlaybackError(error: unknown) {

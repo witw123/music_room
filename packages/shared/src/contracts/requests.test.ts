@@ -78,7 +78,7 @@ describe("request contracts", () => {
         assetId: "d".repeat(64),
         kind: "playback" as const,
         sourceFileHash: "b".repeat(64),
-        profileId: "opus-music-v2" as const,
+        profileId: "opus-music-v3" as const,
         codec: "opus" as const,
         container: "audio/ogg" as const,
         sampleRate: 48_000 as const,
@@ -89,7 +89,7 @@ describe("request contracts", () => {
         seekPrerollMs: 80 as const,
         unitCount: 60,
         merkleRoot: "e".repeat(64),
-        encoder: { name: "@audio/opus-encode" as const, version: "2.0.0" as const }
+        encoder: { name: "@audio/opus-encode" as const, version: "3.0.0" as const }
       }
     };
 

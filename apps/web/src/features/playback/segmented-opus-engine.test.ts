@@ -94,7 +94,7 @@ const manifest = {
   assetId: "a".repeat(64),
   kind: "playback",
   sourceFileHash: "b".repeat(64),
-  profileId: "opus-music-v2",
+  profileId: "opus-music-v3",
   codec: "opus",
   container: "audio/ogg",
   sampleRate: 48_000,
@@ -105,7 +105,7 @@ const manifest = {
   seekPrerollMs: 80,
   unitCount: 5,
   merkleRoot: "c".repeat(64),
-  encoder: { name: "@audio/opus-encode", version: "2.0.0" }
+  encoder: { name: "@audio/opus-encode", version: "3.0.0" }
 } as PlaybackAssetManifest;
 
 function playback(serverNowMs: number): PlaybackSnapshot {
@@ -134,7 +134,7 @@ function unit(unitIndex: number): AudioAssetUnitRecord {
     proof: [],
     startMs: unitIndex * 2_000,
     durationMs: 2_000,
-    trimStartSamples: unitIndex === 0 ? 0 : 3_840,
+    trimStartSamples: 0,
     trimEndSamples: 0,
     payload: new Uint8Array([unitIndex]).buffer,
     lastAccessedAt: new Date(0).toISOString(),

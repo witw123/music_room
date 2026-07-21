@@ -4,8 +4,8 @@ export const sha256HexSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const assetKindSchema = z.enum(["original", "playback"]);
 
-export const playbackProfileId = "opus-music-v2" as const;
-export const playbackEncoderVersion = "2.0.0" as const;
+export const playbackProfileId = "opus-music-v3" as const;
+export const playbackEncoderVersion = "3.0.0" as const;
 
 const assetManifestBaseSchema = z.object({
   assetId: sha256HexSchema,

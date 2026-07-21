@@ -4,7 +4,10 @@ const maxFrameSize = 48000 * 60 / 1000
 const maxPacketSize = 1276 * 3
 const opusSampleRate = 48000
 const opusFrameSize = 960
-const opusPreSkipSamples = 3840
+// This is the libopus algorithmic delay, not the room seek preroll.
+// Seek preroll is represented by overlapping source samples and playback
+// trim metadata; it must not be encoded into OpusHead pre-skip.
+export const opusPreSkipSamples = 312
 
 /**
  * Ogg Opus encoder — browser + Node

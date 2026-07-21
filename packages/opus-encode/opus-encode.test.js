@@ -22,7 +22,7 @@ test("encodes PCM without an external WASM asset", async () => {
       new TextDecoder().decode(payload.subarray(index, index + 8)) === "OpusHead"
     );
     assert.ok(opusHeadOffset >= 0);
-    assert.equal(new DataView(payload.buffer).getUint16(opusHeadOffset + 10, true), 3840);
+    assert.equal(new DataView(payload.buffer).getUint16(opusHeadOffset + 10, true), 312);
   } finally {
     encoder.free();
   }

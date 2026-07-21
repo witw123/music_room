@@ -456,7 +456,7 @@ export function useRoomActions({
   );
 
   const playQueueItem = useCallback(
-    async (queueItemId: string) => {
+    async (queueItemId: string, trackId?: string) => {
       if (!roomSnapshot || !activeSession) {
         return;
       }
@@ -465,7 +465,7 @@ export function useRoomActions({
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) => {
-          const queueTrackId = roomSnapshot.queue.find((item) => item.id === queueItemId)?.trackId;
+          const queueTrackId = trackId ?? roomSnapshot.queue.find((item) => item.id === queueItemId)?.trackId;
           const playbackAssetId = roomSnapshot.tracks.find(
             (track) => track.id === queueTrackId
           )?.playbackAsset?.assetId;

@@ -585,11 +585,43 @@ export class SegmentedOpusEngine {
         decoded.copyToChannel(Float32Array.from(channel), index)
       );
     }
-    // @audio/opus-encode writes an 80ms OpusHead pre-skip and each encoded
-    // unit includes the matching seek preroll. Native and WASM Opus decoders
-    // already remove that pre-skip. Applying descriptor trim metadata here a
-    // second time drops 80ms at every 2s boundary and creates audible gaps.
-    return decoded;
+    const sampleScale = decoded.sampleRate / 48_000;
+    const trimStart = Math.min(
+      decoded.length,
+      Math.max(0, Math.round((unit.trimStartSamples ?? 0) * sampleScale))
+    );
+    const trimEnd = Math.min(
+      Math.max(0, decoded.length - trimStart),
+      Math.max(0, Math.round((unit.trimEndSamples ?? 0) * sampleScale))
+    );
+    const availableLength = Math.max(0, decoded.length - trimStart - trimEnd);
+    const targetLength = unit.durationMs
+      ? Math.max(1, Math.round((unit.durationMs / 1000) * decoded.sampleRate))
+      : availableLength;
+    if (
+      trimStart === 0 &&
+      trimEnd === 0 &&
+      availableLength === targetLength
+    ) {
+      return decoded;
+    }
+
+    // Every unit is normalized to its declared timeline length. New assets
+    // have enough tail padding for this copy; zero-fill only protects playback
+    // from malformed or truncated payloads without leaking the next segment.
+    const normalized = context.createBuffer(
+      decoded.numberOfChannels,
+      targetLength,
+      decoded.sampleRate
+    );
+    const copyLength = Math.min(targetLength, availableLength);
+    for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
+      normalized.copyToChannel(
+        decoded.getChannelData(channel).subarray(trimStart, trimStart + copyLength),
+        channel
+      );
+    }
+    return normalized;
   }
 
   private async getWasmDecoder() {

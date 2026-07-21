@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import {
   assetUnitDescriptorSchema,
+  playbackEncoderVersion,
   playbackProfileId,
   verifyAssetUnit,
   type AssetKind,
@@ -379,6 +380,35 @@ export class MusicRoomDatabase extends Dexie {
     });
     this.version(17).stores({
       favoriteProviderAlbums: "&id, userId, provider, providerAlbumId, updatedAt"
+    });
+    this.version(18).upgrade(async (transaction) => {
+      const manifests = transaction.table<AudioAssetManifestRecord, string>("assetManifests");
+      const units = transaction.table<AudioAssetUnitRecord, string>("assetUnits");
+      const links = transaction.table<TrackAssetLinkRecord, string>("trackAssetLinks");
+      const jobs = transaction.table<TranscodeJobRecord, string>("transcodeJobs");
+      const obsoletePlaybackAssets = await manifests.filter((record) => {
+        const manifest = record.manifest as {
+          kind?: unknown;
+          profileId?: unknown;
+          encoder?: { version?: unknown };
+        };
+        return manifest.kind === "playback" && (
+          manifest.profileId !== playbackProfileId ||
+          manifest.encoder?.version !== playbackEncoderVersion
+        );
+      }).toArray();
+      const obsoleteAssetIds = obsoletePlaybackAssets.map((record) => record.assetId);
+
+      if (obsoleteAssetIds.length > 0) {
+        await Promise.all([
+          units.where("assetId").anyOf(obsoleteAssetIds).delete(),
+          links.where("playbackAssetId").anyOf(obsoleteAssetIds).delete(),
+          manifests.bulkDelete(obsoleteAssetIds)
+        ]);
+      }
+      await jobs.filter((job) =>
+        (job as { profileId?: unknown }).profileId !== playbackProfileId
+      ).delete();
     });
   }
 }

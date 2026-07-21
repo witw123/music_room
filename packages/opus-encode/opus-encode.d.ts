@@ -12,4 +12,6 @@ export interface StreamEncoder {
 	free(): void;
 }
 
+export const opusPreSkipSamples: 312;
+
 export default function opus(opts: OpusEncodeOptions): Promise<StreamEncoder>;

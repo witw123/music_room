@@ -1,13 +1,14 @@
 "use client";
 
-import type {
-  AssetUnitDescriptor,
-  OriginalAssetManifest,
-  PlaybackAssetManifest,
-  RoomSnapshot,
-  TrackMeta
+import {
+  playbackEncoderVersion,
+  playbackProfileId,
+  type AssetUnitDescriptor,
+  type OriginalAssetManifest,
+  type PlaybackAssetManifest,
+  type RoomSnapshot,
+  type TrackMeta
 } from "@music-room/shared";
-
 export const localRepositoryDirectoryName = ".music-room";
 export const localRepositoryFormat = "music-room-local-repository" as const;
 export const localRepositorySchemaVersion = 1 as const;
@@ -154,10 +155,16 @@ export class LocalRepository {
     );
     const manifest = existing ?? createRepositoryManifest();
     validateRepositoryManifest(manifest);
+    if (existing && !hasCurrentPlaybackProfile(manifest)) {
+      manifest.playbackProfiles = currentPlaybackProfiles();
+      await writeJsonFile(dataDirectory, repositoryManifestFileName, manifest);
+    }
     if (!existing) {
       await writeJsonFile(dataDirectory, repositoryManifestFileName, manifest);
     }
-    return new LocalRepository(root, dataDirectory, manifest);
+    const repository = new LocalRepository(root, dataDirectory, manifest);
+    await repository.cleanupObsoletePlaybackAssets();
+    return repository;
   }
 
   async touch() {
@@ -530,6 +537,28 @@ export class LocalRepository {
     await this.touch();
   }
 
+  async cleanupObsoletePlaybackAssets() {
+    const assets = await this.listPlaybackAssets();
+    const obsolete = assets.filter((asset) =>
+      asset.manifest.profileId !== playbackProfileId ||
+      asset.manifest.encoder?.version !== playbackEncoderVersion
+    );
+    if (obsolete.length === 0) return;
+
+    const obsoleteAssetIds = new Set(obsolete.map((asset) => asset.manifest.assetId));
+    const tracks = await this.listTracks();
+    await Promise.all(
+      tracks
+        .filter((track) => track.playbackAsset && obsoleteAssetIds.has(track.playbackAsset.assetId))
+        .map((track) => this.writeTrack({ ...track, playbackAsset: null }, { updateCatalog: false }))
+    );
+    await Promise.all(obsolete.map((asset) => this.removeDirectory(
+      this.getPlaybackAssetPath(asset.manifest.assetId, asset.manifest.profileId)
+    )));
+    await this.writeCatalogIndex();
+    await this.touch();
+  }
+
   async listPlaybackAssets() {
     return this.listJsonFilesRecursively<LocalRepositoryPlaybackManifest>(
       `${localRepositoryDirectoryName}/assets/playback`
@@ -682,15 +711,24 @@ function createRepositoryManifest(): LocalRepositoryManifest {
     schemaVersion: localRepositorySchemaVersion,
     repositoryId: globalThis.crypto?.randomUUID?.() ?? `repository-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     hashAlgorithm: "sha256",
-    playbackProfiles: {
-      "opus-music-v2": {
-        encoderVersion: "2.0.0",
-        segmentDurationMs: 2_000
-      }
-    },
+    playbackProfiles: currentPlaybackProfiles(),
     createdAt: now,
     updatedAt: now
   };
+}
+
+function currentPlaybackProfiles() {
+  return {
+    [playbackProfileId]: {
+      encoderVersion: playbackEncoderVersion,
+      segmentDurationMs: 2_000
+    }
+  };
+}
+
+function hasCurrentPlaybackProfile(manifest: LocalRepositoryManifest) {
+  const profile = manifest.playbackProfiles?.[playbackProfileId];
+  return profile?.encoderVersion === playbackEncoderVersion && profile.segmentDurationMs === 2_000;
 }
 
 function validateRepositoryManifest(manifest: LocalRepositoryManifest) {
