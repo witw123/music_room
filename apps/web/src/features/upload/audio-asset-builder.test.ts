@@ -6,6 +6,7 @@ import {
   playbackProfileId,
   resolveEncodingConcurrency,
   resolveSupportedUploadFormat,
+  resampleChannelsToOpus,
   slicePcmSegment,
   StreamingSincResampler
 } from "./audio-asset-builder";
@@ -23,7 +24,7 @@ describe("audio asset preparation", () => {
 
   it("publishes the server-compatible playback profile", () => {
     expect(playbackProfileId).toBe("opus-music-v3");
-    expect(playbackEncoderVersion).toBe("3.1.0");
+    expect(playbackEncoderVersion).toBe("3.2.0");
   });
 
   it("accepts only the supported room source formats", () => {
@@ -105,6 +106,20 @@ describe("audio asset preparation", () => {
     }
     resampled44100 += resampler44100.finish()[0]?.length ?? 0;
     expect(resampled44100).toBe(48_000);
+  });
+
+  it("uses the same anti-aliased resampler for WAV-sized source chunks", () => {
+    const input = Float32Array.from({ length: 96_000 }, (_, index) =>
+      0.5 * Math.sin(2 * Math.PI * 32_000 * index / 96_000)
+    );
+    const output = resampleChannelsToOpus([input], 96_000)[0]!;
+
+    expect(output).toHaveLength(48_000);
+    const steadyState = output.subarray(1_000, 47_000);
+    const rms = Math.sqrt(
+      steadyState.reduce((sum, sample) => sum + sample * sample, 0) / steadyState.length
+    );
+    expect(rms).toBeLessThan(0.02);
   });
 
   it("bounds segment encoding concurrency by work and available CPU", () => {

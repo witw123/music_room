@@ -1334,22 +1334,26 @@ function decodeWavSample(
   throw new Error(`不支持的 WAV PCM 位深：${bitsPerSample}`);
 }
 
-async function resampleWavChannels(channels: Float32Array[], sampleRate: number) {
+function resampleWavChannels(channels: Float32Array[], sampleRate: number) {
   if (sampleRate === opusSampleRate) return channels;
   return resampleChannelsToOpus(channels, sampleRate);
 }
 
-async function resampleChannelsToOpus(channels: Float32Array[], sampleRate: number) {
-  const { resample } = await import("wave-resampler");
-  const options = sampleRate > opusSampleRate
-    ? { method: "linear" as const, LPF: true as const, LPFType: "IIR" as const, LPFOrder: 4 }
-    : { method: "linear" as const, LPF: false as const };
-  return channels.map((channel) => Float32Array.from(resample(
-    channel,
-    sampleRate,
-    opusSampleRate,
-    options
-  )));
+export function resampleChannelsToOpus(channels: Float32Array[], sampleRate: number) {
+  if (sampleRate === opusSampleRate) return channels;
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new Error("音频采样率无效。");
+  }
+
+  return channels.map((channel) => {
+    const resampler = new StreamingSincResampler(1, sampleRate, opusSampleRate);
+    const first = resampler.append([channel]);
+    const last = resampler.finish();
+    const output = new Float32Array((first[0]?.length ?? 0) + (last[0]?.length ?? 0));
+    output.set(first[0] ?? new Float32Array(0));
+    output.set(last[0] ?? new Float32Array(0), first[0]?.length ?? 0);
+    return output;
+  });
 }
 
 async function readFileUnit(file: File, unitIndex: number) {
