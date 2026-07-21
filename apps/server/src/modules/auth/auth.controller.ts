@@ -140,6 +140,11 @@ export class AuthController {
   }
 
   private async assertAuthRateLimit(action: "register" | "login", clientIp: string, username: string) {
+    // E2E runs multiple isolated browser contexts through the same loopback IP.
+    if (process.env.NODE_ENV === "test" && process.env.AUTH_RATE_LIMIT_DISABLED === "true") {
+      return;
+    }
+
     const limits =
       action === "register"
         ? { perIp: 8, perUsername: 4, windowMs: 60_000 }
