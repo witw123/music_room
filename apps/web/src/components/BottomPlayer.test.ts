@@ -102,6 +102,8 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain("!pipWindow ? (");
     expect(miniPlayerSource).toContain("h-full min-h-0 flex-col");
     expect(miniPlayerSource).not.toContain("overflow-y-auto");
+    expect(miniPlayerSource).toContain("min-h-[92px] shrink-0");
+    expect(miniPlayerSource).toContain("text-[2rem] font-bold");
     expect(miniPlayerSource).toContain("const ownerWindow = pipWindow ?? window");
     expect(miniPlayerSource).toContain("panel.ownerDocument.defaultView ?? window");
     expect(playerSource).toContain("requestMiniPlayerWindow()");

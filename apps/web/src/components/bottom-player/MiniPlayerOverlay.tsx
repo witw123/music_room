@@ -273,10 +273,10 @@ export function MiniPlayerOverlay({
           </div>
         </div>
 
-        <div className="flex shrink-0 min-h-[112px] items-start justify-between gap-4 px-3 pb-5 pt-5 sm:min-h-[140px] sm:px-5 sm:pb-7 sm:pt-6">
+        <div className="flex min-h-[92px] shrink-0 items-start justify-between gap-4 px-3 pb-3 pt-3 sm:min-h-[112px] sm:px-5 sm:pb-5 sm:pt-4">
           <div className="min-w-0">
-            <h2 className="truncate text-3xl font-bold leading-tight text-white sm:text-[2.75rem]">{title}</h2>
-            <p className="mt-1 truncate text-xl leading-tight text-white/55 sm:text-2xl">{artist}</p>
+            <h2 className="truncate text-[2rem] font-bold leading-[1.05] text-white sm:text-[2.5rem]">{title}</h2>
+            <p className="mt-1 truncate text-base leading-tight text-white/55 sm:text-xl">{artist}</p>
           </div>
         </div>
       </div>
@@ -372,11 +372,11 @@ function NextIcon() {
 }
 
 function PlayIcon() {
-  return <svg aria-hidden="true" fill="currentColor" height="17" viewBox="0 0 24 24" width="17"><path d="M8 5v14l11-7z" /></svg>;
+  return <svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M8 5v14l11-7z" /></svg>;
 }
 
 function PauseIcon() {
-  return <svg aria-hidden="true" fill="currentColor" height="17" viewBox="0 0 24 24" width="17"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>;
+  return <svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>;
 }
 
 function VolumeIcon({ volume }: { volume: number }) {
