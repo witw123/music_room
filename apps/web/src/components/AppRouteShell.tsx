@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
@@ -59,9 +59,46 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
           hasBottomPlayer={Boolean(awayRoomId)}
           onLogout={handleLogout}
         />
-        <div>{children}</div>
+        <PersistentAppRouteViews pathname={pathname}>{children}</PersistentAppRouteViews>
         {awayRoomId ? null : <AppPersistentPlayer />}
       </div>
     </LocalPlayerProvider>
+  );
+}
+
+/** Keep visited workspace pages mounted so route changes do not reset their data state. */
+function PersistentAppRouteViews({
+  pathname,
+  children
+}: {
+  pathname: string | null;
+  children: ReactNode;
+}) {
+  const routeKey = pathname || "/app";
+  const routeCache = useRef(new Map<string, ReactNode>());
+  const visibleRoute = useRef<string | null>(null);
+
+  if (children !== null && children !== undefined) {
+    if (!routeCache.current.has(routeKey)) {
+      routeCache.current.set(routeKey, children);
+    }
+    visibleRoute.current = routeKey;
+  }
+
+  return (
+    <div className="contents">
+      {[...routeCache.current.entries()].map(([cachedRoute, page]) => {
+        const isVisible = cachedRoute === visibleRoute.current;
+        return (
+          <div
+            aria-hidden={!isVisible}
+            className={isVisible ? "contents" : "hidden"}
+            key={cachedRoute}
+          >
+            {page}
+          </div>
+        );
+      })}
+    </div>
   );
 }

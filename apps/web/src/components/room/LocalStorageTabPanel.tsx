@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import type {
   AuthSession,
@@ -25,6 +25,50 @@ const enabledSearchProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
   ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
 ];
+
+async function enrichProviderSearchResults(provider: Provider, items: ProviderTrack[]) {
+  const missingArtwork = items.filter((track) => !track.artworkUrl);
+  const albumIds = [...new Set(
+    missingArtwork
+      .map((track) => track.providerAlbumId)
+      .filter((albumId): albumId is string => !!albumId)
+  )].slice(0, 12);
+  const artworkByAlbumId = new Map<string, string>();
+
+  await Promise.all(albumIds.map(async (albumId) => {
+    try {
+      const album = provider === "netease"
+        ? await musicRoomApi.getNeteaseAlbum(albumId)
+        : await musicRoomApi.getQqMusicAlbum(albumId);
+      if (album.artworkUrl) artworkByAlbumId.set(albumId, album.artworkUrl);
+    } catch {
+      // Search results remain usable when a provider album endpoint is unavailable.
+    }
+  }));
+
+  const tracksWithoutAlbum = missingArtwork
+    .filter((track) => !track.providerAlbumId)
+    .slice(0, 6);
+  const artworkByTrackId = new Map<string, string>();
+  await Promise.all(tracksWithoutAlbum.map(async (track) => {
+    try {
+      const detail = track.provider === "netease"
+        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+      if (detail.artworkUrl) artworkByTrackId.set(track.providerTrackId, detail.artworkUrl);
+    } catch {
+      // Keep the search candidate when detail lookup fails.
+    }
+  }));
+
+  return items.map((track) => ({
+    ...track,
+    artworkUrl: track.artworkUrl
+      ?? (track.providerAlbumId ? artworkByAlbumId.get(track.providerAlbumId) : undefined)
+      ?? artworkByTrackId.get(track.providerTrackId)
+      ?? null
+  }));
+}
 
 type LocalStorageTabPanelProps = {
   tracks: TrackMeta[];
@@ -137,7 +181,6 @@ function NetworkPlaylistSearch({
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const [provider, setProvider] = useState<Provider>(enabledSearchProviders[0] ?? "netease");
   const [account, setAccount] = useState<ProviderAccount | null>(null);
   const [keywords, setKeywords] = useState("");
@@ -148,7 +191,7 @@ function NetworkPlaylistSearch({
   const searchRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!isExpanded || enabledSearchProviders.length === 0) return;
+    if (enabledSearchProviders.length === 0) return;
     let cancelled = false;
     searchRequestRef.current += 1;
     setAccount(null);
@@ -168,16 +211,7 @@ function NetworkPlaylistSearch({
       cancelled = true;
       searchRequestRef.current += 1;
     };
-  }, [isExpanded, provider]);
-
-  if (enabledSearchProviders.length === 0) {
-    return (
-      <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid="network-playlist-search">
-        <span className="text-sm font-semibold text-foreground">搜索歌曲并导入曲库</span>
-        <span className="text-xs text-foreground-muted">网易云音乐和 QQ 音乐当前未启用，请先在服务端配置对应平台。</span>
-      </section>
-    );
-  }
+  }, [provider]);
 
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
   const isConnected = account?.connected === true;
@@ -188,10 +222,8 @@ function NetworkPlaylistSearch({
       .filter((trackId): trackId is string => !!trackId)
   );
 
-  const searchTracks = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const query = keywords.trim();
-    if (!query || pending || !isConnected) return;
+  const searchTracks = useCallback(async (query: string, requestId: number) => {
+    if (!query || !isConnected || searchRequestRef.current !== requestId) return;
     setPending("search");
     setErrorMessage(null);
     setMessage(null);
@@ -199,9 +231,9 @@ function NetworkPlaylistSearch({
       const response = provider === "netease"
         ? await musicRoomApi.searchNeteaseTracks(query)
         : await musicRoomApi.searchQqMusicTracks(query);
-      const requestId = ++searchRequestRef.current;
+      if (searchRequestRef.current !== requestId) return;
       setResults(response.items);
-      void enrichSearchResults(response.items)
+      void enrichProviderSearchResults(provider, response.items)
         .then((enrichedResults) => {
           if (searchRequestRef.current === requestId) {
             setResults(enrichedResults);
@@ -210,10 +242,38 @@ function NetworkPlaylistSearch({
         .catch(() => undefined);
       if (response.items.length === 0) setMessage("没有找到匹配的歌曲。");
     } catch (error) {
-      setErrorMessage(toLocalSearchErrorMessage(error));
+      if (searchRequestRef.current === requestId) {
+        setErrorMessage(toLocalSearchErrorMessage(error));
+      }
     } finally {
-      setPending(null);
+      if (searchRequestRef.current === requestId) {
+        setPending(null);
+      }
     }
+  }, [isConnected, provider]);
+
+  useEffect(() => {
+    const requestId = ++searchRequestRef.current;
+    const query = keywords.trim();
+    if (!query || !isConnected) {
+      setResults([]);
+      setMessage(null);
+      setPending((current) => current === "search" ? null : current);
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      void searchTracks(query, requestId);
+    }, 320);
+    return () => window.clearTimeout(timerId);
+  }, [isConnected, keywords, searchTracks]);
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = keywords.trim();
+    if (!query || !isConnected) return;
+    const requestId = ++searchRequestRef.current;
+    void searchTracks(query, requestId);
   };
 
   const importTrack = async (candidate: ProviderTrack) => {
@@ -235,67 +295,17 @@ function NetworkPlaylistSearch({
     }
   };
 
-  async function enrichSearchResults(items: ProviderTrack[]) {
-    const missingArtwork = items.filter((track) => !track.artworkUrl);
-    const albumIds = [...new Set(
-      missingArtwork
-        .map((track) => track.providerAlbumId)
-        .filter((albumId): albumId is string => !!albumId)
-    )].slice(0, 12);
-    const artworkByAlbumId = new Map<string, string>();
-
-    await Promise.all(albumIds.map(async (albumId) => {
-      try {
-        const album = provider === "netease"
-          ? await musicRoomApi.getNeteaseAlbum(albumId)
-          : await musicRoomApi.getQqMusicAlbum(albumId);
-        if (album.artworkUrl) artworkByAlbumId.set(albumId, album.artworkUrl);
-      } catch {
-        // Search results remain usable when a provider album endpoint is unavailable.
-      }
-    }));
-
-    const tracksWithoutAlbum = missingArtwork
-      .filter((track) => !track.providerAlbumId)
-      .slice(0, 6);
-    const artworkByTrackId = new Map<string, string>();
-    await Promise.all(tracksWithoutAlbum.map(async (track) => {
-      try {
-        const detail = track.provider === "netease"
-          ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-          : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
-        if (detail.artworkUrl) artworkByTrackId.set(track.providerTrackId, detail.artworkUrl);
-      } catch {
-        // Keep the search candidate when detail lookup fails.
-      }
-    }));
-
-    return items.map((track) => ({
-      ...track,
-      artworkUrl: track.artworkUrl
-        ?? (track.providerAlbumId ? artworkByAlbumId.get(track.providerAlbumId) : undefined)
-        ?? artworkByTrackId.get(track.providerTrackId)
-        ?? null
-    }));
+  if (enabledSearchProviders.length === 0) {
+    return (
+      <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid="network-playlist-search">
+        <span className="text-xs text-foreground-muted">网易云音乐和 QQ 音乐当前未启用，请先在服务端配置对应平台。</span>
+      </section>
+    );
   }
 
   return (
     <section className="flex flex-col gap-3 border-b border-surface-border pb-3" data-testid="network-playlist-search">
-      <button
-        type="button"
-        aria-expanded={isExpanded}
-        onClick={() => setIsExpanded((current) => !current)}
-        className="flex items-center justify-between gap-3 text-left"
-      >
-        <span>
-          <span className="block text-sm font-semibold text-foreground">搜索歌曲并导入曲库</span>
-          <span className="mt-1 block text-xs text-foreground-muted">从网易云音乐或 QQ 音乐导入当前房间曲库</span>
-        </span>
-        <span className={`shrink-0 text-xs text-foreground-muted transition-transform ${isExpanded ? "rotate-180" : ""}`} aria-hidden="true">⌄</span>
-      </button>
-
-      {isExpanded ? (
-        <div className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface/35 p-3">
+      <div className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface/35 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-1" role="tablist" aria-label="导入平台">
               {enabledSearchProviders.map((item) => (
@@ -318,12 +328,12 @@ function NetworkPlaylistSearch({
             )}
           </div>
 
-          <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void searchTracks(event)}>
+          <form className="flex flex-col gap-2 sm:flex-row" onSubmit={handleSearchSubmit}>
             <label className="sr-only" htmlFor="network-playlist-search-input">搜索歌曲</label>
             <input
               id="network-playlist-search-input"
               className="min-w-0 flex-1 border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-              disabled={!isConnected || pending !== null}
+              disabled={!isConnected}
               maxLength={100}
               onChange={(event) => setKeywords(event.target.value)}
               placeholder={`搜索${providerName}歌曲、歌手或专辑`}
@@ -332,7 +342,7 @@ function NetworkPlaylistSearch({
             />
             <button
               type="submit"
-              disabled={!isConnected || !keywords.trim() || pending !== null}
+              disabled={!isConnected || !keywords.trim()}
               className="border border-accent/35 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pending === "search" ? "搜索中…" : "搜索"}
@@ -372,8 +382,7 @@ function NetworkPlaylistSearch({
               })}
             </div>
           ) : null}
-        </div>
-      ) : null}
+      </div>
     </section>
   );
 }

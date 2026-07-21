@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   NeteaseAccountStatus,
   NeteaseTrackCandidate,
@@ -62,6 +62,7 @@ export function ProviderSearchPage() {
   const [album, setAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("songs");
   const [pending, setPending] = useState<string | null>(null);
+  const searchRequestRef = useRef(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [favoriteAlbumIds, setFavoriteAlbumIds] = useState<Set<string>>(new Set());
@@ -118,10 +119,9 @@ export function ProviderSearchPage() {
   const isConnected = account?.connected === true;
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
 
-  async function searchTracks(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const query = keywords.trim();
-    if (!query || pending || !isConnected) return;
+  const searchTracksForQuery = useCallback(async (query: string) => {
+    const requestId = ++searchRequestRef.current;
+    if (!query || !isConnected) return;
     setPending("search");
     setErrorMessage(null);
     setContentTab("songs");
@@ -129,13 +129,41 @@ export function ProviderSearchPage() {
       const response = provider === "netease"
         ? await musicRoomApi.searchNeteaseTracks(query)
         : await musicRoomApi.searchQqMusicTracks(query);
-      setResults(response.items);
-      setStatusMessage(null);
+      if (searchRequestRef.current === requestId) {
+        setResults(response.items);
+        setStatusMessage(null);
+      }
     } catch (error) {
-      setErrorMessage(toProviderErrorMessage(error, provider));
+      if (searchRequestRef.current === requestId) {
+        setErrorMessage(toProviderErrorMessage(error, provider));
+      }
     } finally {
-      setPending(null);
+      if (searchRequestRef.current === requestId) {
+        setPending(null);
+      }
     }
+  }, [isConnected, provider]);
+
+  useEffect(() => {
+    const query = keywords.trim();
+    const requestId = ++searchRequestRef.current;
+    setResults([]);
+    if (!query || !isConnected) {
+      setPending((current) => current === "search" ? null : current);
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      if (searchRequestRef.current === requestId) {
+        void searchTracksForQuery(query);
+      }
+    }, 320);
+    return () => window.clearTimeout(timerId);
+  }, [isConnected, keywords, searchTracksForQuery]);
+
+  function searchTracks(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void searchTracksForQuery(keywords.trim());
   }
 
   async function loadSearchPlaylists() {
