@@ -212,6 +212,7 @@ describe("PeerConnectionRegistry", () => {
       expect(samplePeerConnectionStats).toHaveBeenCalledWith(entry.connection, null);
       expect(onStatsSample).toHaveBeenCalledWith({
         peerId: "peer_b",
+        linkKind: "data",
         sample: {
           ...sample,
           connectionState: "new",

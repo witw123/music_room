@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import { createPeerEntry } from "./peer-connection-registry";
+import { SignalingTransport } from "./signaling-transport";
 import {
   bindPeerConnectionEvents,
   buildPeerConnectionConfig,
@@ -27,6 +29,18 @@ class FakePeerConnection {
   oniceconnectionstatechange: (() => void) | null = null;
   ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
   ontrack: ((event: RTCTrackEvent) => void) | null = null;
+  createDataChannel() {
+    return new FakeDataChannel() as unknown as RTCDataChannel;
+  }
+  async createOffer() {
+    this.signalingState = "have-local-offer";
+    return { type: "offer" as const, sdp: "media-offer" };
+  }
+  async setLocalDescription(description?: RTCLocalSessionDescriptionInit) {
+    if (description?.type === "rollback") {
+      this.signalingState = "stable";
+    }
+  }
   close = vi.fn(() => {
     this.connectionState = "closed";
   });
@@ -271,5 +285,40 @@ describe("peer connection lifecycle helpers", () => {
     Object.defineProperty(track, "muted", { value: false, configurable: true });
     (track.onunmute as (() => void) | null)?.();
     expect(entry.receiverRtpActive).toBe(true);
+  });
+
+  it("keeps a live receiver track usable while a mute recovery is pending", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePeerConnection);
+    const signaling = new SignalingTransport({
+      roomId: "room",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const manager = new PeerConnectionLifecycleManager({
+      localPeerId: "peer_a",
+      autoReconnect: false,
+      iceServers: [],
+      signaling,
+      bindChannel: vi.fn(),
+      clearPendingRequestsForPeer: vi.fn()
+    });
+
+    await manager.syncPeers(["peer_b"]);
+    const entry = manager.getPeerEntry("peer_b", "media")!;
+    const track = {
+      kind: "audio",
+      id: "remote-track",
+      readyState: "live"
+    } as MediaStreamTrack;
+    entry.audioReceiver = { track } as unknown as RTCRtpReceiver;
+    entry.remoteAudioStream = { getAudioTracks: () => [track] } as unknown as MediaStream;
+    entry.remoteAudioTrackId = track.id;
+    entry.receiverTrackState = "failed";
+
+    expect(manager.getPeerMediaState("peer_b")).toMatchObject({
+      receiverTrackState: "live",
+      remoteStream: entry.remoteAudioStream
+    });
+    vi.unstubAllGlobals();
   });
 });

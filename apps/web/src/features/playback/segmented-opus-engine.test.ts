@@ -105,7 +105,7 @@ const manifest = {
   seekPrerollMs: 80,
   unitCount: 5,
   merkleRoot: "c".repeat(64),
-  encoder: { name: "@audio/opus-encode", version: "3.0.0" }
+  encoder: { name: "@audio/opus-encode", version: "3.1.0" }
 } as PlaybackAssetManifest;
 
 function playback(serverNowMs: number): PlaybackSnapshot {
@@ -248,6 +248,41 @@ describe("SegmentedOpusEngine", () => {
       getUnit: async (unitIndex) => unit(unitIndex)
     });
     expect(ended.state).toBe("ended");
+    engine.destroy();
+  });
+
+  it("keeps playback live while the current scheduled unit covers a short asset gap", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    vi.spyOn(roomAudioOutput, "getBroadcastStream").mockReturnValue({
+      getAudioTracks: () => [{ readyState: "live" }]
+    } as unknown as MediaStream);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
+    });
+
+    Object.defineProperty(context, "currentTime", {
+      configurable: true,
+      value: 12.5
+    });
+    const result = await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 3_500,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
+    });
+
+    expect(sources).toHaveLength(2);
+    expect(result).toEqual({ state: "live", bufferedUnits: 1 });
+    expect(engine.getSourceHealth().state).toBe("source-ready");
     engine.destroy();
   });
 
@@ -442,6 +477,45 @@ describe("SegmentedOpusEngine", () => {
     await playing;
     expect(paused.state).toBe("paused");
     expect(sources).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("does not abort an in-flight decode for a same-timeline scheduler tick", async () => {
+    const { context } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    let release!: (value: AudioAssetUnitRecord | null) => void;
+    let released = false;
+    const blocked = new Promise<AudioAssetUnitRecord | null>((resolve) => {
+      release = resolve;
+    });
+    let firstSignal: AbortSignal | undefined;
+    const getUnit = async (_unitIndex: number, signal?: AbortSignal) => {
+      firstSignal ??= signal;
+      return released ? null : blocked;
+    };
+
+    const firstSync = engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit
+    });
+    await Promise.resolve();
+    const nextSync = engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 100,
+      volume: 0.7,
+      getUnit
+    });
+
+    expect(firstSignal?.aborted).toBe(false);
+    released = true;
+    release(null);
+    await Promise.all([firstSync, nextSync]);
     engine.destroy();
   });
 

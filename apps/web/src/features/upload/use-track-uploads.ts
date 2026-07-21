@@ -18,6 +18,7 @@ import {
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
   buildCachedLibraryFileName,
+  cacheLibraryChangedEventName,
   buildCachedLibraryTrackUpsertRecord,
   createInFlightCachedLibraryTrackFileLoader,
   hasUsableCachedLibraryFileForRoomTrack,
@@ -427,6 +428,9 @@ export function useTrackUploads(options: {
     const refreshWhenPlaylistsChange = () => {
       void refreshCacheLibrary();
     };
+    const refreshWhenCacheLibraryChanges = () => {
+      void refreshCacheLibrary();
+    };
     const refreshWhenPlaylistStorageChanges = (event: StorageEvent) => {
       if (event.key === playlistsChangedStorageKey) {
         refreshWhenPlaylistsChange();
@@ -435,12 +439,14 @@ export function useTrackUploads(options: {
     const refreshInterval = window.setInterval(refreshWhenActive, 10_000);
     window.addEventListener("focus", refreshWhenActive);
     window.addEventListener(playlistsChangedEventName, refreshWhenPlaylistsChange);
+    window.addEventListener(cacheLibraryChangedEventName, refreshWhenCacheLibraryChanges);
     window.addEventListener("storage", refreshWhenPlaylistStorageChanges);
     document.addEventListener("visibilitychange", refreshWhenActive);
     return () => {
       window.clearInterval(refreshInterval);
       window.removeEventListener("focus", refreshWhenActive);
       window.removeEventListener(playlistsChangedEventName, refreshWhenPlaylistsChange);
+      window.removeEventListener(cacheLibraryChangedEventName, refreshWhenCacheLibraryChanges);
       window.removeEventListener("storage", refreshWhenPlaylistStorageChanges);
       document.removeEventListener("visibilitychange", refreshWhenActive);
     };

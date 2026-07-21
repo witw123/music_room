@@ -4,7 +4,7 @@ import { RoomPresenceService } from "./room-presence.service";
 
 type SourceCandidate = {
   sessionId: string;
-  peerId: string;
+  peerId: string | null;
 };
 
 export class RoomPlaybackService {
@@ -467,13 +467,22 @@ export class RoomPlaybackService {
   }
 
   /**
-   * Source owner went offline. Pause in place; do not hand media off to other members
-   * because only the owner holds the local playback asset.
+   * A provider-backed track can keep its room timeline while the uploader is
+   * offline. Listeners will resolve the provider source locally; local uploads
+   * still pause because they have no remote source to fall back to.
    */
   handleSourceDeparture(record: RoomRecord, sessionId: string) {
     const playback = record.room.playback;
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
       return false;
+    }
+
+    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+    if (isProviderTrack(currentTrack)) {
+      playback.sourcePeerId = null;
+      playback.mediaEpoch += 1;
+      this.bumpPlaybackVersion(playback);
+      return true;
     }
 
     const positionMs = this.getEffectivePlaybackPositionMs(record, playback);
@@ -507,6 +516,14 @@ export class RoomPlaybackService {
     const playback = record.room.playback;
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
       return false;
+    }
+
+    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+    if (isProviderTrack(currentTrack)) {
+      playback.sourcePeerId = null;
+      playback.mediaEpoch += 1;
+      this.bumpPlaybackVersion(playback);
+      return true;
     }
 
     const positionMs = this.getEffectivePlaybackPositionMs(record, playback);
@@ -762,6 +779,16 @@ export class RoomPlaybackService {
         peerId: activePresence.get(track.ownerSessionId) as string
       };
     }
+
+    // Provider tracks can be reconstructed by listeners when the uploader is
+    // offline. Keep the uploader as the logical source for room state, but do
+    // not invent a peer id or turn a listener into a broadcast source.
+    if (isProviderTrack(track) && !excludedSessionIds.has(track.ownerSessionId)) {
+      return {
+        sessionId: track.ownerSessionId,
+        peerId: null
+      };
+    }
     return null;
   }
 
@@ -796,4 +823,16 @@ export class RoomPlaybackService {
     const elapsedMs = Math.max(0, Date.now() - startedAtMs);
     return this.clampPositionMs(record, playback.currentTrackId, playback.positionMs + elapsedMs);
   }
+}
+
+function isProviderTrack(track: TrackMeta | undefined): track is TrackMeta & {
+  sourceType: "netease" | "qqmusic";
+  sourceRef: NonNullable<TrackMeta["sourceRef"]>;
+} {
+  return !!(
+    track &&
+    (track.sourceType === "netease" || track.sourceType === "qqmusic") &&
+    track.sourceRef &&
+    track.sourceRef.provider === track.sourceType
+  );
 }

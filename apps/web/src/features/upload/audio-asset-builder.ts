@@ -44,6 +44,7 @@ const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
 const opusFrameSamples = 960;
+const resamplerFilterSize = 8;
 const wavHeaderProbeBytes = 1024 * 1024;
 const compressedDecodeWindowBytes = 4 * 1024 * 1024;
 const compressedDecodeBatchFrames = 384;
@@ -301,7 +302,7 @@ async function preparePlaybackAsset(input: {
             ? await compressedSource.getSegment(unitIndex)
             : slicePcmSegment(audioBuffer!, unitIndex);
         if (!segment) return;
-        const encodedSegment = prepareIndependentOpusSegment(segment);
+        const encodedSegment = prepareIndependentOpusSegment(segment, sourceSampleRate);
         const payload = await encoder.encode({
           sampleRate: sourceSampleRate,
           channels: encodedSegment.channels,
@@ -404,48 +405,83 @@ export function slicePcmSegment(
 ) {
   const segmentSamples = Math.round((segmentDurationMs / 1000) * audioBuffer.sampleRate);
   const prerollSamples = Math.round((seekPrerollMs / 1000) * audioBuffer.sampleRate);
+  const postrollSamples = Math.max(
+    1,
+    Math.ceil((opusPreSkipSamples * audioBuffer.sampleRate) / opusSampleRate)
+  );
   const contentStart = unitIndex * segmentSamples;
   const start = Math.max(0, contentStart - prerollSamples);
-  const end = Math.min(audioBuffer.length, contentStart + segmentSamples);
+  const contentEnd = Math.min(audioBuffer.length, contentStart + segmentSamples);
+  const end = Math.min(audioBuffer.length, contentEnd + postrollSamples);
   const sourceChannels = Array.from({ length: audioBuffer.numberOfChannels }, (_, channelIndex) =>
     audioBuffer.getChannelData(channelIndex).slice(start, end)
   );
   return {
     channels: sourceChannels,
-    trimStartSamples: unitIndex === 0 ? 0 : prerollSamples
+    trimStartSamples: unitIndex === 0 ? 0 : prerollSamples,
+    contentSamples: Math.max(0, contentEnd - contentStart)
   };
 }
 
 type EncodablePlaybackSegment = {
   channels: Float32Array[];
   trimStartSamples: number;
+  contentSamples: number;
 };
 
-function prepareIndependentOpusSegment(segment: EncodablePlaybackSegment) {
+export function prepareIndependentOpusSegment(
+  segment: EncodablePlaybackSegment,
+  sourceSampleRate = opusSampleRate
+) {
   const inputLength = segment.channels[0]?.length ?? 0;
   if (inputLength <= 0) {
     throw new Error("音频片段为空。");
   }
 
-  // Keep enough real tail context for libopus' algorithmic delay. The encoder
-  // will add frame padding after this, and the playback descriptor trims that
-  // padding back to the exact room timeline.
+  if (!Number.isFinite(sourceSampleRate) || sourceSampleRate <= 0) {
+    throw new Error("音频采样率无效。");
+  }
+  const sourceToOpus = opusSampleRate / sourceSampleRate;
+  const trimStartSamples = Math.max(
+    0,
+    Math.round(segment.trimStartSamples * sourceToOpus)
+  );
+  const contentSamples = Math.max(
+    0,
+    Math.round(segment.contentSamples * sourceToOpus)
+  );
+  const sourceContentStart = Math.min(inputLength, Math.max(0, segment.trimStartSamples));
+  const sourceContentEnd = Math.min(
+    inputLength,
+    sourceContentStart + Math.max(0, segment.contentSamples)
+  );
+  const sourceTailSamples = Math.max(0, inputLength - sourceContentEnd);
+  const requiredTailSamples = Math.ceil(opusPreSkipSamples / sourceToOpus);
+  const tailPaddingSamples = Math.max(0, requiredTailSamples - sourceTailSamples);
+
+  // Encode real post-roll when available. At EOF, repeating the last sample
+  // keeps the codec lookahead stable instead of forcing a hard step to zero at
+  // every 2s boundary.
   const channels = segment.channels.map((channel) => {
-    const padded = new Float32Array(channel.length + opusPreSkipSamples);
+    const padded = new Float32Array(channel.length + tailPaddingSamples);
     padded.set(channel);
+    if (tailPaddingSamples > 0) {
+      const lastSample = channel[channel.length - 1] ?? 0;
+      padded.fill(lastSample, channel.length);
+    }
     return padded;
   });
   const encodedInputLength = channels[0]!.length;
-  const encodedFrameLength = Math.ceil(encodedInputLength / opusFrameSamples) * opusFrameSamples;
+  const encodedSampleLength = Math.round(encodedInputLength * sourceToOpus);
+  const encodedFrameLength = Math.ceil(encodedSampleLength / opusFrameSamples) * opusFrameSamples;
   const decodedLength = Math.max(0, encodedFrameLength - opusPreSkipSamples);
-  const contentLength = Math.max(0, inputLength - segment.trimStartSamples);
   const trimEndSamples = Math.max(
     0,
-    decodedLength - segment.trimStartSamples - contentLength
+    decodedLength - trimStartSamples - contentSamples
   );
   return {
     channels,
-    trimStartSamples: segment.trimStartSamples,
+    trimStartSamples,
     trimEndSamples
   };
 }
@@ -493,7 +529,8 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   private readonly frameReader: CompressedFrameReader;
   private decodeError: Error | null = null;
   private pcmAppendPromise: Promise<void> = Promise.resolve();
-  private streamingResampler: StreamingLinearResampler | null = null;
+  private streamingResampler: StreamingSincResampler | null = null;
+  private decodedSampleRate: number | null = null;
   private eof = false;
   private lastUnitIndex = -1;
   private disposed = false;
@@ -607,7 +644,11 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
       contentStart + this.targetSegmentSamples
     );
     const desiredStart = Math.max(0, contentStart - this.prerollSamples);
-    await this.decodeUntil(expectedContentEnd);
+    const desiredPostrollEnd = Math.min(
+      declaredDurationSamples,
+      expectedContentEnd + opusPreSkipSamples
+    );
+    await this.decodeUntil(desiredPostrollEnd);
     if (this.decodeError) throw this.decodeError;
 
     let contentEnd = expectedContentEnd;
@@ -624,13 +665,18 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
       contentEnd = this.pcm.endSample;
     }
 
-    const channels = this.pcm.slice(desiredStart, contentEnd);
+    const segmentEnd = Math.min(
+      this.pcm.endSample,
+      Math.max(contentEnd, desiredPostrollEnd)
+    );
+    const channels = this.pcm.slice(desiredStart, segmentEnd);
 
     this.lastUnitIndex = unitIndex;
     this.pcm.trimBefore(Math.max(0, contentEnd - this.prerollSamples));
     return {
       channels,
-      trimStartSamples: unitIndex === 0 ? 0 : this.prerollSamples
+      trimStartSamples: unitIndex === 0 ? 0 : this.prerollSamples,
+      contentSamples: Math.max(0, contentEnd - contentStart)
     };
   }
 
@@ -713,37 +759,42 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     const sourceFrameCount = channels[0]?.length ?? 0;
     if (sourceFrameCount <= 0) return;
 
+    if (this.decodedSampleRate === null) {
+      this.decodedSampleRate = sampleRate;
+    } else if (this.decodedSampleRate !== sampleRate) {
+      throw new Error("压缩音频解码块的采样率发生变化。");
+    }
+
     if (sampleRate === opusSampleRate) {
       this.pcm.append(channels);
       return;
     }
 
     if (!this.streamingResampler) {
-      this.streamingResampler = new StreamingLinearResampler(
+      this.streamingResampler = new StreamingSincResampler(
         channels.length,
         sampleRate,
         opusSampleRate
       );
     }
-    if (this.streamingResampler.sourceSampleRate !== sampleRate) {
-      throw new Error("压缩音频解码块的采样率发生变化。");
-    }
     this.pcm.append(this.streamingResampler.append(channels));
   }
 }
 
-class StreamingLinearResampler {
+export class StreamingSincResampler {
   private readonly source: PcmAccumulator;
   private outputSampleIndex = 0;
   private finished = false;
+  private readonly cutoff: number;
+  private readonly support: number;
 
   constructor(
     private readonly channels: number,
     public readonly sourceSampleRate: number,
     private readonly targetSampleRate: number
   ) {
-    // Parameter properties are assigned after field initializers. Construct
-    // the accumulator here so it receives the actual channel count.
+    this.cutoff = Math.min(1, targetSampleRate / sourceSampleRate);
+    this.support = resamplerFilterSize / this.cutoff;
     this.source = new PcmAccumulator(channels);
   }
 
@@ -779,18 +830,33 @@ class StreamingLinearResampler {
     while (this.outputSampleIndex < targetEnd) {
       const sourcePosition =
         (this.outputSampleIndex * this.sourceSampleRate) / this.targetSampleRate;
-      const leftIndex = Math.floor(sourcePosition);
-      const rightIndex = leftIndex + 1;
-      if (!final && rightIndex >= sourceEnd) break;
-      if (sourceEnd <= 0 || leftIndex >= sourceEnd) break;
+      const firstIndex = Math.ceil(sourcePosition - this.support);
+      const lastIndex = Math.floor(sourcePosition + this.support);
+      if (!final && lastIndex >= sourceEnd) break;
+      if (sourceEnd <= 0 || firstIndex >= sourceEnd) break;
 
-      const fraction = sourcePosition - leftIndex;
+      let weightSum = 0;
       for (let channelIndex = 0; channelIndex < this.channels; channelIndex += 1) {
-        const left = this.source.sampleAt(leftIndex, channelIndex);
-        const right = rightIndex < sourceEnd
-          ? this.source.sampleAt(rightIndex, channelIndex)
-          : left;
-        output[channelIndex]![outputCount] = left + (right - left) * fraction;
+        output[channelIndex]![outputCount] = 0;
+      }
+      for (let sourceIndex = firstIndex; sourceIndex <= lastIndex; sourceIndex += 1) {
+        const distance = (sourcePosition - sourceIndex) * this.cutoff;
+        const absoluteDistance = Math.abs(distance);
+        if (absoluteDistance >= resamplerFilterSize) continue;
+        const windowDistance = absoluteDistance / resamplerFilterSize;
+        const window = 0.5 + 0.5 * Math.cos(Math.PI * windowDistance);
+        const weight = this.cutoff * sinc(distance) * window;
+        if (weight === 0) continue;
+        weightSum += weight;
+        for (let channelIndex = 0; channelIndex < this.channels; channelIndex += 1) {
+          output[channelIndex]![outputCount] +=
+            this.source.sampleAtClamped(sourceIndex, channelIndex) * weight;
+        }
+      }
+      if (weightSum !== 0) {
+        for (let channelIndex = 0; channelIndex < this.channels; channelIndex += 1) {
+          output[channelIndex]![outputCount] /= weightSum;
+        }
       }
       outputCount += 1;
       this.outputSampleIndex += 1;
@@ -798,9 +864,15 @@ class StreamingLinearResampler {
 
     const nextSourcePosition =
       (this.outputSampleIndex * this.sourceSampleRate) / this.targetSampleRate;
-    this.source.trimBefore(Math.max(0, Math.floor(nextSourcePosition)));
+    this.source.trimBefore(Math.max(0, Math.floor(nextSourcePosition - this.support - 1)));
     return output.map((channel) => channel.slice(0, outputCount));
   }
+}
+
+function sinc(value: number) {
+  if (value === 0) return 1;
+  const angle = Math.PI * value;
+  return Math.sin(angle) / angle;
 }
 
 class PcmAccumulator {
@@ -850,6 +922,16 @@ class PcmAccumulator {
       return chunk.channels[channelIndex]![sampleIndex - chunk.start]!;
     }
     throw new Error("重采样器读取了不可用的音频采样。");
+  }
+
+  sampleAtClamped(sampleIndex: number, channelIndex: number) {
+    if (this._endSample <= this._startSample) {
+      throw new Error("重采样器没有可用的音频采样。");
+    }
+    return this.sampleAt(
+      Math.max(this._startSample, Math.min(sampleIndex, this._endSample - 1)),
+      channelIndex
+    );
   }
 
   trimBefore(sample: number) {
@@ -1192,17 +1274,25 @@ async function readWavPlaybackSegment(
 ): Promise<EncodablePlaybackSegment> {
   const sourceSegmentSamples = Math.round((segmentDurationMs / 1000) * header.sampleRate);
   const sourcePrerollSamples = Math.round((seekPrerollMs / 1000) * header.sampleRate);
+  const sourcePostrollSamples = Math.max(
+    1,
+    Math.ceil((opusPreSkipSamples * header.sampleRate) / opusSampleRate)
+  );
   const contentStart = unitIndex * sourceSegmentSamples;
+  const contentEnd = Math.min(header.totalSamples, contentStart + sourceSegmentSamples);
   const sampleStart = Math.max(0, contentStart - sourcePrerollSamples);
-  const sampleEnd = Math.min(header.totalSamples, contentStart + sourceSegmentSamples);
+  const sampleEnd = Math.min(header.totalSamples, contentEnd + sourcePostrollSamples);
   const range = resolveWavByteRangeForSamples(header, sampleStart, sampleEnd);
   const bytes = new Uint8Array(await file.slice(range.startByte, range.endByte).arrayBuffer());
   const channels = decodeWavPcmChannels(bytes, header);
   const normalizedChannels = await resampleWavChannels(channels, header.sampleRate);
-  const targetPrerollSamples = Math.round((seekPrerollMs / 1000) * opusSampleRate);
+  const targetScale = opusSampleRate / header.sampleRate;
   return {
     channels: normalizedChannels,
-    trimStartSamples: unitIndex === 0 ? 0 : targetPrerollSamples
+    trimStartSamples: unitIndex === 0
+      ? 0
+      : Math.round((contentStart - sampleStart) * targetScale),
+    contentSamples: Math.max(0, Math.round((contentEnd - contentStart) * targetScale))
   };
 }
 

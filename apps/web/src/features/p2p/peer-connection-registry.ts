@@ -223,6 +223,7 @@ export function startPeerStatsSampling(input: {
   steadyStatsSamplingIntervalMs: number;
   onStatsSample?: (payload: {
     peerId: string;
+    linkKind: PeerLinkKind;
     sample: PeerConnectionStatsSample;
   }) => void;
   samplePeerConnectionStats: (
@@ -249,6 +250,7 @@ export function startPeerStatsSampling(input: {
     input.entry.statsSnapshot = nextStats.snapshot;
     input.onStatsSample?.({
       peerId: input.peerId,
+      linkKind: input.entry.linkKind,
       sample: {
         ...nextStats.sample,
         connectionState: input.entry.connection.connectionState ?? nextStats.sample.connectionState ?? null,

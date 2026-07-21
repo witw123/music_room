@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type {
   NeteaseAccountStatus,
   NeteaseTrackCandidate,
-  Playlist,
   ProviderAlbumDetail,
   ProviderAlbumSummary,
   ProviderPlaylistDetail,
@@ -30,8 +29,9 @@ import {
 } from "@/lib/indexeddb";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { ProviderAlbumDetailView, ProviderAlbumTrackTable } from "@/components/ProviderAlbumDetailView";
+import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import {
   getCachedFavorites,
   getCachedProviderAccount,
@@ -43,7 +43,6 @@ type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
-type PlaylistPickerOption = { kind: "network"; playlist: Playlist };
 
 const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
@@ -78,8 +77,9 @@ export function ProviderSearchPage() {
     return new Set(cachedItems.map((item) => albumKey(item.provider, item.providerAlbumId)));
   });
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
+  const [playlistPickerAlbum, setPlaylistPickerAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
-  const [playlistPickerOptions, setPlaylistPickerOptions] = useState<PlaylistPickerOption[]>([]);
+  const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
 
   useEffect(() => {
@@ -241,6 +241,7 @@ export function ProviderSearchPage() {
   async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
     if (pending) return;
     setPlaylistPickerTrack(track);
+    setPlaylistPickerAlbum(null);
     setPlaylistPickerAnchor(anchor);
     setPlaylistPickerLoading(true);
     setPlaylistPickerOptions([]);
@@ -261,7 +262,31 @@ export function ProviderSearchPage() {
     }
   }
 
-  async function addTrackToPlaylist(option: PlaylistPickerOption) {
+  async function openAlbumPlaylistPicker(albumToAdd: ProviderAlbumDetail, anchor: AnchoredDialogAnchor) {
+    if (pending) return;
+    setPlaylistPickerTrack(null);
+    setPlaylistPickerAlbum(albumToAdd);
+    setPlaylistPickerAnchor(anchor);
+    setPlaylistPickerLoading(true);
+    setPlaylistPickerOptions([]);
+    setErrorMessage(null);
+    setPending(`playlist-picker:album:${albumToAdd.providerAlbumId}`);
+    try {
+      const networkPlaylists = await musicRoomApi.listMyPlaylists();
+      setPlaylistPickerOptions(
+        networkPlaylists
+          .filter((item) => !isLocalPlaylistMirror(item))
+          .map((item) => ({ kind: "network" as const, playlist: item }))
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? `歌单加载失败：${error.message}` : "歌单加载失败，请稍后重试。");
+    } finally {
+      setPlaylistPickerLoading(false);
+      setPending(null);
+    }
+  }
+
+  async function addTrackToPlaylist(option: ProviderPlaylistPickerOption) {
     const track = playlistPickerTrack;
     if (!track || pending) return;
     setPending(`add-playlist:${option.kind}:${option.playlist.id}:${track.providerTrackId}`);
@@ -281,6 +306,40 @@ export function ProviderSearchPage() {
         setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
       }
       setPlaylistPickerTrack(null);
+      setPlaylistPickerAlbum(null);
+      setPlaylistPickerAnchor(null);
+    } catch (error) {
+      setErrorMessage(toProviderErrorMessage(error, provider));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function addAlbumToPlaylist(option: ProviderPlaylistPickerOption) {
+    const albumToAdd = playlistPickerAlbum;
+    if (!albumToAdd || pending) return;
+    setPending(`add-playlist-album:${option.playlist.id}:${albumToAdd.providerAlbumId}`);
+    setErrorMessage(null);
+    try {
+      const resolvedTracks = await Promise.all(albumToAdd.tracks.map((track) => resolveTrackArtwork(track)));
+      const trackIds = resolvedTracks.map((track) => localPlaylistTrackId(track));
+      await Promise.all(resolvedTracks.map(async (track) => {
+        try {
+          await upsertLocalPlaylistTrack(toProviderTrackRecord(track));
+        } catch {
+          // The network playlist remains authoritative when local metadata storage is unavailable.
+        }
+      }));
+      const existingIds = new Set(option.playlist.trackIds);
+      const nextTrackIds = [...option.playlist.trackIds, ...trackIds.filter((trackId) => !existingIds.has(trackId))];
+      const addedCount = nextTrackIds.length - option.playlist.trackIds.length;
+      if (addedCount > 0) {
+        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: nextTrackIds });
+      }
+      setStatusMessage(addedCount > 0
+        ? `专辑《${albumToAdd.title}》中的 ${addedCount} 首歌曲已加入“${option.playlist.title}”。`
+        : `专辑《${albumToAdd.title}》中的歌曲已全部在“${option.playlist.title}”中。`);
+      setPlaylistPickerAlbum(null);
       setPlaylistPickerAnchor(null);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
@@ -480,7 +539,7 @@ export function ProviderSearchPage() {
               <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
             ) : null}
             {contentTab === "albums" ? (
-              <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} />
+              <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} />
             ) : null}
           </>
         ) : (
@@ -490,20 +549,21 @@ export function ProviderSearchPage() {
         {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
       </div>
-      {playlistPickerTrack && playlistPickerAnchor ? (
-        <PlaylistPickerDialog
+      {(playlistPickerTrack || playlistPickerAlbum) && playlistPickerAnchor ? (
+        <ProviderPlaylistPickerDialog
           anchor={playlistPickerAnchor}
           loading={playlistPickerLoading}
           options={playlistPickerOptions}
           pending={pending !== null}
-          track={playlistPickerTrack}
+          subjectLabel={playlistPickerTrack ? `《${playlistPickerTrack.title}》 · ${playlistPickerTrack.artist}` : `专辑《${playlistPickerAlbum?.title ?? ""}》 · ${playlistPickerAlbum?.tracks.length ?? 0} 首歌曲`}
           onClose={() => {
             if (!pending) {
               setPlaylistPickerTrack(null);
+              setPlaylistPickerAlbum(null);
               setPlaylistPickerAnchor(null);
             }
           }}
-          onSelect={(option) => void addTrackToPlaylist(option)}
+          onSelect={(option) => void (playlistPickerTrack ? addTrackToPlaylist(option) : addAlbumToPlaylist(option))}
         />
       ) : null}
     </main>
@@ -614,7 +674,8 @@ function AlbumsContent({
   favoriteAlbumIds,
   onOpen,
   onBack,
-  onToggleFavorite
+  onToggleFavorite,
+  onAddAlbumToPlaylist
 }: {
   albums: ProviderAlbumSummary[];
   album: ProviderAlbumDetail | null;
@@ -623,6 +684,7 @@ function AlbumsContent({
   onOpen: (item: ProviderAlbumSummary) => Promise<void>;
   onBack: () => void;
   onToggleFavorite: (album: ProviderAlbumSummary | ProviderAlbumDetail) => Promise<void>;
+  onAddAlbumToPlaylist: (album: ProviderAlbumDetail, anchor: AnchoredDialogAnchor) => void;
 }) {
   if (album) {
     const favoriteId = albumKey(album.provider, album.providerAlbumId);
@@ -633,6 +695,7 @@ function AlbumsContent({
         onBack={onBack}
         onToggleFavorite={() => onToggleFavorite(album)}
         pending={pending}
+        onAddAlbumToPlaylist={(anchor) => onAddAlbumToPlaylist(album, anchor)}
       />
     );
   }
@@ -642,19 +705,6 @@ function AlbumsContent({
 
 function albumKey(provider: Provider, providerAlbumId: string) {
   return `${provider}:${providerAlbumId}`;
-}
-
-function PlaylistPickerDialog({ anchor, loading, options, pending, track, onClose, onSelect }: { anchor: AnchoredDialogAnchor; loading: boolean; options: PlaylistPickerOption[]; pending: boolean; track: Track; onClose: () => void; onSelect: (option: PlaylistPickerOption) => void }) {
-  return <AnchoredDialog anchor={anchor} ariaLabelledBy="playlist-picker-title" className="max-w-md" onClose={onClose}>
-    <div className="flex items-start justify-between gap-4"><div className="min-w-0"><h2 className="text-lg font-semibold text-foreground" id="playlist-picker-title">选择目标歌单</h2><p className="mt-1 truncate text-xs text-foreground-muted">《{track.title}》 · {track.artist}</p></div><Button aria-label="关闭" disabled={pending} onClick={onClose} size="icon" type="button" variant="ghost"><Icon name="close" /></Button></div>
-    {loading ? <p className="mt-6 text-center text-sm text-foreground-muted">正在加载可用歌单…</p> : null}
-    {!loading && options.length === 0 ? <div className="mt-6 text-center"><p className="text-sm text-foreground-muted">还没有可添加的歌单。</p><Link className="mt-3 inline-block text-sm text-accent hover:text-accent/80" href="/app/playlists">前往歌单页创建</Link></div> : null}
-    {options.length ? <PlaylistPickerSection label="歌单" options={options} pending={pending} onSelect={onSelect} /> : null}
-  </AnchoredDialog>;
-}
-
-function PlaylistPickerSection({ label, options, pending, onSelect }: { label: string; options: PlaylistPickerOption[]; pending: boolean; onSelect: (option: PlaylistPickerOption) => void }) {
-  return <section className="mt-5 first:mt-6"><h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">{label}</h3><div className="space-y-2">{options.map((option) => { const item = option.playlist; return <button className="flex w-full items-center gap-3 rounded-xl border border-surface-border bg-black px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={pending} key={`${option.kind}:${item.id}`} onClick={() => onSelect(option)} type="button"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"><Icon name="music" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{item.title}</span><span className="mt-1 block truncate text-xs text-foreground-muted">{item.trackIds.length} 首歌曲</span></span><Icon name="chevron-right" /></button>; })}</div></section>;
 }
 
 function SearchTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {

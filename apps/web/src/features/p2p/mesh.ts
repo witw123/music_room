@@ -46,6 +46,7 @@ type MeshCallbacks = {
   }) => void;
   onStatsSample?: (payload: {
     peerId: string;
+    linkKind?: "data" | "media";
     sample: PeerConnectionStatsSample;
   }) => void;
   onPeerStalled?: (payload: {

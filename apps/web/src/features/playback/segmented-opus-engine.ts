@@ -20,6 +20,7 @@ type SyncInput = {
   playback: PlaybackSnapshot;
   serverNowMs: number;
   volume: number;
+  broadcast?: boolean;
   getUnit: (unitIndex: number, signal?: AbortSignal) => Promise<AudioAssetUnitRecord | null>;
   gaplessNext?: {
     transition: GaplessTransition;
@@ -89,13 +90,21 @@ export class SegmentedOpusEngine {
   private syncInFlight: Promise<SyncResult> | null = null;
   private syncAbortController: AbortController | null = null;
   private queuedSyncInput: SyncInput | null = null;
+  private activeSyncWorkKey: string | null = null;
   private timelineGeneration = 0;
   private wasmDecodeChain: Promise<void> = Promise.resolve();
+  private broadcastEnabled = true;
 
   async sync(input: SyncInput): Promise<SyncResult> {
     if (this.syncInFlight) {
       this.queuedSyncInput = input;
-      this.syncAbortController?.abort();
+      // Scheduler ticks reuse the same timeline. Aborting a decode pass for
+      // every 100 ms tick makes IndexedDB/WASM work restart repeatedly on
+      // slower devices, which can turn a healthy stream into an underrun.
+      // Timeline changes still cancel stale work immediately.
+      if (this.activeSyncWorkKey !== getSyncWorkKey(input)) {
+        this.syncAbortController?.abort();
+      }
       return this.syncInFlight;
     }
 
@@ -116,11 +125,16 @@ export class SegmentedOpusEngine {
     while (nextInput && !this.destroyed) {
       const controller = new AbortController();
       this.syncAbortController = controller;
+      const workKey = getSyncWorkKey(nextInput);
+      this.activeSyncWorkKey = workKey;
       try {
         result = await this.syncOnce(nextInput, controller.signal);
       } finally {
         if (this.syncAbortController === controller) {
           this.syncAbortController = null;
+        }
+        if (this.activeSyncWorkKey === workKey) {
+          this.activeSyncWorkKey = null;
         }
       }
       nextInput = this.queuedSyncInput;
@@ -144,6 +158,8 @@ export class SegmentedOpusEngine {
       this.sourceHealth = "source-ended";
       return { state: "paused" as const, bufferedUnits: 0 };
     }
+
+    this.setBroadcastEnabled(input.broadcast !== false);
 
     const timelineKey = [
       input.manifest.assetId,
@@ -254,14 +270,31 @@ export class SegmentedOpusEngine {
       startupBufferMs
     }).length;
     const requiredUnits = this.timelineStarted ? 1 : startupCount;
+    const timelineWasStarted = this.timelineStarted;
+    const currentTimelineUnitKey = timelineUnitKey(
+      input.manifest.assetId,
+      timelineId,
+      currentIndex
+    );
+    const hasSafeScheduledAudio = this.hasSafeScheduledAudio(
+      currentTimelineUnitKey,
+      context
+    );
     if (contiguousUnits.length < requiredUnits) {
+      if (this.timelineStarted && hasSafeScheduledAudio) {
+        this.updateSourceHealth();
+        return {
+          state: "live" as const,
+          bufferedUnits: this.countContiguousScheduledUnits(
+            input.manifest.assetId,
+            timelineId,
+            currentIndex
+          )
+        };
+      }
       if (
         this.timelineStarted &&
-        !this.scheduled.has(timelineUnitKey(
-          input.manifest.assetId,
-          timelineId,
-          currentIndex
-        )) &&
+        !hasSafeScheduledAudio &&
         roomPositionMs + underrunGuardMs < input.manifest.durationMs
       ) {
         this.enterUnderrun();
@@ -361,18 +394,20 @@ export class SegmentedOpusEngine {
       this.pendingTransition = null;
     }
     this.fadePlaybackGateTo(1);
-    this.setBroadcastTrackEnabled(true);
+    if (this.broadcastEnabled) {
+      this.setBroadcastTrackEnabled(true);
+    }
     this.sampleSourceEnergy(context);
-    const trackState = roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState;
-    // A live RTP track may legitimately carry zero-energy PCM during a quiet
-    // or silent part of a song. Energy is useful telemetry, but it cannot
-    // distinguish valid silence from a broken media path.
-    this.sourceHealth = trackState === "live" ? "source-ready" : "source-silent";
+    this.updateSourceHealth();
+    const hasAudibleScheduledAudio = this.hasSafeScheduledAudio(
+      currentTimelineUnitKey,
+      context
+    );
     return {
-      state: bufferedUnits * input.manifest.segmentDurationMs >= Math.min(
-        targetBufferedAheadMs,
-        Math.max(0, input.manifest.durationMs - roomPositionMs)
-      )
+      state: (timelineWasStarted && hasAudibleScheduledAudio) || bufferedUnits * input.manifest.segmentDurationMs >= Math.min(
+          targetBufferedAheadMs,
+          Math.max(0, input.manifest.durationMs - roomPositionMs)
+        )
         ? "live" as const
         : "buffering" as const,
       bufferedUnits,
@@ -383,6 +418,19 @@ export class SegmentedOpusEngine {
     if (this.masterGain) {
       rampAudioParam(this.masterGain.gain, normalizeVolume(volume), this.masterGainContext);
     }
+  }
+
+  setBroadcastEnabled(enabled: boolean) {
+    if (this.broadcastEnabled === enabled) {
+      return;
+    }
+
+    // A fallback engine must never leave a previously-created RTP destination
+    // connected. Reset the timeline so the next sync rebuilds the graph with
+    // the new output mode and keeps the room clock as the single anchor.
+    this.resetTimeline({ preserveCache: true });
+    this.disposeOutputGraph();
+    this.broadcastEnabled = enabled;
   }
 
   destroy() {
@@ -766,7 +814,9 @@ export class SegmentedOpusEngine {
     this.masterGain.gain.value = normalizeVolume(volume);
     output.connect(this.masterGain);
     this.masterGain.connect(context.destination);
-    const broadcastDestination = roomAudioOutput.getBroadcastDestination(context);
+    const broadcastDestination = this.broadcastEnabled
+      ? roomAudioOutput.getBroadcastDestination(context)
+      : null;
     if (broadcastDestination) {
       this.broadcastGain = context.createGain();
       this.broadcastGain.gain.value = 1;
@@ -789,6 +839,24 @@ export class SegmentedOpusEngine {
       count += 1;
     }
     return count;
+  }
+
+  private hasSafeScheduledAudio(timelineKey: string, context: AudioContext) {
+    const scheduled = this.scheduled.get(timelineKey);
+    return Boolean(
+      scheduled &&
+      scheduled.endAt > context.currentTime + underrunGuardMs / 1000
+    );
+  }
+
+  private updateSourceHealth() {
+    const trackState = this.broadcastEnabled
+      ? roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState
+      : "live";
+    // A live RTP track may legitimately carry zero-energy PCM during a quiet
+    // or silent part of a song. Energy is useful telemetry, but it cannot
+    // distinguish valid silence from a broken media path.
+    this.sourceHealth = trackState === "live" ? "source-ready" : "source-silent";
   }
 
   private pruneDecodedCache(assetId: string, currentIndex: number, segmentDurationMs: number) {
@@ -936,6 +1004,16 @@ function unitKey(assetId: string, unitIndex: number) {
 
 function timelineUnitKey(assetId: string, timelineId: string, unitIndex: number) {
   return `${assetId}:${timelineId}:${unitIndex}`;
+}
+
+function getSyncWorkKey(input: SyncInput) {
+  return [
+    input.manifest.assetId,
+    input.playback.currentTrackId,
+    input.playback.mediaEpoch,
+    input.playback.status,
+    input.playback.startAt ?? "none"
+  ].join(":");
 }
 
 function formatDecodeError(error: unknown) {

@@ -15,6 +15,14 @@ import {
   toCachedLibraryTrackFile
 } from "./cache-library-files";
 
+export const cacheLibraryChangedEventName = "music-room-cache-library-changed";
+
+export function notifyCacheLibraryChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(cacheLibraryChangedEventName));
+  }
+}
+
 export {
   buildCachedLibraryFileName,
   createInFlightCachedLibraryTrackFileLoader,

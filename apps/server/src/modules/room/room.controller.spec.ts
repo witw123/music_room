@@ -76,7 +76,7 @@ async function buildTrackRegistration() {
     seekPrerollMs: 80 as const,
     unitCount: 1,
     merkleRoot: "3".repeat(64),
-    encoder: { name: "@audio/opus-encode" as const, version: "3.0.0" as const }
+    encoder: { name: "@audio/opus-encode" as const, version: "3.1.0" as const }
   };
   return {
     title: "Song",

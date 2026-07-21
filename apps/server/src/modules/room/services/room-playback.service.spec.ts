@@ -20,7 +20,7 @@ function playbackAsset(assetId: string, durationMs: number) {
     merkleRoot: "c".repeat(64),
     encoder: {
       name: "@audio/opus-encode" as const,
-      version: "3.0.0" as const
+      version: "3.1.0" as const
     }
   };
 }
@@ -121,5 +121,30 @@ describe("RoomPlaybackService gapless playback", () => {
     );
 
     expect(snapshot.gaplessNext).toBeNull();
+  });
+
+  it("keeps provider playback available while its owner is offline", async () => {
+    const room = record(0);
+    room.tracks[0] = {
+      ...room.tracks[0]!,
+      sourceType: "netease",
+      sourceRef: { provider: "netease", trackId: "123" }
+    };
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map()
+    } as never);
+
+    await service.updatePlayback(room, {
+      action: "play",
+      trackId: "track_1"
+    });
+
+    expect(room.room.playback.status).toBe("playing");
+    expect(room.room.playback.sourceSessionId).toBe("owner");
+    expect(room.room.playback.sourcePeerId).toBeNull();
+
+    service.handleSourceDeparture(room, "owner");
+    expect(room.room.playback.status).toBe("playing");
+    expect(room.room.playback.sourcePeerId).toBeNull();
   });
 });

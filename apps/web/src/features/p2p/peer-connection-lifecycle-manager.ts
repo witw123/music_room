@@ -31,6 +31,7 @@ import {
   samplePeerConnectionStats,
   type PeerConnectionStatsSample
 } from "./connection-stats";
+import { resolveAdaptiveAudioBitrateKbps } from "./audio-bitrate-policy";
 
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
 
@@ -58,6 +59,7 @@ type PeerConnectionLifecycleManagerInput = {
   }) => void;
   onStatsSample?: (payload: {
     peerId: string;
+    linkKind?: PeerLinkKind;
     sample: PeerConnectionStatsSample;
   }) => void;
   onPeerStalled?: (payload: {
@@ -189,11 +191,15 @@ export class PeerConnectionLifecycleManager {
           this.peerConnections.get(payload.peerId)?.configuredAudioMaxBitrateKbps ?? null;
         input.onStatsSample?.({
           peerId: payload.peerId,
+          linkKind: payload.linkKind,
           sample: {
             ...mergedSample,
             configuredAudioMaxBitrateKbps: configured
           }
         });
+        if (payload.linkKind === "media") {
+          this.adaptAudioBitrate(payload.peerId, mediaEntry, mergedSample);
+        }
         this.observeMediaHealth(payload.peerId, mergedSample);
       },
       samplePeerConnectionStats
@@ -268,9 +274,19 @@ export class PeerConnectionLifecycleManager {
       return null;
     }
     this.recoverRemoteAudioTrackFromReceiver(peerId, entry);
+    const remoteTrack = entry.audioReceiver?.track ??
+      entry.remoteAudioStream?.getAudioTracks()[0] ??
+      null;
+    const receiverTrackState = entry.receiverTrackState === "failed" &&
+      remoteTrack?.readyState === "live"
+      ? "live"
+      : entry.receiverTrackState;
     return {
       senderTrackState: entry.senderTrackState,
-      receiverTrackState: entry.receiverTrackState,
+      // A muted receiver track is still usable. Keep the audio element bound
+      // to it while RTP recovers so Chromium can use its jitter buffer instead
+      // of entering the missing-track path for every loss burst.
+      receiverTrackState,
       remoteStream: entry.remoteAudioStream,
       remoteTrackId: entry.remoteAudioTrackId,
       receiverRtpActive: entry.receiverRtpActive ||
@@ -852,6 +868,13 @@ export class PeerConnectionLifecycleManager {
     effectiveMaxBitrateKbps: number | null = this.localAudioMaxBitrateKbps
   ) {
     if (effectiveMaxBitrateKbps === null || typeof sender.getParameters !== "function") {
+      for (const [, entry] of this.peerConnections.allEntries()) {
+        if (entry.audioSender === sender) {
+          entry.configuredAudioMaxBitrateKbps = this.localAudioMaxBitrateKbps;
+          entry.appliedAudioBitrateKbps = null;
+          break;
+        }
+      }
       return;
     }
     const targetBitrateKbps = normalizeAudioBitrateKbps(effectiveMaxBitrateKbps);
@@ -893,6 +916,57 @@ export class PeerConnectionLifecycleManager {
     } catch {
       // Browser codecs may reject a runtime bitrate update; RTP remains usable.
     }
+  }
+
+  private adaptAudioBitrate(
+    peerId: string,
+    entry: PeerEntry | null,
+    sample: PeerConnectionStatsSample
+  ) {
+    if (
+      !entry ||
+      entry.releasing ||
+      !entry.audioSender?.track ||
+      this.localAudioSourcePeerId !== this.localPeerId ||
+      this.localAudioMaxBitrateKbps === null
+    ) {
+      return;
+    }
+
+    const currentKbps = entry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps;
+    const nextKbps = resolveAdaptiveAudioBitrateKbps({
+      requestedKbps: this.localAudioMaxBitrateKbps,
+      currentKbps,
+      availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
+      packetLossRate: sample.packetLossRate ?? null,
+      jitterMs: sample.jitterMs ?? null,
+      roundTripTimeMs: sample.currentRoundTripTimeMs
+    });
+    if (nextKbps === null || nextKbps === currentKbps) {
+      return;
+    }
+
+    void enqueuePeerOperation(entry, async () => {
+      if (
+        entry.releasing ||
+        entry.audioSender === null ||
+        this.localAudioSourcePeerId !== this.localPeerId ||
+        this.localAudioMaxBitrateKbps === null
+      ) {
+        return;
+      }
+      const latestKbps = resolveAdaptiveAudioBitrateKbps({
+        requestedKbps: this.localAudioMaxBitrateKbps,
+        currentKbps: entry.appliedAudioBitrateKbps ?? currentKbps,
+        availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
+        packetLossRate: sample.packetLossRate ?? null,
+        jitterMs: sample.jitterMs ?? null,
+        roundTripTimeMs: sample.currentRoundTripTimeMs
+      });
+      if (latestKbps !== null && latestKbps !== entry.appliedAudioBitrateKbps) {
+        await this.applyAudioSenderParameters(entry.audioSender, latestKbps);
+      }
+    }).catch(() => undefined);
   }
 
   private async recreatePeer(peerId: string, entry: PeerEntry) {

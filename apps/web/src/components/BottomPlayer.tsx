@@ -17,6 +17,7 @@ import {
   type PendingSeek
 } from "@/components/bottom-player/seek-state";
 import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
+import { MiniPlayerOverlay } from "@/components/bottom-player/MiniPlayerOverlay";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 
 type BottomPlayerProps = {
@@ -104,6 +105,11 @@ function BottomPlayerBase({
   const seekRequestIdRef = useRef(0);
   const [pendingSeek, setPendingSeek] = useState<PendingSeek | null>(null);
   const [isImmersiveOpen, setIsImmersiveOpen] = useState(false);
+  const [isMiniOpen, setIsMiniOpen] = useState(false);
+  const toggleMiniPlayer = useCallback(() => {
+    setIsImmersiveOpen(false);
+    setIsMiniOpen((current) => !current);
+  }, []);
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
@@ -344,6 +350,8 @@ function BottomPlayerBase({
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
+        isMiniOpen={isMiniOpen}
+        onToggleMini={toggleMiniPlayer}
         isLyricsOpen={isLyricsOpen}
         onToggleLyrics={onToggleLyrics}
         artworkAccent={artworkPalette.accent}
@@ -378,6 +386,8 @@ function BottomPlayerBase({
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
+        isMiniOpen={isMiniOpen}
+        onToggleMini={toggleMiniPlayer}
         isLyricsOpen={isLyricsOpen}
         onToggleLyrics={onToggleLyrics}
         artworkAccent={artworkPalette.accent}
@@ -413,6 +423,30 @@ function BottomPlayerBase({
       positionMs={boundedProgressMs}
       currentTrack={currentTrack}
       onClose={() => setIsImmersiveOpen(false)}
+    />
+    <MiniPlayerOverlay
+      isOpen={isMiniOpen}
+      isPlaying={isPlaying}
+      canControlPlayback={canControlPlayback}
+      canSeekPlayback={canSeekPlayback && canControlPlayback}
+      playbackTrackId={playback?.currentTrackId}
+      title={title}
+      artist={artist}
+      positionMs={boundedProgressMs}
+      durationMs={currentTrackDuration}
+      volume={volume}
+      artworkUrl={currentTrack?.artworkUrl ?? null}
+      setSeekDraft={setSeekDraft}
+      commitSeek={commitSeek}
+      applyVolume={applyVolume}
+      onPrev={playPrev}
+      onNext={playNext}
+      onTogglePlay={togglePlayback}
+      onOpenImmersive={() => {
+        setIsMiniOpen(false);
+        setIsImmersiveOpen(true);
+      }}
+      onClose={() => setIsMiniOpen(false)}
     />
     </>
   );

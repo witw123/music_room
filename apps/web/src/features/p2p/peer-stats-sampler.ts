@@ -20,6 +20,7 @@ export class PeerStatsSampler {
       steadyStatsSamplingIntervalMs: number;
       onStatsSample?: (payload: {
         peerId: string;
+        linkKind: PeerEntry["linkKind"];
         sample: PeerConnectionStatsSample;
       }) => void;
       samplePeerConnectionStats?: (

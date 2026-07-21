@@ -89,7 +89,7 @@ describe("request contracts", () => {
         seekPrerollMs: 80 as const,
         unitCount: 60,
         merkleRoot: "e".repeat(64),
-        encoder: { name: "@audio/opus-encode" as const, version: "3.0.0" as const }
+        encoder: { name: "@audio/opus-encode" as const, version: "3.1.0" as const }
       }
     };
 

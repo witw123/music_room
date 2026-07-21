@@ -69,4 +69,24 @@ describe("BottomPlayer source", () => {
     expect(layoutSource).not.toContain("onMouseUp={commitSeek}");
     expect(layoutSource).not.toContain("onTouchEnd={commitSeek}");
   });
+
+  it("exposes the mini player from both responsive player layouts", () => {
+    const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+    const layoutSource = readFileSync(
+      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      "utf8"
+    );
+    const miniPlayerSource = readFileSync(
+      new URL("./bottom-player/MiniPlayerOverlay.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(playerSource).toContain("const [isMiniOpen, setIsMiniOpen] = useState(false)");
+    expect(playerSource).toContain("<MiniPlayerOverlay");
+    expect(layoutSource.match(/<MiniPlayerToggleButton/g)?.length).toBe(2);
+    expect(layoutSource).toContain('aria-label={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}');
+    expect(miniPlayerSource).toContain('data-testid="mini-player-overlay"');
+    expect(miniPlayerSource).toContain("onPointerMove={handlePointerMove}");
+    expect(miniPlayerSource).toContain("lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]");
+  });
 });

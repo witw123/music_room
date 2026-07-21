@@ -36,6 +36,8 @@ type LayoutProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isImmersiveOpen: boolean;
   onToggleImmersive: () => void;
+  isMiniOpen: boolean;
+  onToggleMini: () => void;
   isLyricsOpen?: boolean;
   onToggleLyrics?: () => void;
   artworkAccent: string;
@@ -334,6 +336,8 @@ export function MobileBottomPlayerLayout({
   onReorderQueue,
   isImmersiveOpen,
   onToggleImmersive,
+  isMiniOpen,
+  onToggleMini,
   isLyricsOpen = false,
   onToggleLyrics,
   artworkAccent,
@@ -469,8 +473,11 @@ export function MobileBottomPlayerLayout({
             </Button>
           </div>
 
-          <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
-          <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+          <div className="flex shrink-0 items-center">
+            <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
+            <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+            <MiniPlayerToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isMiniOpen} onToggle={onToggleMini} />
+          </div>
         </div>
       </div>
     </div>
@@ -505,6 +512,8 @@ export function DesktopBottomPlayerLayout({
   onReorderQueue,
   isImmersiveOpen,
   onToggleImmersive,
+  isMiniOpen,
+  onToggleMini,
   isLyricsOpen = false,
   onToggleLyrics,
   artworkAccent,
@@ -632,6 +641,7 @@ export function DesktopBottomPlayerLayout({
 
         <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
         <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+        <MiniPlayerToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isMiniOpen} onToggle={onToggleMini} />
       </div>
     </div>
   );
@@ -652,6 +662,24 @@ function ImmersiveToggleButton({ isOpen, onToggle, accentColor, accentSoft }: { 
       ) : (
         <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 9V4h5" /><path d="m4 4 6 6" /><path d="M20 15v5h-5" /><path d="m20 20-6-6" /></svg>
       )}
+    </button>
+  );
+}
+
+function MiniPlayerToggleButton({ isOpen, onToggle, accentColor, accentSoft }: { isOpen: boolean; onToggle: () => void; accentColor?: string; accentSoft?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
+      title={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
+      onClick={onToggle}
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+      style={accentColor ? { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) } : undefined}
+    >
+      <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
+        <rect x="3.5" y="4" width="17" height="16" rx="2" />
+        <rect x="11" y="12" width="7" height="5" rx="0.8" />
+      </svg>
     </button>
   );
 }
