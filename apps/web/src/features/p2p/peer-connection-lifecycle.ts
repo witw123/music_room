@@ -7,6 +7,8 @@ import type { PeerLinkKind } from "./signaling-transport";
 
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
 
+const remoteTrackMuteGraceMs = 3_000;
+
 export function shouldInitiatePeerConnection(localPeerId: string, peerId: string) {
   return localPeerId.localeCompare(peerId) < 0;
 }
@@ -319,7 +321,7 @@ export function bindPeerConnectionEvents(input: {
             state: "failed"
           });
         }
-      }, 1_500);
+      }, remoteTrackMuteGraceMs);
       input.onMediaTrackMuted?.({ peerId: input.peerId, trackId: event.track.id });
     };
     event.track.onunmute = () => {

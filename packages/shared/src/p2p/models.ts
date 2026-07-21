@@ -31,6 +31,7 @@ export const peerSignalMessageSchema = z.object({
   channelKind: z.literal("data"),
   linkKind: z.enum(["data", "media"]).optional(),
   recoveryGeneration: z.number().int().nonnegative().optional(),
+  connectionGeneration: z.number().int().positive().optional(),
   sequence: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())

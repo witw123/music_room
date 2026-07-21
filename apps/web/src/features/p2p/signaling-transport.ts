@@ -20,6 +20,12 @@ type SignalPeerEntry = {
   };
   pendingCandidates: RTCIceCandidateInit[];
   lastSignalProgressAtMs: number;
+  connectionGeneration?: number;
+};
+
+type IncomingSignalOrder = {
+  connectionGeneration: number | null;
+  sequenceByType: Partial<Record<SignalType, number>>;
 };
 
 type LocalOfferConnection = {
@@ -65,6 +71,7 @@ function buildPeerSignal(input: {
   type: SignalType;
   payload: Record<string, unknown>;
   linkKind: PeerLinkKind;
+  connectionGeneration?: number;
 }): PeerSignalMessage {
   return {
     protocolVersion: 4,
@@ -75,7 +82,10 @@ function buildPeerSignal(input: {
     channelKind: "data",
     linkKind: input.linkKind,
     type: input.type,
-    payload: input.payload
+    payload: input.payload,
+    ...(typeof input.connectionGeneration === "number"
+      ? { connectionGeneration: input.connectionGeneration }
+      : {})
   };
 }
 
@@ -84,6 +94,7 @@ export class SignalingTransport {
   private readonly localPeerId: string;
   private readonly sendSignal: (payload: PeerSignalMessage) => void;
   private readonly onSignal?: SignalDiagnosticRecorder;
+  private readonly incomingSignalOrder = new Map<string, IncomingSignalOrder>();
 
   constructor(input: {
     roomId: string;
@@ -110,7 +121,8 @@ export class SignalingTransport {
     peerId: string,
     type: SignalType,
     payload: Record<string, unknown>,
-    linkKind: PeerLinkKind = "data"
+    linkKind: PeerLinkKind = "data",
+    connectionGeneration?: number
   ) {
     this.onSignal?.({
       peerId,
@@ -125,7 +137,8 @@ export class SignalingTransport {
         remotePeerId: peerId,
         type,
         payload,
-        linkKind
+        linkKind,
+        connectionGeneration
       })
     );
   }
@@ -134,11 +147,12 @@ export class SignalingTransport {
     peerId: string,
     connection: LocalOfferConnection,
     options?: RTCOfferOptions,
-    linkKind: PeerLinkKind = "data"
+    linkKind: PeerLinkKind = "data",
+    connectionGeneration?: number
   ) {
     const offer = options ? await connection.createOffer(options) : await connection.createOffer();
     await connection.setLocalDescription(offer);
-    this.send(peerId, "offer", toSessionDescriptionPayload(offer), linkKind);
+    this.send(peerId, "offer", toSessionDescriptionPayload(offer), linkKind, connectionGeneration);
     return offer;
   }
 
@@ -147,6 +161,10 @@ export class SignalingTransport {
     handlers: IncomingSignalHandlers<TEntry>
   ) {
     if (payload.channelKind !== "data" || payload.toPeerId !== this.localPeerId) {
+      return;
+    }
+
+    if (!this.acceptIncomingSignalOrder(payload)) {
       return;
     }
 
@@ -184,7 +202,13 @@ export class SignalingTransport {
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
-        this.send(payload.fromPeerId, "answer", toSessionDescriptionPayload(answer), linkKind);
+        this.send(
+          payload.fromPeerId,
+          "answer",
+          toSessionDescriptionPayload(answer),
+          linkKind,
+          entry.connectionGeneration
+        );
       });
       return;
     }
@@ -231,6 +255,52 @@ export class SignalingTransport {
         }
       });
     }
+  }
+
+  private acceptIncomingSignalOrder(payload: PeerSignalMessage) {
+    const linkKind = payload.linkKind ?? "data";
+    const recoveryGeneration = payload.recoveryGeneration ?? 0;
+    const key = `${payload.fromPeerId}:${linkKind}:${recoveryGeneration}`;
+    const previous = this.incomingSignalOrder.get(key);
+    const connectionGeneration = payload.connectionGeneration ?? null;
+    const sequence = payload.sequence ?? null;
+
+    if (previous) {
+      if (
+        connectionGeneration !== null &&
+        previous.connectionGeneration !== null &&
+        connectionGeneration < previous.connectionGeneration
+      ) {
+        return false;
+      }
+      if (
+        connectionGeneration === previous.connectionGeneration &&
+        sequence !== null &&
+        typeof previous.sequenceByType[payload.type] === "number" &&
+        sequence <= previous.sequenceByType[payload.type]!
+      ) {
+        return false;
+      }
+    }
+
+    const sequenceByType =
+      connectionGeneration !== null &&
+      previous?.connectionGeneration !== null &&
+      connectionGeneration > (previous?.connectionGeneration ?? -1)
+        ? {}
+        : { ...(previous?.sequenceByType ?? {}) };
+    if (sequence !== null) {
+      sequenceByType[payload.type] = Math.max(
+        sequenceByType[payload.type] ?? Number.MIN_SAFE_INTEGER,
+        sequence
+      );
+    }
+    this.incomingSignalOrder.set(key, {
+      connectionGeneration:
+        connectionGeneration ?? previous?.connectionGeneration ?? null,
+      sequenceByType
+    });
+    return true;
   }
 }
 

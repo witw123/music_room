@@ -369,7 +369,7 @@ describe("SegmentedOpusEngine", () => {
   });
 
   it("pre-schedules the next timeline even when the queue repeats the same asset", async () => {
-    const { context, sources } = createContext();
+    const { context, sources, gains } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
     const engine = new SegmentedOpusEngine();
     const serverNowMs = Date.now();
@@ -404,6 +404,44 @@ describe("SegmentedOpusEngine", () => {
       27,
       29
     ]);
+    const previousFinalGain = gains[gains.length - manifest.unitCount - 1];
+    const nextFirstGain = gains[gains.length - manifest.unitCount];
+    expect(previousFinalGain?.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, 21);
+    expect(nextFirstGain?.gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 21.02);
+    engine.destroy();
+  });
+
+  it("cancels a blocked sync before applying a newer pause", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const blocked = new Promise<AudioAssetUnitRecord | null>(() => undefined);
+    const serverNowMs = Date.now();
+
+    const playing = engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async () => blocked
+    });
+    await Promise.resolve();
+
+    const paused = await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        status: "paused",
+        startAt: null
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async () => null
+    });
+
+    await playing;
+    expect(paused.state).toBe("paused");
+    expect(sources).toHaveLength(0);
     engine.destroy();
   });
 

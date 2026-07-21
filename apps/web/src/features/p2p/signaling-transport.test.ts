@@ -385,4 +385,46 @@ describe("SignalingTransport", () => {
 
     expect(getOrCreatePeerEntry).not.toHaveBeenCalled();
   });
+
+  it("drops reordered signals from an older connection generation", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const getOrCreatePeerEntry = vi.fn(async () => buildSignalEntry());
+    const handlers = {
+      getOrCreatePeerEntry,
+      runPeerOperation: async <T>(
+        _entry: ReturnType<typeof buildSignalEntry>,
+        task: () => Promise<T>
+      ) => task(),
+      applyRemoteDescription: vi.fn(),
+      flushPendingCandidates: vi.fn()
+    };
+
+    await transport.handleIncomingSignal(
+      buildSignal({
+        connectionGeneration: 3,
+        sequence: 20
+      }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({
+        connectionGeneration: 2,
+        sequence: 99
+      }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({
+        connectionGeneration: 3,
+        sequence: 20
+      }),
+      handlers
+    );
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(1);
+  });
 });

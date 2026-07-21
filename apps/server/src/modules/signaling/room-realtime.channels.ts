@@ -6,3 +6,4 @@ export const roomQueuePatchChannel = "music-room:room-queue-patch";
 export const roomPresencePatchChannel = "music-room:room-presence-patch";
 export const roomLibraryPatchChannel = "music-room:room-library-patch";
 export const peerSignalChannel = "music-room:peer-signal";
+export const sessionReplacementChannel = "music-room:session-replacement";

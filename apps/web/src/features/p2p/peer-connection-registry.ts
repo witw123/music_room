@@ -39,6 +39,8 @@ export type PeerEntry = {
   mediaNegotiationPending: boolean;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
+  /** Monotonic id for this local RTCPeerConnection incarnation. */
+  connectionGeneration: number;
   pendingCandidates: RTCIceCandidateInit[];
   statsIntervalId: ReturnType<typeof setInterval> | null;
   statsSnapshot: PeerConnectionStatsSnapshot | null;
@@ -56,6 +58,7 @@ export function createPeerEntry(input: {
   connection: RTCPeerConnection;
   initiatorPeerId: string | null;
   nowMs: number;
+  connectionGeneration?: number;
   linkKind?: PeerLinkKind;
 }): PeerEntry {
   return {
@@ -79,6 +82,7 @@ export function createPeerEntry(input: {
     mediaSyncRetryAttempts: 0,
     mediaNegotiationPending: false,
     initiatorPeerId: input.initiatorPeerId,
+    connectionGeneration: input.connectionGeneration ?? 1,
     pendingCandidates: [],
     statsIntervalId: null,
     statsSnapshot: null,

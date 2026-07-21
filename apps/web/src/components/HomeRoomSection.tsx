@@ -14,7 +14,7 @@ import {
 } from "@/lib/client-shell";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
-import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
+import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -48,11 +48,11 @@ export function HomeRoomSection() {
 
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
-    } catch {
-      setAvailableRooms([]);
+      setAvailableRooms(filterRoomsForSession(rooms, activeSession.userId));
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
     }
-  }, [activeSession]);
+  }, [activeSession, setStatusMessage]);
 
   const refreshRecentRoom = useCallback(async () => {
     if (!activeSession) {
@@ -150,8 +150,10 @@ export function HomeRoomSection() {
   }
 
   const visibleRooms = useMemo(
-    () => availableRooms.filter((room) => room.room.id !== recentRoom?.room.id).slice(0, 3),
-    [availableRooms, recentRoom?.room.id]
+    () => [...availableRooms].sort(
+      (left, right) => getOnlineMemberCount(right.room.members) - getOnlineMemberCount(left.room.members)
+    ),
+    [availableRooms]
   );
 
   return (
@@ -262,7 +264,7 @@ export function HomeRoomSection() {
               {visibleRooms.length > 0 ? (
                 <div>
                   <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-white/[0.35]">
-                    Public rooms
+                    All rooms
                   </p>
                   <div className="grid gap-2">
                     {visibleRooms.map((room) => (

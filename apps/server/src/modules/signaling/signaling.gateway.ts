@@ -57,7 +57,8 @@ import {
   roomPresencePatchChannel,
   roomQueuePatchChannel,
   roomSnapshotChannel,
-  roomSnapshotMissingChannel
+  roomSnapshotMissingChannel,
+  sessionReplacementChannel
 } from "./room-realtime.channels";
 
 type PendingPeerSignal = {
@@ -376,6 +377,36 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.redisUnsubscribers.push(unsubscribe);
     });
 
+    void this.redisService.subscribe(sessionReplacementChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        sessionId?: string;
+        socketId?: string;
+      };
+      if (
+        !hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId) ||
+        typeof message.roomId !== "string" ||
+        typeof message.sessionId !== "string" ||
+        typeof message.socketId !== "string"
+      ) {
+        return;
+      }
+
+      const socket = this.server.sockets.sockets.get(message.socketId);
+      if (
+        !socket ||
+        socket.data.roomId !== message.roomId ||
+        socket.data.sessionId !== message.sessionId
+      ) {
+        return;
+      }
+
+      this.invalidateReplacedSocket(socket, message.roomId);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
   }
 
   onModuleDestroy() {
@@ -573,13 +604,25 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     );
 
     const fenceToken = randomUUID();
-    await this.claimSessionLease(
+    const previousLease = await this.claimSessionLease(
       message.roomId,
       message.sessionId,
       message.peerId,
       client.id,
       fenceToken
     );
+    if (
+      previousLease?.socketId &&
+      previousLease.socketId !== client.id &&
+      previousLease.instanceId !== this.roomRealtimeBroadcaster.instanceId
+    ) {
+      this.publishRealtime(sessionReplacementChannel, {
+        sourceId: this.roomRealtimeBroadcaster.instanceId,
+        roomId: message.roomId,
+        sessionId: message.sessionId,
+        socketId: previousLease.socketId
+      });
+    }
     client.data.roomId = message.roomId;
     client.data.sessionId = message.sessionId;
     client.data.peerId = message.peerId;
@@ -657,7 +700,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.assertRealtimeClient(client, message.roomId);
     await this.assertUserStillActive(client.data.sessionId as string);
     await this.assertSessionLease(client);
-    await this.renewSessionLease(client);
+    if (!(await this.renewSessionLease(client))) {
+      throw new WsException("Realtime session was replaced.");
+    }
 
     if (client.data.sessionId !== message.sessionId || client.data.peerId !== message.peerId) {
       throw new WsException("Presence mismatch.");
@@ -723,7 +768,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return { ok: true };
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.realtimeRateLimits.delete(client.id);
     const roomId = client.data.roomId as string | undefined;
     const sessionId = client.data.sessionId as string | undefined;
@@ -734,6 +779,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.unregisterSessionSocket(roomId, sessionId, client.id);
     this.metrics.unbindRealtimeSocket(client.id);
     if (roomId && sessionId && isActiveSessionSocket) {
+      const ownsLease = await this.sessionLeaseBelongsTo(roomId, sessionId, {
+        peerId,
+        socketId: client.id,
+        fenceToken: client.data.sessionFenceToken as string | undefined
+      });
+      if (!ownsLease) {
+        return;
+      }
       void this.updatePeerPresence(roomId, sessionId, null, "reconnecting");
       this.scheduleDisconnectCleanup(
         roomId,
@@ -1073,7 +1126,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     if (!ownsLease) {
       return;
     }
-    await this.deleteSessionLease(roomId, sessionId, { peerId, socketId, fenceToken });
+    const deleted = await this.deleteSessionLease(roomId, sessionId, {
+      peerId,
+      socketId,
+      fenceToken
+    });
+    if (!deleted) {
+      return;
+    }
 
     await this.updatePeerPresence(roomId, sessionId, null, "offline");
     if (peerId) {
@@ -1178,7 +1238,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const peerId = client.data.peerId as string;
     const fenceToken = client.data.sessionFenceToken as string;
     try {
-      await this.redisService.setJson(
+      return await this.redisService.renewJsonLeaseIfValue(
         this.sessionLeaseKey(roomId, sessionId),
         {
           instanceId: this.roomRealtimeBroadcaster.instanceId,
@@ -1188,10 +1248,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           socketId: client.id,
           fenceToken
         },
-        Math.ceil(this.sessionLeaseTtlMs / 1_000)
+        this.sessionLeaseTtlMs
       );
     } catch {
       // A transient Redis outage should not interrupt local presence.
+      return true;
     }
   }
 
@@ -1243,26 +1304,25 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     sessionId: string,
     expected?: { peerId?: string; socketId?: string; fenceToken?: string }
   ) {
+    if (!expected?.peerId || !expected.socketId || !expected.fenceToken) {
+      return false;
+    }
+
     try {
-      const lease = await this.redisService.getJson<unknown>(
-        this.sessionLeaseKey(roomId, sessionId)
-      );
-      const typedLease = lease as {
-        peerId?: string;
-        socketId?: string;
-        fenceToken?: string;
-      };
-      if (
-        !lease ||
-        (expected?.peerId && typedLease.peerId !== expected.peerId) ||
-        (expected?.socketId && typedLease.socketId !== expected.socketId) ||
-        (expected?.fenceToken && typedLease.fenceToken !== expected.fenceToken)
-      ) {
-        return;
-      }
-      await this.redisService.delete(this.sessionLeaseKey(roomId, sessionId));
+      // The old socket may be racing a replacement. Compare and delete in one
+      // Redis operation so a lease claimed after this cleanup starts cannot
+      // be removed by the stale disconnect timer.
+      return await this.redisService.deleteJsonIfValue(this.sessionLeaseKey(roomId, sessionId), {
+        instanceId: this.roomRealtimeBroadcaster.instanceId,
+        roomId,
+        sessionId,
+        peerId: expected.peerId,
+        socketId: expected.socketId,
+        fenceToken: expected.fenceToken
+      });
     } catch {
       // Ignore lease cleanup failures; the TTL limits stale ownership.
+      return false;
     }
   }
 
@@ -1362,11 +1422,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const isSeamlessReconnect = existing.peerId === nextPeerId;
     if (isSeamlessReconnect) {
       if (replacedSocket) {
-        replacedSocket.leave(roomId);
-        replacedSocket.data.roomId = undefined;
-        replacedSocket.data.sessionId = undefined;
-        replacedSocket.data.peerId = undefined;
-        replacedSocket.data.isRealtimeAuthenticated = false;
+        this.invalidateReplacedSocket(replacedSocket, roomId);
       }
       return;
     }
@@ -1379,15 +1435,28 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       return;
     }
 
-    replacedSocket.emit("room.session.replaced", {
+    this.invalidateReplacedSocket(replacedSocket, roomId);
+  }
+
+  private invalidateReplacedSocket(socket: Socket, roomId: string) {
+    const sessionId = socket.data.sessionId as string | undefined;
+    const peerId = socket.data.peerId as string | undefined;
+    if (sessionId) {
+      this.cancelPendingDisconnectCleanup(roomId, sessionId);
+    }
+    this.unregisterPeerSocket(roomId, peerId, socket.id);
+    this.unregisterSessionSocket(roomId, sessionId, socket.id);
+    this.metrics.unbindRealtimeSocket(socket.id);
+    socket.emit("room.session.replaced", {
       roomId,
       reason: "duplicate-session"
     });
-    replacedSocket.leave(roomId);
-    replacedSocket.data.roomId = undefined;
-    replacedSocket.data.sessionId = undefined;
-    replacedSocket.data.peerId = undefined;
-    replacedSocket.data.isRealtimeAuthenticated = false;
+    socket.leave(roomId);
+    socket.data.roomId = undefined;
+    socket.data.sessionId = undefined;
+    socket.data.peerId = undefined;
+    socket.data.sessionFenceToken = undefined;
+    socket.data.isRealtimeAuthenticated = false;
   }
 }
 

@@ -12,6 +12,7 @@ type ScheduledSource = {
   source: AudioBufferSourceNode;
   gain: GainNode;
   revision: number;
+  endAt: number;
 };
 
 type SyncInput = {
@@ -19,11 +20,11 @@ type SyncInput = {
   playback: PlaybackSnapshot;
   serverNowMs: number;
   volume: number;
-  getUnit: (unitIndex: number) => Promise<AudioAssetUnitRecord | null>;
+  getUnit: (unitIndex: number, signal?: AbortSignal) => Promise<AudioAssetUnitRecord | null>;
   gaplessNext?: {
     transition: GaplessTransition;
     manifest: PlaybackAssetManifest;
-    getUnit: (unitIndex: number) => Promise<AudioAssetUnitRecord | null>;
+    getUnit: (unitIndex: number, signal?: AbortSignal) => Promise<AudioAssetUnitRecord | null>;
   } | null;
 };
 
@@ -86,12 +87,15 @@ export class SegmentedOpusEngine {
   private lastUnderrunAt: string | null = null;
   private lastDecodeError: string | null = null;
   private syncInFlight: Promise<SyncResult> | null = null;
+  private syncAbortController: AbortController | null = null;
   private queuedSyncInput: SyncInput | null = null;
   private timelineGeneration = 0;
+  private wasmDecodeChain: Promise<void> = Promise.resolve();
 
   async sync(input: SyncInput): Promise<SyncResult> {
     if (this.syncInFlight) {
       this.queuedSyncInput = input;
+      this.syncAbortController?.abort();
       return this.syncInFlight;
     }
 
@@ -110,15 +114,23 @@ export class SegmentedOpusEngine {
     let nextInput: SyncInput | null = input;
     let result: SyncResult = { state: "idle", bufferedUnits: 0 };
     while (nextInput && !this.destroyed) {
-      result = await this.syncOnce(nextInput);
+      const controller = new AbortController();
+      this.syncAbortController = controller;
+      try {
+        result = await this.syncOnce(nextInput, controller.signal);
+      } finally {
+        if (this.syncAbortController === controller) {
+          this.syncAbortController = null;
+        }
+      }
       nextInput = this.queuedSyncInput;
       this.queuedSyncInput = null;
     }
     return result;
   }
 
-  private async syncOnce(input: SyncInput): Promise<SyncResult> {
-    if (this.destroyed) {
+  private async syncOnce(input: SyncInput, signal: AbortSignal): Promise<SyncResult> {
+    if (this.destroyed || signal.aborted) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
     const timelineId = input.playback.startAt;
@@ -209,15 +221,24 @@ export class SegmentedOpusEngine {
         return cached;
       }
       const loaded = await withTimeout(
-        input.getUnit(unitIndex),
+        input.getUnit(unitIndex, signal),
         assetOperationTimeoutMs,
-        "Audio asset read timed out."
+        "Audio asset read timed out.",
+        signal
       );
       if (loaded) {
         this.unitRecords.set(unitKey(input.manifest.assetId, unitIndex), loaded);
       }
       return loaded;
-    }));
+    })).catch((error) => {
+      if (isAbortError(error) || signal.aborted) {
+        return [] as Array<AudioAssetUnitRecord | null>;
+      }
+      throw error;
+    });
+    if (signal.aborted) {
+      return { state: "idle" as const, bufferedUnits: 0 };
+    }
     if (this.destroyed || this.timelineKey !== timelineKey || generation !== this.timelineGeneration) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
@@ -253,8 +274,11 @@ export class SegmentedOpusEngine {
       const currentUnit = contiguousUnits[0]!;
       let currentDecoded: AudioBuffer;
       try {
-        currentDecoded = await this.getDecodedUnitWithRetry(context, currentUnit);
-      } catch {
+        currentDecoded = await this.getDecodedUnitWithRetry(context, currentUnit, signal);
+      } catch (error) {
+        if (isAbortError(error) || signal.aborted) {
+          return { state: "idle" as const, bufferedUnits: 0 };
+        }
         this.enterUnderrun();
         return { state: "buffering" as const, bufferedUnits: 0 };
       }
@@ -294,9 +318,9 @@ export class SegmentedOpusEngine {
         ))
     );
     const decodeResults = await Promise.allSettled(
-      decodeTargets.map((unit) => this.getDecodedUnitWithRetry(context, unit))
+      decodeTargets.map((unit) => this.getDecodedUnitWithRetry(context, unit, signal))
     );
-    if (this.destroyed || this.timelineKey !== timelineKey || generation !== this.timelineGeneration) {
+    if (this.destroyed || signal.aborted || this.timelineKey !== timelineKey || generation !== this.timelineGeneration) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
 
@@ -305,6 +329,9 @@ export class SegmentedOpusEngine {
         continue;
       }
       const decoded = await this.decoded.get(unitKey(input.manifest.assetId, unit.unitIndex))!;
+      if (signal.aborted) {
+        return { state: "idle" as const, bufferedUnits: 0 };
+      }
       this.scheduleUnit({
         context,
         assetId: input.manifest.assetId,
@@ -322,7 +349,14 @@ export class SegmentedOpusEngine {
       currentIndex
     );
     if (input.gaplessNext) {
-      await this.scheduleGaplessNext(context, input.serverNowMs, input.gaplessNext);
+      try {
+        await this.scheduleGaplessNext(context, input.serverNowMs, input.gaplessNext, signal);
+      } catch (error) {
+        if (isAbortError(error) || signal.aborted) {
+          return { state: "idle" as const, bufferedUnits: 0 };
+        }
+        throw error;
+      }
     } else {
       this.pendingTransition = null;
     }
@@ -353,11 +387,16 @@ export class SegmentedOpusEngine {
 
   destroy() {
     this.destroyed = true;
+    this.syncAbortController?.abort();
+    this.syncAbortController = null;
     this.queuedSyncInput = null;
     this.timelineGeneration += 1;
     this.resetTimeline();
-    this.wasmDecoder?.free();
+    const decoder = this.wasmDecoder;
     this.wasmDecoder = null;
+    if (decoder) {
+      void this.wasmDecodeChain.then(() => decoder.free());
+    }
     this.disposeOutputGraph();
   }
 
@@ -392,6 +431,7 @@ export class SegmentedOpusEngine {
     currentIndex: number;
     anchorTime?: number;
     anchorPositionMs?: number;
+    fadeIn?: boolean;
   }) {
     const anchorTime = input.anchorTime ?? this.contextAnchorTime;
     if (anchorTime === null || anchorTime === undefined || !this.masterGain) return;
@@ -439,7 +479,10 @@ export class SegmentedOpusEngine {
       sourceGain.disconnect();
     };
     const startAt = Math.max(earliestStart, desiredAudibleStart);
-    if (input.unit.unitIndex === input.currentIndex && input.anchorTime === undefined) {
+    if (
+      input.fadeIn ||
+      (input.unit.unitIndex === input.currentIndex && input.anchorTime === undefined)
+    ) {
       // Only a timeline entry point needs a fade-in. Reapplying it to every
       // 2s continuation creates a periodic dip even when the buffers are
       // sample-contiguous.
@@ -450,13 +493,19 @@ export class SegmentedOpusEngine {
       setAudioParamValueAt(sourceGain.gain, 1, startAt);
     }
     source.start(startAt, offsetSeconds);
-    this.scheduled.set(timelineKey, { source, gain: sourceGain, revision });
+    this.scheduled.set(timelineKey, {
+      source,
+      gain: sourceGain,
+      revision,
+      endAt: startAt + Math.max(0, input.decoded.duration - offsetSeconds)
+    });
   }
 
   private async scheduleGaplessNext(
     context: AudioContext,
     serverNowMs: number,
-    input: NonNullable<SyncInput["gaplessNext"]>
+    input: NonNullable<SyncInput["gaplessNext"]>,
+    signal: AbortSignal
   ) {
     const transitionContextTime = context.currentTime +
       (Date.parse(input.transition.transitionAt) - serverNowMs) / 1000;
@@ -473,20 +522,38 @@ export class SegmentedOpusEngine {
     );
     const units: AudioAssetUnitRecord[] = [];
     for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
+      if (signal.aborted) {
+        throw createAbortError();
+      }
       const key = unitKey(input.manifest.assetId, unitIndex);
       const cached = this.unitRecords.get(key);
       const loaded = cached ?? await withTimeout(
-        input.getUnit(unitIndex),
+        input.getUnit(unitIndex, signal),
         assetOperationTimeoutMs,
-        "Gapless next-track audio asset read timed out."
+        "Gapless next-track audio asset read timed out.",
+        signal
       );
       if (!loaded) break;
       this.unitRecords.set(key, loaded);
       units.push(loaded);
     }
     const decoded = await Promise.allSettled(
-      units.map((unit) => this.getDecodedUnitWithRetry(context, unit))
+      units.map((unit) => this.getDecodedUnitWithRetry(context, unit, signal))
     );
+    if (signal.aborted) {
+      throw createAbortError();
+    }
+    const boundaryFadeStart = Math.max(
+      context.currentTime,
+      transitionContextTime - fadeDurationSeconds
+    );
+    for (const scheduled of this.scheduled.values()) {
+      if (Math.abs(scheduled.endAt - transitionContextTime) > 0.1) {
+        continue;
+      }
+      setAudioParamValueAt(scheduled.gain.gain, 1, boundaryFadeStart);
+      rampAudioParamTo(scheduled.gain.gain, 0, transitionContextTime);
+    }
     for (const [index, unit] of units.entries()) {
       const result = decoded[index];
       if (result?.status !== "fulfilled") continue;
@@ -499,19 +566,21 @@ export class SegmentedOpusEngine {
         roomPositionMs: 0,
         currentIndex: 0,
         anchorTime: transitionContextTime,
-        anchorPositionMs: 0
+        anchorPositionMs: 0,
+        fadeIn: unit.unitIndex === 0
       });
     }
   }
 
   private getDecodedUnit(
     context: AudioContext,
-    unit: AudioAssetUnitRecord
+    unit: AudioAssetUnitRecord,
+    signal?: AbortSignal
   ) {
     const key = unitKey(unit.assetId, unit.unitIndex);
     const existing = this.decoded.get(key);
     if (existing) return existing;
-    const decoding = this.decodeUnit(context, unit).catch((error) => {
+    const decoding = this.decodeUnit(context, unit, signal).catch((error) => {
       if (this.decoded.get(key) === decoding) {
         this.decoded.delete(key);
       }
@@ -544,13 +613,17 @@ export class SegmentedOpusEngine {
 
   private getDecodedUnitWithRetry(
     context: AudioContext,
-    unit: AudioAssetUnitRecord
+    unit: AudioAssetUnitRecord,
+    signal?: AbortSignal
   ) {
-    return this.getDecodedUnit(context, unit).catch(async (firstError) => {
+    return this.getDecodedUnit(context, unit, signal).catch(async (firstError) => {
+      if (isAbortError(firstError) || signal?.aborted) {
+        throw firstError;
+      }
       this.lastDecodeError = formatDecodeError(firstError);
       this.decoded.delete(unitKey(unit.assetId, unit.unitIndex));
       try {
-        return await this.getDecodedUnit(context, unit);
+        return await this.getDecodedUnit(context, unit, signal);
       } catch (retryError) {
         this.lastDecodeError = formatDecodeError(retryError);
         throw retryError;
@@ -560,21 +633,27 @@ export class SegmentedOpusEngine {
 
   private async decodeUnit(
     context: AudioContext,
-    unit: AudioAssetUnitRecord
+    unit: AudioAssetUnitRecord,
+    signal?: AbortSignal
   ) {
     let decoded: AudioBuffer;
     try {
       decoded = await withTimeout(
         context.decodeAudioData(unit.payload.slice(0)),
         assetOperationTimeoutMs,
-        "Audio asset decode timed out."
+        "Audio asset decode timed out.",
+        signal
       );
-    } catch {
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted) {
+        throw error;
+      }
       const decoder = await this.getWasmDecoder();
       const result = await withTimeout(
-        decoder.decodeFile(new Uint8Array(unit.payload)),
+        this.enqueueWasmDecode(decoder, new Uint8Array(unit.payload), signal),
         assetOperationTimeoutMs,
-        "WASM audio asset decode timed out."
+        "WASM audio asset decode timed out.",
+        signal
       );
       decoded = context.createBuffer(
         result.channelData.length,
@@ -625,12 +704,33 @@ export class SegmentedOpusEngine {
   }
 
   private async getWasmDecoder() {
+    if (this.destroyed) {
+      throw createAbortError();
+    }
     if (!this.wasmDecoder) {
       const { OggOpusDecoder } = await import("ogg-opus-decoder");
       this.wasmDecoder = new OggOpusDecoder();
       await this.wasmDecoder.ready;
     }
     return this.wasmDecoder;
+  }
+
+  private enqueueWasmDecode(
+    decoder: import("ogg-opus-decoder").OggOpusDecoder,
+    payload: Uint8Array,
+    signal?: AbortSignal
+  ) {
+    const decode = this.wasmDecodeChain.then(() => {
+      if (this.destroyed || this.wasmDecoder !== decoder || signal?.aborted) {
+        throw createAbortError();
+      }
+      return decoder.decodeFile(payload);
+    });
+    this.wasmDecodeChain = decode.then(
+      () => undefined,
+      () => undefined
+    );
+    return decode;
   }
 
   private ensureMasterGain(context: AudioContext, volume: number) {
@@ -844,6 +944,16 @@ function formatDecodeError(error: unknown) {
     : String(error);
 }
 
+function createAbortError() {
+  const error = new Error("Audio operation aborted.");
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function readAnalyserMetrics(analyser: AnalyserNode) {
   const values = new Float32Array(analyser.fftSize);
   if (typeof analyser.getFloatTimeDomainData === "function") {
@@ -898,18 +1008,31 @@ function rampAudioParam(param: AudioParam, value: number, context: AudioContext 
   rampAudioParamTo(param, value, now + fadeDurationSeconds);
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+  signal?: AbortSignal
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = () => finish(() => reject(createAbortError()));
+    const timer = setTimeout(() => finish(() => reject(new Error(message))), timeoutMs);
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
     promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      }
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error))
     );
   });
 }

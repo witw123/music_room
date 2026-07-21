@@ -55,7 +55,6 @@ export function RoomsHomePage({
   });
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [roomPage, setRoomPage] = useState(0);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
@@ -113,10 +112,10 @@ export function RoomsHomePage({
       if (activeSession) {
         setAvailableRooms(filterRoomsForSession(rooms, activeSession.userId));
       }
-    } catch {
-      setAvailableRooms([]);
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
     }
-  }, [activeSession]);
+  }, [activeSession, setStatusMessage]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -245,12 +244,6 @@ export function RoomsHomePage({
     () => [...availableRooms].sort((left, right) => getOnlineMemberCount(right.room.members) - getOnlineMemberCount(left.room.members)),
     [availableRooms]
   );
-  const roomsPerPage = 9;
-  const roomPageCount = Math.max(1, Math.ceil(visibleRooms.length / roomsPerPage));
-  const pagedRooms = visibleRooms.slice(roomPage * roomsPerPage, (roomPage + 1) * roomsPerPage);
-  useEffect(() => {
-    setRoomPage((current) => Math.min(current, roomPageCount - 1));
-  }, [roomPageCount]);
 
   if (!hydrated || !activeSession) {
     return <div className="min-h-screen bg-background" />;
@@ -340,7 +333,7 @@ export function RoomsHomePage({
         <div className="glass-panel min-h-[300px] rounded-[24px] p-3 sm:rounded-[28px] sm:p-5 lg:p-6">
           {visibleRooms.length ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {pagedRooms.map((item) => (
+              {visibleRooms.map((item) => (
                 <RoomDirectoryCard
                   key={item.room.id}
                   isAway={item.room.id === effectiveAwayRoomId}
@@ -373,33 +366,6 @@ export function RoomsHomePage({
               </p>
             </div>
           )}
-          {visibleRooms.length > roomsPerPage ? (
-            <div className="mt-4 flex flex-col gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted sm:flex-row sm:items-center sm:justify-between">
-              <span>第 {roomPage + 1} / {roomPageCount} 页</span>
-              <div className="flex items-center gap-2">
-                <Button
-                  aria-label="上一页"
-                  disabled={roomPage === 0}
-                  onClick={() => setRoomPage((current) => Math.max(0, current - 1))}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  上一页
-                </Button>
-                <Button
-                  aria-label="下一页"
-                  disabled={roomPage >= roomPageCount - 1}
-                  onClick={() => setRoomPage((current) => Math.min(roomPageCount - 1, current + 1))}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          ) : null}
         </div>
       </section>
 

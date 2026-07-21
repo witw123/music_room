@@ -102,4 +102,26 @@ describe("RedisService", () => {
     expect(publisher.mget).toHaveBeenCalledWith("presence:a", "presence:b");
   });
 
+  it("renews a JSON lease only when the fence payload still matches", async () => {
+    const service = new RedisService();
+    const publisher = mockRedisInstances[0];
+    publisher.status = "ready";
+
+    await expect(
+      service.renewJsonLeaseIfValue(
+        "music-room:realtime-session:room_1:user_1",
+        { socketId: "socket_1", fenceToken: "fence_1" },
+        90_000
+      )
+    ).resolves.toBe(true);
+
+    expect(publisher.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])'),
+      1,
+      "music-room:realtime-session:room_1:user_1",
+      JSON.stringify({ socketId: "socket_1", fenceToken: "fence_1" }),
+      "90000"
+    );
+  });
+
 });

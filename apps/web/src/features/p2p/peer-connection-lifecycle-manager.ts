@@ -132,6 +132,7 @@ export class PeerConnectionLifecycleManager {
   private readonly onMediaRecovery?: PeerConnectionLifecycleManagerInput["onMediaRecovery"];
   private readonly mediaRecovery = new Map<string, MediaRecoveryState>();
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
+  private connectionGenerationSequence = 0;
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
   private localAudioMaxBitrateKbps: number | null = null;
@@ -348,7 +349,13 @@ export class PeerConnectionLifecycleManager {
       if (entry.releasing || entry.connection.signalingState !== "stable") {
         return null;
       }
-      await this.signaling.createAndSendOffer(peerId, entry.connection, { iceRestart: true }, "data");
+      await this.signaling.createAndSendOffer(
+        peerId,
+        entry.connection,
+        { iceRestart: true },
+        "data",
+        entry.connectionGeneration
+      );
       entry.lastSignalProgressAtMs = Date.now();
       return entry;
     });
@@ -410,7 +417,8 @@ export class PeerConnectionLifecycleManager {
         peerId,
         entry.connection,
         { iceRestart: Boolean(entry.connection.remoteDescription) },
-        "media"
+        "media",
+        entry.connectionGeneration
       );
       entry.lastSignalProgressAtMs = Date.now();
       this.scheduleMediaWatchdog(peerId, entry);
@@ -467,6 +475,7 @@ export class PeerConnectionLifecycleManager {
       connection,
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
       nowMs: Date.now(),
+      connectionGeneration: ++this.connectionGenerationSequence,
       linkKind
     });
     if (linkKind === "media" && typeof connection.addTransceiver === "function") {
@@ -492,7 +501,13 @@ export class PeerConnectionLifecycleManager {
         this.peerConnections.get(currentPeerId, linkKind) === currentEntry,
       isExpectedPeer: (currentPeerId) => this.peerConnections.expects(currentPeerId),
       sendCandidate: (candidatePeerId, payload) =>
-        this.signaling.send(candidatePeerId, "candidate", payload, linkKind),
+        this.signaling.send(
+          candidatePeerId,
+          "candidate",
+          payload,
+          linkKind,
+          entry.connectionGeneration
+        ),
       onPeerConnectionChange: (payload) => {
         this.onPeerConnectionChange?.(payload);
         if (payload.state === "connected") {
@@ -572,7 +587,13 @@ export class PeerConnectionLifecycleManager {
         entry.channel = controlChannel;
         this.bindChannelCallback(peerId, entry, controlChannel);
         await enqueuePeerOperation(entry, async () => {
-          await this.signaling.createAndSendOffer(peerId, connection);
+          await this.signaling.createAndSendOffer(
+            peerId,
+            connection,
+            undefined,
+            "data",
+            entry.connectionGeneration
+          );
           entry.lastSignalProgressAtMs = Date.now();
         });
       } else if (shouldInitiate && linkKind === "media") {
@@ -589,7 +610,13 @@ export class PeerConnectionLifecycleManager {
             return;
           }
           try {
-            await this.signaling.createAndSendOffer(peerId, connection, undefined, "media");
+            await this.signaling.createAndSendOffer(
+              peerId,
+              connection,
+              undefined,
+              "media",
+              entry.connectionGeneration
+            );
             entry.mediaNegotiationPending = false;
             entry.lastSignalProgressAtMs = Date.now();
             this.clearMediaSyncRetry(entry);
@@ -679,7 +706,13 @@ export class PeerConnectionLifecycleManager {
         state: "live"
       });
       if (renegotiate && entry.connection.signalingState === "stable") {
-        await this.signaling.createAndSendOffer(peerId, entry.connection, undefined, "media");
+        await this.signaling.createAndSendOffer(
+          peerId,
+          entry.connection,
+          undefined,
+          "media",
+          entry.connectionGeneration
+        );
         entry.lastSignalProgressAtMs = Date.now();
         entry.mediaNegotiationPending = false;
       }
@@ -756,7 +789,13 @@ export class PeerConnectionLifecycleManager {
       entry.connection.signalingState === "stable"
     ) {
       try {
-        await this.signaling.createAndSendOffer(peerId, entry.connection, undefined, "media");
+        await this.signaling.createAndSendOffer(
+          peerId,
+          entry.connection,
+          undefined,
+          "media",
+          entry.connectionGeneration
+        );
         entry.lastSignalProgressAtMs = Date.now();
         entry.mediaNegotiationPending = false;
         this.clearMediaSyncRetry(entry);
@@ -1113,8 +1152,7 @@ export class PeerConnectionLifecycleManager {
       // offer instead of creating another empty offer and reopening glare.
       forceRecreate: reason === "no-packets" &&
         (entry.senderTrackState === "live" ||
-          entry.receiverTrackState === "live" ||
-          entry.receiverTrackState === "failed")
+          entry.receiverTrackState === "live")
     });
   }
 
