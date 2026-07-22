@@ -26,6 +26,7 @@ import {
 } from "@/lib/indexeddb";
 import { createRepositoryTrackRecord, LocalRepository } from "./local-repository";
 import { hydrateLocalRepository } from "./local-repository-hydration";
+import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {
@@ -84,7 +85,7 @@ export async function getConfiguredLocalRepository() {
   const directory = await getLocalAudioDirectory();
   if (!directory) return null;
   try {
-    return await LocalRepository.open(directory.handle);
+    return await LocalRepository.open(directory.handle, { recover: false });
   } catch {
     // A directory handle can become unavailable after the folder is moved or deleted.
     // Browser storage remains usable until the user selects a new folder.
@@ -218,7 +219,7 @@ export async function getLocalAudioFile(
     return null;
   }
 
-  const repository = await LocalRepository.open(directory.handle).catch(() => null);
+  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
   const repositoryFile = fileRecord.relativePath && repository
     ? await repository.readPath(fileRecord.relativePath)
     : null;
@@ -295,7 +296,7 @@ export async function getLocalAudioCacheFile(fileHash: string) {
     return null;
   }
 
-  const repository = await LocalRepository.open(directory.handle).catch(() => null);
+  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
   const repositoryFile = fileRecord.relativePath && repository
     ? await repository.readPath(fileRecord.relativePath)
     : null;
@@ -321,13 +322,14 @@ export async function saveAudioFileToLocalDirectory(input: {
     playbackAsset?: PlaybackAssetManifest;
   };
 }) {
-  const directory = await getWritableLocalAudioDirectory();
-  if (!directory) {
-    throw new Error("请先选择本地音频文件夹。 ");
-  }
+  return enqueueLocalRepositoryWrite(async () => {
+    const directory = await getWritableLocalAudioDirectory();
+    if (!directory) {
+      throw new Error("请先选择本地音频文件夹。 ");
+    }
 
   const fileName = buildLocalAudioFileName(input);
-  const repository = await LocalRepository.open(directory.handle);
+    const repository = await LocalRepository.open(directory.handle, { recover: false });
   const existingTrack = await repository.readTrack(input.fileHash);
   await deleteLocalAudioCacheFile(input.fileHash);
   const relativePath = await repository.writeManagedSource({
@@ -425,7 +427,8 @@ export async function saveAudioFileToLocalDirectory(input: {
   if (input.trackId) {
     await deleteOriginalAssetForTrack(input.trackId);
   }
-  return { fileName };
+    return { fileName };
+  });
 }
 
 export async function saveCachedAudioFileToLocalDirectory(input: {
@@ -437,13 +440,14 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   originalAsset?: OriginalAssetManifest;
   playbackAsset?: PlaybackAssetManifest;
 }) {
-  const directory = await getWritableLocalAudioDirectory();
-  if (!directory) {
-    return null;
-  }
+  return enqueueLocalRepositoryWrite(async () => {
+    const directory = await getWritableLocalAudioDirectory();
+    if (!directory) {
+      return null;
+    }
 
   const fileName = buildLocalAudioFileName(input);
-  const repository = await LocalRepository.open(directory.handle);
+    const repository = await LocalRepository.open(directory.handle, { recover: false });
   const relativePath = await repository.writeCachedSource({
     file: input.file,
     fileHash: input.fileHash,
@@ -461,7 +465,8 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
     playbackAsset: input.playbackAsset
   });
   await deleteCachedLibraryTrackFile(input.fileHash);
-  return { fileName };
+    return { fileName };
+  });
 }
 
 async function persistCachedTrackRecord(
@@ -606,7 +611,7 @@ export async function deleteLocalAudioCacheFile(fileHash: string) {
     return false;
   }
 
-  const repository = await LocalRepository.open(directory.handle).catch(() => null);
+  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
   if (repository && fileRecord.relativePath) {
     await repository.removePath(fileRecord.relativePath);
   }
@@ -746,7 +751,7 @@ async function filterReadableLocalFiles(
   }>,
   allowExternalRootFiles: boolean
 ) {
-  const repository = await LocalRepository.open(root).catch(() => null);
+  const repository = await LocalRepository.open(root, { recover: false }).catch(() => null);
   const available = await Promise.all(records.map(async (record) => {
     if (record.relativePath && repository && await repository.readPath(record.relativePath)) {
       return record.fileHash;

@@ -1,10 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createOptimisticSeekPlayback,
   runBestEffortRoomLeave,
   shouldRetryPlaybackMutationAfterConflict,
   shouldResetPlayerAfterQueueRemoval,
   shouldResetPlayerAfterTrackRemoval
 } from "./use-room-actions";
+
+describe("optimistic playback seek", () => {
+  it("moves the local playing timeline to the target before the server responds", () => {
+    const nextPlayback = createOptimisticSeekPlayback({
+      playback: {
+        status: "playing",
+        currentTrackId: "track_1",
+        currentQueueItemId: "queue_1",
+        playbackAssetId: "asset_1",
+        startAt: "2026-07-22T00:00:00.000Z",
+        sourceSessionId: "session_1",
+        sourcePeerId: "peer_1",
+        sourceTrackId: "track_1",
+        positionMs: 10_000,
+        startedAt: "2026-07-22T00:00:00.000Z",
+        queueVersion: 1,
+        playbackRevision: 4,
+        mediaEpoch: 1,
+        playbackMode: "sequence"
+      },
+      positionMs: 45_000,
+      durationMs: 60_000,
+      nowMs: Date.parse("2026-07-22T00:00:01.000Z")
+    });
+
+    expect(nextPlayback).toMatchObject({
+      positionMs: 45_000,
+      startAt: "2026-07-22T00:00:01.000Z",
+      startedAt: "2026-07-22T00:00:01.000Z",
+      playbackRevision: 5
+    });
+  });
+});
 
 describe("player cleanup after removal", () => {
   it("resets only when the removed queue item is currently playing", () => {

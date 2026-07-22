@@ -164,7 +164,7 @@ export class LocalRepository {
     public readonly manifest: LocalRepositoryManifest
   ) {}
 
-  static async open(root: FileSystemDirectoryHandle) {
+  static async open(root: FileSystemDirectoryHandle, options?: { recover?: boolean }) {
     const dataDirectory = await root.getDirectoryHandle(localRepositoryDirectoryName, {
       create: true
     });
@@ -186,9 +186,11 @@ export class LocalRepository {
       await writeJsonFile(dataDirectory, repositoryManifestFileName, manifest);
     }
     const repository = new LocalRepository(root, dataDirectory, manifest);
-    await repository.cleanupTemporaryWrites();
-    await repository.cleanupTrash();
-    await repository.cleanupObsoletePlaybackAssets();
+    if (options?.recover !== false) {
+      await repository.cleanupTemporaryWrites();
+      await repository.cleanupTrash();
+      await repository.cleanupObsoletePlaybackAssets();
+    }
     return repository;
   }
 

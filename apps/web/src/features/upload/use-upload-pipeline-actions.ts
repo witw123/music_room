@@ -131,19 +131,19 @@ export function useUploadPipelineActions({
             originalAsset: input.track.originalAsset,
             playbackAsset: input.track.playbackAsset
           }
-        }).catch(() => undefined);
+        }).then(() => refreshCacheLibrary()).catch(() => undefined);
       }
       if (roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)
           ? roomSnapshot.tracks
           : [...roomSnapshot.tracks, input.track as TrackMeta];
-        await persistRoomSnapshotToLocalRepository({
+        void persistRoomSnapshotToLocalRepository({
           ...roomSnapshot,
           tracks
-        });
+        }).catch(() => undefined);
       }
     },
-    [roomSnapshot]
+    [refreshCacheLibrary, roomSnapshot]
   );
 
   const handleFilesSelected = useCallback(
@@ -256,7 +256,7 @@ export function useUploadPipelineActions({
         syncRoomSnapshot,
         setStatusMessage
       });
-      await refreshCacheLibrary();
+      void refreshCacheLibrary();
     },
     [
       activeSession,
@@ -487,7 +487,7 @@ async function importProviderTrack(input: {
     }));
     retainedObjectUrl = true;
     await syncRoomSnapshot(roomSnapshot.room.id);
-    await refreshCacheLibrary().catch(() => undefined);
+    void refreshCacheLibrary().catch(() => undefined);
     setStatusMessage(`《${candidate.title}》已导入曲库。`);
   } catch (error) {
     if (registeredTrackId && shouldRollbackRegisteredTrack) {

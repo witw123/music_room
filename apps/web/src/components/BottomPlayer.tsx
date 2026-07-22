@@ -176,12 +176,11 @@ function BottomPlayerBase({
   }, []);
 
   useEffect(() => {
-    progressAnchorRef.current = {
-      progressMs,
-      receivedAtMs: Date.now()
-    };
-
-    if (seekDraft !== null || !isPlaying) {
+    if (seekDraft === null) {
+      progressAnchorRef.current = {
+        progressMs,
+        receivedAtMs: Date.now()
+      };
       setRenderedProgressMs(clampProgressMs(progressMs, currentTrackDuration));
     }
   }, [currentTrackDuration, isPlaying, progressMs, seekDraft]);

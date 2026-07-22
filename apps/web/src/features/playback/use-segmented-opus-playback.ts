@@ -186,13 +186,21 @@ export function useSegmentedOpusPlayback(input: {
           serverNowMs,
           volume: runtime.volume,
           broadcast: !currentLocalFallback,
-          getUnit: (unitIndex) => getAssetUnit(currentPlaybackAsset.assetId, unitIndex),
+          getUnit: (unitIndex, signal) => getPlayableAssetUnit(
+            currentPlaybackAsset.assetId,
+            unitIndex,
+            signal
+          ),
           gaplessNext:
             !currentLocalFallback && nextTransition && nextTrack?.playbackAsset
               ? {
                   transition: nextTransition,
                   manifest: nextTrack.playbackAsset,
-                  getUnit: (unitIndex) => getAssetUnit(nextTrack.playbackAsset!.assetId, unitIndex)
+                  getUnit: (unitIndex, signal) => getPlayableAssetUnit(
+                    nextTrack.playbackAsset!.assetId,
+                    unitIndex,
+                    signal
+                  )
                 }
               : null
         });
@@ -207,7 +215,7 @@ export function useSegmentedOpusPlayback(input: {
           ownedUnitCount: result.bufferedUnits,
           totalUnitCount: currentPlaybackAsset.unitCount,
           audioContextState,
-          lastError: null,
+          lastError: sourceHealth?.lastDecodeError ?? null,
           sourceHealth: sourceHealth?.state,
           sourceEnergy: sourceHealth?.energy,
           decodedPeak: sourceHealth?.decodedPeak,
@@ -353,6 +361,23 @@ function formatSegmentedPlaybackError(error: unknown) {
     return error.message;
   }
   return "分段音频读取或解码失败";
+}
+
+async function getPlayableAssetUnit(
+  assetId: string,
+  unitIndex: number,
+  signal?: AbortSignal
+) {
+  const unit = await getAssetUnit(assetId, unitIndex);
+  if (!unit || unit.payloadBytes <= 0 || unit.payload.byteLength !== unit.payloadBytes) {
+    return null;
+  }
+  if (signal?.aborted) {
+    const error = new Error("Audio asset read aborted.");
+    error.name = "AbortError";
+    throw error;
+  }
+  return unit;
 }
 
 export function buildSegmentedPlaybackFailureSnapshot(input: {

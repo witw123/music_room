@@ -733,7 +733,7 @@ export async function getAssetUnitIndexes(assetId: string) {
 async function getLocalRepositoryForAssetRead() {
   const directory = await musicRoomDatabase.localAudioDirectory.get("default");
   if (!directory) return null;
-  return LocalRepository.open(directory.handle).catch(() => null);
+  return LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
 }
 
 function createLocalAssetManifestRecord(
@@ -806,7 +806,7 @@ export async function upsertTranscodeJob(
 
   const directory = await musicRoomDatabase.localAudioDirectory.get("default");
   if (directory) {
-    await LocalRepository.open(directory.handle)
+    await LocalRepository.open(directory.handle, { recover: false })
       .then((repository) => repository.writeTranscodeJob(record))
       .catch(() => undefined);
   }
@@ -1064,7 +1064,7 @@ export async function upsertLocalPlaylistTrack(
   });
   const directory = await musicRoomDatabase.localAudioDirectory.get("default");
   if (directory) {
-    await LocalRepository.open(directory.handle)
+    await LocalRepository.open(directory.handle, { recover: false })
       .then((repository) => repository.writeProviderTrack(input.id, {
         ...input,
         createdAt: input.createdAt ?? existing?.createdAt ?? now,
@@ -1274,7 +1274,7 @@ export async function deleteLocalTrackDataForTracks(
   if (options?.roomId) {
     const directory = await musicRoomDatabase.localAudioDirectory.get("default");
     const repository = directory
-      ? await LocalRepository.open(directory.handle).catch(() => null)
+      ? await LocalRepository.open(directory.handle, { recover: false }).catch(() => null)
       : null;
     if (repository) {
       await repository.removeRoomTrackReferences(options.roomId, uniqueTrackIds);
@@ -1289,7 +1289,7 @@ async function cleanupDeletedLocalRepositoryData(
   if (fileHashes.size === 0 && manifests.size === 0) return;
   const directory = await musicRoomDatabase.localAudioDirectory.get("default");
   const repository = directory
-    ? await LocalRepository.open(directory.handle).catch(() => null)
+    ? await LocalRepository.open(directory.handle, { recover: false }).catch(() => null)
     : null;
   if (!repository) return;
 

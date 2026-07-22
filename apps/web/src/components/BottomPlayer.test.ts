@@ -45,6 +45,7 @@ describe("BottomPlayer source", () => {
 
     expect(source).toContain("seekDraft ?? renderedProgressMs");
     expect(source).not.toContain("seekDraft ?? snapshotProgressMs ?? progressMs");
+    expect(source).toContain("if (seekDraft === null)");
   });
 
   it("keeps the progress bar pinned at the top edge of the player", () => {

@@ -14,6 +14,7 @@ import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
 
 type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
@@ -96,6 +97,29 @@ export function shouldRetryPlaybackMutationAfterConflict(
     expectedTarget.currentTrackId === latestPlayback.currentTrackId &&
     expectedTarget.currentQueueItemId === latestPlayback.currentQueueItemId
   );
+}
+
+export function createOptimisticSeekPlayback(input: {
+  playback: PlaybackSnapshot;
+  positionMs: number;
+  durationMs?: number | null;
+  nowMs?: number;
+}) {
+  const durationMs = input.durationMs ?? 0;
+  const positionMs = durationMs > 0
+    ? Math.min(Math.max(0, input.positionMs), durationMs)
+    : Math.max(0, input.positionMs);
+  const timelineStart = input.playback.status === "playing"
+    ? new Date(input.nowMs ?? getRoomPlaybackClockNowMs()).toISOString()
+    : null;
+
+  return {
+    ...input.playback,
+    positionMs,
+    startAt: timelineStart,
+    startedAt: timelineStart,
+    playbackRevision: input.playback.playbackRevision + 1
+  } satisfies PlaybackSnapshot;
 }
 
 export function useRoomActions({
@@ -725,25 +749,49 @@ export function useRoomActions({
         return null;
       }
 
+      const currentPlayback = roomSnapshot.room.playback;
+      if (!currentPlayback.currentTrackId) {
+        return null;
+      }
+      const currentTrack = roomSnapshot.tracks.find(
+        (track) => track.id === currentPlayback.currentTrackId
+      );
+      const optimisticPlayback = createOptimisticSeekPlayback({
+        playback: currentPlayback,
+        positionMs,
+        durationMs: currentTrack?.durationMs
+      });
+      dispatchRoomStateEvent({
+        type: "server-playback-patch",
+        roomId: roomSnapshot.room.id,
+        playback: optimisticPlayback
+      });
+
       return runPlaybackMutation(
         roomSnapshot.room.id,
-        roomSnapshot.room.playback.playbackRevision,
+        currentPlayback.playbackRevision,
         (expectedVersion) => {
           const playbackAssetId = roomSnapshot.tracks.find(
-            (track) => track.id === roomSnapshot.room.playback.currentTrackId
+            (track) => track.id === currentPlayback.currentTrackId
           )?.playbackAsset?.assetId;
           return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "seek",
-            positionMs,
+            positionMs: optimisticPlayback.positionMs,
             ...(playbackAssetId ? { playbackAssetId } : {}),
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
           });
         },
-        roomSnapshot.room.playback
+        currentPlayback
       );
     },
-    [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]
+    [
+      roomSnapshot,
+      activeSession,
+      dispatchRoomStateEvent,
+      getCurrentPeerId,
+      runPlaybackMutation
+    ]
   );
 
   const handleEnded = useCallback(async () => {

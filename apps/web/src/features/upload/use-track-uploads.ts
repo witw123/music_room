@@ -248,9 +248,11 @@ export function useTrackUploads(options: {
       delete next[trackId];
       return next;
     });
-    await deleteLocalTrackDataForTracks([trackId]);
-    await cleanupLocalAudioCacheFiles();
-    await refreshCacheLibrary();
+    void (async () => {
+      await deleteLocalTrackDataForTracks([trackId]);
+      await cleanupLocalAudioCacheFiles();
+      await refreshCacheLibrary();
+    })().catch(() => undefined);
   }, [refreshCacheLibrary]);
 
   const deleteRoomTrackArtifacts = useCallback(async (
@@ -266,12 +268,14 @@ export function useTrackUploads(options: {
       }
       return next;
     });
-    await deleteLocalTrackDataForTracks([...removed], roomId ? { roomId } : undefined);
-    if (roomId && deleteRoomSnapshot) {
-      await deleteRoomSnapshotFromLocalRepository(roomId).catch(() => undefined);
-    }
-    await cleanupLocalAudioCacheFiles();
-    await refreshCacheLibrary();
+    void (async () => {
+      await deleteLocalTrackDataForTracks([...removed], roomId ? { roomId } : undefined);
+      if (roomId && deleteRoomSnapshot) {
+        await deleteRoomSnapshotFromLocalRepository(roomId).catch(() => undefined);
+      }
+      await cleanupLocalAudioCacheFiles();
+      await refreshCacheLibrary();
+    })().catch(() => undefined);
   }, [refreshCacheLibrary]);
 
   const chooseLocalFolder = useCallback(async () => {

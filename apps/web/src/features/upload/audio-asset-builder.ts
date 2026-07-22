@@ -104,19 +104,28 @@ export async function prepareAudioAssets(input: {
 
   const decodePlan = await inspectDecodePlan(input.file, input.onProgress);
   const sourcePromise = prepareOriginalAsset(input);
-  const playbackDraftId = decodePlan.useStreaming ? createPlaybackDraftId() : null;
+  let playbackDraftId = decodePlan.useStreaming ? createPlaybackDraftId() : null;
+  const prepareStreamingFallback = () => {
+    playbackDraftId ??= createPlaybackDraftId();
+    return prepareStreamingPlaybackAsset({
+      ...input,
+      fileHash: sourcePromise.then((source) => source.fileHash),
+      draftId: playbackDraftId,
+      expectedDurationMs: decodePlan.durationSeconds
+        ? Math.max(1, Math.round(decodePlan.durationSeconds * 1000))
+        : undefined
+    });
+  };
   const playbackPromise = decodePlan.useStreaming
-    ? prepareStreamingPlaybackAsset({
-        ...input,
-        fileHash: sourcePromise.then((source) => source.fileHash),
-        draftId: playbackDraftId!,
-        expectedDurationMs: decodePlan.durationSeconds
-          ? Math.max(1, Math.round(decodePlan.durationSeconds * 1000))
-          : undefined
-      })
+    ? prepareStreamingFallback()
     : preparePlaybackAsset({
         ...input,
         fileHash: sourcePromise.then((source) => source.fileHash)
+      }).catch((error) => {
+        if (input.signal?.aborted) {
+          throw error;
+        }
+        return prepareStreamingFallback();
       });
   void playbackPromise.catch(() => {
     if (playbackDraftId) {
@@ -327,11 +336,109 @@ async function prepareStreamingPlaybackAsset(input: {
   let resampler: StreamingSincResampler | null = null;
   let pcm: PcmAccumulator | null = null;
   let nextUnitIndex = 0;
-  const leafHashes: string[] = [];
+  const leafHashes: Array<string | undefined> = [];
   const expectedUnitCount = input.expectedDurationMs
     ? Math.max(1, Math.ceil(input.expectedDurationMs / segmentDurationMs))
     : 0;
-  const encoder = new OpusSegmentEncoder();
+  const encoders = Array.from(
+    { length: resolveEncodingConcurrency(4) },
+    () => new OpusSegmentEncoder()
+  );
+  const availableEncoderIndexes = encoders.map((_, index) => index);
+  const encoderWaiters: Array<(index: number) => void> = [];
+  const pendingUnitTasks = new Set<Promise<void>>();
+  const maxInFlightUnits = encoders.length * 2;
+  let completedUnits = 0;
+  let encodingError: unknown = null;
+
+  const acquireEncoder = async () => {
+    const available = availableEncoderIndexes.pop();
+    if (available !== undefined) return available;
+    return await new Promise<number>((resolve) => encoderWaiters.push(resolve));
+  };
+
+  const releaseEncoder = (index: number) => {
+    const waiter = encoderWaiters.shift();
+    if (waiter) {
+      waiter(index);
+    } else {
+      availableEncoderIndexes.push(index);
+    }
+  };
+
+  const waitForTaskCapacity = async () => {
+    while (pendingUnitTasks.size >= maxInFlightUnits) {
+      await Promise.race([...pendingUnitTasks].map((task) => task.catch(() => undefined)));
+      if (encodingError) throw encodingError;
+    }
+  };
+
+  const scheduleUnit = async (inputUnit: {
+    unitIndex: number;
+    channels: Float32Array[];
+    trimStartSamples: number;
+    trimEndSamples: number;
+    durationMs: number;
+  }) => {
+    if (encodingError) throw encodingError;
+    await waitForTaskCapacity();
+    const encoderIndex = await acquireEncoder();
+    if (encodingError) {
+      releaseEncoder(encoderIndex);
+      throw encodingError;
+    }
+
+    const task = (async () => {
+      let payload: ArrayBuffer;
+      try {
+        payload = await encoders[encoderIndex]!.encode({
+          sampleRate: opusSampleRate,
+          channels: inputUnit.channels,
+          bitrateKbps: channelCount === 1 ? 96 : 192
+        });
+      } catch (error) {
+        encodingError ??= error;
+        throw error;
+      } finally {
+        // Hashing and IndexedDB persistence do not occupy the encoder worker.
+        releaseEncoder(encoderIndex);
+      }
+
+      try {
+        const contentHash = await hashAssetUnit(inputUnit.unitIndex, payload);
+        await putPlaybackAssetDraftUnit({
+          draftId: input.draftId,
+          unitIndex: inputUnit.unitIndex,
+          descriptor: {
+            kind: "playback",
+            unitIndex: inputUnit.unitIndex,
+            payloadBytes: payload.byteLength,
+            startMs: inputUnit.unitIndex * segmentDurationMs,
+            durationMs: inputUnit.durationMs,
+            trimStartSamples: inputUnit.trimStartSamples,
+            trimEndSamples: inputUnit.trimEndSamples
+          },
+          contentHash,
+          payload
+        });
+        leafHashes[inputUnit.unitIndex] = contentHash;
+        completedUnits += 1;
+        input.onProgress?.({
+          stage: "encoding",
+          completed: completedUnits,
+          total: Math.max(expectedUnitCount, nextUnitIndex)
+        });
+      } catch (error) {
+        encodingError ??= error;
+        throw error;
+      }
+    })();
+    pendingUnitTasks.add(task);
+    task.then(
+      () => pendingUnitTasks.delete(task),
+      () => pendingUnitTasks.delete(task)
+    );
+  };
 
   const emitReadyUnits = async (final: boolean) => {
     if (!pcm) return;
@@ -365,34 +472,14 @@ async function prepareStreamingPlaybackAsset(input: {
         trimStartSamples: nextUnitIndex === 0 ? 0 : contentStart - sampleStart,
         contentSamples: contentEnd - contentStart
       }, opusSampleRate);
-      const payload = await encoder.encode({
-        sampleRate: opusSampleRate,
-        channels: encodedSegment.channels,
-        bitrateKbps: channelCount === 1 ? 96 : 192
-      });
-      const contentHash = await hashAssetUnit(nextUnitIndex, payload);
-      await putPlaybackAssetDraftUnit({
-        draftId: input.draftId,
+      await scheduleUnit({
         unitIndex: nextUnitIndex,
-        descriptor: {
-          kind: "playback",
-          unitIndex: nextUnitIndex,
-          payloadBytes: payload.byteLength,
-          startMs: nextUnitIndex * segmentDurationMs,
-          durationMs: Math.max(1, Math.round((contentEnd - contentStart) / opusSampleRate * 1000)),
-          trimStartSamples: encodedSegment.trimStartSamples,
-          trimEndSamples: encodedSegment.trimEndSamples
-        },
-        contentHash,
-        payload
+        channels: encodedSegment.channels,
+        trimStartSamples: encodedSegment.trimStartSamples,
+        trimEndSamples: encodedSegment.trimEndSamples,
+        durationMs: Math.max(1, Math.round((contentEnd - contentStart) / opusSampleRate * 1000))
       });
-      leafHashes.push(contentHash);
       nextUnitIndex += 1;
-      input.onProgress?.({
-        stage: "encoding",
-        completed: nextUnitIndex,
-        total: Math.max(expectedUnitCount, nextUnitIndex)
-      });
       pcm.trimBefore(Math.max(0, contentEnd - prerollSamples));
     }
   };
@@ -429,16 +516,26 @@ async function prepareStreamingPlaybackAsset(input: {
       preparedPcm.append(finishedResampler.finish());
     }
     await emitReadyUnits(true);
-    if (leafHashes.length === 0 || leafHashes.length !== nextUnitIndex) {
+    await Promise.allSettled([...pendingUnitTasks]);
+    if (encodingError) throw encodingError;
+    const completeLeafHashes: string[] = [];
+    for (let unitIndex = 0; unitIndex < nextUnitIndex; unitIndex += 1) {
+      const contentHash = leafHashes[unitIndex];
+      if (!contentHash) {
+        throw new Error("流式音频没有生成完整的播放分片。");
+      }
+      completeLeafHashes.push(contentHash);
+    }
+    if (completeLeafHashes.length === 0 || completeLeafHashes.length !== nextUnitIndex) {
       throw new Error("流式音频没有生成完整的播放分片。");
     }
 
     const durationMs = Math.max(1, Math.ceil((preparedPcm.endSample / opusSampleRate) * 1000));
     const expectedUnitCount = Math.max(1, Math.ceil(durationMs / segmentDurationMs));
-    if (leafHashes.length !== expectedUnitCount) {
+    if (completeLeafHashes.length !== expectedUnitCount) {
       throw new Error("流式音频时间轴与播放分片数量不一致。");
     }
-    const tree = await buildMerkleTree(leafHashes);
+    const tree = await buildMerkleTree(completeLeafHashes);
     const manifestWithoutId = {
       kind: "playback" as const,
       sourceFileHash: await input.fileHash,
@@ -451,7 +548,7 @@ async function prepareStreamingPlaybackAsset(input: {
       durationMs,
       segmentDurationMs: segmentDurationMs as 2000,
       seekPrerollMs: seekPrerollMs as 80,
-      unitCount: leafHashes.length,
+      unitCount: completeLeafHashes.length,
       merkleRoot: tree.root,
       encoder: { name: "@audio/opus-encode" as const, version: playbackEncoderVersion }
     };
@@ -461,12 +558,13 @@ async function prepareStreamingPlaybackAsset(input: {
     });
     return {
       playbackAsset,
-      leafHashes,
+      leafHashes: completeLeafHashes,
       proofs: tree.proofs,
       draftId: input.draftId
     };
   } finally {
-    encoder.dispose();
+    await Promise.allSettled([...pendingUnitTasks]);
+    encoders.forEach((encoder) => encoder.dispose());
   }
 }
 

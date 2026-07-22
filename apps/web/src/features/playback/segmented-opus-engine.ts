@@ -692,6 +692,10 @@ export class SegmentedOpusEngine {
         "Audio asset decode timed out.",
         signal
       );
+      validateDecodedAudioBuffer(decoded, unit);
+      if (unit.payload.byteLength > 128 && !hasDecodedSignal(decoded)) {
+        throw new Error("Audio asset decoder returned silent PCM.");
+      }
     } catch (error) {
       if (isAbortError(error) || signal?.aborted) {
         throw error;
@@ -711,6 +715,7 @@ export class SegmentedOpusEngine {
       result.channelData.forEach((channel, index) =>
         decoded.copyToChannel(Float32Array.from(channel), index)
       );
+      validateDecodedAudioBuffer(decoded, unit);
     }
     const sampleScale = decoded.sampleRate / 48_000;
     const trimStart = Math.min(
@@ -1020,6 +1025,56 @@ function formatDecodeError(error: unknown) {
   return error instanceof Error && error.message.trim()
     ? error.message
     : String(error);
+}
+
+function validateDecodedAudioBuffer(
+  decoded: AudioBuffer,
+  unit: AudioAssetUnitRecord
+) {
+  if (
+    decoded.numberOfChannels < 1 ||
+    decoded.numberOfChannels > 2 ||
+    decoded.length <= 0 ||
+    !Number.isFinite(decoded.sampleRate) ||
+    decoded.sampleRate <= 0
+  ) {
+    throw new Error("Audio asset decoder returned an invalid AudioBuffer.");
+  }
+
+  const sampleScale = decoded.sampleRate / 48_000;
+  const trimStart = Math.min(
+    decoded.length,
+    Math.max(0, Math.round((unit.trimStartSamples ?? 0) * sampleScale))
+  );
+  const trimEnd = Math.min(
+    Math.max(0, decoded.length - trimStart),
+    Math.max(0, Math.round((unit.trimEndSamples ?? 0) * sampleScale))
+  );
+  if (decoded.length - trimStart - trimEnd <= 0) {
+    throw new Error("Audio asset decoder returned an empty playable range.");
+  }
+
+  for (let channelIndex = 0; channelIndex < decoded.numberOfChannels; channelIndex += 1) {
+    const channel = decoded.getChannelData(channelIndex);
+    for (let index = 0; index < channel.length; index += 1) {
+      if (!Number.isFinite(channel[index])) {
+        throw new Error("Audio asset decoder returned non-finite PCM samples.");
+      }
+    }
+  }
+}
+
+function hasDecodedSignal(decoded: AudioBuffer) {
+  const sampleStride = Math.max(1, Math.floor(decoded.length / 2_048));
+  for (let channelIndex = 0; channelIndex < decoded.numberOfChannels; channelIndex += 1) {
+    const channel = decoded.getChannelData(channelIndex);
+    for (let index = 0; index < channel.length; index += sampleStride) {
+      if (Math.abs(channel[index] ?? 0) > 1e-7) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function createAbortError() {
