@@ -15,7 +15,9 @@ import {
   applyAppTheme,
   appSettingsChangeEvent,
   getAppSettings,
-  updateAppSettings
+  resolveAppTheme,
+  updateAppSettings,
+  type ThemePreference
 } from "@/features/settings/settings-store";
 
 export type AppNavItemId = "home" | "search" | "playlists" | "favorites" | "profile" | "settings";
@@ -47,6 +49,7 @@ type IconName =
   | "profile"
   | "settings"
   | "logout"
+  | "sun"
   | "collapse"
   | "expand";
 
@@ -64,16 +67,22 @@ export function AppSidebar({
   const currentItem = activeItem ?? resolveActiveItem(pathname);
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(true);
+  const [themePreference, setThemePreference] = useState<ThemePreference>("dark");
   const desktopBottomOffsetClass = hasBottomPlayer
     ? "md:bottom-[11.5rem] lg:bottom-[5.25rem]"
     : "md:bottom-0";
 
   useEffect(() => {
     let themeMediaQuery: MediaQueryList | null = null;
-    const syncTheme = () => applyAppTheme(getAppSettings().theme);
+    const syncTheme = () => {
+      const preference = getAppSettings().theme;
+      setThemePreference(preference);
+      applyAppTheme(preference);
+    };
     const syncSidebarState = () => {
       const settings = getAppSettings();
       setCollapsed(settings.layout.sidebarCollapsed);
+      setThemePreference(settings.theme);
       document.documentElement.dataset.reduceMotion = String(settings.layout.reduceMotion);
       applyAppTheme(settings.theme);
       themeMediaQuery?.removeEventListener("change", syncTheme);
@@ -114,11 +123,17 @@ export function AppSidebar({
     router.push(`/room/${awayRoomId}` as Route);
   }
 
+  function handleThemeToggle() {
+    const resolvedTheme = resolveAppTheme(themePreference);
+    updateAppSettings({ theme: resolvedTheme === "light" ? "dark" : "light" });
+  }
+
   const showAwayRoomStatus = pathname?.startsWith("/app/") ?? false;
+  const themeActionLabel = resolveAppTheme(themePreference) === "light" ? "深色模式" : "浅色模式";
 
   return (
     <aside
-      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:transition-[width] md:duration-200 ${collapsed ? "md:w-16" : "md:w-48"} ${desktopBottomOffsetClass}`}
+      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r ${collapsed ? "md:w-16" : "md:w-48"} ${desktopBottomOffsetClass}`}
       aria-label="主导航"
     >
       <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} ${collapsed ? "md:px-2 md:py-3" : "md:px-4 md:py-5"}`}>
@@ -151,18 +166,8 @@ export function AppSidebar({
         ) : null}
       </div>
 
-      <div className={`flex items-center md:flex-col md:items-stretch ${collapsed ? "md:gap-3 md:p-2" : "md:gap-5 md:p-4"} ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
-        <nav className="flex min-w-0 flex-1 items-center gap-1 md:flex-col md:items-stretch" aria-label="工作区">
-          <button
-            aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
-            aria-expanded={!collapsed}
-            className={`group hidden min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium text-white/[0.48] transition-[background-color,color,box-shadow] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${collapsed ? "md:justify-center md:px-2" : "md:justify-start"}`}
-            onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
-            title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
-            type="button"
-          >
-            <NavIcon name={collapsed ? "expand" : "collapse"} size={18} />
-          </button>
+      <div className={`flex min-h-0 flex-1 items-center md:flex-col md:items-stretch ${collapsed ? "md:gap-3 md:p-2" : "md:gap-5 md:p-4"} ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
+        <nav className="flex min-w-0 flex-1 items-center gap-1 md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto" aria-label="工作区">
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
             const keepsHomeInRoom = keepHomeInRoom && item.id === "home";
@@ -222,6 +227,30 @@ export function AppSidebar({
             <UserSummary activeSession={activeSession} onLogout={onLogout} collapsed={collapsed} />
           </div>
         ) : null}
+
+        <div className={`app-sidebar__footer hidden border-t md:flex ${collapsed ? "md:items-center md:gap-3 md:px-0 md:pb-1 md:pt-4" : "md:gap-1 md:px-0 md:pb-1 md:pt-3"}`}>
+          <button
+            aria-label={`切换到${themeActionLabel}`}
+            className={`app-sidebar__footer-control app-sidebar__theme group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${collapsed ? "h-10 w-10 shrink-0 rounded-lg px-0" : "w-full rounded-xl px-3 py-3 text-sm"}`}
+            onClick={handleThemeToggle}
+            title={themeActionLabel}
+            type="button"
+          >
+            <NavIcon name="sun" size={19} />
+            <span className={collapsed ? "md:hidden" : "truncate"}>{themeActionLabel}</span>
+          </button>
+          <button
+            aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
+            aria-expanded={!collapsed}
+            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${collapsed ? "h-10 w-10 shrink-0 rounded-lg px-0" : "w-full rounded-xl px-3 py-3 text-sm"} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
+            onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
+            title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
+            type="button"
+          >
+            <NavIcon name={collapsed ? "expand" : "collapse"} size={20} />
+            <span className={collapsed ? "md:hidden" : "truncate"}>收起</span>
+          </button>
+        </div>
       </div>
 
     </aside>
@@ -373,8 +402,8 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   if (name === "collapse") {
     return (
       <svg {...commonProps}>
-        <path d="M9 4v16" />
-        <path d="m14 8-4 4 4 4" />
+        <path d="m13 6-6 6 6 6" />
+        <path d="m19 6-6 6 6 6" />
       </svg>
     );
   }
@@ -382,8 +411,17 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   if (name === "expand") {
     return (
       <svg {...commonProps}>
-        <path d="M15 4v16" />
-        <path d="m10 8 4 4-4 4" />
+        <path d="m11 6 6 6-6 6" />
+        <path d="m5 6 6 6-6 6" />
+      </svg>
+    );
+  }
+
+  if (name === "sun") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="3.5" />
+        <path d="M12 2.5v2M12 19.5v2M4.5 4.5l1.4 1.4M18.1 18.1l1.4 1.4M2.5 12h2M19.5 12h2M4.5 19.5l1.4-1.4M18.1 5.9l1.4-1.4" />
       </svg>
     );
   }

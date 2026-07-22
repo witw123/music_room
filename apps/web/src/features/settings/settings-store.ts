@@ -150,6 +150,7 @@ export function applyAppTheme(preference: ThemePreference): ResolvedTheme {
   if (typeof document !== "undefined") {
     document.documentElement.dataset.theme = resolved;
     document.documentElement.style.colorScheme = resolved;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "light" ? "#f5f7fb" : "#09090b");
   }
   return resolved;
 }

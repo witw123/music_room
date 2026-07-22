@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     --background: #09090b;
     --background-secondary: #121215;
     --foreground: #fafafa;
@@ -12,9 +13,22 @@
     --surface: rgba(255, 255, 255, 0.03);
     --surface-hover: rgba(255, 255, 255, 0.08);
     --surface-border: rgba(255, 255, 255, 0.1);
+
+    --sidebar-background: rgba(7, 7, 7, 0.94);
+    --sidebar-solid-background: #070707;
+    --sidebar-border: rgba(255, 255, 255, 0.09);
+    --sidebar-divider: rgba(255, 255, 255, 0.07);
+    --sidebar-foreground: rgba(255, 255, 255, 0.92);
+    --sidebar-secondary: rgba(255, 255, 255, 0.5);
+    --sidebar-tertiary: rgba(255, 255, 255, 0.36);
+    --sidebar-hover: rgba(255, 255, 255, 0.06);
+    --sidebar-active: rgba(0, 112, 243, 0.15);
+    --sidebar-active-foreground: #ffffff;
+    --sidebar-shadow: 18px 0 42px rgba(0, 0, 0, 0.22);
   }
 
   html[data-theme="light"] {
+    color-scheme: light;
     --background: #f5f7fb;
     --background-secondary: #ffffff;
     --foreground: #172033;
@@ -22,6 +36,18 @@
     --surface: rgba(15, 23, 42, 0.045);
     --surface-hover: rgba(15, 23, 42, 0.08);
     --surface-border: rgba(15, 23, 42, 0.14);
+
+    --sidebar-background: rgba(255, 255, 255, 0.78);
+    --sidebar-solid-background: #ffffff;
+    --sidebar-border: rgba(15, 23, 42, 0.11);
+    --sidebar-divider: rgba(15, 23, 42, 0.09);
+    --sidebar-foreground: #172033;
+    --sidebar-secondary: #5f6d82;
+    --sidebar-tertiary: #8a95a8;
+    --sidebar-hover: rgba(15, 23, 42, 0.055);
+    --sidebar-active: rgba(0, 112, 243, 0.1);
+    --sidebar-active-foreground: #005fca;
+    --sidebar-shadow: 16px 0 36px rgba(15, 23, 42, 0.08);
   }
 
   html[data-theme="light"] body {
@@ -49,6 +75,31 @@
     box-shadow: 0 0 0 1000px var(--background) inset;
     caret-color: var(--foreground);
     transition: background-color 9999s ease-out 0s;
+  }
+}
+
+@layer components {
+  .app-sidebar__footer {
+    border-color: var(--sidebar-divider);
+  }
+
+  .app-sidebar__footer-control {
+    color: var(--sidebar-secondary);
+  }
+
+  .app-sidebar__footer-control:hover {
+    background: var(--sidebar-hover);
+    color: var(--sidebar-foreground);
+  }
+
+  .app-sidebar__theme svg {
+    color: #f59e0b;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-sidebar__footer-control {
+      transition-duration: 0.01ms;
+    }
   }
 }
 
@@ -120,6 +171,163 @@
     background-color: var(--surface-hover) !important;
   }
 
+  /* Preserve a dimmed backdrop for dialogs while keeping black utility
+     classes usable for light structural surfaces and form controls. */
+  html[data-theme="light"] [class~="bg-black/20"],
+  html[data-theme="light"] [class~="bg-black/25"],
+  html[data-theme="light"] [class~="bg-black/40"],
+  html[data-theme="light"] [class~="bg-black/45"] {
+    background-color: color-mix(in srgb, var(--foreground) 5%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class~="bg-black/60"] {
+    background-color: rgba(15, 23, 42, 0.42) !important;
+  }
+
+  html[data-theme="light"] [class~="bg-black/70"],
+  html[data-theme="light"] [class~="bg-black/75"] {
+    background-color: rgba(15, 23, 42, 0.5) !important;
+  }
+
+  html[data-theme="light"] [class~="text-zinc-200"],
+  html[data-theme="light"] [class~="text-zinc-300"] {
+    color: var(--foreground) !important;
+  }
+
+  html[data-theme="light"] [class~="text-zinc-400"] {
+    color: var(--foreground-muted) !important;
+  }
+
+  /* White opacity utilities are tuned for a dark canvas in the source UI.
+     Re-map their common levels to the light foreground hierarchy. */
+  html[data-theme="light"] [class~="text-white/20"] {
+    color: color-mix(in srgb, var(--foreground) 40%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class~="text-white/30"],
+  html[data-theme="light"] [class~="text-white/35"] {
+    color: color-mix(in srgb, var(--foreground) 52%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class~="text-white/40"],
+  html[data-theme="light"] [class~="text-white/45"] {
+    color: color-mix(in srgb, var(--foreground) 60%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class~="text-white/50"],
+  html[data-theme="light"] [class~="text-white/55"] {
+    color: color-mix(in srgb, var(--foreground) 68%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class~="text-white/60"],
+  html[data-theme="light"] [class~="text-white/70"],
+  html[data-theme="light"] [class~="text-white/75"],
+  html[data-theme="light"] [class~="text-white/80"] {
+    color: color-mix(in srgb, var(--foreground) 82%, transparent) !important;
+  }
+
+  /* Status colors keep their meaning but gain enough contrast against white. */
+  html[data-theme="light"] [class~="text-amber-100"],
+  html[data-theme="light"] [class~="text-amber-100/65"],
+  html[data-theme="light"] [class~="text-amber-100/80"],
+  html[data-theme="light"] [class~="text-amber-200"],
+  html[data-theme="light"] [class~="text-amber-300"] {
+    color: #a16207 !important;
+  }
+
+  html[data-theme="light"] [class~="text-emerald-200"],
+  html[data-theme="light"] [class~="text-emerald-300"],
+  html[data-theme="light"] [class~="text-sky-200"],
+  html[data-theme="light"] [class~="text-sky-300"] {
+    color: #047857 !important;
+  }
+
+  html[data-theme="light"] [class~="text-red-200"],
+  html[data-theme="light"] [class~="text-red-300"],
+  html[data-theme="light"] [class~="text-red-400"] {
+    color: #b91c1c !important;
+  }
+
+  html[data-theme="light"] [class~="text-green-400"] {
+    color: #15803d !important;
+  }
+
+  /* Room management surfaces are intentionally unstyled in dark mode and
+     inherit the workspace there. Give them a quiet elevated layer in light. */
+  html[data-theme="light"] .material-surface {
+    background: color-mix(in srgb, var(--background-secondary) 92%, var(--background)) !important;
+    border-color: var(--surface-border) !important;
+    color: var(--foreground);
+  }
+
+  html[data-theme="light"] .material-surface-header {
+    background: color-mix(in srgb, var(--background-secondary) 88%, transparent) !important;
+    border-color: var(--surface-border) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  /* Artwork palettes are applied inline, so player chrome needs an explicit
+     light-mode surface override. Keep the artwork accents and record material. */
+  html[data-theme="light"] [data-testid="bottom-player"] {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    color: var(--foreground);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  }
+
+  html[data-theme="light"] [data-testid="mini-player-overlay"] {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    color: var(--foreground);
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+  }
+
+  html[data-theme="light"] [data-testid="mini-player-overlay"] [data-player-header] {
+    border-color: var(--surface-border) !important;
+  }
+
+  html[data-theme="light"] [data-testid="mini-player-overlay"] [data-player-header] [style] {
+    color: var(--foreground) !important;
+  }
+
+  /* The cover remains a dark, image-backed control surface in either theme. */
+  html[data-theme="light"] [data-testid="mini-player-cover"] [class~="text-white"],
+  html[data-theme="light"] [data-testid="mini-player-cover"] [class*="text-white/"] {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  html[data-theme="light"] [data-testid="bottom-player"] [data-testid="player-queue-button"] [class~="text-white"] {
+    color: #ffffff !important;
+  }
+
+  html[data-theme="light"] [role="dialog"][aria-label="沉浸式播放"] {
+    background-color: var(--background) !important;
+    color: var(--foreground);
+  }
+
+  /* Keep text on the deliberately dark record/player materials bright after
+     the general white-text remap changes light structural surfaces. */
+  html[data-theme="light"] [class*="from-[#020202]"] [class~="text-white"],
+  html[data-theme="light"] [class*="from-[#020202]"] [class*="text-white/"] {
+    color: rgba(255, 255, 255, 0.86) !important;
+  }
+
+  html[data-theme="light"] select,
+  html[data-theme="light"] option {
+    color-scheme: light;
+  }
+
+  html[data-theme="light"] .netease-results-scroll,
+  html[data-theme="light"] .qqmusic-results-scroll {
+    scrollbar-color: rgba(100, 116, 139, 0.48) rgba(15, 23, 42, 0.05);
+  }
+
+  html[data-theme="light"] .netease-results-scroll::-webkit-scrollbar-track,
+  html[data-theme="light"] .qqmusic-results-scroll::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.05);
+  }
+
   /* Keep the content gutter aligned with the compact desktop sidebar. */
   @media (min-width: 768px) {
     html .md\:pl-60 {
@@ -134,17 +342,6 @@
       padding-left: 4rem !important;
     }
 
-    /* Root workspaces should begin at the sidebar edge instead of re-centering
-       themselves and leaving a dead gutter after the sidebar changes width. */
-    html .md\:pl-60 > .mx-auto:not(.home-centered-workspace),
-    html .md\:pl-60 > section.mx-auto:not(.home-centered-workspace) {
-      margin-left: 0 !important;
-    }
-
-    html .md\:pl-60 > .mx-auto:not(.home-centered-workspace),
-    html .md\:pl-60 > section.mx-auto:not(.home-centered-workspace) {
-      padding-left: 0 !important;
-    }
   }
 
   html[data-reduce-motion="true"] *,

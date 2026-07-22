@@ -95,9 +95,23 @@ export function MiniPlayerOverlay({
     }
 
     copyStylesToPictureInPictureWindow(pipWindow);
+    const syncPipTheme = () => {
+      const theme = document.documentElement.dataset.theme ?? "dark";
+      pipWindow.document.documentElement.dataset.theme = theme;
+      pipWindow.document.documentElement.style.colorScheme = theme;
+    };
+    syncPipTheme();
+    const themeObserver = new MutationObserver(syncPipTheme);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"]
+    });
     const handlePageHide = () => onClose();
     pipWindow.addEventListener("pagehide", handlePageHide);
-    return () => pipWindow.removeEventListener("pagehide", handlePageHide);
+    return () => {
+      themeObserver.disconnect();
+      pipWindow.removeEventListener("pagehide", handlePageHide);
+    };
   }, [onClose, pipWindow]);
 
   useEffect(() => {
@@ -173,6 +187,7 @@ export function MiniPlayerOverlay({
     >
       {!pipWindow ? (
         <div
+          data-player-header="true"
           className="flex h-14 cursor-grab touch-none items-center gap-3 border-b border-white/10 px-4 active:cursor-grabbing sm:h-[76px] sm:px-6"
           style={{ borderColor: miniPlayerColors.border }}
           onPointerCancel={stopDragging}
