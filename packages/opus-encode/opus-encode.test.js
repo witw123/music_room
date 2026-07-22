@@ -51,3 +51,26 @@ test("reuses the codec for independent Ogg units", async () => {
     encoder.free();
   }
 });
+
+test("resamples both streaming and independent non-48kHz input", async () => {
+  const encoder = await createOpusEncoder({
+    sampleRate: 44_100,
+    channels: 1,
+    bitrate: 96,
+    application: "audio"
+  });
+
+  try {
+    const input = Float32Array.from({ length: 44_100 }, (_, index) => Math.sin(index / 19));
+    const streamed = new Uint8Array([
+      ...encoder.encode([input.subarray(0, 22_050)]),
+      ...encoder.encode([input.subarray(22_050)]),
+      ...encoder.flush()
+    ]);
+    const independent = encoder.encodeIndependent([input]);
+    assert.equal(new TextDecoder().decode(streamed.subarray(0, 4)), "OggS");
+    assert.equal(new TextDecoder().decode(independent.subarray(0, 4)), "OggS");
+  } finally {
+    encoder.free();
+  }
+});

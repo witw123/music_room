@@ -847,15 +847,34 @@ export async function putPlaybackAssetDraftUnit(input: {
   contentHash: string;
   payload: ArrayBuffer;
 }) {
-  await musicRoomDatabase.playbackAssetDraftUnits.put({
-    draftUnitId: `${input.draftId}:${input.unitIndex}`,
+  await putPlaybackAssetDraftUnits({
     draftId: input.draftId,
-    unitIndex: input.unitIndex,
-    descriptor: input.descriptor,
-    contentHash: input.contentHash,
-    payload: input.payload,
-    createdAt: new Date().toISOString()
+    units: [input]
   });
+}
+
+export async function putPlaybackAssetDraftUnits(input: {
+  draftId: string;
+  units: Array<{
+    unitIndex: number;
+    descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
+    contentHash: string;
+    payload: ArrayBuffer;
+  }>;
+}) {
+  if (input.units.length === 0) return;
+  const createdAt = new Date().toISOString();
+  await musicRoomDatabase.playbackAssetDraftUnits.bulkPut(
+    input.units.map((unit) => ({
+      draftUnitId: `${input.draftId}:${unit.unitIndex}`,
+      draftId: input.draftId,
+      unitIndex: unit.unitIndex,
+      descriptor: unit.descriptor,
+      contentHash: unit.contentHash,
+      payload: unit.payload,
+      createdAt
+    }))
+  );
 }
 
 export async function getPlaybackAssetDraftUnitBatch(

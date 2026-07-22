@@ -33,6 +33,15 @@ describe("audio asset preparation", () => {
     expect(playbackEncoderVersion).toBe("3.3.0");
   });
 
+  it("keeps streaming resampling in the encoder worker and batches draft writes", () => {
+    const source = readFileSync(new URL("./audio-asset-builder.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("sampleRate: inputUnit.sampleRate");
+    expect(source).toContain("pcm!.append(decoded.channels, false)");
+    expect(source).toContain("putPlaybackAssetDraftUnits");
+    expect(source).not.toContain("resampler = decoded.sampleRate");
+  });
+
   it("accepts only the supported room source formats", () => {
     expect(resolveSupportedUploadFormat({ name: "song.flac", type: "" })).toBe("flac");
     expect(resolveSupportedUploadFormat({ name: "song", type: "audio/wav" })).toBe("wav");

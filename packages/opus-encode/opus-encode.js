@@ -64,6 +64,11 @@ export default async function opus(opts) {
 	// buffered interleaved Int16 PCM at 48kHz
 	let pcmBuf = new Int16Array(0)
 	let headerSent = false
+	// The input segment shape is stable for almost every unit. Cache the
+	// Lanczos taps so long uploads do not recompute the same trigonometry for
+	// every sample in every segment.
+	let resamplePlans = new Map()
+	const maxResamplePlanEntries = 4
 
 	// header pages (BOS + tags)
 	let headerPages = [
@@ -94,19 +99,29 @@ export default async function opus(opts) {
 		const tail = flushIndependent()
 		return concat([head, tail])
 
-		function encodeIndependentChunk(inputChannels) {
-			let len = inputChannels[0].length
-			let outLen = Math.round(len * ratio)
-			let resampled = new Int16Array(outLen * nch)
-
+	function encodeIndependentChunk(inputChannels) {
+		let len = inputChannels[0].length
+		let outLen = Math.round(len * ratio)
+		let resampled = new Int16Array(outLen * nch)
+		if (ratio === 1) {
 			for (let i = 0; i < outLen; i++) {
-				let srcF = i / ratio
 				for (let c = 0; c < nch; c++) {
-					let s = ratio === 1 ? inputChannels[c][i] : lanczos(inputChannels[c], srcF, len)
-					s = s < -1 ? -1 : s > 1 ? 1 : s
-					resampled[i * nch + c] = Math.round(s * 0x7FFF)
+					resampled[i * nch + c] = floatToInt16(inputChannels[c][i])
 				}
 			}
+		} else {
+			const plan = getResamplePlan(len, outLen)
+			for (let i = 0; i < outLen; i++) {
+				const tapOffset = i * plan.tapCount
+				for (let c = 0; c < nch; c++) {
+					let sum = 0
+					for (let tap = 0; tap < plan.tapCount; tap++) {
+						sum += inputChannels[c][plan.indices[tapOffset + tap]] * plan.weights[tapOffset + tap]
+					}
+					resampled[i * nch + c] = floatToInt16(sum / plan.weightSums[i])
+				}
+			}
+		}
 
 			let previous = segmentPcmBuf
 			segmentPcmBuf = new Int16Array(previous.length + resampled.length)
@@ -131,7 +146,7 @@ export default async function opus(opts) {
 			return concat(pages)
 		}
 
-		function flushIndependent() {
+	function flushIndependent() {
 			let pages = []
 			if (!segmentHeaderSent) {
 				pages.push(...segmentHeaderPages)
@@ -154,17 +169,68 @@ export default async function opus(opts) {
 		}
 	}
 
+	function getResamplePlan(inputLength, outputLength) {
+		const key = `${inputLength}:${outputLength}`
+		const cached = resamplePlans.get(key)
+		if (cached) return cached
+
+		const tapCount = 6
+		const indices = new Int32Array(outputLength * tapCount)
+		const weights = new Float64Array(outputLength * tapCount)
+		const weightSums = new Float64Array(outputLength)
+		const a = 3
+		for (let outputIndex = 0; outputIndex < outputLength; outputIndex++) {
+			const sourcePosition = outputIndex / ratio
+			const firstIndex = Math.floor(sourcePosition) - a + 1
+			let weightSum = 0
+			const tapOffset = outputIndex * tapCount
+			for (let tap = 0; tap < tapCount; tap++) {
+				const sourceIndex = firstIndex + tap
+				const distance = sourcePosition - sourceIndex
+				const absoluteDistance = Math.abs(distance)
+				const weight = distance === 0
+					? 1
+					: a * Math.sin(Math.PI * distance) * Math.sin(Math.PI * distance / a) /
+						(Math.PI * Math.PI * distance * distance)
+				const clampedIndex = sourceIndex < 0
+					? 0
+					: sourceIndex >= inputLength ? inputLength - 1 : sourceIndex
+				indices[tapOffset + tap] = clampedIndex
+				weights[tapOffset + tap] = absoluteDistance >= a ? 0 : weight
+				weightSum += weights[tapOffset + tap]
+			}
+			weightSums[outputIndex] = weightSum
+		}
+
+		const plan = { tapCount, indices, weights, weightSums }
+		if (resamplePlans.size >= maxResamplePlanEntries) {
+			resamplePlans.delete(resamplePlans.keys().next().value)
+		}
+		resamplePlans.set(key, plan)
+		return plan
+	}
+
 	function encodeChunk(channels) {
 		let len = channels[0].length
 		let outLen = Math.round(len * ratio)
 		let resampled = new Int16Array(outLen * nch)
-
-		for (let i = 0; i < outLen; i++) {
-			let srcF = i / ratio
-			for (let c = 0; c < nch; c++) {
-				let s = ratio === 1 ? channels[c][i] : lanczos(channels[c], srcF, len)
-				s = s < -1 ? -1 : s > 1 ? 1 : s
-				resampled[i * nch + c] = Math.round(s * 0x7FFF)
+		if (ratio === 1) {
+			for (let i = 0; i < outLen; i++) {
+				for (let c = 0; c < nch; c++) {
+					resampled[i * nch + c] = floatToInt16(channels[c][i])
+				}
+			}
+		} else {
+			const plan = getResamplePlan(len, outLen)
+			for (let i = 0; i < outLen; i++) {
+				const tapOffset = i * plan.tapCount
+				for (let c = 0; c < nch; c++) {
+					let sum = 0
+					for (let tap = 0; tap < plan.tapCount; tap++) {
+						sum += channels[c][plan.indices[tapOffset + tap]] * plan.weights[tapOffset + tap]
+					}
+					resampled[i * nch + c] = floatToInt16(sum / plan.weightSums[i])
+				}
 			}
 		}
 
@@ -229,6 +295,7 @@ export default async function opus(opts) {
 		if (enc) { enc.delete(); enc = null }
 		pcmBuf = null
 		headerPages = null
+		resamplePlans.clear()
 	}
 }
 
@@ -450,18 +517,9 @@ function i16toU8(i16) {
 }
 
 // Lanczos-3 windowed sinc interpolation
-function lanczos(ch, x, len) {
-	let a = 3, sum = 0, wsum = 0
-	let i0 = Math.floor(x) - a + 1
-	let i1 = Math.floor(x) + a
-	for (let i = i0; i <= i1; i++) {
-		let d = x - i
-		let w = d === 0 ? 1 : a * Math.sin(Math.PI * d) * Math.sin(Math.PI * d / a) / (Math.PI * Math.PI * d * d)
-		let idx = i < 0 ? 0 : i >= len ? len - 1 : i
-		sum += ch[idx] * w
-		wsum += w
-	}
-	return wsum ? sum / wsum : 0
+function floatToInt16(value) {
+	value = value < -1 ? -1 : value > 1 ? 1 : value
+	return Math.round(value * 0x7FFF)
 }
 
 

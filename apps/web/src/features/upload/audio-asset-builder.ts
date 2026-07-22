@@ -20,7 +20,7 @@ import {
   deletePlaybackAssetDraft,
   getPlaybackAssetDraftUnitBatch,
   putAssetManifest,
-  putPlaybackAssetDraftUnit,
+  putPlaybackAssetDraftUnits,
   putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
 } from "@/lib/indexeddb";
@@ -33,6 +33,8 @@ const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
 const opusFrameSamples = 960;
+const playbackDraftWriteBatchSize = 16;
+const maxQueuedPlaybackDraftUnits = playbackDraftWriteBatchSize * 4;
 export { playbackEncoderVersion, playbackProfileId };
 export const maxDecodedPcmBytes = 256 * 1024 * 1024;
 
@@ -333,7 +335,6 @@ async function prepareStreamingPlaybackAsset(input: {
 
   let channelCount: 1 | 2 | null = null;
   let sourceSampleRate: number | null = null;
-  let resampler: StreamingSincResampler | null = null;
   let pcm: PcmAccumulator | null = null;
   let nextUnitIndex = 0;
   const leafHashes: Array<string | undefined> = [];
@@ -350,6 +351,56 @@ async function prepareStreamingPlaybackAsset(input: {
   const maxInFlightUnits = encoders.length * 2;
   let completedUnits = 0;
   let encodingError: unknown = null;
+  const queuedDraftUnits: Array<{
+    unitIndex: number;
+    descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
+    contentHash: string;
+    payload: ArrayBuffer;
+  }> = [];
+  let queuedDraftUnitCount = 0;
+  let draftWriteError: unknown = null;
+  let draftWriteChain = Promise.resolve();
+
+  const flushDraftBatch = () => {
+    if (queuedDraftUnits.length === 0) return;
+    const batch = queuedDraftUnits.splice(0, queuedDraftUnits.length);
+    draftWriteChain = draftWriteChain.then(async () => {
+      if (draftWriteError) return;
+      try {
+        await putPlaybackAssetDraftUnits({
+          draftId: input.draftId,
+          units: batch
+        });
+      } catch (error) {
+        draftWriteError ??= error;
+      } finally {
+        queuedDraftUnitCount -= batch.length;
+      }
+    });
+  };
+
+  const queueDraftUnit = async (unit: {
+    unitIndex: number;
+    descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
+    contentHash: string;
+    payload: ArrayBuffer;
+  }) => {
+    queuedDraftUnits.push(unit);
+    queuedDraftUnitCount += 1;
+    if (queuedDraftUnits.length >= playbackDraftWriteBatchSize) {
+      flushDraftBatch();
+    }
+    if (queuedDraftUnitCount >= maxQueuedPlaybackDraftUnits) {
+      await draftWriteChain;
+    }
+    if (draftWriteError) throw draftWriteError;
+  };
+
+  const finishDraftWrites = async () => {
+    flushDraftBatch();
+    await draftWriteChain;
+    if (draftWriteError) throw draftWriteError;
+  };
 
   const acquireEncoder = async () => {
     const available = availableEncoderIndexes.pop();
@@ -376,6 +427,7 @@ async function prepareStreamingPlaybackAsset(input: {
   const scheduleUnit = async (inputUnit: {
     unitIndex: number;
     channels: Float32Array[];
+    sampleRate: number;
     trimStartSamples: number;
     trimEndSamples: number;
     durationMs: number;
@@ -392,7 +444,7 @@ async function prepareStreamingPlaybackAsset(input: {
       let payload: ArrayBuffer;
       try {
         payload = await encoders[encoderIndex]!.encode({
-          sampleRate: opusSampleRate,
+          sampleRate: inputUnit.sampleRate,
           channels: inputUnit.channels,
           bitrateKbps: channelCount === 1 ? 96 : 192
         });
@@ -406,8 +458,7 @@ async function prepareStreamingPlaybackAsset(input: {
 
       try {
         const contentHash = await hashAssetUnit(inputUnit.unitIndex, payload);
-        await putPlaybackAssetDraftUnit({
-          draftId: input.draftId,
+        await queueDraftUnit({
           unitIndex: inputUnit.unitIndex,
           descriptor: {
             kind: "playback",
@@ -441,14 +492,18 @@ async function prepareStreamingPlaybackAsset(input: {
   };
 
   const emitReadyUnits = async (final: boolean) => {
-    if (!pcm) return;
+    if (!pcm || !sourceSampleRate) return;
+    const sampleRate = sourceSampleRate;
     const totalSamples = pcm.endSample;
     const unitCount = final
-      ? Math.max(1, Math.ceil(totalSamples / (segmentDurationMs / 1000 * opusSampleRate)))
+      ? Math.max(1, Math.ceil(totalSamples / (segmentDurationMs / 1000 * sampleRate)))
       : Number.POSITIVE_INFINITY;
-    const segmentSamples = Math.round((segmentDurationMs / 1000) * opusSampleRate);
-    const prerollSamples = Math.round((seekPrerollMs / 1000) * opusSampleRate);
-    const postrollSamples = Math.max(1, opusPreSkipSamples);
+    const segmentSamples = Math.round((segmentDurationMs / 1000) * sampleRate);
+    const prerollSamples = Math.round((seekPrerollMs / 1000) * sampleRate);
+    const postrollSamples = Math.max(
+      1,
+      Math.ceil(opusPreSkipSamples * sampleRate / opusSampleRate)
+    );
 
     while (nextUnitIndex < unitCount) {
       throwIfAborted(input.signal);
@@ -471,13 +526,14 @@ async function prepareStreamingPlaybackAsset(input: {
         channels: segment,
         trimStartSamples: nextUnitIndex === 0 ? 0 : contentStart - sampleStart,
         contentSamples: contentEnd - contentStart
-      }, opusSampleRate);
+      }, sampleRate);
       await scheduleUnit({
         unitIndex: nextUnitIndex,
         channels: encodedSegment.channels,
+        sampleRate,
         trimStartSamples: encodedSegment.trimStartSamples,
         trimEndSamples: encodedSegment.trimEndSamples,
-        durationMs: Math.max(1, Math.round((contentEnd - contentStart) / opusSampleRate * 1000))
+        durationMs: Math.max(1, Math.round((contentEnd - contentStart) / sampleRate * 1000))
       });
       nextUnitIndex += 1;
       pcm.trimBefore(Math.max(0, contentEnd - prerollSamples));
@@ -494,16 +550,12 @@ async function prepareStreamingPlaybackAsset(input: {
       if (channelCount === null) {
         channelCount = channels;
         sourceSampleRate = decoded.sampleRate;
-        resampler = decoded.sampleRate === opusSampleRate
-          ? null
-          : new StreamingSincResampler(channels, decoded.sampleRate, opusSampleRate);
         pcm = new PcmAccumulator(channels);
       } else if (channelCount !== channels || sourceSampleRate !== decoded.sampleRate) {
         throw new Error("流式音频解码块的声道数或采样率发生变化。");
       }
 
-      const output = resampler ? resampler.append(decoded.channels) : decoded.channels;
-      pcm!.append(output);
+      pcm!.append(decoded.channels, false);
       await emitReadyUnits(false);
     });
 
@@ -511,12 +563,9 @@ async function prepareStreamingPlaybackAsset(input: {
     if (!preparedPcm || !channelCount || !sourceSampleRate) {
       throw new Error("音频没有解码出可用 PCM 数据。");
     }
-    const finishedResampler = resampler as StreamingSincResampler | null;
-    if (finishedResampler) {
-      preparedPcm.append(finishedResampler.finish());
-    }
     await emitReadyUnits(true);
     await Promise.allSettled([...pendingUnitTasks]);
+    await finishDraftWrites();
     if (encodingError) throw encodingError;
     const completeLeafHashes: string[] = [];
     for (let unitIndex = 0; unitIndex < nextUnitIndex; unitIndex += 1) {
@@ -530,7 +579,7 @@ async function prepareStreamingPlaybackAsset(input: {
       throw new Error("流式音频没有生成完整的播放分片。");
     }
 
-    const durationMs = Math.max(1, Math.ceil((preparedPcm.endSample / opusSampleRate) * 1000));
+    const durationMs = Math.max(1, Math.ceil((preparedPcm.endSample / sourceSampleRate) * 1000));
     const expectedUnitCount = Math.max(1, Math.ceil(durationMs / segmentDurationMs));
     if (completeLeafHashes.length !== expectedUnitCount) {
       throw new Error("流式音频时间轴与播放分片数量不一致。");
@@ -564,6 +613,7 @@ async function prepareStreamingPlaybackAsset(input: {
     };
   } finally {
     await Promise.allSettled([...pendingUnitTasks]);
+    await draftWriteChain;
     encoders.forEach((encoder) => encoder.dispose());
   }
 }
@@ -833,7 +883,7 @@ class PcmAccumulator {
     return this._endSample;
   }
 
-  append(channels: Float32Array[]) {
+  append(channels: Float32Array[], copy = true) {
     const frameCount = channels[0]?.length ?? 0;
     if (!frameCount) return;
     if (channels.length !== this.channelCount || channels.some((channel) => channel.length !== frameCount)) {
@@ -841,7 +891,7 @@ class PcmAccumulator {
     }
     this.chunks.push({
       start: this._endSample,
-      channels: channels.map((channel) => channel.slice())
+      channels: channels.map((channel) => copy ? channel.slice() : channel)
     });
     this._endSample += frameCount;
   }
@@ -893,7 +943,7 @@ class PcmAccumulator {
       }
       if (first.start < target) {
         const offset = target - first.start;
-        first.channels = first.channels.map((channel) => channel.slice(offset));
+        first.channels = first.channels.map((channel) => channel.subarray(offset));
         first.start = target;
       }
       break;
@@ -1165,15 +1215,17 @@ export function prepareIndependentOpusSegment(
   // Encode real post-roll when available. At EOF, repeating the last sample
   // keeps the codec lookahead stable instead of forcing a hard step to zero at
   // every 2s boundary.
-  const channels = segment.channels.map((channel) => {
-    const padded = new Float32Array(channel.length + tailPaddingSamples);
-    padded.set(channel);
-    if (tailPaddingSamples > 0) {
-      const lastSample = channel[channel.length - 1] ?? 0;
-      padded.fill(lastSample, channel.length);
-    }
-    return padded;
-  });
+  // Normal segments already contain real post-roll. Keep their buffers so
+  // the encoder worker can take ownership without another full PCM copy.
+  const channels = tailPaddingSamples > 0
+    ? segment.channels.map((channel) => {
+        const padded = new Float32Array(channel.length + tailPaddingSamples);
+        padded.set(channel);
+        const lastSample = channel[channel.length - 1] ?? 0;
+        padded.fill(lastSample, channel.length);
+        return padded;
+      })
+    : segment.channels;
   const encodedInputLength = channels[0]!.length;
   const encodedSampleLength = Math.round(encodedInputLength * sourceToOpus);
   const encodedFrameLength = Math.ceil(encodedSampleLength / opusFrameSamples) * opusFrameSamples;
