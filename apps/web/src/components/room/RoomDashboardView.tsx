@@ -190,7 +190,7 @@ function RoomDashboardViewBase({
   }, [handleTabChange]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden lg:grid lg:h-full lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0">
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:overflow-hidden lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
           <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" />
@@ -201,7 +201,7 @@ function RoomDashboardViewBase({
       <div className={`relative z-10 flex w-full min-w-0 shrink-0 flex-col lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden ${
         isLyricsOpen
           ? "h-[clamp(20rem,48svh,32rem)] max-h-[54svh] min-h-[20rem]"
-          : "h-[clamp(17rem,39svh,26rem)] max-h-[43svh] min-h-[17rem]"
+          : "h-[clamp(13rem,35svh,22rem)] max-h-[43svh] min-h-[13rem]"
       }`}>
 
         {/* Vinyl + Track Info */}
@@ -232,7 +232,7 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ RIGHT: Management Panel ══════ */}
-      <div className="material-surface relative z-20 flex w-full min-w-0 min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
+      <div className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-none flex-col rounded-t-[24px] border-t border-white/[0.06] lg:min-h-0 lg:flex-1 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
         <div className="material-surface-header sticky top-0 z-30 shrink-0 rounded-t-[24px] border-b border-white/[0.08] px-3 pb-2 pt-2 sm:px-5 sm:pt-4 lg:rounded-none">
           <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
             <span
@@ -254,7 +254,7 @@ function RoomDashboardViewBase({
                 onKeyDown={(event) => handleTabKeyDown(event, tab)}
                 role="tab"
                 tabIndex={activeTab === tab ? 0 : -1}
-                className={`relative z-10 flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-[color,opacity] duration-150 ease-out sm:text-sm ${
+                className={`relative z-10 flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-[color,opacity] duration-150 ease-out sm:text-sm ${
                   activeTab === tab
                     ? "text-white"
                     : "text-white/50 hover:text-white/80"

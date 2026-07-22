@@ -271,6 +271,31 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
   });
 
+  it("admits a source media offer before a late joiner knows the active source", async () => {
+    const { manager } = createManager();
+    const earlyMediaEntry = await manager.getOrCreateIncomingPeerEntry("peer_b", "media");
+
+    expect(earlyMediaEntry).not.toBeNull();
+
+    await manager.syncPeers(["peer_b"]);
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(earlyMediaEntry);
+
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(earlyMediaEntry);
+  });
+
+  it("releases an unconfirmed early media admission after the source grace period", async () => {
+    const { manager } = createManager();
+    await manager.getOrCreateIncomingPeerEntry("peer_b", "media");
+    await manager.syncPeers(["peer_b"]);
+
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
+  });
+
   it("clears pending request state and closes peers on destroy", async () => {
     const clearPendingRequestsForPeer = vi.fn();
     const { manager } = createManager({ clearPendingRequestsForPeer });

@@ -271,7 +271,7 @@ export function PlaylistPanel({
           <span className="font-mono text-[10px] text-foreground-muted">{playlists.length} 个歌单</span>
           <Button
             aria-label="保存当前队列为歌单"
-            className="h-8 w-8"
+            className="h-10 w-10 sm:h-8 sm:w-8"
             disabled={!activeSession || !canCreatePlaylist || isPending}
             onClick={() => setIsCreateOpen(true)}
             size="icon"
@@ -345,7 +345,7 @@ function PlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { playlist: P
       </button>
       <Button
         aria-label={`删除歌单 ${playlist.title}`}
-        className="h-8 w-8 shrink-0 text-white/70 transition-colors hover:bg-red-500/15 hover:text-red-300"
+        className="h-10 w-10 shrink-0 text-white/70 transition-colors hover:bg-red-500/15 hover:text-red-300 sm:h-8 sm:w-8"
         onClick={(event) => {
           event.stopPropagation();
           onDelete();
@@ -547,10 +547,10 @@ function PlaylistDetail({
 
 function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return (
-    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-4 sm:items-center sm:py-6" role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center" role="presentation">
       <form
         aria-labelledby="room-save-playlist-title"
-        className="light-dialog-surface my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:p-5"
+        className="light-dialog-surface my-auto max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();

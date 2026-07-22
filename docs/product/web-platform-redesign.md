@@ -1,6 +1,6 @@
 # Web 平台当前设计基线
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-23`
 当前版本：`0.2.8`
 
 ## 文档状态
@@ -14,6 +14,11 @@
 | `/` | 产品介绍页 |
 | `/auth` | 登录和注册 |
 | `/app` | 客户端工作区/房间大厅 |
+| `/app/search` | 网易云和 QQ 音乐 provider 搜索与导入 |
+| `/app/playlists` | 本地歌单和网络歌单 |
+| `/app/favorites` | 收藏的 provider 专辑 |
+| `/app/profile` | 个人资料 |
+| `/app/settings` | 主题、布局和播放设置 |
 | `/rooms` | 房间与最近房间入口 |
 | `/room/[roomId]` | 房间工作区 |
 
@@ -23,11 +28,13 @@
 
 房间页面以当前播放舞台、底部播放器和工作区为核心。工作区主视图为：
 
-- `Queue`：共享队列、点歌、重排、删除和播放控制
-- `Library`：房间曲库、个人本地导入和加入队列
+- `Library`：房间曲库、个人本地导入、provider 导入和加入队列
+- `My Playlists`：本地歌单、网络歌单、收藏专辑和 provider 曲目整理
 - `Members`：成员、连接、媒体和播放诊断
 
-不存在 `Cache`/`Download` 一级页面。IndexedDB 保存当前用户自己上传的歌曲及本地生成的资产；它不代表房间可下载内容，也不显示成员间缓存状态。
+共享队列由房间舞台和持久化播放器承载，不再作为独立的房间 Tab。
+
+不存在 `Cache`/`Download` 一级页面。IndexedDB 保存当前用户自己上传或 provider 导入的歌曲及本地生成的资产；它不代表房间可下载内容，也不显示成员间缓存状态。
 
 ## 音频与状态表达
 
@@ -53,6 +60,7 @@ IndexedDB segmented Opus
 ## 产品边界
 
 - 音频文件不上传到服务端
+- NetEase/QQ Music 只在导入阶段由服务端临时代理，导入后音频资产回到浏览器本地存储
 - 房间只同步元数据、队列、播放状态、presence 和 WebRTC 信令
 - `music-room-control` DataChannel 只承载控制/健康协调
 - 音频通过独立 WebRTC RTP Opus Track 发送
@@ -61,7 +69,7 @@ IndexedDB segmented Opus
 
 ## 交互原则
 
-- 首屏优先显示真实可操作的房间和播放状态，不把功能站做成营销页
+- 首屏优先显示真实可操作的房间和播放状态；公共 `/` 是展示页，`/app` 直接进入可用工作区
 - 播放控制使用稳定尺寸，避免缓冲、错误文本或图标变化造成布局跳动
 - 成员/presence 更新不应让播放器重建、清空远端 `srcObject` 或替换 Track
 - `waiting`/`stalled` 恢复只重试 `audio.play()`，不要求用户退房重进

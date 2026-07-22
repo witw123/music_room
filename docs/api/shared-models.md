@@ -1,6 +1,6 @@
 # 共享模型
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-23`
 当前版本：`0.2.8`
 
 ## 使用原则
@@ -70,7 +70,7 @@
 - `codec`、`mimeType`、`fileHash`、`artworkUrl`
 - `ownerSessionId`、`ownerNickname`
 - `sourceType`: `local_upload` 或 `netease`
-- `sourceRef`: 网易云曲目必须携带 `{ provider: "netease", trackId: string }`；本地上传不得携带该字段
+- `sourceRef`: provider 曲目携带 `{ provider: "netease" | "qqmusic", trackId: string }`；本地上传不得携带该字段
 - `originalAsset`：可选的本地原始资产清单
 - `playbackAsset`：可选的本地分段 Opus 资产清单
 

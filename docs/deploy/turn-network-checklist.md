@@ -1,6 +1,6 @@
 # TURN 外网媒体链路检查清单
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-23`
 
 本项目的跨网络播放质量取决于 WebRTC Media RTP 的实际 ICE 路径。控制 DataChannel 和媒体连接独立建立，但两者都依赖正确的信令、候选地址和 TURN 配置。房间不通过 WebRTC 传输音频文件或缓存分片。
 
@@ -9,6 +9,7 @@
 - `TURN_PUBLIC_HOST`：填写客户端可访问的公网域名或公网 IP，不得是 `localhost`、`127.0.0.1` 或内网地址
 - `TURN_EXTERNAL_IP`：填写 coturn 对外出口的真实公网 IP；云主机/NAT 场景不能填容器 IP 或 VPC 内网 IP
 - `TURN_PROTOCOLS=udp,tcp,tls`：优先 UDP，TCP/TLS 作为媒体恢复候选
+- `TURN_TLS_PORT=5349`：启用 TLS 候选时需与 coturn 监听端口一致
 - `TURN_MIN_PORT` / `TURN_MAX_PORT`：relay 端口段必须和 coturn、防火墙、安全组一致
 
 ## 端口开放

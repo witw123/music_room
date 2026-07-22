@@ -154,7 +154,7 @@ export function RoomChatOverlay({
             onClick={handleSend}
             disabled={!inputValue.trim()}
             className={`relative shrink-0 rounded-full bg-accent/90 text-white shadow-lg shadow-accent/20 transition-[background-color,box-shadow,transform,opacity,filter] duration-150 ease-out hover:bg-accent active:scale-[0.97] disabled:grayscale disabled:opacity-30 ${
-              compact ? "h-8 w-8" : "h-9 w-9"
+              compact ? "h-10 w-10" : "h-10 w-10"
             }`}
         >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

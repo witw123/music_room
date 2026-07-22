@@ -201,7 +201,7 @@ export function MiniPlayerOverlay({
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-white sm:text-[21px]">迷你播放器</span>
           <button
             aria-label="打开沉浸式播放"
-            className="light-overlay-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+            className="light-overlay-control inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             onClick={onOpenImmersive}
             style={{ color: miniPlayerColors.accent }}
             title="打开沉浸式播放"
@@ -211,7 +211,7 @@ export function MiniPlayerOverlay({
           </button>
           <button
             aria-label="关闭迷你播放器"
-            className="light-overlay-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+            className="light-overlay-control inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             onClick={onClose}
             style={{ color: miniPlayerColors.accent }}
             title="关闭迷你播放器"
@@ -239,12 +239,12 @@ export function MiniPlayerOverlay({
           ) : null}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-black/45 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+            className="pointer-events-none absolute inset-0 bg-black/45 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
             style={{
               background: `linear-gradient(180deg, rgba(0,0,0,0.18), ${miniPlayerColors.accentSoft} 48%, rgba(0,0,0,0.8) 100%)`
             }}
           />
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-8 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 sm:gap-12">
+          <div className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-8 opacity-100 transition-opacity duration-200 sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100 sm:gap-12">
             <div className="flex items-center justify-center gap-3 text-white sm:gap-6" style={{ color: miniPlayerColors.accent }}>
               <MiniTransportButton ariaLabel="上一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onPrev}>
                 <PreviousIcon />
@@ -343,7 +343,7 @@ function MiniTransportButton({
       aria-label={ariaLabel}
       className={prominent
         ? "inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-        : "inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"}
+        : "inline-flex h-10 w-10 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"}
       disabled={disabled}
       onClick={onClick}
       title={ariaLabel}

@@ -9,7 +9,7 @@ const githubRepositoryUrl = "https://example.test/music-room";
 
 const projectStats = [
   { label: "Latency", value: "< 50ms Sync" },
-  { label: "Audio Quality", value: "Lossless Ready" },
+  { label: "Audio Path", value: "Segmented Opus" },
   { label: "Platform", value: "Browser First" },
   { label: "Privacy", value: "Local-First" }
 ];
@@ -30,8 +30,8 @@ const capabilities = [
   {
     eyebrow: "Privacy & Performance",
     title: "本地曲库，全球无缝共享",
-    body: "无需漫长的云端上传，您的音频文件始终保留在本地设备。通过创新的 P2P 调度算法，直接向房间内的其他成员分发可验证的音频分片。",
-    points: ["本地上传资源", "WebRTC 音频传输", "隐私数据保护"]
+    body: "无需把本地音频长期上传到云端。文件和播放资产保留在您的浏览器中，由当前曲目拥有者通过 WebRTC RTP Opus 向房间成员发布实时音频。",
+    points: ["本地上传资源", "RTP Opus 媒体流", "隐私数据保护"]
   }
 ];
 
@@ -41,8 +41,8 @@ const architectureItems = [
     body: "现代化的沉浸式 Web 界面，提供极致流畅的视觉与交互体验。"
   },
   {
-    title: "Reliable Global Signaling",
-    body: "高可用分布式信令服务，确保房间元数据与状态永远保持一致。"
+    title: "Reliable Room Signaling",
+    body: "基于 Socket.IO 的房间信令服务，负责状态同步、成员 presence 和 WebRTC 协商。"
   },
   {
     title: "Stable Media Transport",
@@ -232,7 +232,7 @@ export function ProductLandingPage() {
   const appHref = buildAppEntryHref();
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black font-sans selection:bg-accent/30 selection:text-white">
+    <main className="relative min-h-[100dvh] overflow-hidden bg-black font-sans selection:bg-accent/30 selection:text-white">
       <TopBar activeSession={null} variant="marketing" />
 
       <div className="fixed inset-0 -z-10 bg-black">
@@ -247,7 +247,7 @@ export function ProductLandingPage() {
           Music Room
         </h1>
         <p className="mt-7 max-w-3xl text-base leading-8 text-white/[0.58] md:text-xl">
-          打破空间距离，与好友实时同步收听本地高保真无损音乐库。支持极低延迟的 P2P 流媒体分发，为您带来无缝的跨设备协作收听体验。
+          与好友实时同步收听本地高保真音乐。通过房间状态同步和 WebRTC RTP Opus 媒体链路，获得浏览器优先的协作听歌体验。
         </p>
         <div className="mt-9 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
           <Link href={appHref as Route}>
@@ -338,7 +338,7 @@ export function ProductLandingPage() {
               专为性能与隐私设计的底层架构
             </h2>
             <p className="mt-5 text-base leading-7 text-white/[0.55]">
-              Music Room 采用去中心化的流媒体分发策略，结合企业级实时信令引擎，在无需将文件上传至云端的情况下，为您提供稳定、安全、纯粹的收听体验。
+              Music Room 让音频文件留在用户浏览器，通过房间状态同步和 WebRTC RTP Opus 媒体链路，提供稳定、安全、纯粹的协作收听体验。
             </p>
           </div>
 

@@ -110,7 +110,7 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r ${desktopBottomOffsetClass}`}
+      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:pt-0 ${desktopBottomOffsetClass}`}
       aria-label="主导航"
     >
       <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-2 md:py-3`}>
@@ -159,7 +159,7 @@ export function AppSidebar({
                   }
                 }}
                 title={collapsed ? item.label : undefined}
-                className={`group flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                className={`group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
                     ? "bg-accent/15 text-white shadow-[inset_2px_0_0_#0070f3]"
                     : keepsHomeInRoom

@@ -1,6 +1,6 @@
 # REST API
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-23`
 当前版本：`0.2.8`
 
 ## 使用约定
@@ -52,7 +52,7 @@
 
 ## QQ 音乐 provider
 
-QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，Cookie 仅以加密形式保存；搜索和导入结果统一为候选歌曲结构。
+QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，Cookie 仅以加密形式保存；搜索、歌单、专辑和导入结果统一为共享 provider 结构。
 
 ### `GET /v1/providers/qqmusic/search`
 
@@ -65,6 +65,12 @@ QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，C
 ### `GET /v1/providers/qqmusic/tracks/{trackId}/audio`
 
 服务端解析临时播放地址，然后校验 CDN、抓取并流式转发音频。支持 `quality=standard|high|exhigh` 和 `Range`，不向浏览器暴露上游地址。首期只接受 MP3/FLAC，返回其他格式时会返回 `QQMUSIC_AUDIO_UNSUPPORTED`。
+
+两个 provider 还提供同构的以下接口：
+
+- `GET /search/playlists`、`GET /search/albums`
+- `GET /playlists`、`GET /playlists/{playlistId}`、`GET /albums/{albumId}`
+- `GET /tracks/{trackId}/audio-url`、`GET /tracks/{trackId}/lyrics`
 
 ## 标准错误码
 
@@ -255,6 +261,20 @@ QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，C
 - 常见失败：无业务失败分支；依赖故障时仍返回 `200`，但 `status` 变为 `degraded`
 - 副作用：无
 - 测试要点：Redis 或 Prisma 不可用时，断言 `checks` 和 `metadata.redisMode`
+
+## 收藏专辑
+
+### `GET /v1/favorites/albums`
+
+读取当前用户保存的 provider 专辑收藏。
+
+### `PUT /v1/favorites/albums`
+
+保存一个 `ProviderAlbumSummary`，请求体结构见 [shared-models.md](./shared-models.md)。
+
+### `DELETE /v1/favorites/albums/{provider}/{providerAlbumId}`
+
+删除当前用户指定 provider 专辑的收藏。
 
 ## 房间
 

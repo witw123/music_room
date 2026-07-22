@@ -1,20 +1,20 @@
 # 整体架构
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-23`
 
 ## 组件划分
 
 ### `apps/web`
 
 - Next.js 15 前端，提供网页工作区、房间页和播放器 UI
-- 负责账号、房间、队列、Socket.IO、WebRTC 控制/媒体连接和 IndexedDB 个人上传资产
+- 负责账号、房间、队列、Socket.IO、WebRTC 控制/媒体连接和 IndexedDB 个人本地资产
 - 播放只使用分段 Opus 引擎和 WebRTC RTP 输出
 
 ### `apps/server`
 
 - NestJS 服务端，提供 REST API、Socket.IO 信令、房间/队列/播放服务和 TURN 配置
 - 服务端保存播放权威状态和音频元数据，不保存音频文件
-- 网易云 provider 只在导入阶段短暂代理音频，导入完成后仍由浏览器生成并保存本地播放资产
+- 网易云和 QQ 音乐 provider 只在导入阶段短暂代理音频，导入完成后仍由浏览器生成并保存本地播放资产
 
 ### `packages/shared`
 

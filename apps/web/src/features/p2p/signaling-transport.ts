@@ -164,16 +164,24 @@ export class SignalingTransport {
       return;
     }
 
-    if (!this.acceptIncomingSignalOrder(payload)) {
+    const linkKind = payload.linkKind ?? "data";
+    // Reject known stale/reordered signals before allocating a peer entry.
+    // This is a read-only check; the ordering slot is committed only after
+    // topology admission succeeds below.
+    if (!this.canAcceptIncomingSignalOrder(payload)) {
       return;
     }
-
-    const linkKind = payload.linkKind ?? "data";
     const entry = await handlers.getOrCreatePeerEntry(payload.fromPeerId, linkKind);
     // A topology update may have removed this peer (or changed the active
     // source) while its SDP/ICE was in flight. Do not let that late signal
     // recreate a connection outside the currently admitted topology.
     if (!entry) {
+      return;
+    }
+    // Only consume the signal's ordering slot after topology admission. A
+    // signal can arrive just before a late joiner's source state is known;
+    // consuming it while rejecting the peer would permanently discard it.
+    if (!this.acceptIncomingSignalOrder(payload)) {
       return;
     }
     entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
@@ -264,37 +272,12 @@ export class SignalingTransport {
   }
 
   private acceptIncomingSignalOrder(payload: PeerSignalMessage) {
-    const linkKind = payload.linkKind ?? "data";
-    const recoveryGeneration = payload.recoveryGeneration ?? 0;
-    const key = `${payload.fromPeerId}:${linkKind}:${recoveryGeneration}`;
-    const previous = this.incomingSignalOrder.get(key);
-    const connectionGeneration = payload.connectionGeneration ?? null;
-    const sequence = payload.sequence ?? null;
-
-    if (previous) {
-      // Once a peer has announced a connection incarnation, an untagged
-      // signal cannot be safely assigned to the current RTCPeerConnection.
-      // Accepting it here lets delayed candidates from an older connection
-      // contaminate a newly recreated media peer.
-      if (previous.connectionGeneration !== null && connectionGeneration === null) {
-        return false;
-      }
-      if (
-        connectionGeneration !== null &&
-        previous.connectionGeneration !== null &&
-        connectionGeneration < previous.connectionGeneration
-      ) {
-        return false;
-      }
-      if (
-        connectionGeneration === previous.connectionGeneration &&
-        sequence !== null &&
-        typeof previous.sequenceByType[payload.type] === "number" &&
-        sequence <= previous.sequenceByType[payload.type]!
-      ) {
-        return false;
-      }
+    if (!this.canAcceptIncomingSignalOrder(payload)) {
+      return false;
     }
+
+    const { key, previous, connectionGeneration, sequence } =
+      this.getIncomingSignalOrderState(payload);
 
     const generationChanged = previous !== undefined &&
       connectionGeneration !== previous.connectionGeneration;
@@ -313,6 +296,50 @@ export class SignalingTransport {
       sequenceByType
     });
     return true;
+  }
+
+  private canAcceptIncomingSignalOrder(payload: PeerSignalMessage) {
+    const { previous, connectionGeneration, sequence } =
+      this.getIncomingSignalOrderState(payload);
+    if (!previous) {
+      return true;
+    }
+
+    // Once a peer has announced a connection incarnation, an untagged signal
+    // cannot be safely assigned to the current RTCPeerConnection. Accepting
+    // it here lets delayed candidates from an older connection contaminate a
+    // newly recreated media peer.
+    if (previous.connectionGeneration !== null && connectionGeneration === null) {
+      return false;
+    }
+    if (
+      connectionGeneration !== null &&
+      previous.connectionGeneration !== null &&
+      connectionGeneration < previous.connectionGeneration
+    ) {
+      return false;
+    }
+    if (
+      connectionGeneration === previous.connectionGeneration &&
+      sequence !== null &&
+      typeof previous.sequenceByType[payload.type] === "number" &&
+      sequence <= previous.sequenceByType[payload.type]!
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  private getIncomingSignalOrderState(payload: PeerSignalMessage) {
+    const linkKind = payload.linkKind ?? "data";
+    const recoveryGeneration = payload.recoveryGeneration ?? 0;
+    const key = `${payload.fromPeerId}:${linkKind}:${recoveryGeneration}`;
+    return {
+      key,
+      previous: this.incomingSignalOrder.get(key),
+      connectionGeneration: payload.connectionGeneration ?? null,
+      sequence: payload.sequence ?? null
+    };
   }
 }
 

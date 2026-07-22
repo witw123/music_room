@@ -7,19 +7,24 @@
 
 Music Room 是一个面向多人同步听歌的浏览器音乐房应用。仓库采用 Monorepo，包含 Next.js 网页端、NestJS 服务端以及前后端共享协议。
 
+当前工作区版本：`0.2.8`<br>
+文档快照：`2026-07-23`
+
 ## 项目定位
 
-Music Room 聚焦于用户本地音频和已导入外部曲目的多人协作收听。服务端负责房间、队列、播放状态、实时同步和元数据；本地音频不会持久化到服务端，网易云导入只允许服务端短暂代理音频流。每个浏览器只在本机 IndexedDB 保存当前用户自己导入的原始资产和播放资产。
+Music Room 聚焦于用户本地音频和已导入外部曲目的多人协作收听。服务端负责账号、房间、权限、队列、播放状态、实时同步和曲目元数据；音频文件不会由服务端持久化。每个浏览器只在本机 IndexedDB 保存当前用户自己导入的原始资产和播放资产。
 
-房间不会在成员之间下载或交换音频文件。曲目拥有者从本地已经准备好的分段 Opus 播放资产发布 WebRTC 媒体流，监听成员只接收一条 RTP Opus 音频流。
+房间不会在成员之间下载或交换音频资产。曲目拥有者从本地已经准备好的分段 Opus 播放资产发布 WebRTC 媒体流，监听成员只接收一条 RTP Opus 音频流。网易云和 QQ 音乐导入由服务端临时代理，随后仍进入浏览器本地播放资产流程。
 
 ## 当前进度
 
 核心产品闭环已经可运行，当前处于“产品可用，工程持续加固”阶段：
 
 - 首页 `/` 为项目入口，`/app` 为网页工作区入口
-- 注册/登录、房间创建/加入/恢复、共享队列、房主播放控制已打通
-- 房间主界面当前收敛为 `共享队列`、`曲库`、`成员`
+- 注册/登录、房间创建/加入/恢复、成员权限、暂离房间恢复、共享队列、房主播放控制已打通
+- 网页工作区包含房间、平台搜索、歌单、收藏专辑、个人资料、设置和持久化播放器
+- 房间工作区当前为 `曲库`、`我的歌单`、`成员`；共享队列由房间舞台和播放器管理
+- 网易云和 QQ 音乐支持账号绑定、歌曲搜索、歌单/专辑浏览和本地导入，并由 provider 开关控制
 - 播放统一使用单一 Segmented Opus/WebRTC 链路和稳定的房间音频会话
 - 诊断面板提供 AudioContext、缓冲、limiter、RTP、ICE 和 Track identity 信息
 - 桌面与移动设备使用同一套响应式网页
@@ -42,6 +47,7 @@ IndexedDB 分段 Opus
 - [播放同步](./docs/architecture/playback-sync.md)
 - [路线图](./docs/engineering/roadmap.md)
 - [测试策略](./docs/engineering/testing.md)
+- [本地开发环境](./docs/engineering/setup.md)
 
 ## 文档入口
 
@@ -58,8 +64,10 @@ IndexedDB 分段 Opus
 ## 仓库结构
 
 - `apps/web`: Next.js Web 前端、本地资产准备、播放和 WebRTC
-- `apps/server`: NestJS API、房间服务、持久化和 Socket.IO 信令
+- `apps/server`: NestJS API、房间/provider 服务、持久化和 Socket.IO 信令
 - `packages/shared`: 前后端共享协议、类型和校验模型
+- `packages/opus-encode`: 导入流程使用的浏览器 Ogg Opus 编码包
+- `packages/config-*`: 共享 TypeScript 与 ESLint 配置
 
 ## 功能概览
 
@@ -67,7 +75,8 @@ IndexedDB 分段 Opus
 - 首页展示入口与 `/app` 网页工作区分流
 - 多人共享播放队列、房主控制与播放同步
 - 本地音频导入、个人曲库恢复和歌单管理
-- 可选的网易云账号绑定、歌曲搜索和单曲导入
+- 可选的网易云和 QQ 音乐账号绑定、歌曲/歌单/专辑搜索和本地导入
+- 收藏专辑、个人资料、设置、主题偏好和暂离房间恢复
 - 通过稳定 WebRTC RTP 媒体 Track 发布分段 Opus 播放
 - 成员级连接、媒体、播放和音频诊断
 - 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
@@ -80,17 +89,22 @@ WebRTC 的 `music-room-control` DataChannel 只承载控制和健康状态协调
 
 - Node.js 22.x
 - pnpm 10.x
-- PostgreSQL
-- Redis
-- Docker / Docker Compose
+- PostgreSQL 16.x
+- Redis 7.x
+- Docker / Docker Compose（推荐用于本地依赖）
+- 支持 IndexedDB、Web Audio 和 WebRTC 的现代浏览器
 
 ### 本地开发
 
 ```bash
 pnpm install
 cp .env.example .env
+docker compose up -d postgres redis
+pnpm --filter @music-room/server db:push
 pnpm dev
 ```
+
+PowerShell 下第二条命令使用 `Copy-Item .env.example .env`。本地模板启用了仅用于开发的认证 fallback 存储，但正常的房间和元数据持久化仍需要 PostgreSQL，实时播放控制仍需要 Redis。
 
 默认地址：
 
@@ -116,7 +130,14 @@ pnpm e2e
 pnpm check:toolchain
 ```
 
-`pnpm e2e` 会启动真实 server + web，并要求本地 Redis 可连接到 `redis://127.0.0.1:6379/15`；`pnpm check:toolchain` 会强制校验 Node.js 22.x 与 pnpm 10.x。
+补充检查：
+
+```bash
+pnpm lint
+pnpm deploy:check
+```
+
+`pnpm e2e` 会启动真实 server + web、清理隔离的 Redis 数据库，并要求 Redis 可连接到 `redis://127.0.0.1:6379/15`（也可通过 `REDIS_URL` 覆盖）。`pnpm check:toolchain` 会强制校验 Node.js 22.x 与 pnpm 10.x。完整依赖和迁移流程见[本地开发环境](./docs/engineering/setup.md)。
 
 ## Web Origin 配置
 
@@ -154,6 +175,13 @@ pnpm check:toolchain
 - `NEXT_PUBLIC_TURN_CREDENTIAL`
 - `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`
 
+### 可选平台 provider
+
+当前 provider API 支持网易云和 QQ 音乐，`.env.example` 默认关闭。启用 provider 时需要同时设置服务端开关和前端构建开关；生产环境还需要合法的 32 字节 hex 或 base64 Cookie 加密密钥。平台凭证只在服务端加密保存，导入音频不会作为服务端曲库长期保存。
+
+- 网易云：`NETEASE_ENABLED`、`NETEASE_COOKIE_ENCRYPTION_KEY`、`NEXT_PUBLIC_NETEASE_ENABLED`
+- QQ 音乐：`QQMUSIC_ENABLED`、`QQMUSIC_COOKIE_ENCRYPTION_KEY`、`NEXT_PUBLIC_QQMUSIC_ENABLED`
+
 ## 连接与播放诊断
 
 成员页的诊断面板会输出：
@@ -184,6 +212,7 @@ pnpm check:toolchain
 
 - Nginx 只反代 Web / API / WebSocket
 - TURN 不经过 Nginx，直接开放端口
+- 正式部署当前只支持单个 `server` 实例，多实例房间权威尚未完成
 - 至少开放 `3478/udp`、`3478/tcp`、`5349/tcp` 以及配置的 TURN relay 端口段
 - coturn 在 NAT 后方时，正确配置公网域名或 `external-ip`
 
@@ -196,7 +225,7 @@ pnpm check:toolchain
 
 ## 发布
 
-生产环境通过 `Dockerfile.web`、`Dockerfile.server` 和 `deploy/linux` 中的 Compose 配置发布，不生成桌面或移动安装包。
+生产环境通过 `Dockerfile.web`、`Dockerfile.server` 和 `deploy/linux` 中的 Compose 配置发布。当前仓库只发布响应式 Web 应用，不生成桌面或移动安装包。
 
 ## 当前已知边界
 
@@ -204,6 +233,7 @@ pnpm check:toolchain
 - Redis 不可用时，依赖 Realtime 的播放控制请求会失败
 - 曲目拥有者离线时，其他成员无法播放该拥有者尚未在本机上传的曲目
 - 网易云能力依赖上游接口、用户登录态、歌曲版权和可用音质；网易云临时音频地址不会写入房间状态
+- QQ 音乐能力同样依赖上游接口、登录态、版权和可用音质；平台 provider 不保证所有歌曲都能导入
 - 浏览器级长时间 WebRTC 测试和统一生产观测能力仍在继续补强
 
 ## License

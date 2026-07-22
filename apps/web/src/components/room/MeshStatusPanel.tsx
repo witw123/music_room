@@ -472,7 +472,7 @@ function MeshStatusPanelBase({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs"
+          className="min-h-11 px-3 py-2 text-xs"
           onClick={() => setIsOpen((value) => !value)}
           aria-expanded={isOpen}
         >

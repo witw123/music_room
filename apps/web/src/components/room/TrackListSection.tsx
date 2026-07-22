@@ -195,7 +195,7 @@ function TrackListSectionBase({
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-8 w-7 shrink-0 !rounded-none bg-transparent p-0 !text-accent hover:bg-transparent hover:!text-accent disabled:opacity-100 disabled:!text-accent/45 sm:w-8"
+                      className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 !text-accent hover:bg-transparent hover:!text-accent disabled:opacity-100 disabled:!text-accent/45 sm:h-8 sm:w-8"
                       disabled={!canControlPlayback || pendingAction !== null}
                       onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"
@@ -213,7 +213,7 @@ function TrackListSectionBase({
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-8 w-7 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:w-8"
+                        className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:h-8 sm:w-8"
                         disabled={pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
@@ -232,7 +232,7 @@ function TrackListSectionBase({
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className={`h-8 w-7 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent sm:w-8 ${isSavedLocally ? "text-accent hover:text-accent" : ""}`}
+                        className={`h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent sm:h-8 sm:w-8 ${isSavedLocally ? "text-accent hover:text-accent" : ""}`}
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
                         aria-label={isSavedLocally ? `《${track.title}》已保存到本地` : `保存《${track.title}》到本地`}
@@ -252,7 +252,7 @@ function TrackListSectionBase({
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-8 w-7 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:w-8"
+                      className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:h-8 sm:w-8"
                       disabled={pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       aria-label={`将《${track.title}》加入队列`}

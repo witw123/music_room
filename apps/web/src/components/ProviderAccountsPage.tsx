@@ -23,13 +23,13 @@ export function ProviderAccountsPage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-screen bg-black" />;
+    return <div className="min-h-[100dvh] bg-black" />;
   }
 
   return (
-    <main className="relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="relative h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-12 md:mx-auto md:max-w-[1400px] md:px-8 md:pt-28">
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-12 md:mx-auto md:max-w-[1400px] md:px-8 md:pt-28">
         <LocalPlaylistsOverview />
       </div>
     </main>

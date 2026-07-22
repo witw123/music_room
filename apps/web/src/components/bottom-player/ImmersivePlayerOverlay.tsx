@@ -74,7 +74,7 @@ export function ImmersivePlayerOverlay({
         aria-label="退出沉浸式播放"
         title="退出沉浸式播放"
         onClick={onClose}
-        className="light-overlay-control absolute left-4 top-4 z-[60] inline-flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 shadow-lg backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 hover:border-accent/30 hover:bg-accent/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:left-8 sm:top-8"
+        className="light-overlay-control absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-[60] inline-flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 shadow-lg backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 hover:border-accent/30 hover:bg-accent/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:left-8 sm:top-8"
         style={{ borderColor: artworkPalette.border }}
       >
         <svg aria-hidden="true" fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
@@ -85,12 +85,12 @@ export function ImmersivePlayerOverlay({
         </svg>
       </button>
 
-      <main className="relative z-10 mx-auto grid h-[100dvh] min-h-0 max-h-[100dvh] w-full max-w-[1500px] -translate-y-4 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-4 overflow-hidden px-4 pb-4 pt-16 sm:-translate-y-5 sm:gap-6 sm:px-8 sm:pb-6 sm:pt-20 lg:-translate-y-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)] lg:grid-rows-1 lg:gap-12 lg:px-14 lg:pb-8 lg:pt-8 xl:gap-20">
-        <section className="flex min-h-0 min-w-0 items-center justify-center overflow-hidden" aria-label={playerStyle === "square-cover" ? "专辑封面" : "唱片"}>
+      <main className="relative z-10 mx-auto grid min-h-full max-h-[100dvh] w-full max-w-[1500px] grid-rows-[auto_auto] items-center gap-4 overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(4rem+env(safe-area-inset-top))] sm:gap-6 sm:px-8 sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pt-[calc(5rem+env(safe-area-inset-top))] lg:h-[100dvh] lg:min-h-0 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)] lg:grid-rows-1 lg:gap-12 lg:overflow-hidden lg:px-14 lg:pb-[calc(2rem+env(safe-area-inset-bottom))] lg:pt-8 lg:-translate-y-8 xl:gap-20">
+        <section className="flex min-h-0 min-w-0 items-center justify-center overflow-visible lg:overflow-hidden" aria-label={playerStyle === "square-cover" ? "专辑封面" : "唱片"}>
           <ImmersiveVinyl artworkUrl={currentTrack?.artworkUrl ?? null} isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
         </section>
 
-        <section className="flex min-h-0 w-full min-w-0 flex-col justify-center overflow-hidden" aria-label="歌曲信息与歌词">
+        <section className="flex min-h-0 w-full min-w-0 flex-col justify-center overflow-visible lg:overflow-hidden" aria-label="歌曲信息与歌词">
           <div className="min-w-0">
             <h1 className="max-w-[22ch] break-words text-xl font-semibold leading-[1.08] text-foreground sm:text-3xl lg:text-4xl">
               {currentTrack?.title ?? "等待选择歌曲"}

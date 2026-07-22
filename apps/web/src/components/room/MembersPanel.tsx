@@ -60,7 +60,7 @@ export function MemberPermissionControls({
         const checked = permissions[permission];
         const pending = pendingPermission === permission;
         return (
-          <div key={permission} className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2.5">
+                      <div key={permission} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2.5">
             <span className="min-w-0">
               <span className="block text-xs font-medium text-foreground">{label}</span>
               <span className="mt-0.5 block truncate text-[10px] text-foreground-muted">{description}</span>
@@ -68,13 +68,13 @@ export function MemberPermissionControls({
             <button
               aria-checked={checked}
               aria-label={`${label}${checked ? "已开启" : "已关闭"}`}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${checked ? "bg-accent" : "bg-surface-hover"} ${pending ? "cursor-wait opacity-60" : ""}`}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${checked ? "bg-accent" : "bg-surface-hover"} ${pending ? "cursor-wait opacity-60" : ""}`}
               disabled={disabled || pendingPermission !== null}
               onClick={() => onChange(permission, !checked)}
               role="switch"
               type="button"
             >
-              <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-4" : "translate-x-0"}`} />
+              <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"}`} />
             </button>
           </div>
         );
@@ -388,7 +388,7 @@ function MembersPanelBase({
                         aria-expanded={isSettingsOpen}
                         aria-controls={`member-permissions-${member.id}`}
                         aria-label={`设置 ${member.nickname} 的权限`}
-                        className="h-8 w-8 rounded-lg p-0"
+                        className="h-10 w-10 rounded-lg p-0"
                         data-testid={`member-settings-${member.id}`}
                         onClick={() => setOpenSettingsMemberId(isSettingsOpen ? null : member.id)}
                         title="设置权限"
@@ -405,7 +405,7 @@ function MembersPanelBase({
                       </Button>
                       <Button
                         aria-label={`移除 ${member.nickname}`}
-                        className="h-8 w-8 rounded-lg p-0 text-red-300 hover:text-red-200"
+                        className="h-10 w-10 rounded-lg p-0 text-red-300 hover:text-red-200"
                         data-testid={`member-remove-${member.id}`}
                         onClick={() => setRemoveTarget(member)}
                         title="移除成员"

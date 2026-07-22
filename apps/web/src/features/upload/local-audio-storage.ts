@@ -470,6 +470,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   provider?: "netease" | "qqmusic" | "local_upload";
   originalAsset?: OriginalAssetManifest;
   playbackAsset?: PlaybackAssetManifest;
+  reuseExisting?: boolean;
 }) {
   return enqueueLocalRepositoryWrite(async () => {
     const directory = await getWritableLocalAudioDirectory();
@@ -484,7 +485,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
     fileHash: input.fileHash,
     mimeType: input.mimeType,
     provider: input.provider
-  }, { reuseExisting: true });
+  }, { reuseExisting: input.reuseExisting ?? true });
   await saveLocalAudioCacheFileRecord({
     fileHash: input.fileHash,
     fileName,

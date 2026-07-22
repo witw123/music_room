@@ -410,6 +410,37 @@ describe("SignalingTransport", () => {
     expect(applyRemoteDescription).not.toHaveBeenCalled();
   });
 
+  it("does not consume signal ordering when topology admission temporarily rejects it", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const entry = buildSignalEntry();
+    const getOrCreatePeerEntry = vi.fn<
+      (peerId: string, linkKind?: "data" | "media") =>
+        Promise<ReturnType<typeof buildSignalEntry> | null>
+    >()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(entry);
+    const applyRemoteDescription = vi.fn(async () => undefined);
+    const handlers = {
+      getOrCreatePeerEntry,
+      runPeerOperation: async <T>(
+        _entry: ReturnType<typeof buildSignalEntry>,
+        task: () => Promise<T>
+      ) => task(),
+      applyRemoteDescription,
+      flushPendingCandidates: vi.fn(async () => undefined)
+    };
+
+    await transport.handleIncomingSignal(buildSignal({ connectionGeneration: 3, sequence: 1 }), handlers);
+    await transport.handleIncomingSignal(buildSignal({ connectionGeneration: 3, sequence: 1 }), handlers);
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(2);
+    expect(applyRemoteDescription).toHaveBeenCalledTimes(1);
+  });
+
   it("drops reordered signals from an older connection generation", async () => {
     const transport = new SignalingTransport({
       roomId: "room_1",

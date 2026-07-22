@@ -308,7 +308,7 @@ function VolumeControl({
         aria-label={`音量 ${percentage}%，点击${isOpen ? "收起" : "调整"}`}
         title={`音量 ${percentage}%`}
         onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
         style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
       >
         <VolumeIcon volume={volume} />
@@ -417,9 +417,9 @@ export function MobileBottomPlayerLayout({
           </span>
         </div>
 
-        <div className="col-span-2 grid min-h-[2.25rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 sm:min-h-[2.5rem] sm:gap-3">
+        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 sm:min-h-[2.5rem] sm:gap-3">
           <div className="flex shrink-0 justify-start">
-            {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
+            {onToggleLyrics ? <span className="max-[420px]:hidden"><LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /></span> : null}
             <PlaybackModeButton
               mode={playbackMode}
               onCycle={onCyclePlaybackMode}
@@ -436,7 +436,7 @@ export function MobileBottomPlayerLayout({
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onPrev}
               title="上一首"
-              className="h-8 w-8 shrink-0 sm:h-9 sm:w-9"
+              className="h-10 w-10 shrink-0 sm:h-10 sm:w-10"
               style={{ color: artworkAccent }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -446,7 +446,7 @@ export function MobileBottomPlayerLayout({
 
             <button
               data-testid="player-toggle-button"
-              className={`inline-grid h-9 w-9 shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow,background-color,color] duration-200 will-change-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-10 sm:w-10 ${
+              className={`inline-grid h-10 w-10 shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow,background-color,color] duration-200 will-change-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-10 sm:w-10 ${
                 canControlPlayback
                   ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
                   : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
@@ -475,7 +475,7 @@ export function MobileBottomPlayerLayout({
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onNext}
               title="下一首"
-              className="h-8 w-8 shrink-0 sm:h-9 sm:w-9"
+              className="h-10 w-10 shrink-0 sm:h-10 sm:w-10"
               style={{ color: artworkAccent }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -486,7 +486,7 @@ export function MobileBottomPlayerLayout({
 
           <div className="flex shrink-0 items-center">
             <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
-            <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
+            <span className="max-[420px]:hidden"><ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} /></span>
             <MiniPlayerToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isMiniOpen} onToggle={onToggleMini} />
           </div>
         </div>
@@ -667,7 +667,7 @@ function ImmersiveToggleButton({ isOpen, onToggle, accentColor, accentSoft }: { 
       aria-label={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       title={isOpen ? "退出沉浸式播放" : "打开沉浸式播放"}
       onClick={onToggle}
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
       style={accentColor ? { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) } : undefined}
     >
       {isOpen ? (
@@ -686,7 +686,7 @@ function MiniPlayerToggleButton({ isOpen, onToggle, accentColor, accentSoft }: {
       aria-label={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
       title={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}
       onClick={onToggle}
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
       style={accentColor ? { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) } : undefined}
     >
       <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">

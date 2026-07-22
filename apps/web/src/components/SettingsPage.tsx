@@ -66,7 +66,7 @@ export function SettingsPage() {
   }, []);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-screen bg-black" />;
+    return <div className="min-h-[100dvh] bg-black" />;
   }
 
   function patchSettings(patch: Parameters<typeof updateAppSettings>[0]) {
@@ -91,8 +91,8 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1000px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:mx-auto md:px-10 md:pt-16">
+    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1000px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:mx-auto md:px-10 md:pt-16">
         <header className="flex items-center justify-between gap-4 border-b border-white/[0.1] pb-5">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-white">设置</h1>
@@ -304,7 +304,7 @@ function SettingRow({
 
 function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
-    <label className="inline-flex cursor-pointer items-center" title={label}>
+    <label className="inline-flex min-h-11 min-w-12 cursor-pointer items-center justify-center" title={label}>
       <input
         aria-label={label}
         checked={checked}
@@ -312,7 +312,7 @@ function Toggle({ checked, label, onChange }: { checked: boolean; label: string;
         onChange={(event) => onChange(event.target.checked)}
         type="checkbox"
       />
-      <span className="relative h-6 w-11 rounded-full bg-white/[0.14] transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+      <span className="relative h-7 w-12 rounded-full bg-white/[0.14] transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
     </label>
   );
 }

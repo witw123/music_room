@@ -534,18 +534,18 @@ export function PlaylistsWorkspacePage({
     }
   }
 
-  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-screen bg-black" />;
+  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-[100dvh] bg-black" />;
 
   const WorkspaceShell = embedded ? "section" : "main";
 
   return (
     <WorkspaceShell className={embedded
       ? "relative w-full text-foreground selection:bg-accent/30 selection:text-white"
-      : "relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28"}>
+      : "relative h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28"}>
       {!embedded ? <AppPageBackground /> : null}
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
-        : "relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20"}>
+        : "relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20"}>
         {!embedded && playlistView === "local" ? (
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -749,11 +749,13 @@ function LocalTrackRow({
   onAddToQueue,
   onDownload,
   onMove,
+  onMoveOrder,
   onPlay,
   onRemove,
   isDownloading = false,
   draggable = false,
   isDragTarget = false,
+  total,
   onDragStart,
   onDragOver,
   onDrop,
@@ -767,6 +769,8 @@ function LocalTrackRow({
   onAddToQueue: () => void;
   onDownload?: () => void;
   onMove?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onMoveOrder?: (direction: -1 | 1) => void;
+  total: number;
   onPlay: () => void;
   onRemove?: () => void;
   isDownloading?: boolean;
@@ -808,11 +812,17 @@ function LocalTrackRow({
       </div>
       <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
       <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
-      <div className="col-start-2 flex shrink-0 items-center justify-end gap-1 sm:col-auto">
+      <div className="col-start-2 flex min-w-0 flex-wrap items-center justify-end gap-1 sm:col-auto sm:flex-nowrap">
+        <PlaylistOrderButtons
+          index={index}
+          onMove={onMoveOrder}
+          title={track.title}
+          total={total}
+        />
         {onDownload ? (
           <Button
             aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
-            className="h-8 w-8"
+            className="h-10 w-10 sm:h-8 sm:w-8"
             disabled={track.availableOffline || isDownloading}
             onClick={onDownload}
             size="icon"
@@ -829,7 +839,7 @@ function LocalTrackRow({
         ) : null}
         <Button
           aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
-          className="h-8 w-8"
+          className="h-10 w-10 sm:h-8 sm:w-8"
           disabled={isQueued || !isPlayable}
           onClick={onAddToQueue}
           size="icon"
@@ -841,7 +851,7 @@ function LocalTrackRow({
         </Button>
         <Button
           aria-label={isPlayable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`}
-          className="h-8 w-8"
+          className="h-10 w-10 sm:h-8 sm:w-8"
           disabled={!isPlayable}
           onClick={onPlay}
           size="icon"
@@ -858,7 +868,7 @@ function LocalTrackRow({
         {onMove ? (
           <Button
             aria-label={`移动《${track.title}》到其他歌单`}
-            className="h-8 w-8"
+            className="h-10 w-10 sm:h-8 sm:w-8"
             disabled={!track.providerTrackId && track.provider !== "local_upload"}
             onClick={onMove}
             size="icon"
@@ -870,12 +880,55 @@ function LocalTrackRow({
           </Button>
         ) : null}
         {onRemove ? (
-          <Button aria-label={`从歌单移除《${track.title}》`} className="h-8 w-8 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={onRemove} size="icon" title="从歌单移除" type="button" variant="ghost">
+          <Button aria-label={`从歌单移除《${track.title}》`} className="h-10 w-10 text-red-300 hover:bg-red-500/10 hover:text-red-200 sm:h-8 sm:w-8" onClick={onRemove} size="icon" title="从歌单移除" type="button" variant="ghost">
             <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>
           </Button>
         ) : null}
       </div>
     </article>
+  );
+}
+
+function PlaylistOrderButtons({
+  index,
+  onMove,
+  title,
+  total
+}: {
+  index: number;
+  onMove?: (direction: -1 | 1) => void;
+  title: string;
+  total: number;
+}) {
+  if (!onMove) return null;
+
+  return (
+    <div className="flex items-center gap-0.5 sm:hidden">
+      <Button
+        aria-label={`上移《${title}》`}
+        className="h-10 w-10 text-foreground-muted hover:bg-white/10 hover:text-foreground"
+        disabled={index === 0}
+        onClick={() => onMove(-1)}
+        size="icon"
+        title="上移"
+        type="button"
+        variant="ghost"
+      >
+        <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 14 6-6 6 6" /></svg>
+      </Button>
+      <Button
+        aria-label={`下移《${title}》`}
+        className="h-10 w-10 text-foreground-muted hover:bg-white/10 hover:text-foreground"
+        disabled={index === total - 1}
+        onClick={() => onMove(1)}
+        size="icon"
+        title="下移"
+        type="button"
+        variant="ghost"
+      >
+        <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 10 6 6 6-6" /></svg>
+      </Button>
+    </div>
   );
 }
 
@@ -913,7 +966,7 @@ export function LocalPlaylistCard({
       {onDelete ? (
         <Button
           aria-label={`删除本地歌单 ${playlist.title}`}
-          className="absolute right-2 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
           onClick={onDelete}
           size="icon"
           title="删除歌单"
@@ -949,7 +1002,7 @@ function NetworkPlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { play
       </button>
       <Button
         aria-label={`删除歌单 ${playlist.title}`}
-        className="absolute right-2 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onDelete}
         size="icon"
         title="删除歌单"
@@ -1077,6 +1130,20 @@ function PlaylistDetailView({
     nextTrackIds.splice(toIndex, 0, movedTrackId);
     setDraggingTrackId(null);
     setDragOverTrackId(null);
+    onUpdateTracks(nextTrackIds);
+  }
+
+  function moveTrackByOffset(trackId: string, direction: -1 | 1) {
+    if (!canEditTracks) return;
+    const currentIndex = currentTrackIds.indexOf(trackId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= currentTrackIds.length) return;
+
+    const nextTrackIds = [...currentTrackIds];
+    [nextTrackIds[currentIndex], nextTrackIds[targetIndex]] = [
+      nextTrackIds[targetIndex],
+      nextTrackIds[currentIndex]
+    ];
     onUpdateTracks(nextTrackIds);
   }
 
@@ -1254,7 +1321,8 @@ function PlaylistDetailView({
               >
                 <span className="w-8 shrink-0 text-xs text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm text-foreground">{trackId}</p><p className="mt-1 text-xs text-foreground-muted">曲目信息不可用</p></div>
-                {canEditTracks ? <Button aria-label="从歌单移除歌曲" className="h-8 w-8 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={() => onUpdateTracks(currentTrackIds.filter((id) => id !== trackId))} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg></Button> : null}
+                {canEditTracks ? <PlaylistOrderButtons index={index} onMove={(direction) => moveTrackByOffset(trackId, direction)} title={trackId} total={currentTrackIds.length} /> : null}
+                {canEditTracks ? <Button aria-label="从歌单移除歌曲" className="h-10 w-10 text-red-300 hover:bg-red-500/10 hover:text-red-200 sm:h-8 sm:w-8" onClick={() => onUpdateTracks(currentTrackIds.filter((id) => id !== trackId))} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l-1-13M10 10v7m4-7v7" /></svg></Button> : null}
               </article>
             );
           }
@@ -1280,12 +1348,14 @@ function PlaylistDetailView({
                onDragStart={() => setDraggingTrackId(trackId)}
                onDrop={() => reorderTracks(trackId)}
               onMove={(event) => onMoveTrack?.(track, getAnchoredDialogAnchor(event.currentTarget))}
+              onMoveOrder={(direction) => moveTrackByOffset(trackId, direction)}
                onRemove={canEditTracks ? () => onUpdateTracks(currentTrackIds.filter((itemTrackId) => itemTrackId !== trackId)) : undefined}
               onPlay={() => {
                 const sequenceIndex = sequenceIndexById.get(track.id);
                 if (sequenceIndex !== undefined) void player.playTracks(sequenceTracks, sequenceIndex);
               }}
               track={track}
+              total={rows.length}
               draggable={canEditTracks}
             />
           );
@@ -1465,10 +1535,10 @@ function PlaylistEditorDialog({
   const isLocal = kind === "local";
   const titleId = `create-${kind}-playlist-title`;
   return (
-    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 px-4 py-6 backdrop-blur-sm" role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation">
       <form
         aria-labelledby={titleId}
-        className="light-dialog-surface max-h-[calc(100dvh-3rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6"
+        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
@@ -1596,7 +1666,7 @@ function PlaylistMoveDialog({
 function DeletePlaylistDialog({ kind, playlist, pending, onConfirm, onCancel }: { kind: "local" | "network"; playlist: { title: string }; pending: boolean; onConfirm: () => void; onCancel: () => void }) {
   const label = kind === "local" ? "本地歌单" : "网络歌单";
   return (
-    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 px-4 py-6 backdrop-blur-sm" role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation">
       <div aria-labelledby="delete-playlist-title" className="light-dialog-surface w-full max-w-sm rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6" role="dialog" aria-modal="true">
         <h2 className="text-lg font-semibold text-foreground" id="delete-playlist-title">删除{label}</h2>
         <p className="mt-3 text-sm leading-6 text-foreground-muted">确定删除“{playlist.title}”吗？已下载到本地的歌曲不会被删除。</p>

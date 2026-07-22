@@ -220,13 +220,21 @@ function RoomStageBase({
   }, [currentTrack, sourceProvider, sourceTrackId]);
 
   useEffect(() => {
-    const updateViewportHeight = () => {
-      setViewportSize({ height: window.innerHeight, width: window.innerWidth });
+    const updateViewportSize = () => {
+      const viewport = window.visualViewport;
+      setViewportSize({
+        height: viewport?.height ?? window.innerHeight,
+        width: viewport?.width ?? window.innerWidth
+      });
     };
 
-    updateViewportHeight();
-    window.addEventListener("resize", updateViewportHeight);
-    return () => window.removeEventListener("resize", updateViewportHeight);
+    updateViewportSize();
+    window.addEventListener("resize", updateViewportSize);
+    window.visualViewport?.addEventListener("resize", updateViewportSize);
+    return () => {
+      window.removeEventListener("resize", updateViewportSize);
+      window.visualViewport?.removeEventListener("resize", updateViewportSize);
+    };
   }, []);
 
   useEffect(() => {
@@ -370,7 +378,7 @@ function RoomStageBase({
             data-testid="room-settings-button"
             variant="ghost"
             size="icon"
-            className="light-overlay-control h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
+            className="light-overlay-control h-10 w-10 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
             onClick={() => setShowSettings((value) => !value)}
             type="button"
           >
@@ -619,11 +627,11 @@ function RoomEditDialog({
   if (!open) return null;
 
   return createPortal(
-    <div className="light-overlay-scrim fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={() => !pending && onClose()} role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" onMouseDown={() => !pending && onClose()} role="presentation">
       <div
         aria-labelledby="edit-room-dialog-title"
         aria-modal="true"
-        className="light-dialog-surface max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >

@@ -34,8 +34,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Music Room",
-  description: "打破空间距离，与好友实时同步收听本地高保真无损音乐库。支持极低延迟的 P2P 流媒体分发，为您带来无缝的跨设备协作收听体验。",
-  keywords: ["Music Room", "音乐房", "一起听歌", "共享队列", "无损音乐", "实时协作"]
+  description: "与好友实时同步收听本地高保真音乐。Music Room 通过房间状态同步和 WebRTC RTP Opus 媒体链路，提供浏览器优先的协作听歌体验。",
+  keywords: ["Music Room", "音乐房", "一起听歌", "共享队列", "高保真音乐", "实时协作"]
 };
 
 export default function RootLayout({

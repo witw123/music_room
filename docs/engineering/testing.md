@@ -1,6 +1,6 @@
 # 测试策略
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-23`
 
 ## 已覆盖
 
@@ -9,6 +9,7 @@
 - 前端房间运行时、WebRTC 连接、IndexedDB 个人资产处理、上传工具和组件
 - 分段 Opus 引擎的缓冲、去重、时间线 generation、fade、limiter 和音量 ramp
 - 播放媒体会话 key、启动请求、AudioContext 激活和 WebRTC Track 生命周期
+- Playwright E2E：注册/建房、双用户 realtime、暂离房间恢复、上传入队播放、解散房间和 metrics smoke
 
 ## 浏览器集成验收
 
@@ -22,6 +23,8 @@
 - 非重连期间 `remoteTrackId` 保持不变
 - `currentTime` 持续推进
 - limiter 后 peak 不超过 0dBFS，没有持续高频噪声、尖峰或可听 click/pop
+
+当前 `pnpm e2e` 覆盖基础双 context 回归；30 分钟连续播放、弱网、ICE restart、真实 TURN 和真实设备音频指标仍是发布前的人工或扩展自动化验收项。
 
 ## 发布前命令
 

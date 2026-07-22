@@ -161,12 +161,12 @@ function RoomWorkspaceBase({
 
       {roomSnapshot && statusMessage ? (
         <div
-          className="fixed left-1/2 top-20 z-50 -translate-x-1/2 px-4 pointer-events-none"
+          className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+5rem)] z-50 w-[min(calc(100vw-1rem),32rem)] max-w-[calc(100vw-1rem)] -translate-x-1/2 px-0 sm:top-20"
           aria-live="polite"
         >
           <div
             data-testid="room-status-message"
-            className={`pointer-events-auto rounded-full px-5 py-2.5 text-sm font-medium shadow-xl backdrop-blur-md transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-out animate-slide-up ${
+            className={`pointer-events-auto max-w-full break-words whitespace-normal rounded-2xl px-4 py-2.5 text-center text-sm font-medium shadow-xl backdrop-blur-md transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-out animate-slide-up ${
               statusTone === "warning"
                 ? "border border-red-500/20 bg-red-500/10 text-red-400"
                 : statusTone === "success"

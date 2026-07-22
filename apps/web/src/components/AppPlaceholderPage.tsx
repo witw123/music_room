@@ -35,13 +35,13 @@ export function AppPlaceholderPage({
   }, [activeSession, authEntryHref, hydrated, router]);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-screen bg-black" />;
+    return <div className="min-h-[100dvh] bg-black" />;
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="relative min-h-[100dvh] overflow-y-auto bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-auto md:max-w-[1400px] md:px-8 md:pt-28">
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col px-4 pb-10 pt-10 sm:px-6 sm:pt-12 md:mx-auto md:max-w-[1400px] md:px-8 md:pt-28">
         <div className="max-w-2xl">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">{eyebrow}</p>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">{title}</h1>

@@ -581,11 +581,11 @@ export function ProviderSearchPage() {
     if (albumId) await loadAlbumById(albumId, track.provider);
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-screen bg-black" />;
+  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
 
   return (
-    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
+    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex justify-center">
           <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
             <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
@@ -602,7 +602,7 @@ export function ProviderSearchPage() {
               value={keywords}
             />
             {enabledProviders.length > 1 ? (
-              <select aria-label="选择音乐平台" className="hidden h-9 rounded-lg border border-white/[0.08] bg-black px-2 text-xs text-white/75 outline-none sm:block" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
+              <select aria-label="选择音乐平台" className="h-10 w-[4.75rem] shrink-0 rounded-lg border border-white/[0.08] bg-black px-1.5 text-[11px] text-white/75 outline-none sm:w-auto sm:px-2 sm:text-xs" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
                 {enabledProviders.map((item) => <option key={item} value={item}>{item === "netease" ? "网易云" : "QQ 音乐"}</option>)}
               </select>
             ) : null}
@@ -714,7 +714,7 @@ function SongsResults({
                 return (
                   <Button
                     aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
-                    className="h-8 w-8"
+                    className="h-10 w-10"
                     disabled={pending !== null || downloaded || downloading}
                     onClick={() => void onDownload(track)}
                     size="icon"
@@ -833,7 +833,7 @@ function albumKey(provider: Provider, providerAlbumId: string) {
 }
 
 function SearchTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
-  return <button aria-selected={active} className={`relative px-1 pb-4 text-sm font-semibold transition ${active ? "text-white" : "text-white/40 hover:text-white/70"}`} onClick={onClick} role="tab" type="button">{children}{active ? <span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /> : null}</button>;
+  return <button aria-selected={active} className={`relative min-h-11 px-1 pb-3 text-sm font-semibold transition ${active ? "text-white" : "text-white/40 hover:text-white/70"}`} onClick={onClick} role="tab" type="button">{children}{active ? <span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /> : null}</button>;
 }
 
 function Artwork({ alt, src, size, className = "" }: { alt: string; src: string | null | undefined; size: "sm" | "md" | "lg"; className?: string }) {

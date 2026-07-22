@@ -1,6 +1,6 @@
 # 部署说明
 
-最后更新：`2026-07-16`
+最后更新：`2026-07-23`
 
 ## 当前支持的部署形态
 
@@ -8,9 +8,9 @@
 
 仓库当前提供的正式模板是：
 
-- [deploy/linux/docker-compose.prod.yml](/e:/code/music_room/deploy/linux/docker-compose.prod.yml)
-- [deploy/linux/.env.production.example](/e:/code/music_room/deploy/linux/.env.production.example)
-- [deploy/linux/nginx/music-room.conf](/e:/code/music_room/deploy/linux/nginx/music-room.conf)
+- [deploy/linux/docker-compose.prod.yml](../../deploy/linux/docker-compose.prod.yml)
+- [deploy/linux/.env.production.example](../../deploy/linux/.env.production.example)
+- [deploy/linux/nginx/music-room.conf](../../deploy/linux/nginx/music-room.conf)
 
 这套模板默认包含：
 
@@ -41,7 +41,7 @@
 4. 执行：
 
 ```bash
-npx pnpm deploy:linux
+pnpm deploy:linux
 ```
 
 或手动执行：
@@ -54,9 +54,9 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 ## 发布前检查
 
 ```bash
-npx pnpm typecheck
-npx pnpm test
-npx pnpm build
+pnpm typecheck
+pnpm test
+pnpm build
 docker compose config
 docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml config
 ```
@@ -64,16 +64,26 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 启动后再执行：
 
 ```bash
-npx pnpm deploy:check
+pnpm deploy:check
 ```
 
 ## 管理台写操作
 
 生产模板默认启用 `ADMIN_MUTATIONS_ENABLED=true`，管理员登录后可以结束房间、禁用或启用普通账号，以及撤销普通用户会话。发生故障需要立即冻结管理写操作时，将该变量改为 `false` 并重启 `server`；只读目录和观测接口不会受影响。
 
-## QQ 音乐 provider
+## Provider 配置
 
-QQ 音乐默认关闭，按需在生产环境设置：
+网易云和 QQ 音乐默认关闭。启用任一 provider 时，服务端需要对应的加密 Cookie 密钥；Web 镜像还需要同步注入对应的 `NEXT_PUBLIC_*_ENABLED` 构建变量。
+
+网易云：
+
+```dotenv
+NETEASE_ENABLED=true
+NETEASE_COOKIE_ENCRYPTION_KEY=<32-byte-hex-or-base64>
+NETEASE_DEFAULT_QUALITY=exhigh
+```
+
+QQ 音乐（默认关闭，按需在生产环境设置）：
 
 ```dotenv
 QQMUSIC_ENABLED=true
@@ -169,6 +179,7 @@ curl http://127.0.0.1:3001/health
 - `TURN_PUBLIC_HOST_USE_APP_DOMAIN=0`
 - `TURN_PUBLIC_HOST_USE_REQUEST_HOST=0`
 - `TURN_PORT=3478`
+- `TURN_TLS_PORT=5349`
 - `TURN_SHARED_SECRET=<replace-me>`
 - `TURN_REALM=turn.example.com`
 - `TURN_MIN_PORT=49160`

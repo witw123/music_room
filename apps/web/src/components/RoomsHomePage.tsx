@@ -267,11 +267,11 @@ export function RoomsHomePage({
   );
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-screen bg-background" />;
+    return <div className="min-h-[100dvh] bg-background" />;
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black pb-[12rem] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="relative flex min-h-[100dvh] flex-col overflow-y-auto bg-black pb-[12rem] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
         <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
@@ -620,10 +620,10 @@ function RoomDialog({
   if (!portalRoot) return null;
 
   return createPortal(
-    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm" onMouseDown={onClose} role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" onMouseDown={onClose} role="presentation">
       <div
         aria-modal="true"
-        className="light-dialog-surface max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >

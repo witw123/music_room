@@ -1,6 +1,6 @@
 # Music Room Design System
 
-Last updated: `2026-04-18`
+Last updated: `2026-07-23`
 
 ## Purpose
 
@@ -106,7 +106,7 @@ Use these as the default palette.
 The core room layout is a two-zone composition:
 
 - Stage zone: current track, room identity, playback aura, room context
-- Workspace zone: queue, library, cache, members, diagnostics
+- Workspace zone: library, personal playlists, members, and diagnostics
 
 The stage should dominate attention first. The workspace should feel structured and operational.
 
@@ -121,7 +121,7 @@ The stage should dominate attention first. The workspace should feel structured 
 
 - Marketing pages: cinematic, spacious, strong hierarchy
 - Room stage: immersive, centered, minimal copy
-- Queue/library/cache/members panels: compact, readable, information-dense
+- Library/personal-playlist/members panels: compact, readable, information-dense
 
 ## Component Guidance
 
@@ -219,7 +219,7 @@ The stage should dominate attention first. The workspace should feel structured 
 - Prefer operational wording such as:
   - `正在连接实时音频`
   - `已复制房间码`
-  - `缓存下载已暂停`
+  - `等待当前音源开始播放`
   - `等待当前音源开始播放`
 
 ## Page-Specific Guidance
@@ -281,4 +281,4 @@ If the requested screen is new, it should still feel like it belongs next to:
 - the dark landing page
 - the room stage with the vinyl hero
 - the bottom playback rail
-- the queue/library/cache/members workspace
+- the library/personal-playlist/members workspace

@@ -69,13 +69,27 @@ export function PlayerQueueDrawer({
     await onReorderQueue(reorderedIds);
   }
 
+  async function moveQueueItem(queueItemId: string, direction: -1 | 1) {
+    if (!canReorderQueue) return;
+    const currentIndex = queue.findIndex((item) => item.id === queueItemId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= queue.length) return;
+
+    const reorderedIds = queue.map((item) => item.id);
+    [reorderedIds[currentIndex], reorderedIds[targetIndex]] = [
+      reorderedIds[targetIndex],
+      reorderedIds[currentIndex]
+    ];
+    await onReorderQueue(reorderedIds);
+  }
+
   return (
     <div className="relative">
       <Button
         variant="ghost"
         size="icon"
         data-testid="player-queue-button"
-        className="relative h-8 w-8 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"
+        className="relative h-10 w-10 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"
         style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
@@ -93,7 +107,7 @@ export function PlayerQueueDrawer({
       </Button>
 
       {isOpen ? (
-        <aside aria-label="播放队列" data-testid="player-queue-drawer" className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
+        <aside aria-label="播放队列" data-testid="player-queue-drawer" className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[calc(10.5rem+env(safe-area-inset-bottom))] max-sm:left-2 max-sm:right-2 max-sm:mb-0 max-sm:w-auto max-sm:max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-12rem)]">
           <div className="light-player-queue-content relative flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar">
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
@@ -144,11 +158,39 @@ export function PlayerQueueDrawer({
                        </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                      {canReorderQueue ? (
+                        <div className="flex items-center gap-0.5 sm:hidden">
+                          <Button
+                            aria-label={`上移《${title}》`}
+                            className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
+                            disabled={index === 0 || isPending}
+                            onClick={() => void moveQueueItem(item.id, -1)}
+                            size="icon"
+                            title="上移"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 14 6-6 6 6" /></svg>
+                          </Button>
+                          <Button
+                            aria-label={`下移《${title}》`}
+                            className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
+                            disabled={index === queue.length - 1 || isPending}
+                            onClick={() => void moveQueueItem(item.id, 1)}
+                            size="icon"
+                            title="下移"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 10 6 6 6-6" /></svg>
+                          </Button>
+                        </div>
+                      ) : null}
                       <Button
                         variant="ghost"
                         size="icon"
                         data-testid="queue-item-play-button"
-                        className="h-8 w-8 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
+                        className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300 sm:h-8 sm:w-8"
                         disabled={!canControlPlayback || isCurrent}
                         onClick={() => void onPlayQueueItem(item.id)}
                         title="播放"
@@ -158,7 +200,7 @@ export function PlayerQueueDrawer({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-zinc-300 hover:bg-red-500/15 hover:text-red-300"
+                        className="h-10 w-10 text-zinc-300 hover:bg-red-500/15 hover:text-red-300 sm:h-8 sm:w-8"
                         disabled={!canRemove}
                         onClick={() => startTransition(() => void onRemoveQueueItem(item.id))}
                         title="移除"

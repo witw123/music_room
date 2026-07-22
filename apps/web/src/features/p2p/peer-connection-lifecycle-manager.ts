@@ -110,6 +110,7 @@ const mediaNoReceiveRecoveryWindows = 4;
 const mediaNoSendRecoveryWindows = 4;
 const mediaRecoveryHealthyLossThreshold = 3;
 const mediaRecoveryHealthyJitterThreshold = 20;
+const incomingMediaAdmissionGraceMs = 8_000;
 
 function createMediaRecoveryState(): MediaRecoveryState {
   return {
@@ -148,6 +149,10 @@ export class PeerConnectionLifecycleManager {
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
   private readonly audioBitrateDegradationWindows = new Map<string, number>();
   private readonly mediaRecoveryOperations = new Map<string, Promise<PeerEntry | null>>();
+  private readonly provisionalIncomingMediaTimers = new WeakMap<
+    PeerEntry,
+    ReturnType<typeof setTimeout>
+  >();
   private connectionGenerationSequence = 0;
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
@@ -263,7 +268,13 @@ export class PeerConnectionLifecycleManager {
       const expected = entry.linkKind === "data"
         ? nextPeers.has(peerId)
         : this.expectedMediaPeerIds().has(peerId);
-      if (!expected) {
+      if (entry.linkKind === "media" && expected) {
+        this.clearProvisionalIncomingMediaAdmission(entry);
+      }
+      if (
+        !expected &&
+        !(entry.linkKind === "media" && this.hasProvisionalIncomingMediaAdmission(entry))
+      ) {
         this.releasePeer(peerId, entry);
       }
     }
@@ -307,11 +318,47 @@ export class PeerConnectionLifecycleManager {
     if (!this.expectedRemotePeerIds.has(peerId)) {
       return false;
     }
-    return linkKind === "data" || this.expectedMediaPeerIds().has(peerId);
+    if (linkKind === "data") {
+      return true;
+    }
+
+    // A newly joined listener can receive the source's media offer before its
+    // playback snapshot has populated localAudioSourcePeerId. Admit media
+    // signals from known room members during that short window; once a source
+    // is known, keep the active-source admission check strict.
+    return this.localAudioSourcePeerId === null || this.expectedMediaPeerIds().has(peerId);
   }
 
   private hasLiveLocalAudioTrack() {
     return !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
+  }
+
+  private provisionallyAdmitIncomingMedia(peerId: string, entry: PeerEntry) {
+    this.clearProvisionalIncomingMediaAdmission(entry);
+    const timer = setTimeout(() => {
+      this.provisionalIncomingMediaTimers.delete(entry);
+      if (
+        entry.releasing ||
+        this.peerConnections.get(peerId, "media") !== entry ||
+        this.expectedMediaPeerIds().has(peerId)
+      ) {
+        return;
+      }
+      this.releasePeer(peerId, entry);
+    }, incomingMediaAdmissionGraceMs);
+    this.provisionalIncomingMediaTimers.set(entry, timer);
+  }
+
+  private hasProvisionalIncomingMediaAdmission(entry: PeerEntry) {
+    return this.provisionalIncomingMediaTimers.has(entry);
+  }
+
+  private clearProvisionalIncomingMediaAdmission(entry: PeerEntry) {
+    const timer = this.provisionalIncomingMediaTimers.get(entry);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.provisionalIncomingMediaTimers.delete(entry);
+    }
   }
 
   private async reconcileMediaTopology() {
@@ -320,7 +367,9 @@ export class PeerConnectionLifecycleManager {
     }
     const expectedMedia = this.expectedMediaPeerIds();
     for (const [peerId, entry] of this.peerConnections.entries("media")) {
-      if (!expectedMedia.has(peerId)) {
+      if (expectedMedia.has(peerId)) {
+        this.clearProvisionalIncomingMediaAdmission(entry);
+      } else if (!this.hasProvisionalIncomingMediaAdmission(entry)) {
         this.releasePeer(peerId, entry);
       }
     }
@@ -414,7 +463,11 @@ export class PeerConnectionLifecycleManager {
       return existing;
     }
 
-    return this.ensurePeer(peerId, false, linkKind);
+    const entry = await this.ensurePeer(peerId, false, linkKind);
+    if (linkKind === "media" && this.localAudioSourcePeerId === null) {
+      this.provisionallyAdmitIncomingMedia(peerId, entry);
+    }
+    return entry;
   }
 
   runPeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {
@@ -649,7 +702,8 @@ export class PeerConnectionLifecycleManager {
         this.peerConnections.get(currentPeerId, linkKind) === currentEntry,
       isExpectedPeer: (currentPeerId) => linkKind === "data"
         ? this.peerConnections.expects(currentPeerId)
-        : this.expectedMediaPeerIds().has(currentPeerId),
+        : this.expectedMediaPeerIds().has(currentPeerId) ||
+          this.hasProvisionalIncomingMediaAdmission(entry),
       sendCandidate: (candidatePeerId, payload) =>
         this.signaling.send(
           candidatePeerId,
@@ -794,6 +848,7 @@ export class PeerConnectionLifecycleManager {
 
   private releasePeer(peerId: string, entry: PeerEntry) {
     if (entry.linkKind === "media") {
+      this.clearProvisionalIncomingMediaAdmission(entry);
       this.latestMediaSamples.delete(peerId);
       this.audioBitrateDegradationWindows.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);

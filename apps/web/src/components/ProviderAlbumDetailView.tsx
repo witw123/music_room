@@ -105,7 +105,7 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
           <span className="relative pb-4 text-sm font-semibold text-white">歌曲 <span className="text-white/35">{tracks.length}</span><span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /></span>
           <span className="pb-4 text-sm text-white/35">详情</span>
         </div>
-        <label className="mb-2 flex h-9 w-full max-w-[220px] items-center gap-2 rounded-full border border-white/[0.1] bg-black px-3 text-white/45 sm:w-auto">
+        <label className="mb-2 flex h-11 w-full max-w-[220px] items-center gap-2 rounded-full border border-white/[0.1] bg-black px-3 text-white/45 sm:h-9 sm:w-auto">
           <Icon name="search" />
           <span className="sr-only">搜索专辑歌曲</span>
           <input aria-label="搜索专辑歌曲" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/35" onChange={(event) => setQuery(event.target.value)} placeholder="搜索" type="search" value={query} />
@@ -136,11 +136,11 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
   const downloading = actions.isDownloading?.(track) ?? false;
   const disabled = downloading;
   return (
-    <div className="col-span-2 flex items-center justify-end gap-1 md:col-auto">
-      {actions.onDownload ? <Button aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-8 w-8" disabled={disabled || downloaded} onClick={() => actions.onDownload?.(track)} size="icon" title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地"} type="button" variant="ghost"><TrackActionIcon name={downloading ? "loading" : "download"} /></Button> : null}
-      {actions.onAddToQueue ? <Button aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-8 w-8" disabled={disabled || queued || !playable} onClick={() => actions.onAddToQueue?.(track)} size="icon" title={queued ? "已在队列中" : playable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><TrackActionIcon name="queue" /></Button> : null}
-      {actions.onPlay ? <Button aria-label={playable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-8 w-8" disabled={disabled || !playable} onClick={() => actions.onPlay?.(track)} size="icon" title={playable ? "播放" : "需要下载后播放"} type="button" variant="ghost"><TrackActionIcon name="play" /></Button> : null}
-      {actions.onAddToPlaylist ? <Button aria-label={`将《${track.title}》加入歌单`} className="h-8 w-8" disabled={disabled} onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" type="button" variant="ghost"><TrackActionIcon name="plus" /></Button> : null}
+    <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-1 md:col-auto md:flex-nowrap">
+      {actions.onDownload ? <Button aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || downloaded} onClick={() => actions.onDownload?.(track)} size="icon" title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地"} type="button" variant="ghost"><TrackActionIcon name={downloading ? "loading" : "download"} /></Button> : null}
+      {actions.onAddToQueue ? <Button aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || queued || !playable} onClick={() => actions.onAddToQueue?.(track)} size="icon" title={queued ? "已在队列中" : playable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><TrackActionIcon name="queue" /></Button> : null}
+      {actions.onPlay ? <Button aria-label={playable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || !playable} onClick={() => actions.onPlay?.(track)} size="icon" title={playable ? "播放" : "需要下载后播放"} type="button" variant="ghost"><TrackActionIcon name="play" /></Button> : null}
+      {actions.onAddToPlaylist ? <Button aria-label={`将《${track.title}》加入歌单`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled} onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" type="button" variant="ghost"><TrackActionIcon name="plus" /></Button> : null}
     </div>
   );
 }

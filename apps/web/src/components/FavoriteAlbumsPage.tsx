@@ -251,15 +251,15 @@ export function FavoriteAlbumsPage() {
     }
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-screen bg-black" />;
+  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
 
   const detailItem = detail
     ? items.find((item) => item.provider === detail.provider && item.providerAlbumId === detail.providerAlbumId) ?? null
     : null;
 
   return (
-    <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20">
+    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20">
         {detail && detailItem ? (
           <ProviderAlbumDetailView
             album={detail}
@@ -298,7 +298,7 @@ export function FavoriteAlbumsPage() {
                           <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
                         </div>
                       </button>
-                      <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
+                      <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
                     </article>
                   ))}
                 </div>

@@ -161,13 +161,20 @@ async function importOfflineProviderTrack(input: {
 
     // Keep the browser cache when no local repository is set. If one exists,
     // this moves the source file into the configured local folder.
-    await saveCachedAudioFileToLocalDirectory({
+    // Do not make playback wait for repository metadata, artwork, or a slow
+    // File System Access write. The IndexedDB copy is already durable, and
+    // the returned File can start at the room clock position immediately.
+    void saveCachedAudioFileToLocalDirectory({
       file,
       fileHash: track.fileHash,
       title: track.title,
       mimeType,
       provider: source.provider,
-      playbackAsset: fallbackPlaybackAsset ?? undefined
+      playbackAsset: fallbackPlaybackAsset ?? undefined,
+      // A provider fallback is a fresh source for the room track. Reusing an
+      // older cache entry here could leave the local path pointing at a
+      // truncated or stale download while the returned File plays correctly.
+      reuseExisting: false
     }).catch(() => undefined);
     notifyCacheLibraryChanged();
 
@@ -207,16 +214,37 @@ async function findUsableLocalPlaybackAsset(
     if (
       record.manifest.profileId !== playbackProfileId ||
       record.manifest.encoder.version !== playbackEncoderVersion ||
+      record.manifest.sourceFileHash !== track.fileHash ||
       record.manifest.unitCount <= 0
     ) {
       continue;
     }
-    if (await getAssetUnit(assetId, 0).catch(() => null)) {
+    const firstUnit = await getAssetUnit(assetId, 0).catch(() => null);
+    if (!isUsablePlaybackUnit(firstUnit, 0)) {
+      continue;
+    }
+    // A complete manifest is expected to contain every unit. Check the tail
+    // as well so a truncated local repository cannot be selected as fallback.
+    const lastUnitIndex = record.manifest.unitCount - 1;
+    const lastUnit = lastUnitIndex === 0
+      ? firstUnit
+      : await getAssetUnit(assetId, lastUnitIndex).catch(() => null);
+    if (isUsablePlaybackUnit(lastUnit, lastUnitIndex)) {
       return record.manifest;
     }
   }
 
   return null;
+}
+
+function isUsablePlaybackUnit(
+  unit: Awaited<ReturnType<typeof getAssetUnit>>,
+  unitIndex: number
+) {
+  return !!unit &&
+    unit.unitIndex === unitIndex &&
+    unit.payloadBytes > 0 &&
+    unit.payload.byteLength === unit.payloadBytes;
 }
 
 async function resolveProviderLyrics(source: OfflineProviderSource) {
