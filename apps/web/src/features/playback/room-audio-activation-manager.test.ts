@@ -106,6 +106,25 @@ describe("RoomAudioActivationManager", () => {
     expect(manager.isActivated()).toBe(true);
   });
 
+  it("does not replay an already-playing element for the same source", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    audio.srcObject = {} as MediaStream;
+
+    await manager.playElement(audio);
+    vi.mocked(audio.play).mockClear();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      value: false
+    });
+
+    await expect(manager.playElement(audio)).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
   it("plays again when a not-paused element has switched to a new media source", async () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();

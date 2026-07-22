@@ -240,6 +240,37 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(FakeRTCPeerConnection.instances).toHaveLength(1);
   });
 
+  it("does not recreate a removed peer when delayed signaling arrives", async () => {
+    const { manager } = createManager();
+    await manager.syncPeers(["peer_b"]);
+
+    await manager.syncPeers([]);
+    const delayedDataEntry = await manager.getOrCreateIncomingPeerEntry("peer_b", "data");
+    const delayedMediaEntry = await manager.getOrCreateIncomingPeerEntry("peer_b", "media");
+
+    expect(delayedDataEntry).toBeNull();
+    expect(delayedMediaEntry).toBeNull();
+    expect(manager.getPeerEntry("peer_b", "data")).toBeNull();
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+  });
+
+  it("does not admit a delayed media signal from a previous source", async () => {
+    const { manager } = createManager();
+    await manager.syncPeers(["peer_b", "peer_c"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
+
+    manager.setLocalAudioStream(null, "peer_c");
+    const delayedMediaEntry = await manager.getOrCreateIncomingPeerEntry("peer_b", "media");
+
+    expect(delayedMediaEntry).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
+  });
+
   it("clears pending request state and closes peers on destroy", async () => {
     const clearPendingRequestsForPeer = vi.fn();
     const { manager } = createManager({ clearPendingRequestsForPeer });
@@ -631,7 +662,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     observeMediaHealth("peer_b", degradedSample);
     observeMediaHealth("peer_b", degradedSample);
-    entry.connection.onconnectionstatechange?.();
+    entry.connection.onconnectionstatechange?.(new Event("connectionstatechange"));
 
     expect(internals.mediaRecovery.get("peer_b")?.highLossWindows).toBeGreaterThan(0);
     expect(internals.mediaRecovery.get("peer_b")?.positiveMediaWindows).toBe(0);

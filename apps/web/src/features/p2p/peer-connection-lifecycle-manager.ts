@@ -153,6 +153,10 @@ export class PeerConnectionLifecycleManager {
   private localAudioSourcePeerId: string | null = null;
   private localAudioMaxBitrateKbps: number | null = null;
   private expectedRemotePeerIds = new Set<string>();
+  // Before the first authoritative member snapshot arrives, an incoming offer
+  // can legitimately beat topology reconciliation. Once initialized, only
+  // explicitly expected peers may allocate a new RTCPeerConnection.
+  private topologyInitialized = false;
   private topologyOperationChain: Promise<void> = Promise.resolve();
   private destroyed = false;
 
@@ -234,6 +238,7 @@ export class PeerConnectionLifecycleManager {
     }
     const nextPeers = this.peerConnections.setExpectedRemotePeerIds(remotePeerIds);
     this.expectedRemotePeerIds = nextPeers;
+    this.topologyInitialized = true;
 
     for (const peerId of nextPeers) {
       const existing = this.peerConnections.get(peerId, "data");
@@ -293,6 +298,16 @@ export class PeerConnectionLifecycleManager {
       expected.add(this.localAudioSourcePeerId);
     }
     return expected;
+  }
+
+  private isIncomingPeerAdmitted(peerId: string, linkKind: PeerLinkKind) {
+    if (!this.topologyInitialized) {
+      return true;
+    }
+    if (!this.expectedRemotePeerIds.has(peerId)) {
+      return false;
+    }
+    return linkKind === "data" || this.expectedMediaPeerIds().has(peerId);
   }
 
   private hasLiveLocalAudioTrack() {
@@ -384,6 +399,22 @@ export class PeerConnectionLifecycleManager {
   async getOrCreatePeerEntry(peerId: string, linkKind: PeerLinkKind = "data") {
     return this.peerConnections.get(peerId, linkKind) ??
       (await this.ensurePeer(peerId, false, linkKind));
+  }
+
+  async getOrCreateIncomingPeerEntry(
+    peerId: string,
+    linkKind: PeerLinkKind = "data"
+  ): Promise<PeerEntry | null> {
+    if (this.destroyed || !this.isIncomingPeerAdmitted(peerId, linkKind)) {
+      return null;
+    }
+
+    const existing = this.peerConnections.get(peerId, linkKind);
+    if (existing && !existing.releasing) {
+      return existing;
+    }
+
+    return this.ensurePeer(peerId, false, linkKind);
   }
 
   runPeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {

@@ -386,6 +386,30 @@ describe("SignalingTransport", () => {
     expect(getOrCreatePeerEntry).not.toHaveBeenCalled();
   });
 
+  it("drops a signal when the current topology no longer admits its peer", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const getOrCreatePeerEntry = vi.fn(async () =>
+      null as ReturnType<typeof buildSignalEntry> | null
+    );
+    const runPeerOperation = vi.fn(async () => undefined);
+    const applyRemoteDescription = vi.fn();
+
+    await transport.handleIncomingSignal(buildSignal(), {
+      getOrCreatePeerEntry,
+      runPeerOperation,
+      applyRemoteDescription,
+      flushPendingCandidates: vi.fn()
+    });
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledWith("peer_b", "data");
+    expect(runPeerOperation).not.toHaveBeenCalled();
+    expect(applyRemoteDescription).not.toHaveBeenCalled();
+  });
+
   it("drops reordered signals from an older connection generation", async () => {
     const transport = new SignalingTransport({
       roomId: "room_1",

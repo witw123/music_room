@@ -34,7 +34,7 @@ type LocalOfferConnection = {
 };
 
 type IncomingSignalHandlers<TEntry extends SignalPeerEntry> = {
-  getOrCreatePeerEntry: (peerId: string, linkKind?: PeerLinkKind) => Promise<TEntry>;
+  getOrCreatePeerEntry: (peerId: string, linkKind?: PeerLinkKind) => Promise<TEntry | null>;
   runPeerOperation: <T>(entry: TEntry, task: () => Promise<T>) => Promise<T | undefined>;
   applyRemoteDescription: (
     entry: TEntry,
@@ -170,6 +170,12 @@ export class SignalingTransport {
 
     const linkKind = payload.linkKind ?? "data";
     const entry = await handlers.getOrCreatePeerEntry(payload.fromPeerId, linkKind);
+    // A topology update may have removed this peer (or changed the active
+    // source) while its SDP/ICE was in flight. Do not let that late signal
+    // recreate a connection outside the currently admitted topology.
+    if (!entry) {
+      return;
+    }
     entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
 
     if (payload.type === "offer") {
