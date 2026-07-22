@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { PlaybackMode } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { LocalStorageManagementCard } from "@/components/LocalStorageSettingsSection";
+import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
+import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import {
@@ -14,13 +17,20 @@ import {
   getAppSettings,
   resetAppSettings,
   updateAppSettings,
-  type AppSettings
+  type AppSettings,
+  type ThemePreference
 } from "@/features/settings/settings-store";
 
 const playbackModeLabels: Record<PlaybackMode, string> = {
   sequence: "顺序播放",
   shuffle: "随机播放",
   single: "单曲循环"
+};
+
+const themeLabels: Record<ThemePreference, string> = {
+  dark: "深色",
+  light: "浅色",
+  system: "跟随系统"
 };
 
 export function SettingsPage() {
@@ -77,7 +87,40 @@ export function SettingsPage() {
         </header>
 
         <div className="mt-6 space-y-8">
+          <SettingsSection title="音乐平台账号">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+              {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
+                <NeteaseSourcePanel activeSession={activeSession} mode="account" />
+              ) : null}
+              {process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? (
+                <QqMusicSourcePanel activeSession={activeSession} mode="account" />
+              ) : null}
+              {process.env.NEXT_PUBLIC_NETEASE_ENABLED !== "true" && process.env.NEXT_PUBLIC_QQMUSIC_ENABLED !== "true" ? (
+                <div className="rounded-xl border border-surface-border bg-surface/40 p-6 text-sm text-foreground-muted">
+                  当前没有启用第三方音乐平台。
+                </div>
+              ) : null}
+            </div>
+          </SettingsSection>
+
+          <LocalStorageManagementCard />
+
           <SettingsSection title="通用">
+            <SettingRow label="主题" description="选择应用的颜色主题，也可以跟随操作系统设置。">
+              <div aria-label="主题" className="grid grid-cols-3 rounded-lg border border-surface-border bg-surface/60 p-1" role="group">
+                {(Object.entries(themeLabels) as Array<[ThemePreference, string]>).map(([theme, label]) => (
+                  <button
+                    aria-pressed={settings.theme === theme}
+                    className={`min-w-16 rounded-md px-2.5 py-2 text-xs font-medium transition-colors ${settings.theme === theme ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+                    key={theme}
+                    onClick={() => patchSettings({ theme })}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
             <SettingRow label="侧边栏默认收纳" description="在桌面端优先为内容留出空间。">
               <Toggle
                 checked={settings.layout.sidebarCollapsed}
@@ -156,9 +199,9 @@ export function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="数据管理">
-            <SettingRow label="平台账号和歌单" description="账号绑定、网络歌单和收藏专辑位于个人中心。">
+            <SettingRow label="歌单与收藏" description="网络歌单、收藏专辑和本地歌单位于我的页面。">
               <Link className="text-xs font-medium text-accent transition hover:text-accent-hover" href="/app/profile">
-                打开个人中心
+                打开我的
               </Link>
             </SettingRow>
             <SettingRow label="恢复默认设置" description="只重置界面和播放偏好，不删除本地歌曲。">

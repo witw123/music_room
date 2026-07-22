@@ -277,7 +277,7 @@ export function ProviderSearchPage() {
     try {
       const resolvedTrack = await resolveTrackArtwork(track);
       if (!await ensureLocalAudioDirectoryWriteAccess()) {
-        throw new Error("请先在个人中心选择本地歌曲保存位置。");
+        throw new Error("请先在我的页面选择本地歌曲保存位置。");
       }
       const response = resolvedTrack.provider === "netease"
         ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
@@ -862,8 +862,8 @@ function Icon({ name, filled = false }: { name: "search" | "heart" | "arrow-left
 
 function toProviderErrorMessage(error: unknown, provider: Provider) {
   if (error instanceof MusicRoomApiError) {
-    if (error.code === "NETEASE_ACCOUNT_REQUIRED" || error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "请先在个人中心绑定对应平台账号。";
-    if (error.code === "NETEASE_AUTH_EXPIRED" || error.code === "QQMUSIC_AUTH_EXPIRED") return "平台登录已失效，请回个人中心重新绑定。";
+    if (error.code === "NETEASE_ACCOUNT_REQUIRED" || error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "请先在我的页面绑定对应平台账号。";
+    if (error.code === "NETEASE_AUTH_EXPIRED" || error.code === "QQMUSIC_AUTH_EXPIRED") return "平台登录已失效，请回我的页面重新绑定。";
     if (error.code === "NETEASE_DISABLED" || error.code === "QQMUSIC_DISABLED") return "该音乐平台当前未启用。";
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") return "该歌曲没有可用的公开音频，可能受到 VIP 或版权限制；免费歌曲也无法播放时请重新绑定 QQ 音乐。";
     return error.message;

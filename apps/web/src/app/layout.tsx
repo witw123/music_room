@@ -1,7 +1,24 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import Script from "next/script";
 import { PersistentRoomRuntime } from "@/components/PersistentRoomRuntime";
 import "./globals.css";
+
+const themeInitScript = `(() => {
+  try {
+    const raw = localStorage.getItem("music-room-settings-v1");
+    const value = raw ? JSON.parse(raw) : null;
+    const preference = value && (value.theme === "light" || value.theme === "system" || value.theme === "dark") ? value.theme : "dark";
+    const systemPrefersLight = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches;
+    const light = preference === "light" || (preference === "system" && systemPrefersLight);
+    const theme = light ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  } catch {
+    document.documentElement.dataset.theme = "dark";
+    document.documentElement.style.colorScheme = "dark";
+  }
+})();`;
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -23,7 +40,10 @@ export default function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <Script id="theme-init" strategy="beforeInteractive">{themeInitScript}</Script>
+      </head>
       <body className={plusJakartaSans.variable}>
         <PersistentRoomRuntime>{children}</PersistentRoomRuntime>
       </body>

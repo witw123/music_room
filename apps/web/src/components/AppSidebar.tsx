@@ -12,6 +12,7 @@ import {
   storeAwayRoomId
 } from "@/lib/away-room";
 import {
+  applyAppTheme,
   appSettingsChangeEvent,
   getAppSettings,
   updateAppSettings
@@ -34,7 +35,7 @@ const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: Ico
   { id: "search", label: "搜索", href: "/app/search", icon: "search" },
   { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
   { id: "favorites", label: "收藏", href: "/app/favorites", icon: "favorite" },
-  { id: "profile", label: "个人中心", href: "/app/profile", icon: "profile" },
+  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" },
   { id: "settings", label: "设置", href: "/app/settings", icon: "settings" }
 ];
 
@@ -68,10 +69,19 @@ export function AppSidebar({
     : "md:bottom-0";
 
   useEffect(() => {
+    let themeMediaQuery: MediaQueryList | null = null;
+    const syncTheme = () => applyAppTheme(getAppSettings().theme);
     const syncSidebarState = () => {
       const settings = getAppSettings();
       setCollapsed(settings.layout.sidebarCollapsed);
       document.documentElement.dataset.reduceMotion = String(settings.layout.reduceMotion);
+      applyAppTheme(settings.theme);
+      themeMediaQuery?.removeEventListener("change", syncTheme);
+      themeMediaQuery = null;
+      if (settings.theme === "system" && typeof window.matchMedia === "function") {
+        themeMediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+        themeMediaQuery.addEventListener("change", syncTheme);
+      }
     };
     syncSidebarState();
     window.addEventListener(appSettingsChangeEvent, syncSidebarState);
@@ -79,6 +89,7 @@ export function AppSidebar({
     return () => {
       window.removeEventListener(appSettingsChangeEvent, syncSidebarState);
       window.removeEventListener("storage", syncSidebarState);
+      themeMediaQuery?.removeEventListener("change", syncTheme);
     };
   }, []);
 
@@ -138,20 +149,20 @@ export function AppSidebar({
             <LogoutButton onLogout={onLogout} />
           </span>
         ) : null}
-        <button
-          aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
-          aria-expanded={!collapsed}
-          className="hidden h-8 w-8 shrink-0 items-center justify-center self-end rounded-full bg-white/[0.06] p-0 text-white/[0.55] transition-colors hover:bg-white/[0.12] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex"
-          onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
-          title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
-          type="button"
-        >
-          <NavIcon name={collapsed ? "expand" : "collapse"} size={17} />
-        </button>
       </div>
 
       <div className={`flex items-center md:flex-col md:items-stretch ${collapsed ? "md:gap-3 md:p-2" : "md:gap-5 md:p-4"} ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
         <nav className="flex min-w-0 flex-1 items-center gap-1 md:flex-col md:items-stretch" aria-label="工作区">
+          <button
+            aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
+            aria-expanded={!collapsed}
+            className={`group hidden min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium text-white/[0.48] transition-[background-color,color,box-shadow] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${collapsed ? "md:justify-center md:px-2" : "md:justify-start"}`}
+            onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
+            title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
+            type="button"
+          >
+            <NavIcon name={collapsed ? "expand" : "collapse"} size={18} />
+          </button>
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
             const keepsHomeInRoom = keepHomeInRoom && item.id === "home";
@@ -353,15 +364,8 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   if (name === "settings") {
     return (
       <svg {...commonProps}>
-        <path d="M12 3.5v2" />
-        <path d="M12 18.5v2" />
-        <path d="m5.99 5.99 1.42 1.42" />
-        <path d="m16.59 16.59 1.42 1.42" />
-        <path d="M3.5 12h2" />
-        <path d="M18.5 12h2" />
-        <path d="m5.99 18.01 1.42-1.42" />
-        <path d="m16.59 7.41 1.42-1.42" />
-        <circle cx="12" cy="12" r="3.5" />
+        <path d="m12 3.5 1.3 1.8 2.2-.3.7 2 2 .7-.3 2.2 1.8 1.3-1.8 1.3.3 2.2-2 .7-.7 2-2.2-.3L12 21l-1.3-1.8-2.2.3-.7-2-2-.7.3-2.2L4.3 12l1.8-1.3-.3-2.2 2-.7.7-2 2.2.3L12 3.5Z" />
+        <circle cx="12" cy="12" r="3.2" />
       </svg>
     );
   }

@@ -14,6 +14,20 @@
     --surface-border: rgba(255, 255, 255, 0.1);
   }
 
+  html[data-theme="light"] {
+    --background: #f5f7fb;
+    --background-secondary: #ffffff;
+    --foreground: #172033;
+    --foreground-muted: #64748b;
+    --surface: rgba(15, 23, 42, 0.045);
+    --surface-hover: rgba(15, 23, 42, 0.08);
+    --surface-border: rgba(15, 23, 42, 0.14);
+  }
+
+  html[data-theme="light"] body {
+    background-color: var(--background);
+  }
+
   body {
     margin: 0;
     background-color: #000000;
@@ -63,14 +77,73 @@
     display: none;
   }
 
+  /* A few legacy surfaces still use fixed dark utility classes. Map those
+     classes to the active palette so the theme applies consistently. */
+  html[data-theme="light"] [class~="bg-black"] {
+    background-color: var(--background) !important;
+  }
+
+  html[data-theme="light"] [class*="bg-black/"] {
+    background-color: color-mix(in srgb, var(--background) 84%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class*="bg-[#"] {
+    background-color: var(--background-secondary) !important;
+  }
+
+  html[data-theme="light"] [class~="text-white"] {
+    color: var(--foreground) !important;
+  }
+
+  html[data-theme="light"] [class~="bg-accent"][class~="text-white"] {
+    color: #ffffff !important;
+  }
+
+  html[data-theme="light"] [class*="text-white/"] {
+    color: color-mix(in srgb, var(--foreground) 68%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class*="hover:text-white"]:hover {
+    color: var(--foreground) !important;
+  }
+
+  html[data-theme="light"] [class*="border-white"],
+  html[data-theme="light"] [class*="divide-white"] {
+    border-color: var(--surface-border) !important;
+  }
+
+  html[data-theme="light"] [class*="bg-white/"] {
+    background-color: var(--surface) !important;
+  }
+
+  html[data-theme="light"] [class*="hover:bg-white/"]:hover {
+    background-color: var(--surface-hover) !important;
+  }
+
   /* Keep the content gutter aligned with the compact desktop sidebar. */
   @media (min-width: 768px) {
+    html .md\:pl-60 {
+      transition: padding-left 200ms ease;
+    }
+
     html[data-sidebar-collapsed="false"] .md\:pl-60 {
       padding-left: 12rem !important;
     }
 
     html:not([data-sidebar-collapsed="false"]) .md\:pl-60 {
       padding-left: 4rem !important;
+    }
+
+    /* Root workspaces should begin at the sidebar edge instead of re-centering
+       themselves and leaving a dead gutter after the sidebar changes width. */
+    html .md\:pl-60 > .mx-auto,
+    html .md\:pl-60 > section.mx-auto {
+      margin-left: 0 !important;
+    }
+
+    html .md\:pl-60 > .mx-auto,
+    html .md\:pl-60 > section.mx-auto {
+      padding-left: 0 !important;
     }
   }
 

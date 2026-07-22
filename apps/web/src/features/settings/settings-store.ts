@@ -3,8 +3,12 @@ import type { PlaybackMode } from "@music-room/shared";
 export const appSettingsStorageKey = "music-room-settings-v1";
 export const appSettingsChangeEvent = "music-room-settings-change";
 
+export type ThemePreference = "dark" | "light" | "system";
+export type ResolvedTheme = Exclude<ThemePreference, "system">;
+
 export type AppSettings = {
   version: 1;
+  theme: ThemePreference;
   layout: {
     sidebarCollapsed: boolean;
     reduceMotion: boolean;
@@ -20,6 +24,7 @@ export type AppSettings = {
 
 const defaultSettings: AppSettings = {
   version: 1,
+  theme: "dark",
   layout: {
     sidebarCollapsed: true,
     reduceMotion: false
@@ -51,6 +56,7 @@ export function getAppSettings(): AppSettings {
 
 export function updateAppSettings(
   patch: Partial<{
+    theme: ThemePreference;
     layout: Partial<AppSettings["layout"]>;
     playback: Partial<AppSettings["playback"]>;
   }>
@@ -96,6 +102,7 @@ export function normalizeSettings(value: unknown): AppSettings {
 
   return {
     version: 1,
+    theme: input.theme === "light" || input.theme === "system" ? input.theme : "dark",
     layout: {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
       reduceMotion: layout.reduceMotion === true
@@ -113,9 +120,32 @@ export function normalizeSettings(value: unknown): AppSettings {
 function cloneSettings(settings: AppSettings): AppSettings {
   return {
     version: settings.version,
+    theme: settings.theme,
     layout: { ...settings.layout },
     playback: { ...settings.playback }
   };
+}
+
+export function resolveAppTheme(preference: ThemePreference, prefersLight?: boolean): ResolvedTheme {
+  if (preference === "light") return "light";
+  if (preference === "system") {
+    const systemPrefersLight = prefersLight ?? (
+      typeof window !== "undefined" && typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-color-scheme: light)").matches
+        : false
+    );
+    return systemPrefersLight ? "light" : "dark";
+  }
+  return "dark";
+}
+
+export function applyAppTheme(preference: ThemePreference): ResolvedTheme {
+  const resolved = resolveAppTheme(preference);
+  if (typeof document !== "undefined") {
+    document.documentElement.dataset.theme = resolved;
+    document.documentElement.style.colorScheme = resolved;
+  }
+  return resolved;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

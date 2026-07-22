@@ -6,9 +6,6 @@ import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { LocalPlaylistsOverview } from "@/components/LocalPlaylistsOverview";
-import { LocalStorageManagementCard } from "@/components/LocalStorageSettingsSection";
-import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
-import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
 
 export function ProviderAccountsPage() {
   const router = useRouter();
@@ -33,20 +30,6 @@ export function ProviderAccountsPage() {
     <main className="relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-12 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
-        <section className="grid min-w-0 gap-4 lg:grid-cols-2">
-          {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
-            <NeteaseSourcePanel activeSession={activeSession} mode="account" />
-          ) : null}
-          {process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? (
-            <QqMusicSourcePanel activeSession={activeSession} mode="account" />
-          ) : null}
-          {process.env.NEXT_PUBLIC_NETEASE_ENABLED !== "true" && process.env.NEXT_PUBLIC_QQMUSIC_ENABLED !== "true" ? (
-            <div className="rounded-xl border border-surface-border bg-surface/40 p-6 text-sm text-foreground-muted">
-              当前没有启用第三方音乐平台。
-            </div>
-          ) : null}
-        </section>
-        <LocalStorageManagementCard />
         <LocalPlaylistsOverview />
       </div>
     </main>

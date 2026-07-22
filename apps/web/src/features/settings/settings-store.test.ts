@@ -3,6 +3,7 @@ import {
   appSettingsStorageKey,
   getAppSettings,
   normalizeSettings,
+  resolveAppTheme,
   resetAppSettings,
   updateAppSettings
 } from "./settings-store";
@@ -14,9 +15,20 @@ describe("app settings store", () => {
 
   it("uses a compact sidebar and stable playback defaults", () => {
     expect(normalizeSettings(null)).toMatchObject({
+      theme: "dark",
       layout: { sidebarCollapsed: true },
       playback: { defaultVolume: 0.8, localPlaybackMode: "sequence", lyricLines: 5 }
     });
+  });
+
+  it("normalizes and resolves light and system themes", () => {
+    expect(normalizeSettings({ theme: "light" }).theme).toBe("light");
+    expect(normalizeSettings({ theme: "system" }).theme).toBe("system");
+    expect(normalizeSettings({ theme: "unknown" }).theme).toBe("dark");
+    expect(resolveAppTheme("dark", true)).toBe("dark");
+    expect(resolveAppTheme("light", false)).toBe("light");
+    expect(resolveAppTheme("system", true)).toBe("light");
+    expect(resolveAppTheme("system", false)).toBe("dark");
   });
 
   it("persists normalized updates and can reset them", () => {

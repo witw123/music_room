@@ -324,7 +324,7 @@ function NetworkPlaylistSearch({
             {isConnected ? (
               <span className="text-[11px] text-emerald-300">已连接{account?.nickname ? ` · ${account.nickname}` : ""}</span>
             ) : (
-              <Link className="text-[11px] text-accent hover:text-accent/80" href="/app/profile">前往个人中心绑定</Link>
+              <Link className="text-[11px] text-accent hover:text-accent/80" href="/app/profile">前往我的绑定</Link>
             )}
           </div>
 

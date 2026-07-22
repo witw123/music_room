@@ -354,7 +354,7 @@ function HeartIcon({ filled = false }: { filled?: boolean }) {
 function toErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") return "该歌曲没有可用的公开音频，可能受到 VIP 或版权限制，请换一首歌曲重试。";
-    if (error.code === "QQMUSIC_AUTH_EXPIRED") return "QQ 音乐登录已失效，请回个人中心重新绑定。";
+    if (error.code === "QQMUSIC_AUTH_EXPIRED") return "QQ 音乐登录已失效，请回我的页面重新绑定。";
     return error.message;
   }
   return error instanceof Error ? error.message : "操作失败，请稍后重试。";
