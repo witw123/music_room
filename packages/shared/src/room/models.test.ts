@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { roomSnapshotSchema } from "./models";
+import {
+  defaultRoomMemberPermissions,
+  getRoomMemberPermissions,
+  roomSnapshotSchema
+} from "./models";
 
 describe("roomSnapshotSchema", () => {
   it("parses a valid room snapshot", () => {
@@ -38,5 +42,14 @@ describe("roomSnapshotSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("fills permissions for legacy members and keeps the host unrestricted", () => {
+    expect(
+      getRoomMemberPermissions({ role: "member", permissions: { queue: false } })
+    ).toEqual({ ...defaultRoomMemberPermissions, queue: false });
+    expect(
+      getRoomMemberPermissions({ role: "host", permissions: { library: false } })
+    ).toEqual(defaultRoomMemberPermissions);
   });
 });

@@ -164,7 +164,7 @@ export function AppSidebar({
       </div>
 
       <div className={`flex min-h-0 flex-1 items-center md:flex-col md:items-stretch md:gap-3 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
-        <nav className="flex min-w-0 flex-1 items-center gap-1 md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto" aria-label="工作区">
+        <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto" aria-label="工作区">
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
             const keepsHomeInRoom = keepHomeInRoom && item.id === "home";
@@ -197,27 +197,27 @@ export function AppSidebar({
               </Link>
             );
           })}
-        </nav>
 
-        {showAwayRoomStatus && awayRoomId ? (
-          <div
-            className={`min-w-0 border-t border-amber-300/20 pt-3 md:mt-1 ${collapsed ? "md:hidden" : ""}`}
-            data-testid="away-room-sidebar-indicator"
-          >
-            <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2">
-              <p className="truncate text-xs font-semibold text-amber-100">已暂离房间</p>
-              <p className="mt-1 truncate text-[10px] text-amber-100/65">播放仍在同步</p>
-              <button
-                className="mt-2 w-full text-left text-xs font-medium text-amber-200 hover:text-amber-100"
-                data-testid="resume-away-room"
-                onClick={handleResumeAwayRoom}
-                type="button"
-              >
-                返回房间
-              </button>
+          {showAwayRoomStatus && awayRoomId ? (
+            <div
+              className={`min-w-0 basis-full border-t border-amber-300/20 pt-3 md:basis-auto md:mt-1 ${collapsed ? "md:hidden" : ""}`}
+              data-testid="away-room-sidebar-indicator"
+            >
+              <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2">
+                <p className="truncate text-xs font-semibold text-amber-100">已暂离房间</p>
+                <p className="mt-1 truncate text-[10px] text-amber-100/65">播放仍在同步</p>
+                <button
+                  className="mt-2 w-full text-left text-xs font-medium text-amber-200 hover:text-amber-100"
+                  data-testid="resume-away-room"
+                  onClick={handleResumeAwayRoom}
+                  type="button"
+                >
+                  返回房间
+                </button>
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </nav>
 
         {activeSession && !collapsed ? (
           <div className={`hidden border-t border-white/[0.07] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>

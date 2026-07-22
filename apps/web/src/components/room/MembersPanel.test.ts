@@ -207,6 +207,19 @@ describe("MembersPanel WebRTC media status", () => {
     expect(source).not.toContain("尚未建立");
   });
 
+  it("keeps member rows focused on identity and host-only controls", () => {
+    const source = readFileSync(new URL("./MembersPanel.tsx", import.meta.url), "utf8");
+    const memberRows = source.slice(source.indexOf("function MembersPanelBase"));
+
+    expect(source).toContain('data-testid="members-panel"');
+    expect(source).toContain("member-settings-");
+    expect(source).toContain("member-remove-");
+    expect(source).toContain('role="switch"');
+    expect(memberRows).not.toContain("reportedSendRateKbps");
+    expect(memberRows).not.toContain("mediaConnectionState");
+    expect(memberRows).toContain('isHost && member.role !== "host"');
+  });
+
   it("prefers self-reported rates for remote members", () => {
     const source = readFileSync(new URL("./MembersPanel.tsx", import.meta.url), "utf8");
     expect(source).toContain("reportedSendRateKbps");

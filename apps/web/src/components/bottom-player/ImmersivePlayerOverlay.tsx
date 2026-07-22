@@ -6,7 +6,9 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
+import { usePlayerStyle } from "@/features/settings/use-player-style";
 
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;
@@ -49,6 +51,7 @@ export function ImmersivePlayerOverlay({
   const sourceProvider = currentTrack?.sourceRef?.provider;
   const sourceTrackId = currentTrack?.sourceRef?.trackId;
   const artworkPalette = useArtworkPalette(currentTrack?.artworkUrl);
+  const playerStyle = usePlayerStyle();
 
   return (
     <div
@@ -83,8 +86,8 @@ export function ImmersivePlayerOverlay({
       </button>
 
       <main className="relative z-10 mx-auto grid h-[100dvh] min-h-0 max-h-[100dvh] w-full max-w-[1500px] -translate-y-4 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-4 overflow-hidden px-4 pb-4 pt-16 sm:-translate-y-5 sm:gap-6 sm:px-8 sm:pb-6 sm:pt-20 lg:-translate-y-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)] lg:grid-rows-1 lg:gap-12 lg:px-14 lg:pb-8 lg:pt-8 xl:gap-20">
-        <section className="flex min-h-0 min-w-0 items-center justify-center overflow-hidden" aria-label="唱片">
-          <ImmersiveVinyl artworkUrl={currentTrack?.artworkUrl ?? null} isPlaying={isPlaying} palette={artworkPalette} />
+        <section className="flex min-h-0 min-w-0 items-center justify-center overflow-hidden" aria-label={playerStyle === "square-cover" ? "专辑封面" : "唱片"}>
+          <ImmersiveVinyl artworkUrl={currentTrack?.artworkUrl ?? null} isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
         </section>
 
         <section className="flex min-h-0 w-full min-w-0 flex-col justify-center overflow-hidden" aria-label="歌曲信息与歌词">
@@ -115,44 +118,48 @@ export function ImmersivePlayerOverlay({
   );
 }
 
-function ImmersiveVinyl({ artworkUrl, isPlaying, palette }: { artworkUrl: string | null; isPlaying: boolean; palette: ArtworkPalette }) {
+function ImmersiveVinyl({ artworkUrl, isPlaying, palette, playerStyle }: { artworkUrl: string | null; isPlaying: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
   return (
     <div className="relative flex aspect-square h-[min(34dvh,14rem)] w-auto max-w-full items-center justify-center sm:h-[min(40dvh,20rem)] lg:h-[min(68dvh,34rem)]">
       <div
         className="relative flex aspect-square w-[86%] items-center justify-center overflow-visible"
       >
-        <div
-          className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] transition-[box-shadow,transform] duration-700 ease-out animate-spin-slow"
-          style={{ animationPlayState: isPlaying ? "running" : "paused" }}
-        >
-          <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+        {playerStyle === "square-cover" ? (
+          <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[1rem] shadow-[0_26px_90px_rgba(0,0,0,0.35)]" />
+        ) : (
           <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)`
-            }}
-          />
-          {Array.from({ length: 7 }).map((_, index) => (
-            <div
-              key={index}
-              className="absolute rounded-full border border-white/[0.025]"
-              style={{ width: `${100 - index * 12}%`, height: `${100 - index * 12}%` }}
-            />
-          ))}
-          {artworkUrl ? (
-            <div
-              className="absolute z-10 aspect-square w-[47%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
-              style={{ backgroundImage: `url("${artworkUrl}")` }}
-            />
-          ) : null}
-          <div
-            className="absolute z-20 flex aspect-square w-[12%] items-center justify-center rounded-full border shadow-inner"
-            style={{ borderColor: palette.border, backgroundColor: palette.accentSoft }}
+            className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] transition-[box-shadow,transform] duration-700 ease-out animate-spin-slow"
+            style={{ animationPlayState: isPlaying ? "running" : "paused" }}
           >
-            <div className="aspect-square w-[30%] rounded-full border border-white/10 bg-black shadow-inner" />
+            <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)`
+              }}
+            />
+            {Array.from({ length: 7 }).map((_, index) => (
+              <div
+                key={index}
+                className="absolute rounded-full border border-white/[0.025]"
+                style={{ width: `${100 - index * 12}%`, height: `${100 - index * 12}%` }}
+              />
+            ))}
+            {artworkUrl ? (
+              <div
+                className="absolute z-10 aspect-square w-[47%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+                style={{ backgroundImage: `url("${artworkUrl}")` }}
+              />
+            ) : null}
+            <div
+              className="absolute z-20 flex aspect-square w-[12%] items-center justify-center rounded-full border shadow-inner"
+              style={{ borderColor: palette.border, backgroundColor: palette.accentSoft }}
+            >
+              <div className="aspect-square w-[30%] rounded-full border border-white/10 bg-black shadow-inner" />
+            </div>
           </div>
-        </div>
-        <VinylTonearm isPlaying={isPlaying} accentColor={palette.accent} />
+        )}
+        {playerStyle === "vinyl" ? <VinylTonearm isPlaying={isPlaying} accentColor={palette.accent} /> : null}
       </div>
     </div>
   );

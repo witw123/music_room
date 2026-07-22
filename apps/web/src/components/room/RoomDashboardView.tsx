@@ -8,6 +8,7 @@ import type {
   Playlist,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
+  RoomMemberPermissions,
   RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
@@ -16,11 +17,9 @@ import type {
   UpdateRoomRequest
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
-import type { LocalMemberPanelState } from "./MembersPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
-import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
 
 type TabId = "library" | "local" | "members";
 
@@ -49,11 +48,12 @@ type RoomDashboardViewProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
+  onUpdateMemberPermissions: (memberId: string, permissions: RoomMemberPermissions) => Promise<boolean>;
+  onRemoveMember: (memberId: string) => Promise<boolean>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -139,11 +139,12 @@ function RoomDashboardViewBase({
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onUpdateRoom,
+  onUpdateMemberPermissions,
+  onRemoveMember,
   onDeletePlaylist,
   connectedPeersCount: _connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  localMemberState,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -163,10 +164,6 @@ function RoomDashboardViewBase({
   onToggleLyrics
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("library");
-  const currentSourcePeerId = resolveCurrentSourcePeerId(
-    roomSnapshot,
-    roomSnapshot.room.playback
-  );
 
   const handleTabChange = useCallback(
     (tab: TabId) => {
@@ -309,14 +306,14 @@ function RoomDashboardViewBase({
           {activeTab === "members" ? (
             <MembersTabPanel
               members={roomSnapshot.room.members}
-              localMemberState={localMemberState}
-              playbackStatus={roomSnapshot.room.playback.status}
-              sourcePeerId={currentSourcePeerId}
-              sourceSessionId={roomSnapshot.room.playback.sourceSessionId}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
+              activeSessionId={activeSession?.userId ?? null}
+              isHost={activeSession?.userId === roomSnapshot.room.hostId}
+              onUpdateMemberPermissions={onUpdateMemberPermissions}
+              onRemoveMember={onRemoveMember}
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
             />
           ) : null}

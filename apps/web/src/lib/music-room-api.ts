@@ -26,6 +26,7 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
+  type RoomMemberPermissions,
   type RoomSnapshot,
   type RoomSyncResponse,
   type TrackMeta,
@@ -258,6 +259,19 @@ export const musicRoomApi = {
     request<RoomSnapshot>(`/v1/rooms/${roomId}`, {
       method: "PATCH",
       body: JSON.stringify(input)
+    }),
+  updateRoomMemberPermissions: (
+    roomId: string,
+    memberId: string,
+    permissions: RoomMemberPermissions
+  ) =>
+    request<RoomSnapshot>(`/v1/rooms/${roomId}/members/${memberId}/permissions`, {
+      method: "PATCH",
+      body: JSON.stringify({ permissions })
+    }),
+  removeRoomMember: (roomId: string, memberId: string) =>
+    request<RoomSnapshot>(`/v1/rooms/${roomId}/members/${memberId}`, {
+      method: "DELETE"
     }),
   leaveRoom: (roomId: string) =>
     request(`/v1/rooms/${roomId}/leave`, {

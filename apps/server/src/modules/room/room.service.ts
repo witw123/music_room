@@ -5,6 +5,7 @@ import type {
   Playlist,
   QueueItem,
   Room,
+  RoomMemberPermissions,
   RoomMember,
   RoomSnapshot,
   RoomSyncResponse,
@@ -12,6 +13,7 @@ import type {
   TrackMeta,
   UserProfile
 } from "@music-room/shared";
+import { defaultRoomMemberPermissions, getRoomMemberPermissions } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
@@ -333,6 +335,54 @@ export class RoomService {
     return record.room;
   }
 
+  async updateMemberPermissions(
+    roomId: string,
+    actorSessionId: string,
+    memberId: string,
+    permissions: RoomMemberPermissions
+  ) {
+    return this.enqueuePresenceUpdate(roomId, actorSessionId, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      this.assertHost(record, actorSessionId);
+      const member = record.room.members.find((candidate) => candidate.id === memberId);
+      if (!member) {
+        throw new Error("Room member not found.");
+      }
+      if (member.role === "host") {
+        throw new Error("Only the host can manage another room member.");
+      }
+
+      member.permissions = { ...permissions };
+      this.incrementPresenceRevision(record.room);
+      this.incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      return record.room;
+    });
+  }
+
+  async removeMember(roomId: string, actorSessionId: string, memberId: string) {
+    return this.enqueuePresenceUpdate(roomId, actorSessionId, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      this.assertHost(record, actorSessionId);
+      const member = record.room.members.find((candidate) => candidate.id === memberId);
+      if (!member) {
+        throw new Error("Room member not found.");
+      }
+      if (member.role === "host") {
+        throw new Error("Only the host can remove another room member.");
+      }
+
+      await this.roomPresenceService.clear(roomId, memberId);
+      record.room.members = record.room.members.filter((candidate) => candidate.id !== memberId);
+      await this.roomPlaybackService.handleSourceDeparture(record, memberId);
+      this.incrementPresenceRevision(record.room);
+      this.incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(memberId, roomId);
+      return { memberId, room: record.room };
+    });
+  }
+
   async deleteRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     await this.assertCanDeleteRoomRecord(record, sessionId);
@@ -457,6 +507,7 @@ export class RoomService {
     await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
+    this.assertPermission(record, sessionId, "library");
 
     const track: TrackMeta = {
       ...input,
@@ -520,6 +571,7 @@ export class RoomService {
   async removeTrack(roomId: string, sessionId: string, trackId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
+    this.assertPermission(record, sessionId, "library");
 
     const track = record.tracks.find((item) => item.id === trackId);
     if (!track) {
@@ -550,6 +602,7 @@ export class RoomService {
     const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
+    this.assertPermission(record, sessionId, "queue");
 
     if (!record.tracks.some((track) => track.id === trackId)) {
       throw new Error(`Track not found in room: ${trackId}`);
@@ -589,6 +642,7 @@ export class RoomService {
     const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
+    this.assertPermission(record, sessionId, "queue");
 
     const validTrackIds = trackIds.filter((trackId) =>
       record.tracks.some((track) => track.id === trackId)
@@ -619,6 +673,7 @@ export class RoomService {
   async removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, actorSessionId);
+    this.assertPermission(record, actorSessionId, "queue");
     const removed = record.queue.find((item) => item.id === queueItemId);
 
     if (!removed) {
@@ -653,6 +708,7 @@ export class RoomService {
   async reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, actorSessionId);
+    this.assertPermission(record, actorSessionId, "queue");
 
     const existingIds = record.queue.map((item) => item.id);
     if (
@@ -699,6 +755,7 @@ export class RoomService {
 
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
+      this.assertPermission(record, input.actorSessionId, "player");
       if (input.actorPeerId) {
         await this.refreshPresenceLease(
           roomId,
@@ -763,7 +820,8 @@ export class RoomService {
       role,
       joinedAt: new Date().toISOString(),
       peerId: null,
-      presenceState: "offline"
+      presenceState: "offline",
+      permissions: { ...defaultRoomMemberPermissions }
     };
   }
 
@@ -813,6 +871,26 @@ export class RoomService {
   private assertMember(record: RoomRecord, sessionId: string) {
     if (!record.room.members.some((member) => member.id === sessionId)) {
       throw new Error("Only room members can perform this action.");
+    }
+  }
+
+  private assertHost(record: RoomRecord, sessionId: string) {
+    if (record.room.hostId !== sessionId) {
+      throw new Error("Only the host can manage room members.");
+    }
+  }
+
+  private assertPermission(
+    record: RoomRecord,
+    sessionId: string,
+    permission: keyof RoomMemberPermissions
+  ) {
+    const member = record.room.members.find((candidate) => candidate.id === sessionId);
+    if (!member) {
+      throw new Error("Only room members can perform this action.");
+    }
+    if (!getRoomMemberPermissions(member)[permission]) {
+      throw new Error(`Member does not have the ${permission} permission.`);
     }
   }
 

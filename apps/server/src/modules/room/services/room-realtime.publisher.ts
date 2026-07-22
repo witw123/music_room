@@ -72,4 +72,8 @@ export class RoomRealtimePublisher {
   emitTrackDeleted(roomId: string, payload: Omit<RoomTrackDeletedPayload, "roomId">) {
     this.roomRealtimeBroadcaster.emitTrackDeleted(roomId, payload);
   }
+
+  emitMemberRemoved(roomId: string, memberId: string) {
+    this.roomRealtimeBroadcaster.emitMemberRemoved(roomId, memberId);
+  }
 }

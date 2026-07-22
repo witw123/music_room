@@ -4,21 +4,18 @@ import { memo } from "react";
 import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
-  PlaybackSnapshot,
-  RoomMember
+  RoomMember,
+  RoomMemberPermissions
 } from "@music-room/shared";
-import {
-  MembersPanel,
-  type LocalMemberPanelState
-} from "./MembersPanel";
+import { MembersPanel } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
 
 type MembersTabPanelProps = {
   members: RoomMember[];
-  localMemberState: LocalMemberPanelState | null;
-  playbackStatus: PlaybackSnapshot["status"];
-  sourcePeerId: string | null;
-  sourceSessionId: string | null;
+  activeSessionId: string | null;
+  isHost: boolean;
+  onUpdateMemberPermissions: (memberId: string, permissions: RoomMemberPermissions) => Promise<boolean>;
+  onRemoveMember: (memberId: string) => Promise<boolean>;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -28,10 +25,10 @@ type MembersTabPanelProps = {
 
 function MembersTabPanelBase({
   members,
-  localMemberState,
-  playbackStatus,
-  sourcePeerId,
-  sourceSessionId,
+  activeSessionId,
+  isHost,
+  onUpdateMemberPermissions,
+  onRemoveMember,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -42,11 +39,10 @@ function MembersTabPanelBase({
     <div className="animate-fade-in flex w-full flex-col gap-5">
       <MembersPanel
         members={members}
-        peerDiagnostics={peerDiagnostics}
-        localMemberState={localMemberState}
-        playbackStatus={playbackStatus}
-        sourcePeerId={sourcePeerId}
-        sourceSessionId={sourceSessionId}
+        activeSessionId={activeSessionId}
+        isHost={isHost}
+        onUpdateMemberPermissions={onUpdateMemberPermissions}
+        onRemoveMember={onRemoveMember}
       />
 
       <MeshStatusPanel

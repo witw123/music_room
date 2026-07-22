@@ -1,6 +1,6 @@
 "use client";
 
-import { errorCodes, type PlaybackSnapshot, type RoomMember, type RoomSnapshot } from "@music-room/shared";
+import { errorCodes, getRoomMemberPermissions, type PlaybackSnapshot, type RoomMember, type RoomSnapshot } from "@music-room/shared";
 import { MusicRoomApiError } from "./music-room-api";
 
 export function formatDuration(durationMs: number) {
@@ -120,7 +120,8 @@ export function areSameRoomMembers(
       incomingMember.role !== member.role ||
       incomingMember.joinedAt !== member.joinedAt ||
       incomingMember.peerId !== member.peerId ||
-      incomingMember.presenceState !== member.presenceState
+      incomingMember.presenceState !== member.presenceState ||
+      JSON.stringify(getRoomMemberPermissions(incomingMember)) !== JSON.stringify(getRoomMemberPermissions(member))
     ) {
       return false;
     }
@@ -330,6 +331,9 @@ export function toUserFacingError(error: unknown) {
   }
   if (lowerMessage.includes("only the original uploader can delete this track")) {
     return "只有歌曲上传者本人可以删除这首歌。";
+  }
+  if (lowerMessage.includes("does not have") && lowerMessage.includes("permission")) {
+    return "该成员没有执行这个操作的权限。";
   }
   if (lowerMessage.includes("playback state version conflict")) {
     return "房间播放状态刚刚被别人改动，请稍后再试。";

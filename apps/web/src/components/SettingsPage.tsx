@@ -19,6 +19,7 @@ import {
   resetAppSettings,
   updateAppSettings,
   type AppSettings,
+  type PlayerStyle,
   type ThemePreference
 } from "@/features/settings/settings-store";
 
@@ -32,6 +33,11 @@ const themeLabels: Record<ThemePreference, string> = {
   dark: "深色",
   light: "浅色",
   system: "跟随系统"
+};
+
+const playerStyleLabels: Record<PlayerStyle, string> = {
+  vinyl: "唱片",
+  "square-cover": "正方形唱片封面"
 };
 
 export function SettingsPage() {
@@ -165,6 +171,18 @@ export function SettingsPage() {
                   {Math.round(settings.playback.defaultVolume * 100)}%
                 </span>
               </div>
+            </SettingRow>
+            <SettingRow label="播放器样式" description="应用于底部、沉浸式和房间播放器。">
+              <select
+                aria-label="播放器样式"
+                className="h-9 min-w-40 rounded-lg border border-surface-border bg-black px-2 text-xs text-white outline-none focus:border-accent"
+                onChange={(event) => patchSettings({ playback: { playerStyle: event.target.value as PlayerStyle } })}
+                value={settings.playback.playerStyle}
+              >
+                {Object.entries(playerStyleLabels).map(([style, label]) => (
+                  <option key={style} value={style}>{label}</option>
+                ))}
+              </select>
             </SettingRow>
             <SettingRow label="本地歌单播放方式" description="仅影响主页和本地歌单播放器。">
               <select

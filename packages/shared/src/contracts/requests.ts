@@ -8,6 +8,7 @@ import {
   trackSourceTypeSchema
 } from "../playlist/models";
 import { playbackModeSchema } from "../playback/models";
+import { roomMemberPermissionsSchema } from "../room/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const optionalNullableText = (max: number) =>
@@ -56,6 +57,12 @@ export const updateRoomRequestSchema = z
       .max(128)
       .refine((value) => value.length === 0 || value.length >= 4, "密码至少 4 位。")
       .optional()
+  })
+  .strict();
+
+export const updateRoomMemberPermissionsRequestSchema = z
+  .object({
+    permissions: roomMemberPermissionsSchema
   })
   .strict();
 

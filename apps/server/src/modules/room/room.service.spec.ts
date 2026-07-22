@@ -63,6 +63,44 @@ describe("RoomService", () => {
     jest.useRealTimers();
   });
 
+  it("limits member management to the host and removes access after a kick", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id, "private");
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updateMemberPermissions(snapshot.room.id, member.id, host.id, {
+        library: false,
+        queue: true,
+        player: false
+      })
+    ).rejects.toThrow("Only the host");
+
+    await roomService.updateMemberPermissions(snapshot.room.id, host.id, member.id, {
+      library: false,
+      queue: true,
+      player: false
+    });
+    const updated = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(updated.room.members.find((item) => item.id === member.id)?.permissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
+
+    await roomService.removeMember(snapshot.room.id, host.id, member.id);
+    await expect(roomService.assertRoomMember(snapshot.room.id, member.id)).rejects.toThrow(
+      "Only room members"
+    );
+    await expect(roomService.getRecoverableRoomSnapshot(snapshot.room.id, member.id)).resolves.toBeNull();
+  });
+
   it("allows any room member to control playback and uses the track owner as source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

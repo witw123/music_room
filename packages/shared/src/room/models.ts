@@ -4,13 +4,29 @@ import { playlistSchema, queueItemSchema, trackMetaSchema } from "../playlist/mo
 
 export const roomPresenceStateSchema = z.enum(["online", "reconnecting", "offline"]);
 
+export const roomMemberPermissionsSchema = z.object({
+  library: z.boolean(),
+  queue: z.boolean(),
+  player: z.boolean()
+}).strict();
+
+export type RoomMemberPermissions = z.infer<typeof roomMemberPermissionsSchema>;
+
+export const defaultRoomMemberPermissions: RoomMemberPermissions = {
+  library: true,
+  queue: true,
+  player: true
+};
+
 export const roomMemberSchema = z.object({
   id: z.string(),
   nickname: z.string(),
   role: z.enum(["host", "member"]),
   joinedAt: z.string().datetime(),
   peerId: z.string().nullable(),
-  presenceState: roomPresenceStateSchema.default("offline")
+  presenceState: roomPresenceStateSchema.default("offline"),
+  // Optional for snapshots persisted before member permissions were added.
+  permissions: roomMemberPermissionsSchema.partial().optional()
 });
 
 export const roomSchema = z.object({
@@ -57,3 +73,16 @@ export type Room = z.infer<typeof roomSchema>;
 export type RoomSnapshot = z.infer<typeof roomSnapshotSchema>;
 export type RoomTrackDeletion = z.infer<typeof roomTrackDeletionSchema>;
 export type RoomSyncResponse = z.infer<typeof roomSyncResponseSchema>;
+
+export function getRoomMemberPermissions(
+  member: Pick<RoomMember, "role" | "permissions">
+): RoomMemberPermissions {
+  if (member.role === "host") {
+    return { ...defaultRoomMemberPermissions };
+  }
+
+  return {
+    ...defaultRoomMemberPermissions,
+    ...member.permissions
+  };
+}

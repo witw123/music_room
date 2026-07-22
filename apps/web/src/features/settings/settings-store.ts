@@ -5,6 +5,7 @@ export const appSettingsChangeEvent = "music-room-settings-change";
 
 export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
+export type PlayerStyle = "vinyl" | "square-cover";
 
 export type AppSettings = {
   version: 1;
@@ -15,6 +16,7 @@ export type AppSettings = {
   };
   playback: {
     defaultVolume: number;
+    playerStyle: PlayerStyle;
     localPlaybackMode: PlaybackMode;
     showLyricsByDefault: boolean;
     preventOfflineAutoLoad: boolean;
@@ -33,6 +35,7 @@ const defaultSettings: AppSettings = {
   },
   playback: {
     defaultVolume: 0.8,
+    playerStyle: "vinyl",
     localPlaybackMode: "sequence",
     showLyricsByDefault: false,
     preventOfflineAutoLoad: false,
@@ -100,6 +103,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   const playbackMode = playback.localPlaybackMode === "shuffle" || playback.localPlaybackMode === "single"
     ? playback.localPlaybackMode
     : "sequence";
+  const playerStyle: PlayerStyle = playback.playerStyle === "square-cover" ? "square-cover" : "vinyl";
   const lyricFontScale = playback.lyricFontScale === "small" || playback.lyricFontScale === "large"
     ? playback.lyricFontScale
     : "medium";
@@ -113,6 +117,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     },
     playback: {
       defaultVolume: volume,
+      playerStyle,
       localPlaybackMode: playbackMode,
       showLyricsByDefault: playback.showLyricsByDefault === true,
       preventOfflineAutoLoad: playback.preventOfflineAutoLoad === true,

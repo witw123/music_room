@@ -18,6 +18,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.presence.patch"),
   z.literal("room.library.patch"),
   z.literal("room.track.deleted"),
+  z.literal("room.member.removed"),
   z.literal("room.session.replaced"),
   z.literal("peer.signal"),
   z.literal("room.chat"),
@@ -121,6 +122,11 @@ export const roomTrackDeletedPayloadSchema = roomTrackDeletionSchema.extend({
   roomId: z.string()
 });
 
+export const roomMemberRemovedPayloadSchema = z.object({
+  roomId: z.string(),
+  memberId: z.string()
+});
+
 export const roomSnapshotEventSchema = z.object({
   event: z.literal("room.snapshot"),
   payload: roomSnapshotSchema
@@ -166,6 +172,11 @@ export const roomTrackDeletedEventSchema = z.object({
   payload: roomTrackDeletedPayloadSchema
 });
 
+export const roomMemberRemovedEventSchema = z.object({
+  event: z.literal("room.member.removed"),
+  payload: roomMemberRemovedPayloadSchema
+});
+
 export const peerSignalEventSchema = z.object({
   event: z.literal("peer.signal"),
   payload: peerSignalMessageSchema
@@ -206,6 +217,7 @@ export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
 export type RoomTrackDeletedPayload = z.infer<typeof roomTrackDeletedPayloadSchema>;
+export type RoomMemberRemovedPayload = z.infer<typeof roomMemberRemovedPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
 export type DiagnosticsReportPayload = TelemetryReport;
@@ -220,6 +232,7 @@ export type ServerToClientEvents = {
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
   "room.track.deleted": (payload: RoomTrackDeletedPayload) => void;
+  "room.member.removed": (payload: RoomMemberRemovedPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
   "session.revoked": () => void;

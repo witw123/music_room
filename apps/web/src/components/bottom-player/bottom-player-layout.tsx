@@ -7,6 +7,8 @@ import { Slider } from "@/components/ui/slider";
 import type { QueueItem, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
+import { SquareAlbumCover } from "@/components/PlayerArtwork";
+import type { PlayerStyle } from "@/features/settings/settings-store";
 
 type LayoutProps = {
   isPlaying: boolean;
@@ -43,6 +45,7 @@ type LayoutProps = {
   artworkAccent: string;
   artworkAccentSoft: string;
   artworkUrl: string | null;
+  playerStyle: PlayerStyle;
 };
 
 export function VinylBadge({
@@ -50,16 +53,22 @@ export function VinylBadge({
   compact = false,
   accentColor = "rgb(0 112 243)",
   accentSoft = "rgba(0, 112, 243, 0.16)",
-  artworkUrl = null
+  artworkUrl = null,
+  playerStyle = "vinyl"
 }: {
   isPlaying: boolean;
   compact?: boolean;
   accentColor?: string;
   accentSoft?: string;
   artworkUrl?: string | null;
+  playerStyle?: PlayerStyle;
 }) {
   const shellSize = compact ? "h-10 w-10" : "h-12 w-12";
   const centerSize = compact ? "h-3.5 w-3.5" : "h-4 w-4";
+
+  if (playerStyle === "square-cover") {
+    return <SquareAlbumCover artworkUrl={artworkUrl} className={`${shellSize} shrink-0 rounded-xl`} />;
+  }
 
   return (
     <div className={`relative flex ${shellSize} shrink-0 items-center justify-center`}>
@@ -342,7 +351,8 @@ export function MobileBottomPlayerLayout({
   onToggleLyrics,
   artworkAccent,
   artworkAccentSoft,
-  artworkUrl
+  artworkUrl,
+  playerStyle
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
@@ -353,6 +363,7 @@ export function MobileBottomPlayerLayout({
             accentSoft={artworkAccentSoft}
             artworkUrl={artworkUrl}
             isPlaying={isPlaying}
+            playerStyle={playerStyle}
             compact
           />
         </button>
@@ -518,7 +529,8 @@ export function DesktopBottomPlayerLayout({
   onToggleLyrics,
   artworkAccent,
   artworkAccentSoft,
-  artworkUrl
+  artworkUrl,
+  playerStyle
 }: LayoutProps) {
   return (
     <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
@@ -529,6 +541,7 @@ export function DesktopBottomPlayerLayout({
           accentSoft={artworkAccentSoft}
           artworkUrl={artworkUrl}
           isPlaying={isPlaying}
+          playerStyle={playerStyle}
         />
         </button>
 

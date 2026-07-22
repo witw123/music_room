@@ -18,7 +18,9 @@ import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
+import { usePlayerStyle } from "@/features/settings/use-player-style";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -120,6 +122,7 @@ function RoomStageBase({
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
   const artworkUrl = currentTrack?.artworkUrl ?? cachedArtworkUrl;
   const artworkPalette = useArtworkPalette(artworkUrl);
+  const playerStyle = usePlayerStyle();
   const recordSize = ultraCompactStage
     ? "clamp(9.5rem, min(26vh, 44vw), 12rem)"
     : compactStage
@@ -434,50 +437,55 @@ function RoomStageBase({
             className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
             style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
           >
-            <VinylAuraVisualizer accentColor={artworkPalette.accent} isPlaying={isPlaying} />
-
             <div
               className="relative flex items-center justify-center overflow-visible"
               style={{ width: "var(--record-size)", height: "var(--record-size)" }}
             >
-              <div
-                className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out animate-spin-slow"
-                style={{ animationPlayState: isPlaying ? "running" : "paused" }}
-              >
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
-                <div
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    background: `conic-gradient(from 0deg at 50% 50%, ${artworkPalette.accentSoft} 0deg, transparent 90deg, ${artworkPalette.accentSoft} 180deg, transparent 270deg, ${artworkPalette.accentSoft} 360deg)`
-                  }}
-                />
-                {Array.from({ length: 6 }).map((_, index) => (
+              {playerStyle === "square-cover" ? (
+                <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[1rem] shadow-2xl" />
+              ) : (
+                <>
+                  <VinylAuraVisualizer accentColor={artworkPalette.accent} isPlaying={isPlaying} />
                   <div
-                    key={index}
-                    className="absolute rounded-full border border-white/[0.02]"
-                    style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
-                  />
-                ))}
-                {artworkUrl ? (
-                  <div
-                    aria-hidden="true"
-                    className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
-                    style={{ backgroundImage: `url("${artworkUrl}")` }}
-                  />
-                ) : null}
-                <div
-                  className="absolute z-20 flex aspect-square items-center justify-center rounded-full border shadow-inner"
-                  style={{
-                    width: "26%",
-                    height: "26%",
-                    borderColor: artworkPalette.border,
-                    backgroundColor: artworkPalette.accentSoft
-                  }}
-                >
-                  <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
-                </div>
-              </div>
-              <VinylTonearm accentColor={artworkPalette.accent} isPlaying={isPlaying} />
+                    className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out animate-spin-slow"
+                    style={{ animationPlayState: isPlaying ? "running" : "paused" }}
+                  >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+                    <div
+                      className="absolute inset-0 rounded-full"
+                      style={{
+                        background: `conic-gradient(from 0deg at 50% 50%, ${artworkPalette.accentSoft} 0deg, transparent 90deg, ${artworkPalette.accentSoft} 180deg, transparent 270deg, ${artworkPalette.accentSoft} 360deg)`
+                      }}
+                    />
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="absolute rounded-full border border-white/[0.02]"
+                        style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
+                      />
+                    ))}
+                    {artworkUrl ? (
+                      <div
+                        aria-hidden="true"
+                        className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+                        style={{ backgroundImage: `url("${artworkUrl}")` }}
+                      />
+                    ) : null}
+                    <div
+                      className="absolute z-20 flex aspect-square items-center justify-center rounded-full border shadow-inner"
+                      style={{
+                        width: "26%",
+                        height: "26%",
+                        borderColor: artworkPalette.border,
+                        backgroundColor: artworkPalette.accentSoft
+                      }}
+                    >
+                      <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
+                    </div>
+                  </div>
+                  <VinylTonearm accentColor={artworkPalette.accent} isPlaying={isPlaying} />
+                </>
+              )}
             </div>
 
           </div>

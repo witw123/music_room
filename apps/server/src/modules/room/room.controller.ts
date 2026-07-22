@@ -16,6 +16,7 @@ import {
   createRoomRequestSchema,
   joinRoomByCodeRequestSchema,
   registerTrackRequestSchema,
+  updateRoomMemberPermissionsRequestSchema,
   updateRoomRequestSchema,
   type Playlist,
   type RegisterTrackRequest
@@ -174,6 +175,32 @@ export class RoomController {
       // Room metadata updates do not depend on optional playlist storage.
     }
     return this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
+  }
+
+  @Patch(":roomId/members/:memberId/permissions")
+  async updateMemberPermissions(
+    @Param("roomId") roomId: string,
+    @Param("memberId") memberId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: unknown
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(updateRoomMemberPermissionsRequestSchema, body);
+    await this.roomService.updateMemberPermissions(roomId, userId, memberId, payload.permissions);
+    return this.roomRealtimePublisher.emitTopologySnapshot(roomId);
+  }
+
+  @Delete(":roomId/members/:memberId")
+  async removeMember(
+    @Param("roomId") roomId: string,
+    @Param("memberId") memberId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.roomService.removeMember(roomId, userId, memberId);
+    const snapshot = await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
+    this.roomRealtimePublisher.emitMemberRemoved(roomId, memberId);
+    return snapshot;
   }
 
   @Post(":roomId/leave")

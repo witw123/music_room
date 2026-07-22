@@ -7,6 +7,7 @@ import {
   type PlaybackMode,
   type PlaybackSnapshot,
   type QueueItem,
+  type RoomMemberPermissions,
   type RoomSnapshot,
   type UpdateRoomRequest
 } from "@music-room/shared";
@@ -188,6 +189,48 @@ export function useRoomActions({
           snapshot
         });
         setStatusMessage("房间信息已更新。");
+        return true;
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+        return false;
+      }
+    },
+    [activeSession, dispatchRoomStateEvent, roomSnapshot, setStatusMessage]
+  );
+
+  const updateMemberPermissions = useCallback(
+    async (memberId: string, permissions: RoomMemberPermissions) => {
+      if (!activeSession || !roomSnapshot || roomSnapshot.room.hostId !== activeSession.userId) {
+        return false;
+      }
+
+      try {
+        const snapshot = await musicRoomApi.updateRoomMemberPermissions(
+          roomSnapshot.room.id,
+          memberId,
+          permissions
+        );
+        dispatchRoomStateEvent({ type: "recover-snapshot", snapshot });
+        setStatusMessage("成员权限已更新。");
+        return true;
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+        return false;
+      }
+    },
+    [activeSession, dispatchRoomStateEvent, roomSnapshot, setStatusMessage]
+  );
+
+  const removeMember = useCallback(
+    async (memberId: string) => {
+      if (!activeSession || !roomSnapshot || roomSnapshot.room.hostId !== activeSession.userId) {
+        return false;
+      }
+
+      try {
+        const snapshot = await musicRoomApi.removeRoomMember(roomSnapshot.room.id, memberId);
+        dispatchRoomStateEvent({ type: "recover-snapshot", snapshot });
+        setStatusMessage("成员已移出房间。");
         return true;
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
@@ -816,6 +859,8 @@ export function useRoomActions({
     updatePlaylistTitle,
     updatePlaylistTracks,
     updateRoom,
+    updateMemberPermissions,
+    removeMember,
     deletePlaylist,
     loadPlaylistIntoRoom,
     removeQueueItem,

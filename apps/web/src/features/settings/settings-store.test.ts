@@ -19,6 +19,7 @@ describe("app settings store", () => {
       layout: { sidebarCollapsed: true },
       playback: {
         defaultVolume: 0.8,
+        playerStyle: "vinyl",
         localPlaybackMode: "sequence",
         lyricLines: 5,
         preventOfflineAutoLoad: false,
@@ -35,6 +36,11 @@ describe("app settings store", () => {
     expect(resolveAppTheme("light", false)).toBe("light");
     expect(resolveAppTheme("system", true)).toBe("light");
     expect(resolveAppTheme("system", false)).toBe("dark");
+  });
+
+  it("normalizes the shared player style preference", () => {
+    expect(normalizeSettings({ playback: { playerStyle: "square-cover" } }).playback.playerStyle).toBe("square-cover");
+    expect(normalizeSettings({ playback: { playerStyle: "unknown" } }).playback.playerStyle).toBe("vinyl");
   });
 
   it("persists normalized updates and can reset them", () => {

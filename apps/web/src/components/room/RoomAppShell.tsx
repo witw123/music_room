@@ -118,11 +118,12 @@ export function RoomAppShell({
            onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
           onUpdatePlaylistTracks={roomActions.updatePlaylistTracks}
           onUpdateRoom={roomActions.updateRoom}
+          onUpdateMemberPermissions={roomActions.updateMemberPermissions}
+          onRemoveMember={roomActions.removeMember}
           onDeletePlaylist={roomActions.deletePlaylist}
           connectedPeersCount={workspaceViewModel.connectedPeersCount}
           mediaConnectionState={pageState.mediaConnectionState}
           mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
-          localMemberState={workspaceViewModel.localMemberState}
           peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
           peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}
           iceConfigSource={workspaceViewModel.iceConfigSource}

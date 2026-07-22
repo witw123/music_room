@@ -7,6 +7,7 @@ import type {
   Playlist,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
+  RoomMemberPermissions,
   RoomMediaConnectionState,
   RoomSnapshot,
   QqMusicTrackCandidate,
@@ -16,7 +17,6 @@ import type {
 import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
-import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -45,11 +45,12 @@ type RoomWorkspaceProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
+  onUpdateMemberPermissions: (memberId: string, permissions: RoomMemberPermissions) => Promise<boolean>;
+  onRemoveMember: (memberId: string) => Promise<boolean>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -102,11 +103,12 @@ function RoomWorkspaceBase({
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onUpdateRoom,
+  onUpdateMemberPermissions,
+  onRemoveMember,
   onDeletePlaylist,
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  localMemberState,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -202,11 +204,12 @@ function RoomWorkspaceBase({
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
               onUpdateRoom={onUpdateRoom}
+              onUpdateMemberPermissions={onUpdateMemberPermissions}
+              onRemoveMember={onRemoveMember}
               onDeletePlaylist={onDeletePlaylist}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}
-              localMemberState={localMemberState}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}

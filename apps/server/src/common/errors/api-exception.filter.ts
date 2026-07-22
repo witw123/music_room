@@ -132,7 +132,9 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
     message.includes("Only room members can perform this action") ||
     message.includes("Only the host") ||
     message.includes("Only the original uploader") ||
-    message.includes("Only the playlist owner")
+    message.includes("Only the playlist owner") ||
+    message.includes("does not have the") ||
+    message.includes("Room member not found")
   ) {
     return errorCodes.unauthorizedRoomAction;
   }

@@ -595,6 +595,12 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }
   });
 
+  socket.on("room.member.removed", ({ roomId, memberId }) => {
+    if (roomId === input.roomId && memberId === input.activeSessionRef.current?.userId) {
+      input.exitCurrentRoom("你已被房主移出房间。");
+    }
+  });
+
   socket.on("session.revoked", () => {
     // Server-side account invalidation must stop reconnect loops before the
     // regular auth hook clears localStorage and redirects the user.

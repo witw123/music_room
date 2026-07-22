@@ -1,4 +1,4 @@
-import { queueItemSchema, roomSchema, trackMetaSchema } from "@music-room/shared";
+import { defaultRoomMemberPermissions, queueItemSchema, roomSchema, trackMetaSchema } from "@music-room/shared";
 import type { PlaybackSnapshot, QueueItem, Room, RoomMember, TrackMeta } from "@music-room/shared";
 import { z } from "zod";
 
@@ -63,14 +63,18 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       description: persisted.description ?? null,
       hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
-      members: persistedMembers.map((member) => ({
-        id: member.id ?? "",
-        nickname: member.nickname ?? "",
-        role: member.role === "host" ? "host" : "member",
-        joinedAt: member.joinedAt ?? new Date(0).toISOString(),
-        peerId: null,
-        presenceState: member.presenceState ?? "offline"
-      })),
+      members: persistedMembers.map((member) => {
+        const role = member.role === "host" ? "host" : "member";
+        return {
+          id: member.id ?? "",
+          nickname: member.nickname ?? "",
+          role,
+          joinedAt: member.joinedAt ?? new Date(0).toISOString(),
+          peerId: null,
+          presenceState: member.presenceState ?? "offline",
+          permissions: { ...defaultRoomMemberPermissions, ...member.permissions }
+        };
+      }),
       playback: {
         status: persistedPlayback.status ?? "paused",
         currentTrackId: persistedPlayback.currentTrackId ?? null,
