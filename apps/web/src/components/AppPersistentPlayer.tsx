@@ -16,6 +16,8 @@ export function AppPersistentPlayer() {
       seekDraft={player.seekDraft}
       setSeekDraft={player.setSeekDraft}
       audioDurationMs={player.audioDurationMs}
+      volume={player.volume}
+      setVolume={player.setVolume}
       syncProgressFromAudio={player.syncProgressFromAudio}
       syncDurationFromAudio={player.syncDurationFromAudio}
       currentTrack={player.currentTrack}

@@ -21,6 +21,7 @@ import {
   requestMiniPlayerWindow
 } from "@/components/bottom-player/MiniPlayerOverlay";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -31,6 +32,8 @@ type BottomPlayerProps = {
   seekDraft: number | null;
   setSeekDraft: (v: number | null) => void;
   audioDurationMs: number;
+  volume: number;
+  setVolume: (value: number) => void;
   syncProgressFromAudio: () => void;
   syncDurationFromAudio: () => void;
   currentTrack: TrackMeta | null;
@@ -70,6 +73,8 @@ function BottomPlayerBase({
   seekDraft,
   setSeekDraft,
   audioDurationMs,
+  volume,
+  setVolume,
   syncProgressFromAudio,
   syncDurationFromAudio,
   currentTrack,
@@ -327,6 +332,18 @@ function BottomPlayerBase({
     void onNext();
   }, [onNext]);
 
+  const applyVolume = useCallback(
+    (nextVolume: number) => {
+      const boundedVolume = Math.min(1, Math.max(0, nextVolume));
+      setVolume(boundedVolume);
+      roomAudioOutput.applyVolume({
+        localAudio: audioRef.current,
+        volume: boundedVolume
+      });
+    },
+    [audioRef, setVolume]
+  );
+
   return (
     <>
     <footer
@@ -355,8 +372,10 @@ function BottomPlayerBase({
         artist={artist}
         boundedProgressMs={boundedProgressMs}
         currentTrackDuration={currentTrackDuration}
+        volume={volume}
         setSeekDraft={setSeekDraft}
         commitSeek={commitSeek}
+        applyVolume={applyVolume}
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}
@@ -389,8 +408,10 @@ function BottomPlayerBase({
         artist={artist}
         boundedProgressMs={boundedProgressMs}
         currentTrackDuration={currentTrackDuration}
+        volume={volume}
         setSeekDraft={setSeekDraft}
         commitSeek={commitSeek}
+        applyVolume={applyVolume}
         onPrev={playPrev}
         onNext={playNext}
         onTogglePlay={togglePlayback}

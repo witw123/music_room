@@ -16,8 +16,20 @@ type ApplyRoomAudioVolumeInput = {
   volume: number;
 };
 
+type LocalAudioElementGraph = {
+  element: HTMLAudioElement;
+  context: AudioContext;
+  source: MediaElementAudioSourceNode;
+  localGain: GainNode;
+};
+
 export class RoomAudioOutput {
   private broadcastDestination: MediaStreamAudioDestinationNode | null = null;
+  private localAudioElementGraph: LocalAudioElementGraph | null = null;
+  private readonly localAudioElementSources = new WeakMap<
+    HTMLAudioElement,
+    { context: AudioContext; source: MediaElementAudioSourceNode }
+  >();
   private readonly volumeAnimationFrames = new WeakMap<HTMLAudioElement, number>();
 
   async primeOutputs(input: PrimeRoomAudioOutputInput): Promise<PrimeRoomAudioOutputsResult> {
@@ -35,9 +47,23 @@ export class RoomAudioOutput {
     const safeVolume = normalizeOutputVolume(input.volume);
     if (input.localAudio) {
       const element = input.localAudio;
+      const localGraph = this.localAudioElementGraph?.element === element
+        ? this.localAudioElementGraph
+        : null;
       const previousFrame = this.volumeAnimationFrames.get(element);
       if (previousFrame !== undefined && typeof window !== "undefined") {
         window.cancelAnimationFrame(previousFrame);
+      }
+      if (localGraph) {
+        try {
+          const now = localGraph.context.currentTime;
+          localGraph.localGain.gain.cancelScheduledValues(now);
+          localGraph.localGain.gain.setTargetAtTime(safeVolume, now, 0.02);
+        } catch {
+          localGraph.localGain.gain.value = safeVolume;
+        }
+        element.volume = 1;
+        return;
       }
       if (
         typeof window === "undefined" ||
@@ -62,6 +88,68 @@ export class RoomAudioOutput {
     }
   }
 
+  bindLocalAudioElement(element: HTMLAudioElement | null | undefined) {
+    if (!element) {
+      return null;
+    }
+
+    const context = this.getSharedAudioContext();
+    if (
+      !context ||
+      typeof context.createMediaElementSource !== "function" ||
+      typeof context.createGain !== "function"
+    ) {
+      return null;
+    }
+
+    const destination = this.getBroadcastDestination(context);
+    if (!destination) {
+      return null;
+    }
+
+    if (
+      this.localAudioElementGraph?.element === element &&
+      this.localAudioElementGraph.context === context
+    ) {
+      return destination.stream;
+    }
+
+    this.disposeLocalAudioElementGraph();
+    try {
+      const cachedSource = this.localAudioElementSources.get(element);
+      const source = cachedSource?.context === context
+        ? cachedSource.source
+        : context.createMediaElementSource(element);
+      this.localAudioElementSources.set(element, { context, source });
+      source.disconnect();
+
+      const localGain = context.createGain();
+      localGain.gain.value = normalizeOutputVolume(element.volume);
+      source.connect(localGain);
+      localGain.connect(context.destination);
+      source.connect(destination);
+      this.localAudioElementGraph = {
+        element,
+        context,
+        source,
+        localGain
+      };
+      // Volume is controlled by localGain so the source member's volume does
+      // not reduce the level sent to other room members.
+      element.volume = 1;
+      return destination.stream;
+    } catch {
+      this.disposeLocalAudioElementGraph();
+      return null;
+    }
+  }
+
+  unbindLocalAudioElement(element?: HTMLAudioElement | null) {
+    if (!element || this.localAudioElementGraph?.element === element) {
+      this.disposeLocalAudioElementGraph();
+    }
+  }
+
   isActivated() {
     return roomAudioActivationManager.isActivated();
   }
@@ -81,6 +169,7 @@ export class RoomAudioOutput {
     if (this.broadcastDestination && this.broadcastDestination.context === context) {
       return this.broadcastDestination;
     }
+    this.disposeLocalAudioElementGraph();
     if (typeof context.createMediaStreamDestination !== "function") {
       return null;
     }
@@ -98,7 +187,26 @@ export class RoomAudioOutput {
   }
 
   releaseRoomAudioSession() {
+    this.disposeLocalAudioElementGraph();
     this.disposeBroadcastDestination();
+  }
+
+  private disposeLocalAudioElementGraph() {
+    const graph = this.localAudioElementGraph;
+    if (!graph) {
+      return;
+    }
+    try {
+      graph.source.disconnect();
+    } catch {
+      // The source may already be disconnected during a context transition.
+    }
+    try {
+      graph.localGain.disconnect();
+    } catch {
+      // The gain may already be disconnected during a context transition.
+    }
+    this.localAudioElementGraph = null;
   }
 
   private disposeBroadcastDestination() {

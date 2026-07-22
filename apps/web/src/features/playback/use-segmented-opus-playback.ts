@@ -58,6 +58,7 @@ export function useSegmentedOpusPlayback(input: {
   localFallbackAsset?: TrackMeta["playbackAsset"] | null;
   peerId: string;
   isCurrentSource: boolean;
+  disableSourcePlayback?: boolean;
   volume: number;
   audioUnlocked: boolean;
 }) {
@@ -74,6 +75,7 @@ export function useSegmentedOpusPlayback(input: {
   const roomId = roomSnapshot?.room.id ?? null;
   const localFallbackAsset = input.localFallbackAsset ?? null;
   const isLocalFallback = !isCurrentSource && !!localFallbackAsset;
+  const disableSourcePlayback = isCurrentSource && input.disableSourcePlayback === true;
   const activePlaybackAsset = isLocalFallback
     ? localFallbackAsset
     : input.currentTrack?.playbackAsset;
@@ -81,7 +83,8 @@ export function useSegmentedOpusPlayback(input: {
     isCurrentSource,
     currentTrackId: roomSnapshot?.room.playback.currentTrackId,
     hasPlaybackAsset: isSupportedPlaybackAsset(activePlaybackAsset),
-    isLocalFallback
+    isLocalFallback,
+    disableSourcePlayback
   });
   const playbackIdentity = resolveSegmentedPlaybackIdentity({
     playback: roomSnapshot?.room.playback,
@@ -134,6 +137,10 @@ export function useSegmentedOpusPlayback(input: {
           playbackAssetId: currentPlaybackAsset?.assetId,
           localOnly: currentLocalFallback
         });
+        if (runtime.isCurrentSource && runtime.disableSourcePlayback) {
+          setSnapshot({ ...idleSnapshot, playbackIdentity: currentPlaybackIdentity });
+          return;
+        }
         if (playbackEngineIdentityRef.current !== currentPlaybackEngineIdentity) {
           engineRef.current?.destroy();
           engineRef.current = null;
@@ -268,6 +275,7 @@ export function useSegmentedOpusPlayback(input: {
     peerId,
     isCurrentSource,
     localFallbackAsset,
+    disableSourcePlayback,
     releaseEngine
   ]);
 
@@ -342,9 +350,11 @@ export function hasActiveSegmentedPlayback(input: {
   currentTrackId: string | null | undefined;
   hasPlaybackAsset: boolean;
   isLocalFallback?: boolean;
+  disableSourcePlayback?: boolean;
 }) {
   return Boolean(input.currentTrackId) && input.hasPlaybackAsset && (
-    input.isCurrentSource || input.isLocalFallback === true
+    (input.isCurrentSource && input.disableSourcePlayback !== true) ||
+    input.isLocalFallback === true
   );
 }
 

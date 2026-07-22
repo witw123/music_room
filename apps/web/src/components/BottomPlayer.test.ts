@@ -23,7 +23,7 @@ describe("BottomPlayer source", () => {
     expect(layoutSource).toContain('w-[44px]');
   });
 
-  it("keeps transport controls centered without a volume action", () => {
+  it("restores the bottom-player volume action without adding it to the mini player", () => {
     const layoutSource = readFileSync(
       new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
       "utf8"
@@ -33,8 +33,8 @@ describe("BottomPlayer source", () => {
       "utf8"
     );
 
-    expect(layoutSource).not.toContain("VolumeControl");
-    expect(layoutSource).not.toContain("player-volume-button");
+    expect(layoutSource).toContain("VolumeControl");
+    expect(layoutSource).toContain("player-volume-button");
     expect(miniPlayerSource).not.toContain("VolumeIcon");
     expect(miniPlayerSource).not.toContain("音量");
     expect(miniPlayerSource).toContain("flex items-center justify-center gap-3");

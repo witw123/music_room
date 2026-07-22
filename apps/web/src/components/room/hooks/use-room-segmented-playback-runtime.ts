@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
-import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
   useSegmentedOpusPlayback,
@@ -9,13 +9,103 @@ import {
 } from "@/features/playback/use-segmented-opus-playback";
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
 import {
   ensureOfflineProviderPlaybackAsset,
   resolveOfflineProviderSource
 } from "@/features/playback/offline-source-fallback";
+import { getRoomLocalAudioFile } from "@/features/upload/local-audio-storage";
 import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 
 const receiverBufferingGraceMs = 3_000;
+const localAudioSeekToleranceSeconds = 0.35;
+const localAudioMetadataTimeoutMs = 8_000;
+
+type LocalAudioResolutionStatus = "idle" | "checking" | "available" | "missing";
+
+type LocalAudioResolution = {
+  key: string | null;
+  status: LocalAudioResolutionStatus;
+  file: Blob | null;
+  error: string | null;
+};
+
+type LocalAudioObjectUrl = {
+  key: string;
+  url: string;
+};
+
+export function resolveRoomAudioPositionMs(
+  playback: Pick<PlaybackSnapshot, "status" | "positionMs" | "startedAt" | "startAt">,
+  nowMs = getRoomPlaybackClockNowMs()
+) {
+  if (playback.status !== "playing") {
+    return Math.max(0, playback.positionMs);
+  }
+
+  const anchorAt = playback.startedAt ?? playback.startAt ?? null;
+  const anchorMs = anchorAt ? Date.parse(anchorAt) : Number.NaN;
+  if (!Number.isFinite(anchorMs)) {
+    return Math.max(0, playback.positionMs);
+  }
+
+  return Math.max(0, playback.positionMs + Math.max(0, nowMs - anchorMs));
+}
+
+function resolveLocalAudioTrackKey(track: TrackMeta | null | undefined) {
+  return track ? `${track.id}:${track.fileHash}` : null;
+}
+
+function resolveLocalAudioTimelineKey(playback: PlaybackSnapshot) {
+  return [
+    playback.currentTrackId ?? "none",
+    playback.mediaEpoch,
+    playback.status,
+    playback.startedAt ?? playback.startAt ?? "none",
+    playback.status === "playing" ? "playing" : playback.positionMs
+  ].join(":");
+}
+
+function isAudioPlaybackBlockedError(error: string | null) {
+  return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
+}
+
+function waitForLocalAudioMetadata(audio: HTMLAudioElement) {
+  if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("error", onError);
+      window.clearTimeout(timeout);
+    };
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+    const onLoadedMetadata = () => finish();
+    const onError = () => finish(new Error("本地音频文件无法解码。"));
+    const timeout = window.setTimeout(
+      () => finish(new Error("本地音频文件读取超时。")),
+      localAudioMetadataTimeoutMs
+    );
+    audio.addEventListener("loadedmetadata", onLoadedMetadata, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+
+    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      finish();
+    }
+  });
+}
 
 export function useRoomSegmentedPlaybackRuntime(input: {
   roomSnapshot: RoomSnapshot | null;
@@ -69,13 +159,27 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     source: offlineSource
   };
   const [offlineFallbackAsset, setOfflineFallbackAsset] = useState<TrackMeta["playbackAsset"] | null>(null);
+  const localAudioTrackKey = resolveLocalAudioTrackKey(input.currentTrack);
+  const [localAudioResolution, setLocalAudioResolution] = useState<LocalAudioResolution>({
+    key: null,
+    status: "idle",
+    file: null,
+    error: null
+  });
   const runtimeInputRef = useRef({
     ...input,
-    localFallbackAsset: null as TrackMeta["playbackAsset"] | null
+    localFallbackAsset: null as TrackMeta["playbackAsset"] | null,
+    localAudioResolution: {
+      key: null as string | null,
+      status: "idle" as LocalAudioResolutionStatus,
+      file: null as Blob | null,
+      error: null as string | null
+    } satisfies LocalAudioResolution
   });
   runtimeInputRef.current = {
     ...input,
-    localFallbackAsset: offlineFallbackAsset
+    localFallbackAsset: offlineFallbackAsset,
+    localAudioResolution
   };
   const { audioRef, isCurrentSource, peerId: runtimePeerId } = input;
   const audioUnlocked = input.audioUnlocked;
@@ -94,6 +198,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     recoveryCount: 0
   });
   const localMediaBindingRef = useRef<string | null>(null);
+  const localAudioObjectUrlRef = useRef<LocalAudioObjectUrl | null>(null);
+  const localAudioReadyKeyRef = useRef<string | null>(null);
+  const localAudioTimelineKeyRef = useRef<string | null>(null);
+  const failedLocalAudioKeysRef = useRef<Set<string>>(new Set());
   const roomId = input.roomSnapshot?.room.id ?? null;
   const [mediaPlayback, setMediaPlayback] = useState<SegmentedPlaybackSnapshot>(() => ({
     state: "idle",
@@ -105,8 +213,85 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }));
 
   useEffect(() => {
+    const track = input.currentTrack;
+    if (!track || !localAudioTrackKey) {
+      setLocalAudioResolution((current) => current.status === "idle" && current.key === null
+        ? current
+        : {
+            key: null,
+            status: "idle",
+            file: null,
+            error: null
+          });
+      return;
+    }
+
+    if (failedLocalAudioKeysRef.current.has(localAudioTrackKey)) {
+      setLocalAudioResolution({
+        key: localAudioTrackKey,
+        status: "missing",
+        file: null,
+        error: "本地音频文件不可播放。"
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setLocalAudioResolution({
+      key: localAudioTrackKey,
+      status: "checking",
+      file: null,
+      error: null
+    });
+    void getRoomLocalAudioFile({
+      trackId: track.id,
+      fileHash: track.fileHash,
+      title: track.title,
+      mimeType: track.mimeType ?? "audio/mpeg",
+      originalAssetId: track.originalAsset?.assetId ?? null
+    }).then((file) => {
+      if (cancelled) return;
+      setLocalAudioResolution({
+        key: localAudioTrackKey,
+        status: file ? "available" : "missing",
+        file,
+        error: null
+      });
+    }).catch((error) => {
+      if (cancelled) return;
+      setLocalAudioResolution({
+        key: localAudioTrackKey,
+        status: "missing",
+        file: null,
+        error: error instanceof Error && error.message.trim()
+          ? error.message
+          : "本地音频文件读取失败。"
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    input.currentTrack,
+    input.currentTrack?.fileHash,
+    input.currentTrack?.id,
+    input.currentTrack?.mimeType,
+    input.currentTrack?.originalAsset?.assetId,
+    input.currentTrack?.title,
+    input.isCurrentSource,
+    localAudioTrackKey
+  ]);
+
+  useEffect(() => {
     const fallbackInput = offlineFallbackInputRef.current;
-    if (input.isCurrentSource || !fallbackInput.source || !fallbackInput.roomSnapshot || !fallbackInput.track) {
+    if (
+      input.isCurrentSource ||
+      localAudioResolution.status !== "missing" ||
+      !fallbackInput.source ||
+      !fallbackInput.roomSnapshot ||
+      !fallbackInput.track
+    ) {
       setOfflineFallbackAsset(null);
       return;
     }
@@ -145,6 +330,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.sourceSessionId,
     input.roomSnapshot?.room.playback.status,
+    localAudioResolution.status,
     offlineSource?.label,
     offlineSource?.provider,
     offlineSource?.trackId,
@@ -192,12 +378,51 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     });
   }, []);
 
+  const clearLocalAudioSource = useCallback((audio: HTMLAudioElement | null) => {
+    // Disconnect before changing src. MediaElementAudioSourceNode is tied to
+    // the element for the lifetime of the AudioContext; leaving the graph
+    // connected across a failed decode or track switch can strand the next
+    // source or keep stale audio flowing into the room broadcast.
+    roomAudioOutput.unbindLocalAudioElement(audio);
+    if (audio) {
+      try {
+        audio.pause();
+        audio.srcObject = null;
+        audio.removeAttribute("src");
+        audio.load();
+      } catch {
+        // Media element cleanup is best effort during room transitions.
+      }
+    }
+
+    const objectUrl = localAudioObjectUrlRef.current?.url;
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    localAudioObjectUrlRef.current = null;
+    localAudioReadyKeyRef.current = null;
+    localAudioTimelineKeyRef.current = null;
+  }, []);
+
+  const markLocalAudioUnavailable = useCallback((key: string, error: string) => {
+    failedLocalAudioKeysRef.current.add(key);
+    setLocalAudioResolution((current) => current.key === key
+      ? {
+          key,
+          status: "missing",
+          file: null,
+          error
+        }
+      : current);
+  }, []);
+
   const playback = useSegmentedOpusPlayback({
     roomSnapshot: input.roomSnapshot,
     currentTrack: input.currentTrack,
     localFallbackAsset: offlineFallbackAsset,
     peerId: input.peerId,
     isCurrentSource: input.isCurrentSource,
+    disableSourcePlayback: input.isCurrentSource && localAudioResolution.status !== "missing",
     volume: input.volume,
     audioUnlocked: input.audioUnlocked,
   });
@@ -207,8 +432,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
     const sourcePeerId = resolveCurrentSourcePeerId(runtime.roomSnapshot, roomPlayback);
     const remote = sourcePeerId ? runtime.getPeerMediaState(sourcePeerId) : null;
-    const usesOfflineFallback = !runtime.isCurrentSource && !!runtime.localFallbackAsset;
-    const visiblePlayback = runtime.isCurrentSource || usesOfflineFallback ? playback : mediaPlayback;
+    const usesNativeLocalAudio = runtime.localAudioResolution.status === "available";
+    const usesLocalAudio = !runtime.isCurrentSource && usesNativeLocalAudio;
+    const usesOfflineFallback = !runtime.isCurrentSource &&
+      !!runtime.localFallbackAsset && !usesLocalAudio;
+    const usesSegmentedPlayback = (runtime.isCurrentSource && !usesNativeLocalAudio) || usesOfflineFallback;
+    const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
     const track = runtime.currentTrack;
     const mediaSession =
       roomPlayback?.currentTrackId && track?.playbackAsset
@@ -218,7 +447,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             playback: roomPlayback,
             sourcePeerId,
             outputTrackId: runtime.isCurrentSource ? roomAudioOutput.getBroadcastTrackId() : null,
-            remoteTrackId: remote?.remoteTrackId ?? null
+            remoteTrackId: usesLocalAudio ? null : remote?.remoteTrackId ?? null
           })
         : null;
     const playbackState = toDiagnosticPlaybackState(visiblePlayback.state);
@@ -251,12 +480,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           audioContextState: visiblePlayback.audioContextState,
           outputTrackId: mediaSession?.outputTrackId ?? null,
           remoteTrackId: mediaSession?.remoteTrackId ?? null,
-          bufferedAheadMs: runtime.isCurrentSource || usesOfflineFallback ? visiblePlayback.bufferedMs : 0,
-          scheduledAheadMs: runtime.isCurrentSource || usesOfflineFallback ? visiblePlayback.bufferedMs : 0,
+          bufferedAheadMs: usesSegmentedPlayback ? visiblePlayback.bufferedMs : 0,
+          scheduledAheadMs: usesSegmentedPlayback ? visiblePlayback.bufferedMs : 0,
           underrunCount: visiblePlayback.underrunCount ?? 0,
           lastUnderrunAt: visiblePlayback.lastUnderrunAt ?? null,
-          decodedPeak: runtime.isCurrentSource || usesOfflineFallback ? visiblePlayback.decodedPeak ?? null : null,
-          decodedRms: runtime.isCurrentSource || usesOfflineFallback ? visiblePlayback.decodedRms ?? null : null,
+          decodedPeak: usesSegmentedPlayback ? visiblePlayback.decodedPeak ?? null : null,
+          decodedRms: usesSegmentedPlayback ? visiblePlayback.decodedRms ?? null : null,
           lastDecodeError: visiblePlayback.lastDecodeError ?? visiblePlayback.lastError,
           mediaRecoveryState: visiblePlayback.state === "unavailable"
             ? "failed"
@@ -274,6 +503,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.peerId,
     input.roomSnapshot?.room.id,
     input.recordPeerDiagnostic,
+    localAudioResolution.status,
     offlineFallbackAsset?.assetId,
     mediaPlayback.audioContextState,
     mediaPlayback.bufferedMs,
@@ -304,10 +534,34 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         : null;
       const audio = audioRef.current;
 
-      if (runtime.isCurrentSource) {
+      if (runtime.isCurrentSource && runtime.localAudioResolution.status !== "available") {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         boundMediaKeyRef.current = null;
+        if (
+          localAudioObjectUrlRef.current ||
+          localMediaBindingRef.current?.endsWith(":local") ||
+          localMediaBindingRef.current?.startsWith("listener:local:") ||
+          localMediaBindingRef.current?.startsWith("source:local:")
+        ) {
+          roomAudioOutput.unbindLocalAudioElement(audio);
+          clearLocalAudioSource(audio);
+          roomAudioOutput.releaseRoomAudioSession();
+        }
+        if (runtime.localAudioResolution.status !== "missing") {
+          runtime.setLocalAudioStream(null, null, null);
+          if (!cancelled) {
+            setMediaPlayback({
+              state: roomPlayback?.status === "playing" ? "buffering" : "paused",
+              bufferedMs: 0,
+              ownedUnitCount: 0,
+              totalUnitCount: runtime.currentTrack?.playbackAsset?.unitCount ?? 0,
+              audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+              lastError: null
+            });
+          }
+          return;
+        }
         const sourceStream = runtime.currentTrack?.playbackAsset && roomPlayback?.currentTrackId
           ? roomAudioOutput.getBroadcastDestination()?.stream ?? null
           : null;
@@ -324,6 +578,223 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         return;
       }
 
+      const localAudio = runtime.localAudioResolution.status === "available"
+        ? runtime.localAudioResolution.file
+        : null;
+      const localAudioKey = runtime.localAudioResolution.key;
+      if (localAudio && localAudioKey) {
+        const totalUnitCount = runtime.currentTrack?.playbackAsset?.unitCount ?? 0;
+        const hasActiveTimeline = roomPlayback?.currentTrackId === runtime.currentTrack?.id;
+        missingMediaSinceRef.current = null;
+        mediaEnsureKeyRef.current = null;
+        boundMediaKeyRef.current = null;
+        runtime.setLocalAudioStream(null, null, null);
+        const localBindingKey = `${runtime.isCurrentSource ? "source" : "listener"}:local:${localAudioKey}`;
+        if (localMediaBindingRef.current !== localBindingKey) {
+          localMediaBindingRef.current = localBindingKey;
+          if (!runtime.isCurrentSource) {
+            roomAudioOutput.releaseRoomAudioSession();
+          }
+        }
+
+        if (!audio || !hasActiveTimeline) {
+          if (audio) {
+            audio.pause();
+            audio.srcObject = null;
+            if (runtime.isCurrentSource) {
+              roomAudioOutput.unbindLocalAudioElement(audio);
+            }
+            if (localAudioObjectUrlRef.current) {
+              clearLocalAudioSource(audio);
+            }
+          }
+          if (!cancelled) {
+            setMediaPlayback({
+              state: roomPlayback ? "paused" : "idle",
+              bufferedMs: 0,
+              ownedUnitCount: 0,
+              totalUnitCount,
+              audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+              lastError: null
+            });
+          }
+          return;
+        }
+
+        try {
+          const isCurrentLocalAudioRequest = () => {
+            const current = runtimeInputRef.current;
+            return !cancelled &&
+              current.currentTrack?.id === runtime.currentTrack?.id &&
+              current.localAudioResolution.key === localAudioKey &&
+              current.localAudioResolution.status === "available" &&
+              current.localAudioResolution.file === localAudio;
+          };
+          if (audio.srcObject) {
+            audio.pause();
+            audio.srcObject = null;
+          }
+          if (localAudioObjectUrlRef.current?.key !== localAudioKey) {
+            clearLocalAudioSource(audio);
+            localAudioObjectUrlRef.current = {
+              key: localAudioKey,
+              url: URL.createObjectURL(localAudio)
+            };
+          }
+          const objectUrl = localAudioObjectUrlRef.current?.url;
+          if (!objectUrl) {
+            throw new Error("本地音频对象地址创建失败。");
+          }
+          if (audio.src !== objectUrl) {
+            audio.pause();
+            audio.preload = "auto";
+            audio.src = objectUrl;
+            localAudioReadyKeyRef.current = null;
+            localAudioTimelineKeyRef.current = null;
+            const metadataReady = waitForLocalAudioMetadata(audio);
+            audio.load();
+            await metadataReady;
+            if (!isCurrentLocalAudioRequest()) return;
+            localAudioReadyKeyRef.current = localAudioKey;
+          } else if (localAudioReadyKeyRef.current !== localAudioKey) {
+            const metadataReady = waitForLocalAudioMetadata(audio);
+            audio.load();
+            await metadataReady;
+            if (!isCurrentLocalAudioRequest()) return;
+            localAudioReadyKeyRef.current = localAudioKey;
+          }
+
+          if (!isCurrentLocalAudioRequest()) return;
+          const activeRuntime = runtimeInputRef.current;
+          const activeRoomPlayback = activeRuntime.roomSnapshot?.room.playback ?? null;
+          if (
+            !activeRoomPlayback ||
+            activeRoomPlayback.currentTrackId !== activeRuntime.currentTrack?.id
+          ) {
+            return;
+          }
+          if (audio.error) {
+            throw new Error("本地音频文件无法解码。");
+          }
+
+          const timelineKey = resolveLocalAudioTimelineKey(activeRoomPlayback);
+          const targetPositionMs = resolveRoomAudioPositionMs(activeRoomPlayback);
+          const elementDurationSeconds = Number.isFinite(audio.duration) && audio.duration > 0
+            ? audio.duration
+            : Math.max(0, (activeRuntime.currentTrack?.durationMs ?? 0) / 1000);
+          const targetSeconds = elementDurationSeconds > 0
+            ? Math.min(targetPositionMs / 1000, Math.max(0, elementDurationSeconds - 0.05))
+            : targetPositionMs / 1000;
+          const shouldForceSync = localAudioTimelineKeyRef.current !== timelineKey;
+          if (
+            shouldForceSync ||
+            !Number.isFinite(audio.currentTime) ||
+            Math.abs(audio.currentTime - targetSeconds) >= localAudioSeekToleranceSeconds
+          ) {
+            audio.currentTime = Math.max(0, targetSeconds);
+          }
+          localAudioTimelineKeyRef.current = timelineKey;
+
+          if (activeRoomPlayback.status !== "playing") {
+            audio.pause();
+            if (!cancelled) {
+              setMediaPlayback({
+                state: "paused",
+                bufferedMs: 0,
+                ownedUnitCount: 0,
+                totalUnitCount,
+                audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+                lastError: null
+              });
+            }
+            return;
+          }
+
+          const sourceBroadcastStream = activeRuntime.isCurrentSource
+            ? roomAudioOutput.bindLocalAudioElement(audio)
+            : null;
+          if (activeRuntime.isCurrentSource && !sourceBroadcastStream) {
+            roomAudioOutput.unbindLocalAudioElement(audio);
+            throw new Error("本地音频无法连接到房间广播音频图。");
+          }
+          activeRuntime.setLocalAudioStream(
+            sourceBroadcastStream,
+            activeRuntime.isCurrentSource ? activeRuntime.peerId : null,
+            activeRuntime.currentTrack?.playbackAsset
+              ? activeRuntime.currentTrack.playbackAsset.bitrate / 1000
+              : null
+          );
+
+          const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
+          if (!activeRuntime.audioUnlocked || audioContextState !== "running") {
+            if (!cancelled) {
+              setMediaPlayback({
+                state: "awaiting-unlock",
+                bufferedMs: 0,
+                ownedUnitCount: 0,
+                totalUnitCount,
+                audioContextState,
+                lastError: null
+              });
+            }
+            return;
+          }
+
+          if (audio.ended && elementDurationSeconds > 0 && targetSeconds >= elementDurationSeconds - 0.1) {
+            audio.pause();
+            if (!cancelled) {
+              setMediaPlayback({
+                state: "paused",
+                bufferedMs: 0,
+                ownedUnitCount: 0,
+                totalUnitCount,
+                audioContextState,
+                lastError: null
+              });
+            }
+            return;
+          }
+
+          const result = await roomAudioOutput.playElement(audio);
+          if (!isCurrentLocalAudioRequest()) return;
+          if (!result.ok) {
+            if (isAudioPlaybackBlockedError(result.error)) {
+              setAudioUnlocked(false);
+              setMediaPlayback({
+                state: "awaiting-unlock",
+                bufferedMs: 0,
+                ownedUnitCount: 0,
+                totalUnitCount,
+                audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+                lastError: result.error
+              });
+              return;
+            }
+            markLocalAudioUnavailable(localAudioKey, result.error ?? "本地音频播放失败。");
+            clearLocalAudioSource(audio);
+            return;
+          }
+
+          activeRuntime.setMediaConnectionState("live");
+          setMediaPlayback({
+            state: "live",
+            bufferedMs: 0,
+            ownedUnitCount: 0,
+            totalUnitCount,
+            audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+            lastError: null
+          });
+        } catch (error) {
+          if (cancelled) return;
+          const detail = error instanceof Error && error.message.trim()
+            ? error.message
+            : "本地音频播放失败。";
+          markLocalAudioUnavailable(localAudioKey, detail);
+          clearLocalAudioSource(audio);
+        }
+        return;
+      }
+
       if (runtime.localFallbackAsset) {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
@@ -332,12 +803,21 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           roomAudioOutput.releaseRoomAudioSession();
         }
         runtime.setLocalAudioStream(null, null, null);
-        if (audio) {
+        if (audio && localAudioObjectUrlRef.current) {
+          clearLocalAudioSource(audio);
+        } else if (audio) {
           audio.pause();
           audio.srcObject = null;
         }
         boundMediaKeyRef.current = null;
         return;
+      }
+
+      if (
+        localAudioObjectUrlRef.current ||
+        localMediaBindingRef.current?.startsWith("listener:local:")
+      ) {
+        clearLocalAudioSource(audio);
       }
 
       const expectedSourcePeerId = roomPlayback?.status === "playing" ? sourcePeerId : null;
@@ -546,10 +1026,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       runtimeInputRef.current.setLocalAudioStream(null, null, null);
       runtimeInputRef.current.audibleRef.current = false;
       const audio = mountedAudio;
-      if (audio && !isCurrentSource) {
-        audio.pause();
-        audio.srcObject = null;
-      }
+      roomAudioOutput.unbindLocalAudioElement(audio);
+      clearLocalAudioSource(audio);
       receiverAudioHealthRef.current = {
         boundAtMs: 0,
         lastProgressAtMs: 0,
@@ -565,6 +1043,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     };
   }, [
     audioRef,
+    clearLocalAudioSource,
+    markLocalAudioUnavailable,
+    setAudioUnlocked,
     isCurrentSource,
     roomId,
     ensureListenerMediaConnection
@@ -613,17 +1094,48 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [audioRef, isCurrentSource]);
 
   useEffect(() => {
-    if (isCurrentSource) {
+    const usesNativeLocalAudio = isCurrentSource && localAudioResolution.status === "available";
+    if (isCurrentSource && !usesNativeLocalAudio) {
       return;
     }
     roomAudioOutput.applyVolume({
       localAudio: audioRef.current,
       volume: input.volume
     });
-  }, [audioRef, input.volume, isCurrentSource]);
+  }, [audioRef, input.volume, isCurrentSource, localAudioResolution.status]);
 
   const lastReportedErrorRef = useRef<string | null>(null);
   const completedTimelineRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !input.isCurrentSource) {
+      return;
+    }
+
+    const handleEnded = () => {
+      const runtime = runtimeInputRef.current;
+      const roomPlayback = runtime.roomSnapshot?.room.playback;
+      if (
+        runtime.localAudioResolution.status !== "available" ||
+        roomPlayback?.status !== "playing" ||
+        roomPlayback.currentTrackId !== runtime.currentTrack?.id
+      ) {
+        return;
+      }
+      const timelineKey = [
+        roomPlayback.currentTrackId,
+        roomPlayback.mediaEpoch,
+        roomPlayback.startAt ?? roomPlayback.startedAt
+      ].join(":");
+      if (completedTimelineRef.current === timelineKey) return;
+      completedTimelineRef.current = timelineKey;
+      void onPlaybackEnded();
+    };
+
+    audio.addEventListener("ended", handleEnded);
+    return () => audio.removeEventListener("ended", handleEnded);
+  }, [audioRef, input.isCurrentSource, onPlaybackEnded]);
 
   useEffect(() => {
     if (
@@ -752,7 +1264,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     void onPlaybackEnded();
   }, [isCurrentSource, localPeerId, offlineFallbackAsset, onPlaybackEnded, playback.state, roomSnapshot, runtimePeerId]);
 
-  return input.isCurrentSource || !!offlineFallbackAsset ? playback : mediaPlayback;
+  const usesSegmentedSource = input.isCurrentSource && localAudioResolution.status === "missing";
+  return usesSegmentedSource || !!offlineFallbackAsset ? playback : mediaPlayback;
 }
 
 function idlePlaybackSnapshot(): SegmentedPlaybackSnapshot {

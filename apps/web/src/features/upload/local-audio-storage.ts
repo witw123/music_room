@@ -13,6 +13,7 @@ import {
   getLocalAudioFileRecord,
   getLocalPlaylistDirectory,
   getLocalAudioCacheFileRecord,
+  getCachedLibraryTrack,
   getAssetManifest,
   getAssetUnits,
   getTrackAssetLink,
@@ -278,6 +279,36 @@ export async function getOriginalAssetFile(input: {
   }
 
   return null;
+}
+
+/** Resolve a room track to the original local file without decoding or transcoding it. */
+export async function getRoomLocalAudioFile(input: {
+  trackId: string;
+  fileHash: string;
+  title: string;
+  mimeType: string;
+  originalAssetId?: string | null;
+}) {
+  const [savedFile, cachedFile] = await Promise.all([
+    getLocalAudioFile(input.fileHash).catch(() => null),
+    getLocalAudioCacheFile(input.fileHash).catch(() => null)
+  ]);
+  if (savedFile) return savedFile;
+  if (cachedFile) return cachedFile;
+
+  const browserCache = await getCachedLibraryTrack(input.fileHash).catch(() => null);
+  if (browserCache?.file) return browserCache.file;
+
+  const linkedAssets = await getTrackAssetLink(input.trackId).catch(() => null);
+  const originalAssetId = input.originalAssetId ?? linkedAssets?.originalAssetId ?? null;
+  if (!originalAssetId) return null;
+
+  return getOriginalAssetFile({
+    assetId: originalAssetId,
+    fileHash: input.fileHash,
+    title: input.title,
+    mimeType: input.mimeType
+  });
 }
 
 export async function getLocalAudioCacheFile(fileHash: string) {

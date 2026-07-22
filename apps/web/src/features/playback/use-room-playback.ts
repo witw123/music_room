@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEve
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
+import { roomAudioOutput } from "./room-audio-output";
 
 const playbackProgressPollIntervalMs = 150;
 const hiddenPlaybackProgressPollIntervalMs = 1_000;
@@ -416,12 +417,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   ]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    audio.volume = volume;
+    roomAudioOutput.applyVolume({
+      localAudio: audioRef.current,
+      volume
+    });
   }, [audioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {

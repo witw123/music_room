@@ -6,10 +6,12 @@ const indexedDbMocks = vi.hoisted(() => ({
   deleteLocalAudioCacheFileRecord: vi.fn(),
   getAssetManifest: vi.fn(),
   getAssetUnits: vi.fn(),
+  getCachedLibraryTrack: vi.fn(),
   getCachedLibraryTrackSummary: vi.fn(),
   getLocalAudioDirectory: vi.fn(),
   getLocalAudioFileRecord: vi.fn(),
   getLocalAudioCacheFileRecord: vi.fn(),
+  getTrackAssetLink: vi.fn(),
   listCachedLibraryTracks: vi.fn(),
   listCachedLibraryTrackSummaries: vi.fn(),
   listLocalAudioCacheFiles: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("@/lib/indexeddb", () => indexedDbMocks);
 import {
   ensureLocalAudioDirectoryWriteAccess,
   getOriginalAssetFile,
+  getRoomLocalAudioFile,
   saveCachedAudioFileToLocalDirectory
 } from "./local-audio-storage";
 
@@ -65,7 +68,21 @@ describe("local audio cache persistence", () => {
     vi.clearAllMocks();
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue(null);
     indexedDbMocks.getLocalAudioFileRecord.mockResolvedValue(null);
+    indexedDbMocks.getCachedLibraryTrack.mockResolvedValue(null);
+    indexedDbMocks.getTrackAssetLink.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrackSummary.mockResolvedValue(null);
+  });
+
+  it("uses the browser library copy for room-local playback", async () => {
+    const file = new Blob(["audio"], { type: "audio/mpeg" });
+    indexedDbMocks.getCachedLibraryTrack.mockResolvedValue({ file });
+
+    await expect(getRoomLocalAudioFile({
+      trackId: "track_1",
+      fileHash: "hash_1",
+      title: "Song",
+      mimeType: "audio/mpeg"
+    })).resolves.toBe(file);
   });
 
   it("rebuilds an owner source file from a complete original asset", async () => {

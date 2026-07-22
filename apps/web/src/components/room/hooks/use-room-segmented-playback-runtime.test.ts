@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isSegmentedPlaybackAudible,
-  resolveReceiverPlaybackState
+  resolveReceiverPlaybackState,
+  resolveRoomAudioPositionMs
 } from "./use-room-segmented-playback-runtime";
 
 describe("receiver playback state", () => {
@@ -48,5 +49,25 @@ describe("segmented playback audible state", () => {
       isCurrentSource: true,
       sourceHealth: "source-silent"
     })).toBe(false);
+  });
+});
+
+describe("local room audio clock", () => {
+  it("uses the room clock to advance a playing local file", () => {
+    expect(resolveRoomAudioPositionMs({
+      status: "playing",
+      positionMs: 12_000,
+      startedAt: "2026-07-22T00:00:10.000Z",
+      startAt: "2026-07-22T00:00:10.000Z"
+    }, Date.parse("2026-07-22T00:00:13.500Z"))).toBe(15_500);
+  });
+
+  it("keeps paused local audio at the server position", () => {
+    expect(resolveRoomAudioPositionMs({
+      status: "paused",
+      positionMs: 12_000,
+      startedAt: "2026-07-22T00:00:10.000Z",
+      startAt: "2026-07-22T00:00:10.000Z"
+    }, Date.parse("2026-07-22T00:00:13.500Z"))).toBe(12_000);
   });
 });
