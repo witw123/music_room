@@ -29,6 +29,11 @@ import {
 import { readEmbeddedAudioMetadata } from "@/features/upload/audio-metadata";
 import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import {
+  appSettingsChangeEvent,
+  getAppSettings,
+  updateAppSettings
+} from "@/features/settings/settings-store";
 
 const localQueueOwnerId = "local-playlist";
 
@@ -111,6 +116,21 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setPlayback((current) => current ? { ...current, playbackMode } : current);
   }, [playbackMode]);
+
+  useEffect(() => {
+    const syncPlaybackSettings = () => {
+      const settings = getAppSettings();
+      setVolume(settings.playback.defaultVolume);
+      setPlaybackMode(settings.playback.localPlaybackMode);
+    };
+    syncPlaybackSettings();
+    window.addEventListener(appSettingsChangeEvent, syncPlaybackSettings);
+    window.addEventListener("storage", syncPlaybackSettings);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncPlaybackSettings);
+      window.removeEventListener("storage", syncPlaybackSettings);
+    };
+  }, []);
 
   useEffect(() => {
     const refresh = () => {
@@ -564,8 +584,10 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, [findPlayableIndex, playRecords, stopAtEnd]);
 
   const onCyclePlaybackMode = useCallback(() => {
-    setPlaybackMode((mode) => mode === "sequence" ? "shuffle" : mode === "shuffle" ? "single" : "sequence");
-  }, []);
+    const nextMode = playbackMode === "sequence" ? "shuffle" : playbackMode === "shuffle" ? "single" : "sequence";
+    setPlaybackMode(nextMode);
+    updateAppSettings({ playback: { localPlaybackMode: nextMode } });
+  }, [playbackMode]);
 
   const handleAudioEnded = useCallback(() => {
     if (playbackMode === "single") {

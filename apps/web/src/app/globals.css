@@ -65,13 +65,22 @@
 
   /* Keep the content gutter aligned with the compact desktop sidebar. */
   @media (min-width: 768px) {
-    html:not([data-sidebar-collapsed="true"]) .md\:pl-60 {
-      padding-left: 13rem !important;
+    html[data-sidebar-collapsed="false"] .md\:pl-60 {
+      padding-left: 12rem !important;
     }
 
-    html[data-sidebar-collapsed="true"] .md\:pl-60 {
+    html:not([data-sidebar-collapsed="false"]) .md\:pl-60 {
       padding-left: 4rem !important;
     }
+  }
+
+  html[data-reduce-motion="true"] *,
+  html[data-reduce-motion="true"] *::before,
+  html[data-reduce-motion="true"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 
   .netease-results-scroll,

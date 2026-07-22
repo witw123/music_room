@@ -6,6 +6,7 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;
@@ -174,6 +175,18 @@ function ImmersiveLyrics({
 }) {
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
+
+  useEffect(() => {
+    const syncPreferences = () => setLyricPreferences(getAppSettings().playback);
+    syncPreferences();
+    window.addEventListener(appSettingsChangeEvent, syncPreferences);
+    window.addEventListener("storage", syncPreferences);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncPreferences);
+      window.removeEventListener("storage", syncPreferences);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -222,7 +235,8 @@ function ImmersiveLyrics({
   return (
     <div className="mt-2 min-h-0 border-t border-white/[0.08] pt-3 sm:mt-4 sm:pt-4">
       <RoomLyricsPanel
-        visibleLines={7}
+        visibleLines={lyricPreferences.lyricLines}
+        fontScale={lyricPreferences.lyricFontScale}
         isPlaying={isPlaying}
         lyrics={plainLyric}
         positionMs={positionMs}

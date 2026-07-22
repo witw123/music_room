@@ -5,6 +5,7 @@ import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
 import { roomAudioOutput } from "./room-audio-output";
+import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 
 const playbackProgressPollIntervalMs = 150;
 const hiddenPlaybackProgressPollIntervalMs = 1_000;
@@ -234,6 +235,17 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   });
   const acceptedPlaybackRef = useRef<PlaybackSnapshot | null>(null);
   acceptedPlaybackRef.current = acceptedPlayback;
+
+  useEffect(() => {
+    const syncVolume = () => setVolume(getAppSettings().playback.defaultVolume);
+    syncVolume();
+    window.addEventListener(appSettingsChangeEvent, syncVolume);
+    window.addEventListener("storage", syncVolume);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncVolume);
+      window.removeEventListener("storage", syncVolume);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") {

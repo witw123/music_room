@@ -18,6 +18,7 @@ import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -85,12 +86,24 @@ function RoomStageBase({
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
+  const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
   const [editRoomForm, setEditRoomForm] = useState<UpdateRoomRequest>({
     visibility: roomSnapshot.room.visibility,
     name: roomSnapshot.room.name ?? "",
     description: roomSnapshot.room.description ?? "",
     password: ""
   });
+
+  useEffect(() => {
+    const syncPreferences = () => setLyricPreferences(getAppSettings().playback);
+    syncPreferences();
+    window.addEventListener(appSettingsChangeEvent, syncPreferences);
+    window.addEventListener("storage", syncPreferences);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncPreferences);
+      window.removeEventListener("storage", syncPreferences);
+    };
+  }, []);
   const [isCopying, setIsCopying] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
@@ -533,7 +546,8 @@ function RoomStageBase({
 
             <RoomLyricsPanel
               className={isLyricsOpen ? "max-w-[42rem]" : "max-w-[36rem]"}
-              visibleLines={isLyricsOpen ? 7 : 3}
+              visibleLines={isLyricsOpen ? lyricPreferences.lyricLines : 3}
+              fontScale={lyricPreferences.lyricFontScale}
               isPlaying={isPlaying}
               lyrics={lyricsText}
               positionMs={lyricsPositionMs}

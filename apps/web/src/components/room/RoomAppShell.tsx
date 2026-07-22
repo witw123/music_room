@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -15,6 +15,7 @@ import type { useRoomPageRoomActions } from "@/components/room/hooks/use-room-pa
 import type { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 import type { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import type { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
+import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 
 type RoomAppShellProps = {
   activeSession: AuthSession | null;
@@ -70,6 +71,17 @@ export function RoomAppShell({
   workspaceViewModel
 }: RoomAppShellProps) {
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+
+  useEffect(() => {
+    const syncLyricsPreference = () => setIsLyricsOpen(getAppSettings().playback.showLyricsByDefault);
+    syncLyricsPreference();
+    window.addEventListener(appSettingsChangeEvent, syncLyricsPreference);
+    window.addEventListener("storage", syncLyricsPreference);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncLyricsPreference);
+      window.removeEventListener("storage", syncLyricsPreference);
+    };
+  }, []);
 
   return (
     <>

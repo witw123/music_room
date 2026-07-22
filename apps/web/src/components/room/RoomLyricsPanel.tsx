@@ -10,6 +10,7 @@ type RoomLyricsPanelProps = {
   isPlaying: boolean;
   className?: string;
   visibleLines?: number;
+  fontScale?: "small" | "medium" | "large";
 };
 
 export function RoomLyricsPanel({
@@ -18,7 +19,8 @@ export function RoomLyricsPanel({
   positionMs,
   isPlaying,
   className,
-  visibleLines = 3
+  visibleLines = 3,
+  fontScale = "medium"
 }: RoomLyricsPanelProps) {
   const lines = useMemo(() => parseRoomLyrics(lyrics), [lyrics]);
   const activeIndex = getActiveRoomLyricIndex(lines, positionMs);
@@ -58,6 +60,8 @@ export function RoomLyricsPanel({
                   key={line.id}
                   ref={isActive ? activeLineRef : undefined}
                   aria-current={isActive ? "true" : undefined}
+                  data-testid="room-lyrics-line"
+                  style={{ fontSize: `${getLyricFontSize({ isActive, visibleLines, fontScale })}rem` }}
                   className={`mx-auto flex w-full ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 max-w-[30rem] items-center justify-center break-words text-center leading-[1.35] transition-[color,opacity] duration-300 ${
                     isActive
                       ? `font-bold text-white ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
@@ -78,4 +82,16 @@ export function RoomLyricsPanel({
       </div>
     </section>
   );
+}
+
+function getLyricFontSize(input: {
+  isActive: boolean;
+  visibleLines: number;
+  fontScale: "small" | "medium" | "large";
+}) {
+  const base = input.isActive
+    ? input.visibleLines === 7 ? 1.25 : input.visibleLines === 5 ? 1.4 : 1.25
+    : input.visibleLines === 7 ? 0.9 : input.visibleLines === 5 ? 0.95 : 0.9;
+  const factor = input.fontScale === "small" ? 0.86 : input.fontScale === "large" ? 1.14 : 1;
+  return base * factor;
 }

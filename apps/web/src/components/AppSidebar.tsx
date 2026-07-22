@@ -11,8 +11,13 @@ import {
   requestAwayRoomResume,
   storeAwayRoomId
 } from "@/lib/away-room";
+import {
+  appSettingsChangeEvent,
+  getAppSettings,
+  updateAppSettings
+} from "@/features/settings/settings-store";
 
-export type AppNavItemId = "home" | "search" | "playlists" | "favorites" | "profile";
+export type AppNavItemId = "home" | "search" | "playlists" | "favorites" | "profile" | "settings";
 
 type AppSidebarProps = {
   activeSession: AuthSession | null;
@@ -29,7 +34,8 @@ const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: Ico
   { id: "search", label: "搜索", href: "/app/search", icon: "search" },
   { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
   { id: "favorites", label: "收藏", href: "/app/favorites", icon: "favorite" },
-  { id: "profile", label: "个人中心", href: "/app/profile", icon: "profile" }
+  { id: "profile", label: "个人中心", href: "/app/profile", icon: "profile" },
+  { id: "settings", label: "设置", href: "/app/settings", icon: "settings" }
 ];
 
 type IconName =
@@ -38,11 +44,10 @@ type IconName =
   | "playlist"
   | "favorite"
   | "profile"
+  | "settings"
   | "logout"
   | "collapse"
   | "expand";
-
-const sidebarCollapsedStorageKey = "music-room-sidebar-collapsed";
 
 export function AppSidebar({
   activeSession,
@@ -57,18 +62,28 @@ export function AppSidebar({
   const router = useRouter();
   const currentItem = activeItem ?? resolveActiveItem(pathname);
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const desktopBottomOffsetClass = hasBottomPlayer
     ? "md:bottom-[11.5rem] lg:bottom-[5.25rem]"
     : "md:bottom-0";
 
   useEffect(() => {
-    setCollapsed(window.localStorage.getItem(sidebarCollapsedStorageKey) === "true");
+    const syncSidebarState = () => {
+      const settings = getAppSettings();
+      setCollapsed(settings.layout.sidebarCollapsed);
+      document.documentElement.dataset.reduceMotion = String(settings.layout.reduceMotion);
+    };
+    syncSidebarState();
+    window.addEventListener(appSettingsChangeEvent, syncSidebarState);
+    window.addEventListener("storage", syncSidebarState);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncSidebarState);
+      window.removeEventListener("storage", syncSidebarState);
+    };
   }, []);
 
   useEffect(() => {
     document.documentElement.dataset.sidebarCollapsed = String(collapsed);
-    window.localStorage.setItem(sidebarCollapsedStorageKey, String(collapsed));
   }, [collapsed]);
 
   useEffect(() => {
@@ -92,7 +107,7 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:transition-[width] md:duration-200 ${collapsed ? "md:w-16" : "md:w-52"} ${desktopBottomOffsetClass}`}
+      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:transition-[width] md:duration-200 ${collapsed ? "md:w-16" : "md:w-48"} ${desktopBottomOffsetClass}`}
       aria-label="主导航"
     >
       <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} ${collapsed ? "md:px-2 md:py-3" : "md:px-4 md:py-5"}`}>
@@ -126,13 +141,12 @@ export function AppSidebar({
         <button
           aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
           aria-expanded={!collapsed}
-          className={`hidden items-center rounded-lg text-white/[0.45] transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex ${collapsed ? "md:justify-center md:px-2 md:py-2" : "md:justify-start md:gap-3 md:px-3 md:py-2"}`}
-          onClick={() => setCollapsed((value) => !value)}
+          className="hidden h-8 w-8 shrink-0 items-center justify-center self-end rounded-full bg-white/[0.06] p-0 text-white/[0.55] transition-colors hover:bg-white/[0.12] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex"
+          onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
           title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
           type="button"
         >
           <NavIcon name={collapsed ? "expand" : "collapse"} size={17} />
-          <span className={collapsed ? "sr-only" : "text-xs"}>{collapsed ? "展开" : "收纳"}</span>
         </button>
       </div>
 
@@ -192,7 +206,7 @@ export function AppSidebar({
           </div>
         ) : null}
 
-        {activeSession ? (
+        {activeSession && (onLogout || !collapsed) ? (
           <div className={`hidden border-t border-white/[0.07] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>
             <UserSummary activeSession={activeSession} onLogout={onLogout} collapsed={collapsed} />
           </div>
@@ -216,6 +230,9 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
   if (pathname?.startsWith("/app/profile")) {
     return "profile";
   }
+  if (pathname?.startsWith("/app/settings")) {
+    return "settings";
+  }
   if (pathname === "/app" || pathname === "/rooms") {
     return "home";
   }
@@ -231,12 +248,20 @@ function UserSummary({
   onLogout?: () => void;
   collapsed?: boolean;
 }) {
+  if (collapsed) {
+    return onLogout ? (
+      <div className="flex justify-center">
+        <LogoutButton onLogout={onLogout} />
+      </div>
+    ) : null;
+  }
+
   return (
-    <div className={`flex min-w-0 items-center gap-2.5 ${collapsed ? "justify-center" : ""}`}>
+    <div className="flex min-w-0 items-center gap-2.5">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-xs font-bold text-accent">
         {getInitial(activeSession.nickname)}
       </span>
-      <div className={`min-w-0 flex-1 ${collapsed ? "hidden" : ""}`}>
+      <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-semibold text-white/[0.82]">{activeSession.nickname}</p>
         <p className="truncate text-[10px] text-white/[0.35]">@{activeSession.username}</p>
       </div>
@@ -321,6 +346,22 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
     return (
       <svg {...commonProps}>
         <path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" />
+      </svg>
+    );
+  }
+
+  if (name === "settings") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 3.5v2" />
+        <path d="M12 18.5v2" />
+        <path d="m5.99 5.99 1.42 1.42" />
+        <path d="m16.59 16.59 1.42 1.42" />
+        <path d="M3.5 12h2" />
+        <path d="M18.5 12h2" />
+        <path d="m5.99 18.01 1.42-1.42" />
+        <path d="m16.59 7.41 1.42-1.42" />
+        <circle cx="12" cy="12" r="3.5" />
       </svg>
     );
   }
