@@ -124,11 +124,11 @@ test("away-room-keeps-live-membership-and-resumes", async ({ browser, page }) =>
 
   await page.getByTestId("room-settings-button").click();
   await page.getByTestId("away-room-button").click();
-  await expect(page.getByTestId("away-room-banner")).toBeVisible();
+  await expect(page.getByTestId("resume-away-room")).toBeVisible();
 
   await page.getByRole("link", { name: "返回首页" }).click();
   await expect(page).toHaveURL(/\/app/);
-  await expect(page.getByTestId("away-room-banner")).toBeVisible();
+  await expect(page.getByTestId("resume-away-room")).toBeVisible();
   await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2");
 
   await listenerPage.evaluate(() => {
@@ -141,7 +141,7 @@ test("away-room-keeps-live-membership-and-resumes", async ({ browser, page }) =>
     (window as Window & { __awayRoomMemberCounts?: string[]; __awayRoomObserver?: MutationObserver }).__awayRoomObserver = observer;
   });
 
-  await page.getByRole("button", { name: "返回房间" }).click();
+  await page.getByTestId("resume-away-room").click();
   await expect(page).toHaveURL(/\/room\/room_/);
   await expect(page.getByTestId("room-code-button")).toContainText(joinCode);
   await page.waitForTimeout(2_000);
