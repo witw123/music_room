@@ -336,6 +336,42 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("bounds encoded and decoded caches after playback advances", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    sources.forEach((source) => source.onended?.());
+    Object.defineProperty(context, "currentTime", {
+      configurable: true,
+      value: 18
+    });
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 9_000,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    const internals = engine as unknown as {
+      decoded: Map<string, unknown>;
+      unitRecords: Map<string, unknown>;
+    };
+    expect([...internals.unitRecords.keys()]).toEqual([`${manifest.assetId}:4`]);
+    expect([...internals.decoded.keys()]).toEqual([`${manifest.assetId}:4`]);
+    engine.destroy();
+  });
+
   it("stops the old timeline and schedules a seek target immediately", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

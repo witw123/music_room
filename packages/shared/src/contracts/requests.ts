@@ -42,7 +42,8 @@ export const createRoomRequestSchema = z
     visibility: z.enum(["private", "public"]).optional(),
     name: trimmedString(120).optional(),
     description: optionalNullableText(500),
-    password: z.string().trim().min(4).max(128).optional()
+    password: z.string().trim().min(4).max(128).optional(),
+    newMemberPermissions: roomMemberPermissionsSchema.optional()
   })
   .strict();
 
@@ -56,7 +57,8 @@ export const updateRoomRequestSchema = z
       .trim()
       .max(128)
       .refine((value) => value.length === 0 || value.length >= 4, "密码至少 4 位。")
-      .optional()
+      .optional(),
+    newMemberPermissions: roomMemberPermissionsSchema.optional()
   })
   .strict();
 

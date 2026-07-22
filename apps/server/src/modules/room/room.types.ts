@@ -1,5 +1,18 @@
-import { defaultRoomMemberPermissions, queueItemSchema, roomSchema, trackMetaSchema } from "@music-room/shared";
-import type { PlaybackSnapshot, QueueItem, Room, RoomMember, TrackMeta } from "@music-room/shared";
+import {
+  defaultRoomMemberPermissions,
+  queueItemSchema,
+  roomMemberPermissionsSchema,
+  roomSchema,
+  trackMetaSchema
+} from "@music-room/shared";
+import type {
+  PlaybackSnapshot,
+  QueueItem,
+  Room,
+  RoomMember,
+  RoomMemberPermissions,
+  TrackMeta
+} from "@music-room/shared";
 import { z } from "zod";
 
 export type RoomRecord = {
@@ -7,13 +20,16 @@ export type RoomRecord = {
   passwordHash?: string | null;
   tracks: TrackMeta[];
   queue: QueueItem[];
+  /** Permission profiles survive member leave/rejoin while the room exists. */
+  memberPermissionProfiles?: Record<string, RoomMemberPermissions>;
 };
 
 export const roomRecordSchema = z.object({
   room: roomSchema,
   passwordHash: z.string().nullable().optional(),
   tracks: z.array(trackMetaSchema),
-  queue: z.array(queueItemSchema)
+  queue: z.array(queueItemSchema),
+  memberPermissionProfiles: z.record(roomMemberPermissionsSchema).default({})
 });
 
 export type PersistedRoomRecord = {
@@ -28,6 +44,8 @@ export type PersistedRoomRecord = {
   roomRevision?: number;
   playback: unknown;
   members: unknown;
+  newMemberPermissions?: unknown;
+  memberPermissionProfiles?: unknown;
   tracks: unknown;
   queue: unknown;
 };
@@ -35,6 +53,8 @@ export type PersistedRoomRecord = {
 type PersistedPlayback = Partial<PlaybackSnapshot> & {
   presenceRevision?: number;
   roomRevision?: number;
+  newMemberPermissions?: unknown;
+  memberPermissionProfiles?: unknown;
 };
 
 export function serializePlaybackForPersistence(
@@ -54,6 +74,13 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
   const persistedMembers = Array.isArray(persisted.members)
     ? (persisted.members as Partial<RoomMember>[])
     : [];
+  const memberPermissionProfiles = normalizeMemberPermissionProfiles(
+    persisted.memberPermissionProfiles ?? persistedPlayback.memberPermissionProfiles,
+    persistedMembers
+  );
+  const parsedNewMemberPermissions = roomMemberPermissionsSchema.safeParse(
+    persisted.newMemberPermissions ?? persistedPlayback.newMemberPermissions
+  );
   const record = {
     room: {
       id: persisted.id,
@@ -63,6 +90,9 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       description: persisted.description ?? null,
       hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
+      ...(parsedNewMemberPermissions.success
+        ? { newMemberPermissions: parsedNewMemberPermissions.data }
+        : {}),
       members: persistedMembers.map((member) => {
         const role = member.role === "host" ? "host" : "member";
         return {
@@ -72,7 +102,10 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
           joinedAt: member.joinedAt ?? new Date(0).toISOString(),
           peerId: null,
           presenceState: member.presenceState ?? "offline",
-          permissions: { ...defaultRoomMemberPermissions, ...member.permissions }
+          permissions: memberPermissionProfiles[member.id ?? ""] ?? {
+            ...defaultRoomMemberPermissions,
+            ...member.permissions
+          }
         };
       }),
       playback: {
@@ -96,7 +129,8 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
     },
     passwordHash: persisted.passwordHash ?? null,
     tracks: persisted.tracks,
-    queue: persisted.queue
+    queue: persisted.queue,
+    memberPermissionProfiles
   };
 
   const normalized = normalizeRoomRecord(record);
@@ -128,19 +162,56 @@ export function normalizeRoomRecord(value: unknown): RoomRecord | null {
   }
   const trackIds = new Set(tracks.map((track) => track.id));
   const queue = normalizeQueue(value.queue, trackIds);
+  const members = normalizeRoomMembers(roomResult.data.members);
   const candidate = {
     room: {
       ...roomResult.data,
-      members: normalizeRoomMembers(roomResult.data.members)
+      members
     },
     ...(value.passwordHash === undefined || value.passwordHash === null || typeof value.passwordHash === "string"
       ? (value.passwordHash === undefined ? {} : { passwordHash: value.passwordHash })
       : {}),
     tracks,
-    queue
+    queue,
+    memberPermissionProfiles: normalizeMemberPermissionProfiles(
+      value.memberPermissionProfiles,
+      members
+    )
   };
   const recordResult = roomRecordSchema.safeParse(candidate);
   return recordResult.success ? recordResult.data : null;
+}
+
+function normalizeMemberPermissionProfiles(
+  value: unknown,
+  members: Array<{
+    id?: string;
+    role?: RoomMember["role"];
+    permissions?: RoomMember["permissions"];
+  }>
+) {
+  const profiles: Record<string, RoomMemberPermissions> = {};
+  if (isRecord(value)) {
+    for (const [memberId, permissions] of Object.entries(value)) {
+      const parsed = roomMemberPermissionsSchema.safeParse(permissions);
+      if (parsed.success) {
+        profiles[memberId] = parsed.data;
+      }
+    }
+  }
+
+  for (const member of members) {
+    if (!member.id) {
+      continue;
+    }
+    if (!profiles[member.id]) {
+      profiles[member.id] = member.role === "host"
+        ? { ...defaultRoomMemberPermissions }
+        : { ...defaultRoomMemberPermissions, ...member.permissions };
+    }
+  }
+
+  return profiles;
 }
 
 function resolvePresenceRevision(

@@ -19,7 +19,8 @@ import {
   updateRoomMemberPermissionsRequestSchema,
   updateRoomRequestSchema,
   type Playlist,
-  type RegisterTrackRequest
+  type RegisterTrackRequest,
+  type RoomMemberPermissions
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
@@ -48,14 +49,24 @@ export class RoomController {
   @Post()
   async createRoom(
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { visibility?: "private" | "public"; name?: string; description?: string | null; password?: string }
+    @Body()
+    body: {
+      visibility?: "private" | "public";
+      name?: string;
+      description?: string | null;
+      password?: string;
+      newMemberPermissions?: RoomMemberPermissions;
+    }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(createRoomRequestSchema, body);
     const metadata = {
       ...(payload.name !== undefined ? { name: payload.name } : {}),
       ...(payload.description !== undefined ? { description: payload.description } : {}),
-      ...(payload.password !== undefined ? { password: payload.password } : {})
+      ...(payload.password !== undefined ? { password: payload.password } : {}),
+      ...(payload.newMemberPermissions !== undefined
+        ? { newMemberPermissions: payload.newMemberPermissions }
+        : {})
     };
     const snapshot = Object.keys(metadata).length > 0
       ? await this.roomService.createRoom(userId, payload.visibility, metadata)
@@ -163,6 +174,7 @@ export class RoomController {
       name: string;
       description?: string | null;
       password?: string;
+      newMemberPermissions?: RoomMemberPermissions;
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);

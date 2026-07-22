@@ -41,6 +41,41 @@ type LocalAudioObjectUrl = {
   url: string;
 };
 
+export type ReceiverAudioHealth = {
+  lastProgressAtMs: number;
+  lastCurrentTime: number | null;
+  hasStarted: boolean;
+  waitingSinceMs: number | null;
+};
+
+export function recordReceiverAudioProgress(input: {
+  health: ReceiverAudioHealth;
+  event: "playing" | "progress";
+  currentTime: number | null;
+  nowMs: number;
+}) {
+  const currentTime = input.currentTime !== null && Number.isFinite(input.currentTime)
+    ? input.currentTime
+    : null;
+  const previousTime = input.health.lastCurrentTime;
+  const advanced = currentTime !== null && (
+    previousTime !== null
+      ? currentTime > previousTime + 0.01
+      : currentTime > 0.01
+  );
+
+  if (input.event === "playing") {
+    input.health.hasStarted = true;
+  }
+  if (advanced) {
+    input.health.lastProgressAtMs = input.nowMs;
+    input.health.hasStarted = true;
+    input.health.waitingSinceMs = null;
+  }
+  input.health.lastCurrentTime = currentTime;
+  return advanced;
+}
+
 export function resolveRoomAudioPositionMs(
   playback: Pick<PlaybackSnapshot, "status" | "positionMs" | "startedAt" | "startAt">,
   nowMs = getRoomPlaybackClockNowMs()
@@ -629,6 +664,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           return;
         }
         const sourceStream = runtime.currentTrack?.playbackAsset && roomPlayback?.currentTrackId
+          && roomPlayback.status === "playing"
           ? roomAudioOutput.getBroadcastDestination()?.stream ?? null
           : null;
         const bindingKey = sourceStream
@@ -930,9 +966,14 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         });
         return;
       }
-      if (roomPlayback?.status !== "playing" && !remote?.remoteStream) {
+      if (roomPlayback?.status !== "playing") {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
+        if (audio) {
+          // Keep srcObject bound so resume reuses the browser jitter buffer,
+          // but never let a paused room continue consuming the remote stream.
+          audio.pause();
+        }
         setMediaPlayback({
           state: "paused",
           bufferedMs: 0,
@@ -952,19 +993,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           mediaEnsureKeyRef.current = null;
         }
         const health = receiverAudioHealthRef.current;
-        const receiverPacketsMissing = roomPlayback?.status === "playing" &&
-          remote.receiverRtpActive === false &&
-          missingMediaSinceRef.current !== null &&
-          now - missingMediaSinceRef.current >= 3_000;
-        if (receiverPacketsMissing && sourcePeerId && roomPlayback?.currentTrackId) {
-          ensureListenerMediaConnection({
-            runtime,
-            sourcePeerId,
-            trackId: roomPlayback.currentTrackId,
-            mediaEpoch: roomPlayback.mediaEpoch,
-            forceRecreate: true
-          });
-        }
         if (audio.srcObject !== remote.remoteStream) {
           audio.srcObject = remote.remoteStream;
           health.boundAtMs = Date.now();
@@ -1047,7 +1075,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             runtime,
             sourcePeerId,
             trackId: roomPlayback.currentTrackId,
-            mediaEpoch: roomPlayback.mediaEpoch
+            mediaEpoch: roomPlayback.mediaEpoch,
           });
         }
         setMediaPlayback({
@@ -1124,33 +1152,34 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     }
 
     const health = receiverAudioHealthRef.current;
+    const markPlaying = () => {
+      recordReceiverAudioProgress({
+        health,
+        event: "playing",
+        currentTime: audio.currentTime,
+        nowMs: Date.now()
+      });
+    };
     const markProgress = () => {
-      const now = Date.now();
-      const currentTime = Number.isFinite(audio.currentTime) ? audio.currentTime : null;
-      const advanced = currentTime !== null && (
-        health.lastCurrentTime === null || currentTime > health.lastCurrentTime + 0.01
-      );
-      if (advanced || !audio.paused) {
-        health.lastProgressAtMs = now;
-        if (!audio.paused) {
-          health.hasStarted = true;
-        }
-      }
-      health.lastCurrentTime = currentTime;
-      health.waitingSinceMs = null;
+      recordReceiverAudioProgress({
+        health,
+        event: "progress",
+        currentTime: audio.currentTime,
+        nowMs: Date.now()
+      });
     };
     const markWaiting = () => {
       health.waitingSinceMs ??= Date.now();
     };
 
-    audio.addEventListener("playing", markProgress);
+    audio.addEventListener("playing", markPlaying);
     audio.addEventListener("timeupdate", markProgress);
     audio.addEventListener("canplay", markProgress);
     audio.addEventListener("waiting", markWaiting);
     audio.addEventListener("stalled", markWaiting);
     audio.addEventListener("error", markWaiting);
     return () => {
-      audio.removeEventListener("playing", markProgress);
+      audio.removeEventListener("playing", markPlaying);
       audio.removeEventListener("timeupdate", markProgress);
       audio.removeEventListener("canplay", markProgress);
       audio.removeEventListener("waiting", markWaiting);

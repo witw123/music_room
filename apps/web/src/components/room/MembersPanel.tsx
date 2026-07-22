@@ -37,6 +37,52 @@ type MembersPanelProps = {
   onRemoveMember: (memberId: string) => Promise<boolean>;
 };
 
+const memberPermissionOptions: Array<[keyof RoomMemberPermissions, string, string]> = [
+  ["library", "曲库权", "上传和管理房间曲库"],
+  ["queue", "队列权", "添加和整理共享队列"],
+  ["player", "播放器权", "控制房间播放状态"]
+];
+
+export function MemberPermissionControls({
+  permissions,
+  onChange,
+  pendingPermission = null,
+  disabled = false
+}: {
+  permissions: RoomMemberPermissions;
+  onChange: (permission: keyof RoomMemberPermissions, checked: boolean) => void;
+  pendingPermission?: keyof RoomMemberPermissions | null;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {memberPermissionOptions.map(([permission, label, description]) => {
+        const checked = permissions[permission];
+        const pending = pendingPermission === permission;
+        return (
+          <div key={permission} className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2.5">
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-foreground">{label}</span>
+              <span className="mt-0.5 block truncate text-[10px] text-foreground-muted">{description}</span>
+            </span>
+            <button
+              aria-checked={checked}
+              aria-label={`${label}${checked ? "已开启" : "已关闭"}`}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${checked ? "bg-accent" : "bg-surface-hover"} ${pending ? "cursor-wait opacity-60" : ""}`}
+              disabled={disabled || pendingPermission !== null}
+              onClick={() => onChange(permission, !checked)}
+              role="switch"
+              type="button"
+            >
+              <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-4" : "translate-x-0"}`} />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function getPresence(member: RoomMember) {
   if (member.presenceState === "online") {
     return { dot: "animate-pulse bg-green-500", text: "text-green-400", label: "在线" };
@@ -381,35 +427,12 @@ function MembersPanelBase({
                       <span className="text-xs font-semibold text-foreground">房间权限</span>
                       <span className="text-[10px] text-foreground-muted">仅房主可修改</span>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      {([
-                        ["library", "曲库权", "上传和管理房间曲库"],
-                        ["queue", "队列权", "添加和整理共享队列"],
-                        ["player", "播放器权", "控制房间播放状态"]
-                      ] as Array<[keyof RoomMemberPermissions, string, string]>).map(([permission, label, description]) => {
-                        const checked = getRoomMemberPermissions(member)[permission];
-                        const pending = pendingPermission === `${member.id}:${permission}`;
-                        return (
-                          <div key={permission} className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2.5">
-                            <span className="min-w-0">
-                              <span className="block text-xs font-medium text-foreground">{label}</span>
-                              <span className="mt-0.5 block truncate text-[10px] text-foreground-muted">{description}</span>
-                            </span>
-                            <button
-                              aria-checked={checked}
-                              aria-label={`${label}${checked ? "已开启" : "已关闭"}`}
-                              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${checked ? "bg-accent" : "bg-surface-hover"} ${pending ? "cursor-wait opacity-60" : ""}`}
-                              disabled={pendingPermission !== null}
-                              onClick={() => void handlePermissionChange(member, permission, !checked)}
-                              role="switch"
-                              type="button"
-                            >
-                              <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-4" : "translate-x-0"}`} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <MemberPermissionControls
+                      disabled={pendingPermission !== null}
+                      onChange={(permission, checked) => void handlePermissionChange(member, permission, checked)}
+                      pendingPermission={pendingPermission?.startsWith(`${member.id}:`) ? pendingPermission.slice(member.id.length + 1) as keyof RoomMemberPermissions : null}
+                      permissions={getRoomMemberPermissions(member)}
+                    />
                   </div>
                 ) : null}
               </div>

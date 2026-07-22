@@ -867,20 +867,39 @@ export class SegmentedOpusEngine {
   private pruneDecodedCache(assetId: string, currentIndex: number, segmentDurationMs: number) {
     const retainAheadUnitCount = Math.max(1, Math.ceil(scheduleAheadMs / segmentDurationMs) + 1);
     const lastRetainedIndex = currentIndex + retainAheadUnitCount;
-    for (const key of this.decoded.keys()) {
-      const [keyAssetId, rawUnitIndex] = key.split(":");
-      const unitIndex = Number(rawUnitIndex);
-      const isScheduledForAnyTimeline = [...this.scheduled.keys()].some((scheduledKey) =>
-        scheduledKey.startsWith(`${assetId}:`) && scheduledKey.endsWith(`:${unitIndex}`)
-      );
-      if (
-        keyAssetId === assetId &&
-        (unitIndex < currentIndex || unitIndex > lastRetainedIndex) &&
-        !isScheduledForAnyTimeline
-      ) {
-        this.decoded.delete(key);
+    this.pruneUnitCache(this.decoded, assetId, currentIndex, lastRetainedIndex);
+    this.pruneUnitCache(this.unitRecords, assetId, currentIndex, lastRetainedIndex);
+  }
+
+  private pruneUnitCache<T>(
+    cache: Map<string, T>,
+    currentAssetId: string,
+    currentIndex: number,
+    lastRetainedIndex: number
+  ) {
+    for (const key of cache.keys()) {
+      const separatorIndex = key.lastIndexOf(":");
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      const assetId = key.slice(0, separatorIndex);
+      const unitIndex = Number(key.slice(separatorIndex + 1));
+      if (!Number.isInteger(unitIndex)) {
+        continue;
+      }
+      const isCurrentWindow = assetId === currentAssetId &&
+        unitIndex >= currentIndex &&
+        unitIndex <= lastRetainedIndex;
+      if (!isCurrentWindow && !this.isScheduledForAnyTimeline(assetId, unitIndex)) {
+        cache.delete(key);
       }
     }
+  }
+
+  private isScheduledForAnyTimeline(assetId: string, unitIndex: number) {
+    return [...this.scheduled.keys()].some((scheduledKey) =>
+      scheduledKey.startsWith(`${assetId}:`) && scheduledKey.endsWith(`:${unitIndex}`)
+    );
   }
 
   private enterUnderrun() {

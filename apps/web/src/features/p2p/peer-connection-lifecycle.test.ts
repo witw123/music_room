@@ -240,6 +240,39 @@ describe("peer connection lifecycle helpers", () => {
     expect(releasePeer).not.toHaveBeenCalled();
   });
 
+  it("does not report a media connection failure as a data stall", () => {
+    const connection = new FakePeerConnection();
+    const entry = createPeerEntry({
+      connection: connection as unknown as RTCPeerConnection,
+      initiatorPeerId: null,
+      nowMs: 100,
+      linkKind: "media"
+    });
+    const onPeerStalled = vi.fn();
+
+    bindPeerConnectionEvents({
+      peerId: "peer_b",
+      entry,
+      localPeerId: "peer_a",
+      connection: connection as unknown as RTCPeerConnection,
+      linkKind: "media",
+      autoReconnect: true,
+      isCurrentEntry: () => true,
+      isExpectedPeer: () => true,
+      sendCandidate: vi.fn(),
+      onPeerStalled,
+      schedulePeerReconnect: vi.fn(),
+      schedulePeerWatchdog: vi.fn(),
+      releasePeer: vi.fn(),
+      bindChannel: vi.fn()
+    });
+
+    connection.connectionState = "failed";
+    connection.onconnectionstatechange?.();
+
+    expect(onPeerStalled).not.toHaveBeenCalled();
+  });
+
   it("does not treat an ontrack event as audible RTP until the track unmutes", () => {
     const connection = new FakePeerConnection();
     const entry = createPeerEntry({
@@ -322,5 +355,55 @@ describe("peer connection lifecycle helpers", () => {
       remoteStream: entry.remoteAudioStream
     });
     vi.unstubAllGlobals();
+  });
+
+  it("keeps a sustained mute as a live track until RTP stats confirm recovery is needed", async () => {
+    vi.useFakeTimers();
+    try {
+      const connection = new FakePeerConnection();
+      const entry = buildEntry({ connection });
+      entry.linkKind = "media";
+      const track = {
+        kind: "audio",
+        id: "muted-track",
+        readyState: "live",
+        muted: false,
+        onended: null,
+        onmute: null,
+        onunmute: null
+      } as unknown as MediaStreamTrack;
+      const onMediaStateChange = vi.fn();
+
+      bindPeerConnectionEvents({
+        peerId: "peer_b",
+        entry,
+        localPeerId: "peer_a",
+        connection: connection as unknown as RTCPeerConnection,
+        linkKind: "media",
+        autoReconnect: false,
+        isCurrentEntry: () => true,
+        isExpectedPeer: () => true,
+        sendCandidate: vi.fn(),
+        schedulePeerReconnect: vi.fn(),
+        schedulePeerWatchdog: vi.fn(),
+        releasePeer: vi.fn(),
+        bindChannel: vi.fn(),
+        onMediaStateChange
+      });
+
+      connection.ontrack?.({
+        track,
+        streams: []
+      } as unknown as RTCTrackEvent);
+      Object.defineProperty(track, "muted", { value: true, configurable: true });
+      (track.onmute as (() => void) | null)?.();
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(entry.receiverTrackState).toBe("live");
+      expect(entry.receiverRtpActive).toBe(false);
+      expect(onMediaStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ state: "failed" }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

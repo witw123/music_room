@@ -234,6 +234,7 @@ export const musicRoomApi = {
     name?: string;
     description?: string | null;
     password?: string;
+    newMemberPermissions?: RoomMemberPermissions;
   }) =>
     request<RoomSnapshot>("/v1/rooms", {
       method: "POST",

@@ -299,14 +299,13 @@ export function createRoomDataMeshRuntime(input: {
         peerBufferedAmountBytes.set(peerId, bufferedAmountBytes);
         input.updatePeerBufferedAmountRef.current(peerId, bufferedAmountBytes);
       },
-      onStatsSample: ({ peerId, sample }) => {
-        input.updateConnectionSupervisorTransportStats({ peerId, sample });
-        const isMediaSample =
-          sample.dataChannelState === null &&
-          (typeof sample.senderTrackId === "string" ||
-            typeof sample.receiverTrackId === "string" ||
-            sample.mediaReceiveBitrateKbps !== null ||
-            sample.mediaSendBitrateKbps !== null);
+      onStatsSample: ({ peerId, linkKind = "data", sample }) => {
+        input.updateConnectionSupervisorTransportStats({
+          peerId,
+          sample,
+          channelKind: linkKind
+        });
+        const isMediaSample = linkKind === "media";
         if (isMediaSample) {
           playbackBandwidthMonitor.update(peerId, {
             availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,

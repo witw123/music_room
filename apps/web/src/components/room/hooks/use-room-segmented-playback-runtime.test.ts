@@ -1,10 +1,55 @@
 import { describe, expect, it } from "vitest";
 import {
   isSegmentedPlaybackAudible,
+  recordReceiverAudioProgress,
   resolveRoomAudioPath,
   resolveReceiverPlaybackState,
   resolveRoomAudioPositionMs
 } from "./use-room-segmented-playback-runtime";
+
+describe("receiver audio progress", () => {
+  it("does not refresh progress for a playing event without clock movement", () => {
+    const health = {
+      lastProgressAtMs: 1_000,
+      lastCurrentTime: 0,
+      hasStarted: false,
+      waitingSinceMs: 2_000
+    };
+
+    recordReceiverAudioProgress({
+      health,
+      event: "playing",
+      currentTime: 0,
+      nowMs: 8_000
+    });
+
+    expect(health).toEqual({
+      lastProgressAtMs: 1_000,
+      lastCurrentTime: 0,
+      hasStarted: true,
+      waitingSinceMs: 2_000
+    });
+  });
+
+  it("clears waiting only after the media clock advances", () => {
+    const health = {
+      lastProgressAtMs: 1_000,
+      lastCurrentTime: 0,
+      hasStarted: true,
+      waitingSinceMs: 2_000
+    };
+
+    recordReceiverAudioProgress({
+      health,
+      event: "progress",
+      currentTime: 0.1,
+      nowMs: 8_000
+    });
+
+    expect(health.lastProgressAtMs).toBe(8_000);
+    expect(health.waitingSinceMs).toBeNull();
+  });
+});
 
 describe("receiver playback state", () => {
   it("keeps an already-playing receiver live during a short RTP gap", () => {

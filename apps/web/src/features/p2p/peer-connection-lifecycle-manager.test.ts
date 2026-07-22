@@ -228,6 +228,18 @@ describe("PeerConnectionLifecycleManager", () => {
     );
   });
 
+  it("does not recreate a data peer after a queued topology removal", async () => {
+    const { manager } = createManager();
+    await manager.syncPeers(["peer_b"]);
+
+    const removal = manager.syncPeers([]);
+    const restart = manager.restartPeer("peer_b");
+    await Promise.all([removal, restart]);
+
+    expect(manager.getPeerEntry("peer_b", "data")).toBeNull();
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+  });
+
   it("clears pending request state and closes peers on destroy", async () => {
     const clearPendingRequestsForPeer = vi.fn();
     const { manager } = createManager({ clearPendingRequestsForPeer });
@@ -448,6 +460,7 @@ describe("PeerConnectionLifecycleManager", () => {
     observeMediaHealth("peer_b", sample);
     observeMediaHealth("peer_b", sample);
     observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
     await vi.advanceTimersByTimeAsync(0);
 
     expect(initialMediaPeer.connectionState).toBe("closed");
@@ -455,7 +468,7 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(2);
   });
 
-  it("restarts a connected listener media peer when its remote track never arrives", async () => {
+  it("actively reoffers a connected listener media peer when its remote track never arrives", async () => {
     const { manager, sendSignal } = createManager();
 
     await manager.syncPeers(["peer_b"]);
@@ -468,7 +481,29 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(0);
+    expect(mediaOffers).toHaveLength(1);
+  });
+
+  it("actively reoffers after a connected listener loses receiver packets", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    mediaPeer.signalingState = "stable";
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = false;
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await manager.restartMediaPeer("peer_b");
+
+    expect(mediaPeer.connectionState).toBe("closed");
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(1);
   });
 
   it("allows a forced media recovery to announce a replacement receiver peer", async () => {
@@ -485,5 +520,159 @@ describe("PeerConnectionLifecycleManager", () => {
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers).toHaveLength(1);
+  });
+
+  it("serializes concurrent media recovery requests for one peer", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    const initialMediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+
+    const first = manager.restartMediaPeer("peer_b", { forceRecreate: true });
+    const second = manager.restartMediaPeer("peer_b", { forceRecreate: true });
+    await Promise.all([first, second]);
+
+    expect(initialMediaPeer.connectionState).toBe("closed");
+    expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(2);
+  });
+
+  it("restores a failed receiver state when RTP resumes", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const entry = manager.getPeerEntry("peer_b", "media")!;
+    const track = {
+      kind: "audio",
+      id: "resumed-track",
+      readyState: "live"
+    } as MediaStreamTrack;
+    entry.audioReceiver = { track } as unknown as RTCRtpReceiver;
+    entry.remoteAudioStream = { getAudioTracks: () => [track] } as unknown as MediaStream;
+    entry.remoteAudioTrackId = track.id;
+    entry.receiverTrackState = "failed";
+    entry.receiverRtpActive = false;
+
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: 261,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 0,
+      jitterMs: 2
+    } as PeerConnectionStatsSample);
+
+    expect(entry.receiverTrackState).toBe("live");
+    expect(entry.receiverRtpActive).toBe(true);
+  });
+
+  it("requires consecutive positive media windows before clearing recovery history", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    manager.getPeerEntry("peer_b", "media")!.receiverTrackState = "live";
+
+    const internals = manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+      mediaRecovery: Map<string, { positiveMediaWindows: number }>;
+    };
+    const observeMediaHealth = internals.observeMediaHealth.bind(manager);
+    const positiveSample = {
+      mediaReceiveBitrateKbps: null,
+      mediaSendBitrateKbps: 96,
+      packetLossRate: 0,
+      jitterMs: 2
+    } as PeerConnectionStatsSample;
+    const emptySample = {
+      ...positiveSample,
+      mediaSendBitrateKbps: 0
+    };
+
+    observeMediaHealth("peer_b", positiveSample);
+    expect(internals.mediaRecovery.get("peer_b")?.positiveMediaWindows).toBe(1);
+    observeMediaHealth("peer_b", emptySample);
+    expect(internals.mediaRecovery.get("peer_b")?.positiveMediaWindows).toBe(0);
+    observeMediaHealth("peer_b", positiveSample);
+    observeMediaHealth("peer_b", positiveSample);
+    expect(internals.mediaRecovery.get("peer_b")?.positiveMediaWindows).toBe(2);
+  });
+
+  it("does not clear recovery history while packet loss remains high", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    const entry = manager.getPeerEntry("peer_b", "media")!;
+    entry.receiverTrackState = "live";
+    entry.receiverRtpActive = true;
+
+    const internals = manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+      mediaRecovery: Map<string, {
+        highLossWindows: number;
+        positiveMediaWindows: number;
+      }>;
+    };
+    const observeMediaHealth = internals.observeMediaHealth.bind(manager);
+    const degradedSample = {
+      mediaReceiveBitrateKbps: 128,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 8,
+      jitterMs: 4
+    } as PeerConnectionStatsSample;
+
+    observeMediaHealth("peer_b", degradedSample);
+    observeMediaHealth("peer_b", degradedSample);
+    entry.connection.onconnectionstatechange?.();
+
+    expect(internals.mediaRecovery.get("peer_b")?.highLossWindows).toBeGreaterThan(0);
+    expect(internals.mediaRecovery.get("peer_b")?.positiveMediaWindows).toBe(0);
+  });
+
+  it("does not let a stale media sample report receiver RTP as active", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    const entry = manager.getPeerEntry("peer_b", "media")!;
+    entry.receiverRtpActive = false;
+    (manager as unknown as {
+      latestMediaSamples: Map<string, PeerConnectionStatsSample>;
+    }).latestMediaSamples.set("peer_b", {
+      mediaReceiveBitrateKbps: 261
+    } as PeerConnectionStatsSample);
+
+    expect(manager.getPeerMediaState("peer_b")?.receiverRtpActive).toBe(false);
+  });
+
+  it("does not let receiver-track discovery mask a zero RTP window", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+    const entry = manager.getPeerEntry("peer_b", "media")!;
+    const track = {
+      kind: "audio",
+      id: "known-track",
+      readyState: "live",
+      muted: false
+    } as unknown as MediaStreamTrack;
+    entry.audioReceiver = { track } as unknown as RTCRtpReceiver;
+    entry.remoteAudioStream = { getAudioTracks: () => [track] } as unknown as MediaStream;
+    entry.remoteAudioTrackId = track.id;
+    entry.receiverTrackState = "live";
+    entry.receiverRtpActive = false;
+
+    expect(manager.getPeerMediaState("peer_b")?.receiverRtpActive).toBe(false);
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNod
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { RoomSnapshot } from "@music-room/shared";
+import { defaultRoomMemberPermissions, type RoomMemberPermissions, type RoomSnapshot } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -16,6 +16,7 @@ import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
+import { MemberPermissionControls } from "@/components/room/MembersPanel";
 import {
   clearAwayRoomId,
   readAwayRoomId,
@@ -35,13 +36,15 @@ type CreateRoomForm = {
   name: string;
   description: string;
   password: string;
+  newMemberPermissions: RoomMemberPermissions;
 };
 
 const emptyCreateRoomForm: CreateRoomForm = {
   visibility: "public",
   name: "",
   description: "",
-  password: ""
+  password: "",
+  newMemberPermissions: { ...defaultRoomMemberPermissions }
 };
 
 export function RoomsHomePage({
@@ -182,7 +185,8 @@ export function RoomsHomePage({
         visibility: createForm.visibility,
         name: createForm.name.trim() || undefined,
         description: createForm.description.trim() || undefined,
-        password: createForm.password.trim() || undefined
+        password: createForm.password.trim() || undefined,
+        newMemberPermissions: createForm.newMemberPermissions
       });
       storeRoomSnapshotHandoff(snapshot);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
@@ -425,6 +429,23 @@ export function RoomsHomePage({
                 value={createForm.password}
               />
             </label>
+            <div className="flex flex-col gap-2">
+              <div>
+                <span className="block text-sm text-foreground">新成员默认权限</span>
+                <span className="mt-1 block text-xs text-foreground-muted">控制新成员首次进入房间时可以使用的功能。</span>
+              </div>
+              <MemberPermissionControls
+                disabled={isPending}
+                onChange={(permission, checked) => setCreateForm((current) => ({
+                  ...current,
+                  newMemberPermissions: {
+                    ...current.newMemberPermissions,
+                    [permission]: checked
+                  }
+                }))}
+                permissions={createForm.newMemberPermissions}
+              />
+            </div>
             {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button disabled={isPending} onClick={() => setCreateDialogOpen(false)} type="button" variant="ghost">取消</Button>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultRoomMemberPermissions,
+  getNewMemberPermissions,
   getRoomMemberPermissions,
   roomSnapshotSchema
 } from "./models";
@@ -51,5 +52,12 @@ describe("roomSnapshotSchema", () => {
     expect(
       getRoomMemberPermissions({ role: "host", permissions: { library: false } })
     ).toEqual(defaultRoomMemberPermissions);
+  });
+
+  it("falls back to enabled permissions for legacy rooms", () => {
+    expect(getNewMemberPermissions({})).toEqual(defaultRoomMemberPermissions);
+    expect(getNewMemberPermissions({
+      newMemberPermissions: { library: false, queue: true, player: false }
+    })).toEqual({ library: false, queue: true, player: false });
   });
 });

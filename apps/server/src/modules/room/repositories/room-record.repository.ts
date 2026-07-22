@@ -582,7 +582,11 @@ export class RoomRecordRepository {
       visibility: record.room.visibility,
       roomRevision: record.room.roomRevision ?? 0,
       presenceRevision: record.room.presenceRevision,
-      playback: serializePlaybackForPersistence(record.room),
+      playback: {
+        ...serializePlaybackForPersistence(record.room),
+        newMemberPermissions: record.room.newMemberPermissions ?? null,
+        memberPermissionProfiles: record.memberPermissionProfiles ?? {}
+      },
       members: record.room.members,
       tracks: record.tracks,
       queue: record.queue

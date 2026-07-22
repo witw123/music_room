@@ -427,4 +427,62 @@ describe("SignalingTransport", () => {
 
     expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(1);
   });
+
+  it("drops an untagged signal after a tagged connection has started", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const getOrCreatePeerEntry = vi.fn(async () => buildSignalEntry());
+    const handlers = {
+      getOrCreatePeerEntry,
+      runPeerOperation: async <T>(
+        _entry: ReturnType<typeof buildSignalEntry>,
+        task: () => Promise<T>
+      ) => task(),
+      applyRemoteDescription: vi.fn(),
+      flushPendingCandidates: vi.fn()
+    };
+
+    await transport.handleIncomingSignal(
+      buildSignal({ connectionGeneration: 7, sequence: 10 }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({ sequence: 11 }),
+      handlers
+    );
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets per-type sequence ordering when a new connection generation starts", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const getOrCreatePeerEntry = vi.fn(async () => buildSignalEntry());
+    const handlers = {
+      getOrCreatePeerEntry,
+      runPeerOperation: async <T>(
+        _entry: ReturnType<typeof buildSignalEntry>,
+        task: () => Promise<T>
+      ) => task(),
+      applyRemoteDescription: vi.fn(),
+      flushPendingCandidates: vi.fn()
+    };
+
+    await transport.handleIncomingSignal(
+      buildSignal({ connectionGeneration: 7, sequence: 100 }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({ connectionGeneration: 8, sequence: 1 }),
+      handlers
+    );
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(2);
+  });
 });

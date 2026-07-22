@@ -238,26 +238,35 @@ export function startPeerStatsSampling(input: {
     return;
   }
 
+  let sampleInFlight = false;
   const emitStatsSample = async () => {
-    const nextStats = await input.samplePeerConnectionStats(
-      input.entry.connection,
-      input.entry.statsSnapshot
-    );
-    if (!nextStats) {
+    if (sampleInFlight || input.entry.releasing) {
       return;
     }
-
-    input.entry.statsSnapshot = nextStats.snapshot;
-    input.onStatsSample?.({
-      peerId: input.peerId,
-      linkKind: input.entry.linkKind,
-      sample: {
-        ...nextStats.sample,
-        connectionState: input.entry.connection.connectionState ?? nextStats.sample.connectionState ?? null,
-        iceConnectionState: input.entry.connection.iceConnectionState ?? nextStats.sample.iceConnectionState ?? null,
-        dataChannelState: input.entry.channel?.readyState ?? null
+    sampleInFlight = true;
+    try {
+      const nextStats = await input.samplePeerConnectionStats(
+        input.entry.connection,
+        input.entry.statsSnapshot
+      );
+      if (!nextStats || input.entry.releasing) {
+        return;
       }
-    });
+
+      input.entry.statsSnapshot = nextStats.snapshot;
+      input.onStatsSample?.({
+        peerId: input.peerId,
+        linkKind: input.entry.linkKind,
+        sample: {
+          ...nextStats.sample,
+          connectionState: input.entry.connection.connectionState ?? nextStats.sample.connectionState ?? null,
+          iceConnectionState: input.entry.connection.iceConnectionState ?? nextStats.sample.iceConnectionState ?? null,
+          dataChannelState: input.entry.channel?.readyState ?? null
+        }
+      });
+    } finally {
+      sampleInFlight = false;
+    }
   };
 
   void emitStatsSample();

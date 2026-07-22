@@ -37,6 +37,8 @@ export const roomSchema = z.object({
   description: z.string().nullable().optional(),
   hasPassword: z.boolean().optional(),
   visibility: z.enum(["private", "public"]),
+  // Optional so snapshots persisted before room-level defaults remain valid.
+  newMemberPermissions: roomMemberPermissionsSchema.optional(),
   members: z.array(roomMemberSchema),
   playback: playbackSnapshotSchema,
   presenceRevision: z.number().int().nonnegative().default(0),
@@ -84,5 +86,14 @@ export function getRoomMemberPermissions(
   return {
     ...defaultRoomMemberPermissions,
     ...member.permissions
+  };
+}
+
+export function getNewMemberPermissions(
+  room: Pick<Room, "newMemberPermissions">
+): RoomMemberPermissions {
+  return {
+    ...defaultRoomMemberPermissions,
+    ...room.newMemberPermissions
   };
 }

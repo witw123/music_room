@@ -1,5 +1,6 @@
 import { memo, useEffect, useState, type CSSProperties, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
+import { defaultRoomMemberPermissions } from "@music-room/shared";
 import type {
   RoomMediaConnectionState,
   RoomMember,
@@ -21,6 +22,7 @@ import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
+import { MemberPermissionControls } from "./MembersPanel";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -93,7 +95,11 @@ function RoomStageBase({
     visibility: roomSnapshot.room.visibility,
     name: roomSnapshot.room.name ?? "",
     description: roomSnapshot.room.description ?? "",
-    password: ""
+    password: "",
+    newMemberPermissions: {
+      ...defaultRoomMemberPermissions,
+      ...roomSnapshot.room.newMemberPermissions
+    }
   });
 
   useEffect(() => {
@@ -163,7 +169,11 @@ function RoomStageBase({
       visibility: roomSnapshot.room.visibility,
       name: roomSnapshot.room.name ?? "",
       description: roomSnapshot.room.description ?? "",
-      password: ""
+      password: "",
+      newMemberPermissions: {
+        ...defaultRoomMemberPermissions,
+        ...roomSnapshot.room.newMemberPermissions
+      }
     });
     setShowSettings(false);
     setShowEditRoom(true);
@@ -178,7 +188,8 @@ function RoomStageBase({
         visibility: editRoomForm.visibility,
         name: editRoomForm.name.trim(),
         description: editRoomForm.description?.trim() || null,
-        password: editRoomForm.password?.trim() ?? ""
+        password: editRoomForm.password?.trim() ?? "",
+        newMemberPermissions: editRoomForm.newMemberPermissions
       });
       if (updated) setShowEditRoom(false);
     } finally {
@@ -650,6 +661,23 @@ function RoomEditDialog({
             房间密码 <span className="text-xs text-foreground-muted">留空表示移除密码，至少 4 位</span>
             <input className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent" maxLength={128} minLength={4} onChange={(event) => onChange((current) => ({ ...current, password: event.target.value }))} placeholder="留空表示无需密码" type="password" value={form.password ?? ""} />
           </label>
+          <div className="flex flex-col gap-2">
+            <div>
+              <span className="block text-sm text-foreground">新成员默认权限</span>
+              <span className="mt-1 block text-xs text-foreground-muted">只影响之后首次进入房间的成员，已有成员权限不会改变。</span>
+            </div>
+            <MemberPermissionControls
+              onChange={(permission, checked) => onChange((current) => ({
+                ...current,
+                newMemberPermissions: {
+                  ...(current.newMemberPermissions ?? defaultRoomMemberPermissions),
+                  [permission]: checked
+                }
+              }))}
+              permissions={{ ...defaultRoomMemberPermissions, ...form.newMemberPermissions }}
+              disabled={pending}
+            />
+          </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button disabled={pending} onClick={onClose} type="button" variant="ghost">取消</Button>
             <Button disabled={pending || !form.name.trim() || (!!form.password?.trim() && form.password.trim().length < 4)} type="submit">{pending ? "保存中…" : "保存修改"}</Button>

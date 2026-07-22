@@ -11,7 +11,10 @@ import {
   toSupervisorDiagnosticPatch,
   type PeerConnectionSupervisorState
 } from "@/features/p2p";
-import type { PlaybackRecoveryRecommendation } from "./room-runtime-types";
+import type {
+  ConnectionSupervisorSignalStateInput,
+  PlaybackRecoveryRecommendation
+} from "./room-runtime-types";
 
 export type SourceRecoveryCoordinatorState = {
   actionKey: string | null;
@@ -78,20 +81,15 @@ export function useRoomConnectionSupervisor(input: {
   );
 
   const updateConnectionSupervisorSignalState = useCallback(
-    (value: {
-      peerId: string;
-      channelKind: "data" | "media";
-      dataConnectionState?: string;
-      dataIceState?: string;
-      dataChannelState?: string;
-      lastFailureReason?: string;
-    }) => {
+    (value: ConnectionSupervisorSignalStateInput) => {
       const state = ensureConnectionSupervisorState(value.peerId);
       const next = notePeerSignalState({
         state,
         dataConnectionState: value.dataConnectionState,
         dataIceState: value.dataIceState,
         dataChannelState: value.dataChannelState,
+        mediaConnectionState: value.mediaConnectionState,
+        mediaIceState: value.mediaIceState,
         lastFailureReason: value.lastFailureReason
       });
       return commitConnectionSupervisorState(next);
@@ -142,6 +140,7 @@ export function useRoomConnectionSupervisor(input: {
     (value: {
       peerId: string;
       sample: PeerConnectionStatsSample;
+      channelKind?: "data" | "media";
       diagnostics?: Pick<
         PeerDiagnosticsSnapshot,
         | "dataChannelState"
@@ -153,15 +152,26 @@ export function useRoomConnectionSupervisor(input: {
       now?: number;
     }) => {
       const state = ensureConnectionSupervisorState(value.peerId);
+      const channelKind = value.channelKind ?? "data";
       const next = observePeerTransport({
         state,
         sample: value.sample,
         diagnostics: value.diagnostics ?? {
-          dataChannelState: value.sample.dataChannelState ?? state.dataChannelState,
-          dataConnectionState: value.sample.connectionState ?? state.dataConnectionState,
-          dataIceState: value.sample.iceConnectionState ?? state.dataIceState,
-          mediaConnectionState: state.mediaConnectionState,
-          mediaIceState: state.mediaIceState
+          dataChannelState: channelKind === "data"
+            ? value.sample.dataChannelState ?? state.dataChannelState
+            : state.dataChannelState,
+          dataConnectionState: channelKind === "data"
+            ? value.sample.connectionState ?? state.dataConnectionState
+            : state.dataConnectionState,
+          dataIceState: channelKind === "data"
+            ? value.sample.iceConnectionState ?? state.dataIceState
+            : state.dataIceState,
+          mediaConnectionState: channelKind === "media"
+            ? value.sample.connectionState ?? state.mediaConnectionState
+            : state.mediaConnectionState,
+          mediaIceState: channelKind === "media"
+            ? value.sample.iceConnectionState ?? state.mediaIceState
+            : state.mediaIceState
         },
         now: value.now
       });

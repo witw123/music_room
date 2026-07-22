@@ -95,4 +95,62 @@ describe("PeerStatsSampler", () => {
 
     expect(entry.statsIntervalId).toBeNull();
   });
+
+  it("does not overlap slow stats reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const sample = {
+        candidateType: null,
+        protocol: null,
+        currentRoundTripTimeMs: null,
+        availableOutgoingBitrateKbps: null,
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: null,
+        packetsLost: null,
+        jitterMs: null
+      } satisfies PeerConnectionStatsSample;
+      const snapshot = {
+        inboundAudioBytes: null,
+        inboundAudioTimestampMs: null,
+        outboundAudioBytes: null,
+        outboundAudioTimestampMs: null,
+        packetsLost: null,
+        packetsTotal: null
+      } satisfies PeerConnectionStatsSnapshot;
+      let resolveSample!: (value: {
+        sample: PeerConnectionStatsSample;
+        snapshot: PeerConnectionStatsSnapshot;
+      }) => void;
+      const samplePeerConnectionStats = vi.fn(() => new Promise<{
+        sample: PeerConnectionStatsSample;
+        snapshot: PeerConnectionStatsSnapshot;
+      }>((resolve) => {
+        resolveSample = resolve;
+      }));
+      const sampler = new PeerStatsSampler({
+        activeStatsSamplingIntervalMs: 1_000,
+        steadyStatsSamplingIntervalMs: 5_000,
+        onStatsSample: vi.fn(),
+        samplePeerConnectionStats
+      });
+      const entry = createPeerEntry({
+        connection: buildConnection(),
+        initiatorPeerId: "peer_a",
+        nowMs: 100
+      });
+
+      sampler.start("peer_b", entry);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(samplePeerConnectionStats).toHaveBeenCalledTimes(1);
+
+      resolveSample({ sample, snapshot });
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(samplePeerConnectionStats).toHaveBeenCalledTimes(2);
+      sampler.stop(entry);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

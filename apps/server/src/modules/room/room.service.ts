@@ -13,7 +13,11 @@ import type {
   TrackMeta,
   UserProfile
 } from "@music-room/shared";
-import { defaultRoomMemberPermissions, getRoomMemberPermissions } from "@music-room/shared";
+import {
+  defaultRoomMemberPermissions,
+  getNewMemberPermissions,
+  getRoomMemberPermissions
+} from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
@@ -92,7 +96,12 @@ export class RoomService {
   async createRoom(
     hostSessionId: string,
     visibility: Room["visibility"] = "public",
-    metadata?: { name?: string; description?: string | null; password?: string }
+    metadata?: {
+      name?: string;
+      description?: string | null;
+      password?: string;
+      newMemberPermissions?: RoomMemberPermissions;
+    }
   ) {
     const hostSession = await this.authService.getUserOrThrow(hostSessionId);
     const name = metadata?.name?.trim() || "未命名房间";
@@ -106,6 +115,9 @@ export class RoomService {
       description,
       hasPassword: !!password,
       visibility,
+      newMemberPermissions: metadata?.newMemberPermissions
+        ? { ...metadata.newMemberPermissions }
+        : { ...defaultRoomMemberPermissions },
       members: [this.buildMember(hostSession, "host")],
       presenceRevision: 0,
       roomRevision: 0,
@@ -131,7 +143,8 @@ export class RoomService {
       room,
       passwordHash: password ? hashRoomPassword(password) : null,
       tracks: [],
-      queue: []
+      queue: [],
+      memberPermissionProfiles: {}
     };
 
     await this.roomRecordRepository.persistRecord(record);
@@ -296,7 +309,18 @@ export class RoomService {
     this.assertUniqueNickname(record, session.id, session.nickname);
 
     if (!record.room.members.some((member) => member.id === session.id)) {
-      record.room.members.push(this.buildMember(session, "member"));
+      const savedPermissions = record.memberPermissionProfiles?.[session.id];
+      const permissions = savedPermissions
+        ? { ...savedPermissions }
+        : getNewMemberPermissions(record.room);
+      record.room.members.push({
+        ...this.buildMember(session, "member"),
+        permissions
+      });
+      record.memberPermissionProfiles = {
+        ...(record.memberPermissionProfiles ?? {}),
+        [session.id]: { ...permissions }
+      };
       this.incrementPresenceRevision(record.room);
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
@@ -315,6 +339,7 @@ export class RoomService {
       name: string;
       description?: string | null;
       password?: string;
+      newMemberPermissions?: RoomMemberPermissions;
     }
   ) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
@@ -326,6 +351,9 @@ export class RoomService {
     record.room.visibility = input.visibility;
     record.room.name = input.name.trim();
     record.room.description = input.description?.trim() || null;
+    if (input.newMemberPermissions !== undefined) {
+      record.room.newMemberPermissions = { ...input.newMemberPermissions };
+    }
     if (input.password !== undefined) {
       record.passwordHash = password ? hashRoomPassword(password) : null;
       record.room.hasPassword = Boolean(password);
@@ -353,6 +381,10 @@ export class RoomService {
       }
 
       member.permissions = { ...permissions };
+      record.memberPermissionProfiles = {
+        ...(record.memberPermissionProfiles ?? {}),
+        [memberId]: { ...permissions }
+      };
       this.incrementPresenceRevision(record.room);
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);

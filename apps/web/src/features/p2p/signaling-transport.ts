@@ -266,6 +266,13 @@ export class SignalingTransport {
     const sequence = payload.sequence ?? null;
 
     if (previous) {
+      // Once a peer has announced a connection incarnation, an untagged
+      // signal cannot be safely assigned to the current RTCPeerConnection.
+      // Accepting it here lets delayed candidates from an older connection
+      // contaminate a newly recreated media peer.
+      if (previous.connectionGeneration !== null && connectionGeneration === null) {
+        return false;
+      }
       if (
         connectionGeneration !== null &&
         previous.connectionGeneration !== null &&
@@ -283,12 +290,11 @@ export class SignalingTransport {
       }
     }
 
-    const sequenceByType =
-      connectionGeneration !== null &&
-      previous?.connectionGeneration !== null &&
-      connectionGeneration > (previous?.connectionGeneration ?? -1)
-        ? {}
-        : { ...(previous?.sequenceByType ?? {}) };
+    const generationChanged = previous !== undefined &&
+      connectionGeneration !== previous.connectionGeneration;
+    const sequenceByType = generationChanged
+      ? {}
+      : { ...(previous?.sequenceByType ?? {}) };
     if (sequence !== null) {
       sequenceByType[payload.type] = Math.max(
         sequenceByType[payload.type] ?? Number.MIN_SAFE_INTEGER,

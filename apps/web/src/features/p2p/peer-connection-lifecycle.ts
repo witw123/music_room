@@ -182,15 +182,20 @@ export function bindPeerConnectionEvents(input: {
       input.entry.reconnectAttempts = 0;
     }
 
-    if (
-      input.connection.connectionState === "failed" ||
-      input.connection.connectionState === "closed"
-    ) {
-      if (input.isExpectedPeer(input.peerId)) {
-        input.onPeerStalled?.({
-          peerId: input.peerId,
-          reason: "connection-failed"
-        });
+      if (
+        input.connection.connectionState === "failed" ||
+        input.connection.connectionState === "closed"
+      ) {
+        if (input.isExpectedPeer(input.peerId)) {
+        // MeshHealthMonitor and the room supervisor own the data link only.
+        // A media failure must stay isolated to the media peer; reporting it
+        // as a generic stall can tear down a healthy control channel.
+        if (input.entry.linkKind === "data") {
+          input.onPeerStalled?.({
+            peerId: input.peerId,
+            reason: "connection-failed"
+          });
+        }
         if (input.autoReconnect && input.entry.linkKind === "data") {
           input.schedulePeerReconnect(input.peerId, input.entry);
         }
@@ -267,7 +272,18 @@ export function bindPeerConnectionEvents(input: {
         // Experimental in Chromium; ignore unsupported implementations.
       }
     }
-    input.entry.remoteAudioStream = event.streams[0] ?? new MediaStream([event.track]);
+    const streamWithTrack = event.streams.find((stream) => {
+      try {
+        return stream.getAudioTracks().some((track) => track.id === event.track.id);
+      } catch {
+        return false;
+      }
+    });
+    const fallbackStream = event.streams[0] ?? null;
+    input.entry.remoteAudioStream = streamWithTrack ??
+      (typeof MediaStream !== "undefined"
+        ? new MediaStream([event.track])
+        : fallbackStream);
     input.entry.remoteAudioTrackId = event.track.id;
     input.entry.receiverRtpActive = event.track.muted !== true;
     input.entry.receiverTrackState = event.track.readyState === "live" ? "live" : "ended";
@@ -288,6 +304,7 @@ export function bindPeerConnectionEvents(input: {
         return;
       }
       input.entry.receiverTrackState = "ended";
+      input.entry.receiverRtpActive = false;
       input.onMediaStateChange?.({
         peerId: input.peerId,
         entry: input.entry,
@@ -313,13 +330,9 @@ export function bindPeerConnectionEvents(input: {
           event.track.readyState === "live"
         ) {
           input.entry.receiverRtpActive = false;
-          input.entry.receiverTrackState = "failed";
-          input.onMediaStateChange?.({
-            peerId: input.peerId,
-            entry: input.entry,
-            direction: "receiver",
-            state: "failed"
-          });
+          // A live receiver track can remain muted while Chromium repairs its
+          // jitter buffer. Keep the track live and let consecutive RTP stats
+          // decide whether a connection recovery is actually necessary.
         }
       }, remoteTrackMuteGraceMs);
       input.onMediaTrackMuted?.({ peerId: input.peerId, trackId: event.track.id });

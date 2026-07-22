@@ -4,6 +4,7 @@ import {
   joinRoomByCodeRequestSchema,
   registerRequestSchema,
   registerTrackRequestSchema,
+  updateRoomRequestSchema,
   updatePlaybackRequestSchema
 } from "./requests";
 
@@ -51,6 +52,13 @@ describe("request contracts", () => {
       joinCode: "ABC123"
     });
     expect(() => createRoomRequestSchema.parse({ visibility: "friends" })).toThrow();
+    expect(updateRoomRequestSchema.parse({
+      visibility: "public",
+      name: "Room",
+      description: null,
+      password: "",
+      newMemberPermissions: { library: false, queue: true, player: false }
+    }).newMemberPermissions).toEqual({ library: false, queue: true, player: false });
   });
 
   it("validates track registration numeric bounds", () => {

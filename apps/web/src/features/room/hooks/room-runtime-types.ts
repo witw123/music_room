@@ -58,6 +58,7 @@ export type RoomDataMeshDiagnosticsRefs = {
   updateConnectionSupervisorTransportStats: (input: {
     peerId: string;
     sample: PeerConnectionStatsSample;
+    channelKind: "data" | "media";
   }) => PeerConnectionSupervisorState | null;
   withResolvedTransportHealth: (
     snapshot: PeerDiagnosticsSnapshot

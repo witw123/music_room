@@ -64,6 +64,44 @@ describe("room.types persistence helpers", () => {
     expect(record.room.playback.playbackRevision).toBe(2);
   });
 
+  it("restores room and member permissions from the persisted playback payload", () => {
+    const record = deserializeRoomRecord({
+      id: "room_permissions",
+      hostId: "host_1",
+      joinCode: "ABC123",
+      visibility: "public",
+      playback: {
+        status: "paused",
+        currentTrackId: null,
+        currentQueueItemId: null,
+        sourceSessionId: "host_1",
+        sourcePeerId: null,
+        sourceTrackId: null,
+        positionMs: 0,
+        startedAt: null,
+        queueVersion: 1,
+        playbackRevision: 1,
+        mediaEpoch: 0,
+        newMemberPermissions: { library: false, queue: true, player: false },
+        memberPermissionProfiles: {
+          member_1: { library: true, queue: false, player: true }
+        }
+      },
+      members: [],
+      tracks: [],
+      queue: []
+    } satisfies PersistedRoomRecord);
+
+    expect(record.room.newMemberPermissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
+    expect(record.memberPermissionProfiles).toEqual({
+      member_1: { library: true, queue: false, player: true }
+    });
+  });
+
   it("keeps legacy rooms visible when their playback asset profile is obsolete", () => {
     const record = deserializeRoomRecord({
       id: "room_legacy",

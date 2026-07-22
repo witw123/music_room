@@ -101,6 +101,93 @@ describe("RoomService", () => {
     await expect(roomService.getRecoverableRoomSnapshot(snapshot.room.id, member.id)).resolves.toBeNull();
   });
 
+  it("restores a member's permissions after leaving and rejoining the same room", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    await roomService.updateMemberPermissions(snapshot.room.id, host.id, member.id, {
+      library: false,
+      queue: true,
+      player: false
+    });
+    await roomService.leaveRoom(snapshot.room.id, member.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    const restored = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(restored.room.members.find((item) => item.id === member.id)?.permissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
+  });
+
+  it("uses room defaults for new members without replacing existing permission profiles", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const firstMember = await authService.createGuestSession("First Member");
+    const secondMember = await authService.createGuestSession("Second Member");
+    const snapshot = await roomService.createRoom(host.id, "public", {
+      newMemberPermissions: {
+        library: false,
+        queue: true,
+        player: false
+      }
+    });
+
+    expect(snapshot.room.newMemberPermissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
+    await roomService.joinRoom(snapshot.room.id, firstMember.id);
+
+    await roomService.updateRoom(snapshot.room.id, host.id, {
+      visibility: "public",
+      name: snapshot.room.name ?? "Room",
+      description: snapshot.room.description,
+      password: "",
+      newMemberPermissions: {
+        library: true,
+        queue: false,
+        player: true
+      }
+    });
+    await roomService.joinRoom(snapshot.room.id, secondMember.id);
+
+    const afterJoins = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(afterJoins.room.members.find((item) => item.id === firstMember.id)?.permissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
+    expect(afterJoins.room.members.find((item) => item.id === secondMember.id)?.permissions).toEqual({
+      library: true,
+      queue: false,
+      player: true
+    });
+
+    await roomService.leaveRoom(snapshot.room.id, firstMember.id);
+    await roomService.joinRoom(snapshot.room.id, firstMember.id);
+
+    const afterRejoin = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(afterRejoin.room.members.find((item) => item.id === firstMember.id)?.permissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
+  });
+
   it("allows any room member to control playback and uses the track owner as source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

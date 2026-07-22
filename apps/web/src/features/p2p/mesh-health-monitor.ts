@@ -19,7 +19,7 @@ type MeshHealthMonitorInput = {
     reason: PeerStalledReason;
   }) => void;
   releasePeer: (peerId: string, entry: PeerEntry) => void;
-  recreatePeer: (peerId: string, entry: PeerEntry) => Promise<PeerEntry>;
+  recreatePeer: (peerId: string, entry: PeerEntry) => Promise<PeerEntry | null>;
 };
 
 export class MeshHealthMonitor {
@@ -32,7 +32,7 @@ export class MeshHealthMonitor {
   private readonly getPeerEntry: (peerId: string) => PeerEntry | null;
   private readonly onPeerStalled?: MeshHealthMonitorInput["onPeerStalled"];
   private readonly releasePeer: (peerId: string, entry: PeerEntry) => void;
-  private readonly recreatePeer: (peerId: string, entry: PeerEntry) => Promise<PeerEntry>;
+  private readonly recreatePeer: (peerId: string, entry: PeerEntry) => Promise<PeerEntry | null>;
 
   constructor(input: MeshHealthMonitorInput) {
     this.autoReconnect = input.autoReconnect;
