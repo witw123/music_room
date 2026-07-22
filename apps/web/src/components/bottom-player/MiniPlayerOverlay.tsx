@@ -261,7 +261,7 @@ export function MiniPlayerOverlay({
           </div>
         </div>
 
-        <div className="flex min-h-[84px] shrink-0 items-start justify-between gap-4 px-3 pb-2 pt-2 sm:min-h-[104px] sm:px-5 sm:pb-3 sm:pt-3">
+        <div className="flex shrink-0 items-start justify-between gap-4 px-3 pb-1 pt-2 sm:px-5 sm:pb-2 sm:pt-3">
           <div className="min-w-0">
             <h2 className="truncate text-[1.25rem] font-bold leading-[1.1] text-white sm:text-[1.5rem]">{title}</h2>
             <p className="mt-1 truncate text-xs leading-tight text-white/55 sm:text-sm">{artist}</p>

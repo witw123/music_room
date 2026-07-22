@@ -17,12 +17,16 @@ import {
   deleteAudioAsset,
   getCompleteAssetPairForSourceFileHash,
   getAssetManifest,
+  deletePlaybackAssetDraft,
+  getPlaybackAssetDraftUnitBatch,
   putAssetManifest,
+  putPlaybackAssetDraftUnit,
   putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
 } from "@/lib/indexeddb";
 import { opusPreSkipSamples } from "@audio/opus-encode";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
+import { parseWavHeader, type WavHeader } from "@/features/playback/codecs/wav-parser";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
@@ -36,6 +40,17 @@ export type PreparedAudioAssets = {
   fileHash: string;
   originalAsset: OriginalAssetManifest;
   playbackAsset: PlaybackAssetManifest;
+};
+
+type PreparedPlaybackAsset = {
+  playbackAsset: PlaybackAssetManifest;
+  leafHashes: string[];
+  proofs: Array<Array<{ position: "left" | "right"; hash: string }>>;
+  encodedUnits?: Array<{
+    payload: ArrayBuffer;
+    descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
+  }>;
+  draftId?: string;
 };
 
 export type AssetPreparationProgress = {
@@ -87,24 +102,50 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
-  await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
+  const decodePlan = await inspectDecodePlan(input.file, input.onProgress);
   const sourcePromise = prepareOriginalAsset(input);
-  const playbackPromise = preparePlaybackAsset({
-    ...input,
-    fileHash: sourcePromise.then((source) => source.fileHash)
+  const playbackDraftId = decodePlan.useStreaming ? createPlaybackDraftId() : null;
+  const playbackPromise = decodePlan.useStreaming
+    ? prepareStreamingPlaybackAsset({
+        ...input,
+        fileHash: sourcePromise.then((source) => source.fileHash),
+        draftId: playbackDraftId!,
+        expectedDurationMs: decodePlan.durationSeconds
+          ? Math.max(1, Math.round(decodePlan.durationSeconds * 1000))
+          : undefined
+      })
+    : preparePlaybackAsset({
+        ...input,
+        fileHash: sourcePromise.then((source) => source.fileHash)
+      });
+  void playbackPromise.catch(() => {
+    if (playbackDraftId) {
+      return deletePlaybackAssetDraft(playbackDraftId).catch(() => undefined);
+    }
+    return undefined;
   });
-  void playbackPromise.catch(() => undefined);
-  const source = await sourcePromise;
-  await upsertTranscodeJob({
-    sourceFileHash: source.fileHash,
-    kind: "playback-transcode",
-    profileId: playbackProfileId,
-    status: "running",
-    progress: 0,
-    errorMessage: null
-  });
-
+  let source: Awaited<typeof sourcePromise>;
   try {
+    source = await sourcePromise;
+  } catch (error) {
+    // The playback job may still be writing draft units while source hashing
+    // fails. Wait for it before deleting the draft to avoid a late write
+    // recreating orphaned records.
+    await Promise.allSettled([playbackPromise]);
+    if (playbackDraftId) {
+      await deletePlaybackAssetDraft(playbackDraftId).catch(() => undefined);
+    }
+    throw error;
+  }
+  try {
+    await upsertTranscodeJob({
+      sourceFileHash: source.fileHash,
+      kind: "playback-transcode",
+      profileId: playbackProfileId,
+      status: "running",
+      progress: 0,
+      errorMessage: null
+    });
     const playback = await playbackPromise;
     const preexistingAssetIds = new Set(
       (
@@ -126,29 +167,39 @@ export async function prepareAudioAssets(input: {
         total: source.originalAsset.unitCount
       });
       await putAssetManifest(playback.playbackAsset);
-      await putLocallyGeneratedAssetUnits({
-        assetId: playback.playbackAsset.assetId,
-        units: playback.encodedUnits.map((unit, unitIndex) => ({
-          descriptor: {
-            ...unit.descriptor,
-            assetId: playback.playbackAsset.assetId,
-            contentHash: playback.leafHashes[unitIndex]!,
-            proof: playback.proofs[unitIndex]!
-          },
-          payload: unit.payload
-        })),
-        complete: true
-      });
-      for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
-        input.onProgress?.({
-          stage: "persisting-playback",
-          completed: unitIndex + 1,
-          total: playback.encodedUnits.length
+      if (playback.draftId) {
+        await persistPlaybackDraftUnits({
+          draftId: playback.draftId,
+          playback,
+          onProgress: input.onProgress
         });
+      } else {
+        const encodedUnits = playback.encodedUnits ?? [];
+        await putLocallyGeneratedAssetUnits({
+          assetId: playback.playbackAsset.assetId,
+          units: encodedUnits.map((unit, unitIndex) => ({
+            descriptor: {
+              ...unit.descriptor,
+              assetId: playback.playbackAsset.assetId,
+              contentHash: playback.leafHashes[unitIndex]!,
+              proof: playback.proofs[unitIndex]!
+            },
+            payload: unit.payload
+          })),
+          complete: true
+        });
+        for (let unitIndex = 0; unitIndex < encodedUnits.length; unitIndex += 1) {
+          input.onProgress?.({
+            stage: "persisting-playback",
+            completed: unitIndex + 1,
+            total: encodedUnits.length
+          });
+        }
       }
     } catch (error) {
       await Promise.allSettled([
         ...createdAssetIds.map((assetId) => deleteAudioAsset(assetId)),
+        ...(playbackDraftId ? [deletePlaybackAssetDraft(playbackDraftId)] : [])
       ]);
       throw error;
     }
@@ -166,6 +217,9 @@ export async function prepareAudioAssets(input: {
       playbackAsset: playback.playbackAsset
     };
   } catch (error) {
+    if (playbackDraftId) {
+      await deletePlaybackAssetDraft(playbackDraftId).catch(() => undefined);
+    }
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
       kind: "playback-transcode",
@@ -247,12 +301,591 @@ async function preparePlaybackAsset(input: {
   fileHash: string | Promise<string>;
   signal?: AbortSignal;
   onProgress?: (progress: AssetPreparationProgress) => void;
-}) {
+}): Promise<PreparedPlaybackAsset> {
   throwIfAborted(input.signal);
   input.onProgress?.({ stage: "decoding", completed: 0, total: 1 });
   const audioBuffer = await decodeAudioFile(input.file);
   input.onProgress?.({ stage: "decoding", completed: 1, total: 1 });
   return await encodePlaybackAsset(input, audioBuffer);
+}
+
+async function prepareStreamingPlaybackAsset(input: {
+  file: File;
+  draftId: string;
+  fileHash: string | Promise<string>;
+  expectedDurationMs?: number;
+  signal?: AbortSignal;
+  onProgress?: (progress: AssetPreparationProgress) => void;
+}): Promise<PreparedPlaybackAsset> {
+  const format = resolveSupportedUploadFormat(input.file);
+  if (!format) {
+    throw new Error("仅支持 FLAC、WAV 和 MP3 音频文件。");
+  }
+
+  let channelCount: 1 | 2 | null = null;
+  let sourceSampleRate: number | null = null;
+  let resampler: StreamingSincResampler | null = null;
+  let pcm: PcmAccumulator | null = null;
+  let nextUnitIndex = 0;
+  const leafHashes: string[] = [];
+  const expectedUnitCount = input.expectedDurationMs
+    ? Math.max(1, Math.ceil(input.expectedDurationMs / segmentDurationMs))
+    : 0;
+  const encoder = new OpusSegmentEncoder();
+
+  const emitReadyUnits = async (final: boolean) => {
+    if (!pcm) return;
+    const totalSamples = pcm.endSample;
+    const unitCount = final
+      ? Math.max(1, Math.ceil(totalSamples / (segmentDurationMs / 1000 * opusSampleRate)))
+      : Number.POSITIVE_INFINITY;
+    const segmentSamples = Math.round((segmentDurationMs / 1000) * opusSampleRate);
+    const prerollSamples = Math.round((seekPrerollMs / 1000) * opusSampleRate);
+    const postrollSamples = Math.max(1, opusPreSkipSamples);
+
+    while (nextUnitIndex < unitCount) {
+      throwIfAborted(input.signal);
+      const contentStart = nextUnitIndex * segmentSamples;
+      const contentEnd = Math.min(totalSamples, contentStart + segmentSamples);
+      const requiredEnd = final
+        ? contentEnd
+        : contentEnd + postrollSamples;
+      if (!final && totalSamples < requiredEnd) {
+        break;
+      }
+      if (contentEnd <= contentStart) {
+        break;
+      }
+
+      const sampleStart = Math.max(0, contentStart - prerollSamples);
+      const sampleEnd = Math.min(totalSamples, contentEnd + postrollSamples);
+      const segment = pcm.readWindow(sampleStart, sampleEnd);
+      const encodedSegment = prepareIndependentOpusSegment({
+        channels: segment,
+        trimStartSamples: nextUnitIndex === 0 ? 0 : contentStart - sampleStart,
+        contentSamples: contentEnd - contentStart
+      }, opusSampleRate);
+      const payload = await encoder.encode({
+        sampleRate: opusSampleRate,
+        channels: encodedSegment.channels,
+        bitrateKbps: channelCount === 1 ? 96 : 192
+      });
+      const contentHash = await hashAssetUnit(nextUnitIndex, payload);
+      await putPlaybackAssetDraftUnit({
+        draftId: input.draftId,
+        unitIndex: nextUnitIndex,
+        descriptor: {
+          kind: "playback",
+          unitIndex: nextUnitIndex,
+          payloadBytes: payload.byteLength,
+          startMs: nextUnitIndex * segmentDurationMs,
+          durationMs: Math.max(1, Math.round((contentEnd - contentStart) / opusSampleRate * 1000)),
+          trimStartSamples: encodedSegment.trimStartSamples,
+          trimEndSamples: encodedSegment.trimEndSamples
+        },
+        contentHash,
+        payload
+      });
+      leafHashes.push(contentHash);
+      nextUnitIndex += 1;
+      input.onProgress?.({
+        stage: "encoding",
+        completed: nextUnitIndex,
+        total: Math.max(expectedUnitCount, nextUnitIndex)
+      });
+      pcm.trimBefore(Math.max(0, contentEnd - prerollSamples));
+    }
+  };
+
+  try {
+    await streamDecodedPcmChunks(input.file, format, input.signal, async (decoded) => {
+      throwIfAborted(input.signal);
+      if (decoded.channels.length < 1 || decoded.channels.length > 2) {
+        throw new Error("仅支持单声道或双声道音频。");
+      }
+      const channels = decoded.channels.length as 1 | 2;
+      if (channelCount === null) {
+        channelCount = channels;
+        sourceSampleRate = decoded.sampleRate;
+        resampler = decoded.sampleRate === opusSampleRate
+          ? null
+          : new StreamingSincResampler(channels, decoded.sampleRate, opusSampleRate);
+        pcm = new PcmAccumulator(channels);
+      } else if (channelCount !== channels || sourceSampleRate !== decoded.sampleRate) {
+        throw new Error("流式音频解码块的声道数或采样率发生变化。");
+      }
+
+      const output = resampler ? resampler.append(decoded.channels) : decoded.channels;
+      pcm!.append(output);
+      await emitReadyUnits(false);
+    });
+
+    const preparedPcm = pcm as PcmAccumulator | null;
+    if (!preparedPcm || !channelCount || !sourceSampleRate) {
+      throw new Error("音频没有解码出可用 PCM 数据。");
+    }
+    const finishedResampler = resampler as StreamingSincResampler | null;
+    if (finishedResampler) {
+      preparedPcm.append(finishedResampler.finish());
+    }
+    await emitReadyUnits(true);
+    if (leafHashes.length === 0 || leafHashes.length !== nextUnitIndex) {
+      throw new Error("流式音频没有生成完整的播放分片。");
+    }
+
+    const durationMs = Math.max(1, Math.ceil((preparedPcm.endSample / opusSampleRate) * 1000));
+    const expectedUnitCount = Math.max(1, Math.ceil(durationMs / segmentDurationMs));
+    if (leafHashes.length !== expectedUnitCount) {
+      throw new Error("流式音频时间轴与播放分片数量不一致。");
+    }
+    const tree = await buildMerkleTree(leafHashes);
+    const manifestWithoutId = {
+      kind: "playback" as const,
+      sourceFileHash: await input.fileHash,
+      profileId: playbackProfileId,
+      codec: "opus" as const,
+      container: "audio/ogg" as const,
+      sampleRate: opusSampleRate as 48000,
+      channels: channelCount,
+      bitrate: channelCount === 1 ? 96_000 as const : 192_000 as const,
+      durationMs,
+      segmentDurationMs: segmentDurationMs as 2000,
+      seekPrerollMs: seekPrerollMs as 80,
+      unitCount: leafHashes.length,
+      merkleRoot: tree.root,
+      encoder: { name: "@audio/opus-encode" as const, version: playbackEncoderVersion }
+    };
+    const playbackAsset = playbackAssetManifestSchema.parse({
+      ...manifestWithoutId,
+      assetId: await computeAssetId(manifestWithoutId)
+    });
+    return {
+      playbackAsset,
+      leafHashes,
+      proofs: tree.proofs,
+      draftId: input.draftId
+    };
+  } finally {
+    encoder.dispose();
+  }
+}
+
+async function persistPlaybackDraftUnits(input: {
+  draftId: string;
+  playback: PreparedPlaybackAsset;
+  onProgress?: (progress: AssetPreparationProgress) => void;
+}) {
+  const batchSize = 8;
+  let offset = 0;
+  while (offset < input.playback.leafHashes.length) {
+    const records = await getPlaybackAssetDraftUnitBatch(input.draftId, offset, batchSize);
+    if (records.length === 0) {
+      throw new Error("流式播放分片草稿不完整。");
+    }
+    if (records.some((record, index) => record.unitIndex !== offset + index)) {
+      throw new Error("流式播放分片草稿索引不连续。");
+    }
+    const units = records.map((record) => {
+      if (
+        record.descriptor.unitIndex !== record.unitIndex ||
+        record.payload.byteLength !== record.descriptor.payloadBytes
+      ) {
+        throw new Error("流式播放分片草稿元数据不一致。");
+      }
+      if (record.contentHash !== input.playback.leafHashes[record.unitIndex]) {
+        throw new Error("流式播放分片内容校验失败。");
+      }
+      const proof = input.playback.proofs[record.unitIndex];
+      if (!proof) {
+        throw new Error("流式播放分片证明不完整。");
+      }
+      return {
+        descriptor: {
+          ...record.descriptor,
+          assetId: input.playback.playbackAsset.assetId,
+          contentHash: record.contentHash,
+          proof
+        },
+        payload: record.payload
+      };
+    });
+    offset += records.length;
+    await putLocallyGeneratedAssetUnits({
+      assetId: input.playback.playbackAsset.assetId,
+      units,
+      complete: offset === input.playback.leafHashes.length
+    });
+    input.onProgress?.({
+      stage: "persisting-playback",
+      completed: offset,
+      total: input.playback.leafHashes.length
+    });
+  }
+  await deletePlaybackAssetDraft(input.draftId);
+}
+
+type DecodedPcmChunk = {
+  channels: Float32Array[];
+  sampleRate: number;
+  samplesDecoded: number;
+};
+
+type StreamingDecoder = {
+  ready: Promise<void>;
+  decode: (bytes: Uint8Array) => Promise<{
+    channelData: Float32Array[];
+    samplesDecoded: number;
+    sampleRate: number;
+    errors: unknown[];
+  }>;
+  flush?: () => Promise<{
+    channelData: Float32Array[];
+    samplesDecoded: number;
+    sampleRate: number;
+    errors: unknown[];
+  }>;
+  free: () => Promise<void>;
+};
+
+async function streamDecodedPcmChunks(
+  file: File,
+  format: "flac" | "wav" | "mp3",
+  signal: AbortSignal | undefined,
+  onChunk: (chunk: DecodedPcmChunk) => Promise<void>
+) {
+  if (format === "wav") {
+    await streamWavPcmChunks(file, signal, onChunk);
+    return;
+  }
+
+  const decoder = (format === "flac"
+    ? new (await import("@wasm-audio-decoders/flac")).FLACDecoderWebWorker()
+    : new (await import("mpg123-decoder")).MPEGDecoderWebWorker({ enableGapless: true })) as StreamingDecoder;
+  let offset = 0;
+  const chunkSize = 1024 * 1024;
+  let ready = false;
+  try {
+    await decoder.ready;
+    ready = true;
+    while (offset < file.size) {
+      throwIfAborted(signal);
+      const bytes = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + chunkSize)).arrayBuffer());
+      if (bytes.byteLength === 0) break;
+      offset += bytes.byteLength;
+      const decoded = await decoder.decode(bytes);
+      await consumeDecodedChunk(decoded, format, onChunk);
+    }
+    if (format === "flac" && decoder.flush) {
+      const decoded = await decoder.flush();
+      await consumeDecodedChunk(decoded, format, onChunk);
+    }
+  } finally {
+    if (ready) {
+      await decoder.free();
+    }
+  }
+}
+
+async function consumeDecodedChunk(
+  decoded: {
+    channelData: Float32Array[];
+    samplesDecoded: number;
+    sampleRate: number;
+    errors: unknown[];
+  },
+  format: "flac" | "mp3",
+  onChunk: (chunk: DecodedPcmChunk) => Promise<void>
+) {
+  if (decoded.errors.length > 0) {
+    throw new Error(`${format === "flac" ? "FLAC" : "MP3"} 流式解码检测到数据错误。`);
+  }
+  if (decoded.samplesDecoded <= 0 || decoded.channelData.length === 0) return;
+  if (
+    !Number.isInteger(decoded.samplesDecoded) ||
+    !Number.isFinite(decoded.sampleRate) ||
+    decoded.sampleRate <= 0 ||
+    decoded.channelData.some((channel) => channel.length !== decoded.samplesDecoded)
+  ) {
+    throw new Error(`${format === "flac" ? "FLAC" : "MP3"} 流式解码返回了无效 PCM。`);
+  }
+  if (decoded.channelData.some((channel) => {
+    for (const sample of channel) {
+      if (!Number.isFinite(sample)) return true;
+    }
+    return false;
+  })) {
+    throw new Error(`${format === "flac" ? "FLAC" : "MP3"} 流式解码返回了非有限 PCM。`);
+  }
+  await onChunk({
+    channels: decoded.channelData,
+    sampleRate: decoded.sampleRate,
+    samplesDecoded: decoded.samplesDecoded
+  });
+}
+
+async function streamWavPcmChunks(
+  file: File,
+  signal: AbortSignal | undefined,
+  onChunk: (chunk: DecodedPcmChunk) => Promise<void>
+) {
+  const probe = new Uint8Array(await file.slice(0, Math.min(file.size, 1024 * 1024)).arrayBuffer());
+  const header = parseWavHeader(probe);
+  const supportedBitDepth = header?.format === "float"
+    ? header.bitsPerSample === 32 || header.bitsPerSample === 64
+    : header?.bitsPerSample === 8 ||
+      header?.bitsPerSample === 16 ||
+      header?.bitsPerSample === 24 ||
+      header?.bitsPerSample === 32;
+  if (!header || header.dataBytes <= 0 || header.channels < 1 || header.channels > 2 || !supportedBitDepth) {
+    throw new Error("WAV 文件格式或位深不受支持。");
+  }
+  if (
+    !Number.isFinite(header.sampleRate) ||
+    header.sampleRate <= 0 ||
+    header.totalSamples <= 0 ||
+    header.dataOffset + header.dataBytes > file.size ||
+    header.dataBytes % header.blockAlign !== 0
+  ) {
+    throw new Error("WAV 文件数据不完整或不是完整音频帧。");
+  }
+
+  const chunkBytes = Math.max(header.blockAlign, Math.floor((1024 * 1024) / header.blockAlign) * header.blockAlign);
+  let offset = header.dataOffset;
+  const dataEnd = Math.min(file.size, header.dataOffset + header.dataBytes);
+  while (offset < dataEnd) {
+    throwIfAborted(signal);
+    const end = Math.min(dataEnd, offset + chunkBytes);
+    const bytes = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+    const channels = decodeWavPcmChannels(bytes, header);
+    if (channels[0]?.length) {
+      if (channels.some((channel) => {
+        for (const sample of channel) {
+          if (!Number.isFinite(sample)) return true;
+        }
+        return false;
+      })) {
+        throw new Error("WAV 文件包含非有限 PCM 样本。");
+      }
+      await onChunk({
+        channels,
+        sampleRate: header.sampleRate,
+        samplesDecoded: channels[0].length
+      });
+    }
+    if (bytes.byteLength === 0) {
+      throw new Error("WAV 文件数据读取不完整。");
+    }
+    offset += bytes.byteLength;
+  }
+  if (offset !== dataEnd) {
+    throw new Error("WAV 文件数据读取不完整。");
+  }
+}
+
+function decodeWavPcmChannels(bytes: Uint8Array, header: WavHeader) {
+  const bytesPerSample = Math.max(1, Math.floor(header.bitsPerSample / 8));
+  const frameCount = Math.floor(bytes.byteLength / header.blockAlign);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const channels = Array.from({ length: header.channels }, () => new Float32Array(frameCount));
+
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const frameOffset = frame * header.blockAlign;
+    for (let channel = 0; channel < header.channels; channel += 1) {
+      channels[channel]![frame] = decodeWavSample(
+        view,
+        frameOffset + channel * bytesPerSample,
+        header.format,
+        header.bitsPerSample
+      );
+    }
+  }
+  return channels;
+}
+
+function decodeWavSample(
+  view: DataView,
+  offset: number,
+  format: "pcm" | "float",
+  bitsPerSample: number
+) {
+  if (format === "float") {
+    return bitsPerSample === 64 ? view.getFloat64(offset, true) : view.getFloat32(offset, true);
+  }
+  if (bitsPerSample === 8) return (view.getUint8(offset) - 128) / 128;
+  if (bitsPerSample === 16) return view.getInt16(offset, true) / 32_768;
+  if (bitsPerSample === 24) {
+    const value = view.getUint8(offset) |
+      (view.getUint8(offset + 1) << 8) |
+      (view.getUint8(offset + 2) << 16);
+    const signed = (value & 0x800000) !== 0 ? value | 0xff000000 : value;
+    return signed / 8_388_608;
+  }
+  if (bitsPerSample === 32) return view.getInt32(offset, true) / 2_147_483_648;
+  throw new Error(`不支持的 WAV PCM 位深：${bitsPerSample}`);
+}
+
+class PcmAccumulator {
+  private readonly chunks: Array<{ start: number; channels: Float32Array[] }> = [];
+  private _startSample = 0;
+  private _endSample = 0;
+
+  constructor(private readonly channelCount: number) {}
+
+  get endSample() {
+    return this._endSample;
+  }
+
+  append(channels: Float32Array[]) {
+    const frameCount = channels[0]?.length ?? 0;
+    if (!frameCount) return;
+    if (channels.length !== this.channelCount || channels.some((channel) => channel.length !== frameCount)) {
+      throw new Error("PCM 音频块的声道长度不一致。");
+    }
+    this.chunks.push({
+      start: this._endSample,
+      channels: channels.map((channel) => channel.slice())
+    });
+    this._endSample += frameCount;
+  }
+
+  readWindow(startSample: number, endSample: number) {
+    const start = Math.max(this._startSample, Math.floor(startSample));
+    const end = Math.min(this._endSample, Math.max(start, Math.ceil(endSample)));
+    const output = Array.from({ length: this.channelCount }, () => new Float32Array(end - start));
+    for (const chunk of this.chunks) {
+      const chunkStart = chunk.start;
+      const chunkEnd = chunkStart + (chunk.channels[0]?.length ?? 0);
+      const overlapStart = Math.max(start, chunkStart);
+      const overlapEnd = Math.min(end, chunkEnd);
+      if (overlapEnd <= overlapStart) continue;
+      const sourceOffset = overlapStart - chunkStart;
+      const outputOffset = overlapStart - start;
+      for (let channelIndex = 0; channelIndex < this.channelCount; channelIndex += 1) {
+        output[channelIndex]!.set(
+          chunk.channels[channelIndex]!.subarray(sourceOffset, sourceOffset + overlapEnd - overlapStart),
+          outputOffset
+        );
+      }
+    }
+    return output;
+  }
+
+  sampleAtClamped(sampleIndex: number, channelIndex: number) {
+    if (this._endSample <= this._startSample) {
+      throw new Error("重采样器没有可用的音频采样。");
+    }
+    const target = Math.max(this._startSample, Math.min(this._endSample - 1, Math.floor(sampleIndex)));
+    for (const chunk of this.chunks) {
+      const length = chunk.channels[0]?.length ?? 0;
+      if (target >= chunk.start && target < chunk.start + length) {
+        return chunk.channels[channelIndex]![target - chunk.start]!;
+      }
+    }
+    throw new Error("重采样器读取了不可用的音频采样。");
+  }
+
+  trimBefore(sample: number) {
+    const target = Math.max(this._startSample, Math.min(this._endSample, Math.floor(sample)));
+    while (this.chunks.length > 0) {
+      const first = this.chunks[0]!;
+      const end = first.start + (first.channels[0]?.length ?? 0);
+      if (end <= target) {
+        this.chunks.shift();
+        continue;
+      }
+      if (first.start < target) {
+        const offset = target - first.start;
+        first.channels = first.channels.map((channel) => channel.slice(offset));
+        first.start = target;
+      }
+      break;
+    }
+    this._startSample = target;
+  }
+}
+
+export class StreamingSincResampler {
+  private readonly source: PcmAccumulator;
+  private outputSampleIndex = 0;
+  private finished = false;
+  private readonly cutoff: number;
+  private readonly support: number;
+
+  constructor(
+    private readonly channelCount: number,
+    private readonly sourceSampleRate: number,
+    private readonly targetSampleRate: number
+  ) {
+    if (!Number.isFinite(sourceSampleRate) || sourceSampleRate <= 0) {
+      throw new Error("音频采样率无效。");
+    }
+    this.cutoff = Math.min(1, targetSampleRate / sourceSampleRate);
+    this.support = 8 / this.cutoff;
+    this.source = new PcmAccumulator(channelCount);
+  }
+
+  append(channels: Float32Array[]) {
+    if (this.finished) throw new Error("重采样器已经结束。");
+    this.source.append(channels);
+    return this.drain(false);
+  }
+
+  finish() {
+    this.finished = true;
+    return this.drain(true);
+  }
+
+  private drain(final: boolean) {
+    const sourceEnd = this.source.endSample;
+    const targetEnd = final
+      ? Math.round(sourceEnd * this.targetSampleRate / this.sourceSampleRate)
+      : Math.ceil(sourceEnd * this.targetSampleRate / this.sourceSampleRate);
+    const output = Array.from({ length: this.channelCount }, () => new Float32Array(Math.max(0, targetEnd - this.outputSampleIndex)));
+    let outputCount = 0;
+    while (this.outputSampleIndex < targetEnd) {
+      const sourcePosition = this.outputSampleIndex * this.sourceSampleRate / this.targetSampleRate;
+      const firstIndex = Math.ceil(sourcePosition - this.support);
+      const lastIndex = Math.floor(sourcePosition + this.support);
+      if (!final && lastIndex >= sourceEnd) break;
+      if (sourceEnd <= 0 || firstIndex >= sourceEnd) break;
+      let weightSum = 0;
+      for (let channelIndex = 0; channelIndex < this.channelCount; channelIndex += 1) {
+        output[channelIndex]![outputCount] = 0;
+      }
+      for (let sourceIndex = firstIndex; sourceIndex <= lastIndex; sourceIndex += 1) {
+        const distance = (sourcePosition - sourceIndex) * this.cutoff;
+        const absoluteDistance = Math.abs(distance);
+        if (absoluteDistance >= 8) continue;
+        const windowDistance = absoluteDistance / 8;
+        const weight = this.cutoff * sinc(distance) * (0.5 + 0.5 * Math.cos(Math.PI * windowDistance));
+        if (weight === 0) continue;
+        weightSum += weight;
+        for (let channelIndex = 0; channelIndex < this.channelCount; channelIndex += 1) {
+          output[channelIndex]![outputCount] += this.source.sampleAtClamped(sourceIndex, channelIndex) * weight;
+        }
+      }
+      if (weightSum !== 0) {
+        for (let channelIndex = 0; channelIndex < this.channelCount; channelIndex += 1) {
+          output[channelIndex]![outputCount] /= weightSum;
+        }
+      }
+      outputCount += 1;
+      this.outputSampleIndex += 1;
+    }
+    const nextSourcePosition = this.outputSampleIndex * this.sourceSampleRate / this.targetSampleRate;
+    this.source.trimBefore(Math.max(0, Math.floor(nextSourcePosition - this.support - 1)));
+    return output.map((channel) => channel.slice(0, outputCount));
+  }
+
+  private sourceSampleAt(sampleIndex: number, channelIndex: number) {
+    return this.source.sampleAtClamped(sampleIndex, channelIndex);
+  }
+}
+
+function sinc(value: number) {
+  if (value === 0) return 1;
+  const angle = Math.PI * value;
+  return Math.sin(angle) / angle;
 }
 
 async function encodePlaybackAsset(
@@ -458,32 +1091,42 @@ export function prepareIndependentOpusSegment(
   };
 }
 
-async function assertFileFitsDecodeMemoryBudget(
+async function inspectDecodePlan(
   file: File,
   onProgress?: (progress: AssetPreparationProgress) => void
 ) {
+  let durationSeconds: number | undefined;
+  let channels: number | undefined;
   onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
   try {
     const { parseBlob } = await import("music-metadata");
     const metadata = await parseBlob(file, { duration: true, skipCovers: true });
-    const durationSeconds = metadata.format.duration;
-    const channels = metadata.format.numberOfChannels;
-    if (
-      typeof durationSeconds === "number" &&
-      Number.isFinite(durationSeconds) &&
-      typeof channels === "number" &&
-      Number.isFinite(channels)
-    ) {
-      assertDecodedPcmWithinMemoryBudget({ durationSeconds, channels });
-    }
-  } catch (error) {
-    if (error instanceof AudioDecodeMemoryLimitError) {
-      throw error;
-    }
-    // The browser decoder remains authoritative when container metadata is incomplete.
+    durationSeconds = typeof metadata.format.duration === "number" &&
+      Number.isFinite(metadata.format.duration) && metadata.format.duration > 0
+      ? metadata.format.duration
+      : undefined;
+    channels = typeof metadata.format.numberOfChannels === "number" &&
+      Number.isFinite(metadata.format.numberOfChannels) && metadata.format.numberOfChannels > 0
+      ? metadata.format.numberOfChannels
+      : undefined;
+  } catch {
+    // The browser decoder or the format-specific streaming decoder remains authoritative.
   } finally {
     onProgress?.({ stage: "inspecting", completed: 1, total: 1 });
   }
+  const estimatedPcmBytes = durationSeconds !== undefined && channels !== undefined
+    ? estimateDecodedPcmBytes({ durationSeconds, channels })
+    : 0;
+  return {
+    durationSeconds,
+    channels,
+    estimatedPcmBytes,
+    // Missing metadata is not a reason to risk a full AudioBuffer allocation.
+    // The format-specific streaming decoders can establish the real duration
+    // and channel layout while keeping the memory footprint bounded.
+    useStreaming: durationSeconds === undefined || channels === undefined ||
+      resolveDecodePath(estimatedPcmBytes) === "streaming"
+  };
 }
 
 export function estimateDecodedPcmBytes(input: {
@@ -513,6 +1156,12 @@ export function assertDecodedPcmWithinMemoryBudget(input: {
   }
 }
 
+export function resolveDecodePath(estimatedPcmBytes: number) {
+  return Number.isFinite(estimatedPcmBytes) && estimatedPcmBytes > maxDecodedPcmBytes
+    ? "streaming"
+    : "full";
+}
+
 async function readFileUnit(file: File, unitIndex: number) {
   return file.slice(
     unitIndex * originalUnitSize,
@@ -533,6 +1182,13 @@ function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException("Audio asset preparation was cancelled.", "AbortError");
   }
+}
+
+function createPlaybackDraftId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `playback-draft-${crypto.randomUUID()}`;
+  }
+  return `playback-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function mimeTypeFromFileName(name: string) {

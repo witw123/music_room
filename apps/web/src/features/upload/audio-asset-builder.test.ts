@@ -7,22 +7,25 @@ import {
   playbackEncoderVersion,
   playbackProfileId,
   prepareIndependentOpusSegment,
+  resolveDecodePath,
   resolveEncodingConcurrency,
   resolveSupportedUploadFormat,
-  slicePcmSegment
+  slicePcmSegment,
+  StreamingSincResampler
 } from "./audio-asset-builder";
 
 describe("audio asset preparation", () => {
-  it("uses one browser decode path for every supported upload format", () => {
+  it("keeps full decode for bounded PCM and selects streaming decode above the limit", () => {
     const source = readFileSync(new URL("./audio-asset-builder.ts", import.meta.url), "utf8");
 
     expect(source).toContain("const audioBuffer = await decodeAudioFile(input.file);");
     expect(source).toContain("return await encodePlaybackAsset(input, audioBuffer);");
+    expect(source).toContain("prepareStreamingPlaybackAsset");
     expect(source).toContain("maxDecodedPcmBytes = 256 * 1024 * 1024");
-    expect(source).not.toContain("AudioDecoder");
-    expect(source).not.toContain("resolveWavPlaybackSource");
-    expect(source).not.toContain("resolveCompressedPlaybackSource");
-    expect(source).not.toContain("StreamingSincResampler");
+    expect(source).toContain("FLACDecoderWebWorker");
+    expect(source).toContain("MPEGDecoderWebWorker");
+    expect(resolveDecodePath(maxDecodedPcmBytes)).toBe("full");
+    expect(resolveDecodePath(maxDecodedPcmBytes + 1)).toBe("streaming");
   });
 
   it("publishes the server-compatible playback profile", () => {
@@ -97,5 +100,19 @@ describe("audio asset preparation", () => {
     expect(resolveEncodingConcurrency(1, 16)).toBe(1);
     expect(resolveEncodingConcurrency(20, 16)).toBe(4);
     expect(resolveEncodingConcurrency(20, 2)).toBe(1);
+  });
+
+  it("keeps resampling state across input chunks", () => {
+    const resampler = new StreamingSincResampler(1, 44_100, 48_000);
+    const first = resampler.append([
+      Float32Array.from({ length: 44_100 }, (_, index) => Math.sin(index / 17))
+    ]);
+    const second = resampler.append([Float32Array.from({ length: 44_100 }, (_, index) => Math.sin((index + 44_100) / 17))]);
+    const tail = resampler.finish();
+    const output = [...(first[0] ?? []), ...(second[0] ?? []), ...(tail[0] ?? [])];
+
+    expect(output).toHaveLength(Math.round(88_200 * 48_000 / 44_100));
+    expect(output.every(Number.isFinite)).toBe(true);
+    expect(Math.abs((second[0]?.[0] ?? 0) - (first[0]?.at(-1) ?? 0))).toBeLessThan(0.2);
   });
 });

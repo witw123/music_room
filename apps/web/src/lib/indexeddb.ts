@@ -84,6 +84,16 @@ export type AudioAssetUnitRecord = AssetUnitDescriptor & {
   protectedUntil: string | null;
 };
 
+export type PlaybackAssetDraftUnitRecord = {
+  draftUnitId: string;
+  draftId: string;
+  unitIndex: number;
+  descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
+  contentHash: string;
+  payload: ArrayBuffer;
+  createdAt: string;
+};
+
 export type TrackAssetLinkRecord = {
   trackId: string;
   originalAssetId: string;
@@ -177,6 +187,7 @@ export class MusicRoomDatabase extends Dexie {
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
   assetManifests!: Table<AudioAssetManifestRecord, string>;
   assetUnits!: Table<AudioAssetUnitRecord, string>;
+  playbackAssetDraftUnits!: Table<PlaybackAssetDraftUnitRecord, string>;
   trackAssetLinks!: Table<TrackAssetLinkRecord, string>;
   transcodeJobs!: Table<TranscodeJobRecord, string>;
   localAudioDirectory!: Table<LocalAudioDirectoryRecord, string>;
@@ -420,6 +431,9 @@ export class MusicRoomDatabase extends Dexie {
       await jobs.filter((job) =>
         (job as { profileId?: unknown }).profileId !== playbackProfileId
       ).delete();
+    });
+    this.version(19).stores({
+      playbackAssetDraftUnits: "&draftUnitId, draftId, unitIndex, [draftId+unitIndex]"
     });
   }
 }
@@ -824,6 +838,45 @@ export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRec
       );
     }
   );
+}
+
+export async function putPlaybackAssetDraftUnit(input: {
+  draftId: string;
+  unitIndex: number;
+  descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
+  contentHash: string;
+  payload: ArrayBuffer;
+}) {
+  await musicRoomDatabase.playbackAssetDraftUnits.put({
+    draftUnitId: `${input.draftId}:${input.unitIndex}`,
+    draftId: input.draftId,
+    unitIndex: input.unitIndex,
+    descriptor: input.descriptor,
+    contentHash: input.contentHash,
+    payload: input.payload,
+    createdAt: new Date().toISOString()
+  });
+}
+
+export async function getPlaybackAssetDraftUnitBatch(
+  draftId: string,
+  offset: number,
+  limit: number
+) {
+  return musicRoomDatabase.playbackAssetDraftUnits
+    .where("[draftId+unitIndex]")
+    .between(
+      [draftId, Math.max(0, offset)],
+      [draftId, Number.MAX_SAFE_INTEGER],
+      true,
+      false
+    )
+    .limit(Math.max(1, limit))
+    .toArray();
+}
+
+export async function deletePlaybackAssetDraft(draftId: string) {
+  await musicRoomDatabase.playbackAssetDraftUnits.where("draftId").equals(draftId).delete();
 }
 
 export async function releaseAssetUnitsToLocalRepository(assetId: string) {
