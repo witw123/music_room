@@ -48,7 +48,6 @@ type IconName =
   | "favorite"
   | "profile"
   | "settings"
-  | "logout"
   | "sun"
   | "collapse"
   | "expand";
@@ -59,8 +58,7 @@ export function AppSidebar({
   hasBottomPlayer = false,
   compactMobile = false,
   keepHomeInRoom = false,
-  roomId = null,
-  onLogout
+  roomId = null
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -130,6 +128,9 @@ export function AppSidebar({
 
   const showAwayRoomStatus = pathname?.startsWith("/app/") ?? false;
   const themeActionLabel = resolveAppTheme(themePreference) === "light" ? "深色模式" : "浅色模式";
+  const footerControlSizeClass = collapsed
+    ? "h-10 w-10 shrink-0 rounded-lg px-0"
+    : "w-full rounded-xl px-3 py-3 text-sm";
 
   return (
     <aside
@@ -159,11 +160,6 @@ export function AppSidebar({
             <span className="mt-1 block truncate text-[10px] text-white/[0.42]">实时协作听歌空间</span>
           </span>
         </Link>
-        {onLogout ? (
-          <span className="ml-auto md:hidden">
-            <LogoutButton onLogout={onLogout} />
-          </span>
-        ) : null}
       </div>
 
       <div className={`flex min-h-0 flex-1 items-center md:flex-col md:items-stretch ${collapsed ? "md:gap-3 md:p-2" : "md:gap-5 md:p-4"} ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
@@ -222,16 +218,16 @@ export function AppSidebar({
           </div>
         ) : null}
 
-        {activeSession && (onLogout || !collapsed) ? (
+        {activeSession && !collapsed ? (
           <div className={`hidden border-t border-white/[0.07] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>
-            <UserSummary activeSession={activeSession} onLogout={onLogout} collapsed={collapsed} />
+            <UserSummary activeSession={activeSession} />
           </div>
         ) : null}
 
-        <div className={`app-sidebar__footer hidden border-t md:flex ${collapsed ? "md:items-center md:gap-3 md:px-0 md:pb-1 md:pt-4" : "md:gap-1 md:px-0 md:pb-1 md:pt-3"}`}>
+        <div className={`app-sidebar__footer hidden flex-col border-t md:flex ${collapsed ? "md:items-center md:gap-3 md:px-0 md:pb-1 md:pt-4" : "md:items-stretch md:gap-1 md:px-0 md:pb-1 md:pt-3"}`}>
           <button
             aria-label={`切换到${themeActionLabel}`}
-            className={`app-sidebar__footer-control app-sidebar__theme group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${collapsed ? "h-10 w-10 shrink-0 rounded-lg px-0" : "w-full rounded-xl px-3 py-3 text-sm"}`}
+            className={`app-sidebar__footer-control app-sidebar__theme group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass}`}
             onClick={handleThemeToggle}
             title={themeActionLabel}
             type="button"
@@ -242,7 +238,7 @@ export function AppSidebar({
           <button
             aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
             aria-expanded={!collapsed}
-            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${collapsed ? "h-10 w-10 shrink-0 rounded-lg px-0" : "w-full rounded-xl px-3 py-3 text-sm"} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
+            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
             onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
             title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
             type="button"
@@ -279,23 +275,7 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
   return null;
 }
 
-function UserSummary({
-  activeSession,
-  onLogout,
-  collapsed = false
-}: {
-  activeSession: AuthSession;
-  onLogout?: () => void;
-  collapsed?: boolean;
-}) {
-  if (collapsed) {
-    return onLogout ? (
-      <div className="flex justify-center">
-        <LogoutButton onLogout={onLogout} />
-      </div>
-    ) : null;
-  }
-
+function UserSummary({ activeSession }: { activeSession: AuthSession }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-xs font-bold text-accent">
@@ -305,22 +285,7 @@ function UserSummary({
         <p className="truncate text-xs font-semibold text-white/[0.82]">{activeSession.nickname}</p>
         <p className="truncate text-[10px] text-white/[0.35]">@{activeSession.username}</p>
       </div>
-      {onLogout ? <LogoutButton onLogout={onLogout} /> : null}
     </div>
-  );
-}
-
-function LogoutButton({ onLogout }: { onLogout: () => void }) {
-  return (
-    <button
-      aria-label="退出登录"
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/[0.35] transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      onClick={onLogout}
-      title="退出登录"
-      type="button"
-    >
-      <NavIcon name="logout" size={16} />
-    </button>
   );
 }
 

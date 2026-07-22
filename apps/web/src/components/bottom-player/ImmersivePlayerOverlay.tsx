@@ -71,7 +71,7 @@ export function ImmersivePlayerOverlay({
         aria-label="退出沉浸式播放"
         title="退出沉浸式播放"
         onClick={onClose}
-        className="absolute left-4 top-4 z-[60] inline-flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 shadow-lg backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 hover:border-accent/30 hover:bg-accent/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:left-8 sm:top-8"
+        className="light-overlay-control absolute left-4 top-4 z-[60] inline-flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 shadow-lg backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 hover:border-accent/30 hover:bg-accent/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:left-8 sm:top-8"
         style={{ borderColor: artworkPalette.border }}
       >
         <svg aria-hidden="true" fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">

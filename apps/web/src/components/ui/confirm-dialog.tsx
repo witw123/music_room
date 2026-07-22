@@ -40,12 +40,12 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm" role="presentation" onMouseDown={() => !pending && onCancel()}>
+    <div className="light-overlay-scrim fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm" role="presentation" onMouseDown={() => !pending && onCancel()}>
       <div
         aria-describedby="confirm-dialog-description"
         aria-labelledby="confirm-dialog-title"
         aria-modal="true"
-        className="w-full max-w-md rounded-lg border border-white/10 bg-surface p-5 shadow-2xl"
+        className="light-dialog-surface w-full max-w-md rounded-lg border border-white/10 bg-surface p-5 shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
         role="alertdialog"
       >

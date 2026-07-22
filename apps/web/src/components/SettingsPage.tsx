@@ -11,6 +11,7 @@ import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
 import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { musicRoomApi } from "@/lib/music-room-api";
 import {
   appSettingsChangeEvent,
   getDefaultAppSettings,
@@ -36,7 +37,7 @@ const themeLabels: Record<ThemePreference, string> = {
 export function SettingsPage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/settings" });
-  const { activeSession, hydrated } = useSessionIdentity({
+  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -71,6 +72,16 @@ export function SettingsPage() {
     if (!window.confirm("确定要恢复默认设置吗？本地歌曲和歌单不会被删除。")) return;
     setSettings(resetAppSettings());
     setStatusMessage("已恢复默认设置");
+  }
+
+  async function handleLogout() {
+    try {
+      await musicRoomApi.logout();
+    } catch {
+      // Clear the local session even when the server cannot be reached.
+    }
+    clearIdentity();
+    router.replace(authEntryHref as Route);
   }
 
   return (
@@ -220,6 +231,20 @@ export function SettingsPage() {
             </SettingRow>
             <SettingRow label="恢复默认设置" description="只重置界面和播放偏好，不删除本地歌曲。">
               <Button onClick={resetSettings} size="sm" type="button" variant="outline">恢复默认</Button>
+            </SettingRow>
+          </SettingsSection>
+
+          <SettingsSection title="账号">
+            <SettingRow label="退出登录" description="退出当前账号并返回登录页面。">
+              <Button
+                data-testid="settings-logout-button"
+                onClick={() => void handleLogout()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                退出登录
+              </Button>
             </SettingRow>
           </SettingsSection>
         </div>

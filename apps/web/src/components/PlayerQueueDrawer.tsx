@@ -93,8 +93,8 @@ export function PlayerQueueDrawer({
       </Button>
 
       {isOpen ? (
-        <aside aria-label="播放队列" data-testid="player-queue-drawer" className="absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
-          <div className="relative flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar">
+        <aside aria-label="播放队列" data-testid="player-queue-drawer" className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[10.5rem] max-sm:left-[-4px] max-sm:right-[-4px] max-sm:mb-0 max-sm:w-auto">
+          <div className="light-player-queue-content relative flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar">
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;
@@ -176,8 +176,8 @@ export function PlayerQueueDrawer({
             )}
             
             {isPending ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#111216]/90 backdrop-blur-sm">
-                 <div className="flex items-center gap-2 rounded-full border border-white/15 bg-[#252832] px-4 py-1.5 shadow-lg">
+              <div className="light-player-queue-pending absolute inset-0 z-10 flex items-center justify-center bg-[#111216]/90 backdrop-blur-sm">
+                 <div className="light-player-queue-pending-pill flex items-center gap-2 rounded-full border border-white/15 bg-[#252832] px-4 py-1.5 shadow-lg">
                     <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
                     <span className="text-xs text-foreground">更新队列中...</span>
                  </div>
@@ -202,7 +202,7 @@ function QueueArtwork({ artworkUrl, title }: { artworkUrl: string | null; title:
   return (
     <div
       aria-label={`${title} 封面`}
-      className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#252832] text-sm font-semibold text-white/45"
+      className="light-player-queue-artwork flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#252832] text-sm font-semibold text-white/45"
       data-testid="queue-item-artwork"
     >
       {source && !hasError ? (

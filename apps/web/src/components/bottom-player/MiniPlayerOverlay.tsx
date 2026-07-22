@@ -201,7 +201,7 @@ export function MiniPlayerOverlay({
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-white sm:text-[21px]">迷你播放器</span>
           <button
             aria-label="打开沉浸式播放"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+            className="light-overlay-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             onClick={onOpenImmersive}
             style={{ color: miniPlayerColors.accent }}
             title="打开沉浸式播放"
@@ -211,7 +211,7 @@ export function MiniPlayerOverlay({
           </button>
           <button
             aria-label="关闭迷你播放器"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
+            className="light-overlay-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             onClick={onClose}
             style={{ color: miniPlayerColors.accent }}
             title="关闭迷你播放器"

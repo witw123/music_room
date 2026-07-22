@@ -305,7 +305,7 @@ function RoomStageBase({
             onClick={() => void handleCopyJoinCode()}
             type="button"
           >
-            <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-white/10 px-3 py-1.5 shadow-sm backdrop-blur-md transition-colors group-hover:bg-white/20">
+            <div className="light-control-surface flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-white/10 px-3 py-1.5 shadow-sm backdrop-blur-md transition-colors group-hover:bg-white/20">
               <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(0,112,243,0.8)]" />
               <span className="truncate font-mono text-[11px] font-bold tracking-[0.28em] text-white">
                 {roomSnapshot.room.joinCode}
@@ -356,7 +356,7 @@ function RoomStageBase({
             data-testid="room-settings-button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
+            className="light-overlay-control h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
             onClick={() => setShowSettings((value) => !value)}
             type="button"
           >
@@ -368,7 +368,7 @@ function RoomStageBase({
           </Button>
 
           {showSettings ? (
-            <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
+            <div className="light-popover-surface animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
               {canDeleteRoom ? (
                 <button
                   data-testid="edit-room-button"
@@ -600,11 +600,11 @@ function RoomEditDialog({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={() => !pending && onClose()} role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" onMouseDown={() => !pending && onClose()} role="presentation">
       <div
         aria-labelledby="edit-room-dialog-title"
         aria-modal="true"
-        className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >

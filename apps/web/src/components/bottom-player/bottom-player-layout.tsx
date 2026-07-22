@@ -257,7 +257,7 @@ function VolumeControl({
     <div ref={rootRef} className="relative shrink-0">
       {isOpen ? (
         <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
-          <div className="flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
             <div className="relative h-24 w-5 shrink-0">
               <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
                 <div

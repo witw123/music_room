@@ -624,10 +624,10 @@ function RoomDialog({
   if (!portalRoot) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm" onMouseDown={onClose} role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm" onMouseDown={onClose} role="presentation">
       <div
         aria-modal="true"
-        className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >

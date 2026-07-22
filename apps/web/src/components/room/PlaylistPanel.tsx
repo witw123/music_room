@@ -547,10 +547,10 @@ function PlaylistDetail({
 
 function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-4 sm:items-center sm:py-6" role="presentation">
+    <div className="light-overlay-scrim fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-4 sm:items-center sm:py-6" role="presentation">
       <form
         aria-labelledby="room-save-playlist-title"
-        className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:p-5"
+        className="light-dialog-surface my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();

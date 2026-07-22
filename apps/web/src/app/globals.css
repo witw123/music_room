@@ -5,6 +5,7 @@
 @layer base {
   :root {
     color-scheme: dark;
+    --app-sidebar-width: 4rem;
     --background: #09090b;
     --background-secondary: #121215;
     --foreground: #fafafa;
@@ -48,6 +49,10 @@
     --sidebar-active: rgba(0, 112, 243, 0.1);
     --sidebar-active-foreground: #005fca;
     --sidebar-shadow: 16px 0 36px rgba(15, 23, 42, 0.08);
+  }
+
+  html[data-sidebar-collapsed="false"] {
+    --app-sidebar-width: 12rem;
   }
 
   html[data-theme="light"] body {
@@ -163,12 +168,45 @@
     border-color: var(--surface-border) !important;
   }
 
-  html[data-theme="light"] [class*="bg-white/"] {
+  /* Match actual utility tokens only. A substring selector also matches
+     hover-prefixed utilities and incorrectly paints a resting gray background. */
+  html[data-theme="light"] [class~="bg-white/5"],
+  html[data-theme="light"] [class~="bg-white/10"],
+  html[data-theme="light"] [class~="bg-white/15"],
+  html[data-theme="light"] [class~="bg-white/20"],
+  html[data-theme="light"] [class~="bg-white/35"],
+  html[data-theme="light"] [class~="bg-white/[0.02]"],
+  html[data-theme="light"] [class~="bg-white/[0.025]"],
+  html[data-theme="light"] [class~="bg-white/[0.03]"],
+  html[data-theme="light"] [class~="bg-white/[0.035]"],
+  html[data-theme="light"] [class~="bg-white/[0.04]"],
+  html[data-theme="light"] [class~="bg-white/[0.05]"],
+  html[data-theme="light"] [class~="bg-white/[0.06]"],
+  html[data-theme="light"] [class~="bg-white/[0.07]"],
+  html[data-theme="light"] [class~="bg-white/[0.08]"],
+  html[data-theme="light"] [class~="bg-white/[0.12]"],
+  html[data-theme="light"] [class~="bg-white/[0.14]"] {
     background-color: var(--surface) !important;
   }
 
-  html[data-theme="light"] [class*="hover:bg-white/"]:hover {
+  html[data-theme="light"] [class~="hover:bg-white/5"]:hover,
+  html[data-theme="light"] [class~="hover:bg-white/10"]:hover,
+  html[data-theme="light"] [class~="hover:bg-white/15"]:hover,
+  html[data-theme="light"] [class~="hover:bg-white/[0.06]"]:hover,
+  html[data-theme="light"] [class~="hover:bg-white/[0.07]"]:hover,
+  html[data-theme="light"] [class~="hover:bg-white/[0.08]"]:hover,
+  html[data-theme="light"] [class~="hover:bg-white/[0.12]"]:hover {
     background-color: var(--surface-hover) !important;
+  }
+
+  /* Filled surface classes on buttons were useful against the dark canvas;
+     light-mode controls stay clean and let their borders define the target. */
+  html[data-theme="light"] button[class~="bg-surface"],
+  html[data-theme="light"] button[class~="bg-surface/25"],
+  html[data-theme="light"] button[class~="bg-surface/40"],
+  html[data-theme="light"] button[class~="bg-surface/50"],
+  html[data-theme="light"] button[class~="bg-surface/60"] {
+    background-color: transparent !important;
   }
 
   /* Preserve a dimmed backdrop for dialogs while keeping black utility
@@ -187,6 +225,93 @@
   html[data-theme="light"] [class~="bg-black/70"],
   html[data-theme="light"] [class~="bg-black/75"] {
     background-color: rgba(15, 23, 42, 0.5) !important;
+  }
+
+  /* Secondary surfaces keep their dark-mode classes for the default theme,
+     but use a clean elevated layer and a softer daylight shadow here. */
+  html[data-theme="light"] .light-dialog-surface,
+  html[data-theme="light"] .light-popover-surface,
+  html[data-theme="light"] .light-audio-surface {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14) !important;
+  }
+
+  html[data-theme="light"] .light-overlay-control {
+    background-color: transparent !important;
+    border-color: var(--surface-border) !important;
+    color: var(--foreground) !important;
+  }
+
+  html[data-theme="light"] .light-overlay-control:hover {
+    background-color: var(--surface-hover) !important;
+  }
+
+  html[data-theme="light"] .light-control-surface {
+    background-color: transparent !important;
+  }
+
+  html[data-theme="light"] .light-control-surface:hover {
+    background-color: var(--surface-hover) !important;
+  }
+
+  /* Dark-mode button fills become transparent controls in the light theme;
+     hover rules still provide feedback without leaving a resting gray block. */
+  html[data-theme="light"] button[class~="bg-black"],
+  html[data-theme="light"] button[class~="bg-white/5"],
+  html[data-theme="light"] button[class~="bg-white/10"],
+  html[data-theme="light"] button[class~="bg-white/15"],
+  html[data-theme="light"] button[class~="bg-white/[0.025]"],
+  html[data-theme="light"] button[class~="bg-white/[0.03]"],
+  html[data-theme="light"] button[class~="bg-white/[0.04]"],
+  html[data-theme="light"] button[class~="bg-white/[0.05]"],
+  html[data-theme="light"] button[class~="bg-white/[0.06]"],
+  html[data-theme="light"] button[class~="bg-white/[0.08]"],
+  html[data-theme="light"] button[class~="bg-white/[0.12]"] {
+    background-color: transparent !important;
+  }
+
+  html[data-theme="light"] button[class~="hover:bg-white/5"]:hover,
+  html[data-theme="light"] button[class~="hover:bg-white/10"]:hover,
+  html[data-theme="light"] button[class~="hover:bg-white/15"]:hover,
+  html[data-theme="light"] button[class~="hover:bg-white/[0.06]"]:hover,
+  html[data-theme="light"] button[class~="hover:bg-white/[0.07]"]:hover,
+  html[data-theme="light"] button[class~="hover:bg-white/[0.08]"]:hover,
+  html[data-theme="light"] button[class~="hover:bg-white/[0.12]"]:hover {
+    background-color: var(--surface-hover) !important;
+  }
+
+  html[data-theme="light"] .light-player-queue {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14) !important;
+  }
+
+  html[data-theme="light"] .light-player-queue-content {
+    background-color: var(--background-secondary) !important;
+  }
+
+  html[data-theme="light"] .light-player-queue-artwork {
+    background-color: var(--surface) !important;
+    border-color: var(--surface-border) !important;
+  }
+
+  html[data-theme="light"] .light-player-queue-pending {
+    background-color: color-mix(in srgb, var(--background-secondary) 86%, transparent) !important;
+  }
+
+  html[data-theme="light"] .light-player-queue-pending-pill {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--surface-border) !important;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  /* Accent and destructive actions must keep their white label on a filled
+     color after the light theme remaps generic white text. */
+  html[data-theme="light"] [class~="bg-accent/90"][class~="text-white"],
+  html[data-theme="light"] [class~="bg-red-500"][class~="text-white"],
+  html[data-theme="light"] [class~="bg-red-600"][class~="text-white"] {
+    color: #ffffff !important;
   }
 
   html[data-theme="light"] [class~="text-zinc-200"],
@@ -236,10 +361,13 @@
   }
 
   html[data-theme="light"] [class~="text-emerald-200"],
-  html[data-theme="light"] [class~="text-emerald-300"],
+  html[data-theme="light"] [class~="text-emerald-300"] {
+    color: #047857 !important;
+  }
+
   html[data-theme="light"] [class~="text-sky-200"],
   html[data-theme="light"] [class~="text-sky-300"] {
-    color: #047857 !important;
+    color: #0369a1 !important;
   }
 
   html[data-theme="light"] [class~="text-red-200"],
@@ -257,6 +385,7 @@
   html[data-theme="light"] .material-surface {
     background: color-mix(in srgb, var(--background-secondary) 92%, var(--background)) !important;
     border-color: var(--surface-border) !important;
+    box-shadow: none !important;
     color: var(--foreground);
   }
 
@@ -334,12 +463,8 @@
       transition: padding-left 200ms ease;
     }
 
-    html[data-sidebar-collapsed="false"] .md\:pl-60 {
-      padding-left: 12rem !important;
-    }
-
-    html:not([data-sidebar-collapsed="false"]) .md\:pl-60 {
-      padding-left: 4rem !important;
+    .md\:pl-60 {
+      padding-left: var(--app-sidebar-width) !important;
     }
 
   }
