@@ -304,6 +304,8 @@ describe("peer connection lifecycle helpers", () => {
     });
 
     await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await manager.syncPeers(["peer_b"]);
     const entry = manager.getPeerEntry("peer_b", "media")!;
     const track = {
       kind: "audio",

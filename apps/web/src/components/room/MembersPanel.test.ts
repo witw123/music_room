@@ -215,6 +215,7 @@ describe("MembersPanel WebRTC media status", () => {
     expect(source).toContain("member-settings-");
     expect(source).toContain("member-remove-");
     expect(source).toContain('role="switch"');
+    expect(source).toContain("left-0.5 top-0.5 h-4 w-4");
     expect(memberRows).not.toContain("reportedSendRateKbps");
     expect(memberRows).not.toContain("mediaConnectionState");
     expect(memberRows).toContain('isHost && member.role !== "host"');

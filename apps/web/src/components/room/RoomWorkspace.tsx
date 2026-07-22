@@ -20,6 +20,7 @@ import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { AppSidebar } from "@/components/AppSidebar";
+import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -53,6 +54,7 @@ type RoomWorkspaceProps = {
   mediaConnectedPeersCount: number;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
+  localMemberState: LocalMemberPanelState | null;
   iceConfigSource: string;
   iceConfigStatus: string;
   workspaceEntryHref: string;
@@ -111,6 +113,7 @@ function RoomWorkspaceBase({
   mediaConnectedPeersCount,
   peerDiagnostics,
   peerRecentEvents,
+  localMemberState,
   iceConfigSource,
   iceConfigStatus,
   workspaceEntryHref,
@@ -212,6 +215,7 @@ function RoomWorkspaceBase({
               mediaConnectedPeersCount={mediaConnectedPeersCount}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
+              localMemberState={localMemberState}
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
               onCopyJoinCode={onCopyJoinCode}

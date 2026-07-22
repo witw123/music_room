@@ -20,6 +20,8 @@ import { RoomStage } from "./RoomStage";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
+import type { LocalMemberPanelState } from "./MembersPanel";
+import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
 
 type TabId = "library" | "local" | "members";
 
@@ -56,6 +58,7 @@ type RoomDashboardViewProps = {
   mediaConnectedPeersCount: number;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
+  localMemberState: LocalMemberPanelState | null;
   iceConfigSource: string;
   iceConfigStatus: string;
   onCopyJoinCode: () => Promise<void>;
@@ -147,6 +150,7 @@ function RoomDashboardViewBase({
   mediaConnectedPeersCount,
   peerDiagnostics,
   peerRecentEvents,
+  localMemberState,
   iceConfigSource,
   iceConfigStatus,
   onCopyJoinCode,
@@ -164,6 +168,7 @@ function RoomDashboardViewBase({
   onToggleLyrics
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("library");
+  const currentSourcePeerId = resolveCurrentSourcePeerId(roomSnapshot, roomSnapshot.room.playback);
 
   const handleTabChange = useCallback(
     (tab: TabId) => {
@@ -308,6 +313,10 @@ function RoomDashboardViewBase({
               members={roomSnapshot.room.members}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
+              localMemberState={localMemberState}
+              playbackStatus={roomSnapshot.room.playback.status}
+              sourceSessionId={roomSnapshot.room.playback.sourceSessionId}
+              sourcePeerId={currentSourcePeerId}
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
               activeSessionId={activeSession?.userId ?? null}

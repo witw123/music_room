@@ -12,6 +12,7 @@ import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
@@ -282,33 +283,7 @@ export function RoomsHomePage({
         />
       ) : null}
 
-      {effectiveAwayRoomId ? (
-        <section className="home-centered-workspace relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-4 sm:px-6 sm:pt-20 lg:px-8 md:mx-auto md:max-w-[1600px]">
-          <div
-            className="flex flex-col gap-3 rounded-2xl border border-amber-300/45 bg-amber-300/10 px-4 py-3 text-amber-100 shadow-[0_12px_36px_rgba(251,191,36,0.12)] sm:flex-row sm:items-center sm:justify-between"
-            data-testid="away-room-banner"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="shrink-0 rounded-full border border-amber-200/60 bg-amber-200/15 px-2.5 py-1 text-xs font-bold tracking-[0.12em] text-amber-100">
-                已暂离
-              </span>
-              <span className="truncate text-sm text-amber-100/80">
-                当前房间仍在后台同步播放
-              </span>
-            </div>
-            <Button
-              className="w-full border-amber-200/40 bg-amber-200/10 text-amber-100 hover:bg-amber-200/20 sm:w-auto"
-              onClick={handleResumeAwayRoom}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              返回房间
-            </Button>
-          </div>
-        </section>
-      ) : null}
-
+      {effectiveAwayRoomId && showSidebar ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
 
 
       <section className="home-centered-workspace relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-8 sm:px-6 sm:pt-20 md:mx-auto md:max-w-[1600px] md:gap-5 lg:px-8">

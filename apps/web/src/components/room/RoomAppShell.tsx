@@ -126,6 +126,7 @@ export function RoomAppShell({
           mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
           peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
           peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}
+          localMemberState={workspaceViewModel.localMemberState}
           iceConfigSource={workspaceViewModel.iceConfigSource}
           iceConfigStatus={workspaceViewModel.iceConfigStatus}
           workspaceEntryHref={workspaceEntryHref}

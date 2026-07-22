@@ -5,10 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId } from "@/lib/away-room";
+import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId, requestAwayRoomResume } from "@/lib/away-room";
 import { musicRoomApi } from "@/lib/music-room-api";
 
 export function AppRouteShell({ children }: { children: ReactNode }) {
@@ -51,6 +52,12 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
     router.replace(authEntryHref as Route);
   }
 
+  function handleResumeAwayRoom() {
+    if (!awayRoomId) return;
+    requestAwayRoomResume(awayRoomId);
+    router.push(`/room/${awayRoomId}` as Route);
+  }
+
   return (
     <LocalPlayerProvider>
       <div className="h-screen min-h-screen overflow-hidden bg-black">
@@ -59,6 +66,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
           hasBottomPlayer={!awayRoomId}
           onLogout={handleLogout}
         />
+        {awayRoomId ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
         <PersistentAppRouteViews pathname={pathname}>{children}</PersistentAppRouteViews>
         {awayRoomId ? null : <AppPersistentPlayer />}
       </div>

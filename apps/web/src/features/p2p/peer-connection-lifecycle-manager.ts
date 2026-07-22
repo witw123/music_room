@@ -31,7 +31,11 @@ import {
   samplePeerConnectionStats,
   type PeerConnectionStatsSample
 } from "./connection-stats";
-import { resolveAdaptiveAudioBitrateKbps } from "./audio-bitrate-policy";
+import {
+  maximumAudioBitrateKbps,
+  resolveAggregateAudioBitratesKbps,
+  type AggregateAudioBitrateInput
+} from "./audio-bitrate-policy";
 
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
 
@@ -138,6 +142,9 @@ export class PeerConnectionLifecycleManager {
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
   private localAudioMaxBitrateKbps: number | null = null;
+  private expectedRemotePeerIds = new Set<string>();
+  private topologyOperationChain: Promise<void> = Promise.resolve();
+  private destroyed = false;
 
   constructor(input: PeerConnectionLifecycleManagerInput) {
     this.localPeerId = input.localPeerId;
@@ -218,11 +225,25 @@ export class PeerConnectionLifecycleManager {
     });
   }
 
-  async syncPeers(
+  syncPeers(
     remotePeerIds: string[],
     options?: { forceReconnectDegraded?: boolean }
   ) {
+    if (this.destroyed) {
+      return Promise.resolve();
+    }
+    return this.enqueueTopologyOperation(() => this.syncPeersNow(remotePeerIds, options));
+  }
+
+  private async syncPeersNow(
+    remotePeerIds: string[],
+    options?: { forceReconnectDegraded?: boolean }
+  ) {
+    if (this.destroyed) {
+      return;
+    }
     const nextPeers = this.peerConnections.setExpectedRemotePeerIds(remotePeerIds);
+    this.expectedRemotePeerIds = nextPeers;
 
     for (const peerId of nextPeers) {
       const existing = this.peerConnections.get(peerId, "data");
@@ -241,18 +262,68 @@ export class PeerConnectionLifecycleManager {
       if (dataEntry) {
         this.schedulePeerWatchdog(peerId, dataEntry);
       }
-      // Always pass media peers through ensurePeer. Unlike the data path, this
-      // used to reuse a failed/closed media entry and leave a new listener
-      // with a permanently missing receiver track.
-      const mediaEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
-      this.scheduleMediaWatchdog(peerId, mediaEntry);
-      void this.enqueueMediaOperation(peerId, mediaEntry);
     }
 
     for (const [peerId, entry] of this.peerConnections.allEntries()) {
-      if (!nextPeers.has(peerId)) {
+      const expected = entry.linkKind === "data"
+        ? nextPeers.has(peerId)
+        : this.expectedMediaPeerIds().has(peerId);
+      if (!expected) {
         this.releasePeer(peerId, entry);
       }
+    }
+
+    await this.reconcileMediaTopology();
+  }
+
+  private enqueueTopologyOperation<T>(task: () => Promise<T>) {
+    const operation = this.topologyOperationChain.then(task, task);
+    this.topologyOperationChain = operation.then(
+      () => undefined,
+      () => undefined
+    );
+    return operation;
+  }
+
+  private expectedMediaPeerIds() {
+    const expected = new Set<string>();
+    if (this.localAudioSourcePeerId === this.localPeerId) {
+      if (this.hasLiveLocalAudioTrack()) {
+        for (const peerId of this.expectedRemotePeerIds) {
+          expected.add(peerId);
+        }
+      }
+      return expected;
+    }
+
+    if (
+      this.localAudioSourcePeerId !== null &&
+      this.expectedRemotePeerIds.has(this.localAudioSourcePeerId)
+    ) {
+      expected.add(this.localAudioSourcePeerId);
+    }
+    return expected;
+  }
+
+  private hasLiveLocalAudioTrack() {
+    return !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
+  }
+
+  private async reconcileMediaTopology() {
+    if (this.destroyed) {
+      return;
+    }
+    const expectedMedia = this.expectedMediaPeerIds();
+    for (const [peerId, entry] of this.peerConnections.entries("media")) {
+      if (!expectedMedia.has(peerId)) {
+        this.releasePeer(peerId, entry);
+      }
+    }
+
+    for (const peerId of expectedMedia) {
+      const entry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      this.scheduleMediaWatchdog(peerId, entry);
+      await this.enqueueMediaOperation(peerId, entry).catch(() => undefined);
     }
   }
 
@@ -300,6 +371,9 @@ export class PeerConnectionLifecycleManager {
     sourcePeerId: string | null,
     maxBitrateKbps: number | null = null
   ) {
+    if (this.destroyed) {
+      return;
+    }
     const normalizedBitrateKbps = normalizeAudioBitrateKbps(maxBitrateKbps);
     const previousTrack = this.localAudioStream?.getAudioTracks()[0] ?? null;
     const nextTrack = stream?.getAudioTracks()[0] ?? null;
@@ -315,16 +389,7 @@ export class PeerConnectionLifecycleManager {
     this.localAudioStream = stream;
     this.localAudioSourcePeerId = sourcePeerId;
     this.localAudioMaxBitrateKbps = normalizedBitrateKbps;
-    for (const [peerId, entry] of this.peerConnections.entries("media")) {
-      if (maxBitrateKbps === null) {
-        entry.configuredAudioMaxBitrateKbps = null;
-      }
-      if (peerId === sourcePeerId) {
-        this.clearMediaWatchdog(entry);
-        this.scheduleMediaWatchdog(peerId, entry);
-      }
-      void this.enqueueMediaOperation(peerId, entry);
-    }
+    void this.enqueueTopologyOperation(() => this.reconcileMediaTopology()).catch(() => undefined);
   }
 
   async getOrCreatePeerEntry(peerId: string, linkKind: PeerLinkKind = "data") {
@@ -379,6 +444,12 @@ export class PeerConnectionLifecycleManager {
 
   async restartMediaPeer(peerId: string, options?: { forceRecreate?: boolean }) {
     const entry = this.peerConnections.get(peerId, "media");
+    if (!this.expectedMediaPeerIds().has(peerId)) {
+      if (entry) {
+        this.releasePeer(peerId, entry);
+      }
+      return null;
+    }
     const allowEmptyMediaOffer = options?.forceRecreate === true;
     const recoveryInitiator = allowEmptyMediaOffer
       ? true
@@ -443,7 +514,12 @@ export class PeerConnectionLifecycleManager {
   }
 
   destroy() {
+    this.destroyed = true;
     this.peerConnections.clearExpected();
+    this.expectedRemotePeerIds.clear();
+    this.localAudioStream = null;
+    this.localAudioSourcePeerId = null;
+    this.localAudioMaxBitrateKbps = null;
     for (const [peerId, entry] of this.peerConnections.allEntries()) {
       this.releasePeer(peerId, entry);
     }
@@ -515,7 +591,9 @@ export class PeerConnectionLifecycleManager {
       autoReconnect: this.autoReconnect,
       isCurrentEntry: (currentPeerId, currentEntry) =>
         this.peerConnections.get(currentPeerId, linkKind) === currentEntry,
-      isExpectedPeer: (currentPeerId) => this.peerConnections.expects(currentPeerId),
+      isExpectedPeer: (currentPeerId) => linkKind === "data"
+        ? this.peerConnections.expects(currentPeerId)
+        : this.expectedMediaPeerIds().has(currentPeerId),
       sendCandidate: (candidatePeerId, payload) =>
         this.signaling.send(
           candidatePeerId,
@@ -658,7 +736,7 @@ export class PeerConnectionLifecycleManager {
       // Keep recovery history while an expected media peer is being replaced.
       // Otherwise every failed recreation starts at attempt zero and the
       // listener can loop forever without reaching a stable retry path.
-      if (!this.peerConnections.expects(peerId)) {
+      if (!this.expectedMediaPeerIds().has(peerId)) {
         this.mediaRecovery.delete(peerId);
       }
     }
@@ -933,15 +1011,8 @@ export class PeerConnectionLifecycleManager {
       return;
     }
 
+    const nextKbps = this.resolveAggregateAudioBitrate(peerId, sample);
     const currentKbps = entry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps;
-    const nextKbps = resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: this.localAudioMaxBitrateKbps,
-      currentKbps,
-      availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
-      packetLossRate: sample.packetLossRate ?? null,
-      jitterMs: sample.jitterMs ?? null,
-      roundTripTimeMs: sample.currentRoundTripTimeMs
-    });
     if (nextKbps === null || nextKbps === currentKbps) {
       return;
     }
@@ -955,18 +1026,40 @@ export class PeerConnectionLifecycleManager {
       ) {
         return;
       }
-      const latestKbps = resolveAdaptiveAudioBitrateKbps({
-        requestedKbps: this.localAudioMaxBitrateKbps,
-        currentKbps: entry.appliedAudioBitrateKbps ?? currentKbps,
-        availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
-        packetLossRate: sample.packetLossRate ?? null,
-        jitterMs: sample.jitterMs ?? null,
-        roundTripTimeMs: sample.currentRoundTripTimeMs
-      });
+      const latestKbps = this.resolveAggregateAudioBitrate(peerId, sample);
       if (latestKbps !== null && latestKbps !== entry.appliedAudioBitrateKbps) {
         await this.applyAudioSenderParameters(entry.audioSender, latestKbps);
       }
     }).catch(() => undefined);
+  }
+
+  private resolveAggregateAudioBitrate(
+    peerId: string,
+    fallbackSample: PeerConnectionStatsSample
+  ) {
+    if (this.localAudioMaxBitrateKbps === null) {
+      return null;
+    }
+
+    const inputs: AggregateAudioBitrateInput[] = [];
+    for (const [currentPeerId, currentEntry] of this.peerConnections.entries("media")) {
+      if (currentEntry.releasing || !currentEntry.audioSender?.track) {
+        continue;
+      }
+      const currentSample = currentPeerId === peerId
+        ? fallbackSample
+        : this.latestMediaSamples.get(currentPeerId);
+      inputs.push({
+        peerId: currentPeerId,
+        requestedKbps: this.localAudioMaxBitrateKbps,
+        currentKbps: currentEntry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps,
+        availableOutgoingBitrateKbps: currentSample?.availableOutgoingBitrateKbps ?? null,
+        packetLossRate: currentSample?.packetLossRate ?? null,
+        jitterMs: currentSample?.jitterMs ?? null,
+        roundTripTimeMs: currentSample?.currentRoundTripTimeMs ?? null
+      });
+    }
+    return resolveAggregateAudioBitratesKbps(inputs).get(peerId) ?? null;
   }
 
   private async recreatePeer(peerId: string, entry: PeerEntry) {
@@ -1298,5 +1391,5 @@ function normalizeAudioBitrateKbps(value: number | null) {
     return null;
   }
 
-  return Math.round(value);
+  return Math.min(maximumAudioBitrateKbps, Math.round(value));
 }

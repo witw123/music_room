@@ -5,8 +5,10 @@ import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomMember,
-  RoomMemberPermissions
+  RoomMemberPermissions,
+  RoomSnapshot
 } from "@music-room/shared";
+import type { LocalMemberPanelState } from "./MembersPanel";
 import { MembersPanel } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
 
@@ -18,6 +20,10 @@ type MembersTabPanelProps = {
   onRemoveMember: (memberId: string) => Promise<boolean>;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
+  localMemberState: LocalMemberPanelState | null;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"];
+  sourceSessionId: string | null;
+  sourcePeerId: string | null;
   iceConfigSource: string;
   iceConfigStatus: string;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
@@ -31,6 +37,10 @@ function MembersTabPanelBase({
   onRemoveMember,
   peerDiagnostics,
   peerRecentEvents,
+  localMemberState,
+  playbackStatus,
+  sourceSessionId,
+  sourcePeerId,
   iceConfigSource,
   iceConfigStatus,
   onDiagnosticsVisibilityChange
@@ -47,7 +57,12 @@ function MembersTabPanelBase({
 
       <MeshStatusPanel
         members={members}
+        activeSessionId={activeSessionId}
         peerDiagnostics={peerDiagnostics}
+        localMemberState={localMemberState}
+        playbackStatus={playbackStatus}
+        sourceSessionId={sourceSessionId}
+        sourcePeerId={sourcePeerId}
         recentEvents={peerRecentEvents}
         iceConfigSource={iceConfigSource}
         iceConfigStatus={iceConfigStatus}
