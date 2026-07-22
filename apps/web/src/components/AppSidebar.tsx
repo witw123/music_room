@@ -123,7 +123,8 @@ export function AppSidebar({
 
   function handleThemeToggle() {
     const resolvedTheme = resolveAppTheme(themePreference);
-    updateAppSettings({ theme: resolvedTheme === "light" ? "dark" : "light" });
+    const nextTheme = resolvedTheme === "light" ? "dark" : "light";
+    startThemeTransition(nextTheme);
   }
 
   const showAwayRoomStatus = pathname?.startsWith("/app/") ?? false;
@@ -251,6 +252,51 @@ export function AppSidebar({
 
     </aside>
   );
+}
+
+function startThemeTransition(nextTheme: ThemePreference) {
+  if (typeof document === "undefined") return;
+
+  const root = document.documentElement;
+  const reduceMotion = root.dataset.reduceMotion === "true" || (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+  const toggle = document.querySelector<HTMLButtonElement>(".app-sidebar__theme");
+  const toggleRect = toggle?.getBoundingClientRect();
+
+  if (!reduceMotion) {
+    const originX = toggleRect ? toggleRect.left + toggleRect.width / 2 : window.innerWidth / 2;
+    const originY = toggleRect ? toggleRect.top + toggleRect.height / 2 : window.innerHeight / 2;
+    root.style.setProperty("--theme-transition-x", `${originX}px`);
+    root.style.setProperty("--theme-transition-y", `${originY}px`);
+  }
+
+  const viewTransitionDocument = document as Document & {
+    startViewTransition?: (callback: () => void) => { finished: Promise<void> };
+  };
+
+  if (!reduceMotion && typeof viewTransitionDocument.startViewTransition === "function") {
+    const transition = viewTransitionDocument.startViewTransition(() => {
+      applyAppTheme(nextTheme);
+      updateAppSettings({ theme: nextTheme });
+    });
+    void transition.finished.finally(() => clearThemeTransitionStyles(root));
+    return;
+  }
+
+  if (!reduceMotion) root.classList.add("theme-transitioning");
+  updateAppSettings({ theme: nextTheme });
+  if (!reduceMotion) {
+    window.setTimeout(() => clearThemeTransitionStyles(root), 360);
+  }
+}
+
+function clearThemeTransitionStyles(root: HTMLElement) {
+  root.classList.remove("theme-transitioning");
+  root.style.removeProperty("--theme-transition-x");
+  root.style.removeProperty("--theme-transition-y");
 }
 
 function resolveActiveItem(pathname: string | null): AppNavItemId | null {
