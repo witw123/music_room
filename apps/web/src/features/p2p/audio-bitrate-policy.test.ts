@@ -17,14 +17,43 @@ describe("resolveAdaptiveAudioBitrateKbps", () => {
     })).toBe(192);
   });
 
-  it("backs off quickly when the path cannot reserve the audio budget", () => {
+  it("backs off when low capacity is accompanied by network degradation", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       requestedKbps: 192,
       currentKbps: 192,
       availableOutgoingBitrateKbps: 160,
+      packetLossRate: 3,
+      jitterMs: 4,
+      roundTripTimeMs: 45
+    })).toBe(128);
+  });
+
+  it("keeps the requested maximum while capacity is only an estimate", () => {
+    expect(resolveAdaptiveAudioBitrateKbps({
+      requestedKbps: 510,
+      currentKbps: 510,
+      availableOutgoingBitrateKbps: 160,
       packetLossRate: 0,
       jitterMs: 4,
       roundTripTimeMs: 45
+    })).toBe(510);
+  });
+
+  it("ignores a single transient degradation window", () => {
+    const input = {
+      requestedKbps: 510,
+      currentKbps: 510,
+      availableOutgoingBitrateKbps: 160,
+      packetLossRate: 3,
+      jitterMs: 4,
+      roundTripTimeMs: 45,
+      degradedNetworkWindows: 1
+    };
+
+    expect(resolveAdaptiveAudioBitrateKbps(input)).toBe(510);
+    expect(resolveAdaptiveAudioBitrateKbps({
+      ...input,
+      degradedNetworkWindows: 2
     })).toBe(128);
   });
 
@@ -96,10 +125,11 @@ describe("resolveAdaptiveAudioBitrateKbps", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       requestedKbps: maximumAudioBitrateKbps,
       currentKbps: maximumAudioBitrateKbps,
-      availableOutgoingBitrateKbps: 627,
+      availableOutgoingBitrateKbps: 10_000,
       packetLossRate: 0,
       jitterMs: 4,
-      roundTripTimeMs: 45
+      roundTripTimeMs: 45,
+      aggregateTargetKbps: 501
     })).toBe(496);
   });
 
@@ -120,17 +150,17 @@ describe("resolveAdaptiveAudioBitrateKbps", () => {
       createAggregateInput("peer_d", 600)
     ]);
 
-    expect([...result.values()]).toEqual([160, 160, 160]);
+    expect([...result.values()]).toEqual([192, 192, 192]);
   });
 
-  it("uses the lowest known path estimate for the shared source budget", () => {
+  it("does not lower healthy senders from a low path estimate alone", () => {
     const result = resolveAggregateAudioBitratesKbps([
       createAggregateInput("peer_b", 1_200),
       createAggregateInput("peer_c", 1_200),
       createAggregateInput("peer_d", 400)
     ]);
 
-    expect([...result.values()]).toEqual([104, 104, 104]);
+    expect([...result.values()]).toEqual([192, 192, 192]);
   });
 
   it("keeps per-peer network degradation inside the shared allocation", () => {

@@ -75,18 +75,6 @@ function formatPresence(member: RoomMember) {
   return "离线";
 }
 
-function formatRoomPlaybackStatus(value: RoomSnapshot["room"]["playback"]["status"]) {
-  if (value === "playing") return "播放中";
-  if (value === "paused") return "已暂停";
-  return "待机";
-}
-
-function formatSampleAge(value: number | null) {
-  if (value === null) return "暂无采样";
-  if (value < 1_000) return "刚刚";
-  return `${Math.round(value / 1_000)} 秒前`;
-}
-
 function formatPlaybackTransport(value: PeerDiagnosticsSnapshot["playbackTransport"]) {
   if (value === "segmented-opus-local") return "本地分段音频";
   if (value === "webrtc-opus-remote") return "WebRTC Opus";
@@ -179,7 +167,7 @@ function getEventClass(level: PeerRecentEvent["level"]) {
 
 function DiagnosticGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-[10px] leading-4 text-foreground-muted sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-words">
+    <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-[10px] leading-4 text-foreground-muted sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-words">
       {children}
     </div>
   );
@@ -187,8 +175,8 @@ function DiagnosticGrid({ children }: { children: React.ReactNode }) {
 
 function DiagnosticSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-surface-border pt-3">
-      <h3 className="mb-2 text-[10px] font-semibold text-foreground-muted">{title}</h3>
+    <section className="border-t border-surface-border pt-2">
+      <h3 className="mb-1 text-[10px] font-semibold text-foreground-muted">{title}</h3>
       {children}
     </section>
   );
@@ -224,7 +212,7 @@ function formatTrackStatus(peer: PeerDiagnosticsSnapshot | undefined) {
 
 function DiagnosticMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-h-[3.35rem] min-w-0 flex-col justify-center px-3 py-2 first:border-r first:border-surface-border sm:px-3.5">
+    <div className="flex min-h-[2.85rem] min-w-0 flex-col justify-center px-3 py-1.5 first:border-r first:border-surface-border sm:px-3.5">
       <span className="text-[10px] text-foreground-muted">{label}</span>
       <strong className="mt-1 truncate text-xs font-semibold text-foreground">{value}</strong>
     </div>
@@ -270,82 +258,151 @@ function MemberDiagnosticCard({
     isLocal,
     localMemberState: isLocal ? localMemberState : null
   });
-  const connectionState = peer
-    ? `${formatConnectionState(peer.dataChannelState)} / ${formatConnectionState(peer.mediaConnectionState)}`
+  const dataConnectionState = peer?.dataChannelState ?? peer?.dataConnectionState;
+  const connectionState = dataConnectionState || peer?.mediaConnectionState
+    ? `${formatConnectionState(dataConnectionState)} / ${formatConnectionState(peer?.mediaConnectionState)}`
     : "暂无样本";
   const playbackPath = isLocal
     ? formatPlaybackPath(localMemberState?.playbackPath)
     : formatPlaybackTransport(peer?.playbackTransport ?? null);
   const memberLabel = `${member.nickname} · ${member.role === "host" ? "房主" : "成员"}`;
+  const linkJitter = peer?.jitterMs ?? peer?.receiverJitterTargetMs;
+  const hasConnectionDetails = Boolean(
+    peer && (
+      peer.mediaCandidateType ||
+      peer.dataCandidateType ||
+      peer.currentRoundTripTimeMs !== null ||
+      peer.dataChannelState ||
+      peer.dataConnectionState ||
+      peer.mediaConnectionState ||
+      peer.dataIceState ||
+      peer.mediaIceState ||
+      peer.transportHealth
+    )
+  );
+  const hasAudioMetrics = Boolean(
+    peer && (
+      typeof peer.mediaSendBitrateKbps === "number" ||
+      typeof peer.mediaReceiveBitrateKbps === "number" ||
+      typeof peer.packetLossRate === "number" ||
+      typeof linkJitter === "number" ||
+      peer.opusCodec
+    )
+  );
+  const hasPlaybackDetails = Boolean(
+    (isLocal && localMemberState?.playbackPath) ||
+    (!isLocal && peer?.playbackTransport) ||
+    peer?.remoteTrackStatus?.received ||
+    peer?.remoteTrackStatus?.trackReadyState ||
+    peer?.remoteTrackStatus?.lastAudioEvent ||
+    (peer?.segmentedPlaybackStatus?.listenerPlaybackState &&
+      peer.segmentedPlaybackStatus.listenerPlaybackState !== "idle") ||
+    (peer?.segmentedPlaybackStatus?.mediaRecoveryState &&
+      peer.segmentedPlaybackStatus.mediaRecoveryState !== "idle") ||
+    peer?.segmentedPlaybackStatus?.lastDecodeError
+  );
 
   return (
-    <details className="min-h-[14rem] rounded-lg border border-surface-border bg-background/25 px-3 py-2">
+    <details className="rounded-lg border border-surface-border bg-background/25 px-3 py-2">
       <summary className="cursor-pointer list-none">
-        <div className="min-h-[10.75rem]">
-          <div className="flex min-h-[4.7rem] items-start justify-between gap-3">
-            <div className="min-w-0">
-              <strong className="block truncate text-xs text-foreground">{memberLabel}</strong>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
-                <span className={getPlaybackClass(audibleStatus.tone)}>播放：{memberPlaybackStatus}</span>
-                <span className="text-foreground-muted">在线：{formatPresence(member)}</span>
-              </div>
-              <p className="mt-1 truncate text-[10px] text-foreground-muted">连接：{connectionState}</p>
-            </div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <strong className="block truncate text-xs text-foreground">{memberLabel}</strong>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px]">
+              <span className={getPlaybackClass(audibleStatus.tone)}>播放：{memberPlaybackStatus}</span>
+              <span className="text-foreground-muted">在线：{formatPresence(member)}</span>
+              <span className="text-foreground-muted">连接：{connectionState}</span>
+            </p>
+          </div>
+          {peer?.transportHealth ? (
             <span className={`min-w-[3.5rem] shrink-0 rounded-full border px-2 py-0.5 text-center text-[10px] ${getHealthClass(peer)}`}>
-              {formatHealth(peer?.transportHealth)}
+              {formatHealth(peer.transportHealth)}
             </span>
-          </div>
-
-          <div className="grid min-h-[3.35rem] grid-cols-2 border-y border-surface-border">
-            <DiagnosticMetric label="成员上行" value={formatMetric(mediaRates.sendRateKbps, " kbps")} />
-            <DiagnosticMetric label="成员下行" value={formatMetric(mediaRates.receiveRateKbps, " kbps")} />
-          </div>
+          ) : null}
         </div>
-        <p className={`mt-2 min-h-4 text-[10px] text-red-300 ${peer?.lastError ? "" : "invisible"}`}>
-          {peer?.lastError ?? "暂无错误"}
-        </p>
+
+        <div className="mt-2 grid grid-cols-2 border-y border-surface-border">
+          <DiagnosticMetric label="成员上行" value={formatMetric(mediaRates.sendRateKbps, " kbps")} />
+          <DiagnosticMetric label="成员下行" value={formatMetric(mediaRates.receiveRateKbps, " kbps")} />
+        </div>
+        {peer?.lastError ? (
+          <p className="mt-1 text-[10px] text-red-300">{peer.lastError}</p>
+        ) : null}
       </summary>
-      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <DiagnosticSection title="连接路径">
-          <DiagnosticGrid>
-            <span>网络路径：{peer ? describeCandidatePath(peer) : "路径暂无样本"}</span>
-            <span>往返延迟：{formatMetric(peer?.currentRoundTripTimeMs, " ms")}</span>
-            <span>数据通道：{formatConnectionState(peer?.dataChannelState)}</span>
-            <span>音频通道：{formatConnectionState(peer?.mediaConnectionState)}</span>
-            <span>数据 ICE：{formatConnectionState(peer?.dataIceState)}</span>
-            <span>媒体 ICE：{formatConnectionState(peer?.mediaIceState)}</span>
-            <span>连接健康：{formatHealth(peer?.transportHealth)}</span>
-            <span>数据缓冲：{formatMetric(peer?.dataBufferedAmountBytes, " bytes")}</span>
-          </DiagnosticGrid>
-        </DiagnosticSection>
-        <DiagnosticSection title="实际音频流量">
-          <DiagnosticGrid>
-            <span>成员上行：{formatMetric(mediaRates.sendRateKbps, " kbps")}</span>
-            <span>成员下行：{formatMetric(mediaRates.receiveRateKbps, " kbps")}</span>
-            <span>采样状态：{formatSampleAge(mediaRates.sampleAgeMs)}</span>
-            <span>链路上行：{formatMetric(peer?.mediaSendBitrateKbps, " kbps")}</span>
-            <span>链路下行：{formatMetric(peer?.mediaReceiveBitrateKbps, " kbps")}</span>
-            <span>丢包：{formatMetric(peer?.packetLossRate, "%")}</span>
-            <span>抖动：{formatMetric(peer?.jitterMs ?? peer?.receiverJitterTargetMs, " ms")}</span>
-            <span>音频编码：{peer?.opusCodec ?? "暂无"}</span>
-            <span>目标码率：{formatMetric(peer?.targetAudioBitrateKbps, " kbps")}</span>
-          </DiagnosticGrid>
-        </DiagnosticSection>
-        <DiagnosticSection title="播放与音频状态">
-          <DiagnosticGrid>
-            <span>房间播放：{formatRoomPlaybackStatus(playbackStatus)}</span>
-            <span>成员播放：{memberPlaybackStatus}</span>
-            <span>音频表现：{audibleStatus.label}</span>
-            <span>播放链路：{playbackPath}</span>
-            <span>监听状态：{formatListenerPlaybackState(peer?.segmentedPlaybackStatus)}</span>
-            <span>媒体轨道：{formatTrackStatus(peer)}</span>
-            <span>音频事件：{formatAudioEvent(peer?.remoteTrackStatus?.lastAudioEvent ?? null)}</span>
-            <span>缓冲：{formatMetric(peer?.segmentedPlaybackStatus?.bufferedAheadMs, " ms")}</span>
-            <span>音频上下文：{peer?.segmentedPlaybackStatus?.audioContextState ?? "暂无"}</span>
-            <span>恢复状态：{peer?.segmentedPlaybackStatus?.mediaRecoveryState ?? "暂无"}</span>
-          </DiagnosticGrid>
-        </DiagnosticSection>
-      </div>
+      {hasConnectionDetails || hasAudioMetrics || hasPlaybackDetails ? (
+        <div className="mt-2 grid grid-cols-1 gap-2 xl:grid-cols-2">
+          {hasConnectionDetails ? (
+            <DiagnosticSection title="连接路径">
+              <DiagnosticGrid>
+                {peer?.mediaCandidateType || peer?.dataCandidateType || peer?.mediaProtocol || peer?.dataProtocol ? (
+                  <span>网络路径：{describeCandidatePath(peer)}</span>
+                ) : null}
+                {peer && peer.currentRoundTripTimeMs !== null ? (
+                  <span>往返延迟：{formatMetric(peer.currentRoundTripTimeMs, " ms")}</span>
+                ) : null}
+                {peer?.dataChannelState || peer?.dataConnectionState ? (
+                  <span>数据通道：{formatConnectionState(peer.dataChannelState ?? peer.dataConnectionState)}</span>
+                ) : null}
+                {peer?.mediaConnectionState ? <span>音频通道：{formatConnectionState(peer.mediaConnectionState)}</span> : null}
+                {peer?.dataIceState ? <span>数据 ICE：{formatConnectionState(peer.dataIceState)}</span> : null}
+                {peer?.mediaIceState ? <span>媒体 ICE：{formatConnectionState(peer.mediaIceState)}</span> : null}
+                {peer?.transportHealth ? <span>连接健康：{formatHealth(peer.transportHealth)}</span> : null}
+              </DiagnosticGrid>
+            </DiagnosticSection>
+          ) : null}
+
+          {hasAudioMetrics ? (
+            <DiagnosticSection title="音频链路">
+              <DiagnosticGrid>
+                {peer && typeof peer.mediaSendBitrateKbps === "number" ? (
+                  <span>链路上行：{formatMetric(peer.mediaSendBitrateKbps, " kbps")}</span>
+                ) : null}
+                {peer && typeof peer.mediaReceiveBitrateKbps === "number" ? (
+                  <span>链路下行：{formatMetric(peer.mediaReceiveBitrateKbps, " kbps")}</span>
+                ) : null}
+                {peer && typeof peer.packetLossRate === "number" ? (
+                  <span>丢包：{formatMetric(peer.packetLossRate, "%")}</span>
+                ) : null}
+                {typeof linkJitter === "number" ? <span>抖动：{formatMetric(linkJitter, " ms")}</span> : null}
+                {peer?.opusCodec ? <span>音频编码：{peer.opusCodec}</span> : null}
+              </DiagnosticGrid>
+            </DiagnosticSection>
+          ) : null}
+
+          {hasPlaybackDetails ? (
+            <DiagnosticSection title="播放状态">
+              <DiagnosticGrid>
+                {isLocal && localMemberState?.playbackPath ? (
+                  <span>播放链路：{playbackPath}</span>
+                ) : null}
+                {!isLocal && peer?.playbackTransport ? (
+                  <span>播放链路：{playbackPath}</span>
+                ) : null}
+                {peer?.segmentedPlaybackStatus?.listenerPlaybackState &&
+                peer.segmentedPlaybackStatus.listenerPlaybackState !== "idle" ? (
+                  <span>监听状态：{formatListenerPlaybackState(peer.segmentedPlaybackStatus)}</span>
+                ) : null}
+                {peer?.remoteTrackStatus?.received || peer?.remoteTrackStatus?.trackReadyState ? (
+                  <span>媒体轨道：{formatTrackStatus(peer)}</span>
+                ) : null}
+                {peer?.remoteTrackStatus?.lastAudioEvent ? (
+                  <span>音频事件：{formatAudioEvent(peer.remoteTrackStatus.lastAudioEvent)}</span>
+                ) : null}
+                {peer && typeof peer.segmentedPlaybackStatus?.bufferedAheadMs === "number" && peer.segmentedPlaybackStatus.bufferedAheadMs > 0 ? (
+                  <span>缓冲：{formatMetric(peer.segmentedPlaybackStatus.bufferedAheadMs, " ms")}</span>
+                ) : null}
+                {peer?.segmentedPlaybackStatus?.mediaRecoveryState &&
+                peer.segmentedPlaybackStatus.mediaRecoveryState !== "idle" ? (
+                  <span>恢复状态：{peer.segmentedPlaybackStatus.mediaRecoveryState}</span>
+                ) : null}
+                {peer?.segmentedPlaybackStatus?.lastDecodeError ? (
+                  <span className="text-red-300">解码错误：{peer.segmentedPlaybackStatus.lastDecodeError}</span>
+                ) : null}
+              </DiagnosticGrid>
+            </DiagnosticSection>
+          ) : null}
+        </div>
+      ) : null}
     </details>
   );
 }
@@ -453,17 +510,19 @@ function MeshStatusPanelBase({
             </p>
           )}
 
-          <details className="rounded-lg border border-surface-border bg-background/25 px-3 py-2">
-            <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">最近事件</summary>
-            <div className="mt-3 flex flex-col gap-2">
-              {visibleEvents.length ? visibleEvents.map((event) => (
-                <div key={event.id} className={`rounded-lg border px-3 py-2 text-[10px] ${getEventClass(event.level)}`}>
-                  <span className="text-foreground-muted">{formatTimestamp(event.timestamp)}</span>
-                  <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
-                </div>
-              )) : <p className="text-[10px] text-foreground-muted">当前没有最近事件。</p>}
-            </div>
-          </details>
+          {visibleEvents.length ? (
+            <details className="rounded-lg border border-surface-border bg-background/25 px-3 py-2">
+              <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">最近事件</summary>
+              <div className="mt-3 flex flex-col gap-2">
+                {visibleEvents.map((event) => (
+                  <div key={event.id} className={`rounded-lg border px-3 py-2 text-[10px] ${getEventClass(event.level)}`}>
+                    <span className="text-foreground-muted">{formatTimestamp(event.timestamp)}</span>
+                    <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : null}
     </section>

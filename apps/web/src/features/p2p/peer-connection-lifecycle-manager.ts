@@ -32,6 +32,8 @@ import {
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
+  audioBitrateDegradationConfirmWindows,
+  hasAudioNetworkDegradationSignal,
   maximumAudioBitrateKbps,
   resolveAggregateAudioBitratesKbps,
   type AggregateAudioBitrateInput
@@ -138,6 +140,7 @@ export class PeerConnectionLifecycleManager {
   private readonly onMediaRecovery?: PeerConnectionLifecycleManagerInput["onMediaRecovery"];
   private readonly mediaRecovery = new Map<string, MediaRecoveryState>();
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
+  private readonly audioBitrateDegradationWindows = new Map<string, number>();
   private connectionGenerationSequence = 0;
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
@@ -732,6 +735,7 @@ export class PeerConnectionLifecycleManager {
   private releasePeer(peerId: string, entry: PeerEntry) {
     if (entry.linkKind === "media") {
       this.latestMediaSamples.delete(peerId);
+      this.audioBitrateDegradationWindows.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
       // Keep recovery history while an expected media peer is being replaced.
       // Otherwise every failed recreation starts at attempt zero and the
@@ -1011,6 +1015,21 @@ export class PeerConnectionLifecycleManager {
       return;
     }
 
+    const degradationWindows = hasAudioNetworkDegradationSignal({
+      packetLossRate: sample.packetLossRate ?? null,
+      jitterMs: sample.jitterMs ?? null,
+      roundTripTimeMs: sample.currentRoundTripTimeMs
+    })
+      ? Math.min(
+          audioBitrateDegradationConfirmWindows,
+          (this.audioBitrateDegradationWindows.get(peerId) ?? 0) + 1
+        )
+      : 0;
+    if (degradationWindows > 0) {
+      this.audioBitrateDegradationWindows.set(peerId, degradationWindows);
+    } else {
+      this.audioBitrateDegradationWindows.delete(peerId);
+    }
     const nextKbps = this.resolveAggregateAudioBitrate(peerId, sample);
     const currentKbps = entry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps;
     if (nextKbps === null || nextKbps === currentKbps) {
@@ -1056,7 +1075,8 @@ export class PeerConnectionLifecycleManager {
         availableOutgoingBitrateKbps: currentSample?.availableOutgoingBitrateKbps ?? null,
         packetLossRate: currentSample?.packetLossRate ?? null,
         jitterMs: currentSample?.jitterMs ?? null,
-        roundTripTimeMs: currentSample?.currentRoundTripTimeMs ?? null
+        roundTripTimeMs: currentSample?.currentRoundTripTimeMs ?? null,
+        degradedNetworkWindows: this.audioBitrateDegradationWindows.get(currentPeerId) ?? 0
       });
     }
     return resolveAggregateAudioBitratesKbps(inputs).get(peerId) ?? null;

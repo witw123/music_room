@@ -1,6 +1,7 @@
 export const minimumAudioBitrateKbps = 64;
 export const audioBitrateStepKbps = 8;
 export const maximumAudioBitrateKbps = 510;
+export const audioBitrateDegradationConfirmWindows = 2;
 
 const audioCapacityShare = 0.8;
 const additiveIncreaseKbps = 16;
@@ -13,6 +14,7 @@ export type AdaptiveAudioBitrateInput = {
   jitterMs: number | null;
   roundTripTimeMs: number | null;
   aggregateTargetKbps?: number | null;
+  degradedNetworkWindows?: number;
 };
 
 export type AggregateAudioBitrateInput = AdaptiveAudioBitrateInput & {
@@ -31,23 +33,21 @@ export function resolveAdaptiveAudioBitrateKbps(input: AdaptiveAudioBitrateInput
   }
 
   let desiredKbps = requestedKbps;
+  const networkDegraded = hasDegradedNetwork(input);
+  const severeNetwork = networkDegraded && (
+    atLeast(input.packetLossRate, 5) ||
+    atLeast(input.jitterMs, 50) ||
+    atLeast(input.roundTripTimeMs, 250)
+  );
+  const degradedNetwork = networkDegraded;
   const availableKbps = finitePositive(input.availableOutgoingBitrateKbps);
-  if (availableKbps !== null) {
+  if (availableKbps !== null && degradedNetwork) {
     desiredKbps = Math.min(desiredKbps, availableKbps * audioCapacityShare);
   }
   const aggregateTargetKbps = finitePositive(input.aggregateTargetKbps ?? null);
   if (aggregateTargetKbps !== null) {
     desiredKbps = Math.min(desiredKbps, aggregateTargetKbps);
   }
-
-  const severeNetwork =
-    atLeast(input.packetLossRate, 5) ||
-    atLeast(input.jitterMs, 50) ||
-    atLeast(input.roundTripTimeMs, 250);
-  const degradedNetwork =
-    atLeast(input.packetLossRate, 2.5) ||
-    atLeast(input.jitterMs, 30) ||
-    atLeast(input.roundTripTimeMs, 150);
 
   if (severeNetwork) {
     desiredKbps = Math.min(desiredKbps, requestedKbps * 0.7);
@@ -101,7 +101,9 @@ export function resolveAggregateAudioBitratesKbps(
   );
   const fairShareKbps = sharedAvailableKbps === null
     ? null
-    : Math.min(requestedTotalKbps, sharedAvailableKbps) / activeInputs.length;
+    : activeInputs.some(hasDegradedNetwork)
+      ? Math.min(requestedTotalKbps, sharedAvailableKbps) / activeInputs.length
+      : null;
 
   return new Map(activeInputs.map((input) => [
     input.peerId,
@@ -139,4 +141,18 @@ function finitePositive(value: number | null) {
 
 function atLeast(value: number | null, threshold: number) {
   return typeof value === "number" && Number.isFinite(value) && value >= threshold;
+}
+
+function hasDegradedNetwork(input: AdaptiveAudioBitrateInput) {
+  return hasAudioNetworkDegradationSignal(input) &&
+    (input.degradedNetworkWindows === undefined ||
+      input.degradedNetworkWindows >= audioBitrateDegradationConfirmWindows);
+}
+
+export function hasAudioNetworkDegradationSignal(
+  input: Pick<AdaptiveAudioBitrateInput, "packetLossRate" | "jitterMs" | "roundTripTimeMs">
+) {
+  return atLeast(input.packetLossRate, 2.5) ||
+    atLeast(input.jitterMs, 30) ||
+    atLeast(input.roundTripTimeMs, 150);
 }
