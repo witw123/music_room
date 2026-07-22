@@ -1,6 +1,6 @@
 import type { Room } from "@music-room/shared";
 import { RoomRecordRepository } from "./room-record.repository";
-import type { RoomRecord } from "../room.types";
+import { normalizeRoomRecord, type RoomRecord } from "../room.types";
 
 function createRoomRecord(roomRevision: number): RoomRecord {
   const room: Room = {
@@ -485,7 +485,10 @@ describe("RoomRecordRepository", () => {
       60
     );
 
-    await expect(repository.listRecoverableRecords()).resolves.toEqual([validRecord]);
+    expect(normalizeRoomRecord(validRecord)).not.toBeNull();
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([
+      normalizeRoomRecord(validRecord)
+    ]);
 
     expect(redis.removeFromSet).toHaveBeenCalledWith("music-room:rooms", "room_bad");
     expect(rooms.has("room_bad")).toBe(false);
@@ -521,7 +524,10 @@ describe("RoomRecordRepository", () => {
       60
     );
 
-    await expect(repository.listRecoverableRecords()).resolves.toEqual([record]);
+    expect(normalizeRoomRecord(record)).not.toBeNull();
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([
+      normalizeRoomRecord(record)
+    ]);
     expect(prisma.roomState.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         id: record.room.id,
