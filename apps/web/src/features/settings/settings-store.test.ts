@@ -17,7 +17,13 @@ describe("app settings store", () => {
     expect(normalizeSettings(null)).toMatchObject({
       theme: "dark",
       layout: { sidebarCollapsed: true },
-      playback: { defaultVolume: 0.8, localPlaybackMode: "sequence", lyricLines: 5 }
+      playback: {
+        defaultVolume: 0.8,
+        localPlaybackMode: "sequence",
+        lyricLines: 5,
+        preventOfflineAutoLoad: false,
+        streamingOnlyPlayback: false
+      }
     });
   });
 
@@ -45,11 +51,21 @@ describe("app settings store", () => {
 
     updateAppSettings({
       layout: { sidebarCollapsed: false },
-      playback: { defaultVolume: 2, lyricLines: 9 }
+      playback: {
+        defaultVolume: 2,
+        lyricLines: 9,
+        preventOfflineAutoLoad: true,
+        streamingOnlyPlayback: true
+      }
     });
     expect(getAppSettings()).toMatchObject({
       layout: { sidebarCollapsed: false },
-      playback: { defaultVolume: 1, lyricLines: 7 }
+      playback: {
+        defaultVolume: 1,
+        lyricLines: 7,
+        preventOfflineAutoLoad: true,
+        streamingOnlyPlayback: true
+      }
     });
     expect(values.has(appSettingsStorageKey)).toBe(true);
 

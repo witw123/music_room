@@ -174,6 +174,20 @@ export function SettingsPage() {
                 onChange={(checked) => patchSettings({ playback: { showLyricsByDefault: checked } })}
               />
             </SettingRow>
+            <SettingRow label="禁止自动加载歌曲" description="房间成员离线时，不自动下载歌曲到本地。">
+              <Toggle
+                checked={settings.playback.preventOfflineAutoLoad}
+                label="禁止自动加载歌曲"
+                onChange={(checked) => patchSettings({ playback: { preventOfflineAutoLoad: checked } })}
+              />
+            </SettingRow>
+            <SettingRow label="完全流式播放" description="跳过本机保存的歌曲，优先使用曲库资产流式播放。">
+              <Toggle
+                checked={settings.playback.streamingOnlyPlayback}
+                label="完全流式播放"
+                onChange={(checked) => patchSettings({ playback: { streamingOnlyPlayback: checked } })}
+              />
+            </SettingRow>
             <SettingRow label="歌词大小" description="应用于沉浸式播放器歌词。">
               <select
                 aria-label="歌词大小"

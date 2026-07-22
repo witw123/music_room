@@ -17,6 +17,8 @@ export type AppSettings = {
     defaultVolume: number;
     localPlaybackMode: PlaybackMode;
     showLyricsByDefault: boolean;
+    preventOfflineAutoLoad: boolean;
+    streamingOnlyPlayback: boolean;
     lyricFontScale: "small" | "medium" | "large";
     lyricLines: number;
   };
@@ -33,6 +35,8 @@ const defaultSettings: AppSettings = {
     defaultVolume: 0.8,
     localPlaybackMode: "sequence",
     showLyricsByDefault: false,
+    preventOfflineAutoLoad: false,
+    streamingOnlyPlayback: false,
     lyricFontScale: "medium",
     lyricLines: 5
   }
@@ -111,6 +115,8 @@ export function normalizeSettings(value: unknown): AppSettings {
       defaultVolume: volume,
       localPlaybackMode: playbackMode,
       showLyricsByDefault: playback.showLyricsByDefault === true,
+      preventOfflineAutoLoad: playback.preventOfflineAutoLoad === true,
+      streamingOnlyPlayback: playback.streamingOnlyPlayback === true,
       lyricFontScale,
       lyricLines
     }

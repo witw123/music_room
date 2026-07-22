@@ -16,6 +16,10 @@ import {
   resolveOfflineProviderSource
 } from "@/features/playback/offline-source-fallback";
 import { getRoomLocalAudioFile } from "@/features/upload/local-audio-storage";
+import {
+  appSettingsChangeEvent,
+  getAppSettings
+} from "@/features/settings/settings-store";
 import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 
 const receiverBufferingGraceMs = 3_000;
@@ -156,6 +160,22 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const setMediaConnectionState = input.setMediaConnectionState;
   const setSourceStartState = input.setSourceStartState;
   const setAudioUnlocked = input.setAudioUnlocked;
+  const [playbackPreferences, setPlaybackPreferences] = useState(
+    () => getAppSettings().playback
+  );
+
+  useEffect(() => {
+    const syncPlaybackPreferences = () => setPlaybackPreferences(getAppSettings().playback);
+    syncPlaybackPreferences();
+    window.addEventListener(appSettingsChangeEvent, syncPlaybackPreferences);
+    window.addEventListener("storage", syncPlaybackPreferences);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncPlaybackPreferences);
+      window.removeEventListener("storage", syncPlaybackPreferences);
+    };
+  }, []);
+
+  const { preventOfflineAutoLoad, streamingOnlyPlayback } = playbackPreferences;
   const offlineSource = resolveOfflineProviderSource({
     roomSnapshot: input.roomSnapshot,
     track: input.currentTrack
@@ -241,6 +261,16 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return;
     }
 
+    if (streamingOnlyPlayback) {
+      setLocalAudioResolution({
+        key: localAudioTrackKey,
+        status: "missing",
+        file: null,
+        error: null
+      });
+      return;
+    }
+
     if (failedLocalAudioKeysRef.current.has(localAudioTrackKey)) {
       setLocalAudioResolution({
         key: localAudioTrackKey,
@@ -295,13 +325,16 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.currentTrack?.originalAsset?.assetId,
     input.currentTrack?.title,
     input.isCurrentSource,
-    localAudioTrackKey
+    localAudioTrackKey,
+    streamingOnlyPlayback
   ]);
 
   useEffect(() => {
     const fallbackInput = offlineFallbackInputRef.current;
     if (
       input.isCurrentSource ||
+      preventOfflineAutoLoad ||
+      streamingOnlyPlayback ||
       localAudioResolution.status !== "missing" ||
       !fallbackInput.source ||
       !fallbackInput.roomSnapshot ||
@@ -312,13 +345,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
     setOfflineFallbackAsset(null);
     setStatusMessage(`成员不在线，正在从${fallbackInput.source.label}获取歌曲并导入曲库…`);
     void ensureOfflineProviderPlaybackAsset({
       roomSnapshot: fallbackInput.roomSnapshot,
       track: fallbackInput.track,
       source: fallbackInput.source,
-      onStatus: setStatusMessage
+      onStatus: setStatusMessage,
+      signal: abortController.signal
     }).then((result) => {
       if (!cancelled) {
         if (result.file) {
@@ -343,6 +378,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
     return () => {
       cancelled = true;
+      abortController.abort();
     };
   }, [
     input.currentTrack?.id,
@@ -360,8 +396,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     offlineSource?.label,
     offlineSource?.provider,
     offlineSource?.trackId,
+    preventOfflineAutoLoad,
     setStatusMessage,
-    sourceMemberPresenceState
+    sourceMemberPresenceState,
+    streamingOnlyPlayback
   ]);
 
   const ensureListenerMediaConnection = useCallback((input: {

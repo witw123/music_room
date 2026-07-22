@@ -17,6 +17,7 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { LocalPlaylistPanel } from "./LocalPlaylistPanel";
+import { FavoriteAlbumsPanel } from "./FavoriteAlbumsPanel";
 
 type Provider = "netease" | "qqmusic";
 type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -102,7 +103,7 @@ function LocalStorageTabPanelBase({
   onDeletePlaylist
 }: LocalStorageTabPanelProps) {
   const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
-  const [playlistTab, setPlaylistTab] = useState<"local" | "network">("local");
+  const [playlistTab, setPlaylistTab] = useState<"local" | "network" | "favorites">("local");
 
   const handleImportCachedTrack = async (track: CachedLibraryTrack) => {
     if (pendingCachedImport) return;
@@ -135,6 +136,15 @@ function LocalStorageTabPanelBase({
         >
           网络歌单
         </button>
+        <button
+          aria-selected={playlistTab === "favorites"}
+          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${playlistTab === "favorites" ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+          onClick={() => setPlaylistTab("favorites")}
+          role="tab"
+          type="button"
+        >
+          我的收藏
+        </button>
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
         <LocalPlaylistPanel
@@ -164,6 +174,14 @@ function LocalStorageTabPanelBase({
           onUpdatePlaylistTracks={onUpdatePlaylistTracks}
           playlists={playlists}
           tracks={tracks}
+        />
+      </section> : null}
+      {playlistTab === "favorites" ? <section className="flex flex-col gap-3" data-testid="favorite-albums-section">
+        <FavoriteAlbumsPanel
+          activeSession={activeSession}
+          onImportNeteaseTrack={onImportNeteaseTrack}
+          onImportQqMusicTrack={onImportQqMusicTrack}
+          roomTracks={tracks}
         />
       </section> : null}
     </div>

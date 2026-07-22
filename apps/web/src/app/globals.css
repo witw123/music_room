@@ -136,13 +136,13 @@
 
     /* Root workspaces should begin at the sidebar edge instead of re-centering
        themselves and leaving a dead gutter after the sidebar changes width. */
-    html .md\:pl-60 > .mx-auto,
-    html .md\:pl-60 > section.mx-auto {
+    html .md\:pl-60 > .mx-auto:not(.home-centered-workspace),
+    html .md\:pl-60 > section.mx-auto:not(.home-centered-workspace) {
       margin-left: 0 !important;
     }
 
-    html .md\:pl-60 > .mx-auto,
-    html .md\:pl-60 > section.mx-auto {
+    html .md\:pl-60 > .mx-auto:not(.home-centered-workspace),
+    html .md\:pl-60 > section.mx-auto:not(.home-centered-workspace) {
       padding-left: 0 !important;
     }
   }

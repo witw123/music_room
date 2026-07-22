@@ -283,7 +283,7 @@ export function RoomsHomePage({
       ) : null}
 
       {effectiveAwayRoomId ? (
-        <section className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-4 sm:px-6 sm:pt-20 lg:px-8 md:mx-0 md:max-w-[1600px]">
+        <section className="home-centered-workspace relative z-10 mx-auto w-full max-w-[1200px] px-4 pt-4 sm:px-6 sm:pt-20 lg:px-8 md:mx-auto md:max-w-[1600px]">
           <div
             className="flex flex-col gap-3 rounded-2xl border border-amber-300/45 bg-amber-300/10 px-4 py-3 text-amber-100 shadow-[0_12px_36px_rgba(251,191,36,0.12)] sm:flex-row sm:items-center sm:justify-between"
             data-testid="away-room-banner"
@@ -311,7 +311,7 @@ export function RoomsHomePage({
 
 
 
-      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-8 sm:px-6 sm:pt-20 md:mx-0 md:max-w-[1600px] md:gap-5 lg:px-8">
+      <section className="home-centered-workspace relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-8 sm:px-6 sm:pt-20 md:mx-auto md:max-w-[1600px] md:gap-5 lg:px-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
