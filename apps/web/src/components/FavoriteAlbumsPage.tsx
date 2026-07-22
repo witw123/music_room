@@ -259,7 +259,7 @@ export function FavoriteAlbumsPage() {
 
   return (
     <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20">
         {detail && detailItem ? (
           <ProviderAlbumDetailView
             album={detail}

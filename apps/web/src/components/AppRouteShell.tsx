@@ -56,7 +56,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
       <div className="h-screen min-h-screen overflow-hidden bg-black">
         <AppSidebar
           activeSession={activeSession}
-          hasBottomPlayer={Boolean(awayRoomId)}
+          hasBottomPlayer={!awayRoomId}
           onLogout={handleLogout}
         />
         <PersistentAppRouteViews pathname={pathname}>{children}</PersistentAppRouteViews>

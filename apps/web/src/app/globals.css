@@ -98,10 +98,25 @@
   }
 
   .app-sidebar__theme svg {
-    color: #f59e0b;
+    color: currentColor;
+  }
+
+  .app-sidebar {
+    will-change: width;
+    transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  @media (min-width: 768px) {
+    .app-sidebar {
+      width: var(--app-sidebar-width);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .app-sidebar {
+      transition-duration: 0.01ms !important;
+    }
+
     .app-sidebar__footer-control {
       transition-duration: 0.01ms;
     }

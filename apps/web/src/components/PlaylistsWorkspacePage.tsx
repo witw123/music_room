@@ -545,7 +545,7 @@ export function PlaylistsWorkspacePage({
       {!embedded ? <AppPageBackground /> : null}
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
-        : "relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20"}>
+        : "relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20"}>
         {!embedded && playlistView === "local" ? (
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
