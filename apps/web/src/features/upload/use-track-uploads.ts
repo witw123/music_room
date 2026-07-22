@@ -13,7 +13,8 @@ import {
   cleanupOrphanedLocalAudioStorage,
   deleteLocalTrackDataForTracks,
   getCachedLibraryTrack,
-  listCachedLibraryTrackSummaries
+  listCachedLibraryTrackSummaries,
+  upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
@@ -23,20 +24,19 @@ import {
   createInFlightCachedLibraryTrackFileLoader,
   hasUsableCachedLibraryFileForRoomTrack,
   loadCacheLibrarySnapshot,
+  notifyCacheLibraryChanged,
   toCachedLibraryFile
 } from "./cache-library";
 import {
   buildLocalAudioFileName,
   chooseLocalAudioDirectory,
   cleanupLocalAudioCacheFiles,
-  downloadAudioFile,
   getLocalAudioCacheFile,
   getLocalAudioFile,
   getLocalAudioStorageState,
   getOriginalAssetFile,
   normalizeLocalAudioMimeType,
-  saveAudioFileToLocalDirectory,
-  supportsLocalAudioDirectory
+  saveAudioFileToLocalDirectory
 } from "./local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
@@ -357,7 +357,8 @@ export function useTrackUploads(options: {
             : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
           ).catch(() => null))?.plainLyric ?? null
           : null);
-      if (supportsLocalAudioDirectory()) {
+      const localStorageState = await getLocalAudioStorageState();
+      if (localStorageState.directoryName) {
         await saveAudioFileToLocalDirectory({
           file,
           fileHash: track.fileHash,
@@ -382,19 +383,24 @@ export function useTrackUploads(options: {
         return;
       }
 
-      downloadAudioFile(
+      await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord({
+        roomId: roomSnapshot?.room.id ?? "local-library",
         file,
-        buildLocalAudioFileName({
-          title: track.title,
+        track: {
+          ...track,
+          fileHash: track.fileHash,
           mimeType,
-          fileHash: track.fileHash
-        })
-      );
-      setStatusMessage(`《${track.title}》已开始下载。当前浏览器不支持自动选择文件夹。`);
+          sizeBytes: file.size,
+          lyrics
+        }
+      }));
+      notifyCacheLibraryChanged();
+      await refreshCacheLibrary();
+      setStatusMessage(`《${track.title}》已保存到浏览器本地曲库，可直接离线播放。`);
     } catch (error) {
       setStatusMessage(toLocalAudioErrorMessage(error));
     }
-  }, [refreshCacheLibrary, setStatusMessage, uploadedTracks]);
+  }, [refreshCacheLibrary, roomSnapshot?.room.id, setStatusMessage, uploadedTracks]);
 
   const cleanLocalStorage = useCallback(async () => {
     try {

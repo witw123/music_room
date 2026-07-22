@@ -21,11 +21,23 @@ import {
 } from "@/lib/local-playlist-database";
 import { formatDuration } from "@/lib/music-room-ui";
 import {
+  ensureDefaultLocalPlaylist,
+  getDefaultLocalPlaylistTrackIds,
+  hashAudioBlob,
   localPlaylistTrackId,
+  listMergedLocalPlaylistTracks,
+  restoreLocalPlaylistsFromRepository,
   toProviderTrackRecord
 } from "@/features/playlist/local-playlist";
 import {
-  upsertLocalPlaylistTrack
+  ensureLocalAudioDirectoryWriteAccess,
+  getLocalAudioStorageState,
+  normalizeLocalAudioMimeType,
+  saveAudioFileToLocalDirectory
+} from "@/features/upload/local-audio-storage";
+import {
+  upsertLocalPlaylistTrack,
+  type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -69,6 +81,7 @@ export function ProviderSearchPage() {
   const [album, setAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("songs");
   const [pending, setPending] = useState<string | null>(null);
+  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const searchRequestRef = useRef(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -141,6 +154,18 @@ export function ProviderSearchPage() {
 
   const isConnected = account?.connected === true;
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
+
+  useEffect(() => {
+    let cancelled = false;
+    void listMergedLocalPlaylistTracks()
+      .then((tracks) => {
+        if (!cancelled) setLocalTracks(tracks);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession]);
 
   const searchTracksForQuery = useCallback(async (query: string) => {
     const requestId = ++searchRequestRef.current;
@@ -235,6 +260,78 @@ export function ProviderSearchPage() {
         : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
     } catch {
       return track;
+    }
+  }
+
+  async function downloadTrack(track: Track) {
+    const downloadKey = `download:${track.provider}:${track.providerTrackId}`;
+    if (pending || localTracks.some((item) =>
+      item.provider === track.provider &&
+      item.providerTrackId === track.providerTrackId &&
+      item.availableOffline
+    )) return;
+
+    setPending(downloadKey);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      const resolvedTrack = await resolveTrackArtwork(track);
+      if (!await ensureLocalAudioDirectoryWriteAccess()) {
+        throw new Error("请先在个人中心选择本地歌曲保存位置。");
+      }
+      const response = resolvedTrack.provider === "netease"
+        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
+        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
+      const fileHash = await hashAudioBlob(response.blob);
+      const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+      const lyricPayload = await (resolvedTrack.provider === "netease"
+        ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
+        : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
+      ).catch(() => null);
+      const lyrics = lyricPayload?.plainLyric ?? null;
+      const saved = await saveAudioFileToLocalDirectory({
+        file: response.blob,
+        fileHash,
+        title: resolvedTrack.title,
+        mimeType,
+        track: {
+          artist: resolvedTrack.artist,
+          album: resolvedTrack.album,
+          artworkUrl: resolvedTrack.artworkUrl,
+          lyrics,
+          provider: resolvedTrack.provider,
+          providerTrackId: resolvedTrack.providerTrackId,
+          durationMs: resolvedTrack.durationMs,
+          sizeBytes: response.blob.size
+        }
+      });
+      const updatedTrack = {
+        ...toProviderTrackRecord(resolvedTrack, localTracks.find((item) => item.id === localPlaylistTrackId(resolvedTrack))),
+        fileHash,
+        fileName: saved.fileName,
+        sizeBytes: response.blob.size,
+        mimeType,
+        lyrics,
+        availableOffline: true,
+        updatedAt: new Date().toISOString()
+      };
+      await upsertLocalPlaylistTrack(updatedTrack);
+      const nextTracks = [...localTracks.filter((item) => item.id !== updatedTrack.id), updatedTrack];
+      setLocalTracks(nextTracks);
+
+      const storage = await getLocalAudioStorageState();
+      const savedFileHashes = new Set(storage.savedFileHashes);
+      const mergedTracks = await listMergedLocalPlaylistTracks();
+      await restoreLocalPlaylistsFromRepository();
+      ensureDefaultLocalPlaylist({
+        trackIds: getDefaultLocalPlaylistTrackIds(mergedTracks, savedFileHashes),
+        sourceDirectoryName: storage.directoryName
+      });
+      setStatusMessage(`《${resolvedTrack.title}》已下载并保存到本地歌单。`);
+    } catch (error) {
+      setErrorMessage(toProviderErrorMessage(error, track.provider));
+    } finally {
+      setPending(null);
     }
   }
 
@@ -489,8 +586,8 @@ export function ProviderSearchPage() {
   return (
     <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
-        <header className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:flex-1 sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
+        <header className="flex justify-center">
+          <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
             <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
             <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
             <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌单或专辑</label>
@@ -509,12 +606,7 @@ export function ProviderSearchPage() {
                 {enabledProviders.map((item) => <option key={item} value={item}>{item === "netease" ? "网易云" : "QQ 音乐"}</option>)}
               </select>
             ) : null}
-            <button aria-label="搜索" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-accent/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40" disabled={!isConnected || !keywords.trim() || pending !== null} title="搜索" type="submit"><Icon name="search" /></button>
           </form>
-          <div className="flex w-full min-w-0 items-center justify-between gap-3 text-xs text-white/45 sm:w-auto sm:justify-end">
-            <span>{isConnected ? `${providerName} · ${account?.nickname ?? "已连接"}` : `${providerName}未连接`}</span>
-            <Link className="text-accent hover:text-accent-hover" href="/app/profile">管理账号</Link>
-          </div>
         </header>
 
         {enabledProviders.length > 0 ? (
@@ -533,7 +625,14 @@ export function ProviderSearchPage() {
             ) : null}
 
             {contentTab === "songs" ? (
-              <SongsResults results={results} pending={pending} onAlbum={loadAlbumForTrack} onImportPlaylist={openPlaylistPicker} />
+              <SongsResults
+                results={results}
+                pending={pending}
+                localTracks={localTracks}
+                onAlbum={loadAlbumForTrack}
+                onDownload={downloadTrack}
+                onImportPlaylist={openPlaylistPicker}
+              />
             ) : null}
             {contentTab === "playlists" ? (
               <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
@@ -573,12 +672,16 @@ export function ProviderSearchPage() {
 function SongsResults({
   results,
   pending,
+  localTracks,
   onAlbum,
+  onDownload,
   onImportPlaylist
 }: {
   results: Track[];
   pending: string | null;
+  localTracks: LocalPlaylistTrackRecord[];
   onAlbum: (track: Track) => Promise<void>;
+  onDownload: (track: Track) => Promise<void>;
   onImportPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => Promise<void>;
 }) {
   return (
@@ -601,6 +704,28 @@ function SongsResults({
             <TrackAlbumLink className="hidden truncate text-xs md:block" pending={pending} track={track} onAlbum={onAlbum} />
             <span className="hidden text-xs tabular-nums text-white/35 md:block">{formatDuration(track.durationMs)}</span>
             <div className="flex items-center justify-start md:justify-end">
+              {(() => {
+                const downloaded = localTracks.some((item) =>
+                  item.provider === track.provider &&
+                  item.providerTrackId === track.providerTrackId &&
+                  item.availableOffline
+                );
+                const downloading = pending === `download:${track.provider}:${track.providerTrackId}`;
+                return (
+                  <Button
+                    aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
+                    className="h-8 w-8"
+                    disabled={pending !== null || downloaded || downloading}
+                    onClick={() => void onDownload(track)}
+                    size="icon"
+                    title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地歌单"}
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Icon name={downloading ? "loading" : "download"} />
+                  </Button>
+                );
+              })()}
               <Button aria-label={`加入歌单 ${track.title}`} disabled={pending !== null} onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" variant="ghost" type="button"><Icon name="playlist-add" /></Button>
             </div>
           </article>
@@ -722,11 +847,13 @@ function SearchEmptyState({ title, description }: { title: string; description: 
   return <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center"><Icon name="search" /><p className="mt-4 text-sm font-medium text-white/60">{title}</p><p className="mt-2 text-xs text-white/30">{description}</p></div>;
 }
 
-function Icon({ name, filled = false }: { name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add"; filled?: boolean }) {
+function Icon({ name, filled = false }: { name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add" | "download" | "loading"; filled?: boolean }) {
   const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: filled ? "currentColor" : "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   if (name === "search") return <svg {...common}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>;
   if (name === "heart") return <svg {...common}><path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" /></svg>;
   if (name === "playlist-add") return <svg {...common}><path d="M4 5.5h10M4 9.5h10M4 13.5h6" /><path d="M17 13v7M13.5 16.5h7" /></svg>;
+  if (name === "download") return <svg {...common}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>;
+  if (name === "loading") return <svg {...common} className="animate-spin"><path d="M12 3a9 9 0 1 0 9 9" /></svg>;
   if (name === "arrow-left") return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></svg>;
   if (name === "close") return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
   if (name === "chevron-right") return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;

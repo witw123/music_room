@@ -18,6 +18,7 @@ type MembersTabPanelProps = {
   localMemberState: LocalMemberPanelState | null;
   playbackStatus: PlaybackSnapshot["status"];
   sourcePeerId: string | null;
+  sourceSessionId: string | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -30,6 +31,7 @@ function MembersTabPanelBase({
   localMemberState,
   playbackStatus,
   sourcePeerId,
+  sourceSessionId,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -44,6 +46,7 @@ function MembersTabPanelBase({
         localMemberState={localMemberState}
         playbackStatus={playbackStatus}
         sourcePeerId={sourcePeerId}
+        sourceSessionId={sourceSessionId}
       />
 
       <MeshStatusPanel

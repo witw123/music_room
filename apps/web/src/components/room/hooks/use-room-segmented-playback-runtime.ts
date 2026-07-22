@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import type { PlaybackSnapshot, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
   useSegmentedOpusPlayback,
+  type PlaybackAudioPath,
   type SegmentedPlaybackSnapshot
 } from "@/features/playback/use-segmented-opus-playback";
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
@@ -64,6 +65,20 @@ function resolveLocalAudioTimelineKey(playback: PlaybackSnapshot) {
     playback.startedAt ?? playback.startAt ?? "none",
     playback.status === "playing" ? "playing" : playback.positionMs
   ].join(":");
+}
+
+export function resolveRoomAudioPath(input: {
+  isCurrentSource: boolean;
+  nativeLocalAudio: boolean;
+  localFallback: boolean;
+}): PlaybackAudioPath {
+  if (input.nativeLocalAudio) {
+    return "local-file";
+  }
+  if (input.localFallback) {
+    return "local-segmented";
+  }
+  return input.isCurrentSource ? "broadcast-segmented" : "remote-stream";
 }
 
 function isAudioPlaybackBlockedError(error: string | null) {
@@ -306,7 +321,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       onStatus: setStatusMessage
     }).then((result) => {
       if (!cancelled) {
-        setOfflineFallbackAsset(result.playbackAsset);
+        if (result.file) {
+          setOfflineFallbackAsset(null);
+          setLocalAudioResolution({
+            key: localAudioTrackKey,
+            status: "available",
+            file: result.file,
+            error: null
+          });
+        } else {
+          setOfflineFallbackAsset(result.playbackAsset);
+        }
       }
     }).catch((error) => {
       if (cancelled) return;
@@ -330,6 +355,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.sourceSessionId,
     input.roomSnapshot?.room.playback.status,
+    localAudioTrackKey,
     localAudioResolution.status,
     offlineSource?.label,
     offlineSource?.provider,
@@ -454,7 +480,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const isAudible = isSegmentedPlaybackAudible({
       state: visiblePlayback.state,
       isCurrentSource: runtime.isCurrentSource,
-      sourceHealth: visiblePlayback.sourceHealth
+      sourceHealth: visiblePlayback.sourceHealth,
+      nativeLocalAudio: usesNativeLocalAudio
     });
     runtime.audibleRef.current = isAudible;
     const isRecovering = visiblePlayback.state === "buffering" ||
@@ -1265,7 +1292,16 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [isCurrentSource, localPeerId, offlineFallbackAsset, onPlaybackEnded, playback.state, roomSnapshot, runtimePeerId]);
 
   const usesSegmentedSource = input.isCurrentSource && localAudioResolution.status === "missing";
-  return usesSegmentedSource || !!offlineFallbackAsset ? playback : mediaPlayback;
+  const audioPath = resolveRoomAudioPath({
+    isCurrentSource: input.isCurrentSource,
+    nativeLocalAudio: localAudioResolution.status === "available",
+    localFallback: !!offlineFallbackAsset
+  });
+  const effectivePlayback = usesSegmentedSource || !!offlineFallbackAsset ? playback : mediaPlayback;
+  return useMemo(
+    () => ({ ...effectivePlayback, audioPath }),
+    [audioPath, effectivePlayback]
+  );
 }
 
 function idlePlaybackSnapshot(): SegmentedPlaybackSnapshot {
@@ -1305,9 +1341,12 @@ export function isSegmentedPlaybackAudible(input: {
   state: SegmentedPlaybackSnapshot["state"];
   isCurrentSource: boolean;
   sourceHealth?: SegmentedPlaybackSnapshot["sourceHealth"];
+  nativeLocalAudio?: boolean;
 }) {
   return input.state === "live" && (
-    !input.isCurrentSource || input.sourceHealth === "source-ready"
+    input.nativeLocalAudio === true ||
+    !input.isCurrentSource ||
+    input.sourceHealth === "source-ready"
   );
 }
 

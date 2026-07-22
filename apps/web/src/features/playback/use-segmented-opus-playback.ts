@@ -24,8 +24,15 @@ export type SegmentedPlaybackState =
   | "unavailable"
   | "ended";
 
+export type PlaybackAudioPath =
+  | "local-file"
+  | "local-segmented"
+  | "remote-stream"
+  | "broadcast-segmented";
+
 export type SegmentedPlaybackSnapshot = {
   state: SegmentedPlaybackState;
+  audioPath?: PlaybackAudioPath;
   playbackIdentity?: string | null;
   bufferedMs: number;
   ownedUnitCount: number;

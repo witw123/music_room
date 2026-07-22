@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useState } from "react";
 import type { PeerDiagnosticsSnapshot, PlaybackSnapshot, RoomMember } from "@music-room/shared";
+import type { PlaybackAudioPath } from "@/features/playback/use-segmented-opus-playback";
 import {
   dedupePeerDiagnostics,
   dedupeRoomMembers,
@@ -13,6 +14,7 @@ type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
 export type LocalMemberPanelState = {
   memberId: string;
   audible: boolean | null;
+  playbackPath?: PlaybackAudioPath;
   mediaSummary?: {
     receiveRateKbps: number | null;
     sendRateKbps: number | null;
@@ -32,6 +34,7 @@ type MembersPanelProps = {
   localMemberState?: LocalMemberPanelState | null;
   playbackStatus: PlaybackSnapshot["status"];
   sourcePeerId: string | null;
+  sourceSessionId?: string | null;
 };
 
 function getToneClasses(tone: StatusTone) {
@@ -108,19 +111,37 @@ export function getPlaybackStatus(
 const memberReportedTelemetryFreshMs = 6_000;
 
 export type MemberAudibleStatus = {
-  label: "正在发声" | "未发声" | "等待音频" | "未播放" | "等待重连" | "离线";
+  label: "正在发声" | "本地播放" | "正在播放" | "未发声" | "未播放" | "等待音频" | "等待重连" | "离线";
   tone: StatusTone;
   active: boolean;
 };
+
+export function isMemberCurrentSource(input: {
+  member: Pick<RoomMember, "id" | "peerId">;
+  sourceSessionId?: string | null;
+  sourcePeerId: string | null;
+}) {
+  // sourceSessionId is stable across peer reconnects. Only use the peer id
+  // for snapshots from before session identity was persisted.
+  if (input.sourceSessionId !== null && input.sourceSessionId !== undefined) {
+    return input.member.id === input.sourceSessionId;
+  }
+
+  return input.member.peerId !== null && input.member.peerId === input.sourcePeerId;
+}
 
 export function getMemberAudibleStatus(input: {
   presenceState: RoomMember["presenceState"];
   playbackActive: boolean;
   isLocal: boolean;
+  isCurrentSource?: boolean;
   localMemberState: LocalMemberPanelState | null;
   diagnostic: PeerDiagnosticsSnapshot | undefined;
   now?: number;
 }): MemberAudibleStatus {
+  const isCurrentSource = input.isCurrentSource ?? true;
+  const isLocalPlayback = input.localMemberState?.playbackPath === "local-file" ||
+    input.localMemberState?.playbackPath === "local-segmented";
   if (input.presenceState === "offline") {
     return { label: "离线", tone: "neutral", active: false };
   }
@@ -128,15 +149,27 @@ export function getMemberAudibleStatus(input: {
     return { label: "等待重连", tone: "warning", active: false };
   }
   if (!input.playbackActive) {
-    return { label: "未播放", tone: "neutral", active: false };
+    return {
+      label: input.isCurrentSource ? "未发声" : "未播放",
+      tone: "neutral",
+      active: false
+    };
   }
 
   if (input.isLocal) {
     if (input.localMemberState?.audible === true) {
-      return { label: "正在发声", tone: "success", active: true };
+      return {
+        label: isCurrentSource ? "正在发声" : isLocalPlayback ? "本地播放" : "正在播放",
+        tone: "success",
+        active: true
+      };
     }
     if (input.localMemberState?.audible === false) {
-      return { label: "未发声", tone: "warning", active: false };
+      return {
+        label: isCurrentSource ? "未发声" : "未播放",
+        tone: "warning",
+        active: false
+      };
     }
     return { label: "等待音频", tone: "accent", active: false };
   }
@@ -152,8 +185,16 @@ export function getMemberAudibleStatus(input: {
 
   if (typeof input.diagnostic?.reportedAudible === "boolean") {
     return input.diagnostic.reportedAudible
-      ? { label: "正在发声", tone: "success", active: true }
-      : { label: "未发声", tone: "warning", active: false };
+      ? {
+          label: isCurrentSource ? "正在发声" : "正在播放",
+          tone: "success",
+          active: true
+        }
+      : {
+          label: isCurrentSource ? "未发声" : "未播放",
+          tone: "warning",
+          active: false
+        };
   }
 
   // Older peers do not send an explicit audible flag. Their fresh self-reported
@@ -165,8 +206,16 @@ export function getMemberAudibleStatus(input: {
     return { label: "等待音频", tone: "accent", active: false };
   }
   return hasReportedTraffic
-    ? { label: "正在发声", tone: "success", active: true }
-    : { label: "未发声", tone: "warning", active: false };
+    ? {
+        label: isCurrentSource ? "正在发声" : "正在播放",
+        tone: "success",
+        active: true
+      }
+    : {
+        label: isCurrentSource ? "未发声" : "未播放",
+        tone: "warning",
+        active: false
+      };
 }
 
 export function resolveMemberMediaRates(input: {
@@ -259,7 +308,8 @@ function MembersPanelBase({
   peerDiagnostics = [],
   localMemberState = null,
   playbackStatus: roomPlaybackStatus,
-  sourcePeerId
+  sourcePeerId,
+  sourceSessionId = null
 }: MembersPanelProps) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -320,7 +370,11 @@ function MembersPanelBase({
               : member.peerId
                 ? diagnosticsByPeerId.get(member.peerId)
                 : undefined;
-            const isCurrentSource = member.peerId !== null && member.peerId === sourcePeerId;
+            const isCurrentSource = isMemberCurrentSource({
+              member,
+              sourceSessionId,
+              sourcePeerId
+            });
             const status = isLocal
               ? localMemberState.playbackStatus
               : getPlaybackStatus(member.presenceState, diagnostic, {
@@ -332,6 +386,7 @@ function MembersPanelBase({
               presenceState: member.presenceState,
               playbackActive: roomPlaybackStatus === "playing",
               isLocal,
+              isCurrentSource,
               localMemberState,
               diagnostic,
               now

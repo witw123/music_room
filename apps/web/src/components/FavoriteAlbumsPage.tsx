@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, QqMusicTrackCandidate } from "@music-room/shared";
 import { useRouter } from "next/navigation";
@@ -260,7 +259,7 @@ export function FavoriteAlbumsPage() {
 
   return (
     <main className="h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:px-10 md:pt-14">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-0 md:px-8 md:pt-20">
         {detail && detailItem ? (
           <ProviderAlbumDetailView
             album={detail}
@@ -285,29 +284,21 @@ export function FavoriteAlbumsPage() {
           />
         ) : (
           <>
-            <header className="flex flex-wrap items-end justify-between gap-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">Your collection</p>
-                <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">收藏</h1>
-                <p className="mt-2 text-sm text-white/40">已收藏 {items.length} 张专辑</p>
-              </div>
-              <Link className="text-xs text-white/45 hover:text-white" href="/app/search">返回搜索</Link>
-            </header>
-
-            <section className="mt-10">
+            <section className="mt-4">
               {items.length ? (
-                <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                   {items.map((item) => (
-                    <article className="group min-w-0" key={item.id}>
-                      <button className="block w-full text-left" disabled={pending !== null} onClick={() => void openAlbum(item)} type="button">
-                        <AlbumArtwork alt={item.title} src={item.artworkUrl} />
-                        <span className="mt-3 block truncate text-sm font-medium text-white/85">{item.title}</span>
-                        <span className="mt-1 block truncate text-xs text-white/40">{item.artist}</span>
+                    <article className="group relative min-w-0" key={item.id}>
+                      <button className="block w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70" disabled={pending !== null} onClick={() => void openAlbum(item)} type="button">
+                        <div className="relative aspect-square overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+                          <AlbumArtwork alt={item.title} className="h-full w-full" src={item.artworkUrl} />
+                        </div>
+                        <div className="min-w-0 px-1 pt-3">
+                          <strong className="block truncate text-[15px] font-semibold text-foreground">{item.title}</strong>
+                          <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
+                        </div>
                       </button>
-                      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-white/30">
-                        <span>{item.provider === "netease" ? "网易云" : "QQ 音乐"}</span>
-                        <Button aria-label={`取消收藏 ${item.title}`} disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
-                      </div>
+                      <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
                     </article>
                   ))}
                 </div>
@@ -348,12 +339,12 @@ export function FavoriteAlbumsPage() {
   );
 }
 
-function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
+function AlbumArtwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
   return src ? (
     // External provider artwork is intentionally rendered without Next image optimization.
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className="aspect-square w-full rounded-2xl object-cover" loading="lazy" src={src} />
-  ) : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-black text-3xl text-white/20">♪</span>;
+    <img alt={alt} className={`aspect-square w-full object-cover ${className}`} loading="lazy" src={src} />
+  ) : <span aria-label={alt} className={`flex aspect-square w-full items-center justify-center bg-black text-3xl text-white/20 ${className}`}>♪</span>;
 }
 
 function HeartIcon({ filled = false }: { filled?: boolean }) {

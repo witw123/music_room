@@ -9,14 +9,12 @@ import {
   getAssetManifest,
   getAssetUnit,
   getTrackAssetLink,
-  linkTrackAssets,
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import {
   musicRoomApi,
   resolveDownloadedAudioMimeType
 } from "@/lib/music-room-api";
-import { persistRoomSnapshotToLocalRepository } from "@/features/upload/local-room-storage";
 import { saveCachedAudioFileToLocalDirectory } from "@/features/upload/local-audio-storage";
 import {
   buildCachedLibraryTrackUpsertRecord,
@@ -24,8 +22,7 @@ import {
 } from "@/features/upload/cache-library";
 import {
   playbackEncoderVersion,
-  playbackProfileId,
-  prepareAudioAssets
+  playbackProfileId
 } from "@/features/upload/audio-asset-builder";
 
 export type OfflineProviderSource = {
@@ -35,8 +32,9 @@ export type OfflineProviderSource = {
 };
 
 type OfflineFallbackResult = {
-  playbackAsset: PlaybackAssetManifest;
+  playbackAsset: PlaybackAssetManifest | null;
   fileHash: string;
+  file: File | null;
 };
 
 const inFlightFallbackImports = new Map<
@@ -90,12 +88,6 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
   signal?: AbortSignal;
 }) {
   const localPlaybackAsset = await findUsableLocalPlaybackAsset(input.track.id, input.track);
-  if (localPlaybackAsset) {
-    return {
-      playbackAsset: localPlaybackAsset,
-      fileHash: localPlaybackAsset.sourceFileHash
-    } satisfies OfflineFallbackResult;
-  }
 
   const importKey = `${input.roomSnapshot.room.id}:${input.track.id}:${input.source.provider}:${input.source.trackId}`;
   const existing = inFlightFallbackImports.get(importKey);
@@ -103,7 +95,10 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
     return existing;
   }
 
-  const operation = importOfflineProviderTrack(input);
+  const operation = importOfflineProviderTrack({
+    ...input,
+    fallbackPlaybackAsset: localPlaybackAsset
+  });
   inFlightFallbackImports.set(importKey, operation);
   const sharedOperation = operation.finally(() => {
     if (inFlightFallbackImports.get(importKey) === sharedOperation) {
@@ -118,77 +113,82 @@ async function importOfflineProviderTrack(input: {
   roomSnapshot: RoomSnapshot;
   track: TrackMeta;
   source: OfflineProviderSource;
+  fallbackPlaybackAsset: PlaybackAssetManifest | null;
   onStatus?: (message: string) => void;
   signal?: AbortSignal;
 }): Promise<OfflineFallbackResult> {
-  const { roomSnapshot, track, source, onStatus, signal } = input;
-  onStatus?.(`成员不在线，正在从${source.label}获取《${track.title}》并导入曲库…`);
+  const {
+    roomSnapshot,
+    track,
+    source,
+    fallbackPlaybackAsset,
+    onStatus,
+    signal
+  } = input;
 
-  const downloaded = source.provider === "netease"
-    ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
-    : await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal);
-  const mimeType = await resolveDownloadedAudioMimeType(
-    downloaded.blob,
-    downloaded.contentType
-  );
-  const extension = mimeType === "audio/flac" ? "flac" : "mp3";
-  const file = new File(
-    [downloaded.blob],
-    `${sanitizeFileName(track.title) || source.provider}-fallback.${extension}`,
-    { type: mimeType }
-  );
+  try {
+    onStatus?.(`成员不在线，正在从${source.label}下载并保存《${track.title}》…`);
+    const downloaded = source.provider === "netease"
+      ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
+      : await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal);
+    const mimeType = await resolveDownloadedAudioMimeType(
+      downloaded.blob,
+      downloaded.contentType
+    );
+    const extension = mimeType === "audio/flac" ? "flac" : "mp3";
+    const file = new File(
+      [downloaded.blob],
+      `${sanitizeFileName(track.title) || source.provider}-fallback.${extension}`,
+      { type: mimeType }
+    );
 
-  const prepared = await prepareAudioAssets({
-    file,
-    signal,
-    onProgress: ({ stage, completed, total }) => {
-      if (stage !== "encoding" && stage !== "persisting-playback") return;
-      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-      onStatus?.(`成员不在线，正在从${source.label}导入曲库《${track.title}》 ${percent}%`);
-    }
-  });
+    const lyrics = track.lyrics?.trim() || await resolveProviderLyrics(source);
+    // The room track already owns its content hash. Avoid decoding or creating
+    // playback segments here: the downloaded provider file is the local source.
+    await upsertCachedLibraryTrack(
+      buildCachedLibraryTrackUpsertRecord({
+        roomId: roomSnapshot.room.id,
+        file,
+        track: {
+          ...track,
+          fileHash: track.fileHash,
+          sizeBytes: file.size,
+          mimeType,
+          lyrics: lyrics || null
+        }
+      })
+    );
 
-  await linkTrackAssets({
-    trackId: track.id,
-    originalAssetId: prepared.originalAsset.assetId,
-    playbackAssetId: prepared.playbackAsset.assetId
-  });
-
-  const lyrics = track.lyrics?.trim() || await resolveProviderLyrics(source);
-  await upsertCachedLibraryTrack(
-    buildCachedLibraryTrackUpsertRecord({
-      roomId: roomSnapshot.room.id,
+    // Keep the browser cache when no local repository is set. If one exists,
+    // this moves the source file into the configured local folder.
+    await saveCachedAudioFileToLocalDirectory({
       file,
-      track: {
-        ...track,
-        fileHash: prepared.fileHash,
-        sizeBytes: file.size,
-        durationMs: prepared.playbackAsset.durationMs,
-        mimeType,
-        lyrics: lyrics || null
-      }
-    })
-  );
+      fileHash: track.fileHash,
+      title: track.title,
+      mimeType,
+      provider: source.provider,
+      playbackAsset: fallbackPlaybackAsset ?? undefined
+    }).catch(() => undefined);
+    notifyCacheLibraryChanged();
 
-  // Keep the browser cache as the fallback when no local repository is set.
-  // When one exists, move the source file into it immediately instead.
-  await saveCachedAudioFileToLocalDirectory({
-    file,
-    fileHash: prepared.fileHash,
-    title: track.title,
-    mimeType,
-    provider: source.provider,
-    originalAsset: prepared.originalAsset,
-    playbackAsset: prepared.playbackAsset
-  }).catch(() => undefined);
-  await persistRoomSnapshotToLocalRepository(roomSnapshot).catch(() => undefined);
-  notifyCacheLibraryChanged();
+    onStatus?.(`成员不在线，已从${source.label}保存《${track.title}》，正在使用本地原音频播放。`);
+    return {
+      playbackAsset: fallbackPlaybackAsset,
+      fileHash: track.fileHash,
+      file
+    };
+  } catch (error) {
+    if (signal?.aborted || !fallbackPlaybackAsset) {
+      throw error;
+    }
 
-  onStatus?.(`成员不在线，已从${source.label}导入《${track.title}》，正在播放。`);
-  return {
-    playbackAsset: prepared.playbackAsset,
-    fileHash: prepared.fileHash
-  };
+    onStatus?.(`成员不在线，${source.label}下载失败，使用已有播放资产继续播放。`);
+    return {
+      playbackAsset: fallbackPlaybackAsset,
+      fileHash: fallbackPlaybackAsset.sourceFileHash,
+      file: null
+    };
+  }
 }
 
 async function findUsableLocalPlaybackAsset(

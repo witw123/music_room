@@ -1,9 +1,32 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getMemberAudibleStatus, getPlaybackStatus, resolveMemberMediaRates } from "./MembersPanel";
+import {
+  getMemberAudibleStatus,
+  getPlaybackStatus,
+  isMemberCurrentSource,
+  resolveMemberMediaRates
+} from "./MembersPanel";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 
 describe("MembersPanel WebRTC media status", () => {
+  it("labels a non-source local file as local playback instead of speaking", () => {
+    const audible = getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: true,
+      isCurrentSource: false,
+      localMemberState: {
+        memberId: "member_1",
+        audible: true,
+        playbackPath: "local-file",
+        playbackStatus: { label: "正常出声", detail: "", tone: "success", badgeText: "本地音频" }
+      },
+      diagnostic: undefined
+    });
+
+    expect(audible).toMatchObject({ label: "本地播放", active: true });
+  });
+
   it("shows the local member as speaking only while local playback is audible", () => {
     const audible = getMemberAudibleStatus({
       presenceState: "online",
@@ -12,11 +35,60 @@ describe("MembersPanel WebRTC media status", () => {
       localMemberState: {
         memberId: "member_1",
         audible: true,
+        playbackPath: "local-file",
         playbackStatus: { label: "正常出声", detail: "", tone: "success", badgeText: "RTP Opus" }
       },
       diagnostic: undefined
     });
     expect(audible).toMatchObject({ label: "正在发声", active: true });
+  });
+
+  it("labels a local listener receiving the source stream as playing", () => {
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: true,
+      isCurrentSource: false,
+      localMemberState: {
+        memberId: "member_1",
+        audible: true,
+        playbackPath: "remote-stream",
+        playbackStatus: { label: "正常出声", detail: "", tone: "success", badgeText: "RTP Opus" }
+      },
+      diagnostic: undefined
+    })).toMatchObject({ label: "正在播放", active: true });
+  });
+
+  it("uses the source session identity ahead of a stale peer id", () => {
+    expect(isMemberCurrentSource({
+      member: { id: "member_1", peerId: "peer_old" },
+      sourceSessionId: "member_2",
+      sourcePeerId: "peer_old"
+    })).toBe(false);
+    expect(isMemberCurrentSource({
+      member: { id: "member_2", peerId: "peer_new" },
+      sourceSessionId: "member_2",
+      sourcePeerId: "peer_old"
+    })).toBe(true);
+  });
+
+  it("labels a paused source as not speaking while listeners are not playing", () => {
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: false,
+      isLocal: true,
+      isCurrentSource: true,
+      localMemberState: null,
+      diagnostic: undefined
+    })).toMatchObject({ label: "未发声", active: false });
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: false,
+      isLocal: false,
+      isCurrentSource: false,
+      localMemberState: null,
+      diagnostic: undefined
+    })).toMatchObject({ label: "未播放", active: false });
   });
 
   it("uses a fresh remote self-report for the speaking indicator", () => {

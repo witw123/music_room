@@ -312,6 +312,7 @@ function RoomDashboardViewBase({
               localMemberState={localMemberState}
               playbackStatus={roomSnapshot.room.playback.status}
               sourcePeerId={currentSourcePeerId}
+              sourceSessionId={roomSnapshot.room.playback.sourceSessionId}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}

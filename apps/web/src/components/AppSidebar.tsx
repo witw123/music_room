@@ -32,7 +32,17 @@ const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: Ico
   { id: "profile", label: "个人中心", href: "/app/profile", icon: "profile" }
 ];
 
-type IconName = "home" | "search" | "playlist" | "favorite" | "profile" | "logout";
+type IconName =
+  | "home"
+  | "search"
+  | "playlist"
+  | "favorite"
+  | "profile"
+  | "logout"
+  | "collapse"
+  | "expand";
+
+const sidebarCollapsedStorageKey = "music-room-sidebar-collapsed";
 
 export function AppSidebar({
   activeSession,
@@ -47,9 +57,19 @@ export function AppSidebar({
   const router = useRouter();
   const currentItem = activeItem ?? resolveActiveItem(pathname);
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const desktopBottomOffsetClass = hasBottomPlayer
     ? "md:bottom-[11.5rem] lg:bottom-[5.25rem]"
     : "md:bottom-0";
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(sidebarCollapsedStorageKey) === "true");
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.sidebarCollapsed = String(collapsed);
+    window.localStorage.setItem(sidebarCollapsedStorageKey, String(collapsed));
+  }, [collapsed]);
 
   useEffect(() => {
     const syncAwayRoom = () => setAwayRoomId(readAwayRoomId());
@@ -72,13 +92,13 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:w-60 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r ${desktopBottomOffsetClass}`}
+      className={`relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 text-foreground shadow-2xl backdrop-blur-2xl md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:transition-[width] md:duration-200 ${collapsed ? "md:w-16" : "md:w-52"} ${desktopBottomOffsetClass}`}
       aria-label="主导航"
     >
-      <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-4 md:py-5`}>
+      <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} ${collapsed ? "md:px-2 md:py-3" : "md:px-4 md:py-5"}`}>
         <Link
           href="/app"
-          className="flex min-w-0 items-center gap-3"
+          className={`flex min-w-0 items-center gap-3 ${collapsed ? "md:justify-center" : ""}`}
           aria-label="返回首页"
           onClick={(event) => {
             if (keepHomeInRoom) {
@@ -93,7 +113,7 @@ export function AppSidebar({
           <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-[0_8px_30px_rgba(0,112,243,0.28)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
             <NavIcon name="home" size={17} />
           </span>
-          <span className="min-w-0 leading-none">
+          <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
             <span className="block truncate text-sm font-bold tracking-tight text-white">Music Room</span>
             <span className="mt-1 block truncate text-[10px] text-white/[0.42]">实时协作听歌空间</span>
           </span>
@@ -103,12 +123,20 @@ export function AppSidebar({
             <LogoutButton onLogout={onLogout} />
           </span>
         ) : null}
-        <span className="ml-auto hidden text-[10px] font-bold uppercase tracking-[0.24em] text-white/[0.3] md:block md:pl-1 md:pt-7">
-          Workspace
-        </span>
+        <button
+          aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
+          aria-expanded={!collapsed}
+          className={`hidden items-center rounded-lg text-white/[0.45] transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex ${collapsed ? "md:justify-center md:px-2 md:py-2" : "md:justify-start md:gap-3 md:px-3 md:py-2"}`}
+          onClick={() => setCollapsed((value) => !value)}
+          title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
+          type="button"
+        >
+          <NavIcon name={collapsed ? "expand" : "collapse"} size={17} />
+          <span className={collapsed ? "sr-only" : "text-xs"}>{collapsed ? "展开" : "收纳"}</span>
+        </button>
       </div>
 
-      <div className={`flex items-center md:flex-col md:items-stretch md:gap-5 md:p-4 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
+      <div className={`flex items-center md:flex-col md:items-stretch ${collapsed ? "md:gap-3 md:p-2" : "md:gap-5 md:p-4"} ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
         <nav className="flex min-w-0 flex-1 items-center gap-1 md:flex-col md:items-stretch" aria-label="工作区">
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
@@ -128,16 +156,17 @@ export function AppSidebar({
                     storeAwayRoomId(roomId);
                   }
                 }}
+                title={collapsed ? item.label : undefined}
                 className={`group flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
                     ? "bg-accent/15 text-white shadow-[inset_2px_0_0_#0070f3]"
                     : keepsHomeInRoom
                       ? "cursor-default text-white/[0.48]"
                       : "text-white/[0.48] hover:bg-white/[0.06] hover:text-white"
-                }`}
+                } ${collapsed ? "md:justify-center md:px-2" : ""}`}
               >
                 <NavIcon name={item.icon} />
-                <span className="truncate">{item.label}</span>
+                <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>
               </Link>
             );
           })}
@@ -145,7 +174,7 @@ export function AppSidebar({
 
         {showAwayRoomStatus && awayRoomId ? (
           <div
-            className="min-w-0 border-t border-amber-300/20 pt-3 md:mt-1"
+            className={`min-w-0 border-t border-amber-300/20 pt-3 md:mt-1 ${collapsed ? "md:hidden" : ""}`}
             data-testid="away-room-sidebar-indicator"
           >
             <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2">
@@ -164,8 +193,8 @@ export function AppSidebar({
         ) : null}
 
         {activeSession ? (
-          <div className="hidden border-t border-white/[0.07] pt-4 md:block">
-            <UserSummary activeSession={activeSession} onLogout={onLogout} />
+          <div className={`hidden border-t border-white/[0.07] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>
+            <UserSummary activeSession={activeSession} onLogout={onLogout} collapsed={collapsed} />
           </div>
         ) : null}
       </div>
@@ -195,17 +224,19 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
 
 function UserSummary({
   activeSession,
-  onLogout
+  onLogout,
+  collapsed = false
 }: {
   activeSession: AuthSession;
   onLogout?: () => void;
+  collapsed?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
+    <div className={`flex min-w-0 items-center gap-2.5 ${collapsed ? "justify-center" : ""}`}>
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-xs font-bold text-accent">
         {getInitial(activeSession.nickname)}
       </span>
-      <div className="min-w-0 flex-1">
+      <div className={`min-w-0 flex-1 ${collapsed ? "hidden" : ""}`}>
         <p className="truncate text-xs font-semibold text-white/[0.82]">{activeSession.nickname}</p>
         <p className="truncate text-[10px] text-white/[0.35]">@{activeSession.username}</p>
       </div>
@@ -290,6 +321,24 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
     return (
       <svg {...commonProps}>
         <path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" />
+      </svg>
+    );
+  }
+
+  if (name === "collapse") {
+    return (
+      <svg {...commonProps}>
+        <path d="M9 4v16" />
+        <path d="m14 8-4 4 4 4" />
+      </svg>
+    );
+  }
+
+  if (name === "expand") {
+    return (
+      <svg {...commonProps}>
+        <path d="M15 4v16" />
+        <path d="m10 8 4 4-4 4" />
       </svg>
     );
   }

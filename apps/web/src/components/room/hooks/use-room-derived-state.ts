@@ -38,6 +38,13 @@ export type UseRoomDerivedStateInput = {
 const emptyWorkspacePeerDiagnostics: PeerDiagnosticsSnapshot[] = [];
 const emptyWorkspacePeerRecentEvents: PeerRecentEvent[] = [];
 
+export function isLocalPlaybackAudible(segmentedPlayback: SegmentedPlaybackSnapshot) {
+  return segmentedPlayback.state === "live" && (
+    segmentedPlayback.sourceHealth === undefined ||
+    segmentedPlayback.sourceHealth === "source-ready"
+  );
+}
+
 export function useRoomDerivedState({
   roomSnapshot,
   connectedPeers,
@@ -134,14 +141,11 @@ export function useRoomDerivedState({
       playbackStatus: roomSnapshot.room.playback.status,
       segmentedPlayback
     });
-    const audible = segmentedPlayback.state === "live" &&
-      (segmentedPlayback.sourceHealth === undefined || (
-        segmentedPlayback.sourceHealth === "source-ready" &&
-        (segmentedPlayback.sourceEnergy === undefined || segmentedPlayback.sourceEnergy > 0.002)
-      ));
+    const audible = isLocalPlaybackAudible(segmentedPlayback);
     return {
       memberId: localMember.id,
       audible,
+      playbackPath: segmentedPlayback.audioPath,
       mediaSummary: {
         receiveRateKbps: totalMediaReceiveRateKbps,
         sendRateKbps: totalMediaSendRateKbps,

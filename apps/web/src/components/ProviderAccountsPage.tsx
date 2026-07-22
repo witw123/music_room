@@ -44,15 +44,7 @@ export function ProviderAccountsPage() {
     <main className="relative h-screen min-h-screen overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-12 md:mx-0 md:max-w-[1400px] md:px-8 md:pt-28">
-        <div className="max-w-2xl">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Profile</p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">个人中心</h1>
-          <p className="mt-4 max-w-xl text-sm leading-7 text-foreground-muted sm:text-base">
-            管理网易云音乐和 QQ 音乐账号。绑定后即可在搜索页访问歌曲、歌词、歌单和专辑数据。
-          </p>
-        </div>
-
-        <section className="mt-8 grid min-w-0 gap-4 sm:mt-10 lg:grid-cols-2">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-2">
           {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
             <NeteaseSourcePanel activeSession={activeSession} mode="account" />
           ) : null}

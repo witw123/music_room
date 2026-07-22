@@ -62,6 +62,18 @@
   .thin-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Keep the content gutter aligned with the compact desktop sidebar. */
+  @media (min-width: 768px) {
+    html:not([data-sidebar-collapsed="true"]) .md\:pl-60 {
+      padding-left: 13rem !important;
+    }
+
+    html[data-sidebar-collapsed="true"] .md\:pl-60 {
+      padding-left: 4rem !important;
+    }
+  }
+
   .netease-results-scroll,
   .qqmusic-results-scroll {
     scrollbar-gutter: stable;

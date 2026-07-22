@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isSegmentedPlaybackAudible,
+  resolveRoomAudioPath,
   resolveReceiverPlaybackState,
   resolveRoomAudioPositionMs
 } from "./use-room-segmented-playback-runtime";
@@ -49,6 +50,29 @@ describe("segmented playback audible state", () => {
       isCurrentSource: true,
       sourceHealth: "source-silent"
     })).toBe(false);
+  });
+
+  it("treats a live native local file as audible for the source member", () => {
+    expect(isSegmentedPlaybackAudible({
+      state: "live",
+      isCurrentSource: true,
+      nativeLocalAudio: true
+    })).toBe(true);
+  });
+});
+
+describe("room audio path", () => {
+  it("distinguishes local files from a remote listener stream", () => {
+    expect(resolveRoomAudioPath({
+      isCurrentSource: false,
+      nativeLocalAudio: true,
+      localFallback: false
+    })).toBe("local-file");
+    expect(resolveRoomAudioPath({
+      isCurrentSource: false,
+      nativeLocalAudio: false,
+      localFallback: false
+    })).toBe("remote-stream");
   });
 });
 
