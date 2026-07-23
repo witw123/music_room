@@ -540,7 +540,7 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaOffers).toHaveLength(1);
   });
 
-  it("restarts a connected source media peer without destroying its track after consecutive zero outbound samples", async () => {
+  it("does not renegotiate a connected source media peer for a transient zero outbound window", async () => {
     const { manager } = createManager();
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
     const stream = {
@@ -581,8 +581,43 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(initialMediaPeer.mediaSender?.track).toBe(track);
     expect(initialMediaPeer.localDescription).toEqual({
       type: "offer",
-      sdp: "fake-restart-offer"
+      sdp: "fake-offer"
     });
+    expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);
+  });
+
+  it("does not reoffer a connected listener when its live receiver has a transient packet gap", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const initialMediaPeer = mediaEntry.connection as unknown as FakeRTCPeerConnection;
+    initialMediaPeer.signalingState = "stable";
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = true;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    const sample = {
+      mediaReceiveBitrateKbps: 0,
+      mediaSendBitrateKbps: null,
+      lastMediaReceivePacketAtMs: 100,
+      packetLossRate: null,
+      jitterMs: null
+    } as PeerConnectionStatsSample;
+
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(initialMediaPeer.localDescription).toBeNull();
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);
   });
 

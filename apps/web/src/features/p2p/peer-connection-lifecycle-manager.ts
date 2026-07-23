@@ -1534,6 +1534,20 @@ export class PeerConnectionLifecycleManager {
       return;
     }
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
+    const connectedLiveMediaHasPacketGap = reason === "no-packets" &&
+      entry.connection.connectionState === "connected" &&
+      (entry.senderTrackState === "live" || entry.receiverTrackState === "live");
+    if (connectedLiveMediaHasPacketGap) {
+      // ICE/DTLS is still healthy and the negotiated track is still usable.
+      // Re-offering here tears down the receiver's jitter buffer and turns a
+      // transient RTP/statistics gap into a repeating silence cycle. Keep the
+      // existing track and let RTP/unmute or the connection-state watchdog
+      // recover it; missing/ended tracks still take the recovery path below.
+      state.noPacketWindows = 0;
+      state.noSendPacketWindows = 0;
+      this.mediaRecovery.set(peerId, state);
+      return;
+    }
     const now = Date.now();
     state.restartTimesMs = state.restartTimesMs.filter((timestamp) => now - timestamp < 30_000);
     const lastRecoveryAtMs = state.restartTimesMs[state.restartTimesMs.length - 1] ?? null;
