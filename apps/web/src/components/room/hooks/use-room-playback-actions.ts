@@ -8,19 +8,24 @@ import {
   type RefObject,
   type SetStateAction
 } from "react";
-import type { QueueItem, RoomSnapshot } from "@music-room/shared";
+import type { QueueItem, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import {
   createPlaybackStartRequest,
   type PlaybackStartRequest
 } from "@/features/playback/playback-start-request";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import {
+  installBrowserMediaSessionActionHandlers,
+  syncBrowserMediaSession
+} from "@/features/playback/playback-media-session";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 
 type UseRoomPlaybackActionsInput = {
   currentPlaybackPositionRef: MutableRefObject<number>;
   audioRef: RefObject<HTMLAudioElement | null>;
   roomSnapshot: RoomSnapshot | null;
+  currentTrack: TrackMeta | null;
   currentPlaybackTrackId: string | null;
   playbackMediaEpoch: number | null;
   playbackQueueVersion: number | null;
@@ -32,6 +37,8 @@ type UseRoomPlaybackActionsInput = {
   addToQueue: (trackId: string) => Promise<QueueItem | null>;
   playTrack: (trackId?: string) => Promise<unknown>;
   playQueueItem: (queueItemId: string, trackId?: string) => Promise<unknown>;
+  pauseTrack: (positionMs?: number) => Promise<unknown>;
+  seekTrack: (positionMs: number) => Promise<unknown>;
   prevTrack: () => Promise<unknown>;
   nextTrack: () => Promise<unknown>;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -59,6 +66,7 @@ export function useRoomPlaybackActions({
   currentPlaybackPositionRef,
   audioRef,
   roomSnapshot,
+  currentTrack,
   currentPlaybackTrackId,
   playbackMediaEpoch,
   playbackQueueVersion,
@@ -70,6 +78,8 @@ export function useRoomPlaybackActions({
   addToQueue,
   playTrack,
   playQueueItem,
+  pauseTrack,
+  seekTrack,
   prevTrack,
   nextTrack,
   recordPeerDiagnostic,
@@ -312,6 +322,38 @@ export function useRoomPlaybackActions({
     });
     await nextTrack();
   }, [armPlaybackStart, nextTrack]);
+
+  useEffect(() => {
+    syncBrowserMediaSession({
+      track: currentTrack,
+      playback: roomSnapshot?.room.playback,
+      positionMs: currentPlaybackPositionRef.current
+    });
+  }, [currentPlaybackPositionRef, currentTrack, roomSnapshot?.room.playback]);
+
+  useEffect(() => () => {
+    syncBrowserMediaSession({ track: null, playback: null });
+  }, []);
+
+  useEffect(
+    () => installBrowserMediaSessionActionHandlers({
+      onPlay: () => handlePlayTrack(),
+      onPause: () => pauseTrack(currentPlaybackPositionRef.current),
+      onStop: () => pauseTrack(currentPlaybackPositionRef.current),
+      onPreviousTrack: handlePrevTrack,
+      onNextTrack: handleNextTrack,
+      getPositionMs: () => currentPlaybackPositionRef.current,
+      onSeek: (positionMs) => seekTrack(positionMs)
+    }),
+    [
+      currentPlaybackPositionRef,
+      handleNextTrack,
+      handlePlayTrack,
+      handlePrevTrack,
+      pauseTrack,
+      seekTrack
+    ]
+  );
 
   useEffect(() => {
     if (

@@ -6,6 +6,7 @@ import { formatDuration } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
+import { parseRoomLyrics } from "@/components/room/room-lyrics";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
 import { useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
@@ -180,36 +181,45 @@ export function ImmersivePlayerOverlay({
         <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
 
-      <main className="relative z-10 mx-auto hidden h-[100dvh] min-h-0 w-full max-w-[1480px] grid-cols-[minmax(19rem,0.78fr)_minmax(22rem,1.22fr)] items-center gap-8 overflow-hidden px-8 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:grid-cols-[minmax(22rem,0.82fr)_minmax(28rem,1.18fr)] lg:gap-14 lg:px-12 xl:gap-20 xl:px-16">
-        <DesktopImmersivePlayer
-          artworkPalette={artworkPalette}
-          artworkUrl={currentTrack?.artworkUrl ?? null}
-          canControlPlayback={canControlPlayback}
-          canRemoveQueue={canRemoveQueue}
-          canReorderQueue={canReorderQueue}
-          canSeekPlayback={canSeekPlayback}
-          currentQueueItemId={currentQueueItemId}
-          currentTrack={currentTrack}
-          durationMs={durationMs}
-          isPlaying={isPlaying}
-          onCyclePlaybackMode={onCyclePlaybackMode}
-          onNext={onNext}
-          onPlayQueueItem={onPlayQueueItem}
-          onPrev={onPrev}
-          onRemoveQueueItem={onRemoveQueueItem}
-          onReorderQueue={onReorderQueue}
-          onTogglePlay={onTogglePlay}
-          playbackMode={playbackMode}
-          playbackTrackId={playbackTrackId}
-          positionMs={positionMs}
-          queue={queue}
-          setSeekDraft={setSeekDraft}
-          tracks={tracks}
-          volume={volume}
-          applyVolume={applyVolume}
-          commitSeek={commitSeek}
-        />
-        <section className="flex min-h-0 w-full min-w-0 flex-col justify-center overflow-hidden" aria-label="歌曲信息与歌词">
+      <main className="relative z-10 mx-auto hidden h-[100dvh] min-h-0 w-full max-w-[1560px] grid-cols-2 items-center gap-12 overflow-hidden px-10 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:gap-16 lg:px-14 xl:gap-24 xl:px-20">
+        <div className="relative flex min-h-0 w-full min-w-0 items-center justify-center">
+          <DesktopImmersivePlayer
+            artworkPalette={artworkPalette}
+            artworkUrl={currentTrack?.artworkUrl ?? null}
+            canControlPlayback={canControlPlayback}
+            canSeekPlayback={canSeekPlayback}
+            currentTrack={currentTrack}
+            durationMs={durationMs}
+            isPlaying={isPlaying}
+            onCyclePlaybackMode={onCyclePlaybackMode}
+            onNext={onNext}
+            onPrev={onPrev}
+            onTogglePlay={onTogglePlay}
+            playbackMode={playbackMode}
+            playbackTrackId={playbackTrackId}
+            positionMs={positionMs}
+            setSeekDraft={setSeekDraft}
+            volume={volume}
+            applyVolume={applyVolume}
+            commitSeek={commitSeek}
+          />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2">
+            <PlayerQueueDrawer
+              accentColor={artworkPalette.accent}
+              accentSoft={artworkPalette.accentSoft}
+              canControlPlayback={canControlPlayback}
+              canRemoveQueue={canRemoveQueue}
+              canReorderQueue={canReorderQueue}
+              currentQueueItemId={currentQueueItemId}
+              onPlayQueueItem={onPlayQueueItem}
+              onRemoveQueueItem={onRemoveQueueItem}
+              onReorderQueue={onReorderQueue}
+              queue={queue}
+              tracks={tracks}
+            />
+          </div>
+        </div>
+        <section className="flex h-[min(78vh,52rem)] min-h-0 w-full max-w-[36rem] min-w-0 flex-col justify-center justify-self-center overflow-hidden" aria-label="歌曲信息与歌词">
           <div className="mb-3 flex items-center justify-between gap-4 px-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">
             <span>歌词</span>
             <span className="truncate text-right normal-case tracking-normal text-white/35">{currentTrack?.album ?? "正在播放"}</span>
@@ -269,7 +279,7 @@ function MobileImmersivePlayer({
   const controlsDisabled = !canControlPlayback || !playbackTrackId;
 
   return (
-    <section className="relative z-10 flex h-full min-h-0 flex-col px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] md:hidden">
+    <section className="relative z-10 flex h-full min-h-0 flex-col px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(2.25rem+env(safe-area-inset-top))] md:hidden">
       <header className="flex h-12 shrink-0 items-center justify-between">
         <button aria-label="退出沉浸式播放" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/85 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={onClose} title="退出沉浸式播放" type="button">
           <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9"><path d="m6 9 6 6 6-6" /></svg>
@@ -357,26 +367,18 @@ type DesktopImmersivePlayerProps = {
   artworkPalette: ArtworkPalette;
   artworkUrl: string | null;
   canControlPlayback: boolean;
-  canRemoveQueue: boolean;
-  canReorderQueue: boolean;
   canSeekPlayback: boolean;
-  currentQueueItemId: string | null;
   currentTrack: TrackMeta | null;
   durationMs: number;
   isPlaying: boolean;
   onCyclePlaybackMode: () => void | Promise<void>;
   onNext: () => void;
-  onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onPrev: () => void;
-  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
-  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onTogglePlay: () => void;
   playbackMode: PlaybackMode;
   playbackTrackId: string | null | undefined;
   positionMs: number;
-  queue: QueueItem[];
   setSeekDraft: (value: number | null) => void;
-  tracks: TrackMeta[];
   volume: number;
   applyVolume: (value: number) => void;
   commitSeek: () => void;
@@ -386,26 +388,18 @@ function DesktopImmersivePlayer({
   artworkPalette,
   artworkUrl,
   canControlPlayback,
-  canRemoveQueue,
-  canReorderQueue,
   canSeekPlayback,
-  currentQueueItemId,
   currentTrack,
   durationMs,
   isPlaying,
   onCyclePlaybackMode,
   onNext,
-  onPlayQueueItem,
   onPrev,
-  onRemoveQueueItem,
-  onReorderQueue,
   onTogglePlay,
   playbackMode,
   playbackTrackId,
   positionMs,
-  queue,
   setSeekDraft,
-  tracks,
   volume,
   applyVolume,
   commitSeek
@@ -432,19 +426,6 @@ function DesktopImmersivePlayer({
           <p className="mt-0.5 truncate text-sm text-white/65">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</p>
           <p className="mt-1 truncate text-xs text-white/40">{currentTrack?.album ?? "未知专辑"}</p>
         </div>
-        <PlayerQueueDrawer
-          accentColor={artworkPalette.accent}
-          accentSoft={artworkPalette.accentSoft}
-          canControlPlayback={canControlPlayback}
-          canRemoveQueue={canRemoveQueue}
-          canReorderQueue={canReorderQueue}
-          currentQueueItemId={currentQueueItemId}
-          onPlayQueueItem={onPlayQueueItem}
-          onRemoveQueueItem={onRemoveQueueItem}
-          onReorderQueue={onReorderQueue}
-          queue={queue}
-          tracks={tracks}
-        />
       </div>
 
       <div className="mt-5 flex items-center gap-3">
@@ -571,13 +552,15 @@ function ImmersiveLyrics({ desktop = false, isOpen, isPlaying, mobile = false, p
       setLyricsStatus("idle");
       return;
     }
-    if (roomLyrics?.trim()) {
-      setPlainLyric(roomLyrics.trim());
+    const fallbackLyrics = roomLyrics?.trim() || null;
+    const hasTimedLyrics = parseRoomLyrics(fallbackLyrics).some((line) => line.timeMs !== null);
+    if (fallbackLyrics && (hasTimedLyrics || !sourceProvider || !sourceTrackId)) {
+      setPlainLyric(fallbackLyrics);
       setLyricsStatus("ready");
       return;
     }
     if (!sourceProvider || !sourceTrackId) {
-      setPlainLyric(null);
+      setPlainLyric(fallbackLyrics);
       setLyricsStatus("ready");
       return;
     }
@@ -586,12 +569,12 @@ function ImmersiveLyrics({ desktop = false, isOpen, isPlaying, mobile = false, p
     const request = sourceProvider === "netease" ? musicRoomApi.getNeteaseLyrics(sourceTrackId) : musicRoomApi.getQqMusicLyrics(sourceTrackId);
     void request.then((lyrics) => {
       if (!cancelled) {
-        setPlainLyric(lyrics.plainLyric);
+        setPlainLyric(lyrics.plainLyric?.trim() || fallbackLyrics);
         setLyricsStatus("ready");
       }
     }).catch(() => {
       if (!cancelled) {
-        setPlainLyric(null);
+        setPlainLyric(fallbackLyrics);
         setLyricsStatus("error");
       }
     });

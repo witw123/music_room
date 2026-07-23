@@ -310,7 +310,7 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative flex h-auto w-full min-h-0 flex-col px-3 py-3 sm:px-5 md:px-8 lg:h-full ${
+      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 pt-[calc(2.25rem+env(safe-area-inset-top))] sm:px-5 md:px-8 lg:h-full ${
         ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
       }`}
     >

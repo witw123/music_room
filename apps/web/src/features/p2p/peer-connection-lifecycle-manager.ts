@@ -32,13 +32,7 @@ import {
   samplePeerConnectionStats,
   type PeerConnectionStatsSample
 } from "./connection-stats";
-import {
-  audioBitrateDegradationConfirmWindows,
-  hasAudioNetworkDegradationSignal,
-  maximumAudioBitrateKbps,
-  resolveAggregateAudioBitratesKbps,
-  type AggregateAudioBitrateInput
-} from "./audio-bitrate-policy";
+import { maximumAudioBitrateKbps } from "./audio-bitrate-policy";
 
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
 
@@ -162,7 +156,6 @@ export class PeerConnectionLifecycleManager {
   private readonly onMediaRecovery?: PeerConnectionLifecycleManagerInput["onMediaRecovery"];
   private readonly mediaRecovery = new Map<string, MediaRecoveryState>();
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
-  private readonly audioBitrateDegradationWindows = new Map<string, number>();
   private readonly mediaRecoveryOperations = new Map<string, Promise<PeerEntry | null>>();
   private readonly provisionalIncomingMediaTimers = new WeakMap<
     PeerEntry,
@@ -218,7 +211,6 @@ export class PeerConnectionLifecycleManager {
           }
         });
         if (isMediaSample) {
-          this.adaptAudioBitrate(payload.peerId, mediaEntry, payload.sample);
           this.observeMediaHealth(payload.peerId, payload.sample);
         }
       },
@@ -1054,7 +1046,6 @@ export class PeerConnectionLifecycleManager {
     if (entry.linkKind === "media") {
       this.clearProvisionalIncomingMediaAdmission(entry);
       this.latestMediaSamples.delete(peerId);
-      this.audioBitrateDegradationWindows.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
       // Keep recovery history while an expected media peer is being replaced.
       // Otherwise every failed recreation starts at attempt zero and the
@@ -1340,88 +1331,6 @@ export class PeerConnectionLifecycleManager {
     } catch {
       // Browser codecs may reject a runtime bitrate update; RTP remains usable.
     }
-  }
-
-  private adaptAudioBitrate(
-    peerId: string,
-    entry: PeerEntry | null,
-    sample: PeerConnectionStatsSample
-  ) {
-    if (
-      !entry ||
-      entry.releasing ||
-      !entry.audioSender?.track ||
-      this.localAudioSourcePeerId !== this.localPeerId ||
-      this.localAudioMaxBitrateKbps === null
-    ) {
-      return;
-    }
-
-    const degradationWindows = hasAudioNetworkDegradationSignal({
-      packetLossRate: sample.packetLossRate ?? null,
-      jitterMs: sample.jitterMs ?? null,
-      roundTripTimeMs: sample.currentRoundTripTimeMs
-    })
-      ? Math.min(
-          audioBitrateDegradationConfirmWindows,
-          (this.audioBitrateDegradationWindows.get(peerId) ?? 0) + 1
-        )
-      : 0;
-    if (degradationWindows > 0) {
-      this.audioBitrateDegradationWindows.set(peerId, degradationWindows);
-    } else {
-      this.audioBitrateDegradationWindows.delete(peerId);
-    }
-    const nextKbps = this.resolveAggregateAudioBitrate(peerId, sample);
-    const currentKbps = entry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps;
-    if (nextKbps === null || nextKbps === currentKbps) {
-      return;
-    }
-
-    void enqueuePeerOperation(entry, async () => {
-      if (
-        entry.releasing ||
-        entry.audioSender === null ||
-        this.localAudioSourcePeerId !== this.localPeerId ||
-        this.localAudioMaxBitrateKbps === null
-      ) {
-        return;
-      }
-      const latestKbps = this.resolveAggregateAudioBitrate(peerId, sample);
-      if (latestKbps !== null && latestKbps !== entry.appliedAudioBitrateKbps) {
-        await this.applyAudioSenderParameters(entry.audioSender, latestKbps);
-      }
-    }).catch(() => undefined);
-  }
-
-  private resolveAggregateAudioBitrate(
-    peerId: string,
-    fallbackSample: PeerConnectionStatsSample
-  ) {
-    if (this.localAudioMaxBitrateKbps === null) {
-      return null;
-    }
-
-    const inputs: AggregateAudioBitrateInput[] = [];
-    for (const [currentPeerId, currentEntry] of this.peerConnections.entries("media")) {
-      if (currentEntry.releasing || !currentEntry.audioSender?.track) {
-        continue;
-      }
-      const currentSample = currentPeerId === peerId
-        ? fallbackSample
-        : this.latestMediaSamples.get(currentPeerId);
-      inputs.push({
-        peerId: currentPeerId,
-        requestedKbps: this.localAudioMaxBitrateKbps,
-        currentKbps: currentEntry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps,
-        availableOutgoingBitrateKbps: currentSample?.availableOutgoingBitrateKbps ?? null,
-        packetLossRate: currentSample?.packetLossRate ?? null,
-        jitterMs: currentSample?.jitterMs ?? null,
-        roundTripTimeMs: currentSample?.currentRoundTripTimeMs ?? null,
-        degradedNetworkWindows: this.audioBitrateDegradationWindows.get(currentPeerId) ?? 0
-      });
-    }
-    return resolveAggregateAudioBitratesKbps(inputs).get(peerId) ?? null;
   }
 
   private async recreatePeerNow(peerId: string, entry: PeerEntry): Promise<PeerEntry | null> {
