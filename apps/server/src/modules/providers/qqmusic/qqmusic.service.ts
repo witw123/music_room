@@ -30,13 +30,11 @@ import {
 } from "./qqmusic.schemas";
 
 type QrAttempt = { userId: string; qrsig: string; ptqrtoken: string };
-type DiscoverCacheEntry = { value: unknown; freshUntil: number; staleUntil: number };
 const qrTtlSeconds = 180;
 const qrKeyPrefix = "music-room:qqmusic:qr:";
 @Injectable()
 export class QqMusicService {
   private readonly rateLimits = new Map<string, number[]>();
-  private readonly discoverCache = new Map<string, DiscoverCacheEntry>();
   constructor(private readonly api: QqMusicApiClient, private readonly accounts: QqMusicAccountService, private readonly redis: RedisService) {}
   async getAccountStatus(userId: string) { this.assertEnabled(); return this.accounts.getStatus(userId); }
   async startQrLogin(userId: string) {
@@ -101,22 +99,20 @@ export class QqMusicService {
   async getPlaylistCategories(userId: string): Promise<ProviderPlaylistCategoryListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60);
-    return this.getCachedDiscovery("playlist-categories", 3_600, async () => {
-      const body = await this.callProvider(() => this.api.getPlaylistCategories());
-      const data = unwrapData(body);
-      const groups = Array.isArray(data?.categories) ? data.categories : [];
-      const items = groups.flatMap((group) => {
-        const groupRecord = asRecord(group);
-        const groupName = readString(groupRecord?.categoryGroupName);
-        const records = Array.isArray(groupRecord?.items) ? groupRecord.items : [];
-        return records
-          .map((item) => this.toPlaylistCategory(item, groupName))
-          .filter((item): item is ProviderPlaylistCategory => !!item);
-      });
-      return {
-        items: [...new Map(items.map((item) => [item.id, item])).values()]
-      };
+    const body = await this.callProvider(() => this.api.getPlaylistCategories());
+    const data = unwrapData(body);
+    const groups = Array.isArray(data?.categories) ? data.categories : [];
+    const items = groups.flatMap((group) => {
+      const groupRecord = asRecord(group);
+      const groupName = readString(groupRecord?.categoryGroupName);
+      const records = Array.isArray(groupRecord?.items) ? groupRecord.items : [];
+      return records
+        .map((item) => this.toPlaylistCategory(item, groupName))
+        .filter((item): item is ProviderPlaylistCategory => !!item);
     });
+    return {
+      items: [...new Map(items.map((item) => [item.id, item])).values()]
+    };
   }
 
   async getCategoryPlaylists(
@@ -125,41 +121,33 @@ export class QqMusicService {
   ): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60);
-    return this.getCachedDiscovery(
-      `category:${query.categoryId}:${query.sortId}:${query.limit}:${query.offset}`,
-      300,
-      async () => {
-        const body = await this.callProvider(() => this.api.getCategoryPlaylists(query));
-        const data = unwrapData(body);
-        return {
-          items: (Array.isArray(data?.list) ? data.list : [])
-            .map((item) => this.toPlaylistSummary(item))
-            .filter((item): item is ProviderPlaylistSummary => !!item),
-          limit: query.limit,
-          offset: query.offset
-        };
-      }
-    );
+    const body = await this.callProvider(() => this.api.getCategoryPlaylists(query));
+    const data = unwrapData(body);
+    return {
+      items: (Array.isArray(data?.list) ? data.list : [])
+        .map((item) => this.toPlaylistSummary(item))
+        .filter((item): item is ProviderPlaylistSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
   }
 
   async getToplists(userId: string): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60);
-    return this.getCachedDiscovery("toplists", 600, async () => {
-      const body = await this.callProvider(() => this.api.getToplists());
-      const data = unwrapData(body);
-      const records = Array.isArray(data?.topList)
-        ? data.topList
-        : Array.isArray(data?.toplist)
-          ? data.toplist
-          : Array.isArray(data?.list)
-            ? data.list
-            : [];
-      const items = records
-        .map((item) => this.toPlaylistSummary(item))
-        .filter((item): item is ProviderPlaylistSummary => !!item);
-      return { items, limit: Math.max(1, items.length), offset: 0 };
-    });
+    const body = await this.callProvider(() => this.api.getToplists());
+    const data = unwrapData(body);
+    const records = Array.isArray(data?.topList)
+      ? data.topList
+      : Array.isArray(data?.toplist)
+        ? data.toplist
+        : Array.isArray(data?.list)
+          ? data.list
+          : [];
+    const items = records
+      .map((item) => this.toPlaylistSummary(item))
+      .filter((item): item is ProviderPlaylistSummary => !!item);
+    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async getDigitalAlbums(
@@ -168,40 +156,36 @@ export class QqMusicService {
   ): Promise<ProviderAlbumListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60);
-    return this.getCachedDiscovery(`digital-albums:${query.limit}:${query.offset}`, 900, async () => {
-      const body = await this.callProvider(() => this.api.getDigitalAlbums());
-      const data = unwrapData(body);
-      const records = (Array.isArray(data?.content) ? data.content : [])
-        .flatMap((section) => {
-          const sectionRecord = asRecord(section);
-          if (!sectionRecord) return [];
-          for (const key of ["albumlist", "albumList", "list"]) {
-            if (Array.isArray(sectionRecord[key])) return sectionRecord[key];
-          }
-          return [];
-        });
-      return {
-        items: records
-          .slice(query.offset, query.offset + query.limit)
-          .map((item) => this.toAlbumSummary(item))
-          .filter((item): item is ProviderAlbumSummary => !!item),
-        limit: query.limit,
-        offset: query.offset
-      };
-    });
+    const body = await this.callProvider(() => this.api.getDigitalAlbums());
+    const data = unwrapData(body);
+    const records = (Array.isArray(data?.content) ? data.content : [])
+      .flatMap((section) => {
+        const sectionRecord = asRecord(section);
+        if (!sectionRecord) return [];
+        for (const key of ["albumlist", "albumList", "list"]) {
+          if (Array.isArray(sectionRecord[key])) return sectionRecord[key];
+        }
+        return [];
+      });
+    return {
+      items: records
+        .slice(query.offset, query.offset + query.limit)
+        .map((item) => this.toAlbumSummary(item))
+        .filter((item): item is ProviderAlbumSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
   }
 
   async getBanners(userId: string): Promise<ProviderDiscoveryBannerListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60);
     try {
-      return await this.getCachedDiscovery("banners", 300, async () => {
-        const body = await this.callProvider(() => this.api.getBanners());
-        const items = findFirstArray(body, ["focus", "banners", "banner", "list"])
-          .map((item) => this.toDiscoveryBanner(item))
-          .filter((item): item is ProviderDiscoveryBanner => !!item);
-        return { items };
-      });
+      const body = await this.callProvider(() => this.api.getBanners());
+      const items = findFirstArray(body, ["focus", "banners", "banner", "list"])
+        .map((item) => this.toDiscoveryBanner(item))
+        .filter((item): item is ProviderDiscoveryBanner => !!item);
+      return { items };
     } catch {
       return { items: [] };
     }
@@ -283,7 +267,17 @@ export class QqMusicService {
       title: readString(info?.albumName ?? info?.albumname ?? info?.name) ?? "未命名专辑",
       artist: readString(info?.singerName ?? info?.singername ?? info?.artist) ?? "未知歌手",
       description: readString(info?.desc ?? info?.description),
-      artworkUrl: readHttpUrl(info?.albumPic ?? info?.album_pic ?? info?.albumPicUrl ?? info?.picUrl ?? info?.picurl) ?? buildQqAlbumArtwork(readString(info?.albumMid ?? info?.albummid ?? info?.albumMID) ?? albumId),
+      artworkUrl: readHttpUrl(
+        info?.albumPic,
+        info?.album_pic,
+        info?.albumPicUrl,
+        info?.picUrl,
+        info?.picurl,
+        info?.imgUrl,
+        info?.imgurl,
+        info?.coverUrl,
+        info?.coverImgUrl
+      ) ?? buildQqAlbumArtwork(readString(info?.albumMid ?? info?.albummid ?? info?.albumMID) ?? albumId),
       releaseTime: readString(info?.pubTime ?? info?.publishTime ?? info?.time_public ?? info?.aDate),
       trackCount: readNumber(info?.songNum ?? info?.songnum ?? info?.cur_song_num ?? info?.total) ?? tracks.length,
       tracks
@@ -364,29 +358,6 @@ export class QqMusicService {
     if (!isAllowedHost(url.hostname)) throw this.unavailableError();
     return { url };
   }
-  private async getCachedDiscovery<T>(key: string, ttlSeconds: number, load: () => Promise<T>): Promise<T> {
-    const now = Date.now();
-    this.pruneDiscoverCache(now);
-    const cached = this.discoverCache.get(key);
-    if (cached && cached.freshUntil > now) return cached.value as T;
-    try {
-      const value = await load();
-      this.discoverCache.set(key, {
-        value,
-        freshUntil: now + ttlSeconds * 1_000,
-        staleUntil: now + Math.max(ttlSeconds * 6, 3_600) * 1_000
-      });
-      return value;
-    } catch (error) {
-      if (cached && cached.staleUntil > now) return cached.value as T;
-      throw error;
-    }
-  }
-  private pruneDiscoverCache(now: number) {
-    for (const [key, entry] of this.discoverCache) {
-      if (entry.staleUntil <= now) this.discoverCache.delete(key);
-    }
-  }
   private toTrackCandidate(value: unknown): QqMusicTrackCandidate | null {
     const raw = asRecord(value);
     const r = asRecord(raw?.songInfo) ?? asRecord(raw?.songinfo) ?? asRecord(raw?.song) ?? raw;
@@ -401,7 +372,21 @@ export class QqMusicService {
         : readString(r.singername ?? r.singerName ?? r.artist) ?? "未知歌手";
     const pay = asRecord(r.pay); const payPlay = Number(pay?.payplay ?? pay?.pay_play); const file = asRecord(r.file); const quality = Number(r.sizeflac ?? file?.size_flac) > 0 ? "lossless" : Number(r.size320 ?? file?.size_320mp3) > 0 ? "high" : Number(r.size128 ?? file?.size_128mp3) > 0 ? "standard" : null;
     const album = asRecord(r.album); const albumMid = readString(r.albummid ?? r.albumMid ?? r.albumMID ?? album?.mid ?? album?.albummid ?? album?.albumMid ?? album?.albumMID);
-    const artworkUrl = readHttpUrl(r.albumPic ?? r.album_pic ?? r.picUrl) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
+    const artworkUrl = readHttpUrl(
+      r.albumPic,
+      r.album_pic,
+      r.albumPicUrl,
+      r.picUrl,
+      r.picurl,
+      r.imgUrl,
+      r.imgurl,
+      album?.albumPic,
+      album?.album_pic,
+      album?.picUrl,
+      album?.picurl,
+      album?.imgUrl,
+      album?.imgurl
+    ) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
     return { provider: "qqmusic", providerTrackId: id, access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
   }
   private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
@@ -413,7 +398,21 @@ export class QqMusicService {
       providerPlaylistId: id,
       title: readString(playlist.dissname ?? playlist.topTitle ?? playlist.name ?? playlist.title) ?? "未命名歌单",
       description: readString(playlist.desc ?? playlist.description ?? playlist.introduction ?? playlist.updateTime),
-      artworkUrl: readHttpUrl(playlist.logo ?? playlist.coverUrl ?? playlist.picUrl ?? playlist.imgurl ?? playlist.imgUrl),
+      artworkUrl: readHttpUrl(
+        playlist.logo,
+        playlist.dissCover,
+        playlist.disscover,
+        playlist.coverUrl,
+        playlist.coverurl,
+        playlist.coverImgUrl,
+        playlist.coverimgurl,
+        playlist.picUrl,
+        playlist.picurl,
+        playlist.imgUrl,
+        playlist.imgurl,
+        playlist.pic,
+        playlist.cover
+      ),
       creatorName: readString(playlist.nickname ?? playlist.creatorName ?? asRecord(playlist.creator)?.name),
       trackCount: readNumber(playlist.songnum ?? playlist.songNum ?? playlist.song_count ?? playlist.total) ?? (Array.isArray(playlist.songlist) ? playlist.songlist.length : 0)
     };
@@ -433,7 +432,17 @@ export class QqMusicService {
       title,
       artist: singer || "未知歌手",
       description: readString(album.desc ?? album.description ?? album.intro),
-      artworkUrl: readHttpUrl(album.albumPic ?? album.album_pic ?? album.albumPicUrl ?? album.picUrl ?? album.picurl) ?? buildQqAlbumArtwork(id),
+      artworkUrl: readHttpUrl(
+        album.albumPic,
+        album.album_pic,
+        album.albumPicUrl,
+        album.picUrl,
+        album.picurl,
+        album.imgUrl,
+        album.imgurl,
+        album.coverUrl,
+        album.coverImgUrl
+      ) ?? buildQqAlbumArtwork(id),
       releaseTime: readString(album.pubtime ?? album.pubTime ?? album.publicTime ?? album.publishTime),
       trackCount: readNumber(album.songnum ?? album.songNum ?? album.song_count ?? album.total) ?? 0
     };
@@ -456,7 +465,16 @@ export class QqMusicService {
   private toDiscoveryBanner(value: unknown): ProviderDiscoveryBanner | null {
     const banner = asRecord(value);
     if (!banner) return null;
-    const artworkUrl = readHttpUrl(banner.picurl ?? banner.picUrl ?? banner.imgurl ?? banner.imgUrl ?? banner.coverUrl);
+    const artworkUrl = readHttpUrl(
+      banner.picurl,
+      banner.picUrl,
+      banner.imgurl,
+      banner.imgUrl,
+      banner.coverUrl,
+      banner.coverImgUrl,
+      banner.imageUrl,
+      banner.image
+    );
     const targetUrl = readHttpUrl(banner.jumpurl ?? banner.jumpUrl ?? banner.url);
     const id = readString(banner.id ?? banner.bannerId ?? banner.actid ?? banner.type ?? targetUrl ?? artworkUrl);
     if (!id) return null;
@@ -573,9 +591,14 @@ function dedupeAlbums(albums: ProviderAlbumSummary[]) {
   return [...new Map(albums.map((album) => [album.providerAlbumId, album])).values()];
 }
 function readLyricText(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }
-function readHttpUrl(value: unknown) {
-  const result = readString(value);
-  return result && /^https?:\/\//.test(result) ? result.replace(/^http:/i, "https:") : null;
+function readHttpUrl(...values: unknown[]) {
+  for (const value of values) {
+    const result = readString(value);
+    if (!result) continue;
+    const normalized = result.startsWith("//") ? `https:${result}` : result.replace(/^http:/i, "https:");
+    if (/^https:\/\//.test(normalized)) return normalized;
+  }
+  return null;
 }
 function unwrapData(value: unknown): Record<string, any> | null {
   const record = asRecord(value);

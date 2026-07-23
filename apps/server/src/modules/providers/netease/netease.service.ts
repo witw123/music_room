@@ -56,19 +56,12 @@ type SongRecord = {
 
 type RateBucket = { timestamps: number[] };
 type QrAttempt = { userId: string; key: string };
-type DiscoverCacheEntry = {
-  value: unknown;
-  freshUntil: number;
-  staleUntil: number;
-};
-
 const qrTtlSeconds = 180;
 const qrKeyPrefix = "music-room:netease:qr:";
 
 @Injectable()
 export class NeteaseService {
   private readonly userRateLimits = new Map<string, RateBucket>();
-  private readonly discoverCache = new Map<string, DiscoverCacheEntry>();
 
   constructor(
     private readonly api: NeteaseApiClient,
@@ -215,19 +208,17 @@ export class NeteaseService {
   ): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    return this.getCachedDiscovery(`recommended:${query.limit}`, 300, async () => {
-      const body = await this.callProvider(userId, () =>
-        this.api.getRecommendedPlaylists({ limit: query.limit })
-      );
-      const records = Array.isArray(body.result) ? body.result : [];
-      return {
-        items: records
-          .map((item) => this.toPlaylistSummary(item))
-          .filter((item): item is ProviderPlaylistSummary => !!item),
-        limit: query.limit,
-        offset: 0
-      };
-    });
+    const body = await this.callProvider(userId, () =>
+      this.api.getRecommendedPlaylists({ limit: query.limit })
+    );
+    const records = Array.isArray(body.result) ? body.result : [];
+    return {
+      items: records
+        .map((item) => this.toPlaylistSummary(item))
+        .filter((item): item is ProviderPlaylistSummary => !!item),
+      limit: query.limit,
+      offset: 0
+    };
   }
 
   async getCategoryPlaylists(
@@ -236,50 +227,40 @@ export class NeteaseService {
   ): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    return this.getCachedDiscovery(
-      `category:${query.category}:${query.order}:${query.limit}:${query.offset}`,
-      300,
-      async () => {
-        const body = await this.callProvider(userId, () => this.api.getCategoryPlaylists(query));
-        const records = Array.isArray(body.playlists) ? body.playlists : [];
-        return {
-          items: records
-            .map((item) => this.toPlaylistSummary(item))
-            .filter((item): item is ProviderPlaylistSummary => !!item),
-          limit: query.limit,
-          offset: query.offset
-        };
-      }
-    );
+    const body = await this.callProvider(userId, () => this.api.getCategoryPlaylists(query));
+    const records = Array.isArray(body.playlists) ? body.playlists : [];
+    return {
+      items: records
+        .map((item) => this.toPlaylistSummary(item))
+        .filter((item): item is ProviderPlaylistSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
   }
 
   async getPlaylistCategories(userId: string): Promise<ProviderPlaylistCategoryListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    return this.getCachedDiscovery("playlist-categories", 3_600, async () => {
-      const body = await this.callProvider(userId, () => this.api.getPlaylistCategories({}));
-      const groups = asRecord(body.categories);
-      const records = [body.all, ...(Array.isArray(body.sub) ? body.sub : [])];
-      const items = records
-        .map((item, index) => this.toPlaylistCategory(item, groups, index === 0))
-        .filter((item): item is ProviderPlaylistCategory => !!item);
-      return {
-        items: [...new Map(items.map((item) => [item.id, item])).values()]
-      };
-    });
+    const body = await this.callProvider(userId, () => this.api.getPlaylistCategories({}));
+    const groups = asRecord(body.categories);
+    const records = [body.all, ...(Array.isArray(body.sub) ? body.sub : [])];
+    const items = records
+      .map((item, index) => this.toPlaylistCategory(item, groups, index === 0))
+      .filter((item): item is ProviderPlaylistCategory => !!item);
+    return {
+      items: [...new Map(items.map((item) => [item.id, item])).values()]
+    };
   }
 
   async getToplists(userId: string): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    return this.getCachedDiscovery("toplists", 600, async () => {
-      const body = await this.callProvider(userId, () => this.api.getToplists({}));
-      const records = Array.isArray(body.list) ? body.list : [];
-      const items = records
-        .map((item) => this.toPlaylistSummary(item))
-        .filter((item): item is ProviderPlaylistSummary => !!item);
-      return { items, limit: Math.max(1, items.length), offset: 0 };
-    });
+    const body = await this.callProvider(userId, () => this.api.getToplists({}));
+    const records = Array.isArray(body.list) ? body.list : [];
+    const items = records
+      .map((item) => this.toPlaylistSummary(item))
+      .filter((item): item is ProviderPlaylistSummary => !!item);
+    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async getNewAlbums(
@@ -288,47 +269,37 @@ export class NeteaseService {
   ): Promise<ProviderAlbumListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    return this.getCachedDiscovery(
-      `new-albums:${query.area}:${query.limit}:${query.offset}`,
-      900,
-      async () => {
-        const body = await this.callProvider(userId, () => this.api.getNewAlbums(query));
-        return {
-          items: (Array.isArray(body.albums) ? body.albums : [])
-            .map((item) => this.toAlbumSummary(item))
-            .filter((item): item is ProviderAlbumSummary => !!item),
-          limit: query.limit,
-          offset: query.offset
-        };
-      }
-    );
+    const body = await this.callProvider(userId, () => this.api.getNewAlbums(query));
+    return {
+      items: (Array.isArray(body.albums) ? body.albums : [])
+        .map((item) => this.toAlbumSummary(item))
+        .filter((item): item is ProviderAlbumSummary => !!item),
+      limit: query.limit,
+      offset: query.offset
+    };
   }
 
   async getDailyPlaylists(userId: string): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`daily:${userId}`, 20, 60_000);
     const cookie = await this.getCookie(userId);
-    return this.getCachedDiscovery(`daily-playlists:${userId}:${dateKey()}`, 300, async () => {
-      const body = await this.callProvider(userId, () => this.api.getDailyPlaylists({ cookie }));
-      const items = (Array.isArray(body.recommend) ? body.recommend : [])
-        .map((item) => this.toPlaylistSummary(item))
-        .filter((item): item is ProviderPlaylistSummary => !!item);
-      return { items, limit: Math.max(1, items.length), offset: 0 };
-    });
+    const body = await this.callProvider(userId, () => this.api.getDailyPlaylists({ cookie }));
+    const items = (Array.isArray(body.recommend) ? body.recommend : [])
+      .map((item) => this.toPlaylistSummary(item))
+      .filter((item): item is ProviderPlaylistSummary => !!item);
+    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async getDailyTracks(userId: string): Promise<ProviderTrackListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`daily:${userId}`, 20, 60_000);
     const cookie = await this.getCookie(userId);
-    return this.getCachedDiscovery(`daily-tracks:${userId}:${dateKey()}`, 300, async () => {
-      const body = await this.callProvider(userId, () => this.api.getDailyTracks({ cookie }));
-      const data = asRecord(body.data);
-      const items = (Array.isArray(data?.dailySongs) ? data.dailySongs : Array.isArray(body.dailySongs) ? body.dailySongs : [])
-        .map((item) => this.toTrackCandidate(item))
-        .filter((item): item is NeteaseTrackCandidate => !!item);
-      return { items, limit: Math.max(1, items.length), offset: 0 };
-    });
+    const body = await this.callProvider(userId, () => this.api.getDailyTracks({ cookie }));
+    const data = asRecord(body.data);
+    const items = (Array.isArray(data?.dailySongs) ? data.dailySongs : Array.isArray(body.dailySongs) ? body.dailySongs : [])
+      .map((item) => this.toTrackCandidate(item))
+      .filter((item): item is NeteaseTrackCandidate => !!item);
+    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async getTrack(userId: string, trackId: string) {
@@ -491,46 +462,6 @@ export class NeteaseService {
     };
   }
 
-  async openArtwork(rawUrl: string) {
-    this.assertEnabled();
-    let url: URL;
-    try {
-      url = normalizeNeteaseArtworkUrl(rawUrl);
-    } catch {
-      throw this.unavailableError();
-    }
-
-    const upstream = await fetchProviderUrl(
-      url,
-      { headers: new Headers({ accept: "image/*" }) },
-      this.requestTimeoutMs(),
-      isAllowedArtworkHost,
-      { allowSyntheticDns: true }
-    ).catch(() => null);
-    if (!upstream?.ok || !upstream.body) {
-      throw this.unavailableError();
-    }
-
-    const mimeType = resolveArtworkMime(upstream.headers.get("content-type"));
-    if (!mimeType) {
-      await upstream.body.cancel().catch(() => undefined);
-      throw this.unavailableError();
-    }
-
-    const contentLength = Number(upstream.headers.get("content-length") ?? "0");
-    if (contentLength > this.maxArtworkBytes()) {
-      await upstream.body.cancel().catch(() => undefined);
-      throw this.unavailableError();
-    }
-
-    return {
-      upstream,
-      mimeType,
-      contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null,
-      maxBytes: this.maxArtworkBytes()
-    };
-  }
-
   private async resolveAudioSource(
     userId: string,
     trackId: string,
@@ -641,7 +572,15 @@ export class NeteaseService {
       providerPlaylistId: id,
       title: readString(playlist.name) ?? "未命名歌单",
       description: readString(playlist.description) ?? readString(playlist.desc),
-      artworkUrl: readNeteaseArtworkUrl(playlist.coverImgUrl, playlist.coverImgUrlStr),
+      artworkUrl: readNeteaseArtworkUrl(
+        playlist.coverImgUrl,
+        playlist.coverImgUrlStr,
+        playlist.picUrl,
+        playlist.picurl,
+        playlist.coverUrl,
+        playlist.imgUrl,
+        playlist.imgurl
+      ),
       creatorName: readString(asRecord(playlist.creator)?.nickname),
       trackCount: readNumber(playlist.trackCount) ?? readNumber(playlist.trackNumber) ?? (Array.isArray(playlist.tracks) ? playlist.tracks.length : 0),
     };
@@ -712,42 +651,6 @@ export class NeteaseService {
         return new Map<string, unknown>();
       }
       throw error;
-    }
-  }
-
-  private async getCachedDiscovery<T>(
-    key: string,
-    ttlSeconds: number,
-    load: () => Promise<T>
-  ): Promise<T> {
-    const now = Date.now();
-    this.pruneDiscoverCache(now);
-    const cached = this.discoverCache.get(key);
-    if (cached && cached.freshUntil > now) {
-      return cached.value as T;
-    }
-
-    try {
-      const value = await load();
-      this.discoverCache.set(key, {
-        value,
-        freshUntil: now + ttlSeconds * 1_000,
-        staleUntil: now + Math.max(ttlSeconds * 6, 3_600) * 1_000
-      });
-      return value;
-    } catch (error) {
-      if (cached && cached.staleUntil > now) {
-        return cached.value as T;
-      }
-      throw error;
-    }
-  }
-
-  private pruneDiscoverCache(now: number) {
-    for (const [key, entry] of this.discoverCache) {
-      if (entry.staleUntil <= now) {
-        this.discoverCache.delete(key);
-      }
     }
   }
 
@@ -826,10 +729,6 @@ export class NeteaseService {
     return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 209_715_200;
   }
 
-  private maxArtworkBytes() {
-    const value = Number(process.env.NETEASE_MAX_ARTWORK_BYTES ?? 10_485_760);
-    return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 10_485_760;
-  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -951,24 +850,12 @@ function resolveAudioMimeType(providerType: string | null, upstreamType: string 
   return null;
 }
 
-function resolveArtworkMime(contentType: string | null) {
-  const mimeType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
-  return mimeType?.startsWith("image/") ? mimeType : null;
-}
-
 function isAllowedAudioHost(hostname: string) {
   const normalized = hostname.toLowerCase();
   return normalized === "music.163.com" ||
     normalized.endsWith(".music.163.com") ||
     normalized.endsWith(".126.net") ||
     normalized.endsWith(".netease.com");
-}
-
-function isAllowedArtworkHost(hostname: string) {
-  const normalized = hostname.toLowerCase();
-  return normalized === "music.163.com" ||
-    normalized.endsWith(".music.163.com") ||
-    normalized.endsWith(".music.126.net");
 }
 
 /**
@@ -987,30 +874,6 @@ function normalizeNeteaseAudioUrl(value: string) {
     throw new Error("NetEase returned a non-HTTPS audio URL.");
   }
   return url;
-}
-
-function normalizeNeteaseArtworkUrl(value: string) {
-  const url = new URL(value);
-  if (url.protocol === "http:") {
-    url.protocol = "https:";
-    if (url.port === "80") {
-      url.port = "";
-    }
-  }
-  if (
-    url.protocol !== "https:" ||
-    url.port ||
-    url.username ||
-    url.password ||
-    !isAllowedArtworkHost(url.hostname)
-  ) {
-    throw new Error("NetEase returned an unsupported artwork URL.");
-  }
-  return url;
-}
-
-function dateKey() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
 }
 
 function isNeteaseUnavailableError(error: unknown) {

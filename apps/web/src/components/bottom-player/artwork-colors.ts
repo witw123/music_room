@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiBaseUrl } from "@/lib/api-client";
 
 type Rgb = {
   r: number;
@@ -72,48 +71,12 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
 }
 
 export function getArtworkSourceUrl(artworkUrl: string) {
-  const normalizedUrl = normalizeArtworkUrl(artworkUrl);
-  if (isQqMusicArtworkUrl(normalizedUrl)) {
-    return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(normalizedUrl)}`;
-  }
-  if (isNeteaseArtworkUrl(normalizedUrl)) {
-    return `${apiBaseUrl}/v1/providers/netease/artwork?url=${encodeURIComponent(normalizedUrl)}`;
-  }
-  return normalizedUrl;
+  return normalizeArtworkUrl(artworkUrl);
 }
 
 function normalizeArtworkUrl(value: string) {
   if (value.startsWith("//")) return `https:${value}`;
   return value.replace(/^http:\/\//i, "https://");
-}
-
-function isQqMusicArtworkUrl(value: string) {
-  try {
-    const url = new URL(value);
-    const hostname = url.hostname.toLowerCase();
-    return url.protocol === "https:" && (
-      hostname === "qq.com" ||
-      hostname.endsWith(".qq.com") ||
-      hostname === "gtimg.cn" ||
-      hostname.endsWith(".gtimg.cn")
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isNeteaseArtworkUrl(value: string) {
-  try {
-    const url = new URL(value);
-    const hostname = url.hostname.toLowerCase();
-    return url.protocol === "https:" && (
-      hostname === "music.163.com" ||
-      hostname.endsWith(".music.163.com") ||
-      hostname.endsWith(".music.126.net")
-    );
-  } catch {
-    return false;
-  }
 }
 
 function extractArtworkPalette(image: HTMLImageElement): ArtworkPalette {

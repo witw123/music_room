@@ -145,7 +145,10 @@ describe("QqMusicService", () => {
     process.env.QQMUSIC_ENABLED = "true";
     const api = {
       getPlaylistCategories: jest.fn().mockResolvedValue({ data: { categories: [{ categoryGroupName: "热门", items: [{ categoryId: 10000000, categoryName: "全部", allsorts: [{ sortId: 5, sortName: "最热" }] }] }] } }),
-      getCategoryPlaylists: jest.fn().mockResolvedValue({ data: { list: [{ dissid: "playlist-1", dissname: "歌单", imgurl: "http://img.qq.com/cover.jpg" }] } }),
+      getCategoryPlaylists: jest.fn().mockResolvedValue({ data: { list: [
+        { dissid: "playlist-1", dissname: "歌单", imgurl: "http://img.qq.com/cover.jpg" },
+        { dissid: "playlist-2", dissname: "备用封面字段", coverImgUrl: "//img.qq.com/cover-field.jpg" }
+      ] } }),
       getToplists: jest.fn().mockResolvedValue({ data: { topList: [{ topId: 4, topTitle: "巅峰榜", picUrl: "http://img.qq.com/rank.jpg" }] } }),
       getDigitalAlbums: jest.fn().mockResolvedValue({ data: { content: [{ albumlist: [{ album_mid: "album-1", album_name: "数字专辑", picurl: "http://img.qq.com/album.jpg" }] }] } }),
       getBanners: jest.fn().mockResolvedValue({ focus: { list: [{ id: "banner-1", title: "推荐", picurl: "http://img.qq.com/banner.jpg" }] } })
@@ -156,7 +159,10 @@ describe("QqMusicService", () => {
       items: [{ id: "10000000", name: "全部", sortOptions: [{ id: "5", label: "最热" }] }]
     });
     await expect(service.getCategoryPlaylists("user_1", { categoryId: 10000000, sortId: 5, limit: 10, offset: 0 })).resolves.toMatchObject({
-      items: [{ providerPlaylistId: "playlist-1", artworkUrl: "https://img.qq.com/cover.jpg" }]
+      items: expect.arrayContaining([
+        expect.objectContaining({ providerPlaylistId: "playlist-1", artworkUrl: "https://img.qq.com/cover.jpg" }),
+        expect.objectContaining({ providerPlaylistId: "playlist-2", artworkUrl: "https://img.qq.com/cover-field.jpg" })
+      ])
     });
     await expect(service.getToplists("user_1")).resolves.toMatchObject({ items: [{ providerPlaylistId: "4", title: "巅峰榜" }] });
     await expect(service.getDigitalAlbums("user_1", { limit: 10, offset: 0 })).resolves.toMatchObject({
@@ -166,6 +172,8 @@ describe("QqMusicService", () => {
       items: [{ id: "banner-1", title: "推荐", artworkUrl: "https://img.qq.com/banner.jpg" }]
     });
     expect(api.getCategoryPlaylists).toHaveBeenCalledTimes(1);
+    await service.getCategoryPlaylists("user_1", { categoryId: 10000000, sortId: 5, limit: 10, offset: 0 });
+    expect(api.getCategoryPlaylists).toHaveBeenCalledTimes(2);
   });
 
   it("accepts alternate QQ ranking and digital album list keys", async () => {
