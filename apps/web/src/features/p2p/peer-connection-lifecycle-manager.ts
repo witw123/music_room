@@ -311,26 +311,27 @@ export class PeerConnectionLifecycleManager {
   }
 
   private expectedMediaPeerIds() {
-    const expected = new Set<string>();
+    // Media peer connections follow room membership. Which peer currently
+    // carries the broadcast must not decide whether a PC remains alive.
+    return new Set(this.expectedRemotePeerIds);
+  }
+
+  private activeMediaPeerIds() {
+    const active = new Set<string>();
     if (this.localAudioSourcePeerId === this.localPeerId) {
-      // Keep media fanout peers for as long as we are the active source, even
-      // before the broadcast MediaStreamTrack is live. Gating topology on a
-      // live track released every listener media PC whenever the destination
-      // was briefly missing (local-audio resolve, underrun recovery, etc.) and
-      // forced a connect → audible → silent recovery loop.
       for (const peerId of this.expectedRemotePeerIds) {
-        expected.add(peerId);
+        active.add(peerId);
       }
-      return expected;
+      return active;
     }
 
     if (
       this.localAudioSourcePeerId !== null &&
       this.expectedRemotePeerIds.has(this.localAudioSourcePeerId)
     ) {
-      expected.add(this.localAudioSourcePeerId);
+      active.add(this.localAudioSourcePeerId);
     }
-    return expected;
+    return active;
   }
 
   private isIncomingPeerAdmitted(
@@ -369,7 +370,7 @@ export class PeerConnectionLifecycleManager {
     // playback snapshot has populated localAudioSourcePeerId. Admit media
     // signals from known room members during that short window; once a source
     // is known, keep the active-source admission check strict.
-    return this.localAudioSourcePeerId === null || this.expectedMediaPeerIds().has(peerId);
+    return this.localAudioSourcePeerId === null || this.activeMediaPeerIds().has(peerId);
   }
 
   private hasLiveLocalAudioTrack() {
@@ -383,7 +384,7 @@ export class PeerConnectionLifecycleManager {
       if (
         entry.releasing ||
         this.peerConnections.get(peerId, "media") !== entry ||
-        this.expectedMediaPeerIds().has(peerId)
+        this.activeMediaPeerIds().has(peerId)
       ) {
         return;
       }

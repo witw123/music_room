@@ -116,10 +116,22 @@ export function ImmersivePlayerOverlay({
       role="dialog"
       style={{ backgroundColor: artworkPalette.background }}
     >
+      {currentTrack?.artworkUrl ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -inset-[8%] z-0 scale-110 bg-cover bg-center opacity-35 blur-3xl transition-[opacity,transform] duration-700 motion-reduce:transition-none"
+          style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
+        />
+      ) : null}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 opacity-45 transition-opacity duration-500 motion-reduce:transition-none"
-        style={{ background: `linear-gradient(145deg, ${artworkPalette.accentSoft}, transparent 45%, ${artworkPalette.border})` }}
+        className="pointer-events-none absolute inset-0 z-0 backdrop-blur-3xl transition-[background-color,opacity] duration-500 motion-reduce:transition-none"
+        style={{ background: `linear-gradient(112deg, ${artworkPalette.background} 0%, rgba(0, 0, 0, 0.58) 52%, ${artworkPalette.surface} 100%)` }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-0 opacity-70 transition-opacity duration-500 motion-reduce:transition-none"
+        style={{ background: `linear-gradient(145deg, ${artworkPalette.accentSoft}, transparent 46%, ${artworkPalette.border})` }}
       />
 
       <MobileImmersivePlayer
@@ -163,19 +175,46 @@ export function ImmersivePlayerOverlay({
         aria-label="退出沉浸式播放"
         title="退出沉浸式播放"
         onClick={onClose}
-        className="light-overlay-control absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-[60] hidden h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 shadow-lg backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 hover:border-accent/30 hover:bg-accent/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:inline-flex"
-        style={{ borderColor: artworkPalette.border }}
+        className="light-overlay-control absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-[60] hidden h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent text-white/70 shadow-none backdrop-blur-md transition-[background-color,color,transform] duration-200 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 md:inline-flex"
       >
-        <svg aria-hidden="true" fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M9 15H4v5" /><path d="m4 20 6-6" /><path d="M15 9h5V4" /><path d="m20 4-6 6" /></svg>
+        <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
 
-      <main className="relative z-10 mx-auto hidden h-[100dvh] min-h-0 w-full max-w-[1500px] grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)] items-center gap-12 overflow-hidden px-14 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 md:grid xl:gap-20">
-        <section className="flex min-h-0 min-w-0 items-center justify-center overflow-hidden" aria-label={playerStyle === "square-cover" ? "专辑封面" : "唱片"}>
-          <ImmersiveVinyl artworkUrl={currentTrack?.artworkUrl ?? null} isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
-        </section>
+      <main className="relative z-10 mx-auto hidden h-[100dvh] min-h-0 w-full max-w-[1480px] grid-cols-[minmax(19rem,0.78fr)_minmax(22rem,1.22fr)] items-center gap-8 overflow-hidden px-8 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:grid-cols-[minmax(22rem,0.82fr)_minmax(28rem,1.18fr)] lg:gap-14 lg:px-12 xl:gap-20 xl:px-16">
+        <DesktopImmersivePlayer
+          artworkPalette={artworkPalette}
+          artworkUrl={currentTrack?.artworkUrl ?? null}
+          canControlPlayback={canControlPlayback}
+          canRemoveQueue={canRemoveQueue}
+          canReorderQueue={canReorderQueue}
+          canSeekPlayback={canSeekPlayback}
+          currentQueueItemId={currentQueueItemId}
+          currentTrack={currentTrack}
+          durationMs={durationMs}
+          isPlaying={isPlaying}
+          onCyclePlaybackMode={onCyclePlaybackMode}
+          onNext={onNext}
+          onPlayQueueItem={onPlayQueueItem}
+          onPrev={onPrev}
+          onRemoveQueueItem={onRemoveQueueItem}
+          onReorderQueue={onReorderQueue}
+          onTogglePlay={onTogglePlay}
+          playbackMode={playbackMode}
+          playbackTrackId={playbackTrackId}
+          positionMs={positionMs}
+          queue={queue}
+          setSeekDraft={setSeekDraft}
+          tracks={tracks}
+          volume={volume}
+          applyVolume={applyVolume}
+          commitSeek={commitSeek}
+        />
         <section className="flex min-h-0 w-full min-w-0 flex-col justify-center overflow-hidden" aria-label="歌曲信息与歌词">
-          <TrackDetails currentTrack={currentTrack} />
-          <ImmersiveLyrics isOpen={isOpen} isPlaying={isPlaying} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+          <div className="mb-3 flex items-center justify-between gap-4 px-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">
+            <span>歌词</span>
+            <span className="truncate text-right normal-case tracking-normal text-white/35">{currentTrack?.album ?? "正在播放"}</span>
+          </div>
+          <ImmersiveLyrics desktop isOpen={isOpen} isPlaying={isPlaying} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
         </section>
       </main>
     </div>
@@ -314,6 +353,157 @@ function MobileImmersivePlayer({
   );
 }
 
+type DesktopImmersivePlayerProps = {
+  artworkPalette: ArtworkPalette;
+  artworkUrl: string | null;
+  canControlPlayback: boolean;
+  canRemoveQueue: boolean;
+  canReorderQueue: boolean;
+  canSeekPlayback: boolean;
+  currentQueueItemId: string | null;
+  currentTrack: TrackMeta | null;
+  durationMs: number;
+  isPlaying: boolean;
+  onCyclePlaybackMode: () => void | Promise<void>;
+  onNext: () => void;
+  onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPrev: () => void;
+  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  onTogglePlay: () => void;
+  playbackMode: PlaybackMode;
+  playbackTrackId: string | null | undefined;
+  positionMs: number;
+  queue: QueueItem[];
+  setSeekDraft: (value: number | null) => void;
+  tracks: TrackMeta[];
+  volume: number;
+  applyVolume: (value: number) => void;
+  commitSeek: () => void;
+};
+
+function DesktopImmersivePlayer({
+  artworkPalette,
+  artworkUrl,
+  canControlPlayback,
+  canRemoveQueue,
+  canReorderQueue,
+  canSeekPlayback,
+  currentQueueItemId,
+  currentTrack,
+  durationMs,
+  isPlaying,
+  onCyclePlaybackMode,
+  onNext,
+  onPlayQueueItem,
+  onPrev,
+  onRemoveQueueItem,
+  onReorderQueue,
+  onTogglePlay,
+  playbackMode,
+  playbackTrackId,
+  positionMs,
+  queue,
+  setSeekDraft,
+  tracks,
+  volume,
+  applyVolume,
+  commitSeek
+}: DesktopImmersivePlayerProps) {
+  const controlsDisabled = !canControlPlayback || !playbackTrackId;
+
+  return (
+    <section className="flex min-h-0 w-full max-w-[31rem] flex-col justify-center justify-self-center">
+      <div className="relative mx-auto aspect-square w-[min(52vh,29rem)] max-w-full overflow-hidden rounded-[0.75rem] border border-white/10 bg-black/20 shadow-[0_28px_90px_rgba(0,0,0,0.42)]">
+        {artworkUrl ? (
+          <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[0.75rem] border-0 bg-transparent" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-white/75" style={{ background: `linear-gradient(145deg, ${artworkPalette.accent}, ${artworkPalette.background})` }}>
+            <svg aria-hidden="true" fill="none" height="46" viewBox="0 0 24 24" width="46" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[clamp(1.1rem,1.55vw,1.35rem)] font-semibold leading-7 text-white">
+            {currentTrack?.title ?? "等待选择歌曲"}
+          </h1>
+          <p className="mt-0.5 truncate text-sm text-white/65">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</p>
+          <p className="mt-1 truncate text-xs text-white/40">{currentTrack?.album ?? "未知专辑"}</p>
+        </div>
+        <PlayerQueueDrawer
+          accentColor={artworkPalette.accent}
+          accentSoft={artworkPalette.accentSoft}
+          canControlPlayback={canControlPlayback}
+          canRemoveQueue={canRemoveQueue}
+          canReorderQueue={canReorderQueue}
+          currentQueueItemId={currentQueueItemId}
+          onPlayQueueItem={onPlayQueueItem}
+          onRemoveQueueItem={onRemoveQueueItem}
+          onReorderQueue={onReorderQueue}
+          queue={queue}
+          tracks={tracks}
+        />
+      </div>
+
+      <div className="mt-5 flex items-center gap-3">
+        <span className="w-9 shrink-0 text-[11px] tabular-nums text-white/45">{formatDuration(positionMs)}</span>
+        <Slider
+          accentColor={artworkPalette.accent}
+          className="[&>div]:h-1"
+          data-testid="immersive-player-seek-slider"
+          disabled={!durationMs || !canSeekPlayback}
+          max={durationMs || 1}
+          onChange={(event) => setSeekDraft(Number(event.target.value))}
+          onKeyUp={commitSeek}
+          onPointerUp={commitSeek}
+          value={positionMs}
+        />
+        <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-white/45">{formatDuration(durationMs)}</span>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-4 sm:gap-5">
+        <button
+          aria-label="切换播放模式"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/60 transition-[background-color,color,transform] duration-200 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35"
+          disabled={!canControlPlayback}
+          onClick={() => void onCyclePlaybackMode()}
+          title="切换播放模式"
+          type="button"
+        >
+          <PlaybackModeGlyph mode={playbackMode} />
+        </button>
+        <TransportButton ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
+        <button
+          aria-label={isPlaying ? "暂停" : "播放"}
+          className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-[0_12px_32px_rgba(0,0,0,0.28)] transition-[transform,opacity] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-35"
+          disabled={controlsDisabled}
+          onClick={onTogglePlay}
+          title={isPlaying ? "暂停" : "播放"}
+          type="button"
+        >
+          {isPlaying ? <svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M8 5v14l11-7z" /></svg>}
+        </button>
+        <TransportButton ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3 px-1 text-white/55">
+        <SpeakerGlyph volume={volume} />
+        <Slider
+          accentColor={artworkPalette.accent}
+          className="[&>div]:h-1"
+          max={1}
+          onChange={(event) => applyVolume(Number(event.target.value))}
+          onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))}
+          step={0.01}
+          value={volume}
+        />
+      </div>
+    </section>
+  );
+}
+
 function TrackDetails({ currentTrack, mobile = false }: { currentTrack: TrackMeta | null; mobile?: boolean }) {
   return (
     <div className="min-w-0 text-center md:text-left">
@@ -359,7 +549,7 @@ function ImmersiveVinyl({ artworkUrl, isPlaying, mobile = false, palette, player
   );
 }
 
-function ImmersiveLyrics({ isOpen, isPlaying, mobile = false, positionMs, roomLyrics, sourceProvider, sourceTrackId }: { isOpen: boolean; isPlaying: boolean; mobile?: boolean; positionMs: number; roomLyrics: string | null; sourceProvider: "netease" | "qqmusic" | undefined; sourceTrackId: string | undefined }) {
+function ImmersiveLyrics({ desktop = false, isOpen, isPlaying, mobile = false, positionMs, roomLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; positionMs: number; roomLyrics: string | null; sourceProvider: "netease" | "qqmusic" | undefined; sourceTrackId: string | undefined }) {
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
@@ -409,7 +599,7 @@ function ImmersiveLyrics({ isOpen, isPlaying, mobile = false, positionMs, roomLy
   }, [isOpen, roomLyrics, sourceProvider, sourceTrackId]);
 
   if (!isOpen) return null;
-  return <div className={mobile ? "min-h-0 w-full" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel visibleLines={mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} positionMs={positionMs} status={lyricsStatus} /></div>;
+  return <div className={desktop ? "min-h-0 w-full flex-1" : mobile ? "min-h-0 w-full" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} immersive={desktop} visibleLines={desktop || mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} positionMs={positionMs} status={lyricsStatus} /></div>;
 }
 
 function getSourceLabel(sourceType: TrackMeta["sourceType"]) {
