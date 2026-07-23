@@ -37,7 +37,7 @@ export type PeerEntry = {
   mediaSyncRetryTimerId: ReturnType<typeof setTimeout> | null;
   mediaSyncRetryAttempts: number;
   mediaNegotiationPending: boolean;
-  /** Prevent repeated listener offers when the source track never arrives. */
+  /** Gate listener track-recovery offers until their cooldown expires. */
   mediaMissingTrackRecoveryAttempted: boolean;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;

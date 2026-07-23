@@ -224,7 +224,7 @@ export function createRoomDataMeshRuntime(input: {
             else next.delete(peerId);
             return [...next];
           });
-          if (state !== "connected") {
+          if (state === "failed" || state === "closed") {
             latestMediaSamples.delete(peerId);
             playbackBandwidthMonitor.remove(peerId);
             publishLocalTelemetry(true);

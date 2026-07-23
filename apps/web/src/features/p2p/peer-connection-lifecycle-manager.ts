@@ -102,18 +102,26 @@ type MediaRecoveryState = {
   highLossWindows: number;
   highJitterWindows: number;
   positiveMediaWindows: number;
+  lastPositiveMediaAtMs: number | null;
   restartTimesMs: number[];
   failureReportedAtMs: number | null;
   disconnectedTimerId: ReturnType<typeof setTimeout> | null;
 };
 
 const mediaTrackWatchdogGraceMs = 3_000;
-const mediaRecoveryCooldownMs = 3_000;
+// A media recovery is an SDP/ICE operation and can briefly replace the
+// receiver's playout path. Persistent network failure must not turn this into
+// a tight offer loop while the browser is still retrying ICE in place.
+const mediaRecoveryCooldownMs = 8_000;
 const mediaNoReceiveRecoveryWindows = 4;
 const mediaNoSendRecoveryWindows = 4;
 const mediaRecoveryHealthyLossThreshold = 3;
 const mediaRecoveryHealthyJitterThreshold = 20;
 const incomingMediaAdmissionGraceMs = 8_000;
+// ICE can report `disconnected` while its connectivity checks are still
+// repairing the selected candidate pair. Re-offering during that window
+// replaces a usable RTP path and is much more disruptive than the outage.
+const mediaDisconnectedRecoveryDelayMs = 10_000;
 
 function createMediaRecoveryState(): MediaRecoveryState {
   return {
@@ -125,6 +133,7 @@ function createMediaRecoveryState(): MediaRecoveryState {
     highLossWindows: 0,
     highJitterWindows: 0,
     positiveMediaWindows: 0,
+    lastPositiveMediaAtMs: null,
     restartTimesMs: [],
     failureReportedAtMs: null,
     disconnectedTimerId: null
@@ -619,6 +628,8 @@ export class PeerConnectionLifecycleManager {
     const staleSignal = now - entry.lastSignalProgressAtMs >= 8_000;
     const waitingForExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live";
+    const hasMediaDescription = entry.connection.remoteDescription !== null ||
+      entry.connection.localDescription !== null;
     const missingExpectedTrack = waitingForExpectedTrack &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
     // forceRecreate may announce a replacement peer, but a missing remote
@@ -647,14 +658,23 @@ export class PeerConnectionLifecycleManager {
       return entry;
     }
 
+    if (waitingForExpectedTrack && !hasMediaDescription) {
+      // Wait for the active source to announce the first real media offer.
+      // Recovery offers are only valid after this PeerConnection has a
+      // negotiated media description to repair.
+      this.scheduleMediaWatchdog(peerId, entry);
+      return entry;
+    }
+
     if (
       waitingForExpectedTrack &&
-      entry.mediaMissingTrackRecoveryAttempted
+      entry.mediaMissingTrackRecoveryAttempted &&
+      Date.now() - entry.lastSignalProgressAtMs < 8_000
     ) {
-      // One recovery offer is enough to repair a lost late-join negotiation.
-      // Repeating offers against a stable, connected peer creates offer glare
-      // and repeatedly resets the receiver's jitter buffer without improving
-      // the media path.
+      // Give the source time to answer the recovery offer before retrying.
+      // A permanent one-shot latch leaves a listener waiting forever when one
+      // signaling message is lost; the cooldown prevents offer glare.
+      this.scheduleMediaWatchdog(peerId, entry);
       return entry;
     }
 
@@ -825,7 +845,27 @@ export class PeerConnectionLifecycleManager {
           this.scheduleMediaWatchdog(payload.peerId, entry);
         }
       },
-      onIceConnectionStateChange: this.onIceConnectionStateChange,
+      onIceConnectionStateChange: (payload) => {
+        this.onIceConnectionStateChange?.(payload);
+        if (linkKind !== "media" || entry.releasing) {
+          return;
+        }
+
+        if (payload.state === "connected" || payload.state === "completed") {
+          this.clearMediaDisconnectRecovery(payload.peerId);
+          return;
+        }
+        if (payload.state === "disconnected") {
+          // ICE can briefly lose its selected pair while the RTCPeerConnection
+          // still reports `connected`. Use the same delayed recovery path as
+          // connectionstatechange so this does not race the jitter buffer.
+          this.scheduleMediaDisconnectRecovery(payload.peerId, entry);
+          return;
+        }
+        if (payload.state === "failed" || payload.state === "closed") {
+          this.triggerMediaRecovery(payload.peerId, "connection-failed");
+        }
+      },
       onPeerStalled: this.onPeerStalled,
       schedulePeerReconnect: (currentPeerId, currentEntry) =>
         this.schedulePeerReconnect(currentPeerId, currentEntry),
@@ -1414,6 +1454,9 @@ export class PeerConnectionLifecycleManager {
     const hasHealthyMediaWindow = hasPositiveMediaWindow &&
       loss < mediaRecoveryHealthyLossThreshold &&
       jitter < mediaRecoveryHealthyJitterThreshold;
+    if (hasPositiveMediaWindow) {
+      state.lastPositiveMediaAtMs = Date.now();
+    }
     this.mediaRecovery.set(peerId, state);
     if ((sample.mediaReceiveBitrateKbps ?? 0) > 0) {
       const wasReceiverLive = entry.receiverTrackState === "live";
@@ -1490,9 +1533,29 @@ export class PeerConnectionLifecycleManager {
         (entry.connection.connectionState === "disconnected" ||
           entry.connection.iceConnectionState === "disconnected")
       ) {
-        this.triggerMediaRecovery(peerId, "connection-failed");
+        // A live negotiated track with a fresh positive RTP sample means the
+        // browser still has a media path to repair. Stats can outlive a
+        // connection-state blip, so keep checking until positive RTP stops
+        // arriving instead of starting an ICE offer immediately.
+        const recoveryState = this.mediaRecovery.get(peerId) ?? state;
+        const hasRecentPositiveRtp = recoveryState.lastPositiveMediaAtMs !== null &&
+          Date.now() - recoveryState.lastPositiveMediaAtMs < 4_000;
+        if (
+          (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
+          (hasRecentPositiveRtp || recoveryState.lastPositiveMediaAtMs === null)
+        ) {
+          this.mediaRecovery.set(peerId, recoveryState);
+          this.scheduleMediaDisconnectRecovery(peerId, entry);
+          return;
+        }
+        this.triggerMediaRecovery(
+          peerId,
+          entry.senderTrackState === "live" || entry.receiverTrackState === "live"
+            ? "no-packets"
+            : "connection-failed"
+        );
       }
-    }, 2_000);
+    }, mediaDisconnectedRecoveryDelayMs);
     this.mediaRecovery.set(peerId, state);
   }
 
@@ -1503,7 +1566,8 @@ export class PeerConnectionLifecycleManager {
 
     const watchdogDelayMs =
       entry.connection.connectionState === "connected" &&
-      this.hasExpectedRemoteAudioTrack(peerId)
+      this.hasExpectedRemoteAudioTrack(peerId) &&
+      (entry.connection.remoteDescription !== null || entry.connection.localDescription !== null)
         ? mediaTrackWatchdogGraceMs
         : 8_000;
     entry.mediaWatchdogTimerId = setTimeout(() => {
@@ -1520,10 +1584,24 @@ export class PeerConnectionLifecycleManager {
         this.hasExpectedRemoteAudioTrack(peerId) &&
         entry.receiverTrackState !== "live";
       if (waitingForRemoteTrack) {
-        if (entry.mediaMissingTrackRecoveryAttempted) {
+        if (
+          entry.connection.remoteDescription === null &&
+          entry.connection.localDescription === null
+        ) {
+          // The source owns the first offer. A listener-created recvonly
+          // offer before any media description exists races that source offer
+          // and can leave both peers cycling without an ontrack event.
+          this.scheduleMediaWatchdog(peerId, entry);
           return;
         }
         const waitingForMs = Date.now() - entry.lastSignalProgressAtMs;
+        if (
+          entry.mediaMissingTrackRecoveryAttempted &&
+          waitingForMs < 8_000
+        ) {
+          this.scheduleMediaWatchdog(peerId, entry);
+          return;
+        }
         if (waitingForMs < mediaTrackWatchdogGraceMs) {
           this.scheduleMediaWatchdog(peerId, entry);
           return;
@@ -1547,6 +1625,17 @@ export class PeerConnectionLifecycleManager {
       }
 
       if (entry.connection.connectionState === "connected") {
+        return;
+      }
+
+      if (
+        (entry.connection.connectionState === "disconnected" ||
+          entry.connection.iceConnectionState === "disconnected") &&
+        (entry.senderTrackState === "live" || entry.receiverTrackState === "live")
+      ) {
+        // The disconnected timer and consecutive zero-RTP samples own this
+        // recovery path. Do not let the media watchdog issue a second offer
+        // against a connection that may still recover in place.
         return;
       }
 
@@ -1592,9 +1681,20 @@ export class PeerConnectionLifecycleManager {
       return;
     }
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
+    const mediaTransportDisconnected = entry.connection.connectionState === "disconnected" ||
+      entry.connection.iceConnectionState === "disconnected";
+    const mediaTransportFailed = entry.connection.connectionState === "failed" ||
+      entry.connection.connectionState === "closed" ||
+      entry.connection.iceConnectionState === "failed" ||
+      entry.connection.iceConnectionState === "closed";
+    const liveMediaDuringIceRecovery = mediaTransportDisconnected &&
+      (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
+      reason !== "no-packets";
     const connectedLiveMedia = entry.connection.connectionState === "connected" &&
+      !mediaTransportDisconnected &&
+      !mediaTransportFailed &&
       (entry.senderTrackState === "live" || entry.receiverTrackState === "live");
-    if (connectedLiveMedia) {
+    if (connectedLiveMedia || liveMediaDuringIceRecovery) {
       // A connected PeerConnection with a live negotiated track is still the
       // least disruptive playback path. Re-offering or ICE-restarting it for
       // a loss/jitter/no-packet window discards the browser jitter buffer and

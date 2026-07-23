@@ -3,6 +3,7 @@ import {
   isSegmentedPlaybackAudible,
   recordReceiverAudioProgress,
   resolveRoomAudioPath,
+  resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
   resolveRoomAudioPositionMs
 } from "./use-room-segmented-playback-runtime";
@@ -147,5 +148,46 @@ describe("local room audio clock", () => {
       startedAt: "2026-07-22T00:00:10.000Z",
       startAt: "2026-07-22T00:00:10.000Z"
     }, Date.parse("2026-07-22T00:00:13.500Z"))).toBe(12_000);
+  });
+});
+
+describe("remote room audio timeline", () => {
+  it("changes when a playing seek creates a new room clock anchor", () => {
+    const initial = {
+      currentTrackId: "track-1",
+      mediaEpoch: 2,
+      status: "playing" as const,
+      positionMs: 1_000,
+      playbackRevision: 7,
+      startAt: "2026-07-22T00:00:10.000Z",
+      startedAt: "2026-07-22T00:00:10.000Z"
+    };
+    const seeked = {
+      ...initial,
+      positionMs: 42_000,
+      playbackRevision: 8,
+      startAt: "2026-07-22T00:00:51.000Z",
+      startedAt: "2026-07-22T00:00:51.000Z"
+    };
+
+    expect(resolveRemoteAudioTimelineKey(initial)).not.toBe(
+      resolveRemoteAudioTimelineKey(seeked)
+    );
+  });
+
+  it("does not change on ordinary clock progress within one timeline", () => {
+    const initial = {
+      currentTrackId: "track-1",
+      mediaEpoch: 2,
+      status: "playing" as const,
+      positionMs: 1_000,
+      playbackRevision: 7,
+      startAt: "2026-07-22T00:00:10.000Z",
+      startedAt: "2026-07-22T00:00:10.000Z"
+    };
+
+    expect(resolveRemoteAudioTimelineKey(initial)).toBe(
+      resolveRemoteAudioTimelineKey({ ...initial, positionMs: 1_250 })
+    );
   });
 });

@@ -248,6 +248,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
     mediaPeer.signalingState = "stable";
     mediaPeer.connectionState = "connected";
+    mediaPeer.remoteDescription = { type: "offer", sdp: "source-offer" };
     // Expire the track-arrival grace window so recovery soft-reoffers instead
     // of waiting, while still keeping the existing PeerConnection.
     mediaEntry.lastSignalProgressAtMs = Date.now() - 4_000;
@@ -261,6 +262,131 @@ describe("PeerConnectionLifecycleManager", () => {
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers.length).toBeGreaterThanOrEqual(1);
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);
+  });
+
+  it("does not renegotiate a live media peer for a transient disconnected state", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = true;
+    mediaPeer.connectionState = "disconnected";
+    mediaPeer.onconnectionstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaPeer.connectionState).toBe("disconnected");
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(0);
+  });
+
+  it("recovers a disconnected live media peer after positive RTP stops", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = true;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: 128,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 0,
+      jitterMs: 2
+    } as PeerConnectionStatsSample);
+    const recoveryState = (manager as unknown as {
+      mediaRecovery: Map<string, { lastPositiveMediaAtMs: number | null }>;
+    }).mediaRecovery.get("peer_b")!;
+    recoveryState.lastPositiveMediaAtMs = Date.now() - 5_000;
+    mediaPeer.connectionState = "disconnected";
+    mediaPeer.onconnectionstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(1);
+  });
+
+  it("does not restart an ICE-disconnected media peer while RTP is still fresh", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = true;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+
+    mediaPeer.iceConnectionState = "disconnected";
+    mediaPeer.oniceconnectionstatechange?.();
+    await vi.advanceTimersByTimeAsync(8_000);
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: 128,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 0,
+      jitterMs: 2
+    } as PeerConnectionStatsSample);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaOffers).toHaveLength(0);
+  });
+
+  it("recovers an ICE-disconnected media peer after RTP stops", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = true;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: 128,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 0,
+      jitterMs: 2
+    } as PeerConnectionStatsSample);
+    mediaPeer.iceConnectionState = "disconnected";
+    mediaPeer.oniceconnectionstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(1);
   });
 
   it("releases the old media fanout when the source changes", async () => {
@@ -559,6 +685,8 @@ describe("PeerConnectionLifecycleManager", () => {
     const { manager, sendSignal } = createManager();
 
     await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(8_000);
 
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
@@ -847,7 +975,8 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
     mediaPeer.signalingState = "stable";
     mediaPeer.connectionState = "connected";
-    await vi.advanceTimersByTimeAsync(3_000);
+    mediaPeer.remoteDescription = { type: "offer", sdp: "source-offer" };
+    await vi.advanceTimersByTimeAsync(8_000);
 
     expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);

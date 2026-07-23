@@ -107,6 +107,25 @@ function resolveLocalAudioTimelineKey(playback: PlaybackSnapshot) {
   ].join(":");
 }
 
+export function resolveRemoteAudioTimelineKey(playback: Pick<
+  PlaybackSnapshot,
+  | "currentTrackId"
+  | "mediaEpoch"
+  | "status"
+  | "startAt"
+  | "startedAt"
+  | "playbackRevision"
+  | "positionMs"
+>) {
+  return [
+    playback.currentTrackId ?? "none",
+    playback.mediaEpoch,
+    playback.status,
+    playback.startAt ?? playback.startedAt ?? "none",
+    playback.status === "playing" ? playback.playbackRevision : playback.positionMs
+  ].join(":");
+}
+
 export function resolveRoomAudioPath(input: {
   isCurrentSource: boolean;
   nativeLocalAudio: boolean;
@@ -272,6 +291,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const localAudioObjectUrlRef = useRef<LocalAudioObjectUrl | null>(null);
   const localAudioReadyKeyRef = useRef<string | null>(null);
   const localAudioTimelineKeyRef = useRef<string | null>(null);
+  const remoteAudioTimelineKeyRef = useRef<string | null>(null);
   const failedLocalAudioKeysRef = useRef<Set<string>>(new Set());
   const roomId = input.roomSnapshot?.room.id ?? null;
   const [mediaPlayback, setMediaPlayback] = useState<SegmentedPlaybackSnapshot>(() => ({
@@ -675,6 +695,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         boundMediaKeyRef.current = null;
+        remoteAudioTimelineKeyRef.current = null;
         if (
           localAudioObjectUrlRef.current ||
           localMediaBindingRef.current?.endsWith(":local") ||
@@ -750,6 +771,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         boundMediaKeyRef.current = null;
+        remoteAudioTimelineKeyRef.current = null;
         const localBindingKey = `${runtime.isCurrentSource ? "source" : "listener"}:local:${localAudioKey}`;
         if (localMediaBindingRef.current !== localBindingKey) {
           localMediaBindingRef.current = localBindingKey;
@@ -1013,6 +1035,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         audio.pause();
         audio.srcObject = null;
         boundMediaKeyRef.current = null;
+        remoteAudioTimelineKeyRef.current = null;
         receiverAudioHealthRef.current = {
           boundAtMs: 0,
           lastProgressAtMs: 0,
@@ -1031,6 +1054,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           audio.srcObject = null;
         }
         boundMediaKeyRef.current = null;
+        remoteAudioTimelineKeyRef.current = null;
         setMediaPlayback({
           state: roomPlayback ? "paused" : "idle",
           bufferedMs: 0,
@@ -1084,6 +1108,18 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.waitingSinceMs = null;
         }
         boundMediaKeyRef.current = remoteTrackId;
+        const remoteTimelineKey = roomPlayback
+          ? resolveRemoteAudioTimelineKey(roomPlayback)
+          : null;
+        const timelineChanged = remoteTimelineKey !== null &&
+          remoteAudioTimelineKeyRef.current !== null &&
+          remoteAudioTimelineKeyRef.current !== remoteTimelineKey;
+        if (remoteTimelineKey !== null) {
+          // A seek/resume changes the room clock without replacing the RTP
+          // track. Remember it once so the media element gets one controlled
+          // play() nudge instead of entering the connection recovery path.
+          remoteAudioTimelineKeyRef.current = remoteTimelineKey;
+        }
         // A remote MediaStream is played directly by the media element. It
         // must not be blocked by the shared AudioContext unlock flag, which is
         // required by local Web Audio graphs but is not part of this path.
@@ -1095,7 +1131,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.hasStarted &&
           now - health.lastProgressAtMs >= 5_000 &&
           audio.paused;
-        const shouldNudge = waitingTooLong || progressStalled;
+        const shouldNudge = timelineChanged || waitingTooLong || progressStalled;
         if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
           health.lastRecoveryAtMs = now;
           health.waitingSinceMs = null;
@@ -1210,6 +1246,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         lastRecoveryAtMs: 0,
         recoveryCount: 0
       };
+      remoteAudioTimelineKeyRef.current = null;
       mediaEnsureKeyRef.current = null;
       lastMediaEnsureAtRef.current = 0;
       localMediaBindingRef.current = null;
