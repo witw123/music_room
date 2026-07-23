@@ -38,7 +38,7 @@ const themeLabels: Record<ThemePreference, string> = {
 
 const playerStyleLabels: Record<PlayerStyle, string> = {
   vinyl: "唱片",
-  "square-cover": "正方形唱片封面"
+  "square-cover": "正方形封面"
 };
 
 const discoverProviderLabels: Record<DiscoverProvider, string> = {

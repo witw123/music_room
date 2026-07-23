@@ -46,6 +46,7 @@ import type { Route } from "next";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { ProviderAlbumDetailView, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
+import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
@@ -55,6 +56,7 @@ import {
   setCachedFavorites,
   setCachedProviderAccount
 } from "@/features/workspace/page-data-cache";
+import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 
 type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -88,6 +90,11 @@ export function ProviderSearchPage({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
+  const {
+    isFavorite: isFavoriteTrack,
+    pendingFavoriteKey,
+    toggleFavorite: toggleFavoriteTrack
+  } = useFavoriteTracks(activeSession?.userId);
   const defaultProvider = initialProvider && enabledProviders.includes(initialProvider)
     ? initialProvider
     : enabledProviders[0] ?? "netease";
@@ -553,7 +560,14 @@ export function ProviderSearchPage({
       onDownload: (track) => void downloadTrack(track),
       onAddToQueue: (track) => void queueProviderTrack(track),
       onPlay: (track) => void playProviderTrack(track),
-      onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor)
+      onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
+      isFavorite: (track) => isFavoriteTrack(track),
+      isTogglingFavorite: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
+      onToggleFavorite: (track) => {
+        void toggleFavoriteTrack(track)
+          .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+          .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
+      }
     };
   }
 
@@ -753,6 +767,13 @@ export function ProviderSearchPage({
               onAlbum={loadAlbumForTrack}
               onDownload={downloadTrack}
               onImportPlaylist={openPlaylistPicker}
+              isFavorite={isFavoriteTrack}
+              isTogglingFavorite={(track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`}
+              onToggleFavorite={(track) => {
+                void toggleFavoriteTrack(track)
+                  .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+                  .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
+              }}
             />
           ) : null}
            {contentTab === "playlists" ? (
@@ -841,7 +862,10 @@ function SongsResults({
   localTracks,
   onAlbum,
   onDownload,
-  onImportPlaylist
+  onImportPlaylist,
+  isFavorite,
+  isTogglingFavorite,
+  onToggleFavorite
 }: {
   results: Track[];
   pending: string | null;
@@ -849,6 +873,9 @@ function SongsResults({
   onAlbum: (track: Track) => Promise<void>;
   onDownload: (track: Track) => Promise<void>;
   onImportPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => Promise<void>;
+  isFavorite: (track: Track) => boolean;
+  isTogglingFavorite: (track: Track) => boolean;
+  onToggleFavorite: (track: Track) => void;
 }) {
   return (
     <section className="mt-7">
@@ -893,6 +920,7 @@ function SongsResults({
                 );
               })()}
               <Button aria-label={`加入歌单 ${track.title}`} disabled={pending !== null} onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" variant="ghost" type="button"><Icon name="playlist-add" /></Button>
+              <FavoriteTrackButton isFavorite={isFavorite(track)} onToggle={() => onToggleFavorite(track)} pending={isTogglingFavorite(track)} track={track} />
             </div>
           </article>
         ))}

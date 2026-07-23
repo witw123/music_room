@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
-import type { PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
@@ -23,6 +23,8 @@ import {
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
+import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -165,9 +167,28 @@ function BottomPlayerBase({
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
+  const album = currentTrack?.album ?? "未知专辑";
   const playbackMode = playback?.playbackMode ?? "sequence";
   const artworkPalette = useArtworkPalette(currentTrack?.artworkUrl);
   const playerStyle = usePlayerStyle();
+  const { activeSession } = useSessionIdentity({
+    sessionStorageKey: "music-room-session",
+    initialStatusMessage: ""
+  });
+  const favoriteTrack = toFavoriteTrackCandidate(currentTrack);
+  const {
+    isFavorite: isFavoriteTrack,
+    pendingFavoriteKey,
+    toggleFavorite: toggleFavoriteTrack
+  } = useFavoriteTracks(activeSession?.userId);
+  const favoriteTrackIsFavorite = favoriteTrack ? isFavoriteTrack(favoriteTrack) : false;
+  const favoriteTrackIsPending = favoriteTrack
+    ? pendingFavoriteKey === `${favoriteTrack.provider}:${favoriteTrack.providerTrackId}`
+    : false;
+  const toggleCurrentFavorite = useCallback(() => {
+    if (!favoriteTrack) return;
+    void toggleFavoriteTrack(favoriteTrack);
+  }, [favoriteTrack, toggleFavoriteTrack]);
   const playerSurfaceStyle = {
     backgroundColor: artworkPalette.surface,
     borderColor: artworkPalette.border
@@ -381,6 +402,7 @@ function BottomPlayerBase({
         playbackTrackId={playback?.currentTrackId}
         title={title}
         artist={artist}
+        album={album}
         boundedProgressMs={boundedProgressMs}
         currentTrackDuration={currentTrackDuration}
         volume={volume}
@@ -419,6 +441,7 @@ function BottomPlayerBase({
         playbackTrackId={playback?.currentTrackId}
         title={title}
         artist={artist}
+        album={album}
         boundedProgressMs={boundedProgressMs}
         currentTrackDuration={currentTrackDuration}
         volume={volume}
@@ -449,6 +472,10 @@ function BottomPlayerBase({
         artworkUrl={currentTrack?.artworkUrl ?? null}
         playerStyle={playerStyle}
         mobileVariant={mobileVariant}
+        favoriteTrack={favoriteTrack}
+        favoriteTrackIsFavorite={favoriteTrackIsFavorite}
+        favoriteTrackIsPending={favoriteTrackIsPending}
+        onToggleFavoriteTrack={toggleCurrentFavorite}
       />
       </div>
 
@@ -499,6 +526,10 @@ function BottomPlayerBase({
       onPlayQueueItem={onPlayQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
       onReorderQueue={onReorderQueue}
+      favoriteTrack={favoriteTrack}
+      favoriteTrackIsFavorite={favoriteTrackIsFavorite}
+      favoriteTrackIsPending={favoriteTrackIsPending}
+      onToggleFavoriteTrack={toggleCurrentFavorite}
       onClose={() => setIsImmersiveOpen(false)}
     />
     <MiniPlayerOverlay
@@ -526,6 +557,23 @@ function BottomPlayerBase({
     />
     </>
   );
+}
+
+function toFavoriteTrackCandidate(track: TrackMeta | null): ProviderTrackCandidate | null {
+  if (!track?.sourceRef || (track.sourceType !== "netease" && track.sourceType !== "qqmusic")) {
+    return null;
+  }
+  return {
+    provider: track.sourceRef.provider,
+    providerTrackId: track.sourceRef.trackId,
+    access: "unknown",
+    quality: null,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    durationMs: track.durationMs,
+    artworkUrl: track.artworkUrl
+  };
 }
 
 export const BottomPlayer = memo(BottomPlayerBase);

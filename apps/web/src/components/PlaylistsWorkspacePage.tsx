@@ -24,6 +24,7 @@ import {
   hashAudioBlob,
   providerTrackKey,
   sortLocalPlaylists,
+  toCachedProviderTrack,
   toProviderTrackRecord,
   updateLocalPlaylist,
   type LocalPlaylistRecord
@@ -42,6 +43,8 @@ import {
   syncLocalPlaylistToDatabase
 } from "@/lib/local-playlist-database";
 import { formatDuration } from "@/lib/music-room-ui";
+import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
+import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
@@ -115,6 +118,19 @@ export function PlaylistsWorkspacePage({
   const networkPlaylistsRef = useRef<Playlist[]>([]);
   const player = useLocalPlayer();
   const activeUserId = activeSession?.userId ?? null;
+  const {
+    isFavorite: isFavoriteTrack,
+    pendingFavoriteKey,
+    toggleFavorite: toggleFavoriteTrack
+  } = useFavoriteTracks(activeUserId);
+
+  function togglePlaylistTrackFavorite(track: LocalPlaylistTrackRecord) {
+    const candidate = toCachedProviderTrack(track);
+    if (!candidate) return;
+    void toggleFavoriteTrack(candidate)
+      .then(() => setStatusMessage(`已${isFavoriteTrack(candidate) ? "收藏" : "取消收藏"}《${track.title}》。`))
+      .catch((error) => setMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
+  }
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -584,6 +600,15 @@ export function PlaylistsWorkspacePage({
               next[index] = track;
               return next;
             })}
+            isFavorite={(track) => {
+              const candidate = toCachedProviderTrack(track);
+              return candidate ? isFavoriteTrack(candidate) : false;
+            }}
+            isTogglingFavorite={(track) => {
+              const candidate = toCachedProviderTrack(track);
+              return candidate ? pendingFavoriteKey === `${candidate.provider}:${candidate.providerTrackId}` : false;
+            }}
+            onToggleFavorite={togglePlaylistTrackFavorite}
             onUpdateTracks={(trackIds) => void updatePlaylistTracks(selectedPlaylist, trackIds)}
             onMoveTrack={(track, anchor) => setMoveTarget({ anchor, track, source: selectedPlaylist })}
             onDelete={selectedPlaylist.kind === "local" && selectedPlaylist.playlist.id !== defaultLocalPlaylistId
@@ -752,6 +777,9 @@ function LocalTrackRow({
   onMoveOrder,
   onPlay,
   onRemove,
+  isFavorite = false,
+  isTogglingFavorite = false,
+  onToggleFavorite,
   isDownloading = false,
   draggable = false,
   isDragTarget = false,
@@ -773,6 +801,9 @@ function LocalTrackRow({
   total: number;
   onPlay: () => void;
   onRemove?: () => void;
+  isFavorite?: boolean;
+  isTogglingFavorite?: boolean;
+  onToggleFavorite?: () => void;
   isDownloading?: boolean;
   draggable?: boolean;
   isDragTarget?: boolean;
@@ -836,6 +867,14 @@ function LocalTrackRow({
               <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
             )}
           </Button>
+        ) : null}
+        {onToggleFavorite && (track.provider === "netease" || track.provider === "qqmusic") && track.providerTrackId ? (
+          <FavoriteTrackButton
+            isFavorite={isFavorite}
+            onToggle={onToggleFavorite}
+            pending={isTogglingFavorite}
+            track={toCachedProviderTrack(track)}
+          />
         ) : null}
         <Button
           aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
@@ -1025,6 +1064,9 @@ function PlaylistDetailView({
   onDelete,
   onArtworkResolved,
   onTrackUpdated,
+  isFavorite,
+  isTogglingFavorite,
+  onToggleFavorite,
   onUpdateTracks,
   onMoveTrack,
   pending
@@ -1038,6 +1080,9 @@ function PlaylistDetailView({
   onDelete?: () => void;
   onArtworkResolved?: (artworkUrl: string) => void;
   onTrackUpdated?: (track: LocalPlaylistTrackRecord) => void;
+  isFavorite: (track: LocalPlaylistTrackRecord) => boolean;
+  isTogglingFavorite: (track: LocalPlaylistTrackRecord) => boolean;
+  onToggleFavorite: (track: LocalPlaylistTrackRecord) => void;
   onUpdateTracks: (trackIds: string[]) => void;
   onMoveTrack?: (track: LocalPlaylistTrackRecord, anchor: AnchoredDialogAnchor) => void;
   pending: boolean;
@@ -1350,6 +1395,9 @@ function PlaylistDetailView({
               onMove={(event) => onMoveTrack?.(track, getAnchoredDialogAnchor(event.currentTarget))}
               onMoveOrder={(direction) => moveTrackByOffset(trackId, direction)}
                onRemove={canEditTracks ? () => onUpdateTracks(currentTrackIds.filter((itemTrackId) => itemTrackId !== trackId)) : undefined}
+              isFavorite={isFavorite(track)}
+              isTogglingFavorite={isTogglingFavorite(track)}
+              onToggleFavorite={() => onToggleFavorite(track)}
               onPlay={() => {
                 const sequenceIndex = sequenceIndexById.get(track.id);
                 if (sequenceIndex !== undefined) void player.playTracks(sequenceTracks, sequenceIndex);

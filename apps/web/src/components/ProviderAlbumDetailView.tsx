@@ -4,9 +4,11 @@ import { useState } from "react";
 import type {
   NeteaseTrackCandidate,
   ProviderAlbumDetail,
+  ProviderTrackCandidate,
   QqMusicTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { formatDuration } from "@/lib/music-room-ui";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
@@ -22,6 +24,9 @@ export type ProviderAlbumTrackActions = {
   onAddToQueue?: (track: Track) => void;
   onPlay?: (track: Track) => void;
   onAddToPlaylist?: (track: Track, anchor: AnchoredDialogAnchor) => void;
+  isFavorite?: (track: Track) => boolean;
+  onToggleFavorite?: (track: Track) => void | Promise<void>;
+  isTogglingFavorite?: (track: Track) => boolean;
 };
 
 type ProviderAlbumDetailViewProps = {
@@ -145,6 +150,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
       {actions.onAddToQueue ? <Button aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || queued || !playable} onClick={() => actions.onAddToQueue?.(track)} size="icon" title={queued ? "已在队列中" : playable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><TrackActionIcon name="queue" /></Button> : null}
       {actions.onPlay ? <Button aria-label={playable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || !playable} onClick={() => actions.onPlay?.(track)} size="icon" title={playable ? "播放" : "需要下载后播放"} type="button" variant="ghost"><TrackActionIcon name="play" /></Button> : null}
       {actions.onAddToPlaylist ? <Button aria-label={`将《${track.title}》加入歌单`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled} onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" type="button" variant="ghost"><TrackActionIcon name="plus" /></Button> : null}
+      {actions.onToggleFavorite ? <FavoriteTrackButton isFavorite={actions.isFavorite?.(track) ?? false} onToggle={() => actions.onToggleFavorite?.(track)} pending={actions.isTogglingFavorite?.(track) ?? false} size="compact" track={track as ProviderTrackCandidate} /> : null}
     </div>
   );
 }

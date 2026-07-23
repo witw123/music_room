@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import type { QueueItem, TrackMeta } from "@music-room/shared";
+import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
+import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import type { PlayerStyle } from "@/features/settings/settings-store";
@@ -17,6 +18,7 @@ type LayoutProps = {
   playbackTrackId: string | null | undefined;
   title: string;
   artist: string;
+  album: string;
   boundedProgressMs: number;
   currentTrackDuration: number;
   volume: number;
@@ -47,6 +49,10 @@ type LayoutProps = {
   artworkUrl: string | null;
   playerStyle: PlayerStyle;
   mobileVariant?: "compact" | "full";
+  favoriteTrack?: ProviderTrackCandidate | null;
+  favoriteTrackIsFavorite?: boolean;
+  favoriteTrackIsPending?: boolean;
+  onToggleFavoriteTrack?: () => void;
 };
 
 export function VinylBadge({
@@ -325,6 +331,7 @@ export function MobileBottomPlayerLayout({
   playbackTrackId,
   title,
   artist,
+  album,
   boundedProgressMs,
   currentTrackDuration,
   volume,
@@ -367,9 +374,18 @@ export function MobileBottomPlayerLayout({
             title="打开沉浸式播放"
             type="button"
           >
-            <SquareAlbumCover artworkUrl={artworkUrl} className="h-12 w-12 shrink-0 rounded-full border-white/15 shadow-md" />
-            <span className="min-w-0">
-              <span className="block truncate text-[0.95rem] font-semibold leading-5 text-foreground">{title}</span>
+            <VinylBadge
+              accentColor={artworkAccent}
+              accentSoft={artworkAccentSoft}
+              artworkUrl={artworkUrl}
+              isPlaying={isPlaying}
+              playerStyle={playerStyle}
+              compact
+            />
+            <span className="min-w-0 leading-[1.15]">
+              <span className="block truncate text-[0.82rem] font-semibold text-foreground">{title}</span>
+              <span className="mt-0.5 block truncate text-[0.65rem] text-foreground-muted">{artist}</span>
+              <span className="mt-0.5 block truncate text-[0.65rem] text-foreground-muted/75">{album}</span>
             </span>
           </button>
 
@@ -434,6 +450,7 @@ export function MobileBottomPlayerLayout({
           <div className="min-h-[2.1rem]">
             <h3 className="truncate text-sm font-semibold leading-5 text-foreground">{title}</h3>
             <p className="truncate text-[11px] leading-4 text-foreground-muted">{artist}</p>
+            <p className="truncate text-[10px] leading-3 text-foreground-muted/75">{album}</p>
           </div>
         </div>
 
@@ -585,7 +602,11 @@ export function DesktopBottomPlayerLayout({
   artworkAccentSoft,
   artworkUrl,
   playerStyle,
-  mobileVariant = "full"
+  mobileVariant = "full",
+  favoriteTrack,
+  favoriteTrackIsFavorite = false,
+  favoriteTrackIsPending = false,
+  onToggleFavoriteTrack
 }: LayoutProps) {
   return (
     <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`}>
@@ -609,6 +630,14 @@ export function DesktopBottomPlayerLayout({
             <p className="truncate text-xs text-foreground-muted">{artist}</p>
           </div>
         </div>
+        {favoriteTrack && onToggleFavoriteTrack ? (
+          <FavoriteTrackButton
+            isFavorite={favoriteTrackIsFavorite}
+            onToggle={onToggleFavoriteTrack}
+            pending={favoriteTrackIsPending}
+            track={favoriteTrack}
+          />
+        ) : null}
       </div>
 
       <div className="flex items-center justify-center gap-3">

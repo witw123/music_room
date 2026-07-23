@@ -5,7 +5,7 @@ import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite,
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
-import { ProviderAlbumDetailView } from "@/components/ProviderAlbumDetailView";
+import { ProviderAlbumDetailView, ProviderAlbumTrackTable, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
@@ -29,6 +29,7 @@ import {
   saveAudioFileToLocalDirectory
 } from "@/features/upload/local-audio-storage";
 import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
 
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -40,6 +41,14 @@ export function FavoriteAlbumsPage() {
     initialStatusMessage: ""
   });
   const player = useLocalPlayer();
+  const [favoriteView, setFavoriteView] = useState<"tracks" | "albums">("tracks");
+  const {
+    favoriteTracks,
+    isFavorite: isFavoriteTrack,
+    loading: favoriteTracksLoading,
+    pendingFavoriteKey,
+    toggleFavorite: toggleFavoriteTrack
+  } = useFavoriteTracks(activeSession?.userId);
   const [items, setItems] = useState<ProviderAlbumFavorite[]>(() =>
     activeSession ? getCachedFavorites(activeSession.userId) ?? [] : []
   );
@@ -99,6 +108,33 @@ export function FavoriteAlbumsPage() {
 
   function getLocalRecord(track: Track) {
     return localTracks.find((item) => item.id === localPlaylistTrackId(track)) ?? toProviderTrackRecord(track);
+  }
+
+  function toggleFavoriteSong(track: Track) {
+    void toggleFavoriteTrack(track)
+      .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+      .catch((error) => setErrorMessage(toErrorMessage(error)));
+  }
+
+  function favoriteTrackActions() {
+    const tracks = favoriteTracks.map(favoriteTrackToCandidate);
+    return {
+      isDownloaded: (track: Track) => getLocalRecord(track).availableOffline,
+      isPlayable: (track: Track) => player.isTrackPlayable(getLocalRecord(track)),
+      isQueued: (track: Track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
+      isDownloading: (track: Track) => pending === `download:${track.provider}:${track.providerTrackId}`,
+      onDownload: (track: Track) => void downloadTrack(track),
+      onAddToQueue: (track: Track) => player.addToQueue(getLocalRecord(track)),
+      onPlay: (track: Track) => {
+        const records = tracks.map((item) => getLocalRecord(item));
+        const index = records.findIndex((item) => item.id === getLocalRecord(track).id);
+        if (index >= 0) void player.playTracks(records, index);
+      },
+      onAddToPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => void openPlaylistPicker(track, anchor),
+      isFavorite: (track: Track) => isFavoriteTrack(track),
+      isTogglingFavorite: (track: Track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
+      onToggleFavorite: toggleFavoriteSong
+    };
   }
 
   function albumRecords(albumToPlay: ProviderAlbumDetail) {
@@ -260,7 +296,23 @@ export function FavoriteAlbumsPage() {
   return (
     <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20">
-        {detail && detailItem ? (
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-surface-border pb-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Library</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">收藏</h1>
+          </div>
+          <div aria-label="收藏内容类型" className="flex items-center rounded-full border border-surface-border bg-surface p-1" role="tablist">
+            <button aria-selected={favoriteView === "tracks"} className={`rounded-full px-4 py-2 text-xs font-semibold transition ${favoriteView === "tracks" ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:text-foreground"}`} onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
+            <button aria-selected={favoriteView === "albums"} className={`rounded-full px-4 py-2 text-xs font-semibold transition ${favoriteView === "albums" ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
+          </div>
+        </header>
+        {favoriteView === "tracks" ? (
+          <FavoriteTracksSection
+            loading={favoriteTracksLoading}
+            tracks={favoriteTracks.map(favoriteTrackToCandidate)}
+            trackActions={favoriteTrackActions()}
+          />
+        ) : detail && detailItem ? (
           <ProviderAlbumDetailView
             album={detail}
             isFavorite
@@ -279,7 +331,10 @@ export function FavoriteAlbumsPage() {
                 const index = records.findIndex((item) => item.id === localPlaylistTrackId(track));
                 if (index >= 0) void player.playTracks(records, index);
               },
-              onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor)
+              onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
+              isFavorite: (track) => isFavoriteTrack(track),
+              isTogglingFavorite: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
+              onToggleFavorite: toggleFavoriteSong
             }}
           />
         ) : (
@@ -337,6 +392,24 @@ export function FavoriteAlbumsPage() {
       ) : null}
     </main>
   );
+}
+
+function FavoriteTracksSection({
+  loading,
+  tracks,
+  trackActions
+}: {
+  loading: boolean;
+  tracks: Track[];
+  trackActions: ProviderAlbumTrackActions;
+}) {
+  if (loading && tracks.length === 0) {
+    return <div className="mt-6 flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-surface-border text-sm text-foreground-muted">正在加载收藏歌曲…</div>;
+  }
+  if (tracks.length === 0) {
+    return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-surface-border px-6 text-center"><HeartIcon /><p className="mt-4 text-sm font-medium text-foreground-muted">还没有收藏歌曲</p><p className="mt-2 text-xs text-foreground-muted">在发现、歌单或播放器中点击心形按钮收藏歌曲。</p></div>;
+  }
+  return <section className="mt-6"><ProviderAlbumTrackTable actions={trackActions} tracks={tracks} /></section>;
 }
 
 function AlbumArtwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {

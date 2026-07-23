@@ -43,6 +43,7 @@ model User {
   neteaseAccount NeteaseAccount?
   qqMusicAccount QqMusicAccount?
   favoriteAlbums UserFavoriteAlbum[]
+  favoriteTracks UserFavoriteTrack[]
   adminSessions  AdminSession[]
   userSessions   UserSession[]
   auditLogs      AdminAuditLog[]
@@ -153,6 +154,28 @@ model UserFavoriteAlbum {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider, providerAlbumId])
+  @@index([userId, updatedAt])
+}
+
+model UserFavoriteTrack {
+  id              String   @id
+  userId          String
+  provider        String
+  providerTrackId String
+  access          String
+  quality         String?
+  title           String
+  artist          String
+  album           String?
+  providerAlbumId String?
+  durationMs      Int      @default(0)
+  artworkUrl      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, providerTrackId])
   @@index([userId, updatedAt])
 }
 

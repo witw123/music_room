@@ -20,6 +20,8 @@ import {
   type ProviderPlaylistDetail,
   type ProviderPlaylistListResponse,
   type ProviderTrackListResponse,
+  type ProviderTrackCandidate,
+  type ProviderTrackFavorite,
   type QqMusicAccountStatus,
   type QqMusicQrStartResponse,
   type QqMusicQrStatusResponse,
@@ -496,6 +498,17 @@ export const musicRoomApi = {
   deleteFavoriteAlbum: (provider: "netease" | "qqmusic", providerAlbumId: string) =>
     request<{ ok: boolean }>(
       `/v1/favorites/albums/${provider}/${encodeURIComponent(providerAlbumId)}`,
+      { method: "DELETE" }
+    ),
+  listFavoriteTracks: () => request<ProviderTrackFavorite[]>("/v1/favorites/tracks"),
+  saveFavoriteTrack: (track: ProviderTrackCandidate) =>
+    request<ProviderTrackFavorite>("/v1/favorites/tracks", {
+      method: "PUT",
+      body: JSON.stringify(track)
+    }),
+  deleteFavoriteTrack: (provider: "netease" | "qqmusic", providerTrackId: string) =>
+    request<{ ok: boolean }>(
+      `/v1/favorites/tracks/${provider}/${encodeURIComponent(providerTrackId)}`,
       { method: "DELETE" }
     ),
   resolveQqMusicAudio: (

@@ -36,8 +36,10 @@ export const providerPlaylistSummarySchema = z
   })
   .strict();
 
+export const providerTrackCandidateSchema = z.union([neteaseTrackCandidateSchema, qqMusicTrackCandidateSchema]);
+
 export const providerPlaylistDetailSchema = providerPlaylistSummarySchema.extend({
-  tracks: z.array(z.union([neteaseTrackCandidateSchema, qqMusicTrackCandidateSchema]))
+  tracks: z.array(providerTrackCandidateSchema)
 });
 
 export const providerAlbumSummarySchema = z
@@ -55,7 +57,7 @@ export const providerAlbumSummarySchema = z
 
 export const providerAlbumDetailSchema = providerAlbumSummarySchema
   .extend({
-    tracks: z.array(z.union([neteaseTrackCandidateSchema, qqMusicTrackCandidateSchema]))
+    tracks: z.array(providerTrackCandidateSchema)
   })
   .strict();
 
@@ -69,7 +71,7 @@ export const providerPlaylistListResponseSchema = z
 
 export const providerTrackListResponseSchema = z
   .object({
-    items: z.array(z.union([neteaseTrackCandidateSchema, qqMusicTrackCandidateSchema])),
+    items: z.array(providerTrackCandidateSchema),
     limit: z.number().int().positive(),
     offset: z.number().int().nonnegative()
   })
@@ -130,6 +132,24 @@ export const providerAlbumFavoriteSchema = providerAlbumSummarySchema
   })
   .strict();
 
+export const providerTrackFavoriteSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    provider: providerSchema,
+    providerTrackId: z.string().trim().min(1),
+    access: z.enum(["free", "vip", "paid", "unknown"]),
+    quality: z.enum(["standard", "high", "exhigh", "lossless", "hires"]).nullable(),
+    title: z.string(),
+    artist: z.string(),
+    album: z.string().nullable(),
+    providerAlbumId: z.string().nullable(),
+    durationMs: z.number().int().nonnegative(),
+    artworkUrl: z.string().url().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime()
+  })
+  .strict();
+
 export type ProviderLyrics = z.infer<typeof providerLyricsSchema>;
 export type ProviderAudioResolveResponse = z.infer<typeof providerAudioResolveResponseSchema>;
 export type ProviderPlaylistSummary = z.infer<typeof providerPlaylistSummarySchema>;
@@ -139,9 +159,11 @@ export type ProviderAlbumDetail = z.infer<typeof providerAlbumDetailSchema>;
 export type ProviderPlaylistListResponse = z.infer<typeof providerPlaylistListResponseSchema>;
 export type ProviderAlbumListResponse = z.infer<typeof providerAlbumListResponseSchema>;
 export type ProviderTrackListResponse = z.infer<typeof providerTrackListResponseSchema>;
+export type ProviderTrackCandidate = z.infer<typeof providerTrackCandidateSchema>;
 export type ProviderPlaylistCategorySortOption = z.infer<typeof providerPlaylistCategorySortOptionSchema>;
 export type ProviderPlaylistCategory = z.infer<typeof providerPlaylistCategorySchema>;
 export type ProviderPlaylistCategoryListResponse = z.infer<typeof providerPlaylistCategoryListResponseSchema>;
 export type ProviderDiscoveryBanner = z.infer<typeof providerDiscoveryBannerSchema>;
 export type ProviderDiscoveryBannerListResponse = z.infer<typeof providerDiscoveryBannerListResponseSchema>;
 export type ProviderAlbumFavorite = z.infer<typeof providerAlbumFavoriteSchema>;
+export type ProviderTrackFavorite = z.infer<typeof providerTrackFavoriteSchema>;

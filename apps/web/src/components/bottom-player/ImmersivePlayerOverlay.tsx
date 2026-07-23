@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { QueueItem, TrackMeta } from "@music-room/shared";
+import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
@@ -12,8 +12,10 @@ import { Slider } from "@/components/ui/slider";
 import { useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { type PlaybackMode } from "@/components/bottom-player/playback-mode";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
+import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
+import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;
@@ -41,6 +43,10 @@ type ImmersivePlayerOverlayProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  favoriteTrack: ProviderTrackCandidate | null;
+  favoriteTrackIsFavorite: boolean;
+  favoriteTrackIsPending: boolean;
+  onToggleFavoriteTrack: () => void;
   onClose: () => void;
 };
 
@@ -70,6 +76,10 @@ export function ImmersivePlayerOverlay({
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
+  favoriteTrack,
+  favoriteTrackIsFavorite,
+  favoriteTrackIsPending,
+  onToggleFavoriteTrack,
   onClose
 }: ImmersivePlayerOverlayProps) {
   const [mobileView, setMobileView] = useState<"artwork" | "lyrics">("artwork");
@@ -157,6 +167,10 @@ export function ImmersivePlayerOverlay({
         onReorderQueue={onReorderQueue}
         onSetMobileView={setMobileView}
         onTogglePlay={onTogglePlay}
+        favoriteTrack={favoriteTrack}
+        favoriteTrackIsFavorite={favoriteTrackIsFavorite}
+        favoriteTrackIsPending={favoriteTrackIsPending}
+        onToggleFavoriteTrack={onToggleFavoriteTrack}
         playbackMode={playbackMode}
         playbackTrackId={playbackTrackId}
         playerStyle={playerStyle}
@@ -195,35 +209,29 @@ export function ImmersivePlayerOverlay({
             onNext={onNext}
             onPrev={onPrev}
             onTogglePlay={onTogglePlay}
+            favoriteTrack={favoriteTrack}
+            favoriteTrackIsFavorite={favoriteTrackIsFavorite}
+            favoriteTrackIsPending={favoriteTrackIsPending}
+            onToggleFavoriteTrack={onToggleFavoriteTrack}
             playbackMode={playbackMode}
             playbackTrackId={playbackTrackId}
+            playerStyle={playerStyle}
             positionMs={positionMs}
+            queue={queue}
+            tracks={tracks}
+            currentQueueItemId={currentQueueItemId}
+            canReorderQueue={canReorderQueue}
+            canRemoveQueue={canRemoveQueue}
+            onPlayQueueItem={onPlayQueueItem}
+            onRemoveQueueItem={onRemoveQueueItem}
+            onReorderQueue={onReorderQueue}
             setSeekDraft={setSeekDraft}
             volume={volume}
             applyVolume={applyVolume}
             commitSeek={commitSeek}
           />
-          <div className="absolute right-0 top-1/2 -translate-y-1/2">
-            <PlayerQueueDrawer
-              accentColor={artworkPalette.accent}
-              accentSoft={artworkPalette.accentSoft}
-              canControlPlayback={canControlPlayback}
-              canRemoveQueue={canRemoveQueue}
-              canReorderQueue={canReorderQueue}
-              currentQueueItemId={currentQueueItemId}
-              onPlayQueueItem={onPlayQueueItem}
-              onRemoveQueueItem={onRemoveQueueItem}
-              onReorderQueue={onReorderQueue}
-              queue={queue}
-              tracks={tracks}
-            />
-          </div>
         </div>
         <section className="flex h-[min(78vh,52rem)] min-h-0 w-full max-w-[36rem] min-w-0 flex-col justify-center justify-self-center overflow-hidden" aria-label="歌曲信息与歌词">
-          <div className="mb-3 flex items-center justify-between gap-4 px-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">
-            <span>歌词</span>
-            <span className="truncate text-right normal-case tracking-normal text-white/35">{currentTrack?.album ?? "正在播放"}</span>
-          </div>
           <ImmersiveLyrics desktop isOpen={isOpen} isPlaying={isPlaying} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
         </section>
       </main>
@@ -252,6 +260,9 @@ function MobileImmersivePlayer({
   currentQueueItemId,
   currentTrack,
   durationMs,
+  favoriteTrack,
+  favoriteTrackIsFavorite,
+  favoriteTrackIsPending,
   isOpen,
   isPlaying,
   mobileView,
@@ -263,6 +274,7 @@ function MobileImmersivePlayer({
   onRemoveQueueItem,
   onReorderQueue,
   onSetMobileView,
+  onToggleFavoriteTrack,
   onTogglePlay,
   playbackMode,
   playbackTrackId,
@@ -294,8 +306,16 @@ function MobileImmersivePlayer({
             <button aria-label="显示歌词" className="rounded-[1.35rem] outline-none transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button">
               <ImmersiveVinyl artworkUrl={artworkUrl} isPlaying={isPlaying} mobile palette={artworkPalette} playerStyle={playerStyle} />
             </button>
-            <div className="mt-7 w-full">
-              <TrackDetails currentTrack={currentTrack} mobile />
+            <div className="mt-7 flex w-full items-start gap-3">
+              <div className="min-w-0 flex-1"><TrackDetails currentTrack={currentTrack} mobile /></div>
+              <FavoriteTrackButton
+                isFavorite={favoriteTrackIsFavorite}
+                onToggle={onToggleFavoriteTrack}
+                pending={favoriteTrackIsPending}
+                size="large"
+                track={favoriteTrack}
+                className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
+              />
             </div>
           </div>
         ) : (
@@ -375,9 +395,22 @@ type DesktopImmersivePlayerProps = {
   onNext: () => void;
   onPrev: () => void;
   onTogglePlay: () => void;
+  favoriteTrack: ProviderTrackCandidate | null;
+  favoriteTrackIsFavorite: boolean;
+  favoriteTrackIsPending: boolean;
+  onToggleFavoriteTrack: () => void;
   playbackMode: PlaybackMode;
   playbackTrackId: string | null | undefined;
+  playerStyle: "vinyl" | "square-cover";
   positionMs: number;
+  queue: QueueItem[];
+  tracks: TrackMeta[];
+  currentQueueItemId: string | null;
+  canReorderQueue: boolean;
+  canRemoveQueue: boolean;
+  onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   setSeekDraft: (value: number | null) => void;
   volume: number;
   applyVolume: (value: number) => void;
@@ -396,9 +429,22 @@ function DesktopImmersivePlayer({
   onNext,
   onPrev,
   onTogglePlay,
+  favoriteTrack,
+  favoriteTrackIsFavorite,
+  favoriteTrackIsPending,
+  onToggleFavoriteTrack,
   playbackMode,
   playbackTrackId,
+  playerStyle,
   positionMs,
+  queue,
+  tracks,
+  currentQueueItemId,
+  canReorderQueue,
+  canRemoveQueue,
+  onPlayQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue,
   setSeekDraft,
   volume,
   applyVolume,
@@ -407,16 +453,8 @@ function DesktopImmersivePlayer({
   const controlsDisabled = !canControlPlayback || !playbackTrackId;
 
   return (
-    <section className="flex min-h-0 w-full max-w-[31rem] flex-col justify-center justify-self-center">
-      <div className="relative mx-auto aspect-square w-[min(52vh,29rem)] max-w-full overflow-hidden rounded-[0.75rem] border border-white/10 bg-black/20 shadow-[0_28px_90px_rgba(0,0,0,0.42)]">
-        {artworkUrl ? (
-          <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[0.75rem] border-0 bg-transparent" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-white/75" style={{ background: `linear-gradient(145deg, ${artworkPalette.accent}, ${artworkPalette.background})` }}>
-            <svg aria-hidden="true" fill="none" height="46" viewBox="0 0 24 24" width="46" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
-          </div>
-        )}
-      </div>
+    <section className="flex min-h-0 w-[min(58vh,34rem)] max-w-full flex-col justify-center justify-self-center">
+      <ImmersiveVinyl artworkUrl={artworkUrl} desktop isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
 
       <div className="mt-5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
@@ -426,6 +464,14 @@ function DesktopImmersivePlayer({
           <p className="mt-0.5 truncate text-sm text-white/65">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</p>
           <p className="mt-1 truncate text-xs text-white/40">{currentTrack?.album ?? "未知专辑"}</p>
         </div>
+        <FavoriteTrackButton
+          isFavorite={favoriteTrackIsFavorite}
+          onToggle={onToggleFavoriteTrack}
+          pending={favoriteTrackIsPending}
+          size="large"
+          track={favoriteTrack}
+          className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
+        />
       </div>
 
       <div className="mt-5 flex items-center gap-3">
@@ -444,7 +490,7 @@ function DesktopImmersivePlayer({
         <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-white/45">{formatDuration(durationMs)}</span>
       </div>
 
-      <div className="mt-4 flex items-center justify-center gap-4 sm:gap-5">
+      <div className="mt-4 flex items-center justify-center gap-2 sm:gap-3">
         <button
           aria-label="切换播放模式"
           className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/60 transition-[background-color,color,transform] duration-200 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35"
@@ -467,6 +513,19 @@ function DesktopImmersivePlayer({
           {isPlaying ? <svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M8 5v14l11-7z" /></svg>}
         </button>
         <TransportButton ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
+        <PlayerQueueDrawer
+          accentColor={artworkPalette.accent}
+          accentSoft={artworkPalette.accentSoft}
+          canControlPlayback={canControlPlayback}
+          canRemoveQueue={canRemoveQueue}
+          canReorderQueue={canReorderQueue}
+          currentQueueItemId={currentQueueItemId}
+          onPlayQueueItem={onPlayQueueItem}
+          onRemoveQueueItem={onRemoveQueueItem}
+          onReorderQueue={onReorderQueue}
+          queue={queue}
+          tracks={tracks}
+        />
       </div>
 
       <div className="mt-4 flex items-center gap-3 px-1 text-white/55">
@@ -511,18 +570,21 @@ function SpeakerGlyph({ volume }: { volume: number }) {
   return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M11 5 6 9H3v6h3l5 4V5Z" />{volume <= 0.01 ? <path d="m19 9-5 6m0-6 5 6" /> : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}</svg>;
 }
 
-function ImmersiveVinyl({ artworkUrl, isPlaying, mobile = false, palette, playerStyle }: { artworkUrl: string | null; isPlaying: boolean; mobile?: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
+function ImmersiveVinyl({ artworkUrl, desktop = false, isPlaying, mobile = false, palette, playerStyle }: { artworkUrl: string | null; desktop?: boolean; isPlaying: boolean; mobile?: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
   return (
-    <div className={`relative flex aspect-square w-auto max-w-full items-center justify-center ${mobile ? "h-[min(42dvh,22rem)]" : "h-[min(68dvh,34rem)]"}`}>
-      <div className="relative flex aspect-square w-[86%] items-center justify-center overflow-visible">
-        {playerStyle === "square-cover" ? <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[1.25rem] shadow-[0_26px_90px_rgba(0,0,0,0.35)]" /> : (
-          <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] animate-spin-slow" style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
-            <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
-            <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)` }} />
-            {Array.from({ length: 7 }).map((_, index) => <div key={index} className="absolute rounded-full border border-white/[0.025]" style={{ width: `${100 - index * 12}%`, height: `${100 - index * 12}%` }} />)}
-            {artworkUrl ? <div className="absolute z-10 aspect-square w-[47%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]" style={{ backgroundImage: `url("${artworkUrl}")` }} /> : null}
-            <div className="absolute z-20 flex aspect-square w-[12%] items-center justify-center rounded-full border shadow-inner" style={{ borderColor: palette.border, backgroundColor: palette.accentSoft }}><div className="aspect-square w-[30%] rounded-full border border-white/10 bg-black shadow-inner" /></div>
-          </div>
+    <div className={`relative flex aspect-square w-auto max-w-full items-center justify-center ${mobile ? "h-[min(42dvh,22rem)]" : desktop ? "h-[min(58vh,34rem)]" : "h-[min(68dvh,34rem)]"}`}>
+      <div className={`relative flex aspect-square items-center justify-center overflow-visible ${desktop || playerStyle === "square-cover" ? "w-full" : "w-[86%]"}`}>
+        {playerStyle === "square-cover" ? <SquareAlbumCover artworkUrl={artworkUrl} className={`${desktop ? "rounded-[0.75rem]" : "rounded-[1.25rem]"} h-full w-full shadow-[0_26px_90px_rgba(0,0,0,0.35)]`} /> : (
+          <>
+            <VinylAuraVisualizer accentColor={palette.accent} isPlaying={isPlaying} />
+            <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] animate-spin-slow" style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
+              <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+              <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)` }} />
+              {Array.from({ length: 6 }).map((_, index) => <div key={index} className="absolute rounded-full border border-white/[0.02]" style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }} />)}
+              {artworkUrl ? <div className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]" style={{ backgroundImage: `url("${artworkUrl}")` }} /> : null}
+              <div className="absolute z-20 flex aspect-square w-[26%] items-center justify-center rounded-full border shadow-inner" style={{ borderColor: palette.border, backgroundColor: palette.accentSoft }}><div className="aspect-square w-[32%] rounded-full border border-white/5 bg-black shadow-inner" /></div>
+            </div>
+          </>
         )}
         {playerStyle === "vinyl" ? <VinylTonearm isPlaying={isPlaying} accentColor={palette.accent} /> : null}
       </div>
