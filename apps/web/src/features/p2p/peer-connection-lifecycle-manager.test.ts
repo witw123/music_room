@@ -286,6 +286,37 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(manager.getPeerEntry("peer_b", "media")).toBe(earlyMediaEntry);
   });
 
+  it("keeps an active source media offer while the member topology is still stale", async () => {
+    const { manager } = createManager();
+
+    // The late joiner has already reconciled an incomplete snapshot, while
+    // playback state already points at the source peer.
+    await manager.syncPeers([]);
+    manager.setLocalAudioStream(null, "peer_source");
+
+    const earlyMediaEntry = await manager.getOrCreateIncomingPeerEntry("peer_source", "media");
+
+    expect(earlyMediaEntry).not.toBeNull();
+
+    await manager.syncPeers(["peer_source"]);
+
+    expect(manager.getPeerEntry("peer_source", "media")).toBe(earlyMediaEntry);
+  });
+
+  it("admits a media offer before the late joiner knows either the source or its peer", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers([]);
+
+    const earlyMediaEntry = await manager.getOrCreateIncomingPeerEntry(
+      "peer_source",
+      "media",
+      "offer"
+    );
+
+    expect(earlyMediaEntry).not.toBeNull();
+  });
+
   it("releases an unconfirmed early media admission after the source grace period", async () => {
     const { manager } = createManager();
     await manager.getOrCreateIncomingPeerEntry("peer_b", "media");
@@ -599,26 +630,6 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaOffers).toHaveLength(1);
   });
 
-  it("announces a replacement listener peer after a stale media negotiation", async () => {
-    const { manager, sendSignal } = createManager();
-
-    await manager.syncPeers(["peer_b"]);
-    manager.setLocalAudioStream(null, "peer_b");
-    await vi.advanceTimersByTimeAsync(0);
-    const initialMediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
-    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
-    initialMediaPeer.signalingState = "have-local-offer";
-    mediaEntry.lastSignalProgressAtMs = Date.now() - 9_000;
-
-    await manager.restartMediaPeer("peer_b");
-
-    expect(initialMediaPeer.connectionState).toBe("closed");
-    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
-      .map(([payload]) => payload as PeerSignalMessage)
-      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(1);
-  });
-
   it("serializes concurrent media recovery requests for one peer", async () => {
     const { manager } = createManager();
 
@@ -666,46 +677,6 @@ describe("PeerConnectionLifecycleManager", () => {
 
     expect(entry.receiverTrackState).toBe("live");
     expect(entry.receiverRtpActive).toBe(true);
-  });
-
-  it("adopts a late-join audio receiver from its transceiver when ontrack is absent", async () => {
-    class FakeMediaStream {
-      constructor(private readonly tracks: MediaStreamTrack[]) {}
-
-      getAudioTracks() {
-        return this.tracks;
-      }
-    }
-    vi.stubGlobal("MediaStream", FakeMediaStream);
-
-    const { manager } = createManager();
-    await manager.syncPeers(["peer_b"]);
-    manager.setLocalAudioStream(null, "peer_b");
-    await vi.advanceTimersByTimeAsync(0);
-
-    const entry = manager.getPeerEntry("peer_b", "media")!;
-    const track = {
-      kind: "audio",
-      id: "late-join-receiver-track",
-      readyState: "live",
-      muted: false
-    } as unknown as MediaStreamTrack;
-    const staleTrack = {
-      kind: "audio",
-      id: "stale-receiver-track",
-      readyState: "live",
-      muted: false
-    } as unknown as MediaStreamTrack;
-    entry.audioReceiver = { track: staleTrack } as unknown as RTCRtpReceiver;
-    entry.audioTransceiver = {
-      receiver: { track }
-    } as unknown as RTCRtpTransceiver;
-
-    const state = manager.getPeerMediaState("peer_b");
-
-    expect(state?.receiverTrackState).toBe("live");
-    expect(state?.remoteTrackId).toBe(track.id);
-    expect(state?.remoteStream?.getAudioTracks()).toEqual([track]);
   });
 
   it("requires consecutive positive media windows before clearing recovery history", async () => {

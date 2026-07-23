@@ -146,8 +146,8 @@ export class P2PMesh {
 
   async handleSignal(payload: PeerSignalMessage) {
     await this.signaling.handleIncomingSignal(payload, {
-      getOrCreatePeerEntry: (peerId, linkKind) =>
-        this.peerLifecycle.getOrCreateIncomingPeerEntry(peerId, linkKind),
+      getOrCreatePeerEntry: (peerId, linkKind, signalType) =>
+        this.peerLifecycle.getOrCreateIncomingPeerEntry(peerId, linkKind, signalType),
       runPeerOperation: (entry, task) => this.peerLifecycle.runPeerOperation(entry, task),
       applyRemoteDescription: (entry, remoteDescription) =>
         this.applyRemoteDescription(entry, remoteDescription),

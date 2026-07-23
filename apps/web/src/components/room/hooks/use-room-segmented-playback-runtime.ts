@@ -1008,29 +1008,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           const waitingTooLong = health.waitingSinceMs !== null &&
             now - health.waitingSinceMs >= 1_500;
           const progressStalled = startupGraceElapsed &&
-            now - health.lastProgressAtMs >= 5_000;
-          const needsNudge = waitingTooLong || progressStalled;
-          const shouldNudge = needsNudge &&
-            now - health.lastRecoveryAtMs >= 10_000;
-          const receiverMediaStalled = missingMediaSinceRef.current !== null &&
-            now - missingMediaSinceRef.current >= receiverBufferingGraceMs;
-          if (
-            (receiverMediaStalled || progressStalled) &&
-            sourcePeerId &&
-            roomPlayback.currentTrackId
-          ) {
-            // play() cannot repair a decoder/ICE path that has stopped making
-            // audible progress. Keep the existing MediaStream (and its jitter
-            // buffer), but request a throttled media-only recovery from the
-            // lifecycle manager.
-            ensureListenerMediaConnection({
-              runtime,
-              sourcePeerId,
-              trackId: roomPlayback.currentTrackId,
-              mediaEpoch: roomPlayback.mediaEpoch
-            });
-          }
-          if (shouldNudge) {
+            now - health.lastProgressAtMs >= 5_000 &&
+            audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+          const shouldNudge = waitingTooLong || progressStalled;
+          if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
             health.lastRecoveryAtMs = now;
             health.waitingSinceMs = null;
             health.recoveryCount += 1;

@@ -3,7 +3,8 @@ import type {
 } from "@music-room/shared";
 import {
   SignalingTransport,
-  type PeerLinkKind
+  type PeerLinkKind,
+  type SignalType
 } from "./signaling-transport";
 import {
   MeshHealthMonitor
@@ -153,6 +154,7 @@ export class PeerConnectionLifecycleManager {
     PeerEntry,
     ReturnType<typeof setTimeout>
   >();
+  private readonly pendingIncomingMediaAdmissionPeerIds = new Set<string>();
   private connectionGenerationSequence = 0;
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
@@ -273,7 +275,10 @@ export class PeerConnectionLifecycleManager {
       }
       if (
         !expected &&
-        !(entry.linkKind === "media" && this.hasProvisionalIncomingMediaAdmission(entry))
+        !(entry.linkKind === "media" && (
+          this.hasProvisionalIncomingMediaAdmission(entry) ||
+          this.pendingIncomingMediaAdmissionPeerIds.has(peerId)
+        ))
       ) {
         this.releasePeer(peerId, entry);
       }
@@ -311,12 +316,33 @@ export class PeerConnectionLifecycleManager {
     return expected;
   }
 
-  private isIncomingPeerAdmitted(peerId: string, linkKind: PeerLinkKind) {
+  private isIncomingPeerAdmitted(
+    peerId: string,
+    linkKind: PeerLinkKind,
+    signalType?: SignalType
+  ) {
     if (!this.topologyInitialized) {
       return true;
     }
+    // The playback snapshot can identify the active source before the member
+    // presence update adds that source to expectedRemotePeerIds. Do not drop
+    // its first media offer in that window; the provisional admission below
+    // will be promoted when topology catches up or released on timeout.
+    if (
+      linkKind === "media" &&
+      this.localAudioSourcePeerId !== null &&
+      this.localAudioSourcePeerId === peerId
+    ) {
+      return true;
+    }
     if (!this.expectedRemotePeerIds.has(peerId)) {
-      return false;
+      // On a late join, the source offer can arrive before either the
+      // playback snapshot or the member presence patch. Keep this exception
+      // limited to media negotiation signals and only while no source is
+      // known; data peers and stale answers remain strictly topology-bound.
+      return linkKind === "media" &&
+        this.localAudioSourcePeerId === null &&
+        (signalType === "offer" || signalType === "candidate");
     }
     if (linkKind === "data") {
       return true;
@@ -369,7 +395,10 @@ export class PeerConnectionLifecycleManager {
     for (const [peerId, entry] of this.peerConnections.entries("media")) {
       if (expectedMedia.has(peerId)) {
         this.clearProvisionalIncomingMediaAdmission(entry);
-      } else if (!this.hasProvisionalIncomingMediaAdmission(entry)) {
+      } else if (
+        !this.hasProvisionalIncomingMediaAdmission(entry) &&
+        !this.pendingIncomingMediaAdmissionPeerIds.has(peerId)
+      ) {
         this.releasePeer(peerId, entry);
       }
     }
@@ -452,9 +481,10 @@ export class PeerConnectionLifecycleManager {
 
   async getOrCreateIncomingPeerEntry(
     peerId: string,
-    linkKind: PeerLinkKind = "data"
+    linkKind: PeerLinkKind = "data",
+    signalType?: SignalType
   ): Promise<PeerEntry | null> {
-    if (this.destroyed || !this.isIncomingPeerAdmitted(peerId, linkKind)) {
+    if (this.destroyed || !this.isIncomingPeerAdmitted(peerId, linkKind, signalType)) {
       return null;
     }
 
@@ -463,11 +493,25 @@ export class PeerConnectionLifecycleManager {
       return existing;
     }
 
-    const entry = await this.ensurePeer(peerId, false, linkKind);
-    if (linkKind === "media" && this.localAudioSourcePeerId === null) {
-      this.provisionallyAdmitIncomingMedia(peerId, entry);
+    const shouldProvisionallyAdmit = linkKind === "media" &&
+      !this.expectedMediaPeerIds().has(peerId);
+    if (shouldProvisionallyAdmit) {
+      // ensurePeer is async and yields even when it only allocates the local
+      // RTCPeerConnection. Mark the peer before that yield so a concurrent
+      // topology reconcile cannot release the entry before its timer exists.
+      this.pendingIncomingMediaAdmissionPeerIds.add(peerId);
     }
-    return entry;
+    try {
+      const entry = await this.ensurePeer(peerId, false, linkKind);
+      if (shouldProvisionallyAdmit && !entry.releasing) {
+        this.provisionallyAdmitIncomingMedia(peerId, entry);
+      }
+      return entry;
+    } finally {
+      if (shouldProvisionallyAdmit) {
+        this.pendingIncomingMediaAdmissionPeerIds.delete(peerId);
+      }
+    }
   }
 
   runPeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {
@@ -569,21 +613,17 @@ export class PeerConnectionLifecycleManager {
     const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live" &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
-    const requiresReplacement = options?.forceRecreate === true ||
-      entry.connection.connectionState === "failed" ||
-      entry.connection.connectionState === "closed" ||
-      (entry.connection.signalingState !== "stable" && staleSignal) ||
-      (entry.connection.signalingState === "stable" && missingExpectedTrack);
-    // A replaced listener has no remote track to advertise, so a passive
-    // replacement can leave both peers stable and waiting forever. Any
-    // replacement caused by a stale/failed negotiation must announce the new
-    // media m-line; the source-side track is already attached when present.
-    const allowEmptyMediaOffer = requiresReplacement;
+    const allowEmptyMediaOffer = options?.forceRecreate === true ||
+      missingExpectedTrack;
     const recoveryInitiator = allowEmptyMediaOffer
       ? true
       : this.shouldInitiatePeer(peerId);
     if (
-      requiresReplacement
+      options?.forceRecreate ||
+      entry.connection.connectionState === "failed" ||
+      entry.connection.connectionState === "closed" ||
+      (entry.connection.signalingState !== "stable" && staleSignal) ||
+      (entry.connection.signalingState === "stable" && missingExpectedTrack)
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
@@ -625,6 +665,7 @@ export class PeerConnectionLifecycleManager {
     this.destroyed = true;
     this.peerConnections.clearExpected();
     this.expectedRemotePeerIds.clear();
+    this.pendingIncomingMediaAdmissionPeerIds.clear();
     this.localAudioStream = null;
     this.localAudioSourcePeerId = null;
     this.localAudioMaxBitrateKbps = null;
@@ -1224,10 +1265,6 @@ export class PeerConnectionLifecycleManager {
     if (entry.linkKind !== "media" || entry.releasing) {
       return;
     }
-    // Some Chromium builds expose the receiver on the negotiated transceiver
-    // before they dispatch ontrack for a late-join offer. Adopt it immediately
-    // so inbound RTP is not mistaken for a missing media stream.
-    this.recoverRemoteAudioTrackFromReceiver(entry);
     if (remoteDescriptionType === "offer") {
       // An incoming offer is still being answered by the signaling operation.
        // Bind the local source before createAnswer. The media m-line was
@@ -1549,17 +1586,17 @@ export class PeerConnectionLifecycleManager {
       return;
     }
 
-    const isLiveAudioReceiver = (candidate: RTCRtpReceiver | null | undefined) =>
-      candidate?.track?.kind === "audio" && candidate.track.readyState === "live";
-    // The transceiver belongs to the negotiated m-line and is authoritative
-    // after a renegotiation. A receiver cached from an older ontrack event can
-    // remain live while the current receiver is carrying the new source.
-    let receiver = [entry.audioTransceiver?.receiver, entry.audioReceiver]
-      .find(isLiveAudioReceiver) ?? null;
-    if (!receiver) {
+    let receiver = entry.audioReceiver;
+    if (
+      !receiver?.track ||
+      receiver.track.kind !== "audio" ||
+      receiver.track.readyState !== "live"
+    ) {
       try {
         const receivers = entry.connection.getReceivers?.() ?? [];
-        receiver = receivers.find(isLiveAudioReceiver) ?? null;
+        receiver = receivers.find((candidate) =>
+          candidate.track?.kind === "audio" && candidate.track.readyState === "live"
+        ) ?? null;
       } catch {
         return;
       }

@@ -405,7 +405,7 @@ describe("SignalingTransport", () => {
       flushPendingCandidates: vi.fn()
     });
 
-    expect(getOrCreatePeerEntry).toHaveBeenCalledWith("peer_b", "data");
+    expect(getOrCreatePeerEntry).toHaveBeenCalledWith("peer_b", "data", "offer");
     expect(runPeerOperation).not.toHaveBeenCalled();
     expect(applyRemoteDescription).not.toHaveBeenCalled();
   });
