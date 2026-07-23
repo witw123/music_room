@@ -617,8 +617,9 @@ export class PeerConnectionLifecycleManager {
 
     const now = Date.now();
     const staleSignal = now - entry.lastSignalProgressAtMs >= 8_000;
-    const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
-      entry.receiverTrackState !== "live" &&
+    const waitingForExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
+      entry.receiverTrackState !== "live";
+    const missingExpectedTrack = waitingForExpectedTrack &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
     // forceRecreate may announce a replacement peer, but a missing remote
     // track alone must never recreate with an empty listener offer. That path
@@ -641,12 +642,8 @@ export class PeerConnectionLifecycleManager {
     }
 
     // Let the initial offer/answer exchange finish before creating another
-    // offer. The media watchdog will retry if the track still does not arrive.
-    if (
-      this.hasExpectedRemoteAudioTrack(peerId) &&
-      entry.receiverTrackState !== "live" &&
-      now - entry.lastSignalProgressAtMs < mediaTrackWatchdogGraceMs
-    ) {
+    // offer. The media watchdog will retry once the track grace expires.
+    if (waitingForExpectedTrack && !missingExpectedTrack) {
       this.scheduleMediaWatchdog(peerId, entry);
       return entry;
     }

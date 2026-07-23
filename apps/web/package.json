@@ -20,7 +20,7 @@
     "hash-wasm": "4.12.0",
     "mpg123-decoder": "1.0.3",
     "music-metadata": "^11.14.0",
-    "next": "^15.5.18",
+    "next": "^15.5.21",
     "ogg-opus-decoder": "1.7.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
