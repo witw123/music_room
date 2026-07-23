@@ -61,6 +61,15 @@ describe("receiver playback state", () => {
     })).toBe("live");
   });
 
+  it("keeps a started receiver live when the browser reports a zero RTP window", () => {
+    expect(resolveReceiverPlaybackState({
+      receiverRtpActive: false,
+      hasStarted: true,
+      missingMediaSinceMs: null,
+      nowMs: 11_500
+    })).toBe("live");
+  });
+
   it("shows buffering only after the receiver gap exceeds the grace period", () => {
     expect(resolveReceiverPlaybackState({
       receiverRtpActive: false,

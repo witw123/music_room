@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PeerSignalMessage } from "@music-room/shared";
+import { P2PMesh } from "./mesh";
 import { SignalingTransport } from "./signaling-transport";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import type { PeerEntry } from "./peer-connection-registry";
@@ -25,6 +26,7 @@ class FakeRTCPeerConnection {
   onconnectionstatechange: (() => void) | null = null;
   oniceconnectionstatechange: (() => void) | null = null;
   ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
+  ontrack: ((event: RTCTrackEvent) => void) | null = null;
   channel = new FakeDataChannel();
   mediaSender: {
     track: MediaStreamTrack | null;
@@ -72,8 +74,42 @@ class FakeRTCPeerConnection {
     };
   }
 
+  async createAnswer() {
+    return {
+      type: "answer" as const,
+      sdp: "fake-answer"
+    };
+  }
+
+  async setRemoteDescription(description: RTCSessionDescriptionInit) {
+    this.remoteDescription = description;
+    if (description.type === "offer") {
+      this.signalingState = "have-remote-offer";
+      if (this.mediaTransceiver?.direction === "recvonly") {
+        const track = {
+          kind: "audio",
+          id: "negotiated-remote-track",
+          readyState: "live",
+          muted: false
+        } as unknown as MediaStreamTrack;
+        this.ontrack?.({
+          track,
+          streams: [],
+          receiver: null
+        } as unknown as RTCTrackEvent);
+      }
+    } else if (description.type === "answer") {
+      this.signalingState = "stable";
+    }
+  }
+
   async setLocalDescription(description?: RTCLocalSessionDescriptionInit) {
     this.localDescription = description ?? null;
+    if (description?.type === "rollback") {
+      this.signalingState = "stable";
+    } else if (description?.type === "answer") {
+      this.signalingState = "stable";
+    }
   }
 
   close() {
@@ -460,16 +496,63 @@ describe("PeerConnectionLifecycleManager", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
-    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendrecv");
+    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendonly");
     mediaPeer.signalingState = "stable";
 
-    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendrecv");
+    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendonly");
     expect(mediaPeer.mediaSender?.track).toBe(track);
     expect(mediaPeer.mediaSender?.setStreams).toHaveBeenCalledWith(stream);
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers).toHaveLength(1);
+  });
+
+  it("delivers a live track when a listener joins an already-playing source", async () => {
+    vi.stubGlobal("MediaStream", class {
+      constructor(private readonly tracks: MediaStreamTrack[] = []) {}
+
+      getAudioTracks() {
+        return this.tracks;
+      }
+    });
+    let sourceMesh: P2PMesh | null = null;
+    let listenerMesh: P2PMesh | null = null;
+    const sourceSendSignal = vi.fn((payload: unknown) => {
+      void listenerMesh?.handleSignal(payload as PeerSignalMessage);
+    });
+    const listenerSendSignal = vi.fn((payload: unknown) => {
+      void sourceMesh?.handleSignal(payload as PeerSignalMessage);
+    });
+    sourceMesh = new P2PMesh("room_1", "peer_a", sourceSendSignal, {}, []);
+    listenerMesh = new P2PMesh("room_1", "peer_b", listenerSendSignal, {}, []);
+
+    const track = { id: "already-playing-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+    listenerMesh.setLocalAudioStream(null, "peer_a");
+    sourceMesh.setLocalAudioStream(stream, "peer_a");
+
+    await sourceMesh.syncPeers(["peer_b"]);
+    await listenerMesh.syncPeers(["peer_a"]);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const listenerMediaPeer = FakeRTCPeerConnection.instances.find(
+      (entry) => entry.mediaTransceiver?.direction === "recvonly"
+    );
+    expect(listenerMediaPeer?.mediaTransceiver?.direction).toBe("recvonly");
+    expect(listenerMesh.getPeerMediaState("peer_a")?.receiverTrackState).toBe("live");
+    const sentMediaOffers = sourceSendSignal.mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    const sentListenerMediaOffers = listenerSendSignal.mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(sentMediaOffers).toHaveLength(1);
+    expect(sentListenerMediaOffers).toHaveLength(0);
+    sourceMesh.destroy();
+    listenerMesh.destroy();
   });
 
   it("does not create an empty media offer during topology sync", async () => {
@@ -481,6 +564,27 @@ describe("PeerConnectionLifecycleManager", () => {
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers).toHaveLength(0);
+  });
+
+  it("uses recvonly for a listener and promotes the existing peer to sendonly", async () => {
+    const { manager } = createManager();
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    expect(mediaEntry.audioTransceiver?.direction).toBe("recvonly");
+
+    const track = { id: "promoted-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+    manager.setLocalAudioStream(stream, "peer_a");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaEntry.audioTransceiver?.direction).toBe("sendonly");
+    expect(mediaEntry.audioSender?.track).toBe(track);
   });
 
   it("binds the source track before answering an incoming media offer", async () => {
@@ -495,7 +599,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const entry = await manager.getOrCreatePeerEntry("peer_b", "media");
     await manager.notifyRemoteDescriptionApplied("peer_b", entry, "offer");
 
-    expect(entry.audioTransceiver?.direction).toBe("sendrecv");
+    expect(entry.audioTransceiver?.direction).toBe("sendonly");
     expect(entry.audioSender?.track).toBe(track);
     expect(entry.mediaNegotiationPending).toBe(false);
   });
@@ -627,6 +731,75 @@ describe("PeerConnectionLifecycleManager", () => {
       sdp: "fake-offer"
     });
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);
+  });
+
+  it("keeps the source media peer when pause and resume reuse the live broadcast track", async () => {
+    const { manager, sendSignal } = createManager();
+    const track = { id: "pause-resume-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = mediaEntry.connection as unknown as FakeRTCPeerConnection;
+    mediaPeer.signalingState = "stable";
+
+    // A paused HTMLAudioElement keeps the MediaStreamAudioDestination track
+    // live; the source must therefore be idempotent across pause/resume ticks.
+    manager.setLocalAudioStream(stream, "peer_a");
+    await vi.advanceTimersByTimeAsync(0);
+    manager.setLocalAudioStream(stream, "peer_a");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaPeer.mediaSender?.track).toBe(track);
+    expect(
+      (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+        .map(([payload]) => payload as PeerSignalMessage)
+        .filter((payload) => payload.linkKind === "media" && payload.type === "offer")
+    ).toHaveLength(1);
+  });
+
+  it("does not restart a connected live media peer for sustained loss or jitter", async () => {
+    const { manager, sendSignal } = createManager();
+    const track = { id: "stable-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    mediaPeer.signalingState = "stable";
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    const degradedSample = {
+      mediaReceiveBitrateKbps: null,
+      mediaSendBitrateKbps: 192,
+      packetLossRate: 8,
+      jitterMs: 40
+    } as PeerConnectionStatsSample;
+
+    observeMediaHealth("peer_b", degradedSample);
+    observeMediaHealth("peer_b", degradedSample);
+    observeMediaHealth("peer_b", degradedSample);
+    observeMediaHealth("peer_b", degradedSample);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaPeer.connectionState).toBe("connected");
+    expect(
+      (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+        .map(([payload]) => payload as PeerSignalMessage)
+        .filter((payload) => payload.linkKind === "media" && payload.type === "offer")
+    ).toHaveLength(1);
   });
 
   it("does not reoffer a connected listener when its live receiver has a transient packet gap", async () => {

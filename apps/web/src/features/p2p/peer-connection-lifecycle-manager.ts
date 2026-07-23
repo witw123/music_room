@@ -757,10 +757,10 @@ export class PeerConnectionLifecycleManager {
     });
     if (linkKind === "media" && typeof connection.addTransceiver === "function") {
       const transceiver = connection.addTransceiver("audio", {
-        // Keep one bidirectional m-line for both source and listener roles.
-        // The sender stream is attached explicitly when a source starts so
-        // late joins and source changes still produce a usable ontrack event.
-        direction: "sendrecv"
+        // Media has one authoritative sender. A listener-created sendrecv
+        // m-line can race the source's first offer and leave both peers in
+        // have-local-offer without a stable receiver track.
+        direction: this.resolveLocalMediaDirection()
       });
       entry.audioTransceiver = transceiver;
       entry.audioSender = transceiver.sender;
@@ -891,7 +891,7 @@ export class PeerConnectionLifecycleManager {
         await enqueuePeerOperation(entry, async () => {
           await this.syncLocalAudioToPeer(peerId, entry, false);
           // Do not negotiate an empty media m-line during topology sync. A
-          // listener-created sendrecv offer with no source track races with
+          // listener-created recvonly offer with no source track races with
           // the real source offer when playback starts, leaving both peers in
           // have-local-offer and the listener without an ontrack event. The
           // source-side sync below will create the first offer once a live
@@ -960,6 +960,27 @@ export class PeerConnectionLifecycleManager {
     });
   }
 
+  private resolveLocalMediaDirection(): RTCRtpTransceiverDirection {
+    return this.localAudioSourcePeerId === this.localPeerId
+      ? "sendonly"
+      : "recvonly";
+  }
+
+  private syncMediaTransceiverDirection(entry: PeerEntry) {
+    const transceiver = entry.audioTransceiver;
+    if (!transceiver || transceiver.direction === this.resolveLocalMediaDirection()) {
+      return;
+    }
+
+    try {
+      transceiver.direction = this.resolveLocalMediaDirection();
+      entry.mediaNegotiationPending = true;
+    } catch {
+      // Older WebRTC implementations may expose direction as read-only.
+      // The sender/receiver track path remains usable in that case.
+    }
+  }
+
   private async syncLocalAudioToPeer(
     peerId: string,
     entry: PeerEntry,
@@ -968,6 +989,8 @@ export class PeerConnectionLifecycleManager {
     if (entry.releasing) {
       return;
     }
+
+    this.syncMediaTransceiverDirection(entry);
 
     const desiredTrack =
       this.localAudioSourcePeerId === this.localPeerId
@@ -1042,7 +1065,7 @@ export class PeerConnectionLifecycleManager {
       try {
         await entry.audioSender.replaceTrack(desiredTrack);
         entry.senderTrackState = desiredTrack ? "live" : "none";
-        // A track attached after the initial sendrecv offer still needs a
+        // A track attached after the initial source offer still needs a
         // media re-offer so the remote peer receives the track identity/MSID
         // and fires ontrack. replaceTrack alone can leave a connected but
         // permanently silent receiver when the first offer had no track.
@@ -1303,9 +1326,9 @@ export class PeerConnectionLifecycleManager {
     }
     if (remoteDescriptionType === "offer") {
       // An incoming offer is still being answered by the signaling operation.
-       // Bind the local source before createAnswer. The media m-line was
-       // negotiated as sendrecv, so changing the source never needs another
-       // offer.
+      // Bind the local source before createAnswer. The media m-line is
+      // directional, so the answer must include the source track when the
+      // source is answering a listener recovery offer.
       await this.syncLocalAudioToPeer(peerId, entry, false);
       entry.mediaNegotiationPending = false;
       return;
@@ -1569,17 +1592,20 @@ export class PeerConnectionLifecycleManager {
       return;
     }
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
-    const connectedLiveMediaHasPacketGap = reason === "no-packets" &&
-      entry.connection.connectionState === "connected" &&
+    const connectedLiveMedia = entry.connection.connectionState === "connected" &&
       (entry.senderTrackState === "live" || entry.receiverTrackState === "live");
-    if (connectedLiveMediaHasPacketGap) {
-      // ICE/DTLS is still healthy and the negotiated track is still usable.
-      // Re-offering here tears down the receiver's jitter buffer and turns a
-      // transient RTP/statistics gap into a repeating silence cycle. Keep the
-      // existing track and let RTP/unmute or the connection-state watchdog
-      // recover it; missing/ended tracks still take the recovery path below.
+    if (connectedLiveMedia) {
+      // A connected PeerConnection with a live negotiated track is still the
+      // least disruptive playback path. Re-offering or ICE-restarting it for
+      // a loss/jitter/no-packet window discards the browser jitter buffer and
+      // turns a recoverable RTP gap into a recurring silence cycle. The
+      // browser's ICE state and the sender/receiver track callbacks remain the
+      // authoritative recovery signals here.
+      state.degradedWindows = 0;
       state.noPacketWindows = 0;
       state.noSendPacketWindows = 0;
+      state.highLossWindows = 0;
+      state.highJitterWindows = 0;
       this.mediaRecovery.set(peerId, state);
       return;
     }

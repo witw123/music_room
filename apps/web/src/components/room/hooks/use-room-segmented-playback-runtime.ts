@@ -556,6 +556,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     volume: input.volume,
     audioUnlocked: input.audioUnlocked,
   });
+  const usesNativeLocalAudio = localAudioResolution.status === "available";
+  const usesOfflineFallback = !input.isCurrentSource &&
+    !!offlineFallbackAsset && !usesNativeLocalAudio;
+  const usesSegmentedPlayback = (input.isCurrentSource && !usesNativeLocalAudio) ||
+    usesOfflineFallback;
+  const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
 
   useEffect(() => {
     const runtime = runtimeInputRef.current;
@@ -719,8 +725,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           return;
         }
         const sourceStream = runtime.currentTrack?.playbackAsset && roomPlayback?.currentTrackId
-          && roomPlayback.status === "playing"
-          ? roomAudioOutput.getBroadcastDestination()?.stream ?? null
+          ? roomAudioOutput.getBroadcastStream()
           : null;
         const bindingKey = sourceStream
           ? `source:${sourceStream.id}:${runtime.peerId}:${bitrateKbps ?? "none"}`
@@ -856,7 +861,18 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           localAudioTimelineKeyRef.current = timelineKey;
 
           if (activeRoomPlayback.status !== "playing") {
-            runtime.setLocalAudioStream(null, null, null);
+            // Pause the local timeline without tearing down the source's RTP
+            // topology. The destination track remains live and carries
+            // silence while the local element is paused, so resume/seek can
+            // reuse the same ICE/DTLS session and receiver jitter buffer.
+            const sourceBroadcastStream = activeRuntime.isCurrentSource
+              ? roomAudioOutput.getBroadcastStream()
+              : null;
+            activeRuntime.setLocalAudioStream(
+              sourceBroadcastStream,
+              activeRuntime.isCurrentSource ? activeRuntime.peerId : null,
+              activeRuntime.isCurrentSource ? bitrateKbps : null
+            );
             audio.pause();
             if (!cancelled) {
               setMediaPlayback({
@@ -1050,7 +1066,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         // ended track on the same song to receive one fresh recovery attempt.
         mediaEnsureKeyRef.current = null;
         lastMediaEnsureAtRef.current = 0;
-        if (roomPlayback?.status === "playing" && !remote.receiverRtpActive) {
+        const mediaElementStalled = audio.paused ||
+          audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+        if (roomPlayback?.status === "playing" && !remote.receiverRtpActive && mediaElementStalled) {
           missingMediaSinceRef.current ??= now;
         } else {
           missingMediaSinceRef.current = null;
@@ -1071,16 +1089,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         // required by local Web Audio graphs but is not part of this path.
         const startupGraceElapsed = now - health.boundAtMs >= 2_500;
         const waitingTooLong = health.waitingSinceMs !== null &&
-          now - health.waitingSinceMs >= 1_500;
+          now - health.waitingSinceMs >= 1_500 &&
+          mediaElementStalled;
         const progressStalled = startupGraceElapsed &&
+          health.hasStarted &&
           now - health.lastProgressAtMs >= 5_000 &&
-          audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+          audio.paused;
         const shouldNudge = waitingTooLong || progressStalled;
         if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
           health.lastRecoveryAtMs = now;
           health.waitingSinceMs = null;
           health.recoveryCount += 1;
-          runtime.setMediaConnectionState("reconnecting");
           // Keep the same MediaStream binding. Replacing srcObject here
           // destroys the browser jitter buffer and is a common source of
           // repeated silence during short packet-loss bursts.
@@ -1106,9 +1125,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           // AudioContext has not been resumed. Remember that this concrete
           // playback path is usable without forcing a false unlock prompt.
           setAudioUnlocked(true);
-        }
-        if (!cancelled && shouldNudge) {
-          runtime.setMediaConnectionState("live");
         }
         if (cancelled) return;
         if (!cancelled) {
@@ -1297,6 +1313,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
   useEffect(() => {
     if (
+      usesSegmentedPlayback &&
       audioUnlocked &&
       playback.state === "awaiting-unlock" &&
       playback.audioContextState !== "running"
@@ -1309,22 +1326,23 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     playback.audioContextState,
     playback.state,
     setAudioUnlocked,
-    setStatusMessage
+    setStatusMessage,
+    usesSegmentedPlayback
   ]);
 
   useEffect(() => {
-    if (playback.lastError && playback.lastError !== lastReportedErrorRef.current) {
-      lastReportedErrorRef.current = playback.lastError;
-      setLastSourceStartError(playback.lastError);
-      setStatusMessage(`媒体播放正在自动恢复：${playback.lastError}`);
+    if (visiblePlayback.lastError && visiblePlayback.lastError !== lastReportedErrorRef.current) {
+      lastReportedErrorRef.current = visiblePlayback.lastError;
+      setLastSourceStartError(visiblePlayback.lastError);
+      setStatusMessage(`媒体播放正在自动恢复：${visiblePlayback.lastError}`);
       return;
     }
-    if (!playback.lastError && lastReportedErrorRef.current && playback.state === "live") {
+    if (!visiblePlayback.lastError && lastReportedErrorRef.current && visiblePlayback.state === "live") {
       lastReportedErrorRef.current = null;
       setLastSourceStartError(null);
       setStatusMessage("分段播放已自动恢复。");
     }
-  }, [playback.lastError, playback.state, setLastSourceStartError, setStatusMessage]);
+  }, [setLastSourceStartError, setStatusMessage, visiblePlayback.lastError, visiblePlayback.state]);
 
   useEffect(() => {
     if (!input.isCurrentSource) {
@@ -1360,50 +1378,50 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [input.isCurrentSource, playback.sourceHealth, setMediaConnectionState]);
 
   useEffect(() => {
-    if (playback.state === "live") {
+    if (visiblePlayback.state === "live") {
       setSourceStartState("live");
       setMediaConnectionState(
-        input.isCurrentSource && playback.sourceHealth === "source-silent"
+        input.isCurrentSource && visiblePlayback.sourceHealth === "source-silent"
           ? "reconnecting"
           : "live"
       );
       setLastSourceStartError(null);
       return;
     }
-    if (playback.state === "buffering") {
+    if (visiblePlayback.state === "buffering") {
       setSourceStartState("starting");
       setMediaConnectionState("buffering");
-      if (playback.lastError) {
-        setLastSourceStartError(playback.lastError);
+      if (visiblePlayback.lastError) {
+        setLastSourceStartError(visiblePlayback.lastError);
       }
       return;
     }
-    if (playback.state === "awaiting-unlock") {
+    if (visiblePlayback.state === "awaiting-unlock") {
       setSourceStartState("awaiting-unlock");
       setMediaConnectionState("connecting");
       return;
     }
-    if (playback.state === "ended") {
+    if (visiblePlayback.state === "ended") {
       setSourceStartState("live");
       setMediaConnectionState("live");
       return;
     }
-    if (playback.state === "unavailable") {
+    if (visiblePlayback.state === "unavailable") {
       setSourceStartState("failed");
       setMediaConnectionState("failed");
-      setLastSourceStartError(playback.lastError ?? "当前播放源媒体轨道不可用。");
+      setLastSourceStartError(visiblePlayback.lastError ?? "当前播放源媒体轨道不可用。");
       return;
     }
     setSourceStartState("idle");
     setMediaConnectionState("idle");
   }, [
     input.isCurrentSource,
-    playback.state,
-    playback.lastError,
-    playback.sourceHealth,
     setLastSourceStartError,
     setMediaConnectionState,
-    setSourceStartState
+    setSourceStartState,
+    visiblePlayback.lastError,
+    visiblePlayback.sourceHealth,
+    visiblePlayback.state
   ]);
 
   useEffect(() => {
@@ -1422,13 +1440,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     void onPlaybackEnded();
   }, [isCurrentSource, localPeerId, offlineFallbackAsset, onPlaybackEnded, playback.state, roomSnapshot, runtimePeerId]);
 
-  const usesSegmentedSource = input.isCurrentSource && localAudioResolution.status === "missing";
   const audioPath = resolveRoomAudioPath({
     isCurrentSource: input.isCurrentSource,
-    nativeLocalAudio: localAudioResolution.status === "available",
+    nativeLocalAudio: usesNativeLocalAudio,
     localFallback: !!offlineFallbackAsset
   });
-  const effectivePlayback = usesSegmentedSource || !!offlineFallbackAsset ? playback : mediaPlayback;
+  const effectivePlayback = visiblePlayback;
   return useMemo(
     () => ({ ...effectivePlayback, audioPath }),
     [audioPath, effectivePlayback]
