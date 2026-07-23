@@ -30,6 +30,7 @@ function buildSignal(
 function buildSignalEntry(
   input: Partial<{
     signalingState: RTCSignalingState;
+    localDescription: RTCSessionDescriptionInit | null;
     remoteDescription: RTCSessionDescriptionInit | null;
     addIceCandidate: (candidate: RTCIceCandidateInit) => Promise<void>;
   }> = {}
@@ -39,6 +40,7 @@ function buildSignalEntry(
     pendingCandidates: [] as RTCIceCandidateInit[],
     connection: {
       signalingState: input.signalingState ?? "stable",
+      localDescription: input.localDescription ?? null,
       remoteDescription: input.remoteDescription ?? null,
       createAnswer: vi.fn(async () => ({ type: "answer" as const, sdp: "fake-answer" })),
       setLocalDescription: vi.fn(async () => undefined),
@@ -439,6 +441,59 @@ describe("SignalingTransport", () => {
 
     expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(2);
     expect(applyRemoteDescription).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-sends the pending local offer when an impolite peer detects an offer collision", async () => {
+    const sendSignal = vi.fn();
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal
+    });
+    const entry = buildSignalEntry({
+      signalingState: "have-local-offer",
+      localDescription: {
+        type: "offer",
+        sdp: "pending-local-offer"
+      }
+    });
+    const applyRemoteDescription = vi.fn(async () => undefined);
+    const handlers = {
+      getOrCreatePeerEntry: vi.fn(async () => entry),
+      runPeerOperation: async <T>(_entry: typeof entry, task: () => Promise<T>) => task(),
+      applyRemoteDescription,
+      flushPendingCandidates: vi.fn(async () => undefined),
+      nowMs: () => 3456
+    };
+
+    await transport.handleIncomingSignal(
+      buildSignal({
+        type: "offer",
+        payload: {
+          type: "offer",
+          sdp: "recovery-offer"
+        }
+      }),
+      handlers
+    );
+
+    expect(applyRemoteDescription).not.toHaveBeenCalled();
+    expect(entry.connection.setLocalDescription).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith({
+      protocolVersion: 4,
+      capability: "webrtc-opus-v1",
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b",
+      channelKind: "data",
+      linkKind: "data",
+      type: "offer",
+      payload: {
+        type: "offer",
+        sdp: "pending-local-offer"
+      }
+    });
+    expect(entry.lastSignalProgressAtMs).toBe(0);
   });
 
   it("drops reordered signals from an older connection generation", async () => {

@@ -14,6 +14,7 @@ type SignalPeerEntry = {
   connection: {
     addIceCandidate: (candidate: RTCIceCandidateInit) => Promise<void>;
     createAnswer: () => Promise<RTCLocalSessionDescriptionInit>;
+    localDescription: RTCSessionDescription | RTCSessionDescriptionInit | null;
     remoteDescription: RTCSessionDescription | RTCSessionDescriptionInit | null;
     setLocalDescription: (description?: RTCLocalSessionDescriptionInit) => Promise<void>;
     signalingState: RTCSignalingState;
@@ -188,8 +189,6 @@ export class SignalingTransport {
     if (!this.acceptIncomingSignalOrder(payload)) {
       return;
     }
-    entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
-
     if (payload.type === "offer") {
       await handlers.runPeerOperation(entry, async () => {
         this.markReceived(payload.fromPeerId, "offer", linkKind);
@@ -210,6 +209,18 @@ export class SignalingTransport {
           // back its local media offer so a source change cannot strand the
           // connection in have-local-offer.
           if (this.localPeerId.localeCompare(payload.fromPeerId) < 0) {
+            // Keep the pending local offer, but make sure the polite peer can
+            // receive it again after rolling back its recovery offer.
+            const localDescription = entry.connection.localDescription;
+            if (localDescription?.type === "offer") {
+              this.send(
+                payload.fromPeerId,
+                "offer",
+                toSessionDescriptionPayload(localDescription),
+                linkKind,
+                entry.connectionGeneration
+              );
+            }
             return;
           }
           await entry.connection.setLocalDescription({ type: "rollback" });
@@ -219,7 +230,6 @@ export class SignalingTransport {
         await handlers.flushPendingCandidates(entry);
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
-        entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
         this.send(
           payload.fromPeerId,
           "answer",
@@ -227,6 +237,7 @@ export class SignalingTransport {
           linkKind,
           entry.connectionGeneration
         );
+        entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
       });
       return;
     }
