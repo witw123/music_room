@@ -318,11 +318,21 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     }
 
     let cancelled = false;
-    setLocalAudioResolution({
-      key: localAudioTrackKey,
-      status: "checking",
-      file: null,
-      error: null
+    // Do not flip an already-resolved key back to "checking". That briefly
+    // cleared the source media fanout on every redundant effect re-run.
+    setLocalAudioResolution((current) => {
+      if (
+        current.key === localAudioTrackKey &&
+        (current.status === "available" || current.status === "missing")
+      ) {
+        return current;
+      }
+      return {
+        key: localAudioTrackKey,
+        status: "checking",
+        file: null,
+        error: null
+      };
     });
     void getRoomLocalAudioFile({
       trackId: track.id,
@@ -354,13 +364,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       cancelled = true;
     };
   }, [
-    input.currentTrack,
     input.currentTrack?.fileHash,
     input.currentTrack?.id,
     input.currentTrack?.mimeType,
     input.currentTrack?.originalAsset?.assetId,
     input.currentTrack?.title,
-    input.isCurrentSource,
     localAudioTrackKey,
     streamingOnlyPlayback
   ]);
@@ -451,10 +459,18 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       lastMediaEnsureAtRef.current = 0;
     }
     const now = Date.now();
-    if (now - lastMediaEnsureAtRef.current < 2_000) {
+    // Aggressive 2s recreates tore down healthy ICE sessions while the source
+    // was still attaching its track, producing the listen-side sound/silence
+    // cycle. Soft recovery every 8s is enough for genuine missing-track cases.
+    if (now - lastMediaEnsureAtRef.current < 8_000) {
       return;
     }
     lastMediaEnsureAtRef.current = now;
+    const remote = input.runtime.getPeerMediaState(input.sourcePeerId);
+    const hasLiveReceiver = remote?.receiverTrackState === "live" && !!remote.remoteStream;
+    if (hasLiveReceiver && !input.forceRecreate) {
+      return;
+    }
     input.runtime.setMediaConnectionState("reconnecting");
     input.runtime.recordPeerDiagnostic({
       peerId: input.sourcePeerId,
@@ -465,7 +481,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       level: "warning"
     });
     void input.runtime.restartMediaPeer(input.sourcePeerId, {
-      forceRecreate: input.forceRecreate
+      // Never force-recreate from the poll path. Force recreate is reserved for
+      // explicit source-side wedged-sender recovery and races empty media offers.
+      forceRecreate: false
     }).catch((error) => {
       input.runtime.recordPeerDiagnostic({
         peerId: input.sourcePeerId,
@@ -650,6 +668,31 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           roomAudioOutput.releaseRoomAudioSession();
         }
         if (runtime.localAudioResolution.status !== "missing") {
+          // While IndexedDB resolves local audio availability, keep the source
+          // role (and any existing broadcast stream). Clearing sourcePeerId
+          // here used to release every media peer mid-playback and push
+          // listeners into a connect/silence recovery loop.
+          if (
+            runtime.localAudioResolution.status === "checking" ||
+            runtime.localAudioResolution.status === "idle"
+          ) {
+            runtime.setLocalAudioStream(
+              roomAudioOutput.getBroadcastStream(),
+              runtime.peerId,
+              bitrateKbps
+            );
+            if (!cancelled) {
+              setMediaPlayback({
+                state: roomPlayback?.status === "playing" ? "buffering" : "paused",
+                bufferedMs: 0,
+                ownedUnitCount: 0,
+                totalUnitCount: runtime.currentTrack?.playbackAsset?.unitCount ?? 0,
+                audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+                lastError: null
+              });
+            }
+            return;
+          }
           runtime.setLocalAudioStream(null, null, null);
           if (!cancelled) {
             setMediaPlayback({

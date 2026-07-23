@@ -303,10 +303,13 @@ export class PeerConnectionLifecycleManager {
   private expectedMediaPeerIds() {
     const expected = new Set<string>();
     if (this.localAudioSourcePeerId === this.localPeerId) {
-      if (this.hasLiveLocalAudioTrack()) {
-        for (const peerId of this.expectedRemotePeerIds) {
-          expected.add(peerId);
-        }
+      // Keep media fanout peers for as long as we are the active source, even
+      // before the broadcast MediaStreamTrack is live. Gating topology on a
+      // live track released every listener media PC whenever the destination
+      // was briefly missing (local-audio resolve, underrun recovery, etc.) and
+      // forced a connect → audible → silent recovery loop.
+      for (const peerId of this.expectedRemotePeerIds) {
+        expected.add(peerId);
       }
       return expected;
     }
@@ -617,18 +620,19 @@ export class PeerConnectionLifecycleManager {
     const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live" &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
-    const allowEmptyMediaOffer = options?.forceRecreate === true ||
-      missingExpectedTrack;
+    // forceRecreate may announce a replacement peer, but a missing remote
+    // track alone must never recreate with an empty listener offer. That path
+    // races the source track offer and recreates the sound/silence loop.
+    const isLocalSource = this.localAudioSourcePeerId === this.localPeerId;
+    const allowEmptyMediaOffer = options?.forceRecreate === true;
     const recoveryInitiator = allowEmptyMediaOffer
       ? true
       : this.shouldInitiatePeer(peerId);
-    if (
-      options?.forceRecreate ||
+    const connectionBroken =
       entry.connection.connectionState === "failed" ||
       entry.connection.connectionState === "closed" ||
-      (entry.connection.signalingState !== "stable" && staleSignal) ||
-      (entry.connection.signalingState === "stable" && missingExpectedTrack)
-    ) {
+      (entry.connection.signalingState !== "stable" && staleSignal);
+    if (options?.forceRecreate || connectionBroken) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
       const nextEntry = await this.ensurePeer(peerId, recoveryInitiator, "media", allowEmptyMediaOffer);
@@ -647,18 +651,25 @@ export class PeerConnectionLifecycleManager {
       return entry;
     }
 
+    // Connected (or stable) but still missing the remote track: never recreate
+    // the PeerConnection. Soft re-offers keep ICE/DTLS and the polite-peer
+    // rollback path absorbs offer glare with the source.
     return enqueuePeerOperation(entry, async () => {
       if (entry.releasing || entry.connection.signalingState !== "stable") {
         return null;
       }
 
-      await this.signaling.createAndSendOffer(
-        peerId,
-        entry.connection,
-        { iceRestart: Boolean(entry.connection.remoteDescription) },
-        "media",
-        entry.connectionGeneration
-      );
+      if (isLocalSource) {
+        await this.syncLocalAudioToPeer(peerId, entry, true);
+      } else {
+        await this.signaling.createAndSendOffer(
+          peerId,
+          entry.connection,
+          { iceRestart: Boolean(entry.connection.remoteDescription) },
+          "media",
+          entry.connectionGeneration
+        );
+      }
       entry.lastSignalProgressAtMs = Date.now();
       this.scheduleMediaWatchdog(peerId, entry);
       return entry;
