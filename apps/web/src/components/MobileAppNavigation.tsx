@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type MobileNavItem = {
-  id: "home" | "discover" | "playlists" | "favorites" | "profile";
+  id: "home" | "discover" | "playlists" | "favorites" | "profile" | "settings";
   label: string;
   href: Route;
 };
@@ -16,7 +16,8 @@ const items: MobileNavItem[] = [
   { id: "discover", label: "发现", href: "/app/discover" as Route },
   { id: "playlists", label: "歌单", href: "/app/playlists" },
   { id: "favorites", label: "收藏", href: "/app/favorites" },
-  { id: "profile", label: "我的", href: "/app/profile" }
+  { id: "profile", label: "我的", href: "/app/profile" },
+  { id: "settings", label: "设置", href: "/app/settings" }
 ];
 
 export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () => void }) {
@@ -29,7 +30,7 @@ export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () =>
 
   return (
     <nav className="mobile-app-navigation fixed inset-x-0 bottom-0 z-[70] isolate h-[calc(4.5rem+env(safe-area-inset-bottom))] md:hidden" aria-label="主导航">
-      <div className="grid h-full grid-cols-5 items-start px-2 pb-[env(safe-area-inset-bottom)] pt-1">
+      <div className="grid h-full grid-cols-6 items-start px-2 pb-[env(safe-area-inset-bottom)] pt-1">
         {items.map((item) => {
           const active = pendingHref === item.href || isActivePath(pathname, item.href);
           return (

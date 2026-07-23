@@ -73,8 +73,13 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
 
 export function getArtworkSourceUrl(artworkUrl: string) {
   const normalizedUrl = normalizeArtworkUrl(artworkUrl);
-  if (!isQqMusicArtworkUrl(normalizedUrl)) return normalizedUrl;
-  return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(normalizedUrl)}`;
+  if (isQqMusicArtworkUrl(normalizedUrl)) {
+    return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(normalizedUrl)}`;
+  }
+  if (isNeteaseArtworkUrl(normalizedUrl)) {
+    return `${apiBaseUrl}/v1/providers/netease/artwork?url=${encodeURIComponent(normalizedUrl)}`;
+  }
+  return normalizedUrl;
 }
 
 function normalizeArtworkUrl(value: string) {
@@ -91,6 +96,20 @@ function isQqMusicArtworkUrl(value: string) {
       hostname.endsWith(".qq.com") ||
       hostname === "gtimg.cn" ||
       hostname.endsWith(".gtimg.cn")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isNeteaseArtworkUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (
+      hostname === "music.163.com" ||
+      hostname.endsWith(".music.163.com") ||
+      hostname.endsWith(".music.126.net")
     );
   } catch {
     return false;

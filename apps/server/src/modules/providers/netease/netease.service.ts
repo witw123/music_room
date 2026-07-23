@@ -491,6 +491,46 @@ export class NeteaseService {
     };
   }
 
+  async openArtwork(rawUrl: string) {
+    this.assertEnabled();
+    let url: URL;
+    try {
+      url = normalizeNeteaseArtworkUrl(rawUrl);
+    } catch {
+      throw this.unavailableError();
+    }
+
+    const upstream = await fetchProviderUrl(
+      url,
+      { headers: new Headers({ accept: "image/*" }) },
+      this.requestTimeoutMs(),
+      isAllowedArtworkHost,
+      { allowSyntheticDns: true }
+    ).catch(() => null);
+    if (!upstream?.ok || !upstream.body) {
+      throw this.unavailableError();
+    }
+
+    const mimeType = resolveArtworkMime(upstream.headers.get("content-type"));
+    if (!mimeType) {
+      await upstream.body.cancel().catch(() => undefined);
+      throw this.unavailableError();
+    }
+
+    const contentLength = Number(upstream.headers.get("content-length") ?? "0");
+    if (contentLength > this.maxArtworkBytes()) {
+      await upstream.body.cancel().catch(() => undefined);
+      throw this.unavailableError();
+    }
+
+    return {
+      upstream,
+      mimeType,
+      contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null,
+      maxBytes: this.maxArtworkBytes()
+    };
+  }
+
   private async resolveAudioSource(
     userId: string,
     trackId: string,
@@ -785,6 +825,11 @@ export class NeteaseService {
     const value = Number(process.env.NETEASE_MAX_IMPORT_BYTES ?? 209_715_200);
     return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 209_715_200;
   }
+
+  private maxArtworkBytes() {
+    const value = Number(process.env.NETEASE_MAX_ARTWORK_BYTES ?? 10_485_760);
+    return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 10_485_760;
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -809,11 +854,6 @@ function readNumber(value: unknown) {
 
 function readLyricText(value: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function readHttpUrl(value: unknown) {
-  const result = readString(value);
-  return result && /^https?:\/\//.test(result) ? result : null;
 }
 
 function readNeteaseTrackArray(...values: unknown[]): unknown[] {
@@ -911,12 +951,24 @@ function resolveAudioMimeType(providerType: string | null, upstreamType: string 
   return null;
 }
 
+function resolveArtworkMime(contentType: string | null) {
+  const mimeType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  return mimeType?.startsWith("image/") ? mimeType : null;
+}
+
 function isAllowedAudioHost(hostname: string) {
   const normalized = hostname.toLowerCase();
   return normalized === "music.163.com" ||
     normalized.endsWith(".music.163.com") ||
     normalized.endsWith(".126.net") ||
     normalized.endsWith(".netease.com");
+}
+
+function isAllowedArtworkHost(hostname: string) {
+  const normalized = hostname.toLowerCase();
+  return normalized === "music.163.com" ||
+    normalized.endsWith(".music.163.com") ||
+    normalized.endsWith(".music.126.net");
 }
 
 /**
@@ -933,6 +985,26 @@ function normalizeNeteaseAudioUrl(value: string) {
   }
   if (url.protocol !== "https:") {
     throw new Error("NetEase returned a non-HTTPS audio URL.");
+  }
+  return url;
+}
+
+function normalizeNeteaseArtworkUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol === "http:") {
+    url.protocol = "https:";
+    if (url.port === "80") {
+      url.port = "";
+    }
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.port ||
+    url.username ||
+    url.password ||
+    !isAllowedArtworkHost(url.hostname)
+  ) {
+    throw new Error("NetEase returned an unsupported artwork URL.");
   }
   return url;
 }

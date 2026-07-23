@@ -63,7 +63,21 @@ const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
 ];
 
-export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () => void; initialProvider?: Provider } = {}) {
+type ProviderSearchPageProps = {
+  onClose?: () => void;
+  initialProvider?: Provider;
+  embedded?: boolean;
+  keywords?: string;
+  onKeywordsChange?: (keywords: string) => void;
+};
+
+export function ProviderSearchPage({
+  onClose,
+  initialProvider,
+  embedded = false,
+  keywords: controlledKeywords,
+  onKeywordsChange
+}: ProviderSearchPageProps = {}) {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: onClose ? "/app/discover?search=1" : "/app/search" });
   const { activeSession, hydrated } = useSessionIdentity({
@@ -77,7 +91,8 @@ export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () 
   const [account, setAccount] = useState<Account | null>(() =>
     activeSession ? getCachedProviderAccount(activeSession.userId, defaultProvider) ?? null : null
   );
-  const [keywords, setKeywords] = useState("");
+  const [uncontrolledKeywords, setUncontrolledKeywords] = useState("");
+  const keywords = controlledKeywords ?? uncontrolledKeywords;
   const [results, setResults] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<ProviderPlaylistSummary[]>([]);
   const [playlist, setPlaylist] = useState<ProviderPlaylistDetail | null>(null);
@@ -99,9 +114,23 @@ export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () 
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
 
+  const updateKeywords = useCallback((value: string) => {
+    if (onKeywordsChange) {
+      onKeywordsChange(value);
+      return;
+    }
+    setUncontrolledKeywords(value);
+  }, [onKeywordsChange]);
+
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
   }, [activeSession, authEntryHref, hydrated, router]);
+
+  useEffect(() => {
+    if (initialProvider && enabledProviders.includes(initialProvider)) {
+      setProvider(initialProvider);
+    }
+  }, [initialProvider]);
 
   useEffect(() => {
     if (!activeSession) return;
@@ -587,6 +616,76 @@ export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () 
 
   if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
 
+  const searchContent = (
+    <>
+      {enabledProviders.length > 0 ? (
+        <>
+          <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-white/[0.1]`} role="tablist" aria-label="搜索结果类型">
+            <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
+            <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
+            <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
+          </div>
+
+          {!isConnected ? (
+            <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-amber-300/20 bg-amber-200/[0.06] px-5 py-4 text-sm text-amber-100/80">
+              <span>请先绑定 {providerName} 账号。</span>
+              <Link className="shrink-0 text-xs font-semibold text-amber-200 hover:text-white" href="/app/profile">去绑定</Link>
+            </div>
+          ) : null}
+
+          {contentTab === "songs" ? (
+            <SongsResults
+              results={results}
+              pending={pending}
+              localTracks={localTracks}
+              onAlbum={loadAlbumForTrack}
+              onDownload={downloadTrack}
+              onImportPlaylist={openPlaylistPicker}
+            />
+          ) : null}
+          {contentTab === "playlists" ? (
+            <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
+          ) : null}
+          {contentTab === "albums" ? (
+            <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} />
+          ) : null}
+        </>
+      ) : (
+        <div className={`${embedded ? "mt-7" : "mt-10"} rounded-2xl border border-white/[0.1] bg-black p-8 text-sm text-white/55`}>当前没有启用音乐平台。</div>
+      )}
+
+      {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
+      {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
+    </>
+  );
+
+  const playlistPicker = (playlistPickerTrack || playlistPickerAlbum) && playlistPickerAnchor ? (
+    <ProviderPlaylistPickerDialog
+      anchor={playlistPickerAnchor}
+      loading={playlistPickerLoading}
+      options={playlistPickerOptions}
+      pending={pending !== null}
+      subjectLabel={playlistPickerTrack ? `《${playlistPickerTrack.title}》 · ${playlistPickerTrack.artist}` : `专辑《${playlistPickerAlbum?.title ?? ""}》 · ${playlistPickerAlbum?.tracks.length ?? 0} 首歌曲`}
+      onClose={() => {
+        if (!pending) {
+          setPlaylistPickerTrack(null);
+          setPlaylistPickerAlbum(null);
+          setPlaylistPickerAnchor(null);
+        }
+      }}
+      onSelect={(option) => void (playlistPickerTrack ? addTrackToPlaylist(option) : addAlbumToPlaylist(option))}
+    />
+  ) : null;
+
+  if (embedded) {
+    return (
+      <div className="min-w-0">
+        {searchContent}
+        {playlistPicker}
+      </div>
+    );
+  }
+
   return (
     <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
@@ -605,7 +704,7 @@ export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () 
               disabled={!isConnected}
               autoFocus={Boolean(onClose)}
               maxLength={100}
-              onChange={(event) => setKeywords(event.target.value)}
+              onChange={(event) => updateKeywords(event.target.value)}
               placeholder="搜索歌曲、歌手、歌单或专辑"
               type="search"
               value={keywords}
@@ -617,63 +716,9 @@ export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () 
             ) : null}
           </form>
         </header>
-
-        {enabledProviders.length > 0 ? (
-          <>
-            <div className="mt-10 flex items-center gap-7 border-b border-white/[0.1]" role="tablist" aria-label="搜索结果类型">
-              <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
-              <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
-              <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
-            </div>
-
-            {!isConnected ? (
-              <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-amber-300/20 bg-amber-200/[0.06] px-5 py-4 text-sm text-amber-100/80">
-                <span>请先绑定 {providerName} 账号。</span>
-                <Link className="shrink-0 text-xs font-semibold text-amber-200 hover:text-white" href="/app/profile">去绑定</Link>
-              </div>
-            ) : null}
-
-            {contentTab === "songs" ? (
-              <SongsResults
-                results={results}
-                pending={pending}
-                localTracks={localTracks}
-                onAlbum={loadAlbumForTrack}
-                onDownload={downloadTrack}
-                onImportPlaylist={openPlaylistPicker}
-              />
-            ) : null}
-            {contentTab === "playlists" ? (
-              <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
-            ) : null}
-            {contentTab === "albums" ? (
-              <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} />
-            ) : null}
-          </>
-        ) : (
-          <div className="mt-10 rounded-2xl border border-white/[0.1] bg-black p-8 text-sm text-white/55">当前没有启用音乐平台。</div>
-        )}
-
-        {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
-        {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
+        {searchContent}
       </div>
-      {(playlistPickerTrack || playlistPickerAlbum) && playlistPickerAnchor ? (
-        <ProviderPlaylistPickerDialog
-          anchor={playlistPickerAnchor}
-          loading={playlistPickerLoading}
-          options={playlistPickerOptions}
-          pending={pending !== null}
-          subjectLabel={playlistPickerTrack ? `《${playlistPickerTrack.title}》 · ${playlistPickerTrack.artist}` : `专辑《${playlistPickerAlbum?.title ?? ""}》 · ${playlistPickerAlbum?.tracks.length ?? 0} 首歌曲`}
-          onClose={() => {
-            if (!pending) {
-              setPlaylistPickerTrack(null);
-              setPlaylistPickerAlbum(null);
-              setPlaylistPickerAnchor(null);
-            }
-          }}
-          onSelect={(option) => void (playlistPickerTrack ? addTrackToPlaylist(option) : addAlbumToPlaylist(option))}
-        />
-      ) : null}
+      {playlistPicker}
     </main>
   );
 }

@@ -114,9 +114,12 @@ export function DiscoverPage() {
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(() => searchParams.get("search") === "1");
+  const [searchKeywords, setSearchKeywords] = useState(() => searchParams.get("q") ?? "");
 
   useEffect(() => {
-    setSearchOpen(searchParams.get("search") === "1");
+    const nextSearchOpen = searchParams.get("search") === "1";
+    setSearchOpen(nextSearchOpen);
+    setSearchKeywords(nextSearchOpen ? searchParams.get("q") ?? "" : "");
   }, [searchParams]);
 
   useEffect(() => {
@@ -249,11 +252,16 @@ export function DiscoverPage() {
 
   function openSearch() {
     setSearchOpen(true);
-    router.replace(`${pathname}?search=1` as Route, { scroll: false });
+    setDetail(null);
+    const params = new URLSearchParams({ search: "1" });
+    const query = searchKeywords.trim();
+    if (query) params.set("q", query);
+    router.replace(`${pathname}?${params.toString()}` as Route, { scroll: false });
   }
 
   function closeSearch() {
     setSearchOpen(false);
+    setSearchKeywords("");
     router.replace(pathname as Route, { scroll: false });
   }
 
@@ -546,9 +554,7 @@ export function DiscoverPage() {
 
   if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-background" />;
 
-  if (searchOpen) return <ProviderSearchPage initialProvider={discoverProvider} onClose={closeSearch} />;
-
-  if (detail) {
+  if (detail && !searchOpen) {
     return (
       <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
         {detail.kind === "playlist" ? (
@@ -608,43 +614,75 @@ export function DiscoverPage() {
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">发现</h1>
             <p className="mt-2 text-sm text-foreground-muted">从今天开始，找到下一首喜欢的歌。</p>
           </div>
-          <button aria-label="打开搜索" className="group flex h-11 w-full max-w-[460px] items-center gap-3 rounded-full border border-surface-border bg-surface px-4 text-left text-sm text-foreground-muted shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-accent/40 hover:bg-surface-hover active:scale-[0.99] sm:w-[min(42vw,460px)]" onClick={openSearch} type="button">
+          <form className="group flex h-11 w-full max-w-[460px] items-center gap-3 rounded-full border border-surface-border bg-surface px-3 text-sm text-foreground-muted shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-accent/40 hover:bg-surface-hover focus-within:border-accent/60 focus-within:bg-surface-hover sm:w-[min(42vw,460px)]" onSubmit={(event) => {
+            event.preventDefault();
+            openSearch();
+          }}>
             <SearchIcon />
-            <span className="flex-1 truncate">搜索歌曲、歌手、专辑或歌单</span>
-          </button>
+            <label className="sr-only" htmlFor="discover-search-input">搜索歌曲、歌手、专辑或歌单</label>
+            <input
+              autoFocus={searchOpen}
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-foreground-muted"
+              id="discover-search-input"
+              maxLength={100}
+              onChange={(event) => setSearchKeywords(event.target.value)}
+              onFocus={() => {
+                if (!searchOpen) openSearch();
+              }}
+              placeholder="搜索歌曲、歌手、专辑或歌单"
+              type="search"
+              value={searchKeywords}
+            />
+            {searchOpen ? (
+              <button className="shrink-0 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={closeSearch} type="button">取消</button>
+            ) : (
+              <button aria-label="搜索" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition hover:bg-surface hover:text-foreground active:scale-95" type="submit"><SearchIcon /></button>
+            )}
+          </form>
         </header>
 
-        {heroItems.length > 0 ? <HeroRail items={heroItems} onOpenPlaylist={openPlaylist} loadingKey={detailLoading} /> : null}
+        {searchOpen ? (
+          <ProviderSearchPage
+            embedded
+            initialProvider={discoverProvider}
+            keywords={searchKeywords}
+            onKeywordsChange={setSearchKeywords}
+          />
+        ) : (
+          <>
+            {heroItems.length > 0 ? <HeroRail items={heroItems} onOpenPlaylist={openPlaylist} loadingKey={detailLoading} /> : null}
 
-        {categoryOptions.length > 0 ? (
-          <section className="mt-9" aria-label="探索分类">
-            <div className={`gap-2 pb-1 ${categoriesExpanded ? "flex flex-wrap" : "hide-scrollbar flex overflow-x-auto"}`}>
-              <CategoryButton active={selectedCategory === "all"} label="全部" onClick={() => void selectCategory(null)} />
-              {categoryOptions.slice(0, categoriesExpanded ? categoryOptions.length : 14).map((option) => (
-                <CategoryButton key={option.key} active={selectedCategory === option.key} label={option.label} loading={refreshingCategory && selectedCategory === option.key} onClick={() => void selectCategory(option)} />
-              ))}
-            </div>
-            {categoryOptions.length > 14 ? (
-              <button className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={() => setCategoriesExpanded((current) => !current)} type="button">
-                {categoriesExpanded ? "收起分类" : "展开全部分类"}
-                <ChevronIcon expanded={categoriesExpanded} />
-              </button>
+            {categoryOptions.length > 0 ? (
+              <section className="mt-9" aria-label="探索分类">
+                <div className={`gap-2 pb-1 ${categoriesExpanded ? "flex flex-wrap" : "hide-scrollbar flex overflow-x-auto"}`}>
+                  <CategoryButton active={selectedCategory === "all"} label="全部" onClick={() => void selectCategory(null)} />
+                  {categoryOptions.slice(0, categoriesExpanded ? categoryOptions.length : 14).map((option) => (
+                    <CategoryButton key={option.key} active={selectedCategory === option.key} label={option.label} loading={refreshingCategory && selectedCategory === option.key} onClick={() => void selectCategory(option)} />
+                  ))}
+                </div>
+                {categoryOptions.length > 14 ? (
+                  <button className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={() => setCategoriesExpanded((current) => !current)} type="button">
+                    {categoriesExpanded ? "收起分类" : "展开全部分类"}
+                    <ChevronIcon expanded={categoriesExpanded} />
+                  </button>
+                ) : null}
+              </section>
             ) : null}
-          </section>
-        ) : null}
 
-        {loading ? <DiscoverSkeleton /> : null}
-        {!loading && recommended.length === 0 && playlists.length === 0 && albums.length === 0 && dailyTracks.length === 0 ? (
-          <EmptyDiscoverState onRetry={refreshAll} />
-        ) : null}
+            {loading ? <DiscoverSkeleton /> : null}
+            {!loading && recommended.length === 0 && playlists.length === 0 && albums.length === 0 && dailyTracks.length === 0 ? (
+              <EmptyDiscoverState onRetry={refreshAll} />
+            ) : null}
 
-        {recommended.length > 0 ? <DiscoverySection eyebrow="为你推荐" title="今天想听什么" actionLabel="更多歌单" onAction={() => void selectCategory(null)}><PlaylistRail expanded={recommendationsExpanded} items={recommended} onOpen={openPlaylist} loadingKey={detailLoading} onToggleExpanded={() => setRecommendationsExpanded((current) => !current)} /></DiscoverySection> : null}
-        {playlists.length > 0 ? <DiscoverySection eyebrow="歌单" title="按心情挑一张" actionLabel={refreshingCategory ? "加载中" : "换一批"} onAction={refreshAll}><PlaylistRail expanded={playlistsExpanded} items={playlists} onOpen={openPlaylist} loadingKey={detailLoading} onToggleExpanded={() => setPlaylistsExpanded((current) => !current)} /></DiscoverySection> : null}
-        {toplists.length > 0 ? <DiscoverySection eyebrow="排行榜" title="正在发生" actionLabel="查看榜单" onAction={refreshAll}><ToplistRail items={toplists} onOpen={openPlaylist} loadingKey={detailLoading} /></DiscoverySection> : null}
-        {albums.length > 0 ? <DiscoverySection eyebrow="新专辑" title="刚刚发行" actionLabel="浏览专辑" onAction={refreshAll}><AlbumRail items={albums} onOpen={openAlbum} loadingKey={detailLoading} /></DiscoverySection> : null}
-        {dailyPlaylists.length > 0 || dailyTracks.length > 0 ? <DailySection playlists={dailyPlaylists} tracks={dailyTracks} onOpenPlaylist={openPlaylist} loadingKey={detailLoading} /> : null}
+            {recommended.length > 0 ? <DiscoverySection eyebrow="为你推荐" title="今天想听什么" actionLabel="更多歌单" onAction={() => void selectCategory(null)}><PlaylistRail expanded={recommendationsExpanded} items={recommended} onOpen={openPlaylist} loadingKey={detailLoading} onToggleExpanded={() => setRecommendationsExpanded((current) => !current)} /></DiscoverySection> : null}
+            {playlists.length > 0 ? <DiscoverySection eyebrow="歌单" title="按心情挑一张" actionLabel={refreshingCategory ? "加载中" : "换一批"} onAction={refreshAll}><PlaylistRail expanded={playlistsExpanded} items={playlists} onOpen={openPlaylist} loadingKey={detailLoading} onToggleExpanded={() => setPlaylistsExpanded((current) => !current)} /></DiscoverySection> : null}
+            {toplists.length > 0 ? <DiscoverySection eyebrow="排行榜" title="正在发生" actionLabel="查看榜单" onAction={refreshAll}><ToplistRail items={toplists} onOpen={openPlaylist} loadingKey={detailLoading} /></DiscoverySection> : null}
+            {albums.length > 0 ? <DiscoverySection eyebrow="新专辑" title="刚刚发行" actionLabel="浏览专辑" onAction={refreshAll}><AlbumRail items={albums} onOpen={openAlbum} loadingKey={detailLoading} /></DiscoverySection> : null}
+            {dailyPlaylists.length > 0 || dailyTracks.length > 0 ? <DailySection playlists={dailyPlaylists} tracks={dailyTracks} onOpenPlaylist={openPlaylist} loadingKey={detailLoading} /> : null}
 
-        {errorMessage ? <p className="mt-7 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}
+            {errorMessage ? <p className="mt-7 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}
+          </>
+        )}
       </div>
     </main>
   );

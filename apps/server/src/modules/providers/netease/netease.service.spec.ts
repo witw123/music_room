@@ -184,6 +184,36 @@ describe("NeteaseService", () => {
     );
   });
 
+  it("proxies NetEase artwork through the allowlisted CDN", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    mockedFetchProviderUrl.mockResolvedValue(
+      new Response(Uint8Array.of(1, 2, 3), {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg",
+          "content-length": "3"
+        }
+      })
+    );
+    const service = new NeteaseService({} as never, {} as never, {} as never);
+
+    await expect(service.openArtwork("http://p1.music.126.net/cover.jpg")).resolves.toMatchObject({
+      mimeType: "image/jpeg",
+      contentLength: 3
+    });
+    expect(mockedFetchProviderUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: "https:",
+        hostname: "p1.music.126.net",
+        pathname: "/cover.jpg"
+      }),
+      expect.anything(),
+      expect.any(Number),
+      expect.any(Function),
+      { allowSyntheticDns: true }
+    );
+  });
+
   it("exposes normalized lyrics, playlists, and albums", async () => {
     process.env.NETEASE_ENABLED = "true";
     const api = {
