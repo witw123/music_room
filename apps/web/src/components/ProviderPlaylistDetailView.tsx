@@ -28,28 +28,45 @@ export function ProviderPlaylistDetailView({
 }: ProviderPlaylistDetailViewProps) {
   return (
     <section className="mt-7">
-      <button className="inline-flex items-center gap-2 text-sm font-semibold text-white/60 transition hover:text-white" onClick={onBack} type="button">
+      <button className="inline-flex items-center gap-2 text-xs font-semibold text-white/50 transition hover:text-white" onClick={onBack} type="button">
         <Icon name="arrow-left" />
         返回歌单
       </button>
-      <div className="mt-8 grid gap-8 border-b border-white/[0.1] pb-14 lg:grid-cols-[minmax(360px,528px)_minmax(0,1fr)] lg:items-end lg:gap-14">
+      <div className="mt-5 grid gap-8 border-b border-white/[0.1] pb-9 lg:grid-cols-[280px_minmax(0,1fr)]">
         <PlaylistArtwork alt={playlist.title} src={playlist.artworkUrl} />
-        <div className="flex min-w-0 flex-col justify-end lg:pb-1">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">Playlist</p>
-          <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl">{playlist.title}</h1>
-          <p className="mt-5 text-base text-white/55">{playlist.creatorName || "网络歌单"} · {playlist.tracks.length} 首歌曲</p>
-          <p className="mt-8 max-w-5xl text-base leading-8 text-white/45 sm:text-lg">{playlist.description || "暂无歌单简介"}</p>
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Button aria-pressed={isFavorite} className="h-12 rounded-2xl px-6 text-base" disabled={pending !== null} onClick={() => void onToggleFavorite()} type="button">
+        <div className="flex min-w-0 flex-col justify-end">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">Playlist</p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">{playlist.title}</h1>
+          <p className="mt-3 text-sm text-white/55">{playlist.creatorName || "网络歌单"} · {playlist.tracks.length} 首歌曲</p>
+          <DescriptionDisclosure description={playlist.description} />
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <Button aria-pressed={isFavorite} disabled={pending !== null} onClick={() => void onToggleFavorite()} size="sm" type="button">
               <Icon name="heart" filled={isFavorite} />
               {isFavorite ? "已收藏" : "收藏歌单"}
             </Button>
-            <span className="px-1 text-base text-white/35">{playlist.tracks.length} 首歌曲</span>
+            <span className="px-2 text-xs text-white/35">{playlist.tracks.length} 首歌曲</span>
           </div>
         </div>
       </div>
       <ProviderAlbumTrackTable tracks={playlist.tracks} actions={trackActions} />
     </section>
+  );
+}
+
+function DescriptionDisclosure({ description }: { description: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const text = description || "暂无歌单简介";
+  const canExpand = text.length > 120;
+
+  return (
+    <div className="mt-5 max-w-3xl">
+      <p className={`text-sm leading-7 text-white/45 ${canExpand && !expanded ? "line-clamp-3" : ""}`}>{text}</p>
+      {canExpand ? (
+        <button className="mt-2 text-xs font-medium text-accent/80 transition hover:text-accent" onClick={() => setExpanded((current) => !current)} type="button">
+          {expanded ? "收起介绍" : "展开介绍"}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

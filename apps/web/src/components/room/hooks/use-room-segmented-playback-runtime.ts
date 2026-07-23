@@ -1002,52 +1002,51 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.waitingSinceMs = null;
         }
         boundMediaKeyRef.current = remoteTrackId;
-        if (runtime.audioUnlocked) {
-          const now = Date.now();
-          const startupGraceElapsed = now - health.boundAtMs >= 2_500;
-          const waitingTooLong = health.waitingSinceMs !== null &&
-            now - health.waitingSinceMs >= 1_500;
-          const progressStalled = startupGraceElapsed &&
-            now - health.lastProgressAtMs >= 5_000 &&
-            audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
-          const shouldNudge = waitingTooLong || progressStalled;
-          if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
-            health.lastRecoveryAtMs = now;
-            health.waitingSinceMs = null;
-            health.recoveryCount += 1;
-            runtime.setMediaConnectionState("reconnecting");
-            // Keep the same MediaStream binding. Replacing srcObject here
-            // destroys the browser jitter buffer and is a common source of
-            // repeated silence during short packet-loss bursts.
+        // A remote MediaStream is played directly by the media element. It
+        // must not be blocked by the shared AudioContext unlock flag, which is
+        // required by local Web Audio graphs but is not part of this path.
+        const startupGraceElapsed = now - health.boundAtMs >= 2_500;
+        const waitingTooLong = health.waitingSinceMs !== null &&
+          now - health.waitingSinceMs >= 1_500;
+        const progressStalled = startupGraceElapsed &&
+          now - health.lastProgressAtMs >= 5_000 &&
+          audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+        const shouldNudge = waitingTooLong || progressStalled;
+        if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
+          health.lastRecoveryAtMs = now;
+          health.waitingSinceMs = null;
+          health.recoveryCount += 1;
+          runtime.setMediaConnectionState("reconnecting");
+          // Keep the same MediaStream binding. Replacing srcObject here
+          // destroys the browser jitter buffer and is a common source of
+          // repeated silence during short packet-loss bursts.
+        }
+        const result = await roomAudioOutput.playElement(audio, {
+          force: shouldNudge
+        });
+        if (!cancelled && !result.ok) {
+          const blocked = isAudioPlaybackBlockedError(result.error);
+          if (blocked) {
+            setAudioUnlocked(false);
           }
-          const result = await roomAudioOutput.playElement(audio, {
-            force: shouldNudge
+          setMediaPlayback({
+            ...idlePlaybackSnapshot(),
+            state: blocked ? "awaiting-unlock" : "buffering",
+            audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+            lastError: blocked ? null : result.error
           });
-          if (!cancelled && !result.ok) {
-            setMediaPlayback({
-              ...idlePlaybackSnapshot(),
-              state: "awaiting-unlock",
-              audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-              lastError: result.error
-            });
-            return;
-          }
-          if (!cancelled && shouldNudge) {
-            runtime.setMediaConnectionState("live");
-          }
-        } else {
-          if (!cancelled) {
-            setMediaPlayback({
-              state: "awaiting-unlock",
-              bufferedMs: 0,
-              ownedUnitCount: 0,
-              totalUnitCount,
-              audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-              lastError: null
-            });
-          }
           return;
         }
+        if (!cancelled && !runtime.audioUnlocked) {
+          // The remote element can be autoplayable even when the shared
+          // AudioContext has not been resumed. Remember that this concrete
+          // playback path is usable without forcing a false unlock prompt.
+          setAudioUnlocked(true);
+        }
+        if (!cancelled && shouldNudge) {
+          runtime.setMediaConnectionState("live");
+        }
+        if (cancelled) return;
         if (!cancelled) {
           setMediaPlayback({
             state: resolveReceiverPlaybackState({
