@@ -277,7 +277,8 @@ export function observePeerTransport(input: ObserveTransportInput) {
   }
 
   if (
-    (input.state.iceRestartCount >= 2 || input.state.hardRecreateCount >= 2) &&
+    input.state.iceRestartCount >= 2 &&
+    input.state.hardRecreateCount === 0 &&
     preferredTransportKind !== "relay"
   ) {
     preferredTransportKind = "relay";
@@ -374,6 +375,20 @@ export function markRecoveryAction(input: {
     nextBudget.lastFullResubscribeAtMs = now;
   }
 
+  const nextHardRecreateCount = input.action === "hard-recreate"
+    ? input.state.hardRecreateCount + 1
+    : input.state.hardRecreateCount;
+  const preferredTransportKind = input.action === "hard-recreate"
+    ? input.state.hardRecreateCount > 0 && input.state.preferredTransportKind === "relay"
+      ? "direct" as const
+      : "relay" as const
+    : input.action === "full-resubscribe"
+      ? "relay" as const
+      : input.action === "ice-restart" &&
+          input.state.iceRestartCount + input.state.hardRecreateCount + 1 >= 2
+        ? "relay" as const
+        : input.state.preferredTransportKind;
+
   return {
     ...input.state,
     recoveryStage: input.action,
@@ -383,20 +398,24 @@ export function markRecoveryAction(input: {
       input.action === "ice-restart"
         ? input.state.iceRestartCount + 1
         : input.state.iceRestartCount,
-    hardRecreateCount:
-      input.action === "hard-recreate"
-        ? input.state.hardRecreateCount + 1
-        : input.state.hardRecreateCount,
-    preferredTransportKind:
-      input.action === "hard-recreate" || input.action === "full-resubscribe"
-        ? "relay"
-        : input.action === "ice-restart"
-          ? input.state.iceRestartCount + input.state.hardRecreateCount + 1 >= 2
-          ? "relay"
-          : input.state.preferredTransportKind
-          : input.state.preferredTransportKind,
+    hardRecreateCount: nextHardRecreateCount,
+    preferredTransportKind,
     recoveryBudget: nextBudget
   };
+}
+
+export function markMediaRecoveryAttempt(input: {
+  state: PeerConnectionSupervisorState;
+  restartCount: number;
+  reason: string;
+  now?: number;
+}) {
+  return markRecoveryAction({
+    state: input.state,
+    action: input.restartCount >= 3 ? "hard-recreate" : "ice-restart",
+    failureReason: input.reason,
+    now: input.now
+  });
 }
 
 export function resetRecoveryStage(
@@ -434,12 +453,14 @@ export function toSupervisorDiagnosticPatch(state: PeerConnectionSupervisorState
 export function resolvePreferredIceTransportPolicy(
   state: PeerConnectionSupervisorState | null | undefined
 ) {
-  // ICE should always be allowed to select the best currently reachable path.
-  // A previous failed connection is not evidence that relay is better now;
-  // persisting relay-only policy can strand a peer on a slow TURN path for the
-  // whole transport preference TTL and prevent direct recovery.
-  void state;
-  return "all" as const;
+  // Direct UDP remains the normal path. After repeated ICE failures, rebuild
+  // one media incarnation with relay-only candidates so Chromium cannot select
+  // the same broken NAT mapping again. A subsequent failed hard recreation
+  // flips the preference back to `all`, which prevents a bad TURN deployment
+  // from permanently stranding the peer.
+  return state?.preferredTransportKind === "relay"
+    ? "relay" as const
+    : "all" as const;
 }
 
 export function resolveTransportKind(candidateType: string | null | undefined): StableTransportKind | null {

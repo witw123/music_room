@@ -3,7 +3,12 @@
 import { useMemo } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
-import { P2PMesh, resolvePreferredIceTransportPolicy } from "@/features/p2p";
+import {
+  P2PMesh,
+  createPeerConnectionSupervisorState,
+  markMediaRecoveryAttempt,
+  resolvePreferredIceTransportPolicy
+} from "@/features/p2p";
 import { createPeerTelemetryReport, sumFiniteRates } from "@/features/p2p/peer-telemetry";
 import { playbackBandwidthMonitor } from "@/lib/import-bandwidth-governor";
 import type {
@@ -402,15 +407,29 @@ export function createRoomDataMeshRuntime(input: {
         });
       },
       onMediaRecovery: ({ peerId, reason, restartCount }) => {
+        const currentSupervisorState =
+          input.connectionSupervisorStatesRef.current.get(peerId) ??
+          createPeerConnectionSupervisorState({
+            peerId,
+            roomId: input.roomId
+          });
+        const nextSupervisorState = markMediaRecoveryAttempt({
+          state: currentSupervisorState,
+          restartCount,
+          reason
+        });
+        input.connectionSupervisorStatesRef.current.set(peerId, nextSupervisorState);
+        const nextIcePolicy = resolvePreferredIceTransportPolicy(nextSupervisorState);
         input.recordPeerDiagnosticRef.current({
           peerId,
           channelKind: "media",
           direction: "local",
           event: reason === "connection-failed" ? "media-recovery-failed" : "media-ice-restart",
-          summary:
-            reason === "connection-failed"
-              ? "媒体连接连续恢复失败，检查 TURN/网络容量"
-              : `媒体链路已执行 ICE restart（${reason}，第 ${restartCount} 次）`,
+          summary: restartCount >= 3
+            ? nextIcePolicy === "relay"
+              ? "媒体直连连续恢复失败，重建媒体连接并切换 TURN 中继"
+              : "TURN 中继恢复失败，重建媒体连接并回退自动选路"
+            : `媒体链路已执行 ICE restart（${reason}，第 ${restartCount} 次）`,
           level: reason === "connection-failed" ? "error" : "warning"
         });
       },

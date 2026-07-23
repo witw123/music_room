@@ -5,6 +5,11 @@ import { SignalingTransport } from "./signaling-transport";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import type { PeerEntry } from "./peer-connection-registry";
 import type { PeerConnectionStatsSample } from "./connection-stats";
+import {
+  createPeerConnectionSupervisorState,
+  markMediaRecoveryAttempt,
+  resolvePreferredIceTransportPolicy
+} from "./connection-supervisor";
 
 class FakeDataChannel {
   readyState: RTCDataChannelState = "connecting";
@@ -17,6 +22,7 @@ class FakeDataChannel {
 
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
+  readonly configuration: RTCConfiguration | undefined;
   connectionState: RTCPeerConnectionState = "connected";
   iceConnectionState: RTCIceConnectionState = "checking";
   signalingState: RTCSignalingState = "stable";
@@ -40,7 +46,8 @@ class FakeRTCPeerConnection {
     setCodecPreferences: ReturnType<typeof vi.fn>;
   } | null = null;
 
-  constructor() {
+  constructor(configuration?: RTCConfiguration) {
+    this.configuration = configuration;
     FakeRTCPeerConnection.instances.push(this);
   }
 
@@ -123,6 +130,12 @@ function createManager(input: {
   sendSignal?: (payload: unknown) => void;
   bindChannel?: (peerId: string, entry: PeerEntry, channel: RTCDataChannel) => void;
   clearPendingRequestsForPeer?: (peerId: string) => void;
+  resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;
+  onMediaRecovery?: (payload: {
+    peerId: string;
+    reason: "loss" | "jitter" | "no-packets" | "connection-failed";
+    restartCount: number;
+  }) => void;
 } = {}) {
   const sendSignal = input.sendSignal ?? vi.fn();
   const signaling = new SignalingTransport({
@@ -137,7 +150,9 @@ function createManager(input: {
       iceServers: [],
       signaling,
       bindChannel: input.bindChannel ?? vi.fn(),
-      clearPendingRequestsForPeer: input.clearPendingRequestsForPeer ?? vi.fn()
+      clearPendingRequestsForPeer: input.clearPendingRequestsForPeer ?? vi.fn(),
+      resolveConnectionConfig: input.resolveConnectionConfig,
+      onMediaRecovery: input.onMediaRecovery
     }),
     sendSignal
   };
@@ -293,7 +308,22 @@ describe("PeerConnectionLifecycleManager", () => {
   });
 
   it("replaces a media peer only after repeated in-place ICE restarts fail", async () => {
-    const { manager } = createManager();
+    let supervisorState = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_b"
+    });
+    const { manager } = createManager({
+      resolveConnectionConfig: () => ({
+        iceTransportPolicy: resolvePreferredIceTransportPolicy(supervisorState)
+      }),
+      onMediaRecovery: ({ restartCount, reason }) => {
+        supervisorState = markMediaRecoveryAttempt({
+          state: supervisorState,
+          restartCount,
+          reason
+        });
+      }
+    });
 
     await manager.syncPeers(["peer_b"]);
     manager.setLocalAudioStream(null, "peer_b");
@@ -316,7 +346,12 @@ describe("PeerConnectionLifecycleManager", () => {
 
     expect(initialPeer.restartIce).toHaveBeenCalledTimes(2);
     expect(initialPeer.connectionState).toBe("closed");
-    expect(manager.getPeerEntry("peer_b", "media")).not.toBe(initialEntry);
+    const replacementEntry = manager.getPeerEntry("peer_b", "media");
+    expect(replacementEntry).not.toBe(initialEntry);
+    expect(
+      (replacementEntry?.connection as unknown as FakeRTCPeerConnection).configuration
+        ?.iceTransportPolicy
+    ).toBe("relay");
   });
 
   it("sends an explicit ICE restart offer when a source media peer stays disconnected", async () => {

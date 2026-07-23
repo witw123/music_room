@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   canRunRecoveryAction,
   createPeerConnectionSupervisorState,
+  markMediaRecoveryAttempt,
   markRecoveryAction,
   notePeerSignalState,
   observePeerTransport,
@@ -69,7 +70,7 @@ describe("connection-supervisor", () => {
     expect(state.transportScore).toBe("unstable");
   });
 
-  it("keeps ICE candidate selection open after repeated heavy recoveries", () => {
+  it("forces relay after repeated ICE recovery before a hard media recreate", () => {
     let state = createPeerConnectionSupervisorState({
       roomId: "room_1",
       peerId: "peer_b"
@@ -83,10 +84,16 @@ describe("connection-supervisor", () => {
     vi.advanceTimersByTime(2_600);
     state = markRecoveryAction({
       state,
+      action: "ice-restart",
+      failureReason: "ice-failed"
+    });
+    vi.advanceTimersByTime(2_600);
+    state = markRecoveryAction({
+      state,
       action: "hard-recreate",
       failureReason: "media-failed"
     });
-    expect(resolvePreferredIceTransportPolicy(state)).toBe("all");
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
 
     const healthyRelaySample = {
       candidateType: "relay",
@@ -127,7 +134,7 @@ describe("connection-supervisor", () => {
     });
   });
 
-  it("does not force relay after a hard recreate for a stuck peer", () => {
+  it("forces relay for the first hard recreate and falls back to all if relay also fails", () => {
     let state = createPeerConnectionSupervisorState({
       roomId: "room_1",
       peerId: "peer_b"
@@ -139,8 +146,49 @@ describe("connection-supervisor", () => {
       failureReason: "ice-checking-stalled"
     });
 
-    expect(resolvePreferredIceTransportPolicy(state)).toBe("all");
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
     expect(state.preferredTransportKind).toBe("relay");
+
+    state = markRecoveryAction({
+      state,
+      action: "hard-recreate",
+      failureReason: "relay-ice-failed"
+    });
+
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("all");
+    expect(state.preferredTransportKind).toBe("direct");
+  });
+
+  it("maps media restart counts to in-place ICE recovery and hard transport recreation", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_b"
+    });
+
+    state = markMediaRecoveryAttempt({
+      state,
+      restartCount: 1,
+      reason: "ice-failed"
+    });
+    expect(state.lastRecoveryAction).toBe("ice-restart");
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("all");
+
+    state = markMediaRecoveryAttempt({
+      state,
+      restartCount: 2,
+      reason: "ice-failed"
+    });
+    expect(state.lastRecoveryAction).toBe("ice-restart");
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
+
+    state = markMediaRecoveryAttempt({
+      state,
+      restartCount: 3,
+      reason: "connection-failed"
+    });
+    expect(state.lastRecoveryAction).toBe("hard-recreate");
+    expect(state.hardRecreateCount).toBe(1);
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
   });
 
   it("tracks budgets per recovery stage and generation", () => {
