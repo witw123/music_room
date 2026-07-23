@@ -569,17 +569,21 @@ export class PeerConnectionLifecycleManager {
     const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live" &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
-    const allowEmptyMediaOffer = options?.forceRecreate === true ||
-      missingExpectedTrack;
+    const requiresReplacement = options?.forceRecreate === true ||
+      entry.connection.connectionState === "failed" ||
+      entry.connection.connectionState === "closed" ||
+      (entry.connection.signalingState !== "stable" && staleSignal) ||
+      (entry.connection.signalingState === "stable" && missingExpectedTrack);
+    // A replaced listener has no remote track to advertise, so a passive
+    // replacement can leave both peers stable and waiting forever. Any
+    // replacement caused by a stale/failed negotiation must announce the new
+    // media m-line; the source-side track is already attached when present.
+    const allowEmptyMediaOffer = requiresReplacement;
     const recoveryInitiator = allowEmptyMediaOffer
       ? true
       : this.shouldInitiatePeer(peerId);
     if (
-      options?.forceRecreate ||
-      entry.connection.connectionState === "failed" ||
-      entry.connection.connectionState === "closed" ||
-      (entry.connection.signalingState !== "stable" && staleSignal) ||
-      (entry.connection.signalingState === "stable" && missingExpectedTrack)
+      requiresReplacement
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
@@ -1220,6 +1224,10 @@ export class PeerConnectionLifecycleManager {
     if (entry.linkKind !== "media" || entry.releasing) {
       return;
     }
+    // Some Chromium builds expose the receiver on the negotiated transceiver
+    // before they dispatch ontrack for a late-join offer. Adopt it immediately
+    // so inbound RTP is not mistaken for a missing media stream.
+    this.recoverRemoteAudioTrackFromReceiver(entry);
     if (remoteDescriptionType === "offer") {
       // An incoming offer is still being answered by the signaling operation.
        // Bind the local source before createAnswer. The media m-line was
@@ -1541,17 +1549,17 @@ export class PeerConnectionLifecycleManager {
       return;
     }
 
-    let receiver = entry.audioReceiver;
-    if (
-      !receiver?.track ||
-      receiver.track.kind !== "audio" ||
-      receiver.track.readyState !== "live"
-    ) {
+    const isLiveAudioReceiver = (candidate: RTCRtpReceiver | null | undefined) =>
+      candidate?.track?.kind === "audio" && candidate.track.readyState === "live";
+    // The transceiver belongs to the negotiated m-line and is authoritative
+    // after a renegotiation. A receiver cached from an older ontrack event can
+    // remain live while the current receiver is carrying the new source.
+    let receiver = [entry.audioTransceiver?.receiver, entry.audioReceiver]
+      .find(isLiveAudioReceiver) ?? null;
+    if (!receiver) {
       try {
         const receivers = entry.connection.getReceivers?.() ?? [];
-        receiver = receivers.find((candidate) =>
-          candidate.track?.kind === "audio" && candidate.track.readyState === "live"
-        ) ?? null;
+        receiver = receivers.find(isLiveAudioReceiver) ?? null;
       } catch {
         return;
       }

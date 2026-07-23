@@ -33,19 +33,22 @@ import {
   ensureLocalAudioDirectoryWriteAccess,
   getLocalAudioStorageState,
   normalizeLocalAudioMimeType,
+  saveCachedAudioFileToLocalDirectory,
   saveAudioFileToLocalDirectory
 } from "@/features/upload/local-audio-storage";
 import {
   upsertLocalPlaylistTrack,
+  upsertCachedLibraryTrack,
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import { ProviderAlbumDetailView } from "@/components/ProviderAlbumDetailView";
+import { ProviderAlbumDetailView, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   getCachedFavorites,
   getCachedProviderAccount,
@@ -79,6 +82,7 @@ export function ProviderSearchPage({
   onKeywordsChange
 }: ProviderSearchPageProps = {}) {
   const router = useRouter();
+  const player = useLocalPlayer();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: onClose ? "/app/discover?search=1" : "/app/search" });
   const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
@@ -101,6 +105,7 @@ export function ProviderSearchPage({
   const [contentTab, setContentTab] = useState<ContentTab>("songs");
   const [pending, setPending] = useState<string | null>(null);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const searchRequestRef = useRef(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -368,6 +373,96 @@ export function ProviderSearchPage({
     }
   }
 
+  async function cacheTrackForPlayback(track: Track) {
+    const trackId = localPlaylistTrackId(track);
+    const savedTrack = localTracks.find((item) => item.id === trackId);
+    if (savedTrack?.fileHash && player.isTrackPlayable(savedTrack)) return savedTrack;
+    const cachedTrack = playbackTracks.find((item) => item.id === trackId);
+    if (cachedTrack?.fileHash && player.isTrackPlayable(cachedTrack)) return cachedTrack;
+
+    const resolvedTrack = await resolveTrackArtwork(track);
+    const response = resolvedTrack.provider === "netease"
+      ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
+      : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
+    const fileHash = await hashAudioBlob(response.blob);
+    const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+    const lyricPayload = await (resolvedTrack.provider === "netease"
+      ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
+      : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
+    ).catch(() => null);
+    const lyrics = lyricPayload?.plainLyric ?? null;
+
+    await upsertCachedLibraryTrack({
+      fileHash,
+      title: resolvedTrack.title,
+      artist: resolvedTrack.artist,
+      album: resolvedTrack.album,
+      artworkUrl: resolvedTrack.artworkUrl,
+      lyrics,
+      provider: resolvedTrack.provider,
+      providerTrackId: resolvedTrack.providerTrackId,
+      mimeType,
+      durationMs: resolvedTrack.durationMs,
+      sizeBytes: response.blob.size,
+      file: response.blob,
+      sourceTrackIds: [],
+      sourceRoomIds: [],
+      lastSourceTrackId: null,
+      lastSourceRoomId: null,
+      lastOwnerNickname: null
+    });
+    const cachedFile = await saveCachedAudioFileToLocalDirectory({
+      file: response.blob,
+      fileHash,
+      title: resolvedTrack.title,
+      mimeType,
+      provider: resolvedTrack.provider
+    });
+    const record: LocalPlaylistTrackRecord = {
+      ...toProviderTrackRecord(resolvedTrack),
+      fileHash,
+      fileName: cachedFile?.fileName ?? null,
+      sizeBytes: response.blob.size,
+      mimeType,
+      lyrics,
+      availableOffline: false,
+      updatedAt: new Date().toISOString()
+    };
+    player.registerTransientCache(fileHash);
+    setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
+    return record;
+  }
+
+  async function playProviderTrack(track: Track) {
+    if (pending) return;
+    setPending(`play:${track.provider}:${track.providerTrackId}`);
+    setErrorMessage(null);
+    try {
+      const record = await cacheTrackForPlayback(track);
+      await player.playTrack(record);
+      setStatusMessage(`正在播放《${track.title}》，歌曲仅保留在当前队列缓存中。`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "歌曲播放失败，请稍后重试。");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function queueProviderTrack(track: Track) {
+    if (pending) return;
+    setPending(`queue:${track.provider}:${track.providerTrackId}`);
+    setErrorMessage(null);
+    try {
+      const record = await cacheTrackForPlayback(track);
+      player.addToQueue(record);
+      setStatusMessage(`《${track.title}》已加入播放队列。`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "加入队列失败，请稍后重试。");
+    } finally {
+      setPending(null);
+    }
+  }
+
   async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
     if (pending) return;
     setPlaylistPickerTrack(track);
@@ -443,6 +538,23 @@ export function ProviderSearchPage({
     } finally {
       setPending(null);
     }
+  }
+
+  function providerTrackActions(): ProviderAlbumTrackActions {
+    return {
+      isDownloaded: (track) => localTracks.some((item) => item.id === localPlaylistTrackId(track) && item.availableOffline),
+      isPlayable: (track) => {
+        const localTrack = localTracks.find((item) => item.id === localPlaylistTrackId(track));
+        const cachedTrack = playbackTracks.find((item) => item.id === localPlaylistTrackId(track));
+        return Boolean((localTrack && player.isTrackPlayable(localTrack)) || (cachedTrack && player.isTrackPlayable(cachedTrack)));
+      },
+      isQueued: (track) => player.queue.some((item) => item.trackId === localPlaylistTrackId(track)),
+      isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}` || pending === `play:${track.provider}:${track.providerTrackId}` || pending === `queue:${track.provider}:${track.providerTrackId}`,
+      onDownload: (track) => void downloadTrack(track),
+      onAddToQueue: (track) => void queueProviderTrack(track),
+      onPlay: (track) => void playProviderTrack(track),
+      onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor)
+    };
   }
 
   async function addAlbumToPlaylist(option: ProviderPlaylistPickerOption) {
@@ -643,11 +755,11 @@ export function ProviderSearchPage({
               onImportPlaylist={openPlaylistPicker}
             />
           ) : null}
-          {contentTab === "playlists" ? (
-            <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} />
-          ) : null}
-          {contentTab === "albums" ? (
-            <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} />
+           {contentTab === "playlists" ? (
+            <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} trackActions={providerTrackActions()} />
+           ) : null}
+           {contentTab === "albums" ? (
+            <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} trackActions={providerTrackActions()} />
           ) : null}
         </>
       ) : (
@@ -800,7 +912,8 @@ function PlaylistsContent({
   pending,
   onBack,
   onOpen,
-  onSave
+  onSave,
+  trackActions
 }: {
   playlists: ProviderPlaylistSummary[];
   playlist: ProviderPlaylistDetail | null;
@@ -808,6 +921,7 @@ function PlaylistsContent({
   onBack: () => void;
   onOpen: (item: ProviderPlaylistSummary) => Promise<void>;
   onSave: (playlist: ProviderPlaylistDetail) => Promise<void>;
+  trackActions: ProviderAlbumTrackActions;
 }) {
   if (playlist) {
     return (
@@ -817,6 +931,7 @@ function PlaylistsContent({
         onToggleFavorite={() => onSave(playlist)}
         pending={pending}
         playlist={playlist}
+        trackActions={trackActions}
       />
     );
   }
@@ -844,7 +959,8 @@ function AlbumsContent({
   onOpen,
   onBack,
   onToggleFavorite,
-  onAddAlbumToPlaylist
+  onAddAlbumToPlaylist,
+  trackActions
 }: {
   albums: ProviderAlbumSummary[];
   album: ProviderAlbumDetail | null;
@@ -854,6 +970,7 @@ function AlbumsContent({
   onBack: () => void;
   onToggleFavorite: (album: ProviderAlbumSummary | ProviderAlbumDetail) => Promise<void>;
   onAddAlbumToPlaylist: (album: ProviderAlbumDetail, anchor: AnchoredDialogAnchor) => void;
+  trackActions: ProviderAlbumTrackActions;
 }) {
   if (album) {
     const favoriteId = albumKey(album.provider, album.providerAlbumId);
@@ -865,6 +982,7 @@ function AlbumsContent({
         onToggleFavorite={() => onToggleFavorite(album)}
         pending={pending}
         onAddAlbumToPlaylist={(anchor) => onAddAlbumToPlaylist(album, anchor)}
+        trackActions={trackActions}
       />
     );
   }

@@ -53,6 +53,7 @@ type Detail =
   | { kind: "playlist"; summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail }
   | { kind: "album"; summary: ProviderAlbumSummary; value: ProviderAlbumDetail };
 type HeroItem = ProviderDiscoveryBanner & { fallbackPlaylist?: ProviderPlaylistSummary };
+type SearchSuggestion = { label: string; hint?: string };
 
 const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
@@ -69,6 +70,8 @@ type ProviderDiscoveryData = {
   banners: ProviderDiscoveryBanner[];
   categories: ProviderPlaylistCategory[];
 };
+
+const discoverSearchHistoryKey = "music-room-discover-search-history-v1";
 
 const emptyProviderData: ProviderDiscoveryData = {
   recommended: [],
@@ -115,12 +118,36 @@ export function DiscoverPage() {
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(() => searchParams.get("search") === "1");
   const [searchKeywords, setSearchKeywords] = useState(() => searchParams.get("q") ?? "");
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const discoverScrollRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const nextSearchOpen = searchParams.get("search") === "1";
     setSearchOpen(nextSearchOpen);
     setSearchKeywords(nextSearchOpen ? searchParams.get("q") ?? "" : "");
+    setSearchSuggestionsOpen(false);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!detail || searchOpen) return;
+    const frameId = window.requestAnimationFrame(() => {
+      discoverScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [detail, searchOpen]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(discoverSearchHistoryKey) ?? "[]");
+      if (Array.isArray(saved)) {
+        setSearchHistory(saved.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 8));
+      }
+    } catch {
+      setSearchHistory([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (hydrated && !activeSession) {
@@ -251,22 +278,30 @@ export function DiscoverPage() {
   }
 
   function openSearch() {
+    const query = searchKeywords.trim();
+    if (query) {
+      const nextHistory = [query, ...searchHistory.filter((item) => item !== query)].slice(0, 8);
+      setSearchHistory(nextHistory);
+      window.localStorage.setItem(discoverSearchHistoryKey, JSON.stringify(nextHistory));
+    }
     setSearchOpen(true);
+    setSearchSuggestionsOpen(false);
     setDetail(null);
     const params = new URLSearchParams({ search: "1" });
-    const query = searchKeywords.trim();
     if (query) params.set("q", query);
     router.replace(`${pathname}?${params.toString()}` as Route, { scroll: false });
   }
 
   function closeSearch() {
     setSearchOpen(false);
+    setSearchSuggestionsOpen(false);
     setSearchKeywords("");
     router.replace(pathname as Route, { scroll: false });
   }
 
   async function openPlaylist(summary: ProviderPlaylistSummary) {
     const key = `playlist:${summary.provider}:${summary.providerPlaylistId}`;
+    discoverScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     setDetailLoading(key);
     setErrorMessage(null);
     try {
@@ -556,9 +591,9 @@ export function DiscoverPage() {
 
   if (detail && !searchOpen) {
     return (
-      <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <main ref={discoverScrollRef} className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
         {detail.kind === "playlist" ? (
-          <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
+          <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1920px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8 xl:px-14">
             <ProviderPlaylistDetailView
               isFavorite={favoritePlaylistKeys.has(providerPlaylistKey(detail.value.provider, detail.value.providerPlaylistId))}
               onBack={() => setDetail(null)}
@@ -603,10 +638,11 @@ export function DiscoverPage() {
   const dailyTracks = activeData.dailyTracks;
   const heroItems: HeroItem[] = banners.length > 0
     ? banners
-    : recommended.slice(0, 4).map((item) => ({ ...toFallbackBanner(item), fallbackPlaylist: item }));
+    : recommended.slice(0, 8).map((item) => ({ ...toFallbackBanner(item), fallbackPlaylist: item }));
+  const searchSuggestions = buildSearchSuggestions(searchKeywords, searchHistory, activeData);
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main ref={discoverScrollRef} className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1480px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:px-10 md:pt-14">
         <header className="flex flex-wrap items-end justify-between gap-5">
           <div>
@@ -614,31 +650,51 @@ export function DiscoverPage() {
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">发现</h1>
             <p className="mt-2 text-sm text-foreground-muted">从今天开始，找到下一首喜欢的歌。</p>
           </div>
-          <form className="group flex h-11 w-full max-w-[460px] items-center gap-3 rounded-full border border-surface-border bg-surface px-3 text-sm text-foreground-muted shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-accent/40 hover:bg-surface-hover focus-within:border-accent/60 focus-within:bg-surface-hover sm:w-[min(42vw,460px)]" onSubmit={(event) => {
-            event.preventDefault();
-            openSearch();
-          }}>
-            <SearchIcon />
-            <label className="sr-only" htmlFor="discover-search-input">搜索歌曲、歌手、专辑或歌单</label>
-            <input
-              autoFocus={searchOpen}
-              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-foreground-muted"
-              id="discover-search-input"
-              maxLength={100}
-              onChange={(event) => setSearchKeywords(event.target.value)}
-              onFocus={() => {
-                if (!searchOpen) openSearch();
-              }}
-              placeholder="搜索歌曲、歌手、专辑或歌单"
-              type="search"
-              value={searchKeywords}
-            />
-            {searchOpen ? (
-              <button className="shrink-0 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={closeSearch} type="button">取消</button>
-            ) : (
-              <button aria-label="搜索" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition hover:bg-surface hover:text-foreground active:scale-95" type="submit"><SearchIcon /></button>
-            )}
-          </form>
+          <div className="relative w-full max-w-[460px] sm:w-[min(42vw,460px)]">
+            <form className="group flex h-11 w-full items-center gap-3 rounded-full border border-surface-border bg-surface px-3 text-sm text-foreground-muted shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-accent/40 hover:bg-surface-hover focus-within:border-accent/60 focus-within:bg-surface-hover" onSubmit={(event) => {
+              event.preventDefault();
+              openSearch();
+            }}>
+              <SearchIcon />
+              <label className="sr-only" htmlFor="discover-search-input">搜索歌曲、歌手、专辑或歌单</label>
+              <input
+                ref={searchInputRef}
+                autoFocus={searchOpen}
+                className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-foreground-muted"
+                id="discover-search-input"
+                maxLength={100}
+                onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 120)}
+                onChange={(event) => {
+                  setSearchKeywords(event.target.value);
+                  if (!searchOpen) setSearchSuggestionsOpen(true);
+                }}
+                onFocus={() => {
+                  if (!searchOpen) setSearchSuggestionsOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setSearchSuggestionsOpen(false);
+                }}
+                placeholder="搜索歌曲、歌手、专辑或歌单"
+                type="search"
+                value={searchKeywords}
+              />
+              {searchOpen ? (
+                <button className="shrink-0 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={closeSearch} type="button">取消</button>
+              ) : (
+                <button aria-label="搜索" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition hover:bg-surface hover:text-foreground active:scale-95" type="submit"><SearchIcon /></button>
+              )}
+            </form>
+            {!searchOpen && searchSuggestionsOpen ? (
+              <SearchSuggestions
+                items={searchSuggestions}
+                onSelect={(value) => {
+                  setSearchKeywords(value);
+                  setSearchSuggestionsOpen(false);
+                  searchInputRef.current?.focus();
+                }}
+              />
+            ) : null}
+          </div>
         </header>
 
         {searchOpen ? (
@@ -752,6 +808,42 @@ function toFallbackBanner(summary: ProviderPlaylistSummary): ProviderDiscoveryBa
   };
 }
 
+function buildSearchSuggestions(keywords: string, history: string[], data: ProviderDiscoveryData): SearchSuggestion[] {
+  const query = keywords.trim().toLocaleLowerCase();
+  const candidates: SearchSuggestion[] = [];
+  const seen = new Set<string>();
+  const add = (label: string | null | undefined, hint?: string) => {
+    const value = label?.trim();
+    if (!value) return;
+    const key = `${value.toLocaleLowerCase()}:${hint ?? ""}`;
+    if (seen.has(key)) return;
+    if (query && !value.toLocaleLowerCase().includes(query)) return;
+    seen.add(key);
+    candidates.push({ label: value, hint });
+  };
+
+  history.forEach((item) => add(item, "最近搜索"));
+  data.dailyTracks.slice(0, 8).forEach((track) => {
+    add(track.title, "歌曲");
+    add(track.artist, "歌手");
+  });
+  [...data.recommended, ...data.playlists].slice(0, 12).forEach((playlist) => add(playlist.title, "歌单"));
+  data.albums.slice(0, 8).forEach((album) => {
+    add(album.title, "专辑");
+    add(album.artist, "歌手");
+  });
+  data.categories.slice(0, 12).forEach((category) => add(category.name, "分类"));
+
+  if (!query) {
+    ["华语流行", "林俊杰", "周杰伦", "轻音乐", "ACG", "经典老歌"].forEach((item) => add(item, "热门"));
+  } else if (candidates.length === 0) {
+    add(keywords, "搜索歌曲");
+    add(`${keywords} 歌单`, "搜索歌单");
+    add(`${keywords} 专辑`, "搜索专辑");
+  }
+  return candidates.slice(0, 8);
+}
+
 function DiscoverySection({ eyebrow, title, actionLabel, onAction, children }: { eyebrow: string; title: string; actionLabel: string; onAction: () => void; children: ReactNode }) {
   return (
     <section className="mt-11">
@@ -768,10 +860,59 @@ function DiscoverySection({ eyebrow, title, actionLabel, onAction, children }: {
 }
 
 function HeroRail({ items, onOpenPlaylist, loadingKey }: { items: HeroItem[]; onOpenPlaylist: (item: ProviderPlaylistSummary) => Promise<void>; loadingKey: string | null }) {
+  const visibleItems = items.slice(0, 8);
+  const railRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const itemSignature = visibleItems.map((item) => `${item.provider}:${item.id}`).join("|");
+
+  useEffect(() => {
+    setActiveIndex(0);
+    railRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [itemSignature]);
+
+  useEffect(() => {
+    if (paused || visibleItems.length < 2) return;
+    const timerId = window.setTimeout(() => {
+      const nextIndex = (activeIndex + 1) % visibleItems.length;
+      scrollHeroRail(railRef.current, nextIndex);
+      setActiveIndex(nextIndex);
+    }, 5_500);
+    return () => window.clearTimeout(timerId);
+  }, [activeIndex, paused, visibleItems.length]);
+
+  function syncActiveIndex() {
+    const rail = railRef.current;
+    if (!rail) return;
+    const slides = Array.from(rail.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
+    if (!slides.length) return;
+    const nextIndex = slides.reduce((closestIndex, slide, index) => {
+      const closest = slides[closestIndex];
+      return Math.abs(slide.offsetLeft - rail.scrollLeft) < Math.abs(closest.offsetLeft - rail.scrollLeft)
+        ? index
+        : closestIndex;
+    }, 0);
+    setActiveIndex((current) => current === nextIndex ? current : nextIndex);
+  }
+
+  if (!visibleItems.length) return null;
+
   return (
-    <section className="mt-8 -mx-4 overflow-x-auto px-4 hide-scrollbar sm:-mx-7 sm:px-7 md:-mx-10 md:px-10" aria-label="精选推荐">
-      <div className="flex snap-x gap-4">
-        {items.slice(0, 4).map((item) => {
+    <section
+      aria-label="精选推荐轮播"
+      className="relative mt-8 -mx-4 px-4 sm:-mx-7 sm:px-7 md:-mx-10 md:px-10"
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+    >
+      <div
+        ref={railRef}
+        className="flex snap-x gap-4 overflow-x-auto scroll-smooth hide-scrollbar"
+        onPointerCancel={() => setPaused(false)}
+        onPointerDown={() => setPaused(true)}
+        onPointerUp={() => setPaused(false)}
+        onScroll={syncActiveIndex}
+      >
+        {visibleItems.map((item) => {
           const content = (
             <div className="relative aspect-[2.05/1] w-[min(86vw,660px)] shrink-0 snap-start overflow-hidden rounded-2xl border border-surface-border bg-surface sm:w-[min(76vw,660px)]">
               <Artwork alt={item.title} className="h-full w-full" src={item.artworkUrl} />
@@ -794,7 +935,67 @@ function HeroRail({ items, onOpenPlaylist, loadingKey }: { items: HeroItem[]; on
           return <div key={`${item.provider}:${item.id}`}>{content}</div>;
         })}
       </div>
+      {visibleItems.length > 1 ? (
+        <div className="mt-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5" aria-label="选择推荐内容">
+            {visibleItems.map((item, index) => (
+              <button
+                aria-current={activeIndex === index ? "true" : undefined}
+                aria-label={`第 ${index + 1} 个推荐`}
+                className={`h-1.5 rounded-full transition-[width,background-color] duration-300 ${activeIndex === index ? "w-6 bg-accent" : "w-1.5 bg-foreground-muted/35 hover:bg-foreground-muted/70"}`}
+                key={`${item.provider}:${item.id}:indicator`}
+                onClick={() => {
+                  scrollHeroRail(railRef.current, index);
+                  setActiveIndex(index);
+                }}
+                type="button"
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <button aria-label="上一张推荐" className="flex h-8 w-8 items-center justify-center rounded-full border border-surface-border text-foreground-muted transition hover:bg-surface-hover hover:text-foreground" onClick={() => {
+              const nextIndex = (activeIndex - 1 + visibleItems.length) % visibleItems.length;
+              scrollHeroRail(railRef.current, nextIndex);
+              setActiveIndex(nextIndex);
+            }} type="button"><ArrowLeftIcon /></button>
+            <button aria-label="下一张推荐" className="flex h-8 w-8 items-center justify-center rounded-full border border-surface-border text-foreground-muted transition hover:bg-surface-hover hover:text-foreground" onClick={() => {
+              const nextIndex = (activeIndex + 1) % visibleItems.length;
+              scrollHeroRail(railRef.current, nextIndex);
+              setActiveIndex(nextIndex);
+            }} type="button"><ArrowRightIcon /></button>
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function scrollHeroRail(rail: HTMLDivElement | null, index: number) {
+  if (!rail) return;
+  const slide = rail.children[index];
+  if (!(slide instanceof HTMLElement)) return;
+  rail.scrollTo({ left: slide.offsetLeft, behavior: "smooth" });
+}
+
+function SearchSuggestions({ items, onSelect }: { items: SearchSuggestion[]; onSelect: (value: string) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-surface-border bg-surface/95 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-xl" role="listbox">
+      {items.map((item) => (
+        <button
+          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground"
+          key={`${item.label}:${item.hint ?? ""}`}
+          onClick={() => onSelect(item.label)}
+          onMouseDown={(event) => event.preventDefault()}
+          role="option"
+          type="button"
+        >
+          <span className="shrink-0 text-foreground-muted/80"><SearchIcon /></span>
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          {item.hint ? <span className="shrink-0 rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">{item.hint}</span> : null}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -903,5 +1104,6 @@ function toErrorMessage(error: unknown) {
 
 function SearchIcon() { return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>; }
 function ArrowLeftIcon() { return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></svg>; }
+function ArrowRightIcon() { return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m9 18 6-6-6-6" /><path d="M5 12h10" /></svg>; }
 function CompassIcon() { return <svg aria-hidden="true" fill="none" height="28" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" viewBox="0 0 24 24" width="28"><circle cx="12" cy="12" r="8.5" /><path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" /></svg>; }
 function ChevronIcon({ expanded }: { expanded: boolean }) { return <svg aria-hidden="true" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="m6 9 6 6 6-6" /></svg>; }

@@ -112,17 +112,19 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
           <input aria-label="搜索专辑歌曲" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/35" onChange={(event) => setQuery(event.target.value)} placeholder="搜索" type="search" value={query} />
         </label>
       </div>
-      <div className={`mt-4 hidden gap-4 px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/30 md:grid ${actions ? "grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.7fr)_minmax(180px,0.8fr)_90px_minmax(148px,auto)]" : "grid-cols-[42px_minmax(0,1.5fr)_minmax(120px,0.7fr)_minmax(180px,0.8fr)_90px]"}`}>
-        <span>#</span><span>标题</span><span>歌手</span><span>专辑</span><span className="text-right">时长</span>{actions ? <span className="text-right">操作</span> : null}
+      <div className={`mt-4 hidden gap-5 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/30 md:grid ${actions ? "md:grid-cols-[84px_minmax(0,1.5fr)_minmax(180px,0.8fr)_76px_minmax(180px,auto)]" : "md:grid-cols-[84px_minmax(0,1.6fr)_minmax(180px,0.8fr)_76px]"}`}>
+        <span>#</span><span>单曲</span><span>专辑</span><span className="text-right">时长</span>{actions ? <span className="text-right">操作</span> : null}
       </div>
       <div className="mt-2 divide-y divide-white/[0.07]">
         {visibleTracks.length ? visibleTracks.map((track, index) => (
-          <div className={`grid gap-2 px-4 py-4 md:items-center md:gap-4 ${actions ? "md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.7fr)_minmax(180px,0.8fr)_90px_minmax(148px,auto)]" : "md:grid-cols-[42px_minmax(0,1.5fr)_minmax(120px,0.7fr)_minmax(180px,0.8fr)_90px]"}`} key={`${track.provider}:${track.providerTrackId}`}>
-            <span className="text-xs tabular-nums text-white/30">{String(index + 1).padStart(2, "0")}</span>
-            <div className="flex min-w-0 items-center gap-3"><TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} /><div className="min-w-0"><p className="truncate text-sm text-white/85">{track.title}</p><p className="mt-1 truncate text-xs text-white/35 md:hidden">{track.artist} · {track.album ?? "未知专辑"}</p></div></div>
-            <span className="hidden truncate text-xs text-white/50 md:block">{track.artist}</span>
-            <span className="hidden truncate text-xs text-white/50 md:block">{track.album ?? "未知专辑"}</span>
-            <span className="text-xs tabular-nums text-white/40 md:text-right">{formatDuration(track.durationMs)}</span>
+          <div className={`group grid gap-x-3 gap-y-3 px-3 py-4 transition-colors hover:bg-white/[0.035] md:items-center md:gap-5 md:px-3 md:py-5 ${actions ? "md:grid-cols-[84px_minmax(0,1.5fr)_minmax(180px,0.8fr)_76px_minmax(180px,auto)]" : "md:grid-cols-[84px_minmax(0,1.6fr)_minmax(180px,0.8fr)_76px]"}`} key={`${track.provider}:${track.providerTrackId}`}>
+            <div className="flex items-center gap-3 text-xs tabular-nums text-white/35 md:text-sm">
+              <GripIcon />
+              <span>{String(index + 1).padStart(2, "0")}</span>
+            </div>
+            <div className="flex min-w-0 items-center gap-3 md:gap-5"><TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium text-white/90 md:text-[17px]">{track.title}</p><p className="mt-1 flex min-w-0 items-center gap-1 truncate text-xs text-white/45"><span className="truncate">{track.artist}</span><span aria-hidden="true" className="shrink-0 text-white/25">·</span><span className="shrink-0">{actions?.isDownloaded?.(track) ? "已下载" : "未下载"}</span></p></div></div>
+            <span className="hidden truncate text-sm text-white/55 md:block">{track.album ?? "未知专辑"}</span>
+            <span className="col-start-2 text-xs tabular-nums text-white/40 md:col-auto md:text-right">{formatDuration(track.durationMs)}</span>
             {actions ? <TrackActions track={track} actions={actions} /> : null}
           </div>
         )) : <p className="px-4 py-10 text-center text-xs text-white/35">没有匹配的歌曲。</p>}
@@ -148,21 +150,27 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
 }
 
 function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
-  return src ? (
-    // External provider artwork is intentionally rendered without Next image optimization.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className="aspect-square w-full rounded-2xl object-cover" loading="lazy" src={getArtworkSourceUrl(src)} />
-  ) : <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-black text-3xl text-white/20">♪</span>;
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-black text-3xl text-white/20">♪</span>;
+  }
+  // External provider artwork is intentionally rendered without Next image optimization.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img alt={alt} className="aspect-square w-full rounded-2xl object-cover" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />;
 }
 
 function TrackArtwork({ alt, src }: { alt: string; src: string | null }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
-    return <span aria-label={alt} className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/[0.07] text-sm text-white/35">♪</span>;
+    return <span aria-label={alt} className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/[0.07] text-sm text-white/35 md:h-[76px] md:w-[76px] md:rounded-xl">♪</span>;
   }
   // Provider artwork URLs are external and intentionally bypass Next image optimization.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className="h-10 w-10 shrink-0 rounded-lg object-cover" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />;
+  return <img alt={alt} className="h-12 w-12 shrink-0 rounded-lg object-cover md:h-[76px] md:w-[76px] md:rounded-xl" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />;
+}
+
+function GripIcon() {
+  return <svg aria-hidden="true" className="h-4 w-3 shrink-0 text-white/25" fill="currentColor" viewBox="0 0 12 24"><circle cx="3" cy="5" r="1" /><circle cx="9" cy="5" r="1" /><circle cx="3" cy="12" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="3" cy="19" r="1" /><circle cx="9" cy="19" r="1" /></svg>;
 }
 
 function Icon({ name, filled = false }: { name: "arrow-left" | "heart" | "search" | "plus"; filled?: boolean }) {
