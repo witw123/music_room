@@ -9,10 +9,12 @@ const themeInitScript = `(() => {
     const raw = localStorage.getItem("music-room-settings-v1");
     const value = raw ? JSON.parse(raw) : null;
     const preference = value && (value.theme === "light" || value.theme === "system" || value.theme === "dark") ? value.theme : "dark";
+    const sidebarCollapsed = !(value && value.layout && value.layout.sidebarCollapsed === false);
     const systemPrefersLight = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches;
     const light = preference === "light" || (preference === "system" && systemPrefersLight);
     const theme = light ? "light" : "dark";
     document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.sidebarCollapsed = String(sidebarCollapsed);
     document.documentElement.style.colorScheme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#f5f7fb" : "#09090b");
   } catch {

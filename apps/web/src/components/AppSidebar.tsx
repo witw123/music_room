@@ -75,6 +75,10 @@ export function AppSidebar({
       const settings = getAppSettings();
       setCollapsed(settings.layout.sidebarCollapsed);
       setThemePreference(settings.theme);
+      // Keep the shared content offset aligned with the persisted setting. The
+      // sidebar can briefly coexist with another route's instance during a
+      // client transition, so it must not publish its own initial state here.
+      document.documentElement.dataset.sidebarCollapsed = String(settings.layout.sidebarCollapsed);
       document.documentElement.dataset.reduceMotion = String(settings.layout.reduceMotion);
       applyAppTheme(settings.theme);
       themeMediaQuery?.removeEventListener("change", syncTheme);
@@ -93,10 +97,6 @@ export function AppSidebar({
       themeMediaQuery?.removeEventListener("change", syncTheme);
     };
   }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.sidebarCollapsed = String(collapsed);
-  }, [collapsed]);
 
   function handleThemeToggle() {
     const resolvedTheme = resolveAppTheme(themePreference);

@@ -97,6 +97,8 @@ type MediaRecoveryState = {
   degradedWindows: number;
   noPacketWindows: number;
   noSendPacketWindows: number;
+  lastMediaReceivePacketAtMs: number | null;
+  lastMediaSendPacketAtMs: number | null;
   highLossWindows: number;
   highJitterWindows: number;
   positiveMediaWindows: number;
@@ -118,6 +120,8 @@ function createMediaRecoveryState(): MediaRecoveryState {
     degradedWindows: 0,
     noPacketWindows: 0,
     noSendPacketWindows: 0,
+    lastMediaReceivePacketAtMs: null,
+    lastMediaSendPacketAtMs: null,
     highLossWindows: 0,
     highJitterWindows: 0,
     positiveMediaWindows: 0,
@@ -1307,12 +1311,43 @@ export class PeerConnectionLifecycleManager {
     // A null bitrate means that the browser did not provide a comparable
     // stats sample yet. Treating it as zero creates false recovery cycles,
     // especially for a source that joined as the non-initiating peer.
+    const previousReceivePacketAtMs = state.lastMediaReceivePacketAtMs;
+    const previousSendPacketAtMs = state.lastMediaSendPacketAtMs;
+    const currentReceivePacketAtMs = sample.lastMediaReceivePacketAtMs ?? null;
+    const currentSendPacketAtMs = sample.lastMediaSendPacketAtMs ?? null;
+    const receivePacketTimestampAdvanced = currentReceivePacketAtMs !== null &&
+      (previousReceivePacketAtMs === null || currentReceivePacketAtMs > previousReceivePacketAtMs);
+    const sendPacketTimestampAdvanced = currentSendPacketAtMs !== null &&
+      (previousSendPacketAtMs === null || currentSendPacketAtMs > previousSendPacketAtMs);
+    if (
+      currentReceivePacketAtMs !== null &&
+      (previousReceivePacketAtMs === null || currentReceivePacketAtMs >= previousReceivePacketAtMs)
+    ) {
+      state.lastMediaReceivePacketAtMs = currentReceivePacketAtMs;
+    }
+    if (
+      currentSendPacketAtMs !== null &&
+      (previousSendPacketAtMs === null || currentSendPacketAtMs >= previousSendPacketAtMs)
+    ) {
+      state.lastMediaSendPacketAtMs = currentSendPacketAtMs;
+    }
+    // A zero bitrate can be a rounded or delayed stats window. Only count it
+    // as a packet outage after the browser has supplied a stable packet
+    // timestamp and that timestamp stops advancing.
+    const receivePacketTimestampStalled = currentReceivePacketAtMs !== null &&
+      previousReceivePacketAtMs !== null &&
+      !receivePacketTimestampAdvanced;
+    const sendPacketTimestampStalled = currentSendPacketAtMs !== null &&
+      previousSendPacketAtMs !== null &&
+      !sendPacketTimestampAdvanced;
     const noReceivePackets = entry.receiverTrackState === "live" &&
       sample.mediaReceiveBitrateKbps !== null &&
-      sample.mediaReceiveBitrateKbps <= 0;
+      sample.mediaReceiveBitrateKbps <= 0 &&
+      receivePacketTimestampStalled;
     const noSendPackets = entry.senderTrackState === "live" &&
       sample.mediaSendBitrateKbps !== null &&
-      sample.mediaSendBitrateKbps <= 0;
+      sample.mediaSendBitrateKbps <= 0 &&
+      sendPacketTimestampStalled;
     const localSourceIsActive = this.localAudioSourcePeerId === this.localPeerId &&
       !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
     state.degradedWindows = loss >= 3 || jitter >= 20 ? state.degradedWindows + 1 : 0;
@@ -1543,7 +1578,8 @@ export class PeerConnectionLifecycleManager {
       // race the source's late-join offer into a permanent recovery loop.
       forceRecreate: reason === "no-packets" &&
         this.localAudioSourcePeerId === this.localPeerId &&
-        entry.senderTrackState === "live"
+        entry.senderTrackState === "live" &&
+        entry.connection.connectionState !== "connected"
     });
   }
 

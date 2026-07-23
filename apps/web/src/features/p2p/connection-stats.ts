@@ -23,6 +23,9 @@ export type PeerConnectionStatsSample = {
   receiverCodecId?: string | null;
   opusCodec?: string | null;
   mediaTrackEstablishedAtMs?: number | null;
+  lastMediaReceivePacketAtMs?: number | null;
+  lastMediaSendPacketAtMs?: number | null;
+  /** Backward-compatible aggregate timestamp used by diagnostics. */
   lastMediaPacketAtMs?: number | null;
   packetLossRate?: number | null;
   receiverJitterTargetMs?: number | null;
@@ -86,6 +89,14 @@ export async function samplePeerConnectionStats(
     const outboundAudioBytes = getNumber(outboundAudio, "bytesSent");
     const inboundAudioTimestampMs = getTimestampMs(inboundAudio);
     const outboundAudioTimestampMs = getTimestampMs(outboundAudio);
+    const lastMediaReceivePacketAtMs = getNumber(
+      inboundAudio,
+      "lastPacketReceivedTimestamp"
+    );
+    const lastMediaSendPacketAtMs = getNumber(
+      outboundAudio,
+      "lastPacketSentTimestamp"
+    );
     const lossCounters =
       resolvePacketLossCounters(inboundAudio, remoteInboundAudio, outboundAudio) ?? null;
     const packetLossRate = calculatePacketLossRate({
@@ -145,9 +156,9 @@ export async function samplePeerConnectionStats(
         targetAudioBitrateKbps: toKbps(getNumber(outboundAudio, "targetBitrate")),
         senderAudioMaxBitrateKbps: toKbps(getNumber(outboundAudio, "maxBitrate")),
         mediaTrackEstablishedAtMs: resolveMediaTrackEstablishedAtMs(inboundAudio, outboundAudio),
-        lastMediaPacketAtMs:
-          getNumber(inboundAudio, "lastPacketReceivedTimestamp") ??
-          getNumber(outboundAudio, "lastPacketSentTimestamp"),
+        lastMediaReceivePacketAtMs,
+        lastMediaSendPacketAtMs,
+        lastMediaPacketAtMs: lastMediaReceivePacketAtMs ?? lastMediaSendPacketAtMs,
         packetsLost: lossCounters?.lost ?? null,
         packetLossRate,
         jitterMs: toMilliseconds(getNumber(inboundAudio, "jitter"))

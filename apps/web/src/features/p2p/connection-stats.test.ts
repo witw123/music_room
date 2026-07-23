@@ -174,6 +174,7 @@ describe("samplePeerConnectionStats", () => {
             type: "inbound-rtp",
             timestamp: 1_000,
             kind: "audio",
+            lastPacketReceivedTimestamp: 1_050,
             bytesReceived: 10_000,
             packetsLost: 5,
             packetsReceived: 95,
@@ -184,6 +185,7 @@ describe("samplePeerConnectionStats", () => {
             type: "outbound-rtp",
             timestamp: 1_000,
             kind: "audio",
+            lastPacketSentTimestamp: 1_060,
             bytesSent: 8_000
           }
         ])
@@ -230,6 +232,7 @@ describe("samplePeerConnectionStats", () => {
             type: "inbound-rtp",
             timestamp: 3_000,
             kind: "audio",
+            lastPacketReceivedTimestamp: 3_050,
             bytesReceived: 40_000,
             packetsLost: 8,
             packetsReceived: 192,
@@ -240,6 +243,7 @@ describe("samplePeerConnectionStats", () => {
             type: "outbound-rtp",
             timestamp: 3_000,
             kind: "audio",
+            lastPacketSentTimestamp: 3_060,
             bytesSent: 12_000
           }
         ])
@@ -253,5 +257,8 @@ describe("samplePeerConnectionStats", () => {
     expect(secondSample?.sample.packetsLost).toBe(8);
     expect(secondSample?.sample.packetLossRate).toBe(3);
     expect(secondSample?.sample.mediaReceiveBitrateKbps).toBe(120);
+    expect(secondSample?.sample.lastMediaReceivePacketAtMs).toBe(3_050);
+    expect(secondSample?.sample.lastMediaSendPacketAtMs).toBe(3_060);
+    expect(secondSample?.sample.lastMediaPacketAtMs).toBe(3_050);
   });
 });

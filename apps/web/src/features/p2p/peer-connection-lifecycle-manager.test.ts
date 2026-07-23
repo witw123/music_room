@@ -540,7 +540,7 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaOffers).toHaveLength(1);
   });
 
-  it("recreates a wedged source media peer after consecutive zero outbound samples", async () => {
+  it("restarts a connected source media peer without destroying its track after consecutive zero outbound samples", async () => {
     const { manager } = createManager();
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
     const stream = {
@@ -552,6 +552,10 @@ describe("PeerConnectionLifecycleManager", () => {
 
     const initialMediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
     initialMediaPeer.signalingState = "stable";
+    initialMediaPeer.remoteDescription = {
+      type: "offer",
+      sdp: "remote-offer"
+    };
     await vi.advanceTimersByTimeAsync(0);
     const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
     const observeMediaHealth = (manager as unknown as {
@@ -560,6 +564,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const sample = {
       mediaReceiveBitrateKbps: null,
       mediaSendBitrateKbps: 0,
+      lastMediaSendPacketAtMs: 100,
       packetLossRate: null,
       jitterMs: null
     } as PeerConnectionStatsSample;
@@ -568,11 +573,17 @@ describe("PeerConnectionLifecycleManager", () => {
     observeMediaHealth("peer_b", sample);
     observeMediaHealth("peer_b", sample);
     observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", sample);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(initialMediaPeer.connectionState).toBe("closed");
-    expect(manager.getPeerEntry("peer_b", "media")).not.toBe(mediaEntry);
-    expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(2);
+    expect(initialMediaPeer.connectionState).toBe("connected");
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(initialMediaPeer.mediaSender?.track).toBe(track);
+    expect(initialMediaPeer.localDescription).toEqual({
+      type: "offer",
+      sdp: "fake-restart-offer"
+    });
+    expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);
   });
 
   it("actively reoffers a connected listener media peer when its remote track never arrives", async () => {
