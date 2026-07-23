@@ -42,8 +42,10 @@ import {
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import { ProviderAlbumDetailView, ProviderAlbumTrackTable } from "@/components/ProviderAlbumDetailView";
+import { ProviderAlbumDetailView } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
+import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
   getCachedFavorites,
   getCachedProviderAccount,
@@ -61,14 +63,16 @@ const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
 ];
 
-export function ProviderSearchPage() {
+export function ProviderSearchPage({ onClose, initialProvider }: { onClose?: () => void; initialProvider?: Provider } = {}) {
   const router = useRouter();
-  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/search" });
+  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: onClose ? "/app/discover?search=1" : "/app/search" });
   const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const defaultProvider = enabledProviders[0] ?? "netease";
+  const defaultProvider = initialProvider && enabledProviders.includes(initialProvider)
+    ? initialProvider
+    : enabledProviders[0] ?? "netease";
   const [provider, setProvider] = useState<Provider>(defaultProvider);
   const [account, setAccount] = useState<Account | null>(() =>
     activeSession ? getCachedProviderAccount(activeSession.userId, defaultProvider) ?? null : null
@@ -588,13 +592,18 @@ export function ProviderSearchPage() {
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex justify-center">
           <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
-            <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
+            {onClose ? (
+              <button aria-label="返回发现" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" onClick={onClose} title="返回发现" type="button"><Icon name="arrow-left" /></button>
+            ) : (
+              <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
+            )}
             <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
             <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌单或专辑</label>
             <input
               id="provider-search-input"
               className="h-full min-w-0 flex-1 bg-transparent px-1 text-base text-white outline-none placeholder:text-white/30"
               disabled={!isConnected}
+              autoFocus={Boolean(onClose)}
               maxLength={100}
               onChange={(event) => setKeywords(event.target.value)}
               placeholder="搜索歌曲、歌手、歌单或专辑"
@@ -757,23 +766,13 @@ function PlaylistsContent({
 }) {
   if (playlist) {
     return (
-      <section className="mt-7">
-        <button className="inline-flex items-center gap-2 text-xs font-semibold text-white/50 transition hover:text-white" onClick={onBack} type="button"><Icon name="arrow-left" />返回歌单</button>
-        <div className="mt-5 grid gap-8 border-b border-white/[0.1] pb-9 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <Artwork alt={playlist.title} src={playlist.artworkUrl} className="aspect-square w-full" size="lg" />
-          <div className="flex min-w-0 flex-col justify-end">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">Playlist</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">{playlist.title}</h2>
-            <p className="mt-3 text-sm text-white/55">{playlist.creatorName || "网络歌单"} · {playlist.tracks.length} 首歌曲</p>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/45">{playlist.description || "暂无简介"}</p>
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <Button disabled={pending !== null} onClick={() => void onSave(playlist)} size="sm" type="button">{pending?.startsWith("save-playlist:") ? "保存中" : "保存到歌单"}</Button>
-              <span className="px-2 text-xs text-white/35">{playlist.tracks.length} 首歌曲</span>
-            </div>
-          </div>
-        </div>
-        <ProviderAlbumTrackTable tracks={playlist.tracks} />
-      </section>
+      <ProviderPlaylistDetailView
+        isFavorite={false}
+        onBack={onBack}
+        onToggleFavorite={() => onSave(playlist)}
+        pending={pending}
+        playlist={playlist}
+      />
     );
   }
 
@@ -840,7 +839,7 @@ function Artwork({ alt, src, size, className = "" }: { alt: string; src: string 
   const sizes = { sm: "h-10 w-10 rounded-lg", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
   // External provider artwork is intentionally rendered without Next image optimization.
   // eslint-disable-next-line @next/next/no-img-element
-  return src ? <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={src} /> : <span aria-label={alt} className={`flex items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-white/25 ${sizes[size]} ${className}`}><Icon name="music" /></span>;
+  return src ? <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={getArtworkSourceUrl(src)} /> : <span aria-label={alt} className={`flex items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-white/25 ${sizes[size]} ${className}`}><Icon name="music" /></span>;
 }
 
 function SearchEmptyState({ title, description }: { title: string; description: string }) {

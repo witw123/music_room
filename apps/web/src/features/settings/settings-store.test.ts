@@ -17,6 +17,7 @@ describe("app settings store", () => {
     expect(normalizeSettings(null)).toMatchObject({
       theme: "dark",
       layout: { sidebarCollapsed: true },
+      discover: { provider: "netease" },
       playback: {
         defaultVolume: 0.8,
         playerStyle: "vinyl",
@@ -43,6 +44,11 @@ describe("app settings store", () => {
     expect(normalizeSettings({ playback: { playerStyle: "unknown" } }).playback.playerStyle).toBe("vinyl");
   });
 
+  it("normalizes the discovery provider preference", () => {
+    expect(normalizeSettings({ discover: { provider: "qqmusic" } }).discover.provider).toBe("qqmusic");
+    expect(normalizeSettings({ discover: { provider: "unknown" } }).discover.provider).toBe("netease");
+  });
+
   it("persists normalized updates and can reset them", () => {
     const values = new Map<string, string>();
     const dispatchEvent = vi.fn();
@@ -57,6 +63,7 @@ describe("app settings store", () => {
 
     updateAppSettings({
       layout: { sidebarCollapsed: false },
+      discover: { provider: "qqmusic" },
       playback: {
         defaultVolume: 2,
         lyricLines: 9,
@@ -66,6 +73,7 @@ describe("app settings store", () => {
     });
     expect(getAppSettings()).toMatchObject({
       layout: { sidebarCollapsed: false },
+      discover: { provider: "qqmusic" },
       playback: {
         defaultVolume: 1,
         lyricLines: 7,

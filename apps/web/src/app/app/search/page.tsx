@@ -1,8 +1,9 @@
-import { ProviderSearchPage } from "@/components/ProviderSearchPage";
+import { redirect } from "next/navigation";
+import type { Route } from "next";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default function SearchPage() {
-  return <ProviderSearchPage />;
+  redirect("/app/discover?search=1" as Route);
 }

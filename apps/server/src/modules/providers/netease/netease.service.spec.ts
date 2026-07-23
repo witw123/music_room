@@ -215,7 +215,7 @@ describe("NeteaseService", () => {
   it("normalizes public discovery catalogs without requiring a provider account", async () => {
     process.env.NETEASE_ENABLED = "true";
     const api = {
-      getRecommendedPlaylists: jest.fn().mockResolvedValue({ result: [{ id: 1, name: "Recommended" }] }),
+      getRecommendedPlaylists: jest.fn().mockResolvedValue({ result: [{ id: 1, name: "Recommended", coverImgUrl: "http://p1.music.126.net/recommended.jpg" }] }),
       getCategoryPlaylists: jest.fn().mockResolvedValue({ playlists: [{ id: 2, name: "Category" }] }),
       getPlaylistCategories: jest.fn().mockResolvedValue({
         all: { name: "全部歌单" },
@@ -223,12 +223,12 @@ describe("NeteaseService", () => {
         categories: { "1": "风格" }
       }),
       getToplists: jest.fn().mockResolvedValue({ list: [{ id: 3, name: "榜单" }] }),
-      getNewAlbums: jest.fn().mockResolvedValue({ albums: [{ id: 4, name: "新专辑", artists: [{ name: "歌手" }] }] })
+      getNewAlbums: jest.fn().mockResolvedValue({ albums: [{ id: 4, name: "新专辑", picUrl: "http://p2.music.126.net/album.jpg", artists: [{ name: "歌手" }] }] })
     };
     const service = new NeteaseService(api as never, {} as never, {} as never);
 
     await expect(service.getRecommendedPlaylists("user_1", { limit: 10 })).resolves.toMatchObject({
-      items: [{ providerPlaylistId: "1", title: "Recommended" }],
+      items: [{ providerPlaylistId: "1", title: "Recommended", artworkUrl: "https://p1.music.126.net/recommended.jpg" }],
       offset: 0
     });
     await expect(service.getCategoryPlaylists("user_1", { category: "流行", order: "hot", limit: 10, offset: 0 })).resolves.toMatchObject({
@@ -242,7 +242,7 @@ describe("NeteaseService", () => {
     });
     await expect(service.getToplists("user_1")).resolves.toMatchObject({ items: [{ providerPlaylistId: "3" }] });
     await expect(service.getNewAlbums("user_1", { area: "all", limit: 10, offset: 0 })).resolves.toMatchObject({
-      items: [{ providerAlbumId: "4", artist: "歌手" }]
+      items: [{ providerAlbumId: "4", artist: "歌手", artworkUrl: "https://p2.music.126.net/album.jpg" }]
     });
     expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(1);
     await service.getRecommendedPlaylists("user_1", { limit: 10 });

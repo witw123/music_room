@@ -601,7 +601,7 @@ export class NeteaseService {
       providerPlaylistId: id,
       title: readString(playlist.name) ?? "未命名歌单",
       description: readString(playlist.description) ?? readString(playlist.desc),
-      artworkUrl: readHttpUrl(playlist.coverImgUrl ?? playlist.coverImgUrlStr),
+      artworkUrl: readNeteaseArtworkUrl(playlist.coverImgUrl, playlist.coverImgUrlStr),
       creatorName: readString(asRecord(playlist.creator)?.nickname),
       trackCount: readNumber(playlist.trackCount) ?? readNumber(playlist.trackNumber) ?? (Array.isArray(playlist.tracks) ? playlist.tracks.length : 0),
     };
@@ -641,7 +641,7 @@ export class NeteaseService {
       title,
       artist: readString(album.artist) ?? readString(artistRecord?.name) ?? readString(album.artistName) ?? readArtistNames(album.artists),
       description: readString(album.description) ?? readString(album.briefDesc),
-      artworkUrl: readHttpUrl(album.picUrl ?? album.blurPicUrl),
+      artworkUrl: readNeteaseArtworkUrl(album.picUrl, album.blurPicUrl),
       releaseTime: readString(album.publishTime) ?? readString(album.company),
       trackCount: readNumber(album.size) ?? readNumber(album.trackCount) ?? 0
     };

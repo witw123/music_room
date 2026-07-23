@@ -30,7 +30,6 @@ type AppSidebarProps = {
 const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [
   { id: "home", label: "首页", href: "/app", icon: "home" },
   { id: "discover", label: "发现", href: "/app/discover", icon: "discover" },
-  { id: "search", label: "搜索", href: "/app/search", icon: "search" },
   { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
   { id: "favorites", label: "收藏", href: "/app/favorites", icon: "favorite" },
   { id: "profile", label: "我的", href: "/app/profile", icon: "profile" },
@@ -262,7 +261,7 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
     return "discover";
   }
   if (pathname?.startsWith("/app/search")) {
-    return "search";
+    return "discover";
   }
   if (pathname?.startsWith("/app/playlists")) {
     return "playlists";
@@ -348,9 +347,8 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
   if (name === "discover") {
     return (
       <svg {...commonProps}>
-        <path d="M12 3.5 14.4 9l5.6.5-4.2 3.7 1.3 5.5-5.1-2.9-5.1 2.9 1.3-5.5L4 9.5 9.6 9 12 3.5Z" />
-        <path d="M12 7.5v5" />
-        <path d="M9.5 11.5h5" />
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" />
       </svg>
     );
   }

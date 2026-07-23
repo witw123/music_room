@@ -198,7 +198,7 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ LEFT: Immersive Stage ══════ */}
-      <div className="relative z-10 flex h-auto w-full min-w-0 shrink-0 flex-col lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
+      <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
 
         {/* Vinyl + Track Info */}
         <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">

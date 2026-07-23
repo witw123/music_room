@@ -72,8 +72,14 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
 }
 
 export function getArtworkSourceUrl(artworkUrl: string) {
-  if (!isQqMusicArtworkUrl(artworkUrl)) return artworkUrl;
-  return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(artworkUrl)}`;
+  const normalizedUrl = normalizeArtworkUrl(artworkUrl);
+  if (!isQqMusicArtworkUrl(normalizedUrl)) return normalizedUrl;
+  return `${apiBaseUrl}/v1/providers/qqmusic/artwork?url=${encodeURIComponent(normalizedUrl)}`;
+}
+
+function normalizeArtworkUrl(value: string) {
+  if (value.startsWith("//")) return `https:${value}`;
+  return value.replace(/^http:\/\//i, "https://");
 }
 
 function isQqMusicArtworkUrl(value: string) {

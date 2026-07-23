@@ -6,6 +6,7 @@ export const appSettingsChangeEvent = "music-room-settings-change";
 export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 export type PlayerStyle = "vinyl" | "square-cover";
+export type DiscoverProvider = "netease" | "qqmusic";
 
 export type AppSettings = {
   version: 1;
@@ -13,6 +14,9 @@ export type AppSettings = {
   layout: {
     sidebarCollapsed: boolean;
     reduceMotion: boolean;
+  };
+  discover: {
+    provider: DiscoverProvider;
   };
   playback: {
     defaultVolume: number;
@@ -32,6 +36,9 @@ const defaultSettings: AppSettings = {
   layout: {
     sidebarCollapsed: true,
     reduceMotion: false
+  },
+  discover: {
+    provider: "netease"
   },
   playback: {
     defaultVolume: 0.8,
@@ -65,6 +72,7 @@ export function updateAppSettings(
   patch: Partial<{
     theme: ThemePreference;
     layout: Partial<AppSettings["layout"]>;
+    discover: Partial<AppSettings["discover"]>;
     playback: Partial<AppSettings["playback"]>;
   }>
 ) {
@@ -73,6 +81,7 @@ export function updateAppSettings(
     ...current,
     ...patch,
     layout: { ...current.layout, ...patch.layout },
+    discover: { ...current.discover, ...patch.discover },
     playback: { ...current.playback, ...patch.playback }
   });
   if (typeof window !== "undefined") {
@@ -93,6 +102,7 @@ export function resetAppSettings() {
 export function normalizeSettings(value: unknown): AppSettings {
   const input = isRecord(value) ? value : {};
   const layout = isRecord(input.layout) ? input.layout : {};
+  const discover = isRecord(input.discover) ? input.discover : {};
   const playback = isRecord(input.playback) ? input.playback : {};
   const volume = typeof playback.defaultVolume === "number" && Number.isFinite(playback.defaultVolume)
     ? Math.min(1, Math.max(0, playback.defaultVolume))
@@ -115,6 +125,9 @@ export function normalizeSettings(value: unknown): AppSettings {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
       reduceMotion: layout.reduceMotion === true
     },
+    discover: {
+      provider: discover.provider === "qqmusic" ? "qqmusic" : "netease"
+    },
     playback: {
       defaultVolume: volume,
       playerStyle,
@@ -133,6 +146,7 @@ function cloneSettings(settings: AppSettings): AppSettings {
     version: settings.version,
     theme: settings.theme,
     layout: { ...settings.layout },
+    discover: { ...settings.discover },
     playback: { ...settings.playback }
   };
 }

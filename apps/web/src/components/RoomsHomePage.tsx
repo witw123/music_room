@@ -336,22 +336,44 @@ export function RoomsHomePage({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 md:hidden">
-          <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
-            创建房间
-          </Button>
-          <Button data-testid="open-join-room-dialog" variant="outline" size="sm" className="border-surface-border bg-background-secondary hover:bg-surface-hover" onClick={openJoinDialog} type="button">
-            加入房间
-          </Button>
-          <button
-            aria-label="刷新房间列表"
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground-muted transition-[transform,background-color,color] duration-200 hover:bg-surface hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            onClick={() => startTransition(() => void refreshAvailableRooms())}
-            title="刷新房间列表"
-            type="button"
+        <div className="flex flex-col gap-3 md:hidden">
+          <div className="flex items-center gap-2">
+            <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
+              创建房间
+            </Button>
+            <button
+              aria-label="刷新房间列表"
+              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground-muted transition-[transform,background-color,color] duration-200 hover:bg-surface hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              onClick={() => startTransition(() => void refreshAvailableRooms())}
+              title="刷新房间列表"
+              type="button"
+            >
+              <svg aria-hidden="true" className={isPending ? "animate-spin" : ""} fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg>
+            </button>
+          </div>
+
+          <form
+            className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleJoinCodeSubmit();
+            }}
           >
-            <svg aria-hidden="true" className={isPending ? "animate-spin" : ""} fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg>
-          </button>
+            <label className="sr-only" htmlFor="mobile-join-code-input">输入房间码</label>
+            <input
+              aria-label="输入房间码"
+              className="min-w-0 rounded-xl border border-surface-border bg-background-secondary px-3 py-2.5 font-mono text-sm uppercase text-foreground outline-none placeholder:font-sans placeholder:normal-case placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              data-testid="mobile-join-code-input"
+              id="mobile-join-code-input"
+              maxLength={6}
+              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+              placeholder="输入 6 位房间码"
+              value={joinCode}
+            />
+            <Button data-testid="mobile-join-code-submit" disabled={!joinCode.trim() || isPending} type="submit" variant="outline">
+              {isPending ? "加入中…" : "加入"}
+            </Button>
+          </form>
         </div>
 
         <div className="min-h-[300px] md:glass-panel md:rounded-[24px] md:p-3 lg:p-5 xl:p-6">

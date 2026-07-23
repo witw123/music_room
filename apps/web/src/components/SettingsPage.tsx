@@ -19,6 +19,7 @@ import {
   resetAppSettings,
   updateAppSettings,
   type AppSettings,
+  type DiscoverProvider,
   type PlayerStyle,
   type ThemePreference
 } from "@/features/settings/settings-store";
@@ -39,6 +40,16 @@ const playerStyleLabels: Record<PlayerStyle, string> = {
   vinyl: "唱片",
   "square-cover": "正方形唱片封面"
 };
+
+const discoverProviderLabels: Record<DiscoverProvider, string> = {
+  netease: "网易云音乐",
+  qqmusic: "QQ 音乐"
+};
+
+const enabledDiscoverProviders: DiscoverProvider[] = [
+  ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
+  ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
+];
 
 export function SettingsPage() {
   const router = useRouter();
@@ -123,6 +134,23 @@ export function SettingsPage() {
           <LocalStorageManagementCard />
 
           <SettingsSection title="通用">
+            {enabledDiscoverProviders.length > 0 ? (
+              <SettingRow label="发现来源" description="选择发现页展示的音乐平台内容。切换后会立即刷新。">
+                <div aria-label="发现来源" className="grid grid-cols-2 rounded-lg border border-surface-border bg-surface/60 p-1" role="group">
+                  {enabledDiscoverProviders.map((provider) => (
+                    <button
+                      aria-pressed={(enabledDiscoverProviders.includes(settings.discover.provider) ? settings.discover.provider : enabledDiscoverProviders[0]) === provider}
+                      className={`min-w-24 rounded-md px-2.5 py-2 text-xs font-medium transition-colors ${(enabledDiscoverProviders.includes(settings.discover.provider) ? settings.discover.provider : enabledDiscoverProviders[0]) === provider ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+                      key={provider}
+                      onClick={() => patchSettings({ discover: { provider } })}
+                      type="button"
+                    >
+                      {discoverProviderLabels[provider]}
+                    </button>
+                  ))}
+                </div>
+              </SettingRow>
+            ) : null}
             <SettingRow label="主题" description="选择应用的颜色主题，也可以跟随操作系统设置。">
               <div aria-label="主题" className="grid grid-cols-3 rounded-lg border border-surface-border bg-surface/60 p-1" role="group">
                 {(Object.entries(themeLabels) as Array<[ThemePreference, string]>).map(([theme, label]) => (
