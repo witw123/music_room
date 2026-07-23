@@ -631,8 +631,7 @@ export class PeerConnectionLifecycleManager {
       : this.shouldInitiatePeer(peerId);
     const connectionBroken =
       entry.connection.connectionState === "failed" ||
-      entry.connection.connectionState === "closed" ||
-      (entry.connection.signalingState !== "stable" && staleSignal);
+      entry.connection.connectionState === "closed";
     if (options?.forceRecreate || connectionBroken) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
@@ -646,6 +645,28 @@ export class PeerConnectionLifecycleManager {
     if (waitingForExpectedTrack && !missingExpectedTrack) {
       this.scheduleMediaWatchdog(peerId, entry);
       return entry;
+    }
+
+    if (
+      waitingForExpectedTrack &&
+      entry.mediaMissingTrackRecoveryAttempted
+    ) {
+      // One recovery offer is enough to repair a lost late-join negotiation.
+      // Repeating offers against a stable, connected peer creates offer glare
+      // and repeatedly resets the receiver's jitter buffer without improving
+      // the media path.
+      return entry;
+    }
+
+    if (
+      entry.connection.signalingState !== "stable" &&
+      staleSignal
+    ) {
+      const reconnectAttempts = entry.reconnectAttempts;
+      this.releasePeer(peerId, entry);
+      const nextEntry = await this.ensurePeer(peerId, recoveryInitiator, "media", allowEmptyMediaOffer);
+      nextEntry.reconnectAttempts = reconnectAttempts + 1;
+      return nextEntry;
     }
 
     // Connected (or stable) but still missing the remote track: never recreate
@@ -666,6 +687,9 @@ export class PeerConnectionLifecycleManager {
           "media",
           entry.connectionGeneration
         );
+        if (waitingForExpectedTrack) {
+          entry.mediaMissingTrackRecoveryAttempted = true;
+        }
       }
       entry.lastSignalProgressAtMs = Date.now();
       this.scheduleMediaWatchdog(peerId, entry);
@@ -1473,6 +1497,9 @@ export class PeerConnectionLifecycleManager {
         this.hasExpectedRemoteAudioTrack(peerId) &&
         entry.receiverTrackState !== "live";
       if (waitingForRemoteTrack) {
+        if (entry.mediaMissingTrackRecoveryAttempted) {
+          return;
+        }
         const waitingForMs = Date.now() - entry.lastSignalProgressAtMs;
         if (waitingForMs < mediaTrackWatchdogGraceMs) {
           this.scheduleMediaWatchdog(peerId, entry);
@@ -1683,6 +1710,7 @@ export class PeerConnectionLifecycleManager {
       entry.remoteAudioTrackId = track.id;
       entry.receiverTrackState = "live";
       entry.receiverRtpActive = track.muted !== true;
+      entry.mediaMissingTrackRecoveryAttempted = false;
       this.clearMediaWatchdog(entry);
     } catch {
       // MediaStream construction is unavailable only in non-browser test or

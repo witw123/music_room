@@ -287,6 +287,9 @@ export function bindPeerConnectionEvents(input: {
     input.entry.remoteAudioTrackId = event.track.id;
     input.entry.receiverRtpActive = event.track.muted !== true;
     input.entry.receiverTrackState = event.track.readyState === "live" ? "live" : "ended";
+    if (input.entry.receiverTrackState === "live") {
+      input.entry.mediaMissingTrackRecoveryAttempted = false;
+    }
     input.onMediaStateChange?.({
       peerId: input.peerId,
       entry: input.entry,

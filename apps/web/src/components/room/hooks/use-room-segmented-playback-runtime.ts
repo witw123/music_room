@@ -463,10 +463,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       lastMediaEnsureAtRef.current = 0;
     }
     const now = Date.now();
-    // Aggressive 2s recreates tore down healthy ICE sessions while the source
-    // was still attaching its track, producing the listen-side sound/silence
-    // cycle. Soft recovery every 8s is enough for genuine missing-track cases.
-    if (now - lastMediaEnsureAtRef.current < 8_000) {
+    // Only make one recovery request for a given source track incarnation.
+    // Repeating the request every few seconds keeps flipping the UI to
+    // reconnecting and can create offer glare even when ICE is connected.
+    if (
+      mediaEnsureKeyRef.current === recoveryKey &&
+      lastMediaEnsureAtRef.current > 0
+    ) {
       return;
     }
     lastMediaEnsureAtRef.current = now;
@@ -489,6 +492,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       // explicit source-side wedged-sender recovery and races empty media offers.
       forceRecreate: false
     }).catch((error) => {
+      if (mediaEnsureKeyRef.current === recoveryKey) {
+        // A rejected request is safe to retry on a later poll. A successful
+        // request intentionally remains one-shot until a live track arrives.
+        lastMediaEnsureAtRef.current = 0;
+      }
       input.runtime.recordPeerDiagnostic({
         peerId: input.sourcePeerId,
         channelKind: "media",
@@ -737,7 +745,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         boundMediaKeyRef.current = null;
-        runtime.setLocalAudioStream(null, null, null);
         const localBindingKey = `${runtime.isCurrentSource ? "source" : "listener"}:local:${localAudioKey}`;
         if (localMediaBindingRef.current !== localBindingKey) {
           localMediaBindingRef.current = localBindingKey;
@@ -747,6 +754,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         }
 
         if (!audio || !hasActiveTimeline) {
+          // A source keeps its media peer while actively playing. Clearing the
+          // source stream before every local-file sync tick releases the media
+          // topology and makes seek/playback look like a reconnect loop.
+          runtime.setLocalAudioStream(null, null, null);
           if (audio) {
             audio.pause();
             audio.srcObject = null;
@@ -845,6 +856,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           localAudioTimelineKeyRef.current = timelineKey;
 
           if (activeRoomPlayback.status !== "playing") {
+            runtime.setLocalAudioStream(null, null, null);
             audio.pause();
             if (!cancelled) {
               setMediaPlayback({
@@ -1033,6 +1045,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
       if (remote?.remoteStream && remote.receiverTrackState === "live" && audio) {
         const now = Date.now();
+        // A live track closes the recovery attempt even if it is briefly
+        // muted while RTP fills the jitter buffer. This also permits a later
+        // ended track on the same song to receive one fresh recovery attempt.
+        mediaEnsureKeyRef.current = null;
+        lastMediaEnsureAtRef.current = 0;
         if (roomPlayback?.status === "playing" && !remote.receiverRtpActive) {
           missingMediaSinceRef.current ??= now;
         } else {

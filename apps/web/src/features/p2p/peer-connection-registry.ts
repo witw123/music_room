@@ -37,6 +37,8 @@ export type PeerEntry = {
   mediaSyncRetryTimerId: ReturnType<typeof setTimeout> | null;
   mediaSyncRetryAttempts: number;
   mediaNegotiationPending: boolean;
+  /** Prevent repeated listener offers when the source track never arrives. */
+  mediaMissingTrackRecoveryAttempted: boolean;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
   /** Monotonic id for this local RTCPeerConnection incarnation. */
@@ -81,6 +83,7 @@ export function createPeerEntry(input: {
     mediaSyncRetryTimerId: null,
     mediaSyncRetryAttempts: 0,
     mediaNegotiationPending: false,
+    mediaMissingTrackRecoveryAttempted: false,
     initiatorPeerId: input.initiatorPeerId,
     connectionGeneration: input.connectionGeneration ?? 1,
     pendingCandidates: [],

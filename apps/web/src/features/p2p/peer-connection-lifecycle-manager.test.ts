@@ -682,6 +682,12 @@ describe("PeerConnectionLifecycleManager", () => {
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers).toHaveLength(1);
+
+    await manager.restartMediaPeer("peer_b");
+    const retryOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(retryOffers).toHaveLength(1);
   });
 
   it("actively reoffers after a connected listener loses receiver packets", async () => {
