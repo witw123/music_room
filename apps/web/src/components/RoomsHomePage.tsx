@@ -338,7 +338,7 @@ export function RoomsHomePage({
 
         <div className="flex flex-col gap-3 md:hidden">
           <div className="flex items-center gap-2">
-            <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
+            <Button data-testid="create-public-room-mobile" size="sm" onClick={() => openCreateRoom("public")} type="button">
               创建房间
             </Button>
             <button
