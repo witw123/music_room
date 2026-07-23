@@ -7,7 +7,6 @@ import { musicRoomApi } from "@/lib/music-room-api";
 type FavoriteTracksSnapshot = {
   tracks: ProviderTrackFavorite[];
   loading: boolean;
-  loadPromise: Promise<void> | null;
   error: string | null;
   pendingKey: string | null;
 };
@@ -15,6 +14,7 @@ type FavoriteTracksSnapshot = {
 type FavoriteTracksEntry = {
   records: ProviderTrackFavorite[] | null;
   loading: boolean;
+  loadPromise: Promise<void> | null;
   error: string | null;
   pendingKey: string | null;
   snapshot: FavoriteTracksSnapshot;
