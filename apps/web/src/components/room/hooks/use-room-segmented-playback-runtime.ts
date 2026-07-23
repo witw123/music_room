@@ -364,6 +364,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       cancelled = true;
     };
   }, [
+    // currentTrack identity is stabilized by resolveStableCurrentTrack; keep it
+    // in the dep list for exhaustive-deps without re-adding isCurrentSource,
+    // which previously forced unnecessary "checking" resets.
+    input.currentTrack,
     input.currentTrack?.fileHash,
     input.currentTrack?.id,
     input.currentTrack?.mimeType,
