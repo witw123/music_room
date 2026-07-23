@@ -27,6 +27,7 @@ class FakeRTCPeerConnection {
   oniceconnectionstatechange: (() => void) | null = null;
   ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
   ontrack: ((event: RTCTrackEvent) => void) | null = null;
+  restartIce = vi.fn();
   channel = new FakeDataChannel();
   mediaSender: {
     track: MediaStreamTrack | null;
@@ -262,6 +263,107 @@ describe("PeerConnectionLifecycleManager", () => {
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers.length).toBeGreaterThanOrEqual(1);
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender)).toHaveLength(1);
+  });
+
+  it("restarts failed media ICE in place before replacing the peer", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = mediaEntry.connection as unknown as FakeRTCPeerConnection;
+    mediaPeer.remoteDescription = { type: "offer", sdp: "source-offer" };
+    mediaPeer.connectionState = "failed";
+    mediaPeer.iceConnectionState = "failed";
+    mediaPeer.onconnectionstatechange?.();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaPeer.connectionState).toBe("failed");
+    expect(mediaPeer.restartIce).toHaveBeenCalledTimes(1);
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers.at(-1)?.payload).toEqual({
+      type: "offer",
+      sdp: "fake-restart-offer"
+    });
+  });
+
+  it("replaces a media peer only after repeated in-place ICE restarts fail", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const initialEntry = manager.getPeerEntry("peer_b", "media")!;
+    const initialPeer = initialEntry.connection as unknown as FakeRTCPeerConnection;
+    initialPeer.remoteDescription = { type: "offer", sdp: "source-offer" };
+    initialPeer.connectionState = "failed";
+    initialPeer.iceConnectionState = "failed";
+    initialPeer.onconnectionstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(0);
+    // Browsers usually leave failed after setLocalDescription and report the
+    // ICE restart as connecting/checking while the remote answer is pending.
+    initialPeer.connectionState = "connecting";
+    initialPeer.iceConnectionState = "checking";
+
+    await vi.advanceTimersByTimeAsync(16_100);
+
+    expect(initialPeer.restartIce).toHaveBeenCalledTimes(2);
+    expect(initialPeer.connectionState).toBe("closed");
+    expect(manager.getPeerEntry("peer_b", "media")).not.toBe(initialEntry);
+  });
+
+  it("sends an explicit ICE restart offer when a source media peer stays disconnected", async () => {
+    const { manager, sendSignal } = createManager();
+    const track = { id: "source-recovery-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = mediaEntry.connection as unknown as FakeRTCPeerConnection;
+    mediaPeer.signalingState = "stable";
+    mediaPeer.remoteDescription = { type: "answer", sdp: "listener-answer" };
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: null,
+      mediaSendBitrateKbps: 192,
+      packetLossRate: 0,
+      jitterMs: 2
+    } as PeerConnectionStatsSample);
+    const recoveryState = (manager as unknown as {
+      mediaRecovery: Map<string, { lastPositiveMediaAtMs: number | null }>;
+    }).mediaRecovery.get("peer_b")!;
+    recoveryState.lastPositiveMediaAtMs = Date.now() - 5_000;
+    (sendSignal as ReturnType<typeof vi.fn>).mockClear();
+
+    mediaPeer.connectionState = "disconnected";
+    mediaPeer.iceConnectionState = "disconnected";
+    mediaPeer.onconnectionstatechange?.();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    expect(mediaPeer.restartIce).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({
+      linkKind: "media",
+      type: "offer",
+      payload: {
+        type: "offer",
+        sdp: "fake-restart-offer"
+      }
+    }));
   });
 
   it("does not renegotiate a live media peer for a transient disconnected state", async () => {

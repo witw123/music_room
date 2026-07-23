@@ -118,6 +118,7 @@ const mediaNoSendRecoveryWindows = 4;
 const mediaRecoveryHealthyLossThreshold = 3;
 const mediaRecoveryHealthyJitterThreshold = 20;
 const incomingMediaAdmissionGraceMs = 8_000;
+const mediaIceRestartAttemptsBeforeRecreate = 2;
 // ICE can report `disconnected` while its connectivity checks are still
 // repairing the selected candidate pair. Re-offering during that window
 // replaces a usable RTP path and is much more disruptive than the outage.
@@ -640,15 +641,26 @@ export class PeerConnectionLifecycleManager {
     const recoveryInitiator = allowEmptyMediaOffer
       ? true
       : this.shouldInitiatePeer(peerId);
-    const connectionBroken =
+    const mediaTransportFailed =
       entry.connection.connectionState === "failed" ||
-      entry.connection.connectionState === "closed";
-    if (options?.forceRecreate || connectionBroken) {
+      entry.connection.iceConnectionState === "failed";
+    const mediaTransportClosed =
+      entry.connection.connectionState === "closed" ||
+      entry.connection.iceConnectionState === "closed" ||
+      entry.connection.signalingState === "closed";
+    if (options?.forceRecreate || mediaTransportClosed) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
       const nextEntry = await this.ensurePeer(peerId, recoveryInitiator, "media", allowEmptyMediaOffer);
       nextEntry.reconnectAttempts = reconnectAttempts + 1;
       return nextEntry;
+    }
+
+    if (mediaTransportFailed) {
+      // A failed ICE transport does not invalidate the negotiated media
+      // section or its sender/receiver track. Restart ICE on this incarnation
+      // first so both peers keep the same RTP identity and jitter buffer.
+      return this.restartMediaIceInPlace(peerId, entry);
     }
 
     // Let the initial offer/answer exchange finish before creating another
@@ -682,11 +694,10 @@ export class PeerConnectionLifecycleManager {
       entry.connection.signalingState !== "stable" &&
       staleSignal
     ) {
-      const reconnectAttempts = entry.reconnectAttempts;
-      this.releasePeer(peerId, entry);
-      const nextEntry = await this.ensurePeer(peerId, recoveryInitiator, "media", allowEmptyMediaOffer);
-      nextEntry.reconnectAttempts = reconnectAttempts + 1;
-      return nextEntry;
+      // An unanswered recovery offer is not proof that the local media PC is
+      // unusable. Roll it back and issue the next bounded ICE restart on the
+      // same incarnation; triggerMediaRecovery owns the recreate threshold.
+      return this.restartMediaIceInPlace(peerId, entry);
     }
 
     // Connected (or stable) but still missing the remote track: never recreate
@@ -697,6 +708,13 @@ export class PeerConnectionLifecycleManager {
         return null;
       }
 
+      const mediaTransportNeedsIceRestart =
+        entry.connection.connectionState !== "connected" ||
+        entry.connection.iceConnectionState === "disconnected" ||
+        entry.connection.iceConnectionState === "failed";
+      if (mediaTransportNeedsIceRestart) {
+        return this.restartMediaIceInPlace(peerId, entry, { alreadyQueued: true });
+      }
       if (isLocalSource) {
         await this.syncLocalAudioToPeer(peerId, entry, true);
       } else {
@@ -715,6 +733,71 @@ export class PeerConnectionLifecycleManager {
       this.scheduleMediaWatchdog(peerId, entry);
       return entry;
     });
+  }
+
+  private restartMediaIceInPlace(
+    peerId: string,
+    entry: PeerEntry,
+    options?: { alreadyQueued?: boolean }
+  ): Promise<PeerEntry | null> {
+    const restart = async () => {
+      if (
+        entry.releasing ||
+        this.peerConnections.get(peerId, "media") !== entry ||
+        entry.connection.connectionState === "closed" ||
+        entry.connection.signalingState === "closed"
+      ) {
+        return null;
+      }
+
+      if (entry.connection.signalingState !== "stable") {
+        const staleOffer = entry.connection.signalingState === "have-local-offer" &&
+          Date.now() - entry.lastSignalProgressAtMs >= mediaRecoveryCooldownMs;
+        if (!staleOffer) {
+          this.scheduleMediaWatchdog(peerId, entry);
+          return entry;
+        }
+        try {
+          await entry.connection.setLocalDescription({ type: "rollback" });
+        } catch {
+          this.scheduleMediaWatchdog(peerId, entry);
+          return entry;
+        }
+      }
+
+      if (this.localAudioSourcePeerId === this.localPeerId) {
+        await this.syncLocalAudioToPeer(peerId, entry, false);
+      }
+      try {
+        entry.connection.restartIce?.();
+      } catch {
+        // createOffer({ iceRestart: true }) remains the interoperable fallback.
+      }
+      try {
+        await this.signaling.createAndSendOffer(
+          peerId,
+          entry.connection,
+          { iceRestart: true },
+          "media",
+          entry.connectionGeneration
+        );
+      } catch {
+        // Signaling state can change between the stable check and
+        // setLocalDescription. Keep this peer and let the bounded watchdog
+        // retry instead of turning the race into an unhandled rejection.
+        this.scheduleMediaWatchdog(peerId, entry);
+        return entry;
+      }
+      entry.mediaNegotiationPending = false;
+      entry.lastSignalProgressAtMs = Date.now();
+      this.clearMediaSyncRetry(entry);
+      this.scheduleMediaWatchdog(peerId, entry);
+      return entry;
+    };
+
+    return options?.alreadyQueued
+      ? restart()
+      : enqueuePeerOperation(entry, restart);
   }
 
   destroy() {
@@ -1744,17 +1827,18 @@ export class PeerConnectionLifecycleManager {
       reason: shouldReportFailure ? "connection-failed" : reason,
       restartCount
     });
+    const transportClosed = entry.connection.connectionState === "closed" ||
+      entry.connection.iceConnectionState === "closed" ||
+      entry.connection.signalingState === "closed";
+    const transportStillUnusable = entry.connection.connectionState !== "connected" ||
+      entry.connection.iceConnectionState === "disconnected" ||
+      entry.connection.iceConnectionState === "failed";
     void this.restartMediaPeer(peerId, {
-      // A sender can remain "live" while its RTP pipeline is wedged. In that
-      // state replaceTrack is a no-op, so recreate only this media peer after
-      // several consecutive zero-rate samples.
-      // A receiver with a live track must keep that PeerConnection and use an
-      // ICE restart below; recreating it discards the jitter buffer and can
-      // race the source's late-join offer into a permanent recovery loop.
-      forceRecreate: reason === "no-packets" &&
-        this.localAudioSourcePeerId === this.localPeerId &&
-        entry.senderTrackState === "live" &&
-        entry.connection.connectionState !== "connected"
+      // ICE restart is the normal recovery operation. Recreate the media PC
+      // only when it is already closed or repeated in-place restarts failed;
+      // otherwise each retry discards an otherwise reusable RTP session.
+      forceRecreate: transportClosed ||
+        (transportStillUnusable && restartCount > mediaIceRestartAttemptsBeforeRecreate)
     });
   }
 
