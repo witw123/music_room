@@ -140,4 +140,47 @@ describe("QqMusicService", () => {
       response: expect.objectContaining({ code: "QQMUSIC_TRACK_NOT_FOUND" })
     });
   });
+
+  it("normalizes public QQ discovery catalogs", async () => {
+    process.env.QQMUSIC_ENABLED = "true";
+    const api = {
+      getPlaylistCategories: jest.fn().mockResolvedValue({ data: { categories: [{ categoryGroupName: "热门", items: [{ categoryId: 10000000, categoryName: "全部", allsorts: [{ sortId: 5, sortName: "最热" }] }] }] } }),
+      getCategoryPlaylists: jest.fn().mockResolvedValue({ data: { list: [{ dissid: "playlist-1", dissname: "歌单", imgurl: "http://img.qq.com/cover.jpg" }] } }),
+      getToplists: jest.fn().mockResolvedValue({ data: { topList: [{ topId: 4, topTitle: "巅峰榜", picUrl: "http://img.qq.com/rank.jpg" }] } }),
+      getDigitalAlbums: jest.fn().mockResolvedValue({ data: { content: [{ albumlist: [{ album_mid: "album-1", album_name: "数字专辑", picurl: "http://img.qq.com/album.jpg" }] }] } }),
+      getBanners: jest.fn().mockResolvedValue({ focus: { list: [{ id: "banner-1", title: "推荐", picurl: "http://img.qq.com/banner.jpg" }] } })
+    };
+    const service = new QqMusicService(api as never, {} as never, {} as never);
+
+    await expect(service.getPlaylistCategories("user_1")).resolves.toMatchObject({
+      items: [{ id: "10000000", name: "全部", sortOptions: [{ id: "5", label: "最热" }] }]
+    });
+    await expect(service.getCategoryPlaylists("user_1", { categoryId: 10000000, sortId: 5, limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerPlaylistId: "playlist-1", artworkUrl: "https://img.qq.com/cover.jpg" }]
+    });
+    await expect(service.getToplists("user_1")).resolves.toMatchObject({ items: [{ providerPlaylistId: "4", title: "巅峰榜" }] });
+    await expect(service.getDigitalAlbums("user_1", { limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerAlbumId: "album-1", title: "数字专辑", artworkUrl: "https://img.qq.com/album.jpg" }]
+    });
+    await expect(service.getBanners("user_1")).resolves.toMatchObject({
+      items: [{ id: "banner-1", title: "推荐", artworkUrl: "https://img.qq.com/banner.jpg" }]
+    });
+    expect(api.getCategoryPlaylists).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts alternate QQ ranking and digital album list keys", async () => {
+    process.env.QQMUSIC_ENABLED = "true";
+    const api = {
+      getToplists: jest.fn().mockResolvedValue({ data: { toplist: [{ topId: 7, topTitle: "榜单" }] } }),
+      getDigitalAlbums: jest.fn().mockResolvedValue({ data: { content: [{ albumList: [{ album_mid: "album-2", album_name: "专辑", singername: "歌手" }] }] } })
+    };
+    const service = new QqMusicService(api as never, {} as never, {} as never);
+
+    await expect(service.getToplists("user_1")).resolves.toMatchObject({
+      items: [{ providerPlaylistId: "7", title: "榜单" }]
+    });
+    await expect(service.getDigitalAlbums("user_1", { limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerAlbumId: "album-2", title: "专辑" }]
+    });
+  });
 });

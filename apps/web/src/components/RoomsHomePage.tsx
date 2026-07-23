@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Route } from "next";
 import { defaultRoomMemberPermissions, type RoomMemberPermissions, type RoomSnapshot } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
@@ -271,8 +272,8 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-y-auto bg-black pb-[12rem] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
-      <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
+    <main className="relative flex min-h-[100dvh] flex-col overflow-y-auto bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:bg-black md:pb-28 md:pl-60">
+      <div className="fixed inset-0 -z-10 hidden overflow-hidden bg-black md:block">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
         <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
         <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
@@ -290,8 +291,18 @@ export function RoomsHomePage({
       {effectiveAwayRoomId && showSidebar ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
 
 
-      <section className="home-centered-workspace relative mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 pb-8 pt-8 sm:px-6 sm:pt-20 md:mx-auto md:max-w-[1600px] md:gap-5 lg:px-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <section className="home-centered-workspace relative mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-5 pb-8 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:pt-20 md:mx-auto md:max-w-[1600px] md:gap-5 lg:px-8">
+        <header className="flex items-center justify-between md:hidden">
+          <div>
+            <p className="text-sm text-foreground-muted">一起听见此刻</p>
+            <h1 className="mt-0.5 text-2xl font-semibold leading-8 text-foreground">主页</h1>
+          </div>
+          <Link aria-label="打开个人中心" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-background-secondary shadow-sm transition-transform duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href="/app/profile">
+            <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+          </Link>
+        </header>
+
+        <div className="hidden flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:flex">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
               All rooms
@@ -325,7 +336,29 @@ export function RoomsHomePage({
           </div>
         </div>
 
-        <div className="glass-panel min-h-[300px] rounded-[24px] p-3 sm:rounded-[28px] sm:p-5 lg:p-6">
+        <div className="flex flex-wrap items-center gap-2 md:hidden">
+          <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
+            创建房间
+          </Button>
+          <Button data-testid="open-join-room-dialog" variant="outline" size="sm" className="border-surface-border bg-background-secondary hover:bg-surface-hover" onClick={openJoinDialog} type="button">
+            加入房间
+          </Button>
+          <button
+            aria-label="刷新房间列表"
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground-muted transition-[transform,background-color,color] duration-200 hover:bg-surface hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            onClick={() => startTransition(() => void refreshAvailableRooms())}
+            title="刷新房间列表"
+            type="button"
+          >
+            <svg aria-hidden="true" className={isPending ? "animate-spin" : ""} fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg>
+          </button>
+        </div>
+
+        <div className="min-h-[300px] md:glass-panel md:rounded-[24px] md:p-3 lg:p-5 xl:p-6">
+          <div className="mb-3 flex items-center justify-between md:hidden">
+            <h2 className="text-lg font-semibold leading-6 text-foreground">全部房间</h2>
+            <span className="text-sm text-foreground-muted">{visibleRooms.length} 个</span>
+          </div>
           {visibleRooms.length ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visibleRooms.map((item) => (

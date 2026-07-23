@@ -18,6 +18,7 @@ type PlayerQueueDrawerProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   accentColor?: string;
   accentSoft?: string;
+  compactMobile?: boolean;
 };
 
 export function PlayerQueueDrawer({
@@ -31,7 +32,8 @@ export function PlayerQueueDrawer({
   onRemoveQueueItem,
   onReorderQueue,
   accentColor = "rgb(0 148 255)",
-  accentSoft = "rgba(0, 148, 255, 0.16)"
+  accentSoft = "rgba(0, 148, 255, 0.16)",
+  compactMobile = false
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
@@ -89,13 +91,13 @@ export function PlayerQueueDrawer({
         variant="ghost"
         size="icon"
         data-testid="player-queue-button"
-        className="relative h-10 w-10 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"
-        style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
+        className={compactMobile ? "relative h-11 w-11 rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95" : "relative h-10 w-10 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"}
+        style={compactMobile ? undefined : { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
         title="播放队列"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h12" /><path d="M4 12h16" /><path d="M4 18h12" /><path d="m18 4 2 2-2 2" /></svg>
         {queue.length > 0 && (
           <span
             className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500"

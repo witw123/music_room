@@ -1,17 +1,24 @@
 import { Injectable } from "@nestjs/common";
 import {
+  album_new,
   login_qr_check,
   login_qr_create,
   login_qr_key,
   login_status,
   lyric,
+  personalized,
+  playlist_catlist,
   playlist_detail,
   playlist_track_all,
+  recommend_resource,
+  recommend_songs,
   user_playlist,
   album,
   search,
   song_detail,
-  song_url
+  song_url,
+  top_playlist,
+  toplist
 } from "@neteasecloudmusicapienhanced/api";
 import type { RequestBaseConfig } from "@neteasecloudmusicapienhanced/api";
 import type {
@@ -215,6 +222,102 @@ export class NeteaseApiClient {
     });
   }
 
+  async getRecommendedPlaylists(input: { limit: number; cookie?: string }) {
+    return this.call(async () => {
+      const response = (await personalized(withProviderOptions({
+        limit: input.limit,
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getCategoryPlaylists(input: {
+    category: string;
+    order: "hot" | "new";
+    limit: number;
+    offset: number;
+    cookie?: string;
+  }) {
+    return this.call(async () => {
+      const response = (await top_playlist(withProviderOptions({
+        cat: input.category,
+        order: input.order as never,
+        limit: input.limit,
+        offset: input.offset,
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getPlaylistCategories(input: { cookie?: string }) {
+    return this.call(async () => {
+      const response = (await playlist_catlist(withProviderOptions({
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getToplists(input: { cookie?: string }) {
+    return this.call(async () => {
+      const response = (await toplist(withProviderOptions({
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getNewAlbums(input: {
+    area: "all" | "zh" | "ea" | "kr" | "jp";
+    limit: number;
+    offset: number;
+    cookie?: string;
+  }) {
+    return this.call(async () => {
+      const response = (await album_new(withProviderOptions({
+        area: neteaseAlbumAreaByKey[input.area] as never,
+        limit: input.limit,
+        offset: input.offset,
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getDailyPlaylists(input: { cookie: string }) {
+    return this.call(async () => {
+      const response = (await recommend_resource(withProviderOptions({
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getDailyTracks(input: { cookie: string }) {
+    return this.call(async () => {
+      const response = (await recommend_songs(withProviderOptions({
+        cookie: input.cookie
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
   async getPlaylist(input: { playlistId: string; cookie: string }) {
     return this.call(async () => {
       const response = (await playlist_detail(withProviderOptions({ id: input.playlistId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
@@ -369,6 +472,14 @@ const cookieAttributes = new Set([
   "samesite",
   "secure"
 ]);
+
+const neteaseAlbumAreaByKey = {
+  all: "ALL",
+  zh: "ZH",
+  ea: "EA",
+  kr: "KR",
+  jp: "JP"
+} as const;
 
 type ProviderRequestOptions = RequestBaseConfig & {
   crypto?: NeteaseCrypto;

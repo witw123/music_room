@@ -3,11 +3,16 @@ import {
   checkQQLoginQr,
   getAlbumInfo,
   getAlbumSongs,
+  getDigitalAlbumLists,
   getLyric,
   getMusicPlay,
   getQQLoginQr,
+  getRecommendBanner,
   getSearchByKey,
+  getTopLists,
   getUserPlaylists,
+  songListCategories,
+  songLists,
   songListDetail
 } from "@sansenjian/qq-music-api/services";
 import { fetchProviderUrl } from "../provider-fetch";
@@ -154,6 +159,58 @@ export class QqMusicApiClient {
     });
   }
 
+  async getPlaylistCategories() {
+    return this.call(async () => {
+      const response = await songListCategories({}) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readSuccessfulProviderBody(response.body);
+    });
+  }
+
+  async getCategoryPlaylists(input: {
+    categoryId: number;
+    sortId: number;
+    limit: number;
+    offset: number;
+  }) {
+    return this.call(async () => {
+      const response = await songLists({
+        params: {
+          categoryId: input.categoryId,
+          sortId: input.sortId,
+          sin: input.offset,
+          ein: input.offset + input.limit - 1
+        }
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readSuccessfulProviderBody(response.body);
+    });
+  }
+
+  async getToplists() {
+    return this.call(async () => {
+      const response = await getTopLists({}) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readSuccessfulProviderBody(response.body);
+    });
+  }
+
+  async getDigitalAlbums() {
+    return this.call(async () => {
+      const response = await getDigitalAlbumLists({}) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readSuccessfulProviderBody(response.body);
+    });
+  }
+
+  async getBanners() {
+    return this.call(async () => {
+      const response = await getRecommendBanner({}) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readSuccessfulProviderBody(response.body);
+    });
+  }
+
   async getPlaylist(input: { playlistId: string; cookie: string }) {
     return this.call(async () => {
       const response = await songListDetail({
@@ -245,6 +302,15 @@ function readProviderBody(value: unknown): Record<string, any> {
   if (body.error) throw new QqMusicApiError("unavailable");
   const response = body.response;
   return response && typeof response === "object" && !Array.isArray(response) ? response : body;
+}
+
+function readSuccessfulProviderBody(value: unknown): Record<string, any> {
+  const body = readProviderBody(value);
+  const code = Number(body.code);
+  if (Number.isFinite(code) && code !== 0 && code !== 200) {
+    throw new QqMusicApiError("unavailable");
+  }
+  return body;
 }
 
 function assertProviderStatus(status: unknown) {

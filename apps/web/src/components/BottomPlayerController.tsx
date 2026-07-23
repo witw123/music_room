@@ -30,6 +30,7 @@ type BottomPlayerControllerProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
+  mobileVariant?: "compact" | "full";
 };
 
 function BottomPlayerControllerBase({
@@ -54,7 +55,8 @@ function BottomPlayerControllerBase({
   onRemoveQueueItem,
   onReorderQueue,
   isLyricsOpen,
-  onToggleLyrics
+  onToggleLyrics,
+  mobileVariant = "full"
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
   const canControlPlayback =
@@ -112,6 +114,7 @@ function BottomPlayerControllerBase({
 
   return (
     <BottomPlayer
+      mobileVariant={mobileVariant}
       audioRef={audioRef}
       playback={playback}
       canControlPlayback={canControlPlayback}

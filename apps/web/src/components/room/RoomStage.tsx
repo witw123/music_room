@@ -310,13 +310,13 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative flex h-full w-full min-h-0 flex-col px-3 sm:px-5 md:px-8 ${
-        ultraCompactStage ? "py-2" : compactStage ? "py-3" : "py-4 sm:py-5 md:py-6"
+      className={`relative flex h-auto w-full min-h-0 flex-col px-3 py-3 sm:px-5 md:px-8 lg:h-full ${
+        ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
       }`}
     >
       <div
         className={`relative z-30 flex w-full shrink-0 items-start justify-between gap-3 ${
-          compactStage ? "mb-3" : "mb-5 sm:mb-6"
+          compactStage ? "mb-0 lg:mb-3" : "mb-0 lg:mb-5 xl:mb-6"
         }`}
       >
         <div className="min-w-0 space-y-2">
@@ -445,7 +445,7 @@ function RoomStageBase({
         </div>
       </div>
 
-      <div className="relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible">
+      <div className="relative z-20 hidden min-h-0 flex-1 flex-col items-center overflow-visible lg:flex">
         <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-visible">
           <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-visible px-1 ${stageContentOffset}`}>
             {!isLyricsOpen ? (

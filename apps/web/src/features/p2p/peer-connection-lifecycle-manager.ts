@@ -569,13 +569,8 @@ export class PeerConnectionLifecycleManager {
     const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live" &&
       now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
-    const missingReceiverPackets = this.hasExpectedRemoteAudioTrack(peerId) &&
-      entry.receiverTrackState === "live" &&
-      entry.receiverRtpActive === false &&
-      now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
     const allowEmptyMediaOffer = options?.forceRecreate === true ||
-      missingExpectedTrack ||
-      missingReceiverPackets;
+      missingExpectedTrack;
     const recoveryInitiator = allowEmptyMediaOffer
       ? true
       : this.shouldInitiatePeer(peerId);
@@ -584,7 +579,7 @@ export class PeerConnectionLifecycleManager {
       entry.connection.connectionState === "failed" ||
       entry.connection.connectionState === "closed" ||
       (entry.connection.signalingState !== "stable" && staleSignal) ||
-      (entry.connection.signalingState === "stable" && (missingExpectedTrack || missingReceiverPackets))
+      (entry.connection.signalingState === "stable" && missingExpectedTrack)
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
@@ -807,7 +802,11 @@ export class PeerConnectionLifecycleManager {
           );
           entry.lastSignalProgressAtMs = Date.now();
         });
-      } else if (shouldInitiate && linkKind === "media") {
+      } else if (
+        linkKind === "media" &&
+        (shouldInitiate ||
+          (this.localAudioSourcePeerId === this.localPeerId && this.hasLiveLocalAudioTrack()))
+      ) {
         await enqueuePeerOperation(entry, async () => {
           await this.syncLocalAudioToPeer(peerId, entry, false);
           // Do not negotiate an empty media m-line during topology sync. A
@@ -1494,11 +1493,12 @@ export class PeerConnectionLifecycleManager {
       // A sender can remain "live" while its RTP pipeline is wedged. In that
       // state replaceTrack is a no-op, so recreate only this media peer after
       // several consecutive zero-rate samples.
-      // A receiver with no track is different: it must wait for the source's
-      // offer instead of creating another empty offer and reopening glare.
+      // A receiver with a live track must keep that PeerConnection and use an
+      // ICE restart below; recreating it discards the jitter buffer and can
+      // race the source's late-join offer into a permanent recovery loop.
       forceRecreate: reason === "no-packets" &&
-        (entry.senderTrackState === "live" ||
-          this.hasExpectedRemoteAudioTrack(peerId))
+        this.localAudioSourcePeerId === this.localPeerId &&
+        entry.senderTrackState === "live"
     });
   }
 

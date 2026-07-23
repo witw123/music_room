@@ -15,7 +15,7 @@ import {
   type ThemePreference
 } from "@/features/settings/settings-store";
 
-export type AppNavItemId = "home" | "search" | "playlists" | "favorites" | "profile" | "settings";
+export type AppNavItemId = "home" | "discover" | "search" | "playlists" | "favorites" | "profile" | "settings";
 
 type AppSidebarProps = {
   activeSession: AuthSession | null;
@@ -29,6 +29,7 @@ type AppSidebarProps = {
 
 const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [
   { id: "home", label: "首页", href: "/app", icon: "home" },
+  { id: "discover", label: "发现", href: "/app/discover", icon: "discover" },
   { id: "search", label: "搜索", href: "/app/search", icon: "search" },
   { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
   { id: "favorites", label: "收藏", href: "/app/favorites", icon: "favorite" },
@@ -38,6 +39,7 @@ const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: Ico
 
 type IconName =
   | "home"
+  | "discover"
   | "search"
   | "playlist"
   | "favorite"
@@ -256,6 +258,9 @@ function clearThemeTransitionStyles(root: HTMLElement) {
 }
 
 function resolveActiveItem(pathname: string | null): AppNavItemId | null {
+  if (pathname?.startsWith("/app/discover")) {
+    return "discover";
+  }
   if (pathname?.startsWith("/app/search")) {
     return "search";
   }
@@ -336,6 +341,16 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
       <svg {...commonProps}>
         <circle cx="11" cy="11" r="6.5" />
         <path d="m16 16 4.5 4.5" />
+      </svg>
+    );
+  }
+
+  if (name === "discover") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 3.5 14.4 9l5.6.5-4.2 3.7 1.3 5.5-5.1-2.9-5.1 2.9 1.3-5.5L4 9.5 9.6 9 12 3.5Z" />
+        <path d="M12 7.5v5" />
+        <path d="M9.5 11.5h5" />
       </svg>
     );
   }

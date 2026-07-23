@@ -14,9 +14,12 @@ import {
   type ProviderAlbumDetail,
   type ProviderAlbumFavorite,
   type ProviderAudioResolveResponse,
+  type ProviderDiscoveryBannerListResponse,
   type ProviderLyrics,
+  type ProviderPlaylistCategoryListResponse,
   type ProviderPlaylistDetail,
   type ProviderPlaylistListResponse,
+  type ProviderTrackListResponse,
   type QqMusicAccountStatus,
   type QqMusicQrStartResponse,
   type QqMusicQrStatusResponse,
@@ -364,6 +367,33 @@ export const musicRoomApi = {
     });
     return request<ProviderPlaylistListResponse>(`/v1/providers/netease/search/playlists?${params.toString()}`);
   },
+  listNeteaseRecommendedPlaylists: (options?: { limit?: number }) =>
+    request<ProviderPlaylistListResponse>(`/v1/providers/netease/discover/playlists/recommended?limit=${options?.limit ?? 30}`),
+  listNeteaseDiscoveryPlaylists: (options?: { category?: string; order?: "hot" | "new"; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      category: options?.category ?? "全部",
+      order: options?.order ?? "hot",
+      limit: String(options?.limit ?? 30),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderPlaylistListResponse>(`/v1/providers/netease/discover/playlists?${params.toString()}`);
+  },
+  listNeteasePlaylistCategories: () =>
+    request<ProviderPlaylistCategoryListResponse>("/v1/providers/netease/discover/playlist-categories"),
+  listNeteaseToplists: () =>
+    request<ProviderPlaylistListResponse>("/v1/providers/netease/discover/toplists"),
+  listNeteaseNewAlbums: (options?: { area?: "all" | "zh" | "ea" | "kr" | "jp"; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      area: options?.area ?? "all",
+      limit: String(options?.limit ?? 30),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderAlbumListResponse>(`/v1/providers/netease/discover/albums/new?${params.toString()}`);
+  },
+  listNeteaseDailyPlaylists: () =>
+    request<ProviderPlaylistListResponse>("/v1/providers/netease/discover/playlists/daily"),
+  listNeteaseDailyTracks: () =>
+    request<ProviderTrackListResponse>("/v1/providers/netease/discover/tracks/daily"),
   searchNeteaseAlbums: (keywords: string, options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       keywords,
@@ -413,6 +443,28 @@ export const musicRoomApi = {
     });
     return request<ProviderPlaylistListResponse>(`/v1/providers/qqmusic/search/playlists?${params.toString()}`);
   },
+  listQqMusicPlaylistCategories: () =>
+    request<ProviderPlaylistCategoryListResponse>("/v1/providers/qqmusic/discover/playlist-categories"),
+  listQqMusicDiscoveryPlaylists: (options?: { categoryId?: number; sortId?: number; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      categoryId: String(options?.categoryId ?? 10_000_000),
+      sortId: String(options?.sortId ?? 5),
+      limit: String(options?.limit ?? 30),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderPlaylistListResponse>(`/v1/providers/qqmusic/discover/playlists?${params.toString()}`);
+  },
+  listQqMusicToplists: () =>
+    request<ProviderPlaylistListResponse>("/v1/providers/qqmusic/discover/toplists"),
+  listQqMusicDigitalAlbums: (options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      limit: String(options?.limit ?? 30),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<ProviderAlbumListResponse>(`/v1/providers/qqmusic/discover/albums/digital?${params.toString()}`);
+  },
+  listQqMusicBanners: () =>
+    request<ProviderDiscoveryBannerListResponse>("/v1/providers/qqmusic/discover/banners"),
   searchQqMusicAlbums: (keywords: string, options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       keywords,

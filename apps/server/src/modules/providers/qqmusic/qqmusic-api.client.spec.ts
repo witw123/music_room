@@ -1,4 +1,4 @@
-import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getLyric, getQQLoginQr, getSearchByKey, getUserPlaylists, songListDetail } from "@sansenjian/qq-music-api/services";
+import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getDigitalAlbumLists, getLyric, getQQLoginQr, getRecommendBanner, getSearchByKey, getTopLists, getUserPlaylists, songListCategories, songLists, songListDetail } from "@sansenjian/qq-music-api/services";
 import { QqMusicApiClient } from "./qqmusic-api.client";
 import { fetchProviderUrl } from "../provider-fetch";
 
@@ -11,7 +11,12 @@ jest.mock("@sansenjian/qq-music-api/services", () => ({
   getUserPlaylists: jest.fn(),
   songListDetail: jest.fn(),
   getAlbumInfo: jest.fn(),
-  getAlbumSongs: jest.fn()
+  getAlbumSongs: jest.fn(),
+  getDigitalAlbumLists: jest.fn(),
+  getRecommendBanner: jest.fn(),
+  getTopLists: jest.fn(),
+  songListCategories: jest.fn(),
+  songLists: jest.fn()
 }));
 jest.mock("../provider-fetch", () => ({
   fetchProviderUrl: jest.fn()
@@ -25,6 +30,11 @@ const mockedGetUserPlaylists = getUserPlaylists as jest.MockedFunction<typeof ge
 const mockedSongListDetail = songListDetail as jest.MockedFunction<typeof songListDetail>;
 const mockedGetAlbumInfo = getAlbumInfo as jest.MockedFunction<typeof getAlbumInfo>;
 const mockedGetAlbumSongs = getAlbumSongs as jest.MockedFunction<typeof getAlbumSongs>;
+const mockedGetDigitalAlbumLists = getDigitalAlbumLists as jest.MockedFunction<typeof getDigitalAlbumLists>;
+const mockedGetRecommendBanner = getRecommendBanner as jest.MockedFunction<typeof getRecommendBanner>;
+const mockedGetTopLists = getTopLists as jest.MockedFunction<typeof getTopLists>;
+const mockedSongListCategories = songListCategories as jest.MockedFunction<typeof songListCategories>;
+const mockedSongLists = songLists as jest.MockedFunction<typeof songLists>;
 const mockedFetchProviderUrl = fetchProviderUrl as jest.MockedFunction<typeof fetchProviderUrl>;
 
 describe("QqMusicApiClient", () => {
@@ -178,5 +188,21 @@ describe("QqMusicApiClient", () => {
   it("does not turn QQ upstream playlist errors into an empty playlist", async () => {
     mockedGetUserPlaylists.mockResolvedValue({ status: 502, body: { error: "获取用户歌单失败" } } as never);
     await expect(new QqMusicApiClient().getUserPlaylists({ userId: "123", limit: 30, offset: 0, cookie: "secret" })).rejects.toMatchObject({ kind: "unavailable" });
+  });
+
+  it("reads QQ discovery service envelopes", async () => {
+    mockedSongListCategories.mockResolvedValue({ status: 200, body: { response: { code: 0, data: { categories: [] } } } } as never);
+    mockedSongLists.mockResolvedValue({ status: 200, body: { response: { code: 0, data: { list: [{ dissid: "playlist-1" }] } } } } as never);
+    mockedGetTopLists.mockResolvedValue({ status: 200, body: { response: { code: 0, data: { topList: [{ id: 4 }] } } } } as never);
+    mockedGetDigitalAlbumLists.mockResolvedValue({ status: 200, body: { response: { code: 0, data: { content: [] } } } } as never);
+    mockedGetRecommendBanner.mockResolvedValue({ status: 200, body: { response: { code: 0, focus: { list: [] } } } } as never);
+
+    const client = new QqMusicApiClient();
+    await expect(client.getPlaylistCategories()).resolves.toMatchObject({ data: { categories: [] } });
+    await expect(client.getCategoryPlaylists({ categoryId: 10000000, sortId: 5, limit: 20, offset: 0 })).resolves.toMatchObject({ data: { list: [{ dissid: "playlist-1" }] } });
+    await expect(client.getToplists()).resolves.toMatchObject({ data: { topList: [{ id: 4 }] } });
+    await expect(client.getDigitalAlbums()).resolves.toMatchObject({ data: { content: [] } });
+    await expect(client.getBanners()).resolves.toMatchObject({ focus: { list: [] } });
+    expect(mockedSongLists).toHaveBeenCalledWith(expect.objectContaining({ params: { categoryId: 10000000, sortId: 5, sin: 0, ein: 19 } }));
   });
 });

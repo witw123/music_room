@@ -156,6 +156,7 @@ export function RoomAppShell({
         </>
       ) : null}
       <BottomPlayerController
+        mobileVariant="compact"
         audioRef={audioRef}
         isSourceOwner={isSourceOwner}
         roomSnapshot={roomSnapshot}

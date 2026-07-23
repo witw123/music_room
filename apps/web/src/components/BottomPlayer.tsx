@@ -57,6 +57,7 @@ type BottomPlayerProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isLyricsOpen?: boolean;
   onToggleLyrics?: () => void;
+  mobileVariant?: "compact" | "full";
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -94,7 +95,8 @@ function BottomPlayerBase({
   onRemoveQueueItem,
   onReorderQueue,
   isLyricsOpen = false,
-  onToggleLyrics
+  onToggleLyrics,
+  mobileVariant = "full"
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
@@ -171,6 +173,10 @@ function BottomPlayerBase({
     borderColor: artworkPalette.border
   };
   const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
+  const isCompactMobile = mobileVariant === "compact";
+  const footerClassName = isCompactMobile
+    ? "fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[60] box-border flex min-h-[4.25rem] flex-col justify-center overflow-visible rounded-[2rem] bg-background-secondary px-3 py-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.38)] transition-[background-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:min-h-[4.5rem] md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-surface-border md:px-8 md:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] md:pt-3"
+    : "fixed inset-x-3 bottom-3 z-[60] box-border flex min-h-0 flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 pb-[calc(env(safe-area-inset-bottom)_+_0.5rem)] pt-2 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[background-color,border-color] duration-700 sm:px-4 sm:pt-3 lg:inset-x-0 lg:bottom-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3";
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -349,20 +355,23 @@ function BottomPlayerBase({
   return (
     <>
     <footer
-      className="fixed inset-x-3 bottom-3 z-[60] box-border flex min-h-0 flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 pb-[calc(env(safe-area-inset-bottom)_+_0.5rem)] pt-2 shadow-[0_16px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[background-color,border-color] duration-700 sm:px-4 sm:pt-3 lg:inset-x-0 lg:bottom-0 lg:min-h-[4.5rem] lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3"
+      className={footerClassName}
       style={playerSurfaceStyle}
       data-testid="bottom-player"
+      data-mobile-variant={mobileVariant}
     >
-      <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5 z-10" aria-hidden="true">
-        <div
-          className="h-full transition-[width,background-color,box-shadow] duration-150 ease-linear"
-          style={{
-            width: `${progressRatio * 100}%`,
-            backgroundColor: artworkPalette.accent,
-            boxShadow: `0 0 10px ${artworkPalette.accentGlow}`
-          }}
-        />
-      </div>
+      {!isCompactMobile ? (
+        <div className="absolute left-0 right-0 top-0 h-[2px] z-10 bg-white/5" aria-hidden="true">
+          <div
+            className="h-full transition-[width,background-color,box-shadow] duration-150 ease-linear"
+            style={{
+              width: `${progressRatio * 100}%`,
+              backgroundColor: artworkPalette.accent,
+              boxShadow: `0 0 10px ${artworkPalette.accentGlow}`
+            }}
+          />
+        </div>
+      ) : null}
 
       <div className="relative z-10 w-full flex flex-col justify-center">
       <MobileBottomPlayerLayout
@@ -401,6 +410,7 @@ function BottomPlayerBase({
         artworkAccentSoft={artworkPalette.accentSoft}
         artworkUrl={currentTrack?.artworkUrl ?? null}
         playerStyle={playerStyle}
+        mobileVariant={mobileVariant}
       />
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
@@ -438,6 +448,7 @@ function BottomPlayerBase({
         artworkAccentSoft={artworkPalette.accentSoft}
         artworkUrl={currentTrack?.artworkUrl ?? null}
         playerStyle={playerStyle}
+        mobileVariant={mobileVariant}
       />
       </div>
 
@@ -467,6 +478,27 @@ function BottomPlayerBase({
       isPlaying={isPlaying}
       positionMs={boundedProgressMs}
       currentTrack={currentTrack}
+      canControlPlayback={canControlPlayback}
+      canSeekPlayback={canSeekPlayback && canControlPlayback}
+      playbackTrackId={playback?.currentTrackId}
+      durationMs={currentTrackDuration}
+      volume={volume}
+      setSeekDraft={setSeekDraft}
+      commitSeek={commitSeek}
+      applyVolume={applyVolume}
+      onPrev={playPrev}
+      onNext={playNext}
+      onTogglePlay={togglePlayback}
+      playbackMode={playbackMode}
+      onCyclePlaybackMode={onCyclePlaybackMode}
+      queue={queue}
+      tracks={tracks}
+      currentQueueItemId={currentQueueItemId}
+      canReorderQueue={canReorderQueue}
+      canRemoveQueue={canRemoveQueue}
+      onPlayQueueItem={onPlayQueueItem}
+      onRemoveQueueItem={onRemoveQueueItem}
+      onReorderQueue={onReorderQueue}
       onClose={() => setIsImmersiveOpen(false)}
     />
     <MiniPlayerOverlay

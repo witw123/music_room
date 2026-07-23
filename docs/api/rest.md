@@ -50,6 +50,23 @@
 
 服务端解析网易云临时地址并流式转发音频，支持 `quality=standard|high|exhigh` 和 `Range`。音频不写入服务端持久化存储，响应设置为 `Cache-Control: no-store`。
 
+### 网易云发现接口
+
+以下接口返回统一的歌单、专辑、分类或歌曲结构，均只要求 Music Room 应用登录，不要求绑定网易云账号：
+
+- `GET /v1/providers/netease/discover/playlists/recommended?limit=30`：个性化推荐歌单（公共推荐接口）
+- `GET /v1/providers/netease/discover/playlists?category=全部&order=hot&limit=30&offset=0`：分类歌单，`order` 为 `hot|new`
+- `GET /v1/providers/netease/discover/playlist-categories`：歌单分类及统一的 `hot|new` 排序选项
+- `GET /v1/providers/netease/discover/toplists`：官方榜单歌单摘要
+- `GET /v1/providers/netease/discover/albums/new?area=all&limit=30&offset=0`：新碟，`area` 为 `all|zh|ea|kr|jp`
+
+每日推荐依赖当前用户绑定的网易云账号：
+
+- `GET /v1/providers/netease/discover/playlists/daily`：每日推荐歌单
+- `GET /v1/providers/netease/discover/tracks/daily`：每日推荐歌曲
+
+发现数据在服务端做短时进程缓存；上游短暂失败时，在旧值仍处于保留窗口内会返回旧值，避免前端因偶发上游错误整页失败。
+
 ## QQ 音乐 provider
 
 QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，Cookie 仅以加密形式保存；搜索、歌单、专辑和导入结果统一为共享 provider 结构。
@@ -71,6 +88,18 @@ QQ 音乐默认关闭。启用后，用户在服务端绑定 QQ 音乐账号，C
 - `GET /search/playlists`、`GET /search/albums`
 - `GET /playlists`、`GET /playlists/{playlistId}`、`GET /albums/{albumId}`
 - `GET /tracks/{trackId}/audio-url`、`GET /tracks/{trackId}/lyrics`
+
+### QQ 音乐发现接口
+
+以下接口只要求 Music Room 应用登录，不要求绑定 QQ 音乐账号：
+
+- `GET /v1/providers/qqmusic/discover/playlist-categories`：歌单分类及平台提供的排序选项
+- `GET /v1/providers/qqmusic/discover/playlists?categoryId=10000000&sortId=5&limit=30&offset=0`：分类歌单
+- `GET /v1/providers/qqmusic/discover/toplists`：官方榜单歌单摘要
+- `GET /v1/providers/qqmusic/discover/albums/digital?limit=30&offset=0`：数字专辑
+- `GET /v1/providers/qqmusic/discover/banners`：推荐页 Banner；上游不可用时返回空 `items`，不影响其它发现接口
+
+QQ 发现数据同样有短时缓存和旧值容错。QQ 当前 SDK 未稳定暴露与网易云“每日推荐”同等的个性化歌单/歌曲接口，因此不伪造账号推荐数据；绑定账号后的个人歌单仍通过 `GET /v1/providers/qqmusic/playlists` 读取。
 
 ## 标准错误码
 

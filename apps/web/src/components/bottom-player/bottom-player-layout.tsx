@@ -46,6 +46,7 @@ type LayoutProps = {
   artworkAccentSoft: string;
   artworkUrl: string | null;
   playerStyle: PlayerStyle;
+  mobileVariant?: "compact" | "full";
 };
 
 export function VinylBadge({
@@ -352,8 +353,61 @@ export function MobileBottomPlayerLayout({
   artworkAccent,
   artworkAccentSoft,
   artworkUrl,
-  playerStyle
+  playerStyle,
+  mobileVariant = "full"
 }: LayoutProps) {
+  if (mobileVariant === "compact") {
+    return (
+      <div className="mx-auto w-full max-w-[760px] md:hidden">
+        <div className="flex min-h-[3.5rem] items-center gap-1.5">
+          <button
+            aria-label="打开沉浸式播放"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-full py-1 text-left outline-none transition-transform duration-200 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-accent"
+            onClick={onToggleImmersive}
+            title="打开沉浸式播放"
+            type="button"
+          >
+            <SquareAlbumCover artworkUrl={artworkUrl} className="h-12 w-12 shrink-0 rounded-full border-white/15 shadow-md" />
+            <span className="min-w-0">
+              <span className="block truncate text-[0.95rem] font-semibold leading-5 text-foreground">{title}</span>
+            </span>
+          </button>
+
+          <button
+            aria-label={isPlaying ? "暂停" : "播放"}
+            className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-[transform,background-color,box-shadow] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              canControlPlayback ? "border-white/50 bg-white/[0.04] text-white" : "cursor-not-allowed border-white/10 text-foreground-muted opacity-45"
+            }`}
+            disabled={!canControlPlayback || !playbackTrackId}
+            onClick={onTogglePlay}
+            title={isPlaying ? "暂停" : "播放"}
+            type="button"
+          >
+            {isPlaying ? (
+              <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>
+            ) : (
+              <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18"><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+          <PlayerQueueDrawer
+            queue={queue}
+            tracks={tracks}
+            currentQueueItemId={currentQueueItemId}
+            accentColor={artworkAccent}
+            accentSoft={artworkAccentSoft}
+            canControlPlayback={canControlPlayback}
+            canReorderQueue={canReorderQueue}
+            canRemoveQueue={canRemoveQueue}
+            onPlayQueueItem={onPlayQueueItem}
+            onRemoveQueueItem={onRemoveQueueItem}
+            onReorderQueue={onReorderQueue}
+            compactMobile
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
       <div className="grid min-h-[4.25rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 sm:gap-x-3 sm:gap-y-1.5">
@@ -530,10 +584,11 @@ export function DesktopBottomPlayerLayout({
   artworkAccent,
   artworkAccentSoft,
   artworkUrl,
-  playerStyle
+  playerStyle,
+  mobileVariant = "full"
 }: LayoutProps) {
   return (
-    <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
+    <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`}>
       <div className="flex min-w-0 items-center gap-3">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
         <VinylBadge

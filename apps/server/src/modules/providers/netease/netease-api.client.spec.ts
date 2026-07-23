@@ -1,16 +1,23 @@
 import {
+  album_new,
   login_qr_check,
   login_qr_create,
   login_qr_key,
   login_status,
   lyric,
+  personalized,
+  playlist_catlist,
   playlist_detail,
   playlist_track_all,
+  recommend_resource,
+  recommend_songs,
   user_playlist,
   album,
   search,
   song_detail,
-  song_url
+  song_url,
+  top_playlist,
+  toplist
 } from "@neteasecloudmusicapienhanced/api";
 import { NeteaseApiClient } from "./netease-api.client";
 
@@ -20,13 +27,20 @@ jest.mock("@neteasecloudmusicapienhanced/api", () => ({
   login_qr_key: jest.fn(),
   login_status: jest.fn(),
   lyric: jest.fn(),
+  personalized: jest.fn(),
+  playlist_catlist: jest.fn(),
   playlist_detail: jest.fn(),
   playlist_track_all: jest.fn(),
+  recommend_resource: jest.fn(),
+  recommend_songs: jest.fn(),
   user_playlist: jest.fn(),
   album: jest.fn(),
   search: jest.fn(),
   song_detail: jest.fn(),
-  song_url: jest.fn()
+  song_url: jest.fn(),
+  top_playlist: jest.fn(),
+  toplist: jest.fn(),
+  album_new: jest.fn()
 }));
 
 const mockedLoginQrCheck = login_qr_check as jest.MockedFunction<typeof login_qr_check>;
@@ -37,10 +51,17 @@ const mockedSearch = search as jest.MockedFunction<typeof search>;
 const mockedSongDetail = song_detail as jest.MockedFunction<typeof song_detail>;
 const mockedSongUrl = song_url as jest.MockedFunction<typeof song_url>;
 const mockedLyric = lyric as jest.MockedFunction<typeof lyric>;
+const mockedPersonalized = personalized as jest.MockedFunction<typeof personalized>;
+const mockedPlaylistCatlist = playlist_catlist as jest.MockedFunction<typeof playlist_catlist>;
 const mockedPlaylistDetail = playlist_detail as jest.MockedFunction<typeof playlist_detail>;
 const mockedPlaylistTrackAll = playlist_track_all as jest.MockedFunction<typeof playlist_track_all>;
 const mockedUserPlaylist = user_playlist as jest.MockedFunction<typeof user_playlist>;
 const mockedAlbum = album as jest.MockedFunction<typeof album>;
+const mockedTopPlaylist = top_playlist as jest.MockedFunction<typeof top_playlist>;
+const mockedToplist = toplist as jest.MockedFunction<typeof toplist>;
+const mockedAlbumNew = album_new as jest.MockedFunction<typeof album_new>;
+const mockedRecommendResource = recommend_resource as jest.MockedFunction<typeof recommend_resource>;
+const mockedRecommendSongs = recommend_songs as jest.MockedFunction<typeof recommend_songs>;
 
 describe("NeteaseApiClient", () => {
   beforeEach(() => {
@@ -256,5 +277,24 @@ describe("NeteaseApiClient", () => {
     await expect(client.getPlaylistTracks({ playlistId: "11", limit: 1000, offset: 0, cookie: "secret" })).resolves.toMatchObject({ songs: [] });
     await expect(client.getAlbum({ albumId: "22", cookie: "secret" })).resolves.toMatchObject({ album: { id: 22 } });
     expect(mockedUserPlaylist).toHaveBeenCalledWith(expect.objectContaining({ uid: "9", limit: 30, offset: 0, cookie: "secret" }));
+  });
+
+  it("reads discovery playlist, ranking, album, and daily recommendation payloads", async () => {
+    mockedPersonalized.mockResolvedValue({ status: 200, body: { code: 200, result: [{ id: 1, name: "Recommended" }] } } as never);
+    mockedTopPlaylist.mockResolvedValue({ status: 200, body: { code: 200, playlists: [{ id: 2, name: "Category" }] } } as never);
+    mockedPlaylistCatlist.mockResolvedValue({ status: 200, body: { code: 200, all: { name: "全部歌单" }, sub: [] } } as never);
+    mockedToplist.mockResolvedValue({ status: 200, body: { code: 200, list: [{ id: 3, name: "榜单" }] } } as never);
+    mockedAlbumNew.mockResolvedValue({ status: 200, body: { code: 200, albums: [{ id: 4, name: "新专辑" }] } } as never);
+    mockedRecommendResource.mockResolvedValue({ status: 200, body: { code: 200, recommend: [{ id: 5, name: "每日歌单" }] } } as never);
+    mockedRecommendSongs.mockResolvedValue({ status: 200, body: { code: 200, data: { dailySongs: [{ id: 6, name: "每日歌曲" }] } } } as never);
+
+    const client = new NeteaseApiClient();
+    await expect(client.getRecommendedPlaylists({ limit: 10 })).resolves.toMatchObject({ result: [{ id: 1 }] });
+    await expect(client.getCategoryPlaylists({ category: "流行", order: "hot", limit: 10, offset: 0 })).resolves.toMatchObject({ playlists: [{ id: 2 }] });
+    await expect(client.getPlaylistCategories({})).resolves.toMatchObject({ all: { name: "全部歌单" } });
+    await expect(client.getToplists({})).resolves.toMatchObject({ list: [{ id: 3 }] });
+    await expect(client.getNewAlbums({ area: "all", limit: 10, offset: 0 })).resolves.toMatchObject({ albums: [{ id: 4 }] });
+    await expect(client.getDailyPlaylists({ cookie: "secret" })).resolves.toMatchObject({ recommend: [{ id: 5 }] });
+    await expect(client.getDailyTracks({ cookie: "secret" })).resolves.toMatchObject({ data: { dailySongs: [{ id: 6 }] } });
   });
 });

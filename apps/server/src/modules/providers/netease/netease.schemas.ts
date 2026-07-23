@@ -151,6 +151,34 @@ export const neteaseCatalogPageQuerySchema = z
   })
   .strict();
 
+export const neteaseDiscoverPlaylistQuerySchema = z
+  .object({
+    category: z.string().trim().min(1).max(32).default("全部"),
+    order: z.enum(["hot", "new"]).default("hot"),
+    limit: z.coerce.number().int().min(1).max(50).default(30),
+    offset: z.coerce.number().int().min(0).max(10_000).default(0)
+  })
+  .strict();
+
+export const neteaseDiscoverPageQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(50).default(30),
+    offset: z.coerce.number().int().min(0).max(10_000).default(0)
+  })
+  .strict();
+
+export const neteaseRecommendedPlaylistQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(50).default(30)
+  })
+  .strict();
+
+export const neteaseDiscoverAlbumQuerySchema = neteaseDiscoverPageQuerySchema
+  .extend({
+    area: z.enum(["all", "zh", "ea", "kr", "jp"]).default("all")
+  })
+  .strict();
+
 export const neteasePlaylistIdSchema = z.string().trim().regex(/^\d+$/).max(32);
 export const neteaseAlbumIdSchema = z.string().trim().regex(/^\d+$/).max(32);
 
@@ -173,3 +201,7 @@ export type NeteaseSearchBody = z.infer<typeof neteaseSearchBodySchema>;
 export type NeteaseSongDetailBody = z.infer<typeof neteaseSongDetailBodySchema>;
 export type NeteaseAudioUrlBody = z.infer<typeof neteaseAudioUrlBodySchema>;
 export type NeteaseCatalogPageQuery = z.infer<typeof neteaseCatalogPageQuerySchema>;
+export type NeteaseDiscoverPlaylistQuery = z.infer<typeof neteaseDiscoverPlaylistQuerySchema>;
+export type NeteaseDiscoverPageQuery = z.infer<typeof neteaseDiscoverPageQuerySchema>;
+export type NeteaseRecommendedPlaylistQuery = z.infer<typeof neteaseRecommendedPlaylistQuerySchema>;
+export type NeteaseDiscoverAlbumQuery = z.infer<typeof neteaseDiscoverAlbumQuerySchema>;

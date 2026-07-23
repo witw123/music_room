@@ -211,4 +211,41 @@ describe("NeteaseService", () => {
     await expect(service.getAlbum("user_1", "22")).resolves.toMatchObject({ providerAlbumId: "22", tracks: [{ providerTrackId: "7" }] });
     expect(api.getUserPlaylists).toHaveBeenCalledWith({ userId: "99", limit: 30, offset: 0, cookie: "cookie" });
   });
+
+  it("normalizes public discovery catalogs without requiring a provider account", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      getRecommendedPlaylists: jest.fn().mockResolvedValue({ result: [{ id: 1, name: "Recommended" }] }),
+      getCategoryPlaylists: jest.fn().mockResolvedValue({ playlists: [{ id: 2, name: "Category" }] }),
+      getPlaylistCategories: jest.fn().mockResolvedValue({
+        all: { name: "全部歌单" },
+        sub: [{ name: "流行", category: 1 }],
+        categories: { "1": "风格" }
+      }),
+      getToplists: jest.fn().mockResolvedValue({ list: [{ id: 3, name: "榜单" }] }),
+      getNewAlbums: jest.fn().mockResolvedValue({ albums: [{ id: 4, name: "新专辑", artists: [{ name: "歌手" }] }] })
+    };
+    const service = new NeteaseService(api as never, {} as never, {} as never);
+
+    await expect(service.getRecommendedPlaylists("user_1", { limit: 10 })).resolves.toMatchObject({
+      items: [{ providerPlaylistId: "1", title: "Recommended" }],
+      offset: 0
+    });
+    await expect(service.getCategoryPlaylists("user_1", { category: "流行", order: "hot", limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerPlaylistId: "2" }]
+    });
+    await expect(service.getPlaylistCategories("user_1")).resolves.toMatchObject({
+      items: [
+        { id: "全部", name: "全部" },
+        { id: "流行", groupName: "风格" }
+      ]
+    });
+    await expect(service.getToplists("user_1")).resolves.toMatchObject({ items: [{ providerPlaylistId: "3" }] });
+    await expect(service.getNewAlbums("user_1", { area: "all", limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ providerAlbumId: "4", artist: "歌手" }]
+    });
+    expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(1);
+    await service.getRecommendedPlaylists("user_1", { limit: 10 });
+    expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(1);
+  });
 });

@@ -8,6 +8,7 @@ export function AppPersistentPlayer() {
 
   return (
     <BottomPlayer
+      mobileVariant="compact"
       audioRef={player.audioRef}
       playback={player.playback}
       canControlPlayback={player.canControlPlayback}

@@ -352,6 +352,26 @@ describe("PeerConnectionLifecycleManager", () => {
     ).toBe(true);
   });
 
+  it("publishes an already-playing source track when the source is the non-initiating peer", async () => {
+    const { manager, sendSignal } = createManager({ localPeerId: "peer_b" });
+    const track = { id: "already-playing-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_b", 192);
+    await manager.syncPeers(["peer_a"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender);
+    expect(mediaPeer?.mediaSender?.track).toBe(track);
+    expect(
+      (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls.some(([value]) => {
+        const payload = value as PeerSignalMessage;
+        return payload.linkKind === "media" && payload.type === "offer";
+      })
+    ).toBe(true);
+  });
+
   it("starts media negotiation from the source track instead of an empty listener offer", async () => {
     const { manager, sendSignal } = createManager();
     await manager.syncPeers(["peer_b"]);
@@ -555,7 +575,8 @@ describe("PeerConnectionLifecycleManager", () => {
     await vi.advanceTimersByTimeAsync(3_000);
     await manager.restartMediaPeer("peer_b");
 
-    expect(mediaPeer.connectionState).toBe("closed");
+    expect(mediaPeer.connectionState).toBe("connected");
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");

@@ -11,7 +11,7 @@
 - Socket.IO 事件
 - 共享模型与版本字段
 - 播放媒体会话和 WebRTC 诊断
-- NetEase / QQ Music provider 账号、搜索、歌单、专辑和导入接口
+- NetEase / QQ Music provider 账号、搜索、推荐发现、歌单、专辑和导入接口
 - Web 测试入口与前置条件
 
 ## 测试环境基线

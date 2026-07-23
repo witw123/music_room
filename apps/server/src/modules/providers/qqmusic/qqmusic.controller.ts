@@ -21,6 +21,8 @@ import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   qqMusicAlbumIdSchema,
   qqMusicCatalogPageQuerySchema,
+  qqMusicDiscoverPageQuerySchema,
+  qqMusicDiscoverPlaylistQuerySchema,
   qqMusicPlaylistIdSchema,
   qqMusicQualitySchema,
   qqMusicSearchQuerySchema,
@@ -91,6 +93,43 @@ export class QqMusicController {
       await this.user(token),
       parseRequestBody(qqMusicSearchQuerySchema, query)
     );
+  }
+
+  @Get("discover/playlist-categories")
+  async playlistCategories(@Headers("x-session-token") token?: string) {
+    return this.service.getPlaylistCategories(await this.user(token));
+  }
+
+  @Get("discover/playlists")
+  async categoryPlaylists(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") token?: string
+  ) {
+    return this.service.getCategoryPlaylists(
+      await this.user(token),
+      parseRequestBody(qqMusicDiscoverPlaylistQuerySchema, query)
+    );
+  }
+
+  @Get("discover/toplists")
+  async toplists(@Headers("x-session-token") token?: string) {
+    return this.service.getToplists(await this.user(token));
+  }
+
+  @Get("discover/albums/digital")
+  async digitalAlbums(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") token?: string
+  ) {
+    return this.service.getDigitalAlbums(
+      await this.user(token),
+      parseRequestBody(qqMusicDiscoverPageQuerySchema, query)
+    );
+  }
+
+  @Get("discover/banners")
+  async banners(@Headers("x-session-token") token?: string) {
+    return this.service.getBanners(await this.user(token));
   }
 
   @Get("artwork")

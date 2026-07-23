@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
+import { MobileAppNavigation } from "@/components/MobileAppNavigation";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
@@ -61,14 +62,17 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
   return (
     <LocalPlayerProvider>
       <div className="min-h-[100dvh] overflow-x-hidden bg-black">
-        <AppSidebar
-          activeSession={activeSession}
-          hasBottomPlayer={!awayRoomId}
-          onLogout={handleLogout}
-        />
+        <div className="hidden md:contents">
+          <AppSidebar
+            activeSession={activeSession}
+            hasBottomPlayer={!awayRoomId}
+            onLogout={handleLogout}
+          />
+        </div>
         {awayRoomId ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
         <PersistentAppRouteViews pathname={pathname}>{children}</PersistentAppRouteViews>
         {awayRoomId ? null : <AppPersistentPlayer />}
+        <MobileAppNavigation />
       </div>
     </LocalPlayerProvider>
   );
@@ -107,7 +111,7 @@ function PersistentAppRouteViews({
         return (
           <div
             aria-hidden={!isVisible}
-            className={isVisible ? "contents" : "hidden"}
+            className={isVisible ? "mobile-app-route-view md:contents" : "hidden"}
             key={cachedRoute}
           >
             {page}
