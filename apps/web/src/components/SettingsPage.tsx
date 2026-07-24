@@ -68,7 +68,11 @@ export function SettingsPage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   useEffect(() => {
-    const syncSettings = () => setSettings(getAppSettings());
+    const syncSettings = () => {
+      const next = getAppSettings();
+      setSettings(next);
+      if (next.layout.customLayout.enabled) setIsCustomLayoutEditorOpen(true);
+    };
     syncSettings();
     window.addEventListener(appSettingsChangeEvent, syncSettings);
     window.addEventListener("storage", syncSettings);
@@ -77,6 +81,17 @@ export function SettingsPage() {
       window.removeEventListener("storage", syncSettings);
     };
   }, []);
+
+  useEffect(() => {
+    if (isCustomLayoutEditorOpen) {
+      document.documentElement.dataset.customLayoutEditorOpen = "true";
+    } else {
+      delete document.documentElement.dataset.customLayoutEditorOpen;
+    }
+    return () => {
+      delete document.documentElement.dataset.customLayoutEditorOpen;
+    };
+  }, [isCustomLayoutEditorOpen]);
 
   if (!hydrated || !activeSession) {
     return <div className="min-h-[100dvh] bg-background" />;
@@ -186,25 +201,14 @@ export function SettingsPage() {
 
           <SettingsSection title="界面">
             <SettingRow label="自定义界面" description="在桌面画布中调整页面区域的位置和大小。">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Toggle
-                  checked={settings.layout.customLayout.enabled}
-                  label="自定义界面"
-                  onChange={(checked) => {
-                    patchSettings({ layout: { customLayout: { ...settings.layout.customLayout, enabled: checked } } });
-                    if (!checked) setIsCustomLayoutEditorOpen(false);
-                  }}
-                />
-                <Button
-                  disabled={!settings.layout.customLayout.enabled}
-                  onClick={() => setIsCustomLayoutEditorOpen(true)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  打开编辑器
-                </Button>
-              </div>
+              <Toggle
+                checked={settings.layout.customLayout.enabled}
+                label="自定义界面"
+                onChange={(checked) => {
+                  patchSettings({ layout: { customLayout: { ...settings.layout.customLayout, enabled: checked } } });
+                  setIsCustomLayoutEditorOpen(checked);
+                }}
+              />
             </SettingRow>
           </SettingsSection>
 

@@ -16,6 +16,7 @@ import {
   getLocalPlaylistDirectory,
   getLocalAudioCacheFileRecord,
   getCachedLibraryTrack,
+  getCachedLibraryTrackByProviderTrack,
   getAssetManifest,
   getAssetUnits,
   getTrackAssetLink,
@@ -297,6 +298,8 @@ export async function getRoomLocalAudioFile(input: {
   mimeType: string;
   originalAssetId?: string | null;
   allowOriginalAsset?: boolean;
+  provider?: "netease" | "qqmusic";
+  providerTrackId?: string | null;
 }) {
   const [savedFile, cachedFile] = await Promise.all([
     getLocalAudioFile(input.fileHash).catch(() => null),
@@ -307,6 +310,29 @@ export async function getRoomLocalAudioFile(input: {
 
   const browserCache = await getCachedLibraryTrack(input.fileHash).catch(() => null);
   if (browserCache?.file) return browserCache.file;
+
+  // Provider playback caches are content-addressed, while a room track may
+  // have been registered from a different provider download and carry another
+  // file hash. Match the member's own cache by provider identity as well.
+  if (input.provider && input.providerTrackId) {
+    const providerCache = await getCachedLibraryTrackByProviderTrack(
+      input.provider,
+      input.providerTrackId
+    ).catch(() => null);
+    if (providerCache?.file) return providerCache.file;
+
+    const providerSummary = await listCachedLibraryTrackSummaries()
+      .then((summaries) => summaries.find((summary) =>
+        summary.provider === input.provider &&
+        summary.providerTrackId === input.providerTrackId
+      ) ?? null)
+      .catch(() => null);
+    if (providerSummary) {
+      const localProviderCache = await getLocalAudioCacheFile(providerSummary.fileHash)
+        .catch(() => null);
+      if (localProviderCache) return localProviderCache;
+    }
+  }
 
   if (input.allowOriginalAsset === false) return null;
 

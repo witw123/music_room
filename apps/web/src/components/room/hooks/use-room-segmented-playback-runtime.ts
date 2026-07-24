@@ -411,7 +411,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       title: track.title,
       mimeType: track.mimeType ?? "audio/mpeg",
       originalAssetId: track.originalAsset?.assetId ?? null,
-      allowOriginalAsset: !forceProviderCache
+      allowOriginalAsset: !forceProviderCache,
+      provider: isProviderTrack(track) ? track.sourceType : undefined,
+      providerTrackId: isProviderTrack(track) ? track.sourceRef?.trackId : null
     }).then((file) => {
       if (cancelled) return;
       setLocalAudioResolution({
@@ -770,7 +772,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         ) {
           roomAudioOutput.unbindLocalAudioElement(audio);
           clearLocalAudioSource(audio);
-          roomAudioOutput.releaseRoomAudioSession();
           localMediaBindingRef.current = null;
         }
         // The segmented engine is the continuity path while a local file is

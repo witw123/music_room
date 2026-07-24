@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   customLayoutCanvas,
@@ -49,8 +50,13 @@ export function CustomLayoutEditor({ value, onChange, onClose }: CustomLayoutEdi
   const draftRef = useRef(value);
   const [pageId, setPageId] = useState<CustomLayoutPageId>("home");
   const [selectedItemId, setSelectedItemId] = useState<CustomLayoutItemId>("content");
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
 
   useEffect(() => {
     draftRef.current = value;
@@ -177,7 +183,7 @@ export function CustomLayoutEditor({ value, onChange, onClose }: CustomLayoutEdi
     };
   }
 
-  return (
+  const editor = (
     <div aria-label="自定义界面编辑器" aria-modal="true" className="fixed inset-0 z-[120] flex flex-col bg-background/95 text-foreground backdrop-blur-2xl" role="dialog">
       <header className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-surface-border px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
@@ -297,6 +303,8 @@ export function CustomLayoutEditor({ value, onChange, onClose }: CustomLayoutEdi
       </div>
     </div>
   );
+
+  return portalTarget ? createPortal(editor, portalTarget) : null;
 }
 
 function LayoutCanvasItem({

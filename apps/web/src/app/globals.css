@@ -289,6 +289,18 @@
     box-shadow: inset 2px 0 0 var(--accent);
   }
 
+  html[data-custom-layout-editor-open="true"],
+  html[data-custom-layout-editor-open="true"] body {
+    overflow: hidden !important;
+  }
+
+  html[data-custom-layout-editor-open="true"] .app-sidebar,
+  html[data-custom-layout-editor-open="true"] .custom-layout-content-region,
+  html[data-custom-layout-editor-open="true"] [data-custom-layout-item="player"],
+  html[data-custom-layout-editor-open="true"] .mobile-app-navigation {
+    display: none !important;
+  }
+
   html.theme-transitioning,
   html.theme-transitioning body,
   html.theme-transitioning body * {

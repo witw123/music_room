@@ -8,6 +8,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   getAssetManifest: vi.fn(),
   getAssetUnits: vi.fn(),
   getCachedLibraryTrack: vi.fn(),
+  getCachedLibraryTrackByProviderTrack: vi.fn(),
   getCachedLibraryTrackSummary: vi.fn(),
   getLocalAudioDirectory: vi.fn(),
   getLocalAudioFileRecord: vi.fn(),
@@ -71,6 +72,7 @@ describe("local audio cache persistence", () => {
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue(null);
     indexedDbMocks.getLocalAudioFileRecord.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrack.mockResolvedValue(null);
+    indexedDbMocks.getCachedLibraryTrackByProviderTrack.mockResolvedValue(null);
     indexedDbMocks.listCachedLibraryTrackHashes.mockResolvedValue([]);
     indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([]);
     indexedDbMocks.listLocalAudioCacheFiles.mockResolvedValue([]);
@@ -104,6 +106,21 @@ describe("local audio cache persistence", () => {
     })).resolves.toBeNull();
 
     expect(indexedDbMocks.getAssetManifest).not.toHaveBeenCalled();
+  });
+
+  it("matches a member's provider cache even when the room hash differs", async () => {
+    const file = new Blob(["cached provider audio"], { type: "audio/mpeg" });
+    indexedDbMocks.getCachedLibraryTrackByProviderTrack.mockResolvedValue({ file });
+
+    await expect(getRoomLocalAudioFile({
+      trackId: "room_track",
+      fileHash: "room_hash",
+      title: "Song",
+      mimeType: "audio/mpeg",
+      provider: "netease",
+      providerTrackId: "provider_track",
+      allowOriginalAsset: false
+    })).resolves.toBe(file);
   });
 
   it("reports the actual browser and folder cache sizes", async () => {
