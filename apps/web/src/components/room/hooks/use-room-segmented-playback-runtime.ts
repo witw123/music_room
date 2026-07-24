@@ -171,6 +171,21 @@ export function shouldDisableSourcePlayback(input: {
   return input.isCurrentSource && input.localAudioStatus === "available";
 }
 
+/**
+ * A listener's cached file is played directly by the media element. Only a
+ * source needs a running AudioContext because its local element is connected
+ * to the room broadcast destination.
+ */
+export function shouldWaitForLocalAudioContext(input: {
+  isCurrentSource: boolean;
+  audioUnlocked: boolean;
+  audioContextState: AudioContextState | null;
+}) {
+  return input.isCurrentSource && (
+    !input.audioUnlocked || input.audioContextState !== "running"
+  );
+}
+
 function isAudioPlaybackBlockedError(error: string | null) {
   return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
 }
@@ -933,9 +948,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             const sourceBroadcastStream = activeRuntime.isCurrentSource
               ? roomAudioOutput.getBroadcastStream()
               : null;
+            const activeMediaSourcePeerId = activeRuntime.isCurrentSource
+              ? activeRuntime.peerId
+              : sourcePeerId;
             activeRuntime.setLocalAudioStream(
               sourceBroadcastStream,
-              activeRuntime.isCurrentSource ? activeRuntime.peerId : null,
+              activeMediaSourcePeerId,
               activeRuntime.isCurrentSource ? bitrateKbps : null
             );
             audio.pause();
@@ -962,16 +980,23 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             roomAudioOutput.unbindLocalAudioElement(audio);
             throw new Error("本地音频无法连接到房间广播音频图。");
           }
+          const activeMediaSourcePeerId = activeRuntime.isCurrentSource
+            ? activeRuntime.peerId
+            : sourcePeerId;
           activeRuntime.setLocalAudioStream(
             sourceBroadcastStream,
-            activeRuntime.isCurrentSource ? activeRuntime.peerId : null,
+            activeMediaSourcePeerId,
             activeRuntime.currentTrack?.playbackAsset
               ? maximumAudioBitrateKbps
               : null
           );
 
           const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
-          if (!activeRuntime.audioUnlocked || audioContextState !== "running") {
+          if (shouldWaitForLocalAudioContext({
+            isCurrentSource: activeRuntime.isCurrentSource,
+            audioUnlocked: activeRuntime.audioUnlocked,
+            audioContextState
+          })) {
             if (!cancelled) {
               setMediaPlayback({
                 state: "awaiting-unlock",
@@ -1020,6 +1045,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             return;
           }
 
+          if (!activeRuntime.audioUnlocked) {
+            // A direct listener cache does not require the shared AudioContext,
+            // but it has still passed the browser's concrete media-element
+            // autoplay check. Keep the unlock state from triggering a false
+            // overlay while preserving the source-side context guard.
+            setAudioUnlocked(true);
+          }
           activeRuntime.setMediaConnectionState("live");
           setMediaPlayback({
             state: "live",

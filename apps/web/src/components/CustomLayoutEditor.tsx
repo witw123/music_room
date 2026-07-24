@@ -18,6 +18,7 @@ import {
 type CustomLayoutEditorProps = {
   value: CustomLayoutSettings;
   onChange: (value: CustomLayoutSettings) => void;
+  onApply: (value: CustomLayoutSettings) => void;
   onClose: () => void;
 };
 
@@ -45,7 +46,7 @@ const itemColors: Record<CustomLayoutItemId, string> = {
   "mobile-navigation": "#10b981"
 };
 
-export function CustomLayoutEditor({ value, onChange, onClose }: CustomLayoutEditorProps) {
+export function CustomLayoutEditor({ value, onApply, onChange, onClose }: CustomLayoutEditorProps) {
   const [draft, setDraft] = useState(value);
   const draftRef = useRef(value);
   const [pageId, setPageId] = useState<CustomLayoutPageId>("home");
@@ -199,6 +200,10 @@ export function CustomLayoutEditor({ value, onChange, onClose }: CustomLayoutEdi
           <Button className="gap-2" onClick={restorePage} size="sm" type="button" variant="outline">
             <ResetIcon />
             恢复当前页
+          </Button>
+          <Button className="gap-2" onClick={() => onApply(draftRef.current)} size="sm" type="button">
+            <CheckIcon />
+            应用布局
           </Button>
           <Button aria-label="关闭自定义界面编辑器" onClick={onClose} size="icon" title="关闭编辑器" type="button" variant="ghost">
             <CloseIcon />
@@ -426,4 +431,8 @@ function ResetIcon() {
 
 function CloseIcon() {
   return <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" /></svg>;
+}
+
+function CheckIcon() {
+  return <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14"><path d="m5 12 4.5 4.5L19 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>;
 }

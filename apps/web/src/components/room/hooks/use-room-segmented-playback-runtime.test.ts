@@ -6,7 +6,8 @@ import {
   resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
   resolveRoomAudioPositionMs,
-  shouldDisableSourcePlayback
+  shouldDisableSourcePlayback,
+  shouldWaitForLocalAudioContext
 } from "./use-room-segmented-playback-runtime";
 
 describe("receiver audio progress", () => {
@@ -155,6 +156,29 @@ describe("provider cache source transition", () => {
     expect(shouldDisableSourcePlayback({
       isCurrentSource: false,
       localAudioStatus: "available"
+    })).toBe(false);
+  });
+});
+
+describe("native local audio context requirement", () => {
+  it("does not block a listener's own cache when the shared context is suspended", () => {
+    expect(shouldWaitForLocalAudioContext({
+      isCurrentSource: false,
+      audioUnlocked: false,
+      audioContextState: "suspended"
+    })).toBe(false);
+  });
+
+  it("keeps the source cache behind the broadcast audio context", () => {
+    expect(shouldWaitForLocalAudioContext({
+      isCurrentSource: true,
+      audioUnlocked: false,
+      audioContextState: "suspended"
+    })).toBe(true);
+    expect(shouldWaitForLocalAudioContext({
+      isCurrentSource: true,
+      audioUnlocked: true,
+      audioContextState: "running"
     })).toBe(false);
   });
 });

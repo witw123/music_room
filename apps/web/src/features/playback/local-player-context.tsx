@@ -24,8 +24,6 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import {
-  cleanupProviderTrackPlaybackCache,
-  providerPlaybackCacheChangedEvent,
   releaseProviderTrackPlaybackCache
 } from "@/features/playback/provider-track-cache";
 import {
@@ -154,7 +152,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
     const refresh = () => {
       void refreshLibraryRecords().catch(() => undefined);
     };
@@ -162,31 +159,18 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       if (!document.hidden) refresh();
     };
 
-    void cleanupProviderTrackPlaybackCache()
-      .catch(() => 0)
-      .finally(() => {
-        if (!cancelled) refresh();
-      });
+    refresh();
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      cancelled = true;
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshLibraryRecords]);
 
   useEffect(() => {
-    const cleanup = () => {
-      void cleanupProviderTrackPlaybackCache().catch(() => undefined);
-    };
-    window.addEventListener("pagehide", cleanup);
-    window.addEventListener(providerPlaybackCacheChangedEvent, cleanup);
     return () => {
-      window.removeEventListener("pagehide", cleanup);
-      window.removeEventListener(providerPlaybackCacheChangedEvent, cleanup);
-      cleanup();
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
       }

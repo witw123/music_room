@@ -71,7 +71,6 @@ export function SettingsPage() {
     const syncSettings = () => {
       const next = getAppSettings();
       setSettings(next);
-      if (next.layout.customLayout.enabled) setIsCustomLayoutEditorOpen(true);
     };
     syncSettings();
     window.addEventListener(appSettingsChangeEvent, syncSettings);
@@ -201,14 +200,15 @@ export function SettingsPage() {
 
           <SettingsSection title="界面">
             <SettingRow label="自定义界面" description="在桌面画布中调整页面区域的位置和大小。">
-              <Toggle
-                checked={settings.layout.customLayout.enabled}
-                label="自定义界面"
-                onChange={(checked) => {
-                  patchSettings({ layout: { customLayout: { ...settings.layout.customLayout, enabled: checked } } });
-                  setIsCustomLayoutEditorOpen(checked);
-                }}
-              />
+              <button
+                aria-label="进入自定义界面编辑器"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-accent transition hover:bg-accent/10 hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                onClick={() => setIsCustomLayoutEditorOpen(true)}
+                type="button"
+              >
+                <span>进入</span>
+                <ChevronRightIcon />
+              </button>
             </SettingRow>
           </SettingsSection>
 
@@ -360,6 +360,10 @@ export function SettingsPage() {
       {isCustomLayoutEditorOpen ? (
         <CustomLayoutEditor
           onChange={(customLayout) => patchSettings({ layout: { customLayout } })}
+          onApply={(customLayout) => {
+            patchSettings({ layout: { customLayout: { ...customLayout, enabled: true } } });
+            setIsCustomLayoutEditorOpen(false);
+          }}
           onClose={() => setIsCustomLayoutEditorOpen(false)}
           value={settings.layout.customLayout}
         />
@@ -410,4 +414,8 @@ function Toggle({ checked, label, onChange }: { checked: boolean; label: string;
       <span className="relative h-7 w-12 rounded-full bg-surface-hover transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
     </label>
   );
+}
+
+function ChevronRightIcon() {
+  return <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14"><path d="m9 5 7 7-7 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>;
 }
