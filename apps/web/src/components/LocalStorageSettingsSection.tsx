@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  cleanupLocalAudioCacheFiles,
+  clearLocalAudioCache,
   chooseLocalAudioDirectory,
+  getLocalAudioCacheStats,
   getLocalAudioStorageState,
   type LocalAudioStorageState
 } from "@/features/upload/local-audio-storage";
-import { cleanupOrphanedLocalAudioStorage, listCachedLibraryTrackSummaries } from "@/lib/indexeddb";
 import {
   getCachedLocalStorageData,
   setCachedLocalStorageData
@@ -17,27 +17,24 @@ import {
 export function LocalStorageManagementCard() {
   const cachedData = getCachedLocalStorageData();
   const [state, setState] = useState<LocalAudioStorageState | null>(() => cachedData?.state ?? null);
-  const [usageBytes, setUsageBytes] = useState<number | null>(() => cachedData?.usageBytes ?? null);
+  const [cacheBytes, setCacheBytes] = useState(() => cachedData?.cacheBytes ?? 0);
   const [cachedTrackCount, setCachedTrackCount] = useState(() => cachedData?.cachedTrackCount ?? 0);
   const [pendingAction, setPendingAction] = useState<"choose" | "clean" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const pending = pendingAction !== null;
 
   const refresh = async () => {
-    const [nextState, summaries, estimate] = await Promise.all([
+    const [nextState, stats] = await Promise.all([
       getLocalAudioStorageState(),
-      listCachedLibraryTrackSummaries(),
-      typeof navigator !== "undefined" && navigator.storage
-        ? navigator.storage.estimate()
-        : Promise.resolve(null)
+      getLocalAudioCacheStats()
     ]);
     setState(nextState);
-    setCachedTrackCount(summaries.length);
-    setUsageBytes(estimate?.usage ?? null);
+    setCachedTrackCount(stats.fileCount);
+    setCacheBytes(stats.bytes);
     setCachedLocalStorageData({
       state: nextState,
-      cachedTrackCount: summaries.length,
-      usageBytes: estimate?.usage ?? null
+      cachedTrackCount: stats.fileCount,
+      cacheBytes: stats.bytes
     });
   };
 
@@ -62,30 +59,27 @@ export function LocalStorageManagementCard() {
 
   const clean = async () => {
     if (pending) return;
+    if (!window.confirm("确定清理全部缓存音频吗？已保存歌曲和本地歌单不会被删除。")) return;
     setPendingAction("clean");
     setMessage(null);
     try {
-      const summaries = await listCachedLibraryTrackSummaries();
-      const result = await cleanupOrphanedLocalAudioStorage({
-        preserveTrackIds: summaries.flatMap((summary) => summary.sourceTrackIds)
-      });
-      const deletedCacheFiles = await cleanupLocalAudioCacheFiles();
+      const result = await clearLocalAudioCache();
       await refresh();
       setMessage(
-        result.deletedCacheCount > 0 || result.deletedAssetCount > 0 || deletedCacheFiles > 0
-          ? `已清理 ${result.deletedCacheCount + deletedCacheFiles} 个缓存文件和 ${result.deletedAssetCount} 个播放资产。`
-          : "没有发现可清理的无效存储。"
+        result.failedEntryCount > 0
+          ? `已清理 ${result.deletedEntryCount} 个缓存音频，${result.failedEntryCount} 个缓存因目录权限未能清理。`
+          : result.deletedEntryCount > 0
+            ? `已清理 ${result.deletedEntryCount} 个缓存音频。`
+          : "没有发现缓存音频。"
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "清理无效存储失败，请重试。");
+      setMessage(error instanceof Error ? error.message : "清理缓存失败，请重试。");
     } finally {
       setPendingAction(null);
     }
   };
 
-  const mergedCount = state
-    ? new Set([...state.cachedFileHashes, ...state.savedFileHashes]).size
-    : null;
+  const savedCount = state?.savedFileHashes.length ?? 0;
 
   return (
     <section className="mt-8 border-b border-surface-border pb-5" data-testid="local-storage-management">
@@ -99,7 +93,7 @@ export function LocalStorageManagementCard() {
             {state?.directoryName ? `当前目录：${state.directoryName}` : "尚未选择 Music Room 根文件夹"}
           </p>
           <p className="mt-1 text-xs text-foreground-muted/75">
-            {formatBytes(usageBytes)} · {cachedTrackCount} 首记录 · 已合并 {mergedCount ?? 0} 首
+            {formatBytes(cacheBytes)} · {cachedTrackCount} 首缓存音频 · 已保存歌曲 {savedCount} 首
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
@@ -120,11 +114,11 @@ export function LocalStorageManagementCard() {
             disabled={pending}
             onClick={() => void clean()}
             size="sm"
-            title="清理无效的本机音频数据"
+            title="清理全部缓存音频，不删除已保存歌曲"
             type="button"
             variant="outline"
           >
-            {pendingAction === "clean" ? "清理中…" : "清理无效存储"}
+            {pendingAction === "clean" ? "清理中…" : "清理缓存"}
           </Button>
         </div>
       </div>
@@ -134,8 +128,7 @@ export function LocalStorageManagementCard() {
   );
 }
 
-function formatBytes(value: number | null) {
-  if (value === null) return "存储占用不可用";
+function formatBytes(value: number) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
   if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;

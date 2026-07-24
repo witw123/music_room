@@ -143,6 +143,7 @@ export type LocalAudioCacheFileRecord = {
   fileHash: string;
   fileName: string;
   relativePath?: string;
+  sizeBytes?: number;
   cachedAt: string;
 };
 
@@ -1202,8 +1203,6 @@ export async function deleteLocalTrackDataForTracks(
           )
         )
       ];
-      const deletedCacheHashes = new Set<string>();
-
       for (const fileHash of fileHashes) {
         const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
         const summary = await musicRoomDatabase.cachedTrackLibraryMetadata.get(fileHash);
@@ -1217,13 +1216,6 @@ export async function deleteLocalTrackDataForTracks(
           uniqueTrackIds,
           options?.roomId
         );
-        if (nextReferences.isUnreferenced) {
-          await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
-          await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
-          deletedCacheHashes.add(fileHash);
-          deletedLocalFileHashes.add(fileHash);
-          continue;
-        }
 
         if (record) {
           await musicRoomDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
@@ -1268,7 +1260,7 @@ export async function deleteLocalTrackDataForTracks(
         await musicRoomDatabase.assetManifests.bulkDelete(removableAssetIds);
       }
 
-      if (deletedCacheHashes.size > 0 || removableSourceFileHashes.size > 0) {
+      if (removableSourceFileHashes.size > 0) {
         const remainingCachedHashes = new Set(
           (await musicRoomDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
             .filter((key): key is string => typeof key === "string")
@@ -1276,9 +1268,7 @@ export async function deleteLocalTrackDataForTracks(
         const remainingAssetSourceFileHashes = new Set(
           (await musicRoomDatabase.assetManifests.toArray()).map((manifest) => manifest.sourceFileHash)
         );
-        const sourceFileHashesToDelete = [
-          ...new Set([...deletedCacheHashes, ...removableSourceFileHashes])
-        ].filter(
+        const sourceFileHashesToDelete = [...removableSourceFileHashes].filter(
           (fileHash) =>
             !remainingCachedHashes.has(fileHash) && !remainingAssetSourceFileHashes.has(fileHash)
         );

@@ -18,13 +18,11 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import {
-  deleteCachedLibraryTrack,
   getCachedLibraryTrack,
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import {
-  deleteLocalAudioCacheFile,
   getLocalAudioCacheFile,
   getLocalAudioFile
 } from "@/features/upload/local-audio-storage";
@@ -58,7 +56,6 @@ type LocalPlayerContextValue = {
   canSeekPlayback: boolean;
   playbackMode: PlaybackMode;
   isTrackPlayable: (track: LocalPlaylistTrackRecord) => boolean;
-  registerTransientCache: (fileHash: string) => void;
   addToQueue: (track: LocalPlaylistTrackRecord) => void;
   playTrack: (track: LocalPlaylistTrackRecord) => Promise<void>;
   playTracks: (tracks: LocalPlaylistTrackRecord[], startIndex?: number) => Promise<void>;
@@ -85,7 +82,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const currentIndexRef = useRef(0);
   const playRequestRef = useRef(0);
   const metadataEnrichedHashesRef = useRef(new Set<string>());
-  const transientCacheHashesRef = useRef(new Set<string>());
   const progressRef = useRef(0);
   const revisionRef = useRef(0);
   const mediaEpochRef = useRef(0);
@@ -166,10 +162,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     (track: LocalPlaylistTrackRecord) => Boolean(track.fileHash && (track.availableOffline || track.fileName)),
     []
   );
-
-  const registerTransientCache = useCallback((fileHash: string) => {
-    if (fileHash) transientCacheHashesRef.current.add(fileHash);
-  }, []);
 
   const createPlaybackSnapshot = useCallback(
     (input: {
@@ -511,6 +503,30 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: nextPositionMs }));
   }, [createPlaybackSnapshot]);
 
+  const clearCurrentPlayback = useCallback(() => {
+    playRequestRef.current += 1;
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio) {
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    mediaEpochRef.current += 1;
+    playbackRecordsRef.current = [];
+    currentIndexRef.current = 0;
+    playbackSequenceKindRef.current = "direct";
+    currentRecordRef.current = null;
+    setCurrentRecord(null);
+    setPlayback(null);
+    setProgressMs(0);
+    setSeekDraft(null);
+    setAudioDurationMs(0);
+  }, []);
+
   const onSeek = useCallback(async (positionMs: number) => {
     const record = currentRecordRef.current;
     const audio = audioRef.current;
@@ -672,7 +688,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const onRemoveQueueItem = useCallback(async (queueItemId: string) => {
     const index = queueRef.current.findIndex((track) => buildLocalQueueItemId(track.id) === queueItemId);
     if (index < 0) return;
-    const removedRecord = queueRef.current[index];
     const nextRecords = queueRef.current.filter((_, itemIndex) => itemIndex !== index);
     queueRef.current = nextRecords;
     setQueueRecords(nextRecords);
@@ -689,28 +704,15 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     if (currentRecordRef.current?.id === queueItemId.replace("local-queue:", "")) {
       onPause();
     }
-    if (removedRecord.fileHash && transientCacheHashesRef.current.has(removedRecord.fileHash) && !nextRecords.some((track) => track.fileHash === removedRecord.fileHash)) {
-      transientCacheHashesRef.current.delete(removedRecord.fileHash);
-      await Promise.all([
-        deleteLocalAudioCacheFile(removedRecord.fileHash).catch(() => false),
-        deleteCachedLibraryTrack(removedRecord.fileHash).catch(() => null)
-      ]);
-    }
+    // Provider playback files are durable local cache entries. Removing a queue
+    // item must not delete them; cache cleanup is an explicit settings action.
   }, [onPause]);
 
   useEffect(() => {
-    const transientCacheHashes = transientCacheHashesRef.current;
-    return () => {
-      const hashes = [...transientCacheHashes];
-      transientCacheHashes.clear();
-      for (const fileHash of hashes) {
-        void Promise.all([
-          deleteLocalAudioCacheFile(fileHash).catch(() => false),
-          deleteCachedLibraryTrack(fileHash).catch(() => null)
-        ]);
-      }
-    };
-  }, []);
+    if (!currentRecord) return;
+    if (queueRecords.some((track) => track.id === currentRecord.id)) return;
+    clearCurrentPlayback();
+  }, [clearCurrentPlayback, currentRecord, queueRecords]);
 
   const onReorderQueue = useCallback(async (queueItemIds: string[]) => {
     const recordsByQueueId = new Map(
@@ -778,7 +780,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     canSeekPlayback: Boolean(currentRecord),
     playbackMode,
     isTrackPlayable,
-    registerTransientCache,
     addToQueue,
     playTrack,
     playTracks,
@@ -812,7 +813,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     playbackMode,
     progressMs,
     queue,
-    registerTransientCache,
     seekDraft,
     syncDurationFromAudio,
     syncProgressFromAudio,

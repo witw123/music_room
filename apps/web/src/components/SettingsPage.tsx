@@ -212,6 +212,13 @@ export function SettingsPage() {
                 ))}
               </select>
             </SettingRow>
+            <SettingRow label="播放器自动取色" description="根据专辑封面提取播放器颜色；关闭后统一使用项目蓝色主题。">
+              <Toggle
+                checked={!settings.playback.disableArtworkColor}
+                label="播放器自动取色"
+                onChange={(checked) => patchSettings({ playback: { disableArtworkColor: !checked } })}
+              />
+            </SettingRow>
             <SettingRow label="本地歌单播放方式" description="仅影响主页和本地歌单播放器。">
               <select
                 aria-label="本地歌单播放方式"
@@ -229,20 +236,6 @@ export function SettingsPage() {
                 checked={settings.playback.showLyricsByDefault}
                 label="进入播放器时显示歌词"
                 onChange={(checked) => patchSettings({ playback: { showLyricsByDefault: checked } })}
-              />
-            </SettingRow>
-            <SettingRow label="禁止自动加载歌曲" description="房间成员离线时，不自动下载歌曲到本地。">
-              <Toggle
-                checked={settings.playback.preventOfflineAutoLoad}
-                label="禁止自动加载歌曲"
-                onChange={(checked) => patchSettings({ playback: { preventOfflineAutoLoad: checked } })}
-              />
-            </SettingRow>
-            <SettingRow label="完全流式播放" description="跳过本机保存的歌曲，优先使用曲库资产流式播放。">
-              <Toggle
-                checked={settings.playback.streamingOnlyPlayback}
-                label="完全流式播放"
-                onChange={(checked) => patchSettings({ playback: { streamingOnlyPlayback: checked } })}
               />
             </SettingRow>
             <SettingRow label="歌词大小" description="应用于沉浸式播放器歌词。">
@@ -266,6 +259,30 @@ export function SettingsPage() {
               >
                 {[3, 5, 7].map((lineCount) => <option key={lineCount} value={lineCount}>{lineCount} 行</option>)}
               </select>
+            </SettingRow>
+          </SettingsSection>
+
+          <SettingsSection title="播放策略">
+            <SettingRow label="禁止自动加载歌曲" description="房间成员离线时，不自动下载歌曲到本地。">
+              <Toggle
+                checked={settings.playback.preventOfflineAutoLoad}
+                label="禁止自动加载歌曲"
+                onChange={(checked) => patchSettings({ playback: { preventOfflineAutoLoad: checked } })}
+              />
+            </SettingRow>
+            <SettingRow label="完全流式播放" description="跳过本机保存的歌曲，优先使用曲库资产流式播放。">
+              <Toggle
+                checked={settings.playback.streamingOnlyPlayback}
+                label="完全流式播放"
+                onChange={(checked) => patchSettings({ playback: { streamingOnlyPlayback: checked } })}
+              />
+            </SettingRow>
+            <SettingRow label="完全缓存播放" description="房间中的网易云和 QQ 音乐曲目优先下载为本地缓存播放，不加载曲库播放资产。">
+              <Toggle
+                checked={settings.playback.fullyCachedPlayback}
+                label="完全缓存播放"
+                onChange={(checked) => patchSettings({ playback: { fullyCachedPlayback: checked } })}
+              />
             </SettingRow>
           </SettingsSection>
 

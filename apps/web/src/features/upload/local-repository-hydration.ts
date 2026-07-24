@@ -44,7 +44,8 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
         await saveLocalAudioCacheFileRecord({
           fileHash: record.fileHash,
           fileName,
-          relativePath: record.source.relativePath
+          relativePath: record.source.relativePath,
+          sizeBytes: record.sizeBytes
         });
       }
     }

@@ -21,10 +21,12 @@ export type AppSettings = {
   playback: {
     defaultVolume: number;
     playerStyle: PlayerStyle;
+    disableArtworkColor: boolean;
     localPlaybackMode: PlaybackMode;
     showLyricsByDefault: boolean;
     preventOfflineAutoLoad: boolean;
     streamingOnlyPlayback: boolean;
+    fullyCachedPlayback: boolean;
     lyricFontScale: "small" | "medium" | "large";
     lyricLines: number;
   };
@@ -43,10 +45,12 @@ const defaultSettings: AppSettings = {
   playback: {
     defaultVolume: 0.8,
     playerStyle: "vinyl",
+    disableArtworkColor: false,
     localPlaybackMode: "sequence",
     showLyricsByDefault: false,
     preventOfflineAutoLoad: false,
     streamingOnlyPlayback: false,
+    fullyCachedPlayback: false,
     lyricFontScale: "medium",
     lyricLines: 5
   }
@@ -131,10 +135,12 @@ export function normalizeSettings(value: unknown): AppSettings {
     playback: {
       defaultVolume: volume,
       playerStyle,
+      disableArtworkColor: playback.disableArtworkColor === true,
       localPlaybackMode: playbackMode,
       showLyricsByDefault: playback.showLyricsByDefault === true,
       preventOfflineAutoLoad: playback.preventOfflineAutoLoad === true,
       streamingOnlyPlayback: playback.streamingOnlyPlayback === true,
+      fullyCachedPlayback: playback.fullyCachedPlayback === true,
       lyricFontScale,
       lyricLines
     }

@@ -293,49 +293,50 @@ function MobileImmersivePlayer({
   const controlsDisabled = !canControlPlayback || !playbackTrackId;
 
   return (
-    <section className="relative z-10 flex h-full min-h-0 flex-col px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(2.25rem+env(safe-area-inset-top))] md:hidden">
-      <header className="flex h-12 shrink-0 items-center justify-between">
-        <button aria-label="退出沉浸式播放" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/85 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={onClose} title="退出沉浸式播放" type="button">
-          <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9"><path d="m6 9 6 6 6-6" /></svg>
+    <section className="relative z-10 flex h-full min-h-0 flex-col px-8 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] md:hidden">
+      <header className="flex h-14 shrink-0 items-center justify-center">
+        <button aria-label="退出沉浸式播放" className="inline-flex h-10 w-28 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={onClose} title="退出沉浸式播放" type="button">
+          <span className="h-1.5 w-10 rounded-full bg-white/45" aria-hidden="true" />
         </button>
-        <span className="h-1.5 w-10 rounded-full bg-white/35" aria-hidden="true" />
-        <span className="h-11 w-11" aria-hidden="true" />
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden py-3">
-        {mobileView === "artwork" ? (
-          <div className="mobile-player-panel flex min-h-0 flex-col items-center justify-center" key="artwork">
-            <button aria-label="显示歌词" className="rounded-[1.35rem] outline-none transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button">
-              <ImmersiveVinyl artworkUrl={artworkUrl} isPlaying={isPlaying} mobile palette={artworkPalette} playerStyle={playerStyle} />
-            </button>
-            <div className="mt-7 flex w-full items-start gap-3">
-              <div className="min-w-0 flex-1"><TrackDetails currentTrack={currentTrack} mobile /></div>
-              <FavoriteTrackButton
-                isFavorite={favoriteTrackIsFavorite}
-                onToggle={onToggleFavoriteTrack}
-                pending={favoriteTrackIsPending}
-                size="large"
-                track={favoriteTrack}
-                className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
-              />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-none overflow-visible">
+          {mobileView === "artwork" ? (
+            <div className="mobile-player-panel flex flex-col items-center justify-start" key="artwork">
+              <button aria-label="显示歌词" className="mt-[clamp(1.25rem,6vh,4rem)] rounded-[1.35rem] outline-none transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button">
+                <ImmersiveVinyl artworkUrl={artworkUrl} isPlaying={isPlaying} mobile palette={artworkPalette} playerStyle={playerStyle} />
+              </button>
+              <div className="mt-[clamp(1.5rem,4vh,3rem)] flex w-full items-start gap-3">
+                <div className="min-w-0 flex-1"><TrackDetails currentTrack={currentTrack} mobile /></div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <FavoriteTrackButton
+                    accentColor={artworkPalette.accent}
+                    isFavorite={favoriteTrackIsFavorite}
+                    onToggle={onToggleFavoriteTrack}
+                    pending={favoriteTrackIsPending}
+                    size="large"
+                    track={favoriteTrack}
+                    className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
+                  />
+                  <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/70 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="切换播放模式" type="button"><MoreGlyph /></button>
+                </div>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="mobile-player-panel flex min-h-0 flex-1 flex-col" key="lyrics">
-            <button aria-label="显示专辑封面" className="mb-3 flex min-w-0 items-center gap-3 rounded-lg py-2 text-left outline-none transition-[background-color,transform] duration-200 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("artwork")} title="显示专辑封面" type="button">
-              <SquareAlbumCover artworkUrl={artworkUrl} className="h-11 w-11 shrink-0 rounded-md" />
-              <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{currentTrack?.title ?? "等待选择歌曲"}</span><span className="mt-0.5 block truncate text-xs text-white/55">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span></span>
-            </button>
-            <div className="flex min-h-0 flex-1 items-center">
-              <ImmersiveLyrics isOpen={isOpen} isPlaying={isPlaying} mobile positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+          ) : (
+            <div className="mobile-player-panel flex min-h-0 flex-1 flex-col" key="lyrics">
+              <button aria-label="显示专辑封面" className="mb-3 flex min-w-0 items-center gap-3 rounded-lg py-2 text-left outline-none transition-[background-color,transform] duration-200 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("artwork")} title="显示专辑封面" type="button">
+                <SquareAlbumCover artworkUrl={artworkUrl} className="h-11 w-11 shrink-0 rounded-md" />
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{currentTrack?.title ?? "等待选择歌曲"}</span><span className="mt-0.5 block truncate text-xs text-white/55">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span></span>
+              </button>
+              <div className="flex min-h-0 flex-1 items-center">
+                <ImmersiveLyrics isOpen={isOpen} isPlaying={isPlaying} mobile positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      <div className="shrink-0 pt-2">
-        <div className="flex items-center gap-3">
-          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-white/58">{formatDuration(positionMs)}</span>
+        <div className="shrink-0 pt-[clamp(1.25rem,3vh,2rem)]">
           <Slider
             accentColor={artworkPalette.accent}
             className="[&>div]:h-1.5"
@@ -346,20 +347,31 @@ function MobileImmersivePlayer({
             onPointerUp={commitSeek}
             value={positionMs}
           />
-          <span className="w-10 shrink-0 text-xs tabular-nums text-white/58">{formatDuration(durationMs)}</span>
+          <div className="mt-2 grid grid-cols-3 items-center text-xs tabular-nums text-white/58">
+            <span>{formatDuration(positionMs)}</span>
+            <span className="justify-self-center rounded-lg bg-white/[0.12] px-3 py-1 text-white/65">无损</span>
+            <span className="justify-self-end">-{formatDuration(Math.max(0, durationMs - positionMs))}</span>
+          </div>
+        </div>
+      </div>
+
+      <footer className="shrink-0 pt-[clamp(1.25rem,3vh,2rem)]">
+        <div className="flex items-center justify-center gap-4">
+          <TransportButton ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
+          <button aria-label={isPlaying ? "暂停" : "播放"} className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-transform duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:bg-white/35" disabled={controlsDisabled} onClick={onTogglePlay} title={isPlaying ? "暂停" : "播放"} type="button">
+            {isPlaying ? <svg aria-hidden="true" fill="currentColor" height="25" viewBox="0 0 24 24" width="25"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="25" viewBox="0 0 24 24" width="25"><path d="M8 5v14l11-7z" /></svg>}
+          </button>
+          <TransportButton ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
         </div>
 
-        <div className="mt-5 grid grid-cols-[2.75rem_1fr_2.75rem] items-center">
-          <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/70 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="切换播放模式" type="button">
-            <PlaybackModeGlyph mode={playbackMode} />
-          </button>
-          <div className="flex items-center justify-center gap-3">
-            <TransportButton ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
-            <button aria-label={isPlaying ? "暂停" : "播放"} className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-transform duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:bg-white/35" disabled={controlsDisabled} onClick={onTogglePlay} title={isPlaying ? "暂停" : "播放"} type="button">
-              {isPlaying ? <svg aria-hidden="true" fill="currentColor" height="25" viewBox="0 0 24 24" width="25"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="25" viewBox="0 0 24 24" width="25"><path d="M8 5v14l11-7z" /></svg>}
-            </button>
-            <TransportButton ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
-          </div>
+        <div className="mt-5 flex items-center gap-3 px-2 text-white/62">
+          <SpeakerGlyph volume={volume} />
+          <Slider accentColor={artworkPalette.accent} className="[&>div]:h-1" max={1} onChange={(event) => applyVolume(Number(event.target.value))} onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))} step={0.01} value={volume} />
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 items-center justify-items-center text-white/65">
+          <button aria-label="显示歌词" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button"><LyricsGlyph /></button>
+          <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="切换播放模式" type="button"><PlaybackModeGlyph mode={playbackMode} /></button>
           <PlayerQueueDrawer
             accentColor={artworkPalette.accent}
             accentSoft={artworkPalette.accentSoft}
@@ -376,12 +388,7 @@ function MobileImmersivePlayer({
             testId="immersive-player-queue-button"
           />
         </div>
-
-        <div className="mt-5 flex items-center gap-3 px-2 text-white/62">
-          <SpeakerGlyph volume={volume} />
-          <Slider accentColor={artworkPalette.accent} className="[&>div]:h-1" max={1} onChange={(event) => applyVolume(Number(event.target.value))} onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))} step={0.01} value={volume} />
-        </div>
-      </div>
+      </footer>
     </section>
   );
 }
@@ -468,6 +475,7 @@ function DesktopImmersivePlayer({
           <p className="mt-1 truncate text-xs text-white/40">{currentTrack?.album ?? "未知专辑"}</p>
         </div>
         <FavoriteTrackButton
+          accentColor={artworkPalette.accent}
           isFavorite={favoriteTrackIsFavorite}
           onToggle={onToggleFavoriteTrack}
           pending={favoriteTrackIsPending}
@@ -550,11 +558,11 @@ function DesktopImmersivePlayer({
 
 function TrackDetails({ currentTrack, mobile = false }: { currentTrack: TrackMeta | null; mobile?: boolean }) {
   return (
-    <div className="min-w-0 text-center md:text-left">
-      <h1 className={`${mobile ? "text-[1.35rem] leading-7" : "text-3xl leading-[1.08] lg:text-4xl"} mx-auto max-w-[24ch] break-words font-semibold text-foreground md:mx-0`}>
+    <div className={`min-w-0 ${mobile ? "text-left" : "text-center md:text-left"}`}>
+      <h1 className={`${mobile ? "text-[1.8rem] leading-[1.08]" : "text-3xl leading-[1.08] lg:text-4xl"} ${mobile ? "mx-0" : "mx-auto md:mx-0"} max-w-[24ch] break-words font-semibold text-foreground`}>
         {currentTrack?.title ?? "等待选择歌曲"}
       </h1>
-      <p className={`${mobile ? "mt-1 text-sm" : "mt-3 text-lg"} truncate text-foreground-muted`}>{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</p>
+      <p className={`${mobile ? "mt-1 text-lg leading-6" : "mt-3 text-lg"} truncate text-foreground-muted`}>{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</p>
       {!mobile ? <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm text-foreground-muted/70"><span>专辑：{currentTrack?.album ?? "未知专辑"}</span>{currentTrack?.sourceType ? <span>来源：{getSourceLabel(currentTrack.sourceType)}</span> : null}</div> : null}
     </div>
   );
@@ -570,13 +578,21 @@ function PlaybackModeGlyph({ mode }: { mode: PlaybackMode }) {
   return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 7h12" /><path d="m13 4 3 3-3 3" /><path d="M20 17H8" /><path d="m11 14-3 3 3 3" /></svg>;
 }
 
+function MoreGlyph() {
+  return <svg aria-hidden="true" fill="currentColor" height="20" viewBox="0 0 24 24" width="20"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>;
+}
+
+function LyricsGlyph() {
+  return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M5 6h14" /><path d="M5 10h10" /><path d="M5 14h14" /><path d="M5 18h8" /></svg>;
+}
+
 function SpeakerGlyph({ volume }: { volume: number }) {
   return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M11 5 6 9H3v6h3l5 4V5Z" />{volume <= 0.01 ? <path d="m19 9-5 6m0-6 5 6" /> : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}</svg>;
 }
 
 function ImmersiveVinyl({ artworkUrl, desktop = false, isPlaying, mobile = false, palette, playerStyle }: { artworkUrl: string | null; desktop?: boolean; isPlaying: boolean; mobile?: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
   return (
-    <div className={`relative flex aspect-square w-auto max-w-full items-center justify-center ${mobile ? "h-[min(42dvh,22rem)]" : desktop ? "h-[min(58vh,34rem)]" : "h-[min(68dvh,34rem)]"}`}>
+    <div className={`relative flex aspect-square max-w-full items-center justify-center ${mobile ? "w-[min(68vw,31dvh,34rem)]" : desktop ? "h-[min(58vh,34rem)] w-auto" : "h-[min(68dvh,34rem)] w-auto"}`}>
       <div className={`relative flex aspect-square items-center justify-center overflow-visible ${desktop || playerStyle === "square-cover" ? "w-full" : "w-[86%]"}`}>
         {playerStyle === "square-cover" ? <SquareAlbumCover artworkUrl={artworkUrl} className={`${desktop ? "rounded-[0.75rem]" : "rounded-[1.25rem]"} h-full w-full shadow-[0_26px_90px_rgba(0,0,0,0.35)]`} /> : (
           <>

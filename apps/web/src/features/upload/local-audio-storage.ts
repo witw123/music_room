@@ -6,6 +6,7 @@ import type {
 } from "@music-room/shared";
 import {
   deleteAudioAsset,
+  deleteCachedLibraryTrack,
   deleteCachedLibraryTrackFile,
   deleteOriginalAssetForTrack,
   deleteLocalAudioCacheFileRecord,
@@ -18,6 +19,7 @@ import {
   getAssetUnits,
   getTrackAssetLink,
   getCachedLibraryTrackSummary,
+  listCachedLibraryTrackHashes,
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
@@ -50,6 +52,11 @@ export type LocalAudioStorageState = {
   savedFileHashes: string[];
   cachedFileHashes: string[];
   permission: PermissionState | null;
+};
+
+export type LocalAudioCacheStats = {
+  fileCount: number;
+  bytes: number;
 };
 
 export type SelectedLocalAudioFile = {
@@ -288,6 +295,7 @@ export async function getRoomLocalAudioFile(input: {
   title: string;
   mimeType: string;
   originalAssetId?: string | null;
+  allowOriginalAsset?: boolean;
 }) {
   const [savedFile, cachedFile] = await Promise.all([
     getLocalAudioFile(input.fileHash).catch(() => null),
@@ -298,6 +306,8 @@ export async function getRoomLocalAudioFile(input: {
 
   const browserCache = await getCachedLibraryTrack(input.fileHash).catch(() => null);
   if (browserCache?.file) return browserCache.file;
+
+  if (input.allowOriginalAsset === false) return null;
 
   const linkedAssets = await getTrackAssetLink(input.trackId).catch(() => null);
   const originalAssetId = input.originalAssetId ?? linkedAssets?.originalAssetId ?? null;
@@ -489,7 +499,8 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   await saveLocalAudioCacheFileRecord({
     fileHash: input.fileHash,
     fileName,
-    relativePath
+    relativePath,
+    sizeBytes: input.file.size
   });
   await persistCachedTrackRecord(input.fileHash, relativePath, "cache", {
     provider: input.provider,
@@ -665,25 +676,57 @@ async function getTrackOriginalAssetManifest(trackId: string) {
     : null;
 }
 
-export async function cleanupLocalAudioCacheFiles() {
-  const [directory, cachedFiles, cachedSummaries] = await Promise.all([
-    getLocalAudioDirectory(),
-    listLocalAudioCacheFiles(),
-    listCachedLibraryTrackSummaries()
+export async function getLocalAudioCacheStats(): Promise<LocalAudioCacheStats> {
+  const [summaries, browserHashes, localCacheFiles] = await Promise.all([
+    listCachedLibraryTrackSummaries(),
+    listCachedLibraryTrackHashes(),
+    listLocalAudioCacheFiles()
   ]);
-  if (!directory || cachedFiles.length === 0) {
-    return 0;
-  }
+  const summariesByHash = new Map(summaries.map((summary) => [summary.fileHash, summary] as const));
+  const localFilesByHash = new Map(localCacheFiles.map((file) => [file.fileHash, file] as const));
+  const hashes = new Set([
+    ...browserHashes,
+    ...localCacheFiles.map((file) => file.fileHash)
+  ]);
+  const sizes = await Promise.all([...hashes].map(async (fileHash) => {
+    const localFile = localFilesByHash.get(fileHash);
+    if (localFile?.sizeBytes !== undefined) return localFile.sizeBytes;
+    const browserRecord = await getCachedLibraryTrack(fileHash).catch(() => null);
+    if (browserRecord?.file) return browserRecord.file.size;
+    const summary = summariesByHash.get(fileHash);
+    return summary?.sizeBytes ?? 0;
+  }));
 
-  const activeHashes = new Set(cachedSummaries.map((summary) => summary.fileHash));
-  const orphaned = cachedFiles.filter((file) => !activeHashes.has(file.fileHash));
-  let deleted = 0;
-  for (const file of orphaned) {
-    if (await deleteLocalAudioCacheFile(file.fileHash)) {
-      deleted += 1;
+  return {
+    fileCount: hashes.size,
+    bytes: sizes.reduce((total, size) => total + size, 0)
+  };
+}
+
+export async function clearLocalAudioCache() {
+  const [browserHashes, localCacheFiles] = await Promise.all([
+    listCachedLibraryTrackHashes(),
+    listLocalAudioCacheFiles()
+  ]);
+  const hashes = new Set([
+    ...browserHashes,
+    ...localCacheFiles.map((file) => file.fileHash)
+  ]);
+
+  const failedLocalFiles = new Set<string>();
+  for (const file of localCacheFiles) {
+    if (!(await deleteLocalAudioCacheFile(file.fileHash))) {
+      failedLocalFiles.add(file.fileHash);
     }
   }
-  return deleted;
+  for (const fileHash of hashes) {
+    await deleteCachedLibraryTrack(fileHash);
+  }
+
+  return {
+    deletedEntryCount: hashes.size - failedLocalFiles.size,
+    failedEntryCount: failedLocalFiles.size
+  };
 }
 
 export function downloadAudioFile(file: Blob, fileName: string) {

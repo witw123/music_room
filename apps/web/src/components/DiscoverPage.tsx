@@ -19,10 +19,11 @@ import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { ProviderSearchPage } from "@/components/ProviderSearchPage";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
-import type { ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
+import { ProviderAlbumTrackTable, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
-import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
+import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   hashAudioBlob,
@@ -48,6 +49,7 @@ import {
   type DiscoverProvider
 } from "@/features/settings/settings-store";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
+import { Button } from "@/components/ui/button";
 
 type Provider = DiscoverProvider;
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -405,7 +407,6 @@ export function DiscoverPage() {
       availableOffline: false,
       updatedAt: new Date().toISOString()
     };
-    player.registerTransientCache(fileHash);
     setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
     return record;
   }
@@ -418,7 +419,7 @@ export function DiscoverPage() {
     try {
       const record = await cacheTrackForPlayback(track);
       await player.playTrack(record);
-      setStatusMessage(`正在播放《${track.title}》，歌曲仅保留在当前队列缓存中。`);
+      setStatusMessage(`正在播放《${track.title}》，已保留在本机缓存中。`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "歌曲播放失败，请稍后重试。");
     } finally {
@@ -624,10 +625,8 @@ export function DiscoverPage() {
         ) : (
           <DetailView
             detail={detail}
-            isFavorite={isFavoriteTrack}
-            isTogglingFavorite={(track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`}
             onBack={() => setDetail(null)}
-            onToggleFavorite={toggleDiscoverTrackFavorite}
+            trackActions={playlistTrackActions()}
           />
         )}
         {(playlistPickerTrack && playlistPickerAnchor) ? (
@@ -758,12 +757,10 @@ export function DiscoverPage() {
             {albums.length > 0 ? <DiscoverySection eyebrow="新专辑" title="刚刚发行" actionLabel="浏览专辑" onAction={refreshAll}><AlbumRail items={albums} onOpen={openAlbum} loadingKey={detailLoading} /></DiscoverySection> : null}
             {dailyPlaylists.length > 0 || dailyTracks.length > 0 ? (
               <DailySection
-                isFavorite={isFavoriteTrack}
-                isTogglingFavorite={(track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`}
                 onOpenPlaylist={openPlaylist}
-                onToggleFavorite={toggleDiscoverTrackFavorite}
                 playlists={dailyPlaylists}
                 tracks={dailyTracks}
+                trackActions={playlistTrackActions()}
                 loadingKey={detailLoading}
               />
             ) : null}
@@ -1068,17 +1065,13 @@ function DailySection({
   tracks,
   onOpenPlaylist,
   loadingKey,
-  isFavorite,
-  isTogglingFavorite,
-  onToggleFavorite
+  trackActions
 }: {
   playlists: ProviderPlaylistSummary[];
   tracks: Track[];
   onOpenPlaylist: (item: ProviderPlaylistSummary) => Promise<void>;
   loadingKey: string | null;
-  isFavorite: (track: Track) => boolean;
-  isTogglingFavorite: (track: Track) => boolean;
-  onToggleFavorite: (track: Track) => void;
+  trackActions: ProviderAlbumTrackActions;
 }) {
   return (
     <section className="mt-11">
@@ -1086,12 +1079,55 @@ function DailySection({
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(240px,0.72fr)_minmax(0,1.28fr)]">
         {playlists[0] ? <PlaylistCard item={playlists[0]} loading={loadingKey === `playlist:${playlists[0].provider}:${playlists[0].providerPlaylistId}`} onOpen={onOpenPlaylist} /> : <div className="flex min-h-40 items-center rounded-xl border border-dashed border-surface-border px-5 text-sm text-foreground-muted">绑定网易云音乐账号后查看每日歌单。</div>}
         <div className="divide-y divide-surface-border overflow-hidden rounded-xl border border-surface-border bg-surface">
-          {tracks.slice(0, 6).map((track, index) => <div className="flex min-w-0 items-center gap-3 px-4 py-3" key={`${track.provider}:${track.providerTrackId}`}><span className="w-5 shrink-0 text-center text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span><Artwork alt={track.album ?? track.title} className="h-11 w-11 shrink-0 rounded-lg" src={track.artworkUrl} /><div className="min-w-0 flex-1"><strong className="block truncate text-sm font-medium text-foreground">{track.title}</strong><span className="mt-1 block truncate text-xs text-foreground-muted">{track.artist} · {track.album ?? "未知专辑"}</span></div><FavoriteTrackButton isFavorite={isFavorite(track)} onToggle={() => onToggleFavorite(track)} pending={isTogglingFavorite(track)} track={track} /></div>)}
+          {tracks.slice(0, 6).map((track, index) => (
+            <div
+              className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 ${trackActions.isPlayable?.(track) ? "cursor-pointer md:cursor-default" : ""}`}
+              key={`${track.provider}:${track.providerTrackId}`}
+              onClick={() => {
+                if (!trackActions.onPlay || !trackActions.isPlayable?.(track) || trackActions.isDownloading?.(track)) return;
+                if (window.matchMedia("(min-width: 768px)").matches) return;
+                trackActions.onPlay(track);
+              }}
+            >
+              <span className="w-5 shrink-0 text-center text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
+              <div className="flex min-w-0 items-center gap-3"><Artwork alt={track.album ?? track.title} className="h-11 w-11 shrink-0 rounded-lg" src={track.artworkUrl} /><div className="min-w-0"><strong className="block truncate text-sm font-medium text-foreground">{track.title}</strong><span className="mt-1 block truncate text-xs text-foreground-muted">{track.artist} · {track.album ?? "未知专辑"}</span></div></div>
+              <DiscoverTrackControls actions={trackActions} track={track} />
+            </div>
+          ))}
           {!tracks.length ? <div className="px-5 py-10 text-center text-sm text-foreground-muted">今日歌曲暂不可用。</div> : null}
         </div>
       </div>
     </section>
   );
+}
+
+function DiscoverTrackControls({ actions, track }: { actions: ProviderAlbumTrackActions; track: Track }) {
+  const [menuAnchor, setMenuAnchor] = useState<AnchoredDialogAnchor | null>(null);
+  const downloaded = actions.isDownloaded?.(track) ?? false;
+  const playable = actions.isPlayable?.(track) ?? false;
+  const queued = actions.isQueued?.(track) ?? false;
+  const downloading = actions.isDownloading?.(track) ?? false;
+  const menuItems: MobileTrackAction[] = [
+    ...(actions.onPlay ? [{ id: "play", label: playable ? "播放" : "需要下载后播放", icon: "play" as const, disabled: downloading || !playable, onSelect: () => actions.onPlay?.(track) }] : []),
+    ...(actions.onDownload ? [{ id: "download", label: downloaded ? "已下载" : downloading ? "下载中" : "下载到本地", icon: "download" as const, disabled: downloading || downloaded, onSelect: () => actions.onDownload?.(track) }] : []),
+    ...(actions.onAddToQueue ? [{ id: "queue", label: queued ? "已在队列中" : playable ? "加入队列" : "需要下载后加入队列", icon: "queue" as const, disabled: downloading || queued || !playable, onSelect: () => actions.onAddToQueue?.(track) }] : []),
+    ...(actions.onAddToPlaylist ? [{ id: "playlist", label: "加入歌单", icon: "plus" as const, disabled: downloading, onSelect: () => { if (menuAnchor) actions.onAddToPlaylist?.(track, menuAnchor); } }] : []),
+    ...(actions.onToggleFavorite ? [{ id: "favorite", label: actions.isFavorite?.(track) ? "取消收藏" : "收藏歌曲", icon: "heart" as const, disabled: actions.isTogglingFavorite?.(track) ?? false, onSelect: () => void actions.onToggleFavorite?.(track) }] : [])
+  ];
+
+  return (
+    <div className="flex items-center justify-end" onClick={(event) => event.stopPropagation()}>
+      <div className="hidden md:block">
+        {actions.onToggleFavorite ? <FavoriteTrackButton isFavorite={actions.isFavorite?.(track) ?? false} onToggle={() => actions.onToggleFavorite?.(track)} pending={actions.isTogglingFavorite?.(track) ?? false} track={track} /> : null}
+      </div>
+      <Button aria-label={`打开《${track.title}》的操作菜单`} className="h-10 w-10 md:hidden" onClick={(event) => { event.stopPropagation(); setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget)); }} size="icon" title="更多操作" type="button" variant="ghost"><MoreIcon /></Button>
+      {menuAnchor ? <MobileTrackActionsMenu anchor={menuAnchor} items={menuItems} onClose={() => setMenuAnchor(null)} subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`} title={track.title} /> : null}
+    </div>
+  );
+}
+
+function MoreIcon() {
+  return <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>;
 }
 
 function CategoryButton({ active, label, loading = false, onClick }: { active: boolean; label: string; loading?: boolean; onClick: () => void }) {
@@ -1101,15 +1137,11 @@ function CategoryButton({ active, label, loading = false, onClick }: { active: b
 function DetailView({
   detail,
   onBack,
-  isFavorite,
-  isTogglingFavorite,
-  onToggleFavorite
+  trackActions
 }: {
   detail: Detail;
   onBack: () => void;
-  isFavorite: (track: Track) => boolean;
-  isTogglingFavorite: (track: Track) => boolean;
-  onToggleFavorite: (track: Track) => void;
+  trackActions: ProviderAlbumTrackActions;
 }) {
   const tracks = detail.value.tracks;
   return (
@@ -1119,25 +1151,7 @@ function DetailView({
         <Artwork alt={detail.value.title} className="aspect-square w-48 rounded-2xl" src={detail.value.artworkUrl} />
         <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">{detail.kind === "playlist" ? "Playlist" : "Album"}</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{detail.value.title}</h1><p className="mt-2 text-sm text-foreground-muted">{detail.kind === "playlist" ? `${detail.value.creatorName || "网络歌单"} · ` : `${detail.value.artist} · `}{tracks.length} 首歌曲</p><p className="mt-4 max-w-2xl text-sm leading-7 text-foreground-muted">{detail.value.description || "暂无简介"}</p></div>
       </section>
-      <section className="mt-7">
-        <div className="grid grid-cols-[32px_minmax(0,1fr)_auto] gap-3 border-b border-surface-border px-3 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground-muted sm:grid-cols-[32px_minmax(0,1fr)_minmax(120px,0.8fr)_64px_40px]">
-          <span>#</span><span>歌曲</span><span className="hidden sm:block">专辑</span><span className="text-right">时长</span><span aria-hidden="true" />
-        </div>
-        <div className="divide-y divide-surface-border">
-          {tracks.map((track, index) => (
-            <div className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 sm:grid-cols-[32px_minmax(0,1fr)_minmax(120px,0.8fr)_64px_40px]" key={`${track.provider}:${track.providerTrackId}`}>
-              <span className="text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
-              <div className="flex min-w-0 items-center gap-3">
-                <Artwork alt={track.album ?? track.title} className="h-10 w-10 shrink-0 rounded-lg" src={track.artworkUrl} />
-                <div className="min-w-0"><strong className="block truncate text-sm font-medium text-foreground">{track.title}</strong><span className="mt-1 block truncate text-xs text-foreground-muted">{track.artist}</span></div>
-              </div>
-              <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
-              <span className="text-xs tabular-nums text-foreground-muted sm:text-right">{formatDuration(track.durationMs)}</span>
-              <FavoriteTrackButton isFavorite={isFavorite(track)} onToggle={() => onToggleFavorite(track)} pending={isTogglingFavorite(track)} track={track} />
-            </div>
-          ))}
-        </div>
-      </section>
+      <ProviderAlbumTrackTable actions={trackActions} tracks={tracks} />
     </div>
   );
 }
@@ -1165,11 +1179,6 @@ function providerLabel(provider: Provider) {
 
 function providerPlaylistKey(provider: Provider, playlistId: string) {
   return `${provider}:${playlistId}`;
-}
-
-function formatDuration(durationMs: number) {
-  const seconds = Math.max(0, Math.floor(durationMs / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function toErrorMessage(error: unknown) {

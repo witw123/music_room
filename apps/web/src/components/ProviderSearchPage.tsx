@@ -435,7 +435,6 @@ export function ProviderSearchPage({
       availableOffline: false,
       updatedAt: new Date().toISOString()
     };
-    player.registerTransientCache(fileHash);
     setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
     return record;
   }
@@ -447,7 +446,7 @@ export function ProviderSearchPage({
     try {
       const record = await cacheTrackForPlayback(track);
       await player.playTrack(record);
-      setStatusMessage(`正在播放《${track.title}》，歌曲仅保留在当前队列缓存中。`);
+      setStatusMessage(`正在播放《${track.title}》，已保留在本机缓存中。`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "歌曲播放失败，请稍后重试。");
     } finally {

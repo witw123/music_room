@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  appSettingsChangeEvent,
+  getAppSettings,
+  getDefaultAppSettings
+} from "@/features/settings/settings-store";
 
 type Rgb = {
   r: number;
@@ -41,9 +46,25 @@ const fallbackPalette: ArtworkPalette = {
 
 export function useArtworkPalette(artworkUrl: string | null | undefined) {
   const [palette, setPalette] = useState<ArtworkPalette>(fallbackPalette);
+  const [artworkColorEnabled, setArtworkColorEnabled] = useState(
+    () => !getDefaultAppSettings().playback.disableArtworkColor
+  );
 
   useEffect(() => {
-    if (!artworkUrl || typeof window === "undefined") {
+    const syncArtworkColorPreference = () => {
+      setArtworkColorEnabled(!getAppSettings().playback.disableArtworkColor);
+    };
+    syncArtworkColorPreference();
+    window.addEventListener(appSettingsChangeEvent, syncArtworkColorPreference);
+    window.addEventListener("storage", syncArtworkColorPreference);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncArtworkColorPreference);
+      window.removeEventListener("storage", syncArtworkColorPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!artworkColorEnabled || !artworkUrl || typeof window === "undefined") {
       setPalette(fallbackPalette);
       return;
     }
@@ -65,7 +86,7 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
       image.onload = null;
       image.onerror = null;
     };
-  }, [artworkUrl]);
+  }, [artworkColorEnabled, artworkUrl]);
 
   return palette;
 }

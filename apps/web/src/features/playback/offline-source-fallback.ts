@@ -45,6 +45,7 @@ const inFlightFallbackImports = new Map<
 export function resolveOfflineProviderSource(input: {
   roomSnapshot: RoomSnapshot | null | undefined;
   track: TrackMeta | null | undefined;
+  forceProviderCache?: boolean;
 }) {
   const { roomSnapshot, track } = input;
   const playback = roomSnapshot?.room.playback;
@@ -57,12 +58,14 @@ export function resolveOfflineProviderSource(input: {
     return null;
   }
 
-  const sourceSessionId = playback.sourceSessionId ?? track.ownerSessionId;
-  const sourceMember = roomSnapshot.room.members.find(
-    (member) => member.id === sourceSessionId
-  );
-  if (sourceMember && sourceMember.presenceState !== "offline") {
-    return null;
+  if (!input.forceProviderCache) {
+    const sourceSessionId = playback.sourceSessionId ?? track.ownerSessionId;
+    const sourceMember = roomSnapshot.room.members.find(
+      (member) => member.id === sourceSessionId
+    );
+    if (sourceMember && sourceMember.presenceState !== "offline") {
+      return null;
+    }
   }
 
   if (
@@ -84,10 +87,13 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
   roomSnapshot: RoomSnapshot;
   track: TrackMeta;
   source: OfflineProviderSource;
+  forceDownload?: boolean;
   onStatus?: (message: string) => void;
   signal?: AbortSignal;
 }) {
-  const localPlaybackAsset = await findUsableLocalPlaybackAsset(input.track.id, input.track);
+  const localPlaybackAsset = input.forceDownload
+    ? null
+    : await findUsableLocalPlaybackAsset(input.track.id, input.track);
 
   const importKey = `${input.roomSnapshot.room.id}:${input.track.id}:${input.source.provider}:${input.source.trackId}`;
   const existing = inFlightFallbackImports.get(importKey);
@@ -114,6 +120,7 @@ async function importOfflineProviderTrack(input: {
   track: TrackMeta;
   source: OfflineProviderSource;
   fallbackPlaybackAsset: PlaybackAssetManifest | null;
+  forceDownload?: boolean;
   onStatus?: (message: string) => void;
   signal?: AbortSignal;
 }): Promise<OfflineFallbackResult> {
@@ -127,7 +134,9 @@ async function importOfflineProviderTrack(input: {
   } = input;
 
   try {
-    onStatus?.(`成员不在线，正在从${source.label}下载并保存《${track.title}》…`);
+    onStatus?.(input.forceDownload
+      ? `正在从${source.label}下载并缓存《${track.title}》…`
+      : `成员不在线，正在从${source.label}下载并保存《${track.title}》…`);
     const downloaded = source.provider === "netease"
       ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
       : await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal);
@@ -178,7 +187,9 @@ async function importOfflineProviderTrack(input: {
     }).catch(() => undefined);
     notifyCacheLibraryChanged();
 
-    onStatus?.(`成员不在线，已从${source.label}保存《${track.title}》，正在使用本地原音频播放。`);
+    onStatus?.(input.forceDownload
+      ? `已从${source.label}缓存《${track.title}》，正在使用本地原音频播放。`
+      : `成员不在线，已从${source.label}保存《${track.title}》，正在使用本地原音频播放。`);
     return {
       playbackAsset: fallbackPlaybackAsset,
       fileHash: track.fileHash,

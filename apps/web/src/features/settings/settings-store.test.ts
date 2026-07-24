@@ -21,10 +21,12 @@ describe("app settings store", () => {
       playback: {
         defaultVolume: 0.8,
         playerStyle: "vinyl",
+        disableArtworkColor: false,
         localPlaybackMode: "sequence",
         lyricLines: 5,
         preventOfflineAutoLoad: false,
-        streamingOnlyPlayback: false
+        streamingOnlyPlayback: false,
+        fullyCachedPlayback: false
       }
     });
   });
@@ -76,12 +78,17 @@ describe("app settings store", () => {
       discover: { provider: "qqmusic" },
       playback: {
         defaultVolume: 1,
+        disableArtworkColor: false,
         lyricLines: 7,
         preventOfflineAutoLoad: true,
-        streamingOnlyPlayback: true
+        streamingOnlyPlayback: true,
+        fullyCachedPlayback: false
       }
     });
     expect(values.has(appSettingsStorageKey)).toBe(true);
+
+    updateAppSettings({ playback: { disableArtworkColor: true } });
+    expect(getAppSettings().playback.disableArtworkColor).toBe(true);
 
     resetAppSettings();
     expect(getAppSettings().layout.sidebarCollapsed).toBe(true);

@@ -139,7 +139,7 @@ describe("LocalRepository", () => {
 
     await repository.writeRoomSnapshot(buildRoomSnapshot([secondTrack]));
 
-    expect(await repository.readTrack(firstTrack.fileHash)).toBeNull();
+    expect((await repository.readTrack(firstTrack.fileHash))?.roomRefs).toBeUndefined();
     expect((await repository.readTrack(secondTrack.fileHash))?.roomRefs).toHaveLength(1);
     expect((await repository.listRooms())).toHaveLength(1);
   });

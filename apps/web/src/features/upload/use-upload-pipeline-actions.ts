@@ -38,7 +38,6 @@ import {
   toCachedLibraryFile
 } from "./cache-library";
 import {
-  cleanupLocalAudioCacheFiles,
   getConfiguredLocalRepository,
   saveAudioFileToLocalDirectory
 } from "./local-audio-storage";
@@ -232,7 +231,6 @@ export function useUploadPipelineActions({
         deleteTrack: (registerRoomId, trackId) =>
           musicRoomApi.deleteTrack(registerRoomId, trackId),
         deleteLocalTrackData: deleteLocalTrackDataForTracks,
-        cleanupLocalTrackData: cleanupLocalAudioCacheFiles,
         persistTrackIntoLibrary,
         onTrackReady: (trackId, upload, registeredTrack) => {
           setUploadedTracks((current) => ({
@@ -495,7 +493,6 @@ async function importProviderTrack(input: {
         musicRoomApi.deleteTrack(roomSnapshot.room.id, registeredTrackId),
         deleteLocalTrackDataForTracks([registeredTrackId])
       ]);
-      await cleanupLocalAudioCacheFiles();
     }
     setStatusMessage(`导入失败：${toProviderImportErrorMessage(error)}`);
     throw error;

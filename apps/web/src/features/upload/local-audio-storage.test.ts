@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const indexedDbMocks = vi.hoisted(() => ({
+  deleteCachedLibraryTrack: vi.fn(),
   deleteCachedLibraryTrackFile: vi.fn(),
   deleteOriginalAssetForTrack: vi.fn(),
   deleteLocalAudioCacheFileRecord: vi.fn(),
@@ -12,6 +13,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   getLocalAudioFileRecord: vi.fn(),
   getLocalAudioCacheFileRecord: vi.fn(),
   getTrackAssetLink: vi.fn(),
+  listCachedLibraryTrackHashes: vi.fn(),
   listCachedLibraryTracks: vi.fn(),
   listCachedLibraryTrackSummaries: vi.fn(),
   listLocalAudioCacheFiles: vi.fn(),
@@ -69,6 +71,9 @@ describe("local audio cache persistence", () => {
     indexedDbMocks.getLocalAudioDirectory.mockResolvedValue(null);
     indexedDbMocks.getLocalAudioFileRecord.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrack.mockResolvedValue(null);
+    indexedDbMocks.listCachedLibraryTrackHashes.mockResolvedValue([]);
+    indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([]);
+    indexedDbMocks.listLocalAudioCacheFiles.mockResolvedValue([]);
     indexedDbMocks.getTrackAssetLink.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrackSummary.mockResolvedValue(null);
   });
@@ -83,6 +88,75 @@ describe("local audio cache persistence", () => {
       title: "Song",
       mimeType: "audio/mpeg"
     })).resolves.toBe(file);
+  });
+
+  it("does not fall back to a room original asset when requested", async () => {
+    indexedDbMocks.getTrackAssetLink.mockResolvedValue({
+      originalAssetId: "asset_1"
+    });
+
+    await expect(getRoomLocalAudioFile({
+      trackId: "track_1",
+      fileHash: "hash_1",
+      title: "Song",
+      mimeType: "audio/mpeg",
+      allowOriginalAsset: false
+    })).resolves.toBeNull();
+
+    expect(indexedDbMocks.getAssetManifest).not.toHaveBeenCalled();
+  });
+
+  it("reports the actual browser and folder cache sizes", async () => {
+    indexedDbMocks.listCachedLibraryTrackHashes.mockResolvedValue(["browser_hash"]);
+    indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([
+      { fileHash: "browser_hash", sizeBytes: 12 },
+      { fileHash: "folder_hash", sizeBytes: 34 }
+    ]);
+    indexedDbMocks.listLocalAudioCacheFiles.mockResolvedValue([
+      { fileHash: "folder_hash", sizeBytes: 34 }
+    ]);
+
+    const { getLocalAudioCacheStats } = await import("./local-audio-storage");
+
+    await expect(getLocalAudioCacheStats()).resolves.toEqual({
+      fileCount: 2,
+      bytes: 46
+    });
+  });
+
+  it("uses the browser blob size when legacy metadata has no size", async () => {
+    indexedDbMocks.listCachedLibraryTrackHashes.mockResolvedValue(["browser_hash"]);
+    indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([
+      { fileHash: "browser_hash" }
+    ]);
+    indexedDbMocks.getCachedLibraryTrack.mockResolvedValue({
+      file: new Blob(["audio"], { type: "audio/mpeg" })
+    });
+
+    const { getLocalAudioCacheStats } = await import("./local-audio-storage");
+
+    await expect(getLocalAudioCacheStats()).resolves.toEqual({
+      fileCount: 1,
+      bytes: 5
+    });
+  });
+
+  it("clears cached audio without touching saved audio records", async () => {
+    indexedDbMocks.listCachedLibraryTrackHashes.mockResolvedValue(["browser_hash"]);
+    indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([
+      { fileHash: "browser_hash", sizeBytes: 12 },
+      { fileHash: "saved_hash", sizeBytes: 34 }
+    ]);
+
+    const { clearLocalAudioCache } = await import("./local-audio-storage");
+
+    await expect(clearLocalAudioCache()).resolves.toEqual({
+      deletedEntryCount: 1,
+      failedEntryCount: 0
+    });
+    expect(indexedDbMocks.deleteCachedLibraryTrack).toHaveBeenCalledWith("browser_hash");
+    expect(indexedDbMocks.deleteCachedLibraryTrack).not.toHaveBeenCalledWith("saved_hash");
+    expect(indexedDbMocks.deleteLocalAudioCacheFileRecord).not.toHaveBeenCalled();
   });
 
   it("rebuilds an owner source file from a complete original asset", async () => {
@@ -151,7 +225,8 @@ describe("local audio cache persistence", () => {
     expect(indexedDbMocks.saveLocalAudioCacheFileRecord).toHaveBeenCalledWith({
       fileHash: "hash_1",
       fileName: "Song [hash_1].mp3",
-      relativePath: ".music-room/cache/provider/local_upload/ha/hash_1.mp3"
+      relativePath: ".music-room/cache/provider/local_upload/ha/hash_1.mp3",
+      sizeBytes: 5
     });
     expect(indexedDbMocks.deleteCachedLibraryTrackFile).toHaveBeenCalledWith("hash_1");
   });

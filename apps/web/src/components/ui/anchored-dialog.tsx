@@ -30,17 +30,19 @@ export function AnchoredDialog({
   ariaLabelledBy,
   children,
   className,
-  onClose
+  onClose,
+  compact = false
 }: {
   anchor: AnchoredDialogAnchor;
   ariaLabelledBy: string;
   children: ReactNode;
   className?: string;
   onClose: () => void;
+  compact?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
-  const [position, setPosition] = useState(() => getFallbackPosition(anchor));
+  const [position, setPosition] = useState(() => getFallbackPosition(anchor, compact));
 
   useEffect(() => {
     setPortalRoot(document.body);
@@ -104,7 +106,7 @@ export function AnchoredDialog({
     >
       <div
         aria-labelledby={ariaLabelledBy}
-        className={`light-dialog-surface fixed z-[81] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-[min(28rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6 ${className ?? ""}`}
+        className={`light-dialog-surface fixed z-[81] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] ${compact ? "w-[min(18rem,calc(100vw-1.5rem))] p-2" : "w-[min(28rem,calc(100vw-1.5rem))] p-5 sm:p-6"} ${className ?? ""}`}
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -118,9 +120,10 @@ export function AnchoredDialog({
   );
 }
 
-function getFallbackPosition(anchor: AnchoredDialogAnchor) {
+function getFallbackPosition(anchor: AnchoredDialogAnchor, compact = false) {
+  const estimatedWidth = compact ? 288 : 448;
   return {
     top: Math.max(12, anchor.bottom + 10),
-    left: Math.max(12, anchor.right - 448)
+    left: Math.max(12, anchor.right - estimatedWidth)
   };
 }

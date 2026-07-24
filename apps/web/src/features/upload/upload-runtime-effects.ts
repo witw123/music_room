@@ -24,7 +24,6 @@ type UploadRuntimeEffectsInput = {
   roomSnapshot: RoomSnapshot | null;
   roomCatalogKey: string;
   roomTrackIdsKey: string;
-  deleteLocalTrackData: (trackIds: readonly string[]) => Promise<void>;
   setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
   uploadedTrackUrlsRef: MutableRefObject<Map<string, string>>;
   uploadedTracks: Record<string, UploadedTrack>;
@@ -37,15 +36,10 @@ export function useUploadRuntimeEffects({
   roomSnapshot,
   roomCatalogKey,
   roomTrackIdsKey,
-  deleteLocalTrackData,
   setUploadedTracks,
   uploadedTrackUrlsRef,
   uploadedTracks
 }: UploadRuntimeEffectsInput) {
-  const previousRoomTracksRef = useRef<{ roomId: string | null; trackIds: Set<string> }>({
-    roomId: null,
-    trackIds: new Set()
-  });
   const latestRoomSnapshotRef = useRef(roomSnapshot);
   latestRoomSnapshotRef.current = roomSnapshot;
 
@@ -59,7 +53,6 @@ export function useUploadRuntimeEffects({
 
   useEffect(() => {
     if (!roomSnapshot?.room.id) {
-      previousRoomTracksRef.current = { roomId: null, trackIds: new Set() };
       return;
     }
     const activeTrackIds = new Set(roomTrackIdsKey ? roomTrackIdsKey.split("|") : []);
@@ -68,18 +61,7 @@ export function useUploadRuntimeEffects({
       setUploadedTracks
     });
 
-    const previous = previousRoomTracksRef.current;
-    if (previous.roomId === roomSnapshot.room.id) {
-      const removedTrackIds = [...previous.trackIds].filter((trackId) => !activeTrackIds.has(trackId));
-      if (removedTrackIds.length > 0) {
-        void deleteLocalTrackData(removedTrackIds);
-      }
-    }
-    previousRoomTracksRef.current = {
-      roomId: roomSnapshot.room.id,
-      trackIds: activeTrackIds
-    };
-  }, [deleteLocalTrackData, roomSnapshot?.room.id, roomTrackIdsKey, setUploadedTracks]);
+  }, [roomSnapshot?.room.id, roomTrackIdsKey, setUploadedTracks]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession) {

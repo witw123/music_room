@@ -397,22 +397,13 @@ export class LocalRepository {
     );
 
     const tracks = await this.listTracks();
-    const currentFileHashes = new Set(snapshot.tracks.map((track) => track.fileHash));
     for (const record of tracks) {
       const roomRefs = record.roomRefs?.filter((ref) => ref.roomId !== snapshot.room.id) ?? [];
       if (roomRefs.length !== (record.roomRefs?.length ?? 0)) {
         await this.writeTrack({ ...record, roomRefs }, { updateCatalog: false });
       }
-      if (roomRefs.length > 0 || currentFileHashes.has(record.fileHash)) continue;
-
-      // A cache-only external record was created by a previous room mirror.
-      // Remove it once its room reference disappears, but keep managed/local-library records.
-      if (record.source.kind === "external" && record.retention === "cache") {
-        if (record.lyricsPath) {
-          await this.removePath(record.lyricsPath);
-        }
-        await this.deleteTrack(record.fileHash, { updateCatalog: false });
-      }
+      // Room membership is metadata, not cache ownership. Cached audio stays
+      // available after a room snapshot no longer references the track.
     }
 
     for (const track of snapshot.tracks) {

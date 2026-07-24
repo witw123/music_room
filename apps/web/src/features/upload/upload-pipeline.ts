@@ -54,7 +54,6 @@ export async function processSelectedTrackFiles(input: {
   }) => Promise<void>;
   deleteTrack?: (roomId: string, trackId: string) => Promise<unknown>;
   deleteLocalTrackData?: (trackIds: readonly string[]) => Promise<void>;
-  cleanupLocalTrackData?: () => Promise<unknown>;
   onTrackReady?: (trackId: string, upload: UploadedTrack, track: TrackMeta) => void;
 }) {
   const uploads: Record<string, UploadedTrack> = {};
@@ -117,7 +116,6 @@ export async function processSelectedTrackFiles(input: {
           input.deleteTrack?.(input.roomId, registered.id),
           input.deleteLocalTrackData?.([registered.id])
         ]);
-        await input.cleanupLocalTrackData?.();
         throw error;
       }
       retainObjectUrl = true;

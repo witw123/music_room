@@ -632,6 +632,7 @@ export function DesktopBottomPlayerLayout({
         </div>
         {favoriteTrack && onToggleFavoriteTrack ? (
           <FavoriteTrackButton
+            accentColor={artworkAccent}
             isFavorite={favoriteTrackIsFavorite}
             onToggle={onToggleFavoriteTrack}
             pending={favoriteTrackIsPending}

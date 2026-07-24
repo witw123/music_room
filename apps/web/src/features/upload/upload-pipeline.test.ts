@@ -129,7 +129,6 @@ describe("processSelectedTrackFiles", () => {
       deleteLocalTrackData: async (trackIds) => {
         deletedLocalTrackIds.push([...trackIds]);
       },
-      cleanupLocalTrackData: async () => undefined,
       onTrackReady: (trackId) => {
         readyTracks.push(trackId);
       }
