@@ -166,6 +166,9 @@ export class PeerConnectionLifecycleManager {
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
   private localAudioMaxBitrateKbps: number | null = null;
+  // Data links remain room-wide, but a listener playing a local cache must
+  // not keep an RTP receiver for the source alive in the background.
+  private mediaPlaybackEnabled = true;
   private expectedRemotePeerIds = new Set<string>();
   // Before the first authoritative member snapshot arrives, an incoming offer
   // can legitimately beat topology reconciliation. Once initialized, only
@@ -303,6 +306,9 @@ export class PeerConnectionLifecycleManager {
   }
 
   private expectedMediaPeerIds() {
+    if (!this.mediaPlaybackEnabled) {
+      return new Set<string>();
+    }
     // Media peer connections follow room membership. Which peer currently
     // carries the broadcast must not decide whether a PC remains alive.
     return new Set(this.expectedRemotePeerIds);
@@ -331,6 +337,9 @@ export class PeerConnectionLifecycleManager {
     linkKind: PeerLinkKind,
     signalType?: SignalType
   ) {
+    if (linkKind === "media" && !this.mediaPlaybackEnabled) {
+      return false;
+    }
     if (!this.topologyInitialized) {
       return true;
     }
@@ -433,6 +442,9 @@ export class PeerConnectionLifecycleManager {
   }
 
   getPeerMediaState(peerId: string): PeerMediaState | null {
+    if (!this.mediaPlaybackEnabled) {
+      return null;
+    }
     const entry = this.peerConnections.get(peerId, "media");
     if (!entry) {
       return null;
@@ -482,6 +494,15 @@ export class PeerConnectionLifecycleManager {
     this.localAudioSourcePeerId = sourcePeerId;
     this.localAudioMaxBitrateKbps = normalizedBitrateKbps;
     void this.enqueueTopologyOperation(() => this.reconcileMediaTopology()).catch(() => undefined);
+  }
+
+  setMediaPlaybackEnabled(enabled: boolean) {
+    if (this.destroyed || this.mediaPlaybackEnabled === enabled) {
+      return Promise.resolve();
+    }
+
+    this.mediaPlaybackEnabled = enabled;
+    return this.enqueueTopologyOperation(() => this.reconcileMediaTopology()).catch(() => undefined);
   }
 
   async getOrCreatePeerEntry(peerId: string, linkKind: PeerLinkKind = "data") {
@@ -795,6 +816,7 @@ export class PeerConnectionLifecycleManager {
 
   destroy() {
     this.destroyed = true;
+    this.mediaPlaybackEnabled = false;
     this.peerConnections.clearExpected();
     this.expectedRemotePeerIds.clear();
     this.pendingIncomingMediaAdmissionPeerIds.clear();

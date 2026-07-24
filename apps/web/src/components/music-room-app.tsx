@@ -313,6 +313,7 @@ export function MusicRoomApp({
     volume: pageState.volume, audioUnlocked: pageState.audioUnlocked,
     setAudioUnlocked: pageState.setAudioUnlocked,
     setLocalAudioStream: roomRuntime.setLocalAudioStream,
+    setMediaPlaybackEnabled: roomRuntime.setMediaPlaybackEnabled,
     getPeerMediaState: roomRuntime.getPeerMediaState,
     restartMediaPeer: roomRuntime.restartMediaPeer,
     onPlaybackEnded: roomActions.nextTrack,

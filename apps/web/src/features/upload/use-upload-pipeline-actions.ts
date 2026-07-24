@@ -37,6 +37,7 @@ import {
   buildCachedLibraryTrackUpsertRecord,
   toCachedLibraryFile
 } from "./cache-library";
+import { resolveProviderTrackSource } from "./provider-track-identity";
 import {
   getConfiguredLocalRepository,
   saveAudioFileToLocalDirectory
@@ -123,8 +124,8 @@ export function useUploadPipelineActions({
             album: input.track.album,
             artworkUrl: input.track.artworkUrl,
             lyrics: input.lyrics ?? null,
-            provider: input.track.sourceType,
-            providerTrackId: input.track.sourceRef?.trackId ?? null,
+            provider: resolveProviderTrackSource(input.track)?.provider ?? "local_upload",
+            providerTrackId: resolveProviderTrackSource(input.track)?.trackId ?? null,
             loudness: input.track.loudness,
             durationMs: input.track.durationMs,
             sizeBytes: input.track.sizeBytes ?? input.file.size,

@@ -328,9 +328,14 @@ export async function getRoomLocalAudioFile(input: {
       ) ?? null)
       .catch(() => null);
     if (providerSummary) {
-      const localProviderCache = await getLocalAudioCacheFile(providerSummary.fileHash)
-        .catch(() => null);
+      const [localProviderCache, localProviderFile, browserProviderFile] = await Promise.all([
+        getLocalAudioCacheFile(providerSummary.fileHash).catch(() => null),
+        getLocalAudioFile(providerSummary.fileHash).catch(() => null),
+        getCachedLibraryTrack(providerSummary.fileHash).catch(() => null)
+      ]);
       if (localProviderCache) return localProviderCache;
+      if (localProviderFile) return localProviderFile;
+      if (browserProviderFile?.file) return browserProviderFile.file;
     }
   }
 
@@ -591,6 +596,16 @@ async function persistCachedTrackRecord(
           : assets?.provider ?? "local_upload"
       }) ?? existing?.artworkPath ?? null
     : existing?.artworkPath ?? null;
+  const storedProvider = summary.provider === "netease" || summary.provider === "qqmusic"
+    ? summary.provider
+    : assets?.provider === "netease" || assets?.provider === "qqmusic"
+      ? assets.provider
+      : null;
+  const storedProviderTrackId = summary.providerTrackId?.trim() || null;
+  const storedProviderSource = storedProvider && storedProviderTrackId
+    ? { provider: storedProvider, trackId: storedProviderTrackId }
+    : null;
+  const storedSourceType = storedProviderSource?.provider ?? summary.provider ?? assets?.provider;
   const record = {
     schemaVersion: 1 as const,
     fileHash: summary.fileHash,
@@ -603,9 +618,11 @@ async function persistCachedTrackRecord(
     mimeType: summary.mimeType,
     sizeBytes: summary.sizeBytes,
     ...(summary.loudness ? { loudness: summary.loudness } : {}),
-    ...(summary.provider !== undefined ? { sourceType: summary.provider } : {}),
-    ...(summary.providerTrackId && (summary.provider === "netease" || summary.provider === "qqmusic")
-      ? { sourceRef: { provider: summary.provider, trackId: summary.providerTrackId } }
+    ...(storedSourceType !== undefined
+      ? { sourceType: storedSourceType }
+      : {}),
+    ...(storedProviderSource
+      ? { sourceRef: storedProviderSource }
       : { sourceRef: null }),
     source: {
       kind: "managed" as const,

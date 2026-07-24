@@ -24,6 +24,7 @@ import {
   loadCacheLibrarySnapshot,
   toCachedLibraryFile
 } from "./cache-library";
+import { resolveProviderTrackSource } from "./provider-track-identity";
 import {
   buildLocalAudioFileName,
   chooseLocalAudioDirectory,
@@ -362,8 +363,8 @@ export function useTrackUploads(options: {
           album: track.album,
           artworkUrl: track.artworkUrl,
           lyrics,
-          provider: track.sourceType,
-          providerTrackId: track.sourceRef?.trackId ?? null,
+          provider: resolveProviderTrackSource(track)?.provider ?? "local_upload",
+          providerTrackId: resolveProviderTrackSource(track)?.trackId ?? null,
           loudness: track.loudness,
           durationMs: track.durationMs,
           sizeBytes: file.size,

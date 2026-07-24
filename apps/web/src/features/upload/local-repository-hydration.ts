@@ -14,6 +14,7 @@ import {
   type TranscodeJobRecord
 } from "@/lib/indexeddb";
 import { LocalRepository, type LocalRepositoryTrackRecord } from "./local-repository";
+import { resolveProviderTrackSource } from "./provider-track-identity";
 
 export async function hydrateLocalRepository(repository: LocalRepository) {
   const records = await repository.listTracks();
@@ -106,6 +107,10 @@ async function restoreTrackSummary(
   const lyrics = record.lyricsPath
     ? await repository.readPath(record.lyricsPath).then((file) => file?.text() ?? null).catch(() => null)
     : null;
+  const providerSource = resolveProviderTrackSource(record);
+  const cacheProvider = providerSource?.provider ?? (
+    record.sourceType === "local_upload" ? "local_upload" : undefined
+  );
   const summary: CachedLibraryTrackSummaryRecord = {
     fileHash: record.fileHash,
     title: record.title,
@@ -115,8 +120,12 @@ async function restoreTrackSummary(
     ...(record.lyrics !== undefined || lyrics !== null
       ? { lyrics: lyrics ?? record.lyrics ?? null }
       : {}),
-    ...(record.sourceType !== undefined ? { provider: record.sourceType } : {}),
-    ...(record.sourceRef?.trackId ? { providerTrackId: record.sourceRef.trackId } : {}),
+    ...(cacheProvider
+      ? {
+          provider: cacheProvider,
+          ...(providerSource ? { providerTrackId: providerSource.trackId } : {})
+        }
+      : {}),
     mimeType: record.mimeType,
     durationMs: record.durationMs,
     sizeBytes: record.sizeBytes,

@@ -171,6 +171,10 @@ export class P2PMesh {
     this.peerLifecycle.setLocalAudioStream(stream, sourcePeerId, maxBitrateKbps);
   }
 
+  setMediaPlaybackEnabled(enabled: boolean) {
+    return this.peerLifecycle.setMediaPlaybackEnabled(enabled);
+  }
+
   getPeerMediaState(peerId: string) {
     return this.peerLifecycle.getPeerMediaState(peerId);
   }

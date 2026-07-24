@@ -17,6 +17,7 @@ import {
   resolveOfflineProviderSource
 } from "@/features/playback/offline-source-fallback";
 import { getRoomLocalAudioFile } from "@/features/upload/local-audio-storage";
+import { resolveProviderTrackSource } from "@/features/upload/provider-track-identity";
 import {
   appSettingsChangeEvent,
   getAppSettings
@@ -98,9 +99,7 @@ function resolveLocalAudioTrackKey(track: TrackMeta | null | undefined) {
 }
 
 function isProviderTrack(track: TrackMeta | null | undefined) {
-  return (track?.sourceType === "netease" || track?.sourceType === "qqmusic") &&
-    !!track.sourceRef &&
-    track.sourceRef.provider === track.sourceType;
+  return !!resolveProviderTrackSource(track);
 }
 
 function resolveLoudnessGainDb(
@@ -237,12 +236,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   audioUnlocked: boolean;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   setLocalAudioStream: (stream: MediaStream | null, sourcePeerId: string | null, maxBitrateKbps?: number | null) => void;
+  setMediaPlaybackEnabled: (enabled: boolean) => void | Promise<void>;
   getPeerMediaState: (peerId: string) => {
     receiverTrackState: "none" | "live" | "ended" | "failed";
     receiverRtpActive?: boolean;
     remoteStream: MediaStream | null;
     remoteTrackId?: string | null;
-    } | null;
+  } | null;
   restartMediaPeer: (peerId: string, options?: { forceRecreate?: boolean }) => Promise<unknown>;
   onPlaybackEnded: () => void | Promise<void>;
   setMediaConnectionState: Dispatch<SetStateAction<"idle" | "connecting" | "live" | "buffering" | "reconnecting" | "failed">>;
@@ -375,11 +375,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       setLocalAudioResolution((current) => current.status === "idle" && current.key === null
         ? current
         : {
-            key: null,
-            status: "idle",
-            file: null,
-            error: null
-          });
+          key: null,
+          status: "idle",
+          file: null,
+          error: null
+        });
       return;
     }
 
@@ -420,7 +420,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         error: null
       };
     });
-    const providerSource = isProviderTrack(track) ? track.sourceRef : null;
+    const providerSource = resolveProviderTrackSource(track);
     void getRoomLocalAudioFile({
       trackId: track.id,
       fileHash: track.fileHash,
@@ -530,6 +530,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.currentTrack?.id,
     input.currentTrack?.title,
     input.currentTrack?.ownerSessionId,
+    input.currentTrack?.sourceRef?.provider,
     input.currentTrack?.sourceRef?.trackId,
     input.currentTrack?.sourceType,
     input.isCurrentSource,
@@ -638,11 +639,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     failedLocalAudioKeysRef.current.add(key);
     setLocalAudioResolution((current) => current.key === key
       ? {
-          key,
-          status: "missing",
-          file: null,
-          error
-        }
+        key,
+        status: "missing",
+        file: null,
+        error
+      }
       : current);
   }, []);
 
@@ -682,13 +683,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const mediaSession =
       roomPlayback?.currentTrackId && track?.playbackAsset
         ? createPlaybackMediaSession({
-            trackId: roomPlayback.currentTrackId,
-            playbackAssetId: track.playbackAsset.assetId,
-            playback: roomPlayback,
-            sourcePeerId,
-            outputTrackId: runtime.isCurrentSource ? roomAudioOutput.getBroadcastTrackId() : null,
-            remoteTrackId: usesLocalAudio ? null : remote?.remoteTrackId ?? null
-          })
+          trackId: roomPlayback.currentTrackId,
+          playbackAssetId: track.playbackAsset.assetId,
+          playback: roomPlayback,
+          sourcePeerId,
+          outputTrackId: runtime.isCurrentSource ? roomAudioOutput.getBroadcastTrackId() : null,
+          remoteTrackId: usesLocalAudio ? null : remote?.remoteTrackId ?? null
+        })
         : null;
     const playbackState = toDiagnosticPlaybackState(visiblePlayback.state);
     const isAudible = isSegmentedPlaybackAudible({
@@ -776,6 +777,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       const audio = audioRef.current;
 
       if (runtime.isCurrentSource && runtime.localAudioResolution.status !== "available") {
+        runtime.setMediaPlaybackEnabled(true);
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         boundMediaKeyRef.current = null;
@@ -824,6 +826,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         : null;
       const localAudioKey = runtime.localAudioResolution.key;
       if (localAudio && localAudioKey) {
+        runtime.setMediaPlaybackEnabled(runtime.isCurrentSource);
         const totalUnitCount = runtime.currentTrack?.playbackAsset?.unitCount ?? 0;
         const hasActiveTimeline = roomPlayback?.currentTrackId === runtime.currentTrack?.id;
         missingMediaSinceRef.current = null;
@@ -950,7 +953,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
               : null;
             const activeMediaSourcePeerId = activeRuntime.isCurrentSource
               ? activeRuntime.peerId
-              : sourcePeerId;
+              : null;
             activeRuntime.setLocalAudioStream(
               sourceBroadcastStream,
               activeMediaSourcePeerId,
@@ -972,9 +975,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
           const sourceBroadcastStream = activeRuntime.isCurrentSource
             ? roomAudioOutput.bindLocalAudioElement(audio, {
-                loudnessGainDb: activeRuntime.loudnessGainDb,
-                broadcast: true
-              })
+              loudnessGainDb: activeRuntime.loudnessGainDb,
+              broadcast: true
+            })
             : null;
           if (activeRuntime.isCurrentSource && !sourceBroadcastStream) {
             roomAudioOutput.unbindLocalAudioElement(audio);
@@ -982,7 +985,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           }
           const activeMediaSourcePeerId = activeRuntime.isCurrentSource
             ? activeRuntime.peerId
-            : sourcePeerId;
+            : null;
           activeRuntime.setLocalAudioStream(
             sourceBroadcastStream,
             activeMediaSourcePeerId,
@@ -1073,6 +1076,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
 
       if (runtime.localFallbackAsset) {
+        runtime.setMediaPlaybackEnabled(false);
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         if (localMediaBindingRef.current !== "listener:local-fallback") {
@@ -1096,6 +1100,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       ) {
         clearLocalAudioSource(audio);
       }
+
+      runtime.setMediaPlaybackEnabled(true);
 
       const expectedSourcePeerId = roomPlayback?.status === "playing" ? sourcePeerId : null;
       const listenerBindingKey = `listener:${expectedSourcePeerId ?? "none"}`;

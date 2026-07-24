@@ -14,6 +14,7 @@ import {
   toCachedLibraryTrack,
   toCachedLibraryTrackFile
 } from "./cache-library-files";
+import { resolveProviderTrackSource } from "./provider-track-identity";
 
 export const cacheLibraryChangedEventName = "music-room-cache-library-changed";
 
@@ -112,6 +113,10 @@ export function buildCachedLibraryTrackUpsertRecord(
 ): CacheLibraryTrackUpsertRecord {
   const file =
     input.file instanceof File ? input.file : toCachedLibraryFileFromBlob(input.file, input.track);
+  const providerSource = resolveProviderTrackSource(input.track);
+  const cacheProvider = providerSource?.provider ?? (
+    input.track.sourceType === "local_upload" ? "local_upload" : undefined
+  );
 
   return {
     fileHash: input.track.fileHash,
@@ -119,8 +124,12 @@ export function buildCachedLibraryTrackUpsertRecord(
     artist: input.track.artist ?? "未知艺术家",
     ...(input.track.album !== undefined ? { album: input.track.album } : {}),
     ...(input.track.artworkUrl !== undefined ? { artworkUrl: input.track.artworkUrl } : {}),
-    ...(input.track.sourceType ? { provider: input.track.sourceType } : {}),
-    ...(input.track.sourceRef?.trackId ? { providerTrackId: input.track.sourceRef.trackId } : {}),
+    ...(cacheProvider
+      ? {
+          provider: cacheProvider,
+          ...(providerSource ? { providerTrackId: providerSource.trackId } : {})
+        }
+      : {}),
     ...(input.track.loudness ? { loudness: input.track.loudness } : {}),
     ...(input.track.lyrics !== undefined ? { lyrics: input.track.lyrics } : {}),
     mimeType: input.track.mimeType || file.type || "audio/mpeg",

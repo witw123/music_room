@@ -219,6 +219,41 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender?.track)).toHaveLength(0);
   });
 
+  it("releases listener media peers for local playback without dropping data peers", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b", "peer_c"]);
+    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
+
+    await manager.setMediaPlaybackEnabled(false);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).toBeNull();
+    expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_c", "data")).not.toBeNull();
+    expect(manager.getPeerMediaState("peer_b")).toBeNull();
+
+    await manager.setMediaPlaybackEnabled(true);
+
+    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_c", "data")).not.toBeNull();
+  });
+
+  it("rejects delayed media signaling while local playback is enabled", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    await manager.setMediaPlaybackEnabled(false);
+
+    await expect(
+      manager.getOrCreateIncomingPeerEntry("peer_b", "media", "offer")
+    ).resolves.toBeNull();
+    expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
+  });
+
   it("fans out media from a local source while keeping one data link per member", async () => {
     const { manager } = createManager();
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;

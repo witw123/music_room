@@ -24,6 +24,7 @@ import {
   playbackEncoderVersion,
   playbackProfileId
 } from "@/features/upload/audio-asset-builder";
+import { resolveProviderTrackSource } from "@/features/upload/provider-track-identity";
 
 export type OfflineProviderSource = {
   provider: "netease" | "qqmusic";
@@ -68,18 +69,15 @@ export function resolveOfflineProviderSource(input: {
     }
   }
 
-  if (
-    (track.sourceType !== "netease" && track.sourceType !== "qqmusic") ||
-    !track.sourceRef ||
-    track.sourceRef.provider !== track.sourceType
-  ) {
+  const providerSource = resolveProviderTrackSource(track);
+  if (!providerSource) {
     return null;
   }
 
   return {
-    provider: track.sourceType,
-    trackId: track.sourceRef.trackId,
-    label: track.sourceType === "netease" ? "网易云音乐" : "QQ 音乐"
+    provider: providerSource.provider,
+    trackId: providerSource.trackId,
+    label: providerSource.provider === "netease" ? "网易云音乐" : "QQ 音乐"
   } satisfies OfflineProviderSource;
 }
 
