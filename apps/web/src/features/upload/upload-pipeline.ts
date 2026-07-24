@@ -24,6 +24,7 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
     ownerNickname: track.ownerNickname,
     sourceType: track.sourceType,
     ...(track.sourceRef ? { sourceRef: track.sourceRef } : {}),
+    ...(track.loudness ? { loudness: track.loudness } : {}),
     originalAsset: track.originalAsset,
     playbackAsset: track.playbackAsset
   };

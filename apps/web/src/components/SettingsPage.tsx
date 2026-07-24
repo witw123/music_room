@@ -200,6 +200,13 @@ export function SettingsPage() {
                 </span>
               </div>
             </SettingRow>
+            <SettingRow label="响度均衡" description="自动平衡不同歌曲的主观响度，仅影响当前设备。">
+              <Toggle
+                checked={settings.playback.loudnessNormalization}
+                label="响度均衡"
+                onChange={(checked) => patchSettings({ playback: { loudnessNormalization: checked } })}
+              />
+            </SettingRow>
             <SettingRow label="播放器样式" description="应用于底部、沉浸式和房间播放器。">
               <select
                 aria-label="播放器样式"

@@ -2,7 +2,8 @@
 
 import type {
   OriginalAssetManifest,
-  PlaybackAssetManifest
+  PlaybackAssetManifest,
+  TrackLoudness
 } from "@music-room/shared";
 import {
   deleteAudioAsset,
@@ -359,6 +360,7 @@ export async function saveAudioFileToLocalDirectory(input: {
     providerTrackId?: string | null;
     durationMs: number;
     sizeBytes?: number;
+    loudness?: TrackLoudness;
     originalAsset?: OriginalAssetManifest;
     playbackAsset?: PlaybackAssetManifest;
   };
@@ -453,6 +455,7 @@ export async function saveAudioFileToLocalDirectory(input: {
       mimeType: input.mimeType,
       durationMs: input.track.durationMs,
       sizeBytes,
+      loudness: input.track.loudness,
       source: { kind: "managed", relativePath, sizeBytes },
       originalAsset: savedOriginalAsset,
       playbackAsset: savedPlaybackAsset,
@@ -573,6 +576,7 @@ async function persistCachedTrackRecord(
     durationMs: summary.durationMs,
     mimeType: summary.mimeType,
     sizeBytes: summary.sizeBytes,
+    ...(summary.loudness ? { loudness: summary.loudness } : {}),
     ...(summary.provider !== undefined ? { sourceType: summary.provider } : {}),
     ...(summary.providerTrackId && (summary.provider === "netease" || summary.provider === "qqmusic")
       ? { sourceRef: { provider: summary.provider, trackId: summary.providerTrackId } }

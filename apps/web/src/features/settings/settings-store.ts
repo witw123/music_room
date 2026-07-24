@@ -20,6 +20,7 @@ export type AppSettings = {
   };
   playback: {
     defaultVolume: number;
+    loudnessNormalization: boolean;
     playerStyle: PlayerStyle;
     disableArtworkColor: boolean;
     localPlaybackMode: PlaybackMode;
@@ -44,6 +45,7 @@ const defaultSettings: AppSettings = {
   },
   playback: {
     defaultVolume: 0.8,
+    loudnessNormalization: false,
     playerStyle: "vinyl",
     disableArtworkColor: false,
     localPlaybackMode: "sequence",
@@ -134,6 +136,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     },
     playback: {
       defaultVolume: volume,
+      loudnessNormalization: playback.loudnessNormalization === true,
       playerStyle,
       disableArtworkColor: playback.disableArtworkColor === true,
       localPlaybackMode: playbackMode,

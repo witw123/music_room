@@ -122,7 +122,10 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
         queueVersion: persistedPlayback.queueVersion ?? 1,
         playbackRevision: persistedPlayback.playbackRevision ?? 1,
         mediaEpoch: persistedPlayback.mediaEpoch ?? 0,
-        playbackMode: persistedPlayback.playbackMode ?? "sequence"
+        playbackMode: persistedPlayback.playbackMode ?? "sequence",
+        shuffleBagTrackIds: Array.isArray(persistedPlayback.shuffleBagTrackIds)
+          ? persistedPlayback.shuffleBagTrackIds.filter((trackId): trackId is string => typeof trackId === "string")
+          : []
       },
       presenceRevision: resolvePresenceRevision(persisted, persistedPlayback),
       roomRevision: resolveRoomRevision(persisted, persistedPlayback)

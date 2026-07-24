@@ -103,6 +103,19 @@ function isProviderTrack(track: TrackMeta | null | undefined) {
     track.sourceRef.provider === track.sourceType;
 }
 
+function resolveLoudnessGainDb(
+  track: TrackMeta | null | undefined,
+  enabled: boolean
+) {
+  if (!enabled) {
+    return 0;
+  }
+  const gainDb = track?.loudness?.gainDb;
+  return typeof gainDb === "number" && Number.isFinite(gainDb)
+    ? Math.min(12, Math.max(-24, gainDb))
+    : 0;
+}
+
 function resolveLocalAudioTimelineKey(playback: PlaybackSnapshot) {
   return [
     playback.currentTrackId ?? "none",
@@ -239,8 +252,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const {
     preventOfflineAutoLoad,
     streamingOnlyPlayback,
-    fullyCachedPlayback
+    fullyCachedPlayback,
+    loudnessNormalization
   } = playbackPreferences;
+  const loudnessGainDb = resolveLoudnessGainDb(
+    input.currentTrack,
+    loudnessNormalization
+  );
   // Offline auto-cache prevention and stream-only playback take priority over
   // the provider-cache preference when multiple strategies are enabled.
   const forceProviderCache = !preventOfflineAutoLoad &&
@@ -277,6 +295,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     ...input,
     localFallbackAsset: null as TrackMeta["playbackAsset"] | null,
     forceProviderCache: false,
+    loudnessGainDb: 0,
     localAudioResolution: {
       key: null as string | null,
       status: "idle" as LocalAudioResolutionStatus,
@@ -288,7 +307,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     ...input,
     localFallbackAsset: offlineFallbackAsset,
     localAudioResolution,
-    forceProviderCache
+    forceProviderCache,
+    loudnessGainDb
   };
   const { audioRef, isCurrentSource, peerId: runtimePeerId } = input;
   const audioUnlocked = input.audioUnlocked;
@@ -605,6 +625,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     disableSourcePlayback: forceProviderCache ||
       (input.isCurrentSource && localAudioResolution.status !== "missing"),
     volume: input.volume,
+    loudnessGainDb,
     audioUnlocked: input.audioUnlocked,
   });
   const usesNativeLocalAudio = localAudioResolution.status === "available";
@@ -941,7 +962,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           }
 
           const sourceBroadcastStream = activeRuntime.isCurrentSource
-            ? roomAudioOutput.bindLocalAudioElement(audio)
+            ? roomAudioOutput.bindLocalAudioElement(audio, {
+                loudnessGainDb: activeRuntime.loudnessGainDb,
+                broadcast: true
+              })
             : null;
           if (activeRuntime.isCurrentSource && !sourceBroadcastStream) {
             roomAudioOutput.unbindLocalAudioElement(audio);
@@ -1163,6 +1187,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.hasStarted = false;
           health.waitingSinceMs = null;
         }
+        roomAudioOutput.bindLocalAudioElement(audio, {
+          broadcast: false,
+          loudnessGainDb: runtime.loudnessGainDb
+        });
+        roomAudioOutput.applyVolume({
+          localAudio: audio,
+          volume: runtime.volume,
+          loudnessGainDb: runtime.loudnessGainDb
+        });
         boundMediaKeyRef.current = remoteTrackId;
         const remoteTimelineKey = roomPlayback
           ? resolveRemoteAudioTimelineKey(roomPlayback)
@@ -1367,9 +1400,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     }
     roomAudioOutput.applyVolume({
       localAudio: audioRef.current,
-      volume: input.volume
+      volume: input.volume,
+      loudnessGainDb
     });
-  }, [audioRef, input.volume, isCurrentSource, localAudioResolution.status]);
+  }, [audioRef, input.volume, isCurrentSource, localAudioResolution.status, loudnessGainDb]);
 
   const lastReportedErrorRef = useRef<string | null>(null);
   const completedTimelineRef = useRef<string | null>(null);

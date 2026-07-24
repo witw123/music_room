@@ -95,7 +95,7 @@ export function useUploadPipelineActions({
       > & Partial<
         Pick<
           TrackMeta,
-          "album" | "artworkUrl" | "sourceType" | "sourceRef" | "originalAsset" | "playbackAsset"
+          "album" | "artworkUrl" | "sourceType" | "sourceRef" | "loudness" | "originalAsset" | "playbackAsset"
         >
       >;
       roomId: string;
@@ -125,6 +125,7 @@ export function useUploadPipelineActions({
             lyrics: input.lyrics ?? null,
             provider: input.track.sourceType,
             providerTrackId: input.track.sourceRef?.trackId ?? null,
+            loudness: input.track.loudness,
             durationMs: input.track.durationMs,
             sizeBytes: input.track.sizeBytes ?? input.file.size,
             originalAsset: input.track.originalAsset,
@@ -209,7 +210,10 @@ export function useUploadPipelineActions({
                   album: resolvedCachedMetadata.album ?? null,
                   artworkUrl: resolvedCachedMetadata.artworkUrl ?? null
                 },
-                ...(sourceRef ? { sourceRef } : {})
+                ...(sourceRef ? { sourceRef } : {}),
+                ...(resolvedCachedMetadata?.loudness
+                  ? { loudness: resolvedCachedMetadata.loudness }
+                  : {})
               }
             : undefined);
           const lyrics = draft.lyrics?.trim()

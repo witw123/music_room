@@ -43,7 +43,7 @@ type CacheLibraryTrackUpsertInput = {
     | "sizeBytes"
     | "fileHash"
     | "ownerNickname"
-  > & Partial<Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef">> & {
+  > & Partial<Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef" | "loudness">> & {
     lyrics?: string | null;
   };
   roomId: string;
@@ -62,6 +62,7 @@ export type CacheLibraryTrackUpsertRecord = {
   mimeType: string;
   durationMs: number;
   sizeBytes: number;
+  loudness?: TrackMeta["loudness"];
   file: File;
   sourceTrackIds: string[];
   sourceRoomIds: string[];
@@ -120,6 +121,7 @@ export function buildCachedLibraryTrackUpsertRecord(
     ...(input.track.artworkUrl !== undefined ? { artworkUrl: input.track.artworkUrl } : {}),
     ...(input.track.sourceType ? { provider: input.track.sourceType } : {}),
     ...(input.track.sourceRef?.trackId ? { providerTrackId: input.track.sourceRef.trackId } : {}),
+    ...(input.track.loudness ? { loudness: input.track.loudness } : {}),
     ...(input.track.lyrics !== undefined ? { lyrics: input.track.lyrics } : {}),
     mimeType: input.track.mimeType || file.type || "audio/mpeg",
     durationMs: input.track.durationMs,

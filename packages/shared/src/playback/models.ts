@@ -34,6 +34,8 @@ export const playbackSnapshotSchema = z.object({
   mediaEpoch: z.number().int().nonnegative(),
   // Optional for snapshots persisted before room-level playback order was added.
   playbackMode: playbackModeSchema.optional(),
+  // Remaining unique track ids in the current pseudo-random playback cycle.
+  shuffleBagTrackIds: z.array(z.string()).optional(),
   // The source can schedule this track before the server promotes it.
   gaplessNext: gaplessTransitionSchema.nullable().optional()
 });

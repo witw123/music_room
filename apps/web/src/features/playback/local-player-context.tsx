@@ -17,6 +17,7 @@ import type {
   QueueItem,
   TrackMeta
 } from "@music-room/shared";
+import { takeNextShuffleTrack } from "@music-room/shared";
 import {
   getCachedLibraryTrack,
   upsertLocalPlaylistTrack,
@@ -31,6 +32,7 @@ import {
   getLocalAudioCacheFile,
   getLocalAudioFile
 } from "@/features/upload/local-audio-storage";
+import { synchronizeShuffleBagTrackIds } from "@music-room/shared";
 import { readEmbeddedAudioMetadata } from "@/features/upload/audio-metadata";
 import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
@@ -85,6 +87,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const playbackSequenceKindRef = useRef<"queue" | "direct" | "playlist">("direct");
   const currentRecordRef = useRef<LocalPlaylistTrackRecord | null>(null);
   const currentIndexRef = useRef(0);
+  const shuffleBagRef = useRef<string[]>([]);
   const playRequestRef = useRef(0);
   const metadataEnrichedHashesRef = useRef(new Set<string>());
   const progressRef = useRef(0);
@@ -120,6 +123,19 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setPlayback((current) => current ? { ...current, playbackMode } : current);
+  }, [playbackMode]);
+
+  useEffect(() => {
+    if (playbackMode !== "shuffle") {
+      shuffleBagRef.current = [];
+      return;
+    }
+
+    shuffleBagRef.current = synchronizeShuffleBagTrackIds(
+      shuffleBagRef.current,
+      playbackRecordsRef.current.map((track) => track.id),
+      currentRecordRef.current?.id ?? null
+    );
   }, [playbackMode]);
 
   useEffect(() => {
@@ -367,6 +383,9 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     currentIndexRef.current = selectedIndex;
     playbackRecordsRef.current = nextRecords;
     playbackSequenceKindRef.current = sequenceKind;
+    if (playbackMode === "shuffle") {
+      shuffleBagRef.current = shuffleBagRef.current.filter((trackId) => trackId !== record.id);
+    }
     const nextQueue = queueRef.current.map((item) =>
       item.id === record?.id ? record : item
     );
@@ -613,6 +632,27 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, [findPlayableIndex, onSeek, playRecords]);
 
   const onNext = useCallback(() => {
+    if (playbackMode === "shuffle") {
+      const records = playbackRecordsRef.current;
+      const currentTrackId = records[currentIndexRef.current]?.id ?? currentRecordRef.current?.id ?? null;
+      const selection = takeNextShuffleTrack(
+        records,
+        shuffleBagRef.current,
+        currentTrackId,
+        isTrackPlayable
+      );
+      shuffleBagRef.current = selection.bag;
+      if (selection.track) {
+        const nextIndex = records.findIndex((track) => track.id === selection.track?.id);
+        if (nextIndex >= 0) {
+          void playRecords(records, nextIndex, playbackSequenceKindRef.current);
+          return;
+        }
+      }
+      stopAtEnd();
+      return;
+    }
+
     void findPlayableIndex(currentIndexRef.current, 1).then((nextIndex) => {
       if (nextIndex >= 0) {
         void playRecords(
@@ -624,7 +664,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         stopAtEnd();
       }
     });
-  }, [findPlayableIndex, playRecords, stopAtEnd]);
+  }, [findPlayableIndex, isTrackPlayable, playbackMode, playRecords, stopAtEnd]);
 
   const onCyclePlaybackMode = useCallback(() => {
     const nextMode = playbackMode === "sequence" ? "shuffle" : playbackMode === "shuffle" ? "single" : "sequence";
@@ -641,21 +681,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       );
       return;
     }
-    if (playbackMode === "shuffle") {
-      const records = playbackRecordsRef.current;
-      const playable = records
-        .map((track, index) => ({ track, index }))
-        .filter(({ track, index }) => index !== currentIndexRef.current && isTrackPlayable(track));
-      const selected = playable[Math.floor(Math.random() * playable.length)];
-      if (selected) {
-        void playRecords(records, selected.index, playbackSequenceKindRef.current);
-      } else if (isTrackPlayable(records[currentIndexRef.current])) {
-        void playRecords(records, currentIndexRef.current, playbackSequenceKindRef.current);
-      }
-      return;
-    }
     onNext();
-  }, [isTrackPlayable, onNext, playbackMode, playRecords]);
+  }, [onNext, playbackMode, playRecords]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -709,6 +736,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     if (index < 0) return;
     const removedTrack = queueRef.current[index];
     const nextRecords = queueRef.current.filter((_, itemIndex) => itemIndex !== index);
+    shuffleBagRef.current = shuffleBagRef.current.filter((trackId) => trackId !== removedTrack.id);
     queueRef.current = nextRecords;
     setQueueRecords(nextRecords);
     if (playbackSequenceKindRef.current === "queue") {

@@ -6,7 +6,8 @@ import {
   verifyAssetUnit,
   type AssetKind,
   type AssetUnitDescriptor,
-  type AudioAssetManifest
+  type AudioAssetManifest,
+  type TrackLoudness
 } from "@music-room/shared";
 import { LocalRepository } from "@/features/upload/local-repository";
 
@@ -22,6 +23,7 @@ export type CachedLibraryTrackRecord = {
   mimeType: string;
   durationMs: number;
   sizeBytes: number;
+  loudness?: TrackLoudness;
   file: Blob;
   cachedAt: string;
   sourceTrackIds: string[];
@@ -824,6 +826,9 @@ export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRec
   const cachedAt = input.cachedAt ?? existing?.cachedAt ?? new Date().toISOString();
   const record: CachedLibraryTrackRecord = {
     ...input,
+    ...(input.loudness ?? existing?.loudness
+      ? { loudness: input.loudness ?? existing?.loudness }
+      : {}),
     cachedAt,
     sourceTrackIds: [...new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds])],
     sourceRoomIds: [...new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds])]

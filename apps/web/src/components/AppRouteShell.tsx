@@ -65,7 +65,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
         <div className="hidden md:contents">
           <AppSidebar
             activeSession={activeSession}
-            hasBottomPlayer={!awayRoomId}
+            hasBottomPlayer
             onLogout={handleLogout}
           />
         </div>

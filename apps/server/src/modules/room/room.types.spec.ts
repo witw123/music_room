@@ -102,6 +102,41 @@ describe("room.types persistence helpers", () => {
     });
   });
 
+  it("persists and restores the remaining shuffle bag", () => {
+    const playback = {
+      status: "paused" as const,
+      currentTrackId: "track_3",
+      currentQueueItemId: "queue_3",
+      sourceSessionId: "host_1",
+      sourcePeerId: null,
+      sourceTrackId: "track_3",
+      positionMs: 0,
+      startedAt: null,
+      queueVersion: 3,
+      playbackRevision: 4,
+      mediaEpoch: 1,
+      playbackMode: "shuffle" as const,
+      shuffleBagTrackIds: ["track_1", "track_2"]
+    };
+    const persisted = serializePlaybackForPersistence({
+      presenceRevision: 0,
+      roomRevision: 8,
+      playback
+    });
+    const record = deserializeRoomRecord({
+      id: "room_shuffle",
+      hostId: "host_1",
+      joinCode: "ABC123",
+      visibility: "public",
+      playback: persisted,
+      members: [],
+      tracks: [],
+      queue: []
+    } satisfies PersistedRoomRecord);
+
+    expect(record.room.playback.shuffleBagTrackIds).toEqual(["track_1", "track_2"]);
+  });
+
   it("keeps legacy rooms visible when their playback asset profile is obsolete", () => {
     const record = deserializeRoomRecord({
       id: "room_legacy",

@@ -5,6 +5,7 @@ import {
 } from "../assets/models";
 import {
   remoteTrackSourceRefSchema,
+  trackLoudnessSchema,
   trackSourceTypeSchema
 } from "../playlist/models";
 import { playbackModeSchema } from "../playback/models";
@@ -93,6 +94,7 @@ export const registerTrackRequestSchema = z
     ownerNickname: z.string().trim().max(80).optional(),
     sourceType: trackSourceTypeSchema,
     sourceRef: remoteTrackSourceRefSchema.nullable().optional(),
+    loudness: trackLoudnessSchema.optional(),
     originalAsset: originalAssetManifestSchema.optional(),
     playbackAsset: playbackAssetManifestSchema.optional()
   })

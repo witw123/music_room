@@ -14,13 +14,16 @@ type PrimeRoomAudioOutputInput = {
 type ApplyRoomAudioVolumeInput = {
   localAudio?: HTMLAudioElement | null;
   volume: number;
+  loudnessGainDb?: number;
 };
 
 type LocalAudioElementGraph = {
   element: HTMLAudioElement;
   context: AudioContext;
   source: MediaElementAudioSourceNode;
+  normalizationGain: GainNode;
   localGain: GainNode;
+  broadcastDestination: MediaStreamAudioDestinationNode | null;
 };
 
 export class RoomAudioOutput {
@@ -45,6 +48,7 @@ export class RoomAudioOutput {
 
   applyVolume(input: ApplyRoomAudioVolumeInput) {
     const safeVolume = normalizeOutputVolume(input.volume);
+    const safeLoudnessGain = normalizeGainDb(input.loudnessGainDb ?? 0);
     if (input.localAudio) {
       const element = input.localAudio;
       const localGraph = this.localAudioElementGraph?.element === element
@@ -62,6 +66,7 @@ export class RoomAudioOutput {
         } catch {
           localGraph.localGain.gain.value = safeVolume;
         }
+        this.setGraphLoudnessGain(localGraph, safeLoudnessGain);
         element.volume = 1;
         return;
       }
@@ -69,15 +74,16 @@ export class RoomAudioOutput {
         typeof window === "undefined" ||
         typeof window.requestAnimationFrame !== "function"
       ) {
-        element.volume = safeVolume;
+        element.volume = normalizeOutputVolume(safeVolume * safeLoudnessGain);
         return;
       }
       const startVolume = element.volume;
+      const targetVolume = normalizeOutputVolume(safeVolume * safeLoudnessGain);
       const startedAt = performance.now();
       const durationMs = 20;
       const animate = (now: number) => {
         const progress = Math.min(1, Math.max(0, (now - startedAt) / durationMs));
-        element.volume = startVolume + (safeVolume - startVolume) * progress;
+        element.volume = startVolume + (targetVolume - startVolume) * progress;
         if (progress < 1) {
           this.volumeAnimationFrames.set(element, window.requestAnimationFrame(animate));
         } else {
@@ -88,7 +94,10 @@ export class RoomAudioOutput {
     }
   }
 
-  bindLocalAudioElement(element: HTMLAudioElement | null | undefined) {
+  bindLocalAudioElement(
+    element: HTMLAudioElement | null | undefined,
+    options?: { broadcast?: boolean; loudnessGainDb?: number }
+  ) {
     if (!element) {
       return null;
     }
@@ -102,16 +111,23 @@ export class RoomAudioOutput {
       return null;
     }
 
-    const destination = this.getBroadcastDestination(context);
-    if (!destination) {
+    const destination = options?.broadcast === false
+      ? null
+      : this.getBroadcastDestination(context);
+    if (options?.broadcast !== false && !destination) {
       return null;
     }
 
     if (
       this.localAudioElementGraph?.element === element &&
-      this.localAudioElementGraph.context === context
+      this.localAudioElementGraph.context === context &&
+      this.localAudioElementGraph.broadcastDestination === destination
     ) {
-      return destination.stream;
+      this.setGraphLoudnessGain(
+        this.localAudioElementGraph,
+        normalizeGainDb(options?.loudnessGainDb ?? 0)
+      );
+      return destination?.stream ?? null;
     }
 
     this.disposeLocalAudioElementGraph();
@@ -123,21 +139,28 @@ export class RoomAudioOutput {
       this.localAudioElementSources.set(element, { context, source });
       source.disconnect();
 
+      const normalizationGain = context.createGain();
+      normalizationGain.gain.value = normalizeGainDb(options?.loudnessGainDb ?? 0);
       const localGain = context.createGain();
       localGain.gain.value = normalizeOutputVolume(element.volume);
-      source.connect(localGain);
+      source.connect(normalizationGain);
+      normalizationGain.connect(localGain);
       localGain.connect(context.destination);
-      source.connect(destination);
+      if (destination) {
+        source.connect(destination);
+      }
       this.localAudioElementGraph = {
         element,
         context,
         source,
-        localGain
+        normalizationGain,
+        localGain,
+        broadcastDestination: destination
       };
       // Volume is controlled by localGain so the source member's volume does
       // not reduce the level sent to other room members.
       element.volume = 1;
-      return destination.stream;
+      return destination?.stream ?? null;
     } catch {
       this.disposeLocalAudioElementGraph();
       return null;
@@ -206,7 +229,22 @@ export class RoomAudioOutput {
     } catch {
       // The gain may already be disconnected during a context transition.
     }
+    try {
+      graph.normalizationGain.disconnect();
+    } catch {
+      // The gain may already be disconnected during a context transition.
+    }
     this.localAudioElementGraph = null;
+  }
+
+  private setGraphLoudnessGain(graph: LocalAudioElementGraph, gain: number) {
+    try {
+      const now = graph.context.currentTime;
+      graph.normalizationGain.gain.cancelScheduledValues(now);
+      graph.normalizationGain.gain.setTargetAtTime(gain, now, 0.02);
+    } catch {
+      graph.normalizationGain.gain.value = gain;
+    }
   }
 
   private disposeBroadcastDestination() {
@@ -226,4 +264,11 @@ function normalizeOutputVolume(value: number) {
   }
 
   return Math.min(1, Math.max(0, value));
+}
+
+function normalizeGainDb(value: number) {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  return Math.min(4, Math.max(0.063, 10 ** (value / 20)));
 }

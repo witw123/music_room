@@ -192,7 +192,8 @@ export function ImmersivePlayerOverlay({
         aria-label="退出沉浸式播放"
         title="退出沉浸式播放"
         onClick={onClose}
-        className="light-overlay-control absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-[60] hidden h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent text-white/70 shadow-none backdrop-blur-md transition-[background-color,color,transform] duration-200 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 md:inline-flex"
+        className="light-overlay-control absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-[60] hidden h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent text-white/70 shadow-none backdrop-blur-md transition-[background-color,color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 md:inline-flex"
+        style={{ color: artworkPalette.accent }}
       >
         <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
@@ -296,7 +297,7 @@ function MobileImmersivePlayer({
     <section className="relative z-10 flex h-full min-h-0 flex-col px-8 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] md:hidden">
       <header className="flex h-14 shrink-0 items-center justify-center">
         <button aria-label="退出沉浸式播放" className="inline-flex h-10 w-28 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={onClose} title="退出沉浸式播放" type="button">
-          <span className="h-1.5 w-10 rounded-full bg-white/45" aria-hidden="true" />
+          <span className="h-1.5 w-10 rounded-full opacity-60" aria-hidden="true" style={{ backgroundColor: artworkPalette.accent }} />
         </button>
       </header>
 
@@ -319,7 +320,7 @@ function MobileImmersivePlayer({
                     track={favoriteTrack}
                     className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
                   />
-                  <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/70 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="切换播放模式" type="button"><MoreGlyph /></button>
+                  <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/70 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} style={{ color: artworkPalette.accent }} title="切换播放模式" type="button"><MoreGlyph /></button>
                 </div>
               </div>
             </div>
@@ -357,19 +358,19 @@ function MobileImmersivePlayer({
 
       <footer className="shrink-0 pt-[clamp(1.25rem,3vh,2rem)]">
         <div className="flex items-center justify-center gap-4">
-          <TransportButton ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
-          <button aria-label={isPlaying ? "暂停" : "播放"} className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-transform duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:bg-white/35" disabled={controlsDisabled} onClick={onTogglePlay} title={isPlaying ? "暂停" : "播放"} type="button">
+          <TransportButton accentColor={artworkPalette.accent} ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
+          <button aria-label={isPlaying ? "暂停" : "播放"} className="inline-flex h-16 w-16 items-center justify-center rounded-full text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-[background-color,color,transform] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-35" disabled={controlsDisabled} onClick={onTogglePlay} style={{ backgroundColor: artworkPalette.accent }} title={isPlaying ? "暂停" : "播放"} type="button">
             {isPlaying ? <svg aria-hidden="true" fill="currentColor" height="25" viewBox="0 0 24 24" width="25"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="25" viewBox="0 0 24 24" width="25"><path d="M8 5v14l11-7z" /></svg>}
           </button>
-          <TransportButton ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
+          <TransportButton accentColor={artworkPalette.accent} ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="24" viewBox="0 0 24 24" width="24"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
         </div>
 
-        <div className="mt-5 flex items-center gap-3 px-2 text-white/62">
+        <div className="mt-5 flex items-center gap-3 px-2 text-white/62" style={{ color: artworkPalette.accent }}>
           <SpeakerGlyph volume={volume} />
           <Slider accentColor={artworkPalette.accent} className="[&>div]:h-1" max={1} onChange={(event) => applyVolume(Number(event.target.value))} onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))} step={0.01} value={volume} />
         </div>
 
-        <div className="mt-5 grid grid-cols-3 items-center justify-items-center text-white/65">
+        <div className="mt-5 grid grid-cols-3 items-center justify-items-center" style={{ color: artworkPalette.accent }}>
           <button aria-label="显示歌词" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button"><LyricsGlyph /></button>
           <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="切换播放模式" type="button"><PlaybackModeGlyph mode={playbackMode} /></button>
           <PlayerQueueDrawer
@@ -504,26 +505,28 @@ function DesktopImmersivePlayer({
       <div className="mt-4 flex items-center justify-center gap-2 sm:gap-3">
         <button
           aria-label="切换播放模式"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/60 transition-[background-color,color,transform] duration-200 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/60 transition-[background-color,color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35"
           disabled={!canControlPlayback}
           onClick={() => void onCyclePlaybackMode()}
+          style={{ color: artworkPalette.accent }}
           title="切换播放模式"
           type="button"
         >
           <PlaybackModeGlyph mode={playbackMode} />
         </button>
-        <TransportButton ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
+        <TransportButton accentColor={artworkPalette.accent} ariaLabel="上一首" disabled={controlsDisabled} onClick={onPrev}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg></TransportButton>
         <button
           aria-label={isPlaying ? "暂停" : "播放"}
-          className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-[0_12px_32px_rgba(0,0,0,0.28)] transition-[transform,opacity] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-35"
+          className="inline-flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_32px_rgba(0,0,0,0.28)] transition-[background-color,color,transform] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-35"
           disabled={controlsDisabled}
           onClick={onTogglePlay}
+          style={{ backgroundColor: artworkPalette.accent }}
           title={isPlaying ? "暂停" : "播放"}
           type="button"
         >
           {isPlaying ? <svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M8 5v14l11-7z" /></svg>}
         </button>
-        <TransportButton ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
+        <TransportButton accentColor={artworkPalette.accent} ariaLabel="下一首" disabled={controlsDisabled} onClick={onNext}><svg aria-hidden="true" fill="currentColor" height="22" viewBox="0 0 24 24" width="22"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg></TransportButton>
         <PlayerQueueDrawer
           accentColor={artworkPalette.accent}
           accentSoft={artworkPalette.accentSoft}
@@ -540,7 +543,7 @@ function DesktopImmersivePlayer({
         />
       </div>
 
-      <div className="mt-4 flex items-center gap-3 px-1 text-white/55">
+      <div className="mt-4 flex items-center gap-3 px-1 text-white/55" style={{ color: artworkPalette.accent }}>
         <SpeakerGlyph volume={volume} />
         <Slider
           accentColor={artworkPalette.accent}
@@ -568,8 +571,8 @@ function TrackDetails({ currentTrack, mobile = false }: { currentTrack: TrackMet
   );
 }
 
-function TransportButton({ ariaLabel, children, disabled, onClick }: { ariaLabel: string; children: ReactNode; disabled: boolean; onClick: () => void }) {
-  return <button aria-label={ariaLabel} className="inline-flex h-12 w-12 items-center justify-center rounded-full text-white transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-35" disabled={disabled} onClick={onClick} title={ariaLabel} type="button">{children}</button>;
+function TransportButton({ accentColor, ariaLabel, children, disabled, onClick }: { accentColor: string; ariaLabel: string; children: ReactNode; disabled: boolean; onClick: () => void }) {
+  return <button aria-label={ariaLabel} className="inline-flex h-12 w-12 items-center justify-center rounded-full text-white transition-[background-color,color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-35" disabled={disabled} onClick={onClick} style={{ color: accentColor }} title={ariaLabel} type="button">{children}</button>;
 }
 
 function PlaybackModeGlyph({ mode }: { mode: PlaybackMode }) {

@@ -223,11 +223,11 @@ describe("SegmentedOpusEngine", () => {
 
     expect(result).toEqual({ state: "live", bufferedUnits: 5 });
     expect(context.decodeAudioData).toHaveBeenCalledTimes(5);
-    expect(context.createGain).toHaveBeenCalledTimes(8);
-    expect(gains[2]?.gain.value).toBe(0.65);
-    expect(gains[4]?.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    expect(context.createGain).toHaveBeenCalledTimes(9);
+    expect(gains[3]?.gain.value).toBe(0.65);
+    expect(gains[5]?.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
     expect(sources).toHaveLength(5);
-    expect(sources.every((source) => source.connectedTo !== gains[2])).toBe(true);
+    expect(sources.every((source) => source.connectedTo !== gains[3])).toBe(true);
     expect(sources.map((source) => source.starts[0]?.when)).toEqual([11, 13, 15, 17, 19]);
 
     await engine.sync({
@@ -238,7 +238,7 @@ describe("SegmentedOpusEngine", () => {
       getUnit: async (unitIndex) => unit(unitIndex)
     });
     expect(context.createBufferSource).toHaveBeenCalledTimes(5);
-    expect(gains[2]?.gain.value).toBe(0.4);
+    expect(gains[3]?.gain.value).toBe(0.4);
     sources.forEach((source) => source.onended?.());
     const ended = await engine.sync({
       manifest,

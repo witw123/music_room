@@ -9,6 +9,7 @@ export * from "./assets/integrity";
 export * from "./p2p/models";
 export * from "./p2p/asset-models";
 export * from "./playback/models";
+export * from "./playback/shuffle";
 export * from "./playlist/models";
 export * from "./providers/netease";
 export * from "./providers/qqmusic";

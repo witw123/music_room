@@ -120,6 +120,7 @@ async function restoreTrackSummary(
     mimeType: record.mimeType,
     durationMs: record.durationMs,
     sizeBytes: record.sizeBytes,
+    ...(record.loudness ? { loudness: record.loudness } : {}),
     cachedAt: record.updatedAt,
     sourceTrackIds: record.roomRefs?.map((ref) => ref.trackId) ?? [],
     sourceRoomIds: record.roomRefs?.map((ref) => ref.roomId) ?? [],

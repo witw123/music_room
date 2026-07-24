@@ -7,7 +7,8 @@ import {
   type OriginalAssetManifest,
   type PlaybackAssetManifest,
   type RoomSnapshot,
-  type TrackMeta
+  type TrackMeta,
+  type TrackLoudness
 } from "@music-room/shared";
 export const localRepositoryDirectoryName = ".music-room";
 export const localRepositoryFormat = "music-room-local-repository" as const;
@@ -57,6 +58,7 @@ export type LocalRepositoryTrackRecord = {
   durationMs: number;
   mimeType: string;
   sizeBytes: number;
+  loudness?: TrackLoudness;
   sourceType?: "netease" | "qqmusic" | "local_upload";
   sourceRef?: { provider: "netease" | "qqmusic"; trackId: string } | null;
   source: {
@@ -435,6 +437,7 @@ export class LocalRepository {
         durationMs: track.durationMs,
         mimeType: track.mimeType ?? "audio/mpeg",
         sizeBytes: track.sizeBytes ?? 0,
+        loudness: track.loudness,
         sourceType: track.sourceType,
         sourceRef: track.sourceRef ?? null,
         source: existing?.source ?? { kind: "external", relativePath: "" },
@@ -862,6 +865,7 @@ export function createRepositoryTrackRecord(input: {
   mimeType: string;
   durationMs: number;
   sizeBytes: number;
+  loudness?: TrackLoudness;
   source: LocalRepositoryTrackRecord["source"];
   originalAsset?: LocalRepositoryTrackRecord["originalAsset"];
   playbackAsset?: LocalRepositoryTrackRecord["playbackAsset"];
@@ -884,6 +888,7 @@ export function createRepositoryTrackRecord(input: {
     durationMs: input.durationMs,
     mimeType: input.mimeType,
     sizeBytes: input.sizeBytes,
+    ...(input.loudness ? { loudness: input.loudness } : {}),
     ...(input.provider !== undefined ? { sourceType: input.provider } : {}),
     ...(input.providerTrackId && (input.provider === "netease" || input.provider === "qqmusic")
       ? { sourceRef: { provider: input.provider, trackId: input.providerTrackId } }

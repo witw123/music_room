@@ -28,6 +28,7 @@ const lastRoomStorageKey = "music-room-last-room";
 
 type RoomsHomePageProps = {
   awayRoomId?: string | null;
+  hasBottomPlayer?: boolean;
   onResumeAwayRoom?: () => void;
   showSidebar?: boolean;
 };
@@ -50,6 +51,7 @@ const emptyCreateRoomForm: CreateRoomForm = {
 
 export function RoomsHomePage({
   awayRoomId,
+  hasBottomPlayer = false,
   onResumeAwayRoom,
   showSidebar = true
 }: RoomsHomePageProps = {}) {
@@ -278,7 +280,7 @@ export function RoomsHomePage({
         <AppSidebar
           activeItem="home"
           activeSession={activeSession}
-          hasBottomPlayer={false}
+          hasBottomPlayer={hasBottomPlayer}
           onLogout={handleLogout}
         />
       ) : null}

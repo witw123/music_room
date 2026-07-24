@@ -5,7 +5,8 @@ import type {
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
   RemoteTrackSourceRef,
-  TrackSourceType
+  TrackSourceType,
+  TrackLoudness
 } from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
@@ -39,6 +40,7 @@ export type CachedLibraryTrack = {
   mimeType: string;
   durationMs: number;
   sizeBytes: number;
+  loudness?: TrackLoudness;
   cachedAt: string;
   sourceTrackIds: string[];
   sourceRoomIds: string[];
@@ -65,6 +67,7 @@ export async function buildTrackMeta(
       "title" | "artist" | "album" | "artworkUrl"
     >;
     sourceRef?: RemoteTrackSourceRef;
+    loudness?: TrackLoudness;
   }
 ) {
   const fileHash = preparedAssets?.fileHash ?? await hashFile(file);
@@ -107,6 +110,9 @@ export async function buildTrackMeta(
     ownerNickname: session.nickname,
     sourceType,
     ...(source?.sourceRef ? { sourceRef: source.sourceRef } : {}),
+    ...(preparedAssets?.loudness || source?.loudness
+      ? { loudness: preparedAssets?.loudness ?? source?.loudness }
+      : {}),
     ...(preparedAssets
       ? {
           originalAsset: preparedAssets.originalAsset,

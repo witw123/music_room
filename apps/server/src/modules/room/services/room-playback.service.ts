@@ -1,4 +1,5 @@
-import type { GaplessTransition, PlaybackMode, PlaybackSnapshot, QueueItem, TrackMeta } from "@music-room/shared";
+import type { GaplessTransition, PlaybackMode, PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import { synchronizeShuffleBagTrackIds } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 
@@ -50,7 +51,17 @@ export class RoomPlaybackService {
       if (!input.playbackMode) {
         throw new Error("Playback mode is required when changing playback order.");
       }
+      const previousMode = playback.playbackMode ?? "sequence";
       playback.playbackMode = input.playbackMode;
+      if (input.playbackMode === "shuffle") {
+        playback.shuffleBagTrackIds = synchronizeShuffleBagTrackIds(
+          previousMode === "shuffle" ? playback.shuffleBagTrackIds ?? [] : [],
+          record.queue.map((item) => item.trackId),
+          playback.currentTrackId
+        );
+      } else {
+        playback.shuffleBagTrackIds = [];
+      }
     }
 
     if (input.action === "next") {
@@ -97,6 +108,9 @@ export class RoomPlaybackService {
           nextQueueItemId,
           input.playbackAssetId
         );
+        if (playback.playbackMode === "shuffle") {
+          this.markShuffleTrackPlayed(record, nextTrackId);
+        }
       }
     }
 
@@ -307,6 +321,18 @@ export class RoomPlaybackService {
       if (randomized) {
         return "advanced" as const;
       }
+
+      if (record.room.playback.currentTrackId) {
+        this.pausePlaybackAt(record, this.getTrackDurationMs(record, record.room.playback.currentTrackId), {
+          sourceCandidate: null,
+          bumpMediaEpoch: true,
+          clearSourcePeer: true
+        });
+        return "paused-at-end" as const;
+      }
+
+      this.clearPlayback(record.room.playback, { bumpVersion: false });
+      return "cleared" as const;
     }
 
     return direction === "next"
@@ -315,34 +341,73 @@ export class RoomPlaybackService {
   }
 
   private async advanceToRandomPlayable(record: RoomRecord, positionMs: number) {
-    const currentIndex = this.getCurrentQueueIndex(record);
-    const candidates: QueueItem[] = [];
+    const playback = record.room.playback;
+    const trackIds = [...new Set(record.queue.map((item) => item.trackId))];
+    if (trackIds.length === 0) {
+      return false;
+    }
 
-    for (let index = 0; index < record.queue.length; index += 1) {
-      if (index === currentIndex) {
+    const bag = synchronizeShuffleBagTrackIds(
+      playback.shuffleBagTrackIds ?? [],
+      trackIds,
+      playback.currentTrackId
+    );
+    playback.shuffleBagTrackIds = bag;
+
+    let candidateTrackId: string | null = null;
+    for (const trackId of bag) {
+      if (trackId === playback.currentTrackId) {
         continue;
       }
-      const item = record.queue[index]!;
-      if (await this.resolveTrackSourceCandidate(record, item.trackId)) {
-        candidates.push(item);
+      if (await this.resolveTrackSourceCandidate(record, trackId)) {
+        candidateTrackId = trackId;
+        break;
       }
     }
 
     // A one-track queue still loops in shuffle mode rather than stopping.
-    if (candidates.length === 0 && currentIndex >= 0) {
-      const current = record.queue[currentIndex];
-      if (current && (await this.resolveTrackSourceCandidate(record, current.trackId))) {
-        candidates.push(current);
+    if (!candidateTrackId && trackIds.length === 1 && playback.currentTrackId === trackIds[0]) {
+      if (await this.resolveTrackSourceCandidate(record, trackIds[0])) {
+        candidateTrackId = trackIds[0];
+        playback.shuffleBagTrackIds = [];
       }
     }
 
-    if (candidates.length === 0) {
+    if (!candidateTrackId) {
       return false;
     }
 
-    const candidate = candidates[Math.floor(Math.random() * candidates.length)]!;
+    const candidate = record.queue.find((item) => item.trackId === candidateTrackId);
+    if (!candidate) {
+      return false;
+    }
+
+    playback.shuffleBagTrackIds = bag.filter((trackId) => trackId !== candidateTrackId);
     await this.applyTrackPlayback(record, candidate.trackId, positionMs, candidate.id);
     return true;
+  }
+
+  syncShuffleBagWithQueue(record: RoomRecord) {
+    const playback = record.room.playback;
+    if (playback.playbackMode !== "shuffle") {
+      playback.shuffleBagTrackIds = [];
+      return;
+    }
+
+    playback.shuffleBagTrackIds = synchronizeShuffleBagTrackIds(
+      playback.shuffleBagTrackIds ?? [],
+      record.queue.map((item) => item.trackId),
+      playback.currentTrackId
+    );
+  }
+
+  private markShuffleTrackPlayed(record: RoomRecord, trackId: string) {
+    const playback = record.room.playback;
+    playback.shuffleBagTrackIds = synchronizeShuffleBagTrackIds(
+      playback.shuffleBagTrackIds ?? [],
+      record.queue.map((item) => item.trackId),
+      trackId
+    ).filter((candidateTrackId) => candidateTrackId !== trackId);
   }
 
   async advanceToPreviousPlayable(

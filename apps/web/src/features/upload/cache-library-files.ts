@@ -71,6 +71,7 @@ export function toCachedLibraryTrack(
     mimeType: record.mimeType,
     durationMs: record.durationMs,
     sizeBytes: record.sizeBytes,
+    ...(record.loudness ? { loudness: record.loudness } : {}),
     cachedAt: record.cachedAt,
     sourceTrackIds: record.sourceTrackIds,
     sourceRoomIds: record.sourceRoomIds,

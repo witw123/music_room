@@ -135,7 +135,8 @@ export class RoomService {
         queueVersion: 1,
         playbackRevision: 1,
         mediaEpoch: 0,
-        playbackMode: "sequence"
+        playbackMode: "sequence",
+        shuffleBagTrackIds: []
       }
     };
 
@@ -650,6 +651,7 @@ export class RoomService {
     };
 
     record.queue.push(queueItem);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record);
     this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -696,6 +698,7 @@ export class RoomService {
     );
 
     record.queue.push(...nextItems);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record);
     this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -724,6 +727,7 @@ export class RoomService {
     if (removesCurrentQueueItem || removesDirectlyPlayingTrack) {
       record.queue = nextQueue;
       this.roomPlaybackService.clearPlayback(playback);
+      this.roomPlaybackService.syncShuffleBagWithQueue(record);
       this.incrementQueueVersion(playback);
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
@@ -731,6 +735,7 @@ export class RoomService {
     }
 
     record.queue = nextQueue;
+    this.roomPlaybackService.syncShuffleBagWithQueue(record);
     this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -759,6 +764,7 @@ export class RoomService {
       }));
 
     record.queue = nextQueue;
+    this.roomPlaybackService.syncShuffleBagWithQueue(record);
     this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -957,6 +963,7 @@ export class RoomService {
     record.queue = record.queue
       .filter((item) => !trackIds.has(item.trackId))
       .map((item, index) => ({ ...item, position: index }));
+    this.roomPlaybackService.syncShuffleBagWithQueue(record);
 
     if (
       record.room.playback.currentTrackId &&

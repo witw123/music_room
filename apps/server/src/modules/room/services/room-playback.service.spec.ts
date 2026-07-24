@@ -147,4 +147,38 @@ describe("RoomPlaybackService gapless playback", () => {
     expect(room.room.playback.status).toBe("playing");
     expect(room.room.playback.sourcePeerId).toBeNull();
   });
+
+  it("plays each unique track once per shuffle cycle and avoids a boundary repeat", async () => {
+    const room = record(0);
+    const extraTracks = ["track_3", "track_4"].map((id) => track(id, "owner", 7_000));
+    room.tracks.push(...extraTracks);
+    room.queue.push(
+      ...extraTracks.map((item, index) => ({
+        id: `queue_${index + 3}`,
+        trackId: item.id,
+        requestedBy: "owner",
+        requestedById: "owner",
+        position: index + 2,
+        createdAt: `2026-07-19T00:00:0${index + 2}.000Z`
+      }))
+    );
+
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
+    } as never);
+    await service.updatePlayback(room, { action: "set-mode", playbackMode: "shuffle" });
+
+    const firstTrackId = room.room.playback.currentTrackId!;
+    const cycle = [firstTrackId];
+    for (let index = 0; index < room.queue.length - 1; index += 1) {
+      const snapshot = await service.updatePlayback(room, { action: "next" });
+      cycle.push(snapshot.currentTrackId!);
+    }
+
+    expect(new Set(cycle).size).toBe(room.queue.length);
+    const lastTrackId = cycle.at(-1);
+    const nextCycleTrack = await service.updatePlayback(room, { action: "next" });
+    expect(nextCycleTrack.currentTrackId).not.toBe(lastTrackId);
+    expect(cycle).toContain(nextCycleTrack.currentTrackId);
+  });
 });

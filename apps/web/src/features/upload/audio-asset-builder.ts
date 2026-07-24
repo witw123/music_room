@@ -10,7 +10,8 @@ import {
   playbackProfileId,
   type AssetUnitDescriptor,
   type OriginalAssetManifest,
-  type PlaybackAssetManifest
+  type PlaybackAssetManifest,
+  type TrackLoudness
 } from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
 import {
@@ -27,6 +28,7 @@ import {
 import { opusPreSkipSamples } from "@audio/opus-encode";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
 import { parseWavHeader, type WavHeader } from "@/features/playback/codecs/wav-parser";
+import { analyzeAudioBuffer, LoudnessAnalyzer } from "./loudness-analysis";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
@@ -42,10 +44,12 @@ export type PreparedAudioAssets = {
   fileHash: string;
   originalAsset: OriginalAssetManifest;
   playbackAsset: PlaybackAssetManifest;
+  loudness?: TrackLoudness;
 };
 
 type PreparedPlaybackAsset = {
   playbackAsset: PlaybackAssetManifest;
+  loudness: TrackLoudness;
   leafHashes: string[];
   proofs: Array<Array<{ position: "left" | "right"; hash: string }>>;
   encodedUnits?: Array<{
@@ -225,7 +229,8 @@ export async function prepareAudioAssets(input: {
     return {
       fileHash: source.fileHash,
       originalAsset: source.originalAsset,
-      playbackAsset: playback.playbackAsset
+      playbackAsset: playback.playbackAsset,
+      loudness: playback.loudness
     };
   } catch (error) {
     if (playbackDraftId) {
@@ -335,6 +340,7 @@ async function prepareStreamingPlaybackAsset(input: {
 
   let channelCount: 1 | 2 | null = null;
   let sourceSampleRate: number | null = null;
+  let loudnessAnalyzer: LoudnessAnalyzer | null = null;
   let pcm: PcmAccumulator | null = null;
   let nextUnitIndex = 0;
   const leafHashes: Array<string | undefined> = [];
@@ -551,10 +557,15 @@ async function prepareStreamingPlaybackAsset(input: {
         channelCount = channels;
         sourceSampleRate = decoded.sampleRate;
         pcm = new PcmAccumulator(channels);
+        loudnessAnalyzer = new LoudnessAnalyzer(decoded.sampleRate, channels);
       } else if (channelCount !== channels || sourceSampleRate !== decoded.sampleRate) {
         throw new Error("流式音频解码块的声道数或采样率发生变化。");
       }
 
+      loudnessAnalyzer!.push({
+        sampleRate: decoded.sampleRate,
+        channels: decoded.channels
+      });
       pcm!.append(decoded.channels, false);
       await emitReadyUnits(false);
     });
@@ -607,6 +618,7 @@ async function prepareStreamingPlaybackAsset(input: {
     });
     return {
       playbackAsset,
+      loudness: loudnessAnalyzer!.finish(),
       leafHashes: completeLeafHashes,
       proofs: tree.proofs,
       draftId: input.draftId
@@ -1056,6 +1068,7 @@ async function encodePlaybackAsset(
   });
 
   const channels = audioBuffer.numberOfChannels as 1 | 2;
+  const loudness = analyzeAudioBuffer(audioBuffer);
   const bitrate = channels === 1 ? 96_000 as const : 192_000 as const;
   const durationMs = Math.max(1, Math.round(audioBuffer.duration * 1000));
   const sourceSampleRate = audioBuffer.sampleRate;
@@ -1137,6 +1150,7 @@ async function encodePlaybackAsset(
   });
   return {
     playbackAsset,
+    loudness,
     encodedUnits: completeEncodedUnits,
     leafHashes: completeLeafHashes,
     proofs: tree.proofs

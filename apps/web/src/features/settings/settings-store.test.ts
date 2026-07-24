@@ -20,6 +20,7 @@ describe("app settings store", () => {
       discover: { provider: "netease" },
       playback: {
         defaultVolume: 0.8,
+        loudnessNormalization: false,
         playerStyle: "vinyl",
         disableArtworkColor: false,
         localPlaybackMode: "sequence",

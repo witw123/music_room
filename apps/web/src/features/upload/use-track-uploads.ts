@@ -364,6 +364,7 @@ export function useTrackUploads(options: {
           lyrics,
           provider: track.sourceType,
           providerTrackId: track.sourceRef?.trackId ?? null,
+          loudness: track.loudness,
           durationMs: track.durationMs,
           sizeBytes: file.size,
           originalAsset: track.originalAsset,

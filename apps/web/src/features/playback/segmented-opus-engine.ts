@@ -20,6 +20,7 @@ type SyncInput = {
   playback: PlaybackSnapshot;
   serverNowMs: number;
   volume: number;
+  loudnessGainDb?: number;
   broadcast?: boolean;
   getUnit: (unitIndex: number, signal?: AbortSignal) => Promise<AudioAssetUnitRecord | null>;
   gaplessNext?: {
@@ -58,6 +59,7 @@ export class SegmentedOpusEngine {
   private mixBus: GainNode | null = null;
   private playbackGate: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  private loudnessGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
   private broadcastGain: GainNode | null = null;
   private limiterInputAnalyser: AnalyserNode | null = null;
@@ -192,7 +194,7 @@ export class SegmentedOpusEngine {
       this.sourceHealth = "source-silent";
       return { state: "awaiting-unlock" as const, bufferedUnits: 0 };
     }
-    this.ensureMasterGain(context, input.volume);
+    this.ensureMasterGain(context, input.volume, input.loudnessGainDb ?? 0);
 
     const startAtMs = Date.parse(timelineId);
     const elapsedMs = Math.max(0, input.serverNowMs - startAtMs);
@@ -417,6 +419,16 @@ export class SegmentedOpusEngine {
   setVolume(volume: number) {
     if (this.masterGain) {
       rampAudioParam(this.masterGain.gain, normalizeVolume(volume), this.masterGainContext);
+    }
+  }
+
+  setLoudnessGainDb(gainDb: number) {
+    if (this.loudnessGain) {
+      rampAudioParam(
+        this.loudnessGain.gain,
+        normalizeGainDb(gainDb),
+        this.masterGainContext
+      );
     }
   }
 
@@ -786,9 +798,10 @@ export class SegmentedOpusEngine {
     return decode;
   }
 
-  private ensureMasterGain(context: AudioContext, volume: number) {
+  private ensureMasterGain(context: AudioContext, volume: number, loudnessGainDb: number) {
     if (this.masterGain && this.masterGainContext === context) {
       rampAudioParam(this.masterGain.gain, normalizeVolume(volume), context);
+      rampAudioParam(this.loudnessGain!.gain, normalizeGainDb(loudnessGainDb), context);
       return;
     }
     this.disposeOutputGraph();
@@ -815,9 +828,12 @@ export class SegmentedOpusEngine {
       }
     }
     const output = this.limiter ?? this.playbackGate;
+    this.loudnessGain = context.createGain();
+    this.loudnessGain.gain.value = normalizeGainDb(loudnessGainDb);
+    output.connect(this.loudnessGain);
     this.masterGain = context.createGain();
     this.masterGain.gain.value = normalizeVolume(volume);
-    output.connect(this.masterGain);
+    this.loudnessGain.connect(this.masterGain);
     this.masterGain.connect(context.destination);
     const broadcastDestination = this.broadcastEnabled
       ? roomAudioOutput.getBroadcastDestination(context)
@@ -1003,6 +1019,7 @@ export class SegmentedOpusEngine {
     this.mixBus?.disconnect();
     this.playbackGate?.disconnect();
     this.limiter?.disconnect();
+    this.loudnessGain?.disconnect();
     this.masterGain?.disconnect();
     this.broadcastGain?.disconnect();
     this.limiterInputAnalyser?.disconnect();
@@ -1010,6 +1027,7 @@ export class SegmentedOpusEngine {
     this.mixBus = null;
     this.playbackGate = null;
     this.limiter = null;
+    this.loudnessGain = null;
     this.masterGain = null;
     this.broadcastGain = null;
     this.limiterInputAnalyser = null;
@@ -1020,6 +1038,13 @@ export class SegmentedOpusEngine {
 
 function normalizeVolume(volume: number) {
   return Math.min(1, Math.max(0, volume));
+}
+
+function normalizeGainDb(value: number) {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  return Math.min(4, Math.max(0.063, 10 ** (value / 20)));
 }
 
 function unitKey(assetId: string, unitIndex: number) {

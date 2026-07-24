@@ -67,9 +67,10 @@ export function useSegmentedOpusPlayback(input: {
   isCurrentSource: boolean;
   disableSourcePlayback?: boolean;
   volume: number;
+  loudnessGainDb?: number;
   audioUnlocked: boolean;
 }) {
-  const { roomSnapshot, peerId, isCurrentSource, volume } = input;
+  const { roomSnapshot, peerId, isCurrentSource, volume, loudnessGainDb = 0 } = input;
   const engineRef = useRef<SegmentedOpusEngine | null>(null);
   const runtimeRef = useRef(input);
   runtimeRef.current = input;
@@ -199,6 +200,7 @@ export function useSegmentedOpusPlayback(input: {
           playback: currentPlayback,
           serverNowMs,
           volume: runtime.volume,
+          loudnessGainDb: runtime.loudnessGainDb,
           broadcast: !currentLocalFallback,
           getUnit: (unitIndex, signal) => getPlayableAssetUnit(
             currentPlaybackAsset.assetId,
@@ -289,6 +291,10 @@ export function useSegmentedOpusPlayback(input: {
   useEffect(() => {
     engineRef.current?.setVolume(volume);
   }, [volume]);
+
+  useEffect(() => {
+    engineRef.current?.setLoudnessGainDb(loudnessGainDb);
+  }, [loudnessGainDb]);
 
   useEffect(() => () => engineRef.current?.destroy(), []);
 

@@ -26,6 +26,14 @@ export const trackSourceTypeSchema = z.enum([
   "qqmusic"
 ]);
 
+export const trackLoudnessSchema = z.object({
+  integratedLufs: z.number().finite().min(-70).max(0),
+  truePeakDbtp: z.number().finite().min(-120).max(6),
+  gainDb: z.number().finite().min(-24).max(12),
+  targetLufs: z.literal(-14),
+  version: z.literal(1)
+}).strict();
+
 export const trackMetaSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -43,6 +51,7 @@ export const trackMetaSchema = z.object({
   ownerNickname: z.string(),
   sourceType: trackSourceTypeSchema,
   sourceRef: remoteTrackSourceRefSchema.nullable().optional(),
+  loudness: trackLoudnessSchema.optional(),
   originalAsset: originalAssetManifestSchema.optional(),
   playbackAsset: playbackAssetManifestSchema.optional()
 }).superRefine((track, context) => {
@@ -98,6 +107,7 @@ export const playlistSchema = z.object({
 });
 
 export type TrackMeta = z.infer<typeof trackMetaSchema>;
+export type TrackLoudness = z.infer<typeof trackLoudnessSchema>;
 export type QueueItem = z.infer<typeof queueItemSchema>;
 export type Playlist = z.infer<typeof playlistSchema>;
 
