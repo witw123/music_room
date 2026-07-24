@@ -155,35 +155,37 @@ export function RoomAppShell({
           )}
         </>
       ) : null}
-      <BottomPlayerController
-        mobileVariant="compact"
-        audioRef={audioRef}
-        isSourceOwner={isSourceOwner}
-        roomSnapshot={roomSnapshot}
-        activeSession={activeSession}
-        currentTrack={currentTrack}
-        canSeekPlayback={true}
-        resetEpoch={pageState.playerResetEpoch}
-        onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
-        onVolumeChange={pageState.setVolume}
-        onPlay={playbackActions.handlePlayTrack}
-        onPause={roomActions.pauseTrack}
-        onSeek={roomActions.seekTrack}
-        onPrev={playbackActions.handlePrevTrack}
-        onNext={playbackActions.handleNextTrack}
-        onCyclePlaybackMode={() =>
-          roomActions.setPlaybackMode(
-            getNextPlaybackMode(roomSnapshot?.room.playback.playbackMode ?? "sequence")
-          )
-        }
-        canReorderQueue={canReorderQueue}
-        canRemoveQueue={!!activeSession && canReorderQueue}
-        onPlayQueueItem={playbackActions.handlePlayQueueItem}
-        onRemoveQueueItem={roomActions.removeQueueItem}
-        onReorderQueue={roomActions.reorderQueue}
-        isLyricsOpen={isLyricsOpen}
-        onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
-      />
+      {!backgroundOnly && !isRoomAway ? (
+        <BottomPlayerController
+          mobileVariant="compact"
+          audioRef={audioRef}
+          isSourceOwner={isSourceOwner}
+          roomSnapshot={roomSnapshot}
+          activeSession={activeSession}
+          currentTrack={currentTrack}
+          canSeekPlayback={true}
+          resetEpoch={pageState.playerResetEpoch}
+          onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
+          onVolumeChange={pageState.setVolume}
+          onPlay={playbackActions.handlePlayTrack}
+          onPause={roomActions.pauseTrack}
+          onSeek={roomActions.seekTrack}
+          onPrev={playbackActions.handlePrevTrack}
+          onNext={playbackActions.handleNextTrack}
+          onCyclePlaybackMode={() =>
+            roomActions.setPlaybackMode(
+              getNextPlaybackMode(roomSnapshot?.room.playback.playbackMode ?? "sequence")
+            )
+          }
+          canReorderQueue={canReorderQueue}
+          canRemoveQueue={!!activeSession && canReorderQueue}
+          onPlayQueueItem={playbackActions.handlePlayQueueItem}
+          onRemoveQueueItem={roomActions.removeQueueItem}
+          onReorderQueue={roomActions.reorderQueue}
+          isLyricsOpen={isLyricsOpen}
+          onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
+        />
+      ) : null}
     </>
   );
 }

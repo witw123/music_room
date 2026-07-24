@@ -595,7 +595,8 @@ export function useRoomActions({
           action: "prev",
           actorPeerId: getCurrentPeerId?.() ?? undefined,
           expectedVersion
-        })
+        }),
+      roomSnapshot.room.playback
     );
   }, [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]);
 
@@ -612,7 +613,8 @@ export function useRoomActions({
           action: "next",
           actorPeerId: getCurrentPeerId?.() ?? undefined,
           expectedVersion
-        })
+        }),
+      roomSnapshot.room.playback
     );
   }, [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]);
 

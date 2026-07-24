@@ -10,6 +10,7 @@ import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlis
 type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
+  localFolderName: string | null;
   localSavedFileHashes: string[];
   canControlPlayback: boolean;
   canManageAllTracks?: boolean;
@@ -40,6 +41,7 @@ export function filterLibraryTracks<T extends Pick<TrackMeta, "ownerSessionId">>
 function TrackListSectionBase({
   tracks,
   uploadedTracks,
+  localFolderName,
   localSavedFileHashes,
   canControlPlayback,
   canManageAllTracks,
@@ -166,6 +168,7 @@ function TrackListSectionBase({
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
               const isSavedLocally = localSavedFileHashes.includes(track.fileHash);
+              const canSaveToSelectedFolder = Boolean(localFolderName);
               const canSaveLocalTrack = !!activeSession && (
                 track.ownerSessionId === activeSession.userId ||
                 (track.sourceType !== "local_upload" && !!track.sourceRef)
@@ -232,11 +235,15 @@ function TrackListSectionBase({
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className={`h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent sm:h-8 sm:w-8 ${isSavedLocally ? "text-accent hover:text-accent" : ""}`}
+                        className={`h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent sm:h-8 sm:w-8 ${isSavedLocally ? "text-accent hover:text-accent" : canSaveToSelectedFolder ? "" : "text-foreground-muted/60"}`}
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
-                        aria-label={isSavedLocally ? `《${track.title}》已保存到本地` : `保存《${track.title}》到本地`}
-                        title={isSavedLocally ? "已保存到本地" : "保存到本地"}
+                        aria-label={isSavedLocally
+                          ? `《${track.title}》已保存到本地`
+                          : canSaveToSelectedFolder
+                            ? `保存《${track.title}》到本地`
+                            : `《${track.title}》需要先选择本地保存目录`}
+                        title={isSavedLocally ? "已保存到本地" : canSaveToSelectedFolder ? "保存到本地" : "先选择本地保存目录"}
                         type="button"
                         size="icon"
                       >

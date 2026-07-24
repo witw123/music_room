@@ -13,7 +13,6 @@ import {
   deleteLocalTrackDataForTracks,
   getCachedLibraryTrack,
   listCachedLibraryTrackSummaries,
-  upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
@@ -23,7 +22,6 @@ import {
   createInFlightCachedLibraryTrackFileLoader,
   hasUsableCachedLibraryFileForRoomTrack,
   loadCacheLibrarySnapshot,
-  notifyCacheLibraryChanged,
   toCachedLibraryFile
 } from "./cache-library";
 import {
@@ -286,6 +284,12 @@ export function useTrackUploads(options: {
 
   const saveTrackToLocal = useCallback(async (track: TrackMeta) => {
     try {
+      const localStorageState = await getLocalAudioStorageState();
+      if (!localStorageState.directoryName) {
+        setStatusMessage("请先在“我的”页面选择本地音频文件夹，再使用此按钮保存曲库歌曲。");
+        return;
+      }
+
       let file: Blob | null = null;
       if (track.sourceRef) {
         setStatusMessage(`正在从${track.sourceRef.provider === "netease" ? "网易云音乐" : "QQ 音乐"}下载《${track.title}》...`);
@@ -347,50 +351,31 @@ export function useTrackUploads(options: {
             : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
           ).catch(() => null))?.plainLyric ?? null
           : null);
-      const localStorageState = await getLocalAudioStorageState();
-      if (localStorageState.directoryName) {
-        await saveAudioFileToLocalDirectory({
-          file,
-          fileHash: track.fileHash,
-          title: track.title,
-          mimeType,
-          trackId: track.id,
-          track: {
-            artist: track.artist,
-            album: track.album,
-            artworkUrl: track.artworkUrl,
-            lyrics,
-            provider: track.sourceType,
-            providerTrackId: track.sourceRef?.trackId ?? null,
-            durationMs: track.durationMs,
-            sizeBytes: file.size,
-            originalAsset: track.originalAsset,
-            playbackAsset: track.playbackAsset
-          }
-        });
-        await refreshCacheLibrary();
-        setStatusMessage(`《${track.title}》已保存到本地文件夹，浏览器缓存中的源文件已释放。`);
-        return;
-      }
-
-      await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord({
-        roomId: roomSnapshot?.room.id ?? "local-library",
+      await saveAudioFileToLocalDirectory({
         file,
+        fileHash: track.fileHash,
+        title: track.title,
+        mimeType,
+        trackId: track.id,
         track: {
-          ...track,
-          fileHash: track.fileHash,
-          mimeType,
+          artist: track.artist,
+          album: track.album,
+          artworkUrl: track.artworkUrl,
+          lyrics,
+          provider: track.sourceType,
+          providerTrackId: track.sourceRef?.trackId ?? null,
+          durationMs: track.durationMs,
           sizeBytes: file.size,
-          lyrics
+          originalAsset: track.originalAsset,
+          playbackAsset: track.playbackAsset
         }
-      }));
-      notifyCacheLibraryChanged();
+      });
       await refreshCacheLibrary();
-      setStatusMessage(`《${track.title}》已保存到浏览器本地曲库，可直接离线播放。`);
+      setStatusMessage(`《${track.title}》已保存到本地文件夹，浏览器缓存中的源文件已释放。`);
     } catch (error) {
       setStatusMessage(toLocalAudioErrorMessage(error));
     }
-  }, [refreshCacheLibrary, roomSnapshot?.room.id, setStatusMessage, uploadedTracks]);
+  }, [refreshCacheLibrary, setStatusMessage, uploadedTracks]);
 
   const cleanLocalStorage = useCallback(async () => {
     try {

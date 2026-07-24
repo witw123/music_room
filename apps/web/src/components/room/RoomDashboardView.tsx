@@ -273,6 +273,7 @@ function RoomDashboardViewBase({
             <LibraryTabPanel
               tracks={roomSnapshot.tracks}
               uploadedTracks={uploadedTracks}
+              localFolderName={localStorageSummary.localFolderName}
               localSavedFileHashes={localStorageSummary.localSavedFileHashes}
               onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}

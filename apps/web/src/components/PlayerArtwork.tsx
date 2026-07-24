@@ -10,7 +10,7 @@ export function SquareAlbumCover({ artworkUrl, className = "", style }: SquareAl
   return (
     <div
       aria-hidden="true"
-      className={`relative overflow-hidden border border-white/20 bg-accent shadow-2xl ${className}`}
+      className={`relative overflow-hidden bg-accent shadow-2xl ${className}`}
       data-testid="square-album-cover"
       style={style}
     >

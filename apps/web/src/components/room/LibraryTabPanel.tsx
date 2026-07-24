@@ -8,6 +8,7 @@ import { TrackListSection } from "./TrackListSection";
 type LibraryTabPanelProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
+  localFolderName: string | null;
   localSavedFileHashes: string[];
   canControlPlayback: boolean;
   canManageAllTracks?: boolean;
@@ -22,6 +23,7 @@ type LibraryTabPanelProps = {
 function LibraryTabPanelBase({
   tracks,
   uploadedTracks,
+  localFolderName,
   localSavedFileHashes,
   canControlPlayback,
   canManageAllTracks,
@@ -37,6 +39,7 @@ function LibraryTabPanelBase({
       <TrackListSection
         tracks={tracks}
         uploadedTracks={uploadedTracks}
+        localFolderName={localFolderName}
         localSavedFileHashes={localSavedFileHashes}
         canControlPlayback={canControlPlayback}
         canManageAllTracks={canManageAllTracks}
