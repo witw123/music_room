@@ -102,7 +102,7 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main className="settings-page-scroll h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1000px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:mx-auto md:px-10 md:pt-16">
         <header className="flex items-center justify-between gap-4 border-b border-white/[0.1] pb-5">
           <div>

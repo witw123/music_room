@@ -830,7 +830,7 @@ function LocalTrackRow({
 
   return (
     <article
-      className={`grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-surface-border px-4 py-3 last:border-b-0 hover:bg-surface-hover/50 ${isPlayable ? "cursor-pointer sm:cursor-default" : ""} sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto] sm:items-center sm:gap-3 ${isCurrent ? "bg-accent/10" : ""} ${isDragTarget ? "border-accent/60 bg-accent/10" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-surface-border px-4 py-3 last:border-b-0 hover:bg-surface-hover/50 ${isPlayable ? "cursor-pointer sm:cursor-default" : ""} sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto] sm:items-center sm:gap-3 ${isCurrent ? "bg-accent/10" : ""} ${isDragTarget ? "border-accent/60 bg-accent/10" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
       draggable={draggable}
       onDragEnd={onDragEnd}
       onDragOver={(event: DragEvent<HTMLElement>) => {
@@ -860,7 +860,7 @@ function LocalTrackRow({
       }}
       tabIndex={isPlayable ? 0 : undefined}
     >
-      <span aria-label={draggable ? "拖动调整顺序" : undefined} className="flex items-center gap-1 text-xs text-foreground-muted" title={draggable ? "拖动调整顺序" : undefined}>
+      <span aria-label={draggable ? "拖动调整顺序" : undefined} className="hidden items-center gap-1 text-xs text-foreground-muted sm:flex" title={draggable ? "拖动调整顺序" : undefined}>
         {draggable ? <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01" /></svg> : null}
         {String(index + 1).padStart(2, "0")}
       </span>
@@ -870,7 +870,7 @@ function LocalTrackRow({
       </div>
       <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
       <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
-      <div className="col-start-3 row-start-1 row-span-2 flex min-w-0 items-center justify-end gap-1 sm:col-auto sm:row-auto sm:flex-nowrap" onClick={(event) => event.stopPropagation()}>
+      <div className="col-start-2 row-start-1 row-span-2 flex min-w-0 items-center justify-end gap-1 sm:col-auto sm:row-auto sm:flex-nowrap" onClick={(event) => event.stopPropagation()}>
         <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 sm:flex sm:flex-nowrap">
           {onDownload ? <Button aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={track.availableOffline || isDownloading} onClick={onDownload} size="icon" title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"} type="button" variant="ghost">{isDownloading ? <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3a9 9 0 1 0 9 9" /></svg> : <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}</Button> : null}
           {canFavorite ? <FavoriteTrackButton isFavorite={isFavorite} onToggle={onToggleFavorite!} pending={isTogglingFavorite} track={toCachedProviderTrack(track)} /> : null}
@@ -1275,9 +1275,6 @@ function PlaylistDetailView({
       {downloadMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{downloadMessage}</p> : null}
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-surface-border bg-surface/25">
-        <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 border-b border-surface-border px-4 py-3 text-xs text-foreground-muted sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto]">
-          <span>#</span><span>标题</span><span className="hidden sm:block">专辑</span><span className="hidden text-right sm:block">时长</span><span aria-hidden="true" className="hidden sm:block" />
-        </div>
         {rows.length ? rows.map(({ track, index, trackId }) => {
           if (!track) {
             return (
@@ -1304,7 +1301,7 @@ function PlaylistDetailView({
                   reorderTracks(trackId);
                 }}
               >
-                <span className="w-8 shrink-0 text-xs text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
+                <span className="hidden w-8 shrink-0 text-xs text-foreground-muted sm:block">{String(index + 1).padStart(2, "0")}</span>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm text-foreground">{trackId}</p><p className="mt-1 text-xs text-foreground-muted">曲目信息不可用</p></div>
                 {canEditTracks ? <PlaylistOrderButtons index={index} onMove={(direction) => moveTrackByOffset(trackId, direction)} title={trackId} total={currentTrackIds.length} /> : null}
                 {canEditTracks ? <Button aria-label="从歌单移除歌曲" className="h-10 w-10 text-red-300 hover:bg-red-500/10 hover:text-red-200 sm:h-8 sm:w-8" onClick={() => onUpdateTracks(currentTrackIds.filter((id) => id !== trackId))} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l-1-13M10 10v7m4-7v7" /></svg></Button> : null}

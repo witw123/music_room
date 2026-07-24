@@ -130,22 +130,12 @@ export function DiscoverPage() {
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const discoverScrollRef = useRef<HTMLElement>(null);
-
   useEffect(() => {
     const nextSearchOpen = searchParams.get("search") === "1";
     setSearchOpen(nextSearchOpen);
     setSearchKeywords(nextSearchOpen ? searchParams.get("q") ?? "" : "");
     setSearchSuggestionsOpen(false);
   }, [searchParams]);
-
-  useEffect(() => {
-    if (!detail || searchOpen) return;
-    const frameId = window.requestAnimationFrame(() => {
-      discoverScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [detail, searchOpen]);
 
   useEffect(() => {
     try {
@@ -310,7 +300,6 @@ export function DiscoverPage() {
 
   async function openPlaylist(summary: ProviderPlaylistSummary) {
     const key = `playlist:${summary.provider}:${summary.providerPlaylistId}`;
-    discoverScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     setDetailLoading(key);
     setErrorMessage(null);
     try {
@@ -608,7 +597,7 @@ export function DiscoverPage() {
 
   if (detail && !searchOpen) {
     return (
-      <main ref={discoverScrollRef} className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
         {detail.kind === "playlist" ? (
           <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1920px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8 xl:px-14">
             <ProviderPlaylistDetailView
@@ -663,7 +652,7 @@ export function DiscoverPage() {
   const searchSuggestions = buildSearchSuggestions(searchKeywords, searchHistory, activeData);
 
   return (
-    <main ref={discoverScrollRef} className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1480px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:px-10 md:pt-14">
         <header className="flex flex-wrap items-end justify-between gap-5">
           <div>
@@ -1081,7 +1070,7 @@ function DailySection({
         <div className="divide-y divide-surface-border overflow-hidden rounded-xl border border-surface-border bg-surface">
           {tracks.slice(0, 6).map((track, index) => (
             <div
-              className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 ${trackActions.isPlayable?.(track) ? "cursor-pointer md:cursor-default" : ""}`}
+              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 md:grid-cols-[1.5rem_minmax(0,1fr)_auto] ${trackActions.isPlayable?.(track) ? "cursor-pointer md:cursor-default" : ""}`}
               key={`${track.provider}:${track.providerTrackId}`}
               onClick={() => {
                 if (!trackActions.onPlay || !trackActions.isPlayable?.(track) || trackActions.isDownloading?.(track)) return;
@@ -1089,7 +1078,7 @@ function DailySection({
                 trackActions.onPlay(track);
               }}
             >
-              <span className="w-5 shrink-0 text-center text-xs tabular-nums text-foreground-muted">{String(index + 1).padStart(2, "0")}</span>
+              <span className="hidden w-5 shrink-0 text-center text-xs tabular-nums text-foreground-muted md:block">{String(index + 1).padStart(2, "0")}</span>
               <div className="flex min-w-0 items-center gap-3"><Artwork alt={track.album ?? track.title} className="h-11 w-11 shrink-0 rounded-lg" src={track.artworkUrl} /><div className="min-w-0"><strong className="block truncate text-sm font-medium text-foreground">{track.title}</strong><span className="mt-1 block truncate text-xs text-foreground-muted">{track.artist} · {track.album ?? "未知专辑"}</span></div></div>
               <DiscoverTrackControls actions={trackActions} track={track} />
             </div>

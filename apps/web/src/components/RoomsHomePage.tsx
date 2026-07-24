@@ -283,7 +283,7 @@ export function RoomsHomePage({
         <AppSidebar
           activeItem="home"
           activeSession={activeSession}
-          hasBottomPlayer={Boolean(effectiveAwayRoomId)}
+          hasBottomPlayer={false}
           onLogout={handleLogout}
         />
       ) : null}
