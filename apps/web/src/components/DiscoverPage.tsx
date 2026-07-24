@@ -26,6 +26,11 @@ import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/Mob
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
+  cacheProviderTrackForPlayback,
+  hasProviderTrackPlaybackCache,
+  providerPlaybackCacheChangedEvent
+} from "@/features/playback/provider-track-cache";
+import {
   hashAudioBlob,
   listMergedLocalPlaylistTracks,
   localPlaylistTrackId,
@@ -33,13 +38,11 @@ import {
 } from "@/features/playlist/local-playlist";
 import { isLocalPlaylistMirror } from "@/lib/local-playlist-database";
 import {
-  upsertCachedLibraryTrack,
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import {
   normalizeLocalAudioMimeType,
-  saveCachedAudioFileToLocalDirectory,
   saveAudioFileToLocalDirectory,
   ensureLocalAudioDirectoryWriteAccess
 } from "@/features/upload/local-audio-storage";
@@ -177,6 +180,15 @@ export function DiscoverPage() {
       cancelled = true;
     };
   }, [activeSession]);
+
+  useEffect(() => {
+    const handlePlaybackCacheChange = (event: Event) => {
+      const fileHashes = new Set((event as CustomEvent<{ fileHashes?: string[] }>).detail?.fileHashes ?? []);
+      setPlaybackTracks((current) => current.filter((track) => !fileHashes.has(track.fileHash ?? "")));
+    };
+    window.addEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
+    return () => window.removeEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
+  }, []);
 
   useEffect(() => {
     const syncDiscoverProvider = () => {
@@ -346,56 +358,10 @@ export function DiscoverPage() {
     const savedTrack = localTracks.find((item) => item.id === trackId);
     if (savedTrack?.fileHash && player.isTrackPlayable(savedTrack)) return savedTrack;
     const queuedTrack = playbackTracks.find((item) => item.id === trackId);
-    if (queuedTrack?.fileHash && player.queue.some((item) => item.trackId === trackId)) return queuedTrack;
+    if (queuedTrack?.fileHash && player.queue.some((item) => item.trackId === trackId) && await hasProviderTrackPlaybackCache(queuedTrack.fileHash)) return queuedTrack;
+    if (queuedTrack) setPlaybackTracks((current) => current.filter((item) => item.id !== queuedTrack.id));
 
-    const resolvedTrack = await resolveTrackArtwork(track);
-    const response = resolvedTrack.provider === "netease"
-      ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
-      : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
-    const fileHash = await hashAudioBlob(response.blob);
-    const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
-    const lyricPayload = await (resolvedTrack.provider === "netease"
-      ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-      : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-    ).catch(() => null);
-    const lyrics = lyricPayload?.plainLyric ?? null;
-
-    await upsertCachedLibraryTrack({
-      fileHash,
-      title: resolvedTrack.title,
-      artist: resolvedTrack.artist,
-      album: resolvedTrack.album,
-      artworkUrl: resolvedTrack.artworkUrl,
-      lyrics,
-      provider: resolvedTrack.provider,
-      providerTrackId: resolvedTrack.providerTrackId,
-      mimeType,
-      durationMs: resolvedTrack.durationMs,
-      sizeBytes: response.blob.size,
-      file: response.blob,
-      sourceTrackIds: [],
-      sourceRoomIds: [],
-      lastSourceTrackId: null,
-      lastSourceRoomId: null,
-      lastOwnerNickname: null
-    });
-    const cachedFile = await saveCachedAudioFileToLocalDirectory({
-      file: response.blob,
-      fileHash,
-      title: resolvedTrack.title,
-      mimeType,
-      provider: resolvedTrack.provider
-    });
-    const record: LocalPlaylistTrackRecord = {
-      ...toProviderTrackRecord(resolvedTrack),
-      fileHash,
-      fileName: cachedFile?.fileName ?? null,
-      sizeBytes: response.blob.size,
-      mimeType,
-      lyrics,
-      availableOffline: false,
-      updatedAt: new Date().toISOString()
-    };
+    const record = await cacheProviderTrackForPlayback(track);
     setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
     return record;
   }
@@ -581,8 +547,10 @@ export function DiscoverPage() {
     return {
       isDownloaded: (track) => localTracks.some((item) => item.id === localPlaylistTrackId(track) && item.availableOffline),
       isPlayable: () => true,
+      isQueueable: () => true,
       isQueued: (track) => player.queue.some((item) => item.trackId === localPlaylistTrackId(track)),
-      isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}` || pending === `play:${track.provider}:${track.providerTrackId}` || pending === `queue:${track.provider}:${track.providerTrackId}`,
+      isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}`,
+      isPreparingPlayback: (track) => pending === `play:${track.provider}:${track.providerTrackId}` || pending === `queue:${track.provider}:${track.providerTrackId}`,
       onDownload: (track) => void downloadProviderTrack(track),
       onAddToQueue: (track) => void queueProviderTrack(track),
       onPlay: (track) => void playProviderTrack(track),

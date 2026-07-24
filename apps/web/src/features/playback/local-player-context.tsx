@@ -23,6 +23,11 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import {
+  cleanupProviderTrackPlaybackCache,
+  providerPlaybackCacheChangedEvent,
+  releaseProviderTrackPlaybackCache
+} from "@/features/playback/provider-track-cache";
+import {
   getLocalAudioCacheFile,
   getLocalAudioFile
 } from "@/features/upload/local-audio-storage";
@@ -133,6 +138,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const refresh = () => {
       void refreshLibraryRecords().catch(() => undefined);
     };
@@ -140,18 +146,31 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       if (!document.hidden) refresh();
     };
 
-    refresh();
+    void cleanupProviderTrackPlaybackCache()
+      .catch(() => 0)
+      .finally(() => {
+        if (!cancelled) refresh();
+      });
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      cancelled = true;
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshLibraryRecords]);
 
   useEffect(() => {
+    const cleanup = () => {
+      void cleanupProviderTrackPlaybackCache().catch(() => undefined);
+    };
+    window.addEventListener("pagehide", cleanup);
+    window.addEventListener(providerPlaybackCacheChangedEvent, cleanup);
     return () => {
+      window.removeEventListener("pagehide", cleanup);
+      window.removeEventListener(providerPlaybackCacheChangedEvent, cleanup);
+      cleanup();
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
       }
@@ -688,6 +707,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const onRemoveQueueItem = useCallback(async (queueItemId: string) => {
     const index = queueRef.current.findIndex((track) => buildLocalQueueItemId(track.id) === queueItemId);
     if (index < 0) return;
+    const removedTrack = queueRef.current[index];
     const nextRecords = queueRef.current.filter((_, itemIndex) => itemIndex !== index);
     queueRef.current = nextRecords;
     setQueueRecords(nextRecords);
@@ -701,11 +721,10 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       ];
       currentIndexRef.current = 0;
     }
-    if (currentRecordRef.current?.id === queueItemId.replace("local-queue:", "")) {
+    if (currentRecordRef.current?.id === removedTrack.id) {
       onPause();
     }
-    // Provider playback files are durable local cache entries. Removing a queue
-    // item must not delete them; cache cleanup is an explicit settings action.
+    void releaseProviderTrackPlaybackCache(removedTrack.fileHash).catch(() => undefined);
   }, [onPause]);
 
   useEffect(() => {

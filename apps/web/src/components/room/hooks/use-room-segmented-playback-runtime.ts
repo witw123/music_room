@@ -241,7 +241,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     streamingOnlyPlayback,
     fullyCachedPlayback
   } = playbackPreferences;
-  const forceProviderCache = fullyCachedPlayback && isProviderTrack(input.currentTrack);
+  // Offline auto-cache prevention and stream-only playback take priority over
+  // the provider-cache preference when multiple strategies are enabled.
+  const forceProviderCache = !preventOfflineAutoLoad &&
+    !streamingOnlyPlayback &&
+    fullyCachedPlayback &&
+    isProviderTrack(input.currentTrack);
   const offlineSource = resolveOfflineProviderSource({
     roomSnapshot: input.roomSnapshot,
     track: input.currentTrack,
@@ -435,7 +440,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     setOfflineFallbackAsset(null);
     setStatusMessage(forceProviderCache
       ? `正在从${fallbackInput.source.label}获取《${fallbackInput.track.title}》并缓存播放…`
-      : `成员不在线，正在从${fallbackInput.source.label}获取歌曲并导入曲库…`);
+      : `成员不在线，正在从${fallbackInput.source.label}获取歌曲并缓存播放…`);
     void ensureOfflineProviderPlaybackAsset({
       roomSnapshot: fallbackInput.roomSnapshot,
       track: fallbackInput.track,
@@ -463,8 +468,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         ? error.message
         : "平台音频暂时不可用，请稍后重试。";
       setStatusMessage(forceProviderCache
-        ? `无法从${fallbackInput.source?.label ?? "音乐平台"}缓存《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`
-        : `成员不在线，无法从${fallbackInput.source?.label ?? "音乐平台"}获取《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`);
+        ? `无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`
+        : `成员不在线，无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`);
     });
 
     return () => {

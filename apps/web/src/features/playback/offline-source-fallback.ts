@@ -136,7 +136,7 @@ async function importOfflineProviderTrack(input: {
   try {
     onStatus?.(input.forceDownload
       ? `正在从${source.label}下载并缓存《${track.title}》…`
-      : `成员不在线，正在从${source.label}下载并保存《${track.title}》…`);
+      : `成员不在线，正在从${source.label}下载并缓存《${track.title}》…`);
     const downloaded = source.provider === "netease"
       ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
       : await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal);
@@ -169,7 +169,8 @@ async function importOfflineProviderTrack(input: {
     );
 
     // Keep the browser cache when no local repository is set. If one exists,
-    // this moves the source file into the configured local folder.
+    // this moves the source file into its cache/provider directory. This is
+    // still disposable cache storage, never the formal local library.
     // Do not make playback wait for repository metadata, artwork, or a slow
     // File System Access write. The IndexedDB copy is already durable, and
     // the returned File can start at the room clock position immediately.
@@ -188,8 +189,8 @@ async function importOfflineProviderTrack(input: {
     notifyCacheLibraryChanged();
 
     onStatus?.(input.forceDownload
-      ? `已从${source.label}缓存《${track.title}》，正在使用本地原音频播放。`
-      : `成员不在线，已从${source.label}保存《${track.title}》，正在使用本地原音频播放。`);
+      ? `已从${source.label}缓存《${track.title}》，正在使用缓存音频播放。`
+      : `成员不在线，已从${source.label}缓存《${track.title}》，正在使用缓存音频播放。`);
     return {
       playbackAsset: fallbackPlaybackAsset,
       fileHash: track.fileHash,

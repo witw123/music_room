@@ -635,7 +635,10 @@ function stripAssetUnitRecord(unit: Awaited<ReturnType<typeof getAssetUnits>>[nu
   return descriptor;
 }
 
-export async function deleteLocalAudioCacheFile(fileHash: string) {
+export async function deleteLocalAudioCacheFile(
+  fileHash: string,
+  options?: { requestPermission?: boolean }
+) {
   const fileRecord = await getLocalAudioCacheFileRecord(fileHash);
   if (!fileRecord) {
     return false;
@@ -646,10 +649,15 @@ export async function deleteLocalAudioCacheFile(fileHash: string) {
     return false;
   }
 
-  const permission = await requestDirectoryPermission(
-    asPermissionedHandle(directory.handle),
-    "readwrite"
-  );
+  const permission = options?.requestPermission === false
+    ? await asPermissionedHandle(directory.handle)
+      .queryPermission({ mode: "readwrite" })
+      .then((value) => value === "granted")
+      .catch(() => false)
+    : await requestDirectoryPermission(
+      asPermissionedHandle(directory.handle),
+      "readwrite"
+    );
   if (!permission) {
     return false;
   }

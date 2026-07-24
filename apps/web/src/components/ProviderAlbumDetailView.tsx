@@ -19,8 +19,10 @@ type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 export type ProviderAlbumTrackActions = {
   isDownloaded?: (track: Track) => boolean;
   isPlayable?: (track: Track) => boolean;
+  isQueueable?: (track: Track) => boolean;
   isQueued?: (track: Track) => boolean;
   isDownloading?: (track: Track) => boolean;
+  isPreparingPlayback?: (track: Track) => boolean;
   onDownload?: (track: Track) => void;
   onAddToQueue?: (track: Track) => void;
   onPlay?: (track: Track) => void;
@@ -124,13 +126,13 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
             className={`group grid gap-x-3 gap-y-2 px-3 py-3 transition-colors hover:bg-white/[0.035] ${actions ? "grid-cols-[minmax(0,1fr)_auto] cursor-pointer md:cursor-default" : "grid-cols-[minmax(0,1fr)]"} md:items-center md:gap-3 md:px-3 md:py-3 ${actions ? "md:grid-cols-[48px_minmax(0,1.4fr)_minmax(0,0.8fr)_112px_minmax(0,auto)]" : "md:grid-cols-[48px_minmax(0,1.5fr)_minmax(0,0.8fr)_112px]"}`}
             key={`${track.provider}:${track.providerTrackId}`}
             onClick={() => {
-              if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track)) return;
+              if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
               if (window.matchMedia("(min-width: 768px)").matches) return;
               actions.onPlay(track);
             }}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
-              if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track)) return;
+              if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
               if (window.matchMedia("(min-width: 768px)").matches) return;
               event.preventDefault();
               actions.onPlay(track);
@@ -141,7 +143,7 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
               <GripIcon />
               <span>{String(index + 1).padStart(2, "0")}</span>
             </div>
-            <div className="flex min-w-0 items-center gap-3"><TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium text-white/90">{track.title}</p><p className="mt-1 flex min-w-0 items-center gap-1 truncate text-xs text-white/45"><span className="truncate">{track.artist}</span><span aria-hidden="true" className="shrink-0 text-white/25">·</span><span className="shrink-0">{actions?.isDownloaded?.(track) ? "已下载" : "需下载"}</span></p></div></div>
+            <div className="flex min-w-0 items-center gap-3"><TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium text-white/90">{track.title}</p><p className="mt-1 flex min-w-0 items-center gap-1 truncate text-xs text-white/45"><span className="truncate">{track.artist}</span><span aria-hidden="true" className="shrink-0 text-white/25">·</span><span className="shrink-0">{actions?.isDownloaded?.(track) ? "已下载" : "可直接播放"}</span></p></div></div>
             <span className="hidden truncate text-xs text-white/55 md:block">{track.album ?? "未知专辑"}</span>
             <span className="col-start-1 text-xs tabular-nums text-white/40 md:col-auto md:text-right">{formatDuration(track.durationMs)}</span>
             {actions ? <TrackActions track={track} actions={actions} /> : null}
@@ -156,13 +158,15 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
   const [menuAnchor, setMenuAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const downloaded = actions.isDownloaded?.(track) ?? false;
   const playable = actions.isPlayable?.(track) ?? false;
+  const queueable = actions.isQueueable?.(track) ?? playable;
   const queued = actions.isQueued?.(track) ?? false;
   const downloading = actions.isDownloading?.(track) ?? false;
-  const disabled = downloading;
+  const preparingPlayback = actions.isPreparingPlayback?.(track) ?? false;
+  const disabled = downloading || preparingPlayback;
   const menuItems: MobileTrackAction[] = [
-    ...(actions.onPlay ? [{ id: "play", label: playable ? "播放" : "需要下载后播放", icon: "play" as const, disabled: disabled || !playable, onSelect: () => actions.onPlay?.(track) }] : []),
+    ...(actions.onPlay ? [{ id: "play", label: preparingPlayback ? "准备播放中" : playable ? "播放" : "需要下载后播放", icon: "play" as const, disabled: disabled || !playable, onSelect: () => actions.onPlay?.(track) }] : []),
     ...(actions.onDownload ? [{ id: "download", label: downloaded ? "已下载" : downloading ? "下载中" : "下载到本地", icon: "download" as const, disabled: disabled || downloaded, onSelect: () => actions.onDownload?.(track) }] : []),
-    ...(actions.onAddToQueue ? [{ id: "queue", label: queued ? "已在队列中" : playable ? "加入队列" : "需要下载后加入队列", icon: "queue" as const, disabled: disabled || queued || !playable, onSelect: () => actions.onAddToQueue?.(track) }] : []),
+    ...(actions.onAddToQueue ? [{ id: "queue", label: queued ? "已在队列中" : queueable ? "加入队列" : "需要下载后加入队列", icon: "queue" as const, disabled: disabled || queued || !queueable, onSelect: () => actions.onAddToQueue?.(track) }] : []),
     ...(actions.onAddToPlaylist ? [{ id: "playlist", label: "加入歌单", icon: "plus" as const, disabled, onSelect: () => { if (menuAnchor) actions.onAddToPlaylist?.(track, menuAnchor); } }] : []),
     ...(actions.onToggleFavorite ? [{ id: "favorite", label: actions.isFavorite?.(track) ? "取消收藏" : "收藏歌曲", icon: "heart" as const, disabled: actions.isTogglingFavorite?.(track) ?? false, onSelect: () => void actions.onToggleFavorite?.(track) }] : [])
   ];
@@ -171,8 +175,8 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
     <div className="col-start-2 row-start-1 row-span-2 flex min-w-0 items-center justify-end gap-1 md:col-auto md:row-auto md:flex-nowrap" onClick={(event) => event.stopPropagation()}>
       <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 md:flex md:flex-nowrap">
         {actions.onDownload ? <Button aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || downloaded} onClick={() => actions.onDownload?.(track)} size="icon" title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地"} type="button" variant="ghost"><TrackActionIcon name={downloading ? "loading" : "download"} /></Button> : null}
-        {actions.onAddToQueue ? <Button aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || queued || !playable} onClick={() => actions.onAddToQueue?.(track)} size="icon" title={queued ? "已在队列中" : playable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><TrackActionIcon name="queue" /></Button> : null}
-        {actions.onPlay ? <Button aria-label={playable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || !playable} onClick={() => actions.onPlay?.(track)} size="icon" title={playable ? "播放" : "需要下载后播放"} type="button" variant="ghost"><TrackActionIcon name="play" /></Button> : null}
+        {actions.onAddToQueue ? <Button aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || queued || !queueable} onClick={() => actions.onAddToQueue?.(track)} size="icon" title={queued ? "已在队列中" : queueable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><TrackActionIcon name="queue" /></Button> : null}
+        {actions.onPlay ? <Button aria-label={playable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || !playable} onClick={() => actions.onPlay?.(track)} size="icon" title={preparingPlayback ? "准备播放中" : playable ? "播放" : "需要下载后播放"} type="button" variant="ghost"><TrackActionIcon name="play" /></Button> : null}
         {actions.onAddToPlaylist ? <Button aria-label={`将《${track.title}》加入歌单`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled} onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" type="button" variant="ghost"><TrackActionIcon name="plus" /></Button> : null}
         {actions.onToggleFavorite ? <FavoriteTrackButton isFavorite={actions.isFavorite?.(track) ?? false} onToggle={() => actions.onToggleFavorite?.(track)} pending={actions.isTogglingFavorite?.(track) ?? false} size="compact" track={track as ProviderTrackCandidate} /> : null}
       </div>

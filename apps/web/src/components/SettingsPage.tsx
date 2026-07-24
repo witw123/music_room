@@ -263,25 +263,31 @@ export function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="播放策略">
-            <SettingRow label="禁止自动加载歌曲" description="房间成员离线时，不自动下载歌曲到本地。">
+            <SettingRow label="禁止离线自动缓存" description="房间成员离线时不从网易云或 QQ 音乐下载歌曲；已有本地缓存仍可播放。">
               <Toggle
                 checked={settings.playback.preventOfflineAutoLoad}
-                label="禁止自动加载歌曲"
+                label="禁止离线自动缓存"
                 onChange={(checked) => patchSettings({ playback: { preventOfflineAutoLoad: checked } })}
               />
             </SettingRow>
-            <SettingRow label="完全流式播放" description="跳过本机保存的歌曲，优先使用曲库资产流式播放。">
+            <SettingRow label="房间仅流式播放" description="房间歌曲不读取本机音频或平台缓存，始终使用实时流式播放，并停用离线自动缓存。">
               <Toggle
                 checked={settings.playback.streamingOnlyPlayback}
-                label="完全流式播放"
-                onChange={(checked) => patchSettings({ playback: { streamingOnlyPlayback: checked } })}
+                label="房间仅流式播放"
+                onChange={(checked) => patchSettings({ playback: {
+                  streamingOnlyPlayback: checked,
+                  ...(checked ? { fullyCachedPlayback: false } : {})
+                } })}
               />
             </SettingRow>
-            <SettingRow label="完全缓存播放" description="房间中的网易云和 QQ 音乐曲目优先下载为本地缓存播放，不加载曲库播放资产。">
+            <SettingRow label="平台歌曲缓存播放" description="房间中的网易云和 QQ 音乐歌曲下载到当前用户缓存后播放，不保存到正式本地曲库；与流式播放同时开启时以流式播放为准。">
               <Toggle
                 checked={settings.playback.fullyCachedPlayback}
-                label="完全缓存播放"
-                onChange={(checked) => patchSettings({ playback: { fullyCachedPlayback: checked } })}
+                label="平台歌曲缓存播放"
+                onChange={(checked) => patchSettings({ playback: {
+                  fullyCachedPlayback: checked,
+                  ...(checked ? { streamingOnlyPlayback: false } : {})
+                } })}
               />
             </SettingRow>
           </SettingsSection>

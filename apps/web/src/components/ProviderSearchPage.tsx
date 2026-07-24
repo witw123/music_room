@@ -33,14 +33,13 @@ import {
   ensureLocalAudioDirectoryWriteAccess,
   getLocalAudioStorageState,
   normalizeLocalAudioMimeType,
-  saveCachedAudioFileToLocalDirectory,
   saveAudioFileToLocalDirectory
 } from "@/features/upload/local-audio-storage";
 import {
   upsertLocalPlaylistTrack,
-  upsertCachedLibraryTrack,
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
+import { cacheProviderTrackForPlayback } from "@/features/playback/provider-track-cache";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -387,54 +386,7 @@ export function ProviderSearchPage({
     const cachedTrack = playbackTracks.find((item) => item.id === trackId);
     if (cachedTrack?.fileHash && player.isTrackPlayable(cachedTrack)) return cachedTrack;
 
-    const resolvedTrack = await resolveTrackArtwork(track);
-    const response = resolvedTrack.provider === "netease"
-      ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
-      : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
-    const fileHash = await hashAudioBlob(response.blob);
-    const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
-    const lyricPayload = await (resolvedTrack.provider === "netease"
-      ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-      : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-    ).catch(() => null);
-    const lyrics = lyricPayload?.plainLyric ?? null;
-
-    await upsertCachedLibraryTrack({
-      fileHash,
-      title: resolvedTrack.title,
-      artist: resolvedTrack.artist,
-      album: resolvedTrack.album,
-      artworkUrl: resolvedTrack.artworkUrl,
-      lyrics,
-      provider: resolvedTrack.provider,
-      providerTrackId: resolvedTrack.providerTrackId,
-      mimeType,
-      durationMs: resolvedTrack.durationMs,
-      sizeBytes: response.blob.size,
-      file: response.blob,
-      sourceTrackIds: [],
-      sourceRoomIds: [],
-      lastSourceTrackId: null,
-      lastSourceRoomId: null,
-      lastOwnerNickname: null
-    });
-    const cachedFile = await saveCachedAudioFileToLocalDirectory({
-      file: response.blob,
-      fileHash,
-      title: resolvedTrack.title,
-      mimeType,
-      provider: resolvedTrack.provider
-    });
-    const record: LocalPlaylistTrackRecord = {
-      ...toProviderTrackRecord(resolvedTrack),
-      fileHash,
-      fileName: cachedFile?.fileName ?? null,
-      sizeBytes: response.blob.size,
-      mimeType,
-      lyrics,
-      availableOffline: false,
-      updatedAt: new Date().toISOString()
-    };
+    const record = await cacheProviderTrackForPlayback(track);
     setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
     return record;
   }

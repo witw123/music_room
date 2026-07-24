@@ -49,6 +49,11 @@ import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
+import {
+  cacheProviderTrackForPlayback,
+  hasProviderTrackPlaybackCache,
+  providerPlaybackCacheChangedEvent
+} from "@/features/playback/provider-track-cache";
 import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import {
   getCachedPlaylistData,
@@ -771,6 +776,7 @@ function LocalTrackRow({
   index,
   isCurrent,
   isPlayable,
+  isQueueable,
   isQueued,
   onAddToQueue,
   onDownload,
@@ -782,6 +788,7 @@ function LocalTrackRow({
   isTogglingFavorite = false,
   onToggleFavorite,
   isDownloading = false,
+  isPreparingPlayback = false,
   draggable = false,
   isDragTarget = false,
   total,
@@ -794,6 +801,7 @@ function LocalTrackRow({
   index: number;
   isCurrent: boolean;
   isPlayable: boolean;
+  isQueueable: boolean;
   isQueued: boolean;
   onAddToQueue: () => void;
   onDownload?: () => void;
@@ -806,6 +814,7 @@ function LocalTrackRow({
   isTogglingFavorite?: boolean;
   onToggleFavorite?: () => void;
   isDownloading?: boolean;
+  isPreparingPlayback?: boolean;
   draggable?: boolean;
   isDragTarget?: boolean;
   onDragStart?: () => void;
@@ -816,9 +825,9 @@ function LocalTrackRow({
   const [menuAnchor, setMenuAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const canFavorite = !!onToggleFavorite && (track.provider === "netease" || track.provider === "qqmusic") && !!track.providerTrackId;
   const menuItems: MobileTrackAction[] = [
-    { id: "play", label: isPlayable ? "播放" : "需要下载后播放", icon: "play", disabled: !isPlayable, onSelect: onPlay },
-    ...(onDownload ? [{ id: "download", label: track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地", icon: "download" as const, disabled: track.availableOffline || isDownloading, onSelect: onDownload }] : []),
-    { id: "queue", label: isQueued ? "已在队列中" : isPlayable ? "加入队列" : "需要下载后加入队列", icon: "queue", disabled: isQueued || !isPlayable, onSelect: onAddToQueue },
+    { id: "play", label: isPreparingPlayback ? "准备播放中" : isPlayable ? "播放" : "需要下载后播放", icon: "play", disabled: isPreparingPlayback || !isPlayable, onSelect: onPlay },
+    ...(onDownload ? [{ id: "download", label: track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地", icon: "download" as const, disabled: track.availableOffline || isDownloading || isPreparingPlayback, onSelect: onDownload }] : []),
+    { id: "queue", label: isQueued ? "已在队列中" : isQueueable ? "加入队列" : "需要下载后加入队列", icon: "queue", disabled: isQueued || !isQueueable || isPreparingPlayback, onSelect: onAddToQueue },
     ...(canFavorite ? [{ id: "favorite", label: isFavorite ? "取消收藏" : "收藏歌曲", icon: "heart" as const, disabled: isTogglingFavorite, onSelect: onToggleFavorite as () => void }] : []),
     ...(onMoveOrder ? [
       { id: "up", label: "上移", icon: "up" as const, disabled: index === 0, onSelect: () => onMoveOrder(-1) },
@@ -849,12 +858,12 @@ function LocalTrackRow({
         onDrop();
       }}
       onClick={() => {
-        if (!isPlayable || window.matchMedia("(min-width: 640px)").matches) return;
+        if (!isPlayable || isPreparingPlayback || isDownloading || window.matchMedia("(min-width: 640px)").matches) return;
         onPlay();
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
-        if (!isPlayable || window.matchMedia("(min-width: 640px)").matches) return;
+        if (!isPlayable || isPreparingPlayback || isDownloading || window.matchMedia("(min-width: 640px)").matches) return;
         event.preventDefault();
         onPlay();
       }}
@@ -866,16 +875,16 @@ function LocalTrackRow({
       </span>
       <div className="flex min-w-0 items-center gap-3">
         <Artwork artworkUrl={track.artworkUrl} title={track.title} />
-        <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{track.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{track.artist}{track.lyrics ? " · 有歌词" : ""}{track.availableOffline ? " · 已下载" : " · 需下载"}</p></div>
+        <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{track.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{track.artist}{track.lyrics ? " · 有歌词" : ""}{track.availableOffline ? " · 已下载" : track.provider === "netease" || track.provider === "qqmusic" ? " · 可直接播放" : " · 需下载"}</p></div>
       </div>
       <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
       <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
       <div className="col-start-2 row-start-1 row-span-2 flex min-w-0 items-center justify-end gap-1 sm:col-auto sm:row-auto sm:flex-nowrap" onClick={(event) => event.stopPropagation()}>
         <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 sm:flex sm:flex-nowrap">
-          {onDownload ? <Button aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={track.availableOffline || isDownloading} onClick={onDownload} size="icon" title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"} type="button" variant="ghost">{isDownloading ? <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3a9 9 0 1 0 9 9" /></svg> : <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}</Button> : null}
+          {onDownload ? <Button aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={track.availableOffline || isDownloading || isPreparingPlayback} onClick={onDownload} size="icon" title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"} type="button" variant="ghost">{isDownloading ? <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3a9 9 0 1 0 9 9" /></svg> : <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}</Button> : null}
           {canFavorite ? <FavoriteTrackButton isFavorite={isFavorite} onToggle={onToggleFavorite!} pending={isTogglingFavorite} track={toCachedProviderTrack(track)} /> : null}
-          <Button aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={isQueued || !isPlayable} onClick={onAddToQueue} size="icon" title={isQueued ? "已在队列中" : isPlayable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg></Button>
-          <Button aria-label={isPlayable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={!isPlayable} onClick={onPlay} size="icon" title={isPlayable ? "播放" : "需要下载后播放"} type="button" variant={isCurrent ? "default" : "ghost"}>{isCurrent ? <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>}</Button>
+          <Button aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={isQueued || !isQueueable || isPreparingPlayback} onClick={onAddToQueue} size="icon" title={isQueued ? "已在队列中" : isQueueable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg></Button>
+          <Button aria-label={isPlayable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={!isPlayable || isPreparingPlayback || isDownloading} onClick={onPlay} size="icon" title={isPreparingPlayback ? "准备播放中" : isPlayable ? "播放" : "需要下载后播放"} type="button" variant={isCurrent ? "default" : "ghost"}>{isCurrent ? <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>}</Button>
           {onMove ? <Button aria-label={`移动《${track.title}》到其他歌单`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={!track.providerTrackId && track.provider !== "local_upload"} onClick={(event) => onMove(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="移动到其他歌单" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M5 7h10M11 3l4 4-4 4M19 17H9m4-4-4 4 4 4" /></svg></Button> : null}
           {onRemove ? <Button aria-label={`从歌单移除《${track.title}》`} className="h-10 w-10 text-red-300 hover:bg-red-500/10 hover:text-red-200 sm:h-8 sm:w-8" onClick={onRemove} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg></Button> : null}
         </div>
@@ -1039,9 +1048,20 @@ function PlaylistDetailView({
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [downloadTrackId, setDownloadTrackId] = useState<string | null>(null);
+  const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [playbackTrackId, setPlaybackTrackId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ completed: 0, total: 0 });
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handlePlaybackCacheChange = (event: Event) => {
+      const fileHashes = new Set((event as CustomEvent<{ fileHashes?: string[] }>).detail?.fileHashes ?? []);
+      setPlaybackTracks((current) => current.filter((track) => !fileHashes.has(track.fileHash ?? "")));
+    };
+    window.addEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
+    return () => window.removeEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1136,14 +1156,67 @@ function PlaylistDetailView({
     .map((row) => row.track)
     .filter((track): track is LocalPlaylistTrackRecord => Boolean(track))
     .filter((track, index, list) => list.findIndex((candidate) => candidate.id === track.id) === index);
-  const playableTracks = sequenceTracks.filter((track) => player.isTrackPlayable(track));
+  const canPrepareTrack = (track: LocalPlaylistTrackRecord) =>
+    player.isTrackPlayable(track) || !!toCachedProviderTrack(track);
+  const playableTracks = sequenceTracks.filter(canPrepareTrack);
   const downloadableTracks = sequenceTracks.filter((track) =>
     (track.provider === "netease" || track.provider === "qqmusic") &&
     !!track.providerTrackId &&
     !track.availableOffline
   );
   const showBatchDownload = sequenceTracks.length > 0 && (!isLocal || downloadableTracks.length > 0);
-  const sequenceIndexById = new Map(sequenceTracks.map((track, index) => [track.id, index]));
+
+  async function prepareTrackForPlayback(track: LocalPlaylistTrackRecord) {
+    if (player.isTrackPlayable(track)) return track;
+    const cachedTrack = playbackTracks.find((item) => item.id === track.id);
+    if (cachedTrack?.fileHash && await hasProviderTrackPlaybackCache(cachedTrack.fileHash)) return cachedTrack;
+    if (cachedTrack) setPlaybackTracks((current) => current.filter((item) => item.id !== cachedTrack.id));
+    const providerTrack = toCachedProviderTrack(track);
+    if (!providerTrack) return null;
+    const record = await cacheProviderTrackForPlayback(providerTrack);
+    setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
+    return record;
+  }
+
+  async function playPlaylistTrack(track: LocalPlaylistTrackRecord) {
+    if (downloadTrackId || playbackTrackId) return;
+    setPlaybackTrackId(track.id);
+    setDownloadMessage(null);
+    try {
+      const record = await prepareTrackForPlayback(track);
+      if (!record) {
+        setDownloadMessage(`《${track.title}》没有可用的播放音频。`);
+        return;
+      }
+      await player.playTrack(record);
+      setDownloadMessage(`正在播放《${track.title}》，歌曲已保留在本机缓存中。`);
+    } catch (error) {
+      setDownloadMessage(error instanceof Error ? error.message : "歌曲播放失败，请重试。" );
+    } finally {
+      setPlaybackTrackId(null);
+    }
+  }
+
+  async function playAllTracks() {
+    if (isDownloadingAll || downloadTrackId || playbackTrackId || playableTracks.length === 0) return;
+    setDownloadMessage(null);
+    const records: LocalPlaylistTrackRecord[] = [];
+    try {
+      for (const track of sequenceTracks) {
+        setPlaybackTrackId(track.id);
+        const record = await prepareTrackForPlayback(track);
+        if (record) records.push(record);
+      }
+      if (records.length > 0) {
+        await player.playTracks(records, 0);
+        setDownloadMessage(`正在播放“${title}”，歌曲已保留在本机缓存中。`);
+      }
+    } catch (error) {
+      setDownloadMessage(error instanceof Error ? error.message : "播放歌单失败，请重试。" );
+    } finally {
+      setPlaybackTrackId(null);
+    }
+  }
 
   async function downloadTrack(track: LocalPlaylistTrackRecord) {
     const provider = track.provider === "netease" || track.provider === "qqmusic" ? track.provider : null;
@@ -1266,7 +1339,7 @@ function PlaylistDetailView({
             {isDownloadingAll ? `下载中 ${downloadProgress.completed}/${downloadProgress.total}` : downloadableTracks.length > 0 ? "一键下载" : "已全部下载"}
           </Button>
         ) : null}
-        <Button disabled={playableTracks.length === 0} onClick={() => void player.playTracks(sequenceTracks, 0)} type="button">
+        <Button disabled={playableTracks.length === 0 || playbackTrackId !== null || downloadTrackId !== null} onClick={() => void playAllTracks()} type="button">
           <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
           播放全部
         </Button>
@@ -1308,12 +1381,14 @@ function PlaylistDetailView({
               </article>
             );
           }
-          const playable = player.isTrackPlayable(track);
+          const playable = canPrepareTrack(track);
+          const queueable = player.isTrackPlayable(track) || playbackTracks.some((item) => item.id === track.id && !!item.fileHash);
           return (
             <LocalTrackRow
               index={index}
               isCurrent={player.currentTrack?.id === track.id}
               isPlayable={playable}
+              isQueueable={queueable}
               isQueued={player.queue.some((item) => item.trackId === track.id)}
                isDragTarget={dragOverTrackId === trackId}
               key={`${selection.kind}:${track.id}`}
@@ -1322,6 +1397,7 @@ function PlaylistDetailView({
                 ? () => void downloadTrack(track)
                 : undefined}
               isDownloading={downloadTrackId === track.id}
+              isPreparingPlayback={playbackTrackId === track.id}
               onDragEnd={() => {
                 setDraggingTrackId(null);
                 setDragOverTrackId(null);
@@ -1335,10 +1411,7 @@ function PlaylistDetailView({
               isFavorite={isFavorite(track)}
               isTogglingFavorite={isTogglingFavorite(track)}
               onToggleFavorite={() => onToggleFavorite(track)}
-              onPlay={() => {
-                const sequenceIndex = sequenceIndexById.get(track.id);
-                if (sequenceIndex !== undefined) void player.playTracks(sequenceTracks, sequenceIndex);
-              }}
+              onPlay={() => void playPlaylistTrack(track)}
               track={track}
               total={rows.length}
               draggable={canEditTracks}

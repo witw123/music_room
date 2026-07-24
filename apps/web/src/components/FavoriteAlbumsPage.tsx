@@ -17,6 +17,11 @@ import {
 } from "@/features/workspace/page-data-cache";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
+  cacheProviderTrackForPlayback,
+  hasProviderTrackPlaybackCache,
+  providerPlaybackCacheChangedEvent
+} from "@/features/playback/provider-track-cache";
+import {
   hashAudioBlob,
   listMergedLocalPlaylistTracks,
   localPlaylistTrackId,
@@ -60,6 +65,7 @@ export function FavoriteAlbumsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
@@ -106,8 +112,19 @@ export function FavoriteAlbumsPage() {
     };
   }, [activeSession]);
 
+  useEffect(() => {
+    const handlePlaybackCacheChange = (event: Event) => {
+      const fileHashes = new Set((event as CustomEvent<{ fileHashes?: string[] }>).detail?.fileHashes ?? []);
+      setPlaybackTracks((current) => current.filter((track) => !fileHashes.has(track.fileHash ?? "")));
+    };
+    window.addEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
+    return () => window.removeEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
+  }, []);
+
   function getLocalRecord(track: Track) {
-    return localTracks.find((item) => item.id === localPlaylistTrackId(track)) ?? toProviderTrackRecord(track);
+    return localTracks.find((item) => item.id === localPlaylistTrackId(track))
+      ?? playbackTracks.find((item) => item.id === localPlaylistTrackId(track))
+      ?? toProviderTrackRecord(track);
   }
 
   function toggleFavoriteSong(track: Track) {
@@ -117,28 +134,21 @@ export function FavoriteAlbumsPage() {
   }
 
   function favoriteTrackActions() {
-    const tracks = favoriteTracks.map(favoriteTrackToCandidate);
     return {
       isDownloaded: (track: Track) => getLocalRecord(track).availableOffline,
-      isPlayable: (track: Track) => player.isTrackPlayable(getLocalRecord(track)),
+      isPlayable: () => true,
+      isQueueable: (track: Track) => player.isTrackPlayable(getLocalRecord(track)) || playbackTracks.some((item) => item.id === localPlaylistTrackId(track) && !!item.fileHash),
       isQueued: (track: Track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
       isDownloading: (track: Track) => pending === `download:${track.provider}:${track.providerTrackId}`,
+      isPreparingPlayback: (track: Track) => pending === `play:${track.provider}:${track.providerTrackId}`,
       onDownload: (track: Track) => void downloadTrack(track),
       onAddToQueue: (track: Track) => player.addToQueue(getLocalRecord(track)),
-      onPlay: (track: Track) => {
-        const records = tracks.map((item) => getLocalRecord(item));
-        const index = records.findIndex((item) => item.id === getLocalRecord(track).id);
-        if (index >= 0) void player.playTracks(records, index);
-      },
+      onPlay: (track: Track) => void playFavoriteTrack(track),
       onAddToPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => void openPlaylistPicker(track, anchor),
       isFavorite: (track: Track) => isFavoriteTrack(track),
       isTogglingFavorite: (track: Track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
       onToggleFavorite: toggleFavoriteSong
     };
-  }
-
-  function albumRecords(albumToPlay: ProviderAlbumDetail) {
-    return albumToPlay.tracks.map((track) => getLocalRecord(track));
   }
 
   async function resolveTrackArtwork(track: Track) {
@@ -149,6 +159,35 @@ export function FavoriteAlbumsPage() {
         : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
     } catch {
       return track;
+    }
+  }
+
+  async function cacheTrackForPlayback(track: Track) {
+    const trackId = localPlaylistTrackId(track);
+    const savedTrack = localTracks.find((item) => item.id === trackId);
+    if (savedTrack?.fileHash && player.isTrackPlayable(savedTrack)) return savedTrack;
+    const cachedTrack = playbackTracks.find((item) => item.id === trackId);
+    if (cachedTrack?.fileHash && await hasProviderTrackPlaybackCache(cachedTrack.fileHash)) return cachedTrack;
+    if (cachedTrack) setPlaybackTracks((current) => current.filter((item) => item.id !== cachedTrack.id));
+
+    const record = await cacheProviderTrackForPlayback(track);
+    setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
+    return record;
+  }
+
+  async function playFavoriteTrack(track: Track) {
+    if (pending) return;
+    setPending(`play:${track.provider}:${track.providerTrackId}`);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      const record = await cacheTrackForPlayback(track);
+      await player.playTrack(record);
+      setStatusMessage(`正在播放《${track.title}》，歌曲已保留在本机缓存中。`);
+    } catch (error) {
+      setErrorMessage(toErrorMessage(error));
+    } finally {
+      setPending(null);
     }
   }
 
@@ -321,16 +360,14 @@ export function FavoriteAlbumsPage() {
             pending={pending}
             trackActions={{
               isDownloaded: (track) => getLocalRecord(track).availableOffline,
-              isPlayable: (track) => player.isTrackPlayable(getLocalRecord(track)),
+              isPlayable: () => true,
+              isQueueable: (track) => player.isTrackPlayable(getLocalRecord(track)) || playbackTracks.some((item) => item.id === localPlaylistTrackId(track) && !!item.fileHash),
               isQueued: (track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
               isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}`,
+              isPreparingPlayback: (track) => pending === `play:${track.provider}:${track.providerTrackId}`,
               onDownload: (track) => void downloadTrack(track),
               onAddToQueue: (track) => player.addToQueue(getLocalRecord(track)),
-              onPlay: (track) => {
-                const records = albumRecords(detail);
-                const index = records.findIndex((item) => item.id === localPlaylistTrackId(track));
-                if (index >= 0) void player.playTracks(records, index);
-              },
+              onPlay: (track) => void playFavoriteTrack(track),
               onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
               isFavorite: (track) => isFavoriteTrack(track),
               isTogglingFavorite: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
