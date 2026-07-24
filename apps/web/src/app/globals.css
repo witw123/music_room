@@ -394,6 +394,23 @@
     animation: mobile-route-present 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 
+  @media (max-width: 767px) {
+    /* Home content scrolls in one document flow while the compact player and
+       bottom navigation stay fixed above it. */
+    .home-workspace-page {
+      min-height: 0;
+      padding-bottom: 0;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .home-workspace-page .home-centered-workspace {
+      flex: none;
+      min-height: max-content;
+      padding-bottom: calc(12rem + env(safe-area-inset-bottom));
+    }
+  }
+
   .mobile-player-panel {
     animation: mobile-player-panel-present 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }

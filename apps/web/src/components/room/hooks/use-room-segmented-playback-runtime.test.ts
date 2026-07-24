@@ -183,6 +183,16 @@ describe("native local audio context requirement", () => {
   });
 });
 
+describe("listener audio output ownership", () => {
+  it("does not require the shared audio graph for a listener cache by default", () => {
+    expect(shouldWaitForLocalAudioContext({
+      isCurrentSource: false,
+      audioUnlocked: false,
+      audioContextState: "suspended"
+    })).toBe(false);
+  });
+});
+
 describe("local room audio clock", () => {
   it("uses the room clock to advance a playing local file", () => {
     expect(resolveRoomAudioPositionMs({

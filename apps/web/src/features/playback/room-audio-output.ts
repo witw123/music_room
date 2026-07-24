@@ -181,6 +181,10 @@ export class RoomAudioOutput {
     return roomAudioActivationManager.isAudioContextReady();
   }
 
+  hasLocalAudioElementSource(element?: HTMLAudioElement | null) {
+    return !!element && this.localAudioElementSources.has(element);
+  }
+
   getSharedAudioContext() {
     return roomAudioActivationManager.getSharedAudioContext();
   }

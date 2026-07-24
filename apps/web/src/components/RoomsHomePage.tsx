@@ -274,7 +274,7 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="workspace-page relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-28 md:pl-60">
+    <main className="workspace-page home-workspace-page relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-28 md:pl-60">
 
       {showSidebar ? (
         <AppSidebar

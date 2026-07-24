@@ -52,7 +52,9 @@ describe("room audio output", () => {
       .mockReturnValue(context as unknown as AudioContext);
     const audio = { volume: 0.35 } as HTMLAudioElement;
 
+    expect(roomAudioOutput.hasLocalAudioElementSource(audio)).toBe(false);
     expect(roomAudioOutput.bindLocalAudioElement(audio)).toBe(broadcastDestination.stream);
+    expect(roomAudioOutput.hasLocalAudioElementSource(audio)).toBe(true);
     expect(source.connect).toHaveBeenCalledWith(gain);
     expect(source.connect).toHaveBeenCalledWith(broadcastDestination);
     expect(gain.connect).toHaveBeenCalledWith(context.destination);
@@ -76,5 +78,19 @@ describe("room audio output", () => {
 
     expect(source.disconnect).toHaveBeenCalled();
     expect(gain.disconnect).toHaveBeenCalled();
+  });
+
+  it("remembers elements that must stay on the Web Audio graph after cleanup", () => {
+    const { context } = createAudioContextMock();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(context as unknown as AudioContext);
+    const audio = { volume: 1 } as HTMLAudioElement;
+
+    roomAudioOutput.bindLocalAudioElement(audio);
+    roomAudioOutput.releaseRoomAudioSession();
+
+    expect(roomAudioOutput.hasLocalAudioElementSource(audio)).toBe(true);
+    roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false });
+    expect(roomAudioOutput.hasLocalAudioElementSource(audio)).toBe(true);
   });
 });

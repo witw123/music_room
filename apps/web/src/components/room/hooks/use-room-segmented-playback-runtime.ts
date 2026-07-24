@@ -860,9 +860,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         const localBindingKey = `${runtime.isCurrentSource ? "source" : "listener"}:local:${localAudioKey}`;
         if (localMediaBindingRef.current !== localBindingKey) {
           localMediaBindingRef.current = localBindingKey;
-          if (!runtime.isCurrentSource) {
-            roomAudioOutput.releaseRoomAudioSession();
-          }
         }
 
         if (!audio || !hasActiveTimeline) {
@@ -997,12 +994,25 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             return;
           }
 
-          const sourceBroadcastStream = activeRuntime.isCurrentSource
-            ? roomAudioOutput.bindLocalAudioElement(audio, {
+          let sourceBroadcastStream: MediaStream | null = null;
+          if (activeRuntime.isCurrentSource) {
+            sourceBroadcastStream = roomAudioOutput.bindLocalAudioElement(audio, {
               loudnessGainDb: activeRuntime.loudnessGainDb,
               broadcast: true
-            })
-            : null;
+            });
+          } else if (
+            roomAudioOutput.hasLocalAudioElementSource(audio) ||
+            activeRuntime.loudnessGainDb !== 0
+          ) {
+            // A MediaElementAudioSourceNode permanently takes over the
+            // element's output. Reuse it when normalization is active, but
+            // leave a default listener on native media output so a cache
+            // transition cannot strand the element in a disconnected graph.
+            roomAudioOutput.bindLocalAudioElement(audio, {
+              broadcast: false,
+              loudnessGainDb: activeRuntime.loudnessGainDb
+            });
+          }
           if (activeRuntime.isCurrentSource && !sourceBroadcastStream) {
             roomAudioOutput.unbindLocalAudioElement(audio);
             throw new Error("本地音频无法连接到房间广播音频图。");
@@ -1020,7 +1030,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
           const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
           if (shouldWaitForLocalAudioContext({
-            isCurrentSource: activeRuntime.isCurrentSource,
+            isCurrentSource: activeRuntime.isCurrentSource ||
+              roomAudioOutput.hasLocalAudioElementSource(audio),
             audioUnlocked: activeRuntime.audioUnlocked,
             audioContextState
           })) {
@@ -1243,10 +1254,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.hasStarted = false;
           health.waitingSinceMs = null;
         }
-        roomAudioOutput.bindLocalAudioElement(audio, {
-          broadcast: false,
-          loudnessGainDb: runtime.loudnessGainDb
-        });
+        if (
+          runtime.loudnessGainDb !== 0 ||
+          roomAudioOutput.hasLocalAudioElementSource(audio)
+        ) {
+          roomAudioOutput.bindLocalAudioElement(audio, {
+            broadcast: false,
+            loudnessGainDb: runtime.loudnessGainDb
+          });
+        }
         roomAudioOutput.applyVolume({
           localAudio: audio,
           volume: runtime.volume,
