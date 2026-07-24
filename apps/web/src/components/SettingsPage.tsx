@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { PlaybackMode } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { CustomLayoutEditor } from "@/components/CustomLayoutEditor";
 import { LocalStorageManagementCard } from "@/components/LocalStorageSettingsSection";
 import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
 import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
@@ -60,6 +61,7 @@ export function SettingsPage() {
   });
   const [settings, setSettings] = useState<AppSettings>(() => getDefaultAppSettings());
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isCustomLayoutEditorOpen, setIsCustomLayoutEditorOpen] = useState(false);
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -179,6 +181,30 @@ export function SettingsPage() {
                 label="减少界面动画"
                 onChange={(checked) => patchSettings({ layout: { reduceMotion: checked } })}
               />
+            </SettingRow>
+          </SettingsSection>
+
+          <SettingsSection title="界面">
+            <SettingRow label="自定义界面" description="在桌面画布中调整页面区域的位置和大小。">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Toggle
+                  checked={settings.layout.customLayout.enabled}
+                  label="自定义界面"
+                  onChange={(checked) => {
+                    patchSettings({ layout: { customLayout: { ...settings.layout.customLayout, enabled: checked } } });
+                    if (!checked) setIsCustomLayoutEditorOpen(false);
+                  }}
+                />
+                <Button
+                  disabled={!settings.layout.customLayout.enabled}
+                  onClick={() => setIsCustomLayoutEditorOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  打开编辑器
+                </Button>
+              </div>
             </SettingRow>
           </SettingsSection>
 
@@ -327,6 +353,13 @@ export function SettingsPage() {
 
         {statusMessage ? <p className="mt-6 text-xs text-foreground-muted" role="status">{statusMessage}</p> : null}
       </div>
+      {isCustomLayoutEditorOpen ? (
+        <CustomLayoutEditor
+          onChange={(customLayout) => patchSettings({ layout: { customLayout } })}
+          onClose={() => setIsCustomLayoutEditorOpen(false)}
+          value={settings.layout.customLayout}
+        />
+      ) : null}
     </main>
   );
 }

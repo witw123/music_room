@@ -380,6 +380,7 @@ function BottomPlayerBase({
       style={playerSurfaceStyle}
       data-testid="bottom-player"
       data-mobile-variant={mobileVariant}
+      data-custom-layout-item="player"
     >
       {!isCompactMobile ? (
         <div className="absolute left-0 right-0 top-0 h-[2px] z-10 bg-white/5" aria-hidden="true">

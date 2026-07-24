@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appSettingsStorageKey,
+  getDefaultAppSettings,
+  getCustomLayoutPageId,
   getAppSettings,
   normalizeSettings,
   resolveAppTheme,
@@ -50,6 +52,30 @@ describe("app settings store", () => {
   it("normalizes the discovery provider preference", () => {
     expect(normalizeSettings({ discover: { provider: "qqmusic" } }).discover.provider).toBe("qqmusic");
     expect(normalizeSettings({ discover: { provider: "unknown" } }).discover.provider).toBe("netease");
+  });
+
+  it("keeps custom layout pages independent and bounded", () => {
+    const first = getDefaultAppSettings();
+    const second = getDefaultAppSettings();
+    first.layout.customLayout.pages.home.content.x = 400;
+    expect(second.layout.customLayout.pages.home.content.x).toBe(64);
+
+    const normalized = normalizeSettings({
+      layout: {
+        customLayout: {
+          enabled: true,
+          pages: {
+            discover: {
+              content: { x: 9999, y: -20, width: 100, height: 9999, visible: true, locked: false }
+            }
+          }
+        }
+      }
+    });
+    expect(normalized.layout.customLayout.enabled).toBe(true);
+    expect(normalized.layout.customLayout.pages.discover.content).toMatchObject({ x: 1280, y: 0, width: 160, height: 900 });
+    expect(getCustomLayoutPageId("/app/settings")).toBe("settings");
+    expect(getCustomLayoutPageId("/rooms")).toBe("home");
   });
 
   it("persists normalized updates and can reset them", () => {

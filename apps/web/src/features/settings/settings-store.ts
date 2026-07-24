@@ -7,6 +7,54 @@ export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 export type PlayerStyle = "vinyl" | "square-cover";
 export type DiscoverProvider = "netease" | "qqmusic";
+export type CustomLayoutPageId = "home" | "discover" | "playlists" | "favorites" | "profile" | "settings";
+export type CustomLayoutItemId = "sidebar" | "content" | "player" | "mobile-navigation";
+
+export type CustomLayoutItem = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+  locked: boolean;
+};
+
+export type CustomLayoutPage = Record<CustomLayoutItemId, CustomLayoutItem>;
+
+export type CustomLayoutSettings = {
+  enabled: boolean;
+  pages: Record<CustomLayoutPageId, CustomLayoutPage>;
+};
+
+export const customLayoutCanvas = {
+  width: 1440,
+  height: 900
+} as const;
+
+export const customLayoutPageIds: CustomLayoutPageId[] = [
+  "home",
+  "discover",
+  "playlists",
+  "favorites",
+  "profile",
+  "settings"
+];
+
+export const customLayoutPageLabels: Record<CustomLayoutPageId, string> = {
+  home: "首页",
+  discover: "发现",
+  playlists: "歌单",
+  favorites: "收藏",
+  profile: "我的",
+  settings: "设置"
+};
+
+export const customLayoutItemLabels: Record<CustomLayoutItemId, string> = {
+  sidebar: "侧边栏",
+  content: "主内容",
+  player: "底部播放器",
+  "mobile-navigation": "移动端导航"
+};
 
 export type AppSettings = {
   version: 1;
@@ -14,6 +62,7 @@ export type AppSettings = {
   layout: {
     sidebarCollapsed: boolean;
     reduceMotion: boolean;
+    customLayout: CustomLayoutSettings;
   };
   discover: {
     provider: DiscoverProvider;
@@ -38,7 +87,8 @@ const defaultSettings: AppSettings = {
   theme: "dark",
   layout: {
     sidebarCollapsed: true,
-    reduceMotion: false
+    reduceMotion: false,
+    customLayout: getDefaultCustomLayoutSettings()
   },
   discover: {
     provider: "netease"
@@ -129,7 +179,8 @@ export function normalizeSettings(value: unknown): AppSettings {
     theme: input.theme === "light" || input.theme === "system" ? input.theme : "dark",
     layout: {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
-      reduceMotion: layout.reduceMotion === true
+      reduceMotion: layout.reduceMotion === true,
+      customLayout: normalizeCustomLayoutSettings(layout.customLayout)
     },
     discover: {
       provider: discover.provider === "qqmusic" ? "qqmusic" : "netease"
@@ -154,10 +205,99 @@ function cloneSettings(settings: AppSettings): AppSettings {
   return {
     version: settings.version,
     theme: settings.theme,
-    layout: { ...settings.layout },
+    layout: {
+      sidebarCollapsed: settings.layout.sidebarCollapsed,
+      reduceMotion: settings.layout.reduceMotion,
+      customLayout: cloneCustomLayoutSettings(settings.layout.customLayout)
+    },
     discover: { ...settings.discover },
     playback: { ...settings.playback }
   };
+}
+
+function cloneCustomLayoutSettings(settings: CustomLayoutSettings): CustomLayoutSettings {
+  return {
+    enabled: settings.enabled,
+    pages: Object.fromEntries(
+      customLayoutPageIds.map((pageId) => [
+        pageId,
+        Object.fromEntries(
+          (Object.entries(settings.pages[pageId]) as Array<[CustomLayoutItemId, CustomLayoutItem]>).map(([itemId, item]) => [
+            itemId,
+            { ...item }
+          ])
+        ) as CustomLayoutPage
+      ])
+    ) as Record<CustomLayoutPageId, CustomLayoutPage>
+  };
+}
+
+export function getDefaultCustomLayoutSettings(): CustomLayoutSettings {
+  const pages = Object.fromEntries(
+    customLayoutPageIds.map((pageId) => [pageId, createDefaultCustomLayoutPage()])
+  ) as Record<CustomLayoutPageId, CustomLayoutPage>;
+  return { enabled: false, pages };
+}
+
+export function normalizeCustomLayoutSettings(value: unknown): CustomLayoutSettings {
+  const input = isRecord(value) ? value : {};
+  const pagesInput = isRecord(input.pages) ? input.pages : {};
+  const defaults = getDefaultCustomLayoutSettings();
+  const pages = Object.fromEntries(
+    customLayoutPageIds.map((pageId) => {
+      const pageInput = isRecord(pagesInput[pageId]) ? pagesInput[pageId] : {};
+      const defaultPage = defaults.pages[pageId];
+      const page = Object.fromEntries(
+        (Object.keys(defaultPage) as CustomLayoutItemId[]).map((itemId) => [
+          itemId,
+          normalizeCustomLayoutItem(pageInput[itemId], defaultPage[itemId])
+        ])
+      ) as CustomLayoutPage;
+      return [pageId, page];
+    })
+  ) as Record<CustomLayoutPageId, CustomLayoutPage>;
+
+  return {
+    enabled: input.enabled === true,
+    pages
+  };
+}
+
+export function getCustomLayoutPageId(pathname: string | null): CustomLayoutPageId {
+  if (pathname?.startsWith("/app/discover")) return "discover";
+  if (pathname?.startsWith("/app/playlists")) return "playlists";
+  if (pathname?.startsWith("/app/favorites")) return "favorites";
+  if (pathname?.startsWith("/app/profile")) return "profile";
+  if (pathname?.startsWith("/app/settings")) return "settings";
+  return "home";
+}
+
+function createDefaultCustomLayoutPage(): CustomLayoutPage {
+  return {
+    sidebar: { x: 0, y: 0, width: 64, height: 840, visible: true, locked: false },
+    content: { x: 64, y: 0, width: 1376, height: 840, visible: true, locked: false },
+    player: { x: 64, y: 840, width: 1376, height: 60, visible: true, locked: false },
+    "mobile-navigation": { x: 0, y: 840, width: 1440, height: 60, visible: true, locked: true }
+  };
+}
+
+function normalizeCustomLayoutItem(value: unknown, fallback: CustomLayoutItem): CustomLayoutItem {
+  const input = isRecord(value) ? value : {};
+  const width = normalizeLayoutNumber(input.width, fallback.width, 160, customLayoutCanvas.width);
+  const height = normalizeLayoutNumber(input.height, fallback.height, 56, customLayoutCanvas.height);
+  return {
+    x: normalizeLayoutNumber(input.x, fallback.x, 0, customLayoutCanvas.width - width),
+    y: normalizeLayoutNumber(input.y, fallback.y, 0, customLayoutCanvas.height - height),
+    width,
+    height,
+    visible: input.visible !== false,
+    locked: input.locked === true
+  };
+}
+
+function normalizeLayoutNumber(value: unknown, fallback: number, minimum: number, maximum: number) {
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return Math.round(Math.min(maximum, Math.max(minimum, numeric)));
 }
 
 export function resolveAppTheme(preference: ThemePreference, prefersLight?: boolean): ResolvedTheme {

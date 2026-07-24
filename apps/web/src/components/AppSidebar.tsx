@@ -112,6 +112,7 @@ export function AppSidebar({
   return (
     <aside
       className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-[var(--sidebar-border)] bg-[var(--sidebar-background)] pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:pt-0 ${desktopBottomOffsetClass}`}
+      data-custom-layout-item="sidebar"
       aria-label="主导航"
     >
       <div className={`flex items-center gap-3 border-b border-[var(--sidebar-divider)] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-2 md:py-3`}>

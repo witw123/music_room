@@ -12,10 +12,12 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId, requestAwayRoomResume } from "@/lib/away-room";
 import { musicRoomApi } from "@/lib/music-room-api";
+import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
 
 export function AppRouteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  useCustomLayoutRuntime(pathname);
   const authEntryHref = buildWorkspaceAuthHref({
     redirectTo: pathname || "/app"
   });
@@ -111,7 +113,7 @@ function PersistentAppRouteViews({
         return (
           <div
             aria-hidden={!isVisible}
-            className={isVisible ? "mobile-app-route-view md:contents" : "hidden"}
+            className={isVisible ? "mobile-app-route-view custom-layout-content-region md:contents" : "hidden"}
             key={cachedRoute}
           >
             {page}

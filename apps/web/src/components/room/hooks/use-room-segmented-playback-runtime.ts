@@ -159,6 +159,18 @@ export function resolveRoomAudioPath(input: {
   return input.isCurrentSource ? "broadcast-segmented" : "remote-stream";
 }
 
+/**
+ * A cache preference changes the preferred source, but it must not stop the
+ * room source while that cache is being checked or downloaded. The segmented
+ * source remains the continuity path until a playable local file exists.
+ */
+export function shouldDisableSourcePlayback(input: {
+  isCurrentSource: boolean;
+  localAudioStatus: LocalAudioResolutionStatus;
+}) {
+  return input.isCurrentSource && input.localAudioStatus === "available";
+}
+
 function isAudioPlaybackBlockedError(error: string | null) {
   return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
 }
@@ -622,8 +634,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     localFallbackAsset: offlineFallbackAsset,
     peerId: input.peerId,
     isCurrentSource: input.isCurrentSource,
-    disableSourcePlayback: forceProviderCache ||
-      (input.isCurrentSource && localAudioResolution.status !== "missing"),
+    disableSourcePlayback: shouldDisableSourcePlayback({
+      isCurrentSource: input.isCurrentSource,
+      localAudioStatus: localAudioResolution.status
+    }),
     volume: input.volume,
     loudnessGainDb,
     audioUnlocked: input.audioUnlocked,
@@ -757,59 +771,34 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           roomAudioOutput.unbindLocalAudioElement(audio);
           clearLocalAudioSource(audio);
           roomAudioOutput.releaseRoomAudioSession();
+          localMediaBindingRef.current = null;
         }
-        if (runtime.localAudioResolution.status !== "missing") {
-          // While IndexedDB resolves local audio availability, keep the source
-          // role (and any existing broadcast stream). Clearing sourcePeerId
-          // here used to release every media peer mid-playback and push
-          // listeners into a connect/silence recovery loop.
-          if (
-            runtime.localAudioResolution.status === "checking" ||
-            runtime.localAudioResolution.status === "idle"
-          ) {
-            runtime.setLocalAudioStream(
-              roomAudioOutput.getBroadcastStream(),
-              runtime.peerId,
-              bitrateKbps
-            );
-            if (!cancelled) {
-              setMediaPlayback({
-                state: roomPlayback?.status === "playing" ? "buffering" : "paused",
-                bufferedMs: 0,
-                ownedUnitCount: 0,
-                totalUnitCount: runtime.currentTrack?.playbackAsset?.unitCount ?? 0,
-                audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-                lastError: null
-              });
-            }
-            return;
-          }
-          runtime.setLocalAudioStream(null, null, null);
-          if (!cancelled) {
-            setMediaPlayback({
-              state: roomPlayback?.status === "playing" ? "buffering" : "paused",
-              bufferedMs: 0,
-              ownedUnitCount: 0,
-              totalUnitCount: runtime.currentTrack?.playbackAsset?.unitCount ?? 0,
-              audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-              lastError: null
-            });
-          }
-          return;
-        }
-        const sourceStream = runtime.currentTrack?.playbackAsset && roomPlayback?.currentTrackId
+        // The segmented engine is the continuity path while a local file is
+        // being checked, downloaded, or rejected. Keep the source identity
+        // stable and expose its broadcast destination as soon as the engine
+        // creates it; clearing it here makes every listener wait for a new
+        // media track during a normal cache transition.
+        const sourceStream = roomPlayback?.currentTrackId === runtime.currentTrack?.id
           ? roomAudioOutput.getBroadcastStream()
           : null;
-        const bindingKey = sourceStream
-          ? `source:${sourceStream.id}:${runtime.peerId}:${bitrateKbps ?? "none"}`
-          : `source:none:${runtime.peerId}`;
-        if (localMediaBindingRef.current !== bindingKey) {
-          localMediaBindingRef.current = bindingKey;
+        const sourcePeerId = roomPlayback?.currentTrackId === runtime.currentTrack?.id
+          ? runtime.peerId
+          : null;
+        runtime.setLocalAudioStream(
+          sourceStream,
+          sourcePeerId,
+          sourcePeerId ? bitrateKbps : null
+        );
+        if (!cancelled) {
+          setMediaPlayback({
+            state: roomPlayback?.status === "playing" ? "buffering" : "paused",
+            bufferedMs: 0,
+            ownedUnitCount: 0,
+            totalUnitCount: runtime.currentTrack?.playbackAsset?.unitCount ?? 0,
+            audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+            lastError: null
+          });
         }
-        // Keep this idempotent call in the source poll. It lets the manager
-        // notice a replaced/ended destination track without renegotiating
-        // healthy media on every tick.
-        runtime.setLocalAudioStream(sourceStream, runtime.peerId, bitrateKbps);
         return;
       }
 
@@ -1064,31 +1053,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           audio.srcObject = null;
         }
         boundMediaKeyRef.current = null;
-        return;
-      }
-
-      if (runtime.forceProviderCache && runtime.localAudioResolution.status !== "available") {
-        missingMediaSinceRef.current = null;
-        mediaEnsureKeyRef.current = null;
-        if (localMediaBindingRef.current !== "listener:provider-cache") {
-          localMediaBindingRef.current = "listener:provider-cache";
-          roomAudioOutput.releaseRoomAudioSession();
-        }
-        runtime.setLocalAudioStream(null, sourcePeerId, null);
-        if (audio) {
-          audio.pause();
-          audio.srcObject = null;
-        }
-        boundMediaKeyRef.current = null;
-        remoteAudioTimelineKeyRef.current = null;
-        setMediaPlayback({
-          state: roomPlayback?.status === "playing" ? "buffering" : "paused",
-          bufferedMs: 0,
-          ownedUnitCount: 0,
-          totalUnitCount: 0,
-          audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-          lastError: null
-        });
         return;
       }
 

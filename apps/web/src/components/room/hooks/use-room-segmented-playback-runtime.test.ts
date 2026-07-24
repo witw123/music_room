@@ -5,7 +5,8 @@ import {
   resolveRoomAudioPath,
   resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
-  resolveRoomAudioPositionMs
+  resolveRoomAudioPositionMs,
+  shouldDisableSourcePlayback
 } from "./use-room-segmented-playback-runtime";
 
 describe("receiver audio progress", () => {
@@ -128,6 +129,33 @@ describe("room audio path", () => {
       nativeLocalAudio: false,
       localFallback: false
     })).toBe("remote-stream");
+  });
+});
+
+describe("provider cache source transition", () => {
+  it("keeps segmented source playback during cache lookup and download", () => {
+    expect(shouldDisableSourcePlayback({
+      isCurrentSource: true,
+      localAudioStatus: "checking"
+    })).toBe(false);
+    expect(shouldDisableSourcePlayback({
+      isCurrentSource: true,
+      localAudioStatus: "missing"
+    })).toBe(false);
+  });
+
+  it("switches the source to a local file only after it is available", () => {
+    expect(shouldDisableSourcePlayback({
+      isCurrentSource: true,
+      localAudioStatus: "available"
+    })).toBe(true);
+  });
+
+  it("never disables the room source for a listener", () => {
+    expect(shouldDisableSourcePlayback({
+      isCurrentSource: false,
+      localAudioStatus: "available"
+    })).toBe(false);
   });
 });
 

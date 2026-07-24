@@ -405,6 +405,63 @@
       padding-left: var(--app-sidebar-width) !important;
       transition: padding-left 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
+
+    /* The layout editor uses a 1440 x 900 reference canvas. Percent variables
+       keep the saved arrangement proportional on larger desktop windows. */
+    html[data-custom-layout-enabled="true"] {
+      --app-sidebar-width: var(--custom-sidebar-width);
+    }
+
+    html[data-custom-layout-enabled="true"] .app-sidebar[data-custom-layout-item="sidebar"] {
+      position: fixed !important;
+      top: var(--custom-sidebar-y) !important;
+      right: auto !important;
+      bottom: auto !important;
+      left: var(--custom-sidebar-x) !important;
+      width: var(--custom-sidebar-width) !important;
+      height: var(--custom-sidebar-height) !important;
+      max-height: none !important;
+    }
+
+    html[data-custom-layout-enabled="true"] .custom-layout-content-region {
+      position: fixed !important;
+      z-index: 10;
+      top: var(--custom-content-y);
+      left: var(--custom-content-x);
+      display: block !important;
+      width: var(--custom-content-width);
+      height: var(--custom-content-height);
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: hidden;
+    }
+
+    html[data-custom-layout-enabled="true"] .custom-layout-content-region > * {
+      width: 100% !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      padding-left: 0 !important;
+    }
+
+    html[data-custom-layout-enabled="true"] [data-custom-layout-item="player"] {
+      position: fixed !important;
+      z-index: 60;
+      top: var(--custom-player-y) !important;
+      right: auto !important;
+      bottom: auto !important;
+      left: var(--custom-player-x) !important;
+      width: var(--custom-player-width) !important;
+      height: var(--custom-player-height) !important;
+      min-height: 0 !important;
+      max-height: none !important;
+    }
+
+    html[data-custom-layout-sidebar-visible="false"] [data-custom-layout-item="sidebar"],
+    html[data-custom-layout-content-visible="false"] .custom-layout-content-region,
+    html[data-custom-layout-player-visible="false"] [data-custom-layout-item="player"] {
+      display: none !important;
+    }
   }
 
   @media (min-width: 640px) {
