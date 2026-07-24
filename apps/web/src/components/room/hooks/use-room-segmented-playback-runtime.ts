@@ -405,6 +405,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         error: null
       };
     });
+    const providerSource = isProviderTrack(track) ? track.sourceRef : null;
     void getRoomLocalAudioFile({
       trackId: track.id,
       fileHash: track.fileHash,
@@ -412,8 +413,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       mimeType: track.mimeType ?? "audio/mpeg",
       originalAssetId: track.originalAsset?.assetId ?? null,
       allowOriginalAsset: !forceProviderCache,
-      provider: isProviderTrack(track) ? track.sourceType : undefined,
-      providerTrackId: isProviderTrack(track) ? track.sourceRef?.trackId : null
+      provider: providerSource?.provider,
+      providerTrackId: providerSource?.trackId ?? null
     }).then((file) => {
       if (cancelled) return;
       setLocalAudioResolution({
