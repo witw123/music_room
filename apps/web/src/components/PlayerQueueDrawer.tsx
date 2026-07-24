@@ -19,6 +19,7 @@ type PlayerQueueDrawerProps = {
   accentColor?: string;
   accentSoft?: string;
   compactMobile?: boolean;
+  testId?: string;
 };
 
 export function PlayerQueueDrawer({
@@ -33,7 +34,8 @@ export function PlayerQueueDrawer({
   onReorderQueue,
   accentColor = "rgb(0 148 255)",
   accentSoft = "rgba(0, 148, 255, 0.16)",
-  compactMobile = false
+  compactMobile = false,
+  testId = "player-queue-button"
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function PlayerQueueDrawer({
       <Button
         variant="ghost"
         size="icon"
-        data-testid="player-queue-button"
+        data-testid={testId}
         className={compactMobile ? "relative h-11 w-11 rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95" : "relative h-10 w-10 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"}
         style={compactMobile ? undefined : { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
         onClick={toggleDrawer}

@@ -371,6 +371,7 @@ function MobileImmersivePlayer({
             onReorderQueue={onReorderQueue}
             queue={queue}
             tracks={tracks}
+            testId="immersive-player-queue-button"
           />
         </div>
 
@@ -525,6 +526,7 @@ function DesktopImmersivePlayer({
           onReorderQueue={onReorderQueue}
           queue={queue}
           tracks={tracks}
+          testId="immersive-player-queue-button"
         />
       </div>
 
