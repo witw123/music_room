@@ -123,7 +123,7 @@ export function ImmersivePlayerOverlay({
       aria-hidden={!isOpen}
       aria-label="沉浸式播放"
       aria-modal="true"
-      className={`fixed inset-0 z-[80] h-[100dvh] max-h-[100dvh] w-full overflow-hidden text-foreground transition-[opacity,transform,visibility,background-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none ${isOpen ? "visible translate-y-0 scale-100 opacity-100" : "pointer-events-none invisible translate-y-[3%] scale-[0.985] opacity-0"}`}
+      className={`immersive-player-overlay fixed inset-0 z-[80] h-[100dvh] max-h-[100dvh] w-full overflow-hidden text-foreground transition-[opacity,transform,visibility,background-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none ${isOpen ? "visible translate-y-0 scale-100 opacity-100" : "pointer-events-none invisible translate-y-[3%] scale-[0.985] opacity-0"}`}
       role="dialog"
       style={{ backgroundColor: artworkPalette.background }}
     >
@@ -137,11 +137,13 @@ export function ImmersivePlayerOverlay({
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 backdrop-blur-3xl transition-[background-color,opacity] duration-500 motion-reduce:transition-none"
+        data-immersive-wash="true"
         style={{ background: `linear-gradient(112deg, ${artworkPalette.background} 0%, rgba(0, 0, 0, 0.58) 52%, ${artworkPalette.surface} 100%)` }}
       />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 opacity-70 transition-opacity duration-500 motion-reduce:transition-none"
+        data-immersive-accent="true"
         style={{ background: `linear-gradient(145deg, ${artworkPalette.accentSoft}, transparent 46%, ${artworkPalette.border})` }}
       />
 

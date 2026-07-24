@@ -272,9 +272,9 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-y-auto bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:bg-black md:pb-28 md:pl-60">
-      <div className="fixed inset-0 -z-10 hidden overflow-hidden bg-black md:block">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+    <main className="relative flex min-h-[100dvh] flex-col overflow-y-auto bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:bg-background md:pb-28 md:pl-60">
+      <div className="home-room-backdrop fixed inset-0 -z-10 hidden overflow-hidden bg-background md:block">
+        <div className="home-room-grid absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
         <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
         <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
       </div>

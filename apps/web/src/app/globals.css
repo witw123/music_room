@@ -61,7 +61,7 @@
 
   body {
     margin: 0;
-    background-color: #000000;
+    background-color: var(--background);
     color: var(--foreground);
     overflow-x: hidden;
     min-height: 100vh;
@@ -278,6 +278,10 @@
   /* A few legacy surfaces still use fixed dark utility classes. Map those
      classes to the active palette so the theme applies consistently. */
   html[data-theme="light"] [class~="bg-black"] {
+    background-color: var(--background) !important;
+  }
+
+  html[data-theme="light"] [class~="md:bg-black"] {
     background-color: var(--background) !important;
   }
 
@@ -587,16 +591,49 @@
     color: #ffffff !important;
   }
 
+  html[data-theme="light"] [data-testid="square-album-cover"][class~="bg-accent"] [class~="text-white"] {
+    color: #ffffff !important;
+  }
+
+  html[data-theme="light"] .home-room-backdrop {
+    background-color: var(--background) !important;
+  }
+
+  html[data-theme="light"] .home-room-grid {
+    background-image: linear-gradient(to right, rgba(15, 23, 42, 0.045) 1px, transparent 1px), linear-gradient(to bottom, rgba(15, 23, 42, 0.045) 1px, transparent 1px) !important;
+  }
+
+  html[data-theme="light"] .immersive-player-overlay {
+    background-color: var(--background) !important;
+    color: var(--foreground);
+  }
+
+  html[data-theme="light"] .immersive-player-overlay [data-immersive-wash] {
+    background: linear-gradient(112deg, var(--background) 0%, color-mix(in srgb, var(--background-secondary) 72%, var(--background)) 52%, var(--background-secondary) 100%) !important;
+  }
+
+  html[data-theme="light"] .immersive-player-overlay [data-immersive-accent] {
+    background: linear-gradient(145deg, color-mix(in srgb, #0070f3 10%, transparent), transparent 46%, var(--surface-border)) !important;
+  }
+
+  html[data-theme="light"] .immersive-player-overlay [class~="text-foreground"] {
+    color: var(--foreground) !important;
+  }
+
+  html[data-theme="light"] .immersive-player-overlay [class~="text-foreground-muted"] {
+    color: var(--foreground-muted) !important;
+  }
+
   html[data-theme="light"] [role="dialog"][aria-label="沉浸式播放"] {
-    color: rgba(255, 255, 255, 0.96);
+    color: var(--foreground);
   }
 
   html[data-theme="light"] [role="dialog"][aria-label="沉浸式播放"] [class~="text-foreground"] {
-    color: rgba(255, 255, 255, 0.96) !important;
+    color: var(--foreground) !important;
   }
 
   html[data-theme="light"] [role="dialog"][aria-label="沉浸式播放"] [class~="text-foreground-muted"] {
-    color: rgba(255, 255, 255, 0.62) !important;
+    color: var(--foreground-muted) !important;
   }
 
   /* Keep text on the deliberately dark record/player materials bright after
