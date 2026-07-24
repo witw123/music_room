@@ -8,15 +8,18 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "PingFang SC", "Microsoft YaHei", "sans-serif"]
+      },
       colors: {
         background: "var(--background)",
         "background-secondary": "var(--background-secondary)",
         foreground: "var(--foreground)",
         "foreground-muted": "var(--foreground-muted)",
         accent: {
-          DEFAULT: "#0070f3",
-          hover: "#3291ff",
-          glow: "rgba(0, 112, 243, 0.5)",
+          DEFAULT: "rgb(0 122 255 / <alpha-value>)",
+          hover: "rgb(51 149 255 / <alpha-value>)",
+          glow: "rgba(0, 122, 255, 0.42)",
         },
         surface: {
           DEFAULT: "var(--surface)",

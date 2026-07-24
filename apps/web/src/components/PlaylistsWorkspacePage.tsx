@@ -551,25 +551,25 @@ export function PlaylistsWorkspacePage({
     }
   }
 
-  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-[100dvh] bg-black" />;
+  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-[100dvh] bg-background" />;
 
   const WorkspaceShell = embedded ? "section" : "main";
 
   return (
     <WorkspaceShell className={embedded
       ? "relative w-full text-foreground selection:bg-accent/30 selection:text-white"
-      : "relative h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28"}>
+      : "workspace-page relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28"}>
       {!embedded ? <AppPageBackground /> : null}
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
-        : "relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20"}>
+        : "workspace-page__inner relative z-10 pt-6 sm:pt-10 md:pt-20"}>
         {!embedded && playlistView === "local" ? (
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+              <h1 className="workspace-page__title">
                 本地歌单
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">
+              <p className="workspace-page__description max-w-2xl">
                 每个本地歌单读取各自选择的目录。
               </p>
             </div>
@@ -933,7 +933,7 @@ export function LocalPlaylistCard({
         onClick={onOpen}
         type="button"
       >
-        <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
           <Artwork artworkUrls={artworkUrls} title={playlist.title} size="cover" />
           <span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-white/90 backdrop-blur-sm">本地</span>
         </div>
@@ -971,7 +971,7 @@ function NetworkPlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { play
         onClick={onOpen}
         type="button"
       >
-        <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+        <div className="relative aspect-square overflow-hidden rounded-xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
           <Artwork artworkUrls={artworkUrls} title={playlist.title} size="cover" />
         </div>
         <div className="min-w-0 px-1 pt-3">
@@ -1242,8 +1242,8 @@ function PlaylistDetailView({
       <div className="flex flex-col gap-4 border-b border-surface-border pb-5 sm:flex-row sm:items-end">
         <Artwork artworkUrls={artworkUrls} title={title} size="lg" />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">{isLocal ? "Local playlist" : "Network playlist"}</p>
-          <h2 className="mt-2 truncate text-2xl font-bold text-foreground sm:text-3xl">{title}</h2>
+          <p className="workspace-page__eyebrow">{isLocal ? "Local playlist" : "Network playlist"}</p>
+          <h2 className="workspace-page__title truncate">{title}</h2>
           <p className="mt-2 max-w-2xl text-sm text-foreground-muted">{description}</p>
           <p className="mt-3 text-xs text-foreground-muted">{rows.length} 首歌曲{isLocal ? "" : " · 网络歌单"}</p>
           {remoteLoading ? <p className="mt-2 text-xs text-accent">正在同步平台歌单详情…</p> : null}
@@ -1665,5 +1665,5 @@ function DeletePlaylistDialog({ kind, playlist, pending, onConfirm, onCancel }: 
 }
 
 function AppPageBackground() {
-  return <div className="fixed inset-0 -z-10 overflow-hidden bg-black"><div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" /><div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" /><div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" /></div>;
+  return <div aria-hidden="true" className="workspace-page-background" />;
 }

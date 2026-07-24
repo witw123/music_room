@@ -16,7 +16,7 @@ const themeInitScript = `(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.sidebarCollapsed = String(sidebarCollapsed);
     document.documentElement.style.colorScheme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#f5f7fb" : "#09090b");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#f5f5f7" : "#09090b");
   } catch {
     document.documentElement.dataset.theme = "dark";
     document.documentElement.style.colorScheme = "dark";

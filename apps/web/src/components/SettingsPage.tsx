@@ -77,7 +77,7 @@ export function SettingsPage() {
   }, []);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-[100dvh] bg-black" />;
+    return <div className="min-h-[100dvh] bg-background" />;
   }
 
   function patchSettings(patch: Parameters<typeof updateAppSettings>[0]) {
@@ -102,14 +102,14 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="settings-page-scroll h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1000px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:mx-auto md:px-10 md:pt-16">
-        <header className="flex items-center justify-between gap-4 border-b border-white/[0.1] pb-5">
+    <main className="workspace-page settings-page-scroll overflow-y-auto md:pl-60 lg:pb-28">
+      <div className="workspace-page__inner pt-6 sm:pt-10 md:pt-16">
+        <header className="workspace-page__header items-start">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-white">设置</h1>
-            <p className="mt-1 text-xs text-foreground-muted">调整播放和界面偏好。</p>
+            <h1 className="workspace-page__title">设置</h1>
+            <p className="workspace-page__description">调整播放和界面偏好。</p>
           </div>
-          <Link className="text-xs text-foreground-muted transition hover:text-white" href="/app/profile">
+          <Link className="text-xs font-medium text-foreground-muted transition hover:text-foreground" href="/app/profile">
             账号与歌单
           </Link>
         </header>
@@ -203,7 +203,7 @@ export function SettingsPage() {
             <SettingRow label="播放器样式" description="应用于底部、沉浸式和房间播放器。">
               <select
                 aria-label="播放器样式"
-                className="h-9 min-w-40 rounded-lg border border-surface-border bg-black px-2 text-xs text-white outline-none focus:border-accent"
+                className="h-9 min-w-40 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { playerStyle: event.target.value as PlayerStyle } })}
                 value={settings.playback.playerStyle}
               >
@@ -222,7 +222,7 @@ export function SettingsPage() {
             <SettingRow label="本地歌单播放方式" description="仅影响主页和本地歌单播放器。">
               <select
                 aria-label="本地歌单播放方式"
-                className="h-9 min-w-32 rounded-lg border border-surface-border bg-black px-2 text-xs text-white outline-none focus:border-accent"
+                className="h-9 min-w-32 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { localPlaybackMode: event.target.value as PlaybackMode } })}
                 value={settings.playback.localPlaybackMode}
               >
@@ -241,7 +241,7 @@ export function SettingsPage() {
             <SettingRow label="歌词大小" description="应用于沉浸式播放器歌词。">
               <select
                 aria-label="歌词大小"
-                className="h-9 min-w-32 rounded-lg border border-surface-border bg-black px-2 text-xs text-white outline-none focus:border-accent"
+                className="h-9 min-w-32 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { lyricFontScale: event.target.value as AppSettings["playback"]["lyricFontScale"] } })}
                 value={settings.playback.lyricFontScale}
               >
@@ -253,7 +253,7 @@ export function SettingsPage() {
             <SettingRow label="歌词显示行数" description="歌词区域同时保留的可见行数。">
               <select
                 aria-label="歌词显示行数"
-                className="h-9 min-w-32 rounded-lg border border-surface-border bg-black px-2 text-xs text-white outline-none focus:border-accent"
+                className="h-9 min-w-32 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
                 onChange={(event) => patchSettings({ playback: { lyricLines: Number(event.target.value) } })}
                 value={settings.playback.lyricLines}
               >
@@ -321,8 +321,8 @@ export function SettingsPage() {
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="border-b border-surface-border pb-6">
-      <h2 className="mb-3 text-sm font-semibold text-white">{title}</h2>
-      <div className="divide-y divide-white/[0.07]">{children}</div>
+      <h2 className="mb-3 text-base font-semibold text-foreground">{title}</h2>
+      <div className="divide-y divide-surface-border">{children}</div>
     </section>
   );
 }
@@ -339,7 +339,7 @@ function SettingRow({
   return (
     <div className="flex min-h-16 items-center justify-between gap-6 py-3">
       <div className="min-w-0">
-        <p className="text-sm text-white/[0.86]">{label}</p>
+        <p className="text-sm font-medium text-foreground">{label}</p>
         <p className="mt-1 text-xs leading-5 text-foreground-muted">{description}</p>
       </div>
       <div className="shrink-0">{children}</div>
@@ -357,7 +357,7 @@ function Toggle({ checked, label, onChange }: { checked: boolean; label: string;
         onChange={(event) => onChange(event.target.checked)}
         type="checkbox"
       />
-      <span className="relative h-7 w-12 rounded-full bg-white/[0.14] transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+      <span className="relative h-7 w-12 rounded-full bg-surface-hover transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
     </label>
   );
 }

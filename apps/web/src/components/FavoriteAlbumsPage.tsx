@@ -287,23 +287,23 @@ export function FavoriteAlbumsPage() {
     }
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
+  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-background" />;
 
   const detailItem = detail
     ? items.find((item) => item.provider === detail.provider && item.providerAlbumId === detail.providerAlbumId) ?? null
     : null;
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:mx-auto md:px-8 md:pt-20">
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-surface-border pb-4">
+    <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
+      <div className="workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20">
+        <header className="workspace-page__header flex-wrap">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Library</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">收藏</h1>
+            <p className="workspace-page__eyebrow">Library</p>
+            <h1 className="workspace-page__title">收藏</h1>
           </div>
-          <div aria-label="收藏内容类型" className="flex items-center rounded-full border border-surface-border bg-surface p-1" role="tablist">
-            <button aria-selected={favoriteView === "tracks"} className={`rounded-full px-4 py-2 text-xs font-semibold transition ${favoriteView === "tracks" ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:text-foreground"}`} onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
-            <button aria-selected={favoriteView === "albums"} className={`rounded-full px-4 py-2 text-xs font-semibold transition ${favoriteView === "albums" ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
+          <div aria-label="收藏内容类型" className="workspace-segmented" role="tablist">
+            <button aria-selected={favoriteView === "tracks"} className="workspace-segmented__item" onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
+            <button aria-selected={favoriteView === "albums"} className="workspace-segmented__item" onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
           </div>
         </header>
         {favoriteView === "tracks" ? (
@@ -345,7 +345,7 @@ export function FavoriteAlbumsPage() {
                   {items.map((item) => (
                     <article className="group relative min-w-0" key={item.id}>
                       <button className="block w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70" disabled={pending !== null} onClick={() => void openAlbum(item)} type="button">
-                        <div className="relative aspect-square overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+                        <div className="relative aspect-square overflow-hidden rounded-xl border border-surface-border bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
                           <AlbumArtwork alt={item.title} className="h-full w-full" src={item.artworkUrl} />
                         </div>
                         <div className="min-w-0 px-1 pt-3">
@@ -358,14 +358,14 @@ export function FavoriteAlbumsPage() {
                   ))}
                 </div>
               ) : !favoritesLoaded ? (
-                <div className="flex min-h-[430px] items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center text-sm text-white/40">
+                <div className="workspace-surface flex min-h-[430px] items-center justify-center px-6 text-center text-sm text-foreground-muted">
                   正在加载收藏…
                 </div>
               ) : (
-                <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center">
+                <div className="workspace-surface flex min-h-[430px] flex-col items-center justify-center px-6 text-center">
                   <HeartIcon />
-                  <p className="mt-4 text-sm font-medium text-white/60">还没有收藏专辑</p>
-                  <p className="mt-2 text-xs text-white/30">在搜索页打开专辑并点击收藏。</p>
+                  <p className="mt-4 text-sm font-medium text-foreground-muted">还没有收藏专辑</p>
+                  <p className="mt-2 text-xs text-foreground-muted">在搜索页打开专辑并点击收藏。</p>
                 </div>
               )}
             </section>
@@ -417,7 +417,7 @@ function AlbumArtwork({ alt, src, className = "" }: { alt: string; src: string |
     // External provider artwork is intentionally rendered without Next image optimization.
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} className={`aspect-square w-full object-cover ${className}`} loading="lazy" src={src} />
-  ) : <span aria-label={alt} className={`flex aspect-square w-full items-center justify-center bg-black text-3xl text-white/20 ${className}`}>♪</span>;
+  ) : <span aria-label={alt} className={`flex aspect-square w-full items-center justify-center bg-background-secondary text-3xl text-foreground-muted ${className}`}>♪</span>;
 }
 
 function HeartIcon({ filled = false }: { filled?: boolean }) {

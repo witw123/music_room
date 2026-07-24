@@ -597,9 +597,9 @@ export function DiscoverPage() {
 
   if (detail && !searchOpen) {
     return (
-      <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
         {detail.kind === "playlist" ? (
-          <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1920px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8 xl:px-14">
+          <div className="workspace-page__inner workspace-page__inner--wide pt-3 sm:pt-6 md:pt-8">
             <ProviderPlaylistDetailView
               isFavorite={favoritePlaylistKeys.has(providerPlaylistKey(detail.value.provider, detail.value.providerPlaylistId))}
               onBack={() => setDetail(null)}
@@ -652,13 +652,13 @@ export function DiscoverPage() {
   const searchSuggestions = buildSearchSuggestions(searchKeywords, searchHistory, activeData);
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1480px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:px-10 md:pt-14">
-        <header className="flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Music Room</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">发现</h1>
-            <p className="mt-2 text-sm text-foreground-muted">从今天开始，找到下一首喜欢的歌。</p>
+    <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
+      <div className="workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-14">
+        <header className="workspace-page__header flex-wrap">
+          <div className="workspace-page__heading">
+            <p className="workspace-page__eyebrow">Music Room</p>
+            <h1 className="workspace-page__title">发现</h1>
+            <p className="workspace-page__description">从今天开始，找到下一首喜欢的歌。</p>
           </div>
           <div className="relative w-full max-w-[460px] sm:w-[min(42vw,460px)]">
             <form className="group flex h-11 w-full items-center gap-3 rounded-full border border-surface-border bg-surface px-3 text-sm text-foreground-muted shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-accent/40 hover:bg-surface-hover focus-within:border-accent/60 focus-within:bg-surface-hover" onSubmit={(event) => {
@@ -864,11 +864,11 @@ function buildSearchSuggestions(keywords: string, history: string[], data: Provi
 
 function DiscoverySection({ eyebrow, title, actionLabel, onAction, children }: { eyebrow: string; title: string; actionLabel: string; onAction: () => void; children: ReactNode }) {
   return (
-    <section className="mt-11">
+    <section className="workspace-page__section">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">{eyebrow}</p>
-          <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h2>
+          <p className="workspace-page__eyebrow">{eyebrow}</p>
+          <h2 className="mt-1 text-xl font-semibold leading-7 text-foreground">{title}</h2>
         </div>
         <button className="shrink-0 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={onAction} type="button">{actionLabel}<span aria-hidden="true" className="ml-1">→</span></button>
       </div>
@@ -1063,8 +1063,8 @@ function DailySection({
   trackActions: ProviderAlbumTrackActions;
 }) {
   return (
-    <section className="mt-11">
-      <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Daily Mix</p><h2 className="mt-1 text-xl font-bold tracking-tight text-foreground sm:text-2xl">每日推荐</h2></div>
+    <section className="workspace-page__section">
+      <div><p className="workspace-page__eyebrow">Daily Mix</p><h2 className="mt-1 text-xl font-semibold leading-7 text-foreground">每日推荐</h2></div>
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(240px,0.72fr)_minmax(0,1.28fr)]">
         {playlists[0] ? <PlaylistCard item={playlists[0]} loading={loadingKey === `playlist:${playlists[0].provider}:${playlists[0].providerPlaylistId}`} onOpen={onOpenPlaylist} /> : <div className="flex min-h-40 items-center rounded-xl border border-dashed border-surface-border px-5 text-sm text-foreground-muted">绑定网易云音乐账号后查看每日歌单。</div>}
         <div className="divide-y divide-surface-border overflow-hidden rounded-xl border border-surface-border bg-surface">
@@ -1120,7 +1120,7 @@ function MoreIcon() {
 }
 
 function CategoryButton({ active, label, loading = false, onClick }: { active: boolean; label: string; loading?: boolean; onClick: () => void }) {
-  return <button aria-pressed={active} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition ${active ? "border-accent bg-accent text-white" : "border-surface-border bg-surface text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`} disabled={loading} onClick={onClick} type="button">{loading ? "加载中" : label}</button>;
+  return <button aria-pressed={active} className={`workspace-filter ${active ? "workspace-filter--active" : ""}`} disabled={loading} onClick={onClick} type="button">{loading ? "加载中" : label}</button>;
 }
 
 function DetailView({
@@ -1134,11 +1134,11 @@ function DetailView({
 }) {
   const tracks = detail.value.tracks;
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col px-4 pb-12 pt-6 sm:px-7 sm:pt-10 md:px-10 md:pt-14">
+    <div className="workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-14">
       <button className="inline-flex w-fit items-center gap-2 text-xs font-semibold text-foreground-muted transition hover:text-foreground" onClick={onBack} type="button"><ArrowLeftIcon />返回发现</button>
-      <section className="mt-6 grid gap-6 border-b border-surface-border pb-8 sm:grid-cols-[190px_minmax(0,1fr)] sm:items-end">
+      <section className="workspace-page__section grid gap-6 border-b border-surface-border pb-8 sm:grid-cols-[190px_minmax(0,1fr)] sm:items-end">
         <Artwork alt={detail.value.title} className="aspect-square w-48 rounded-2xl" src={detail.value.artworkUrl} />
-        <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">{detail.kind === "playlist" ? "Playlist" : "Album"}</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{detail.value.title}</h1><p className="mt-2 text-sm text-foreground-muted">{detail.kind === "playlist" ? `${detail.value.creatorName || "网络歌单"} · ` : `${detail.value.artist} · `}{tracks.length} 首歌曲</p><p className="mt-4 max-w-2xl text-sm leading-7 text-foreground-muted">{detail.value.description || "暂无简介"}</p></div>
+        <div className="min-w-0"><p className="workspace-page__eyebrow">{detail.kind === "playlist" ? "Playlist" : "Album"}</p><h1 className="workspace-page__title">{detail.value.title}</h1><p className="mt-2 text-sm text-foreground-muted">{detail.kind === "playlist" ? `${detail.value.creatorName || "网络歌单"} · ` : `${detail.value.artist} · `}{tracks.length} 首歌曲</p><p className="mt-4 max-w-2xl text-sm leading-7 text-foreground-muted">{detail.value.description || "暂无简介"}</p></div>
       </section>
       <ProviderAlbumTrackTable actions={trackActions} tracks={tracks} />
     </div>

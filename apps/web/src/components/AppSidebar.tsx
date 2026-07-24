@@ -111,10 +111,10 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070707]/95 pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:pt-0 ${desktopBottomOffsetClass}`}
+      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-[var(--sidebar-border)] bg-[var(--sidebar-background)] pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:pt-0 ${desktopBottomOffsetClass}`}
       aria-label="主导航"
     >
-      <div className={`flex items-center gap-3 border-b border-white/[0.07] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-2 md:py-3`}>
+      <div className={`flex items-center gap-3 border-b border-[var(--sidebar-divider)] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-2 md:py-3`}>
         <Link
           href="/app"
           className={`flex min-w-0 items-center gap-3 ${collapsed ? "md:justify-center" : ""}`}
@@ -129,12 +129,12 @@ export function AppSidebar({
             }
           }}
         >
-          <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-[0_8px_30px_rgba(0,112,243,0.28)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
+          <span className={`flex shrink-0 items-center justify-center rounded-lg bg-accent text-white shadow-[0_8px_30px_var(--accent-glow)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
             <NavIcon name="home" size={17} />
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
-            <span className="block truncate text-sm font-bold tracking-tight text-white">Music Room</span>
-            <span className="mt-1 block truncate text-[10px] text-white/[0.42]">实时协作听歌空间</span>
+            <span className="block truncate text-sm font-bold text-[var(--sidebar-foreground)]">Music Room</span>
+            <span className="mt-1 block truncate text-[10px] text-[var(--sidebar-secondary)]">实时协作听歌空间</span>
           </span>
         </Link>
       </div>
@@ -160,12 +160,12 @@ export function AppSidebar({
                   }
                 }}
                 title={collapsed ? item.label : undefined}
-                className={`group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                className={`app-sidebar__nav-item group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-lg font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
-                    ? "bg-accent/15 text-white shadow-[inset_2px_0_0_#0070f3]"
+                    ? "app-sidebar__nav-item--active"
                     : keepsHomeInRoom
-                      ? "cursor-default text-white/[0.48]"
-                      : "text-white/[0.48] hover:bg-white/[0.06] hover:text-white"
+                      ? "cursor-default opacity-60"
+                      : ""
                 } ${collapsed ? "md:justify-center md:px-2" : ""}`}
               >
                 <NavIcon name={item.icon} />
@@ -177,7 +177,7 @@ export function AppSidebar({
         </nav>
 
         {activeSession && !collapsed ? (
-          <div className={`hidden border-t border-white/[0.07] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>
+          <div className={`hidden border-t border-[var(--sidebar-divider)] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>
             <UserSummary activeSession={activeSession} />
           </div>
         ) : null}
@@ -288,8 +288,8 @@ function UserSummary({ activeSession }: { activeSession: AuthSession }) {
         {getInitial(activeSession.nickname)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-white/[0.82]">{activeSession.nickname}</p>
-        <p className="truncate text-[10px] text-white/[0.35]">@{activeSession.username}</p>
+        <p className="truncate text-xs font-semibold text-[var(--sidebar-foreground)]">{activeSession.nickname}</p>
+        <p className="truncate text-[10px] text-[var(--sidebar-secondary)]">@{activeSession.username}</p>
       </div>
     </div>
   );

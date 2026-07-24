@@ -272,12 +272,7 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-y-auto bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:bg-background md:pb-28 md:pl-60">
-      <div className="home-room-backdrop fixed inset-0 -z-10 hidden overflow-hidden bg-background md:block">
-        <div className="home-room-grid absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
-        <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
-        <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
-      </div>
+    <main className="workspace-page relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-28 md:pl-60">
 
       {showSidebar ? (
         <AppSidebar
@@ -291,23 +286,23 @@ export function RoomsHomePage({
       {effectiveAwayRoomId && showSidebar ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
 
 
-      <section className="home-centered-workspace relative mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-5 pb-8 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:pt-20 md:mx-auto md:max-w-[1600px] md:gap-5 lg:px-8">
-        <header className="flex items-center justify-between md:hidden">
+      <section className="workspace-page__inner home-centered-workspace relative flex w-full flex-col gap-6 pt-[calc(1rem+env(safe-area-inset-top))] md:gap-6">
+        <header className="workspace-page__header flex items-center justify-between md:hidden">
           <div>
-            <p className="text-sm text-foreground-muted">一起听见此刻</p>
-            <h1 className="mt-0.5 text-2xl font-semibold leading-8 text-foreground">主页</h1>
+            <p className="workspace-page__eyebrow">一起听见此刻</p>
+            <h1 className="workspace-page__title">主页</h1>
           </div>
           <Link aria-label="打开个人中心" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-background-secondary shadow-sm transition-transform duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href="/app/profile">
             <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
           </Link>
         </header>
 
-        <div className="hidden flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:flex">
+        <div className="workspace-page__header hidden flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:flex">
           <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
+            <p className="workspace-page__eyebrow mb-1">
               All rooms
             </p>
-            <h2 className="flex items-center gap-3 text-xl font-bold text-foreground sm:text-2xl">
+            <h2 className="flex items-center gap-3 text-xl font-semibold leading-8 text-foreground">
               所有房间
               {isPending ? (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
@@ -376,7 +371,7 @@ export function RoomsHomePage({
           </form>
         </div>
 
-        <div className="min-h-[300px] md:glass-panel md:rounded-[24px] md:p-3 lg:p-5 xl:p-6">
+        <div className="workspace-surface min-h-[300px] p-3 lg:p-5 xl:p-6">
           <div className="mb-3 flex items-center justify-between md:hidden">
             <h2 className="text-lg font-semibold leading-6 text-foreground">全部房间</h2>
             <span className="text-sm text-foreground-muted">{visibleRooms.length} 个</span>
@@ -601,7 +596,7 @@ function RoomDirectoryCard({
 
   return (
     <article
-      className={`group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-3xl border p-5 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-accent ${
+      className={`group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-xl border p-5 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-accent ${
         isAway
           ? "border-amber-300/70 bg-amber-300/10 shadow-[0_12px_36px_rgba(251,191,36,0.14)] hover:border-amber-200 hover:bg-amber-300/15"
           : "border-surface-border bg-surface/50 shadow-md hover:border-accent/30 hover:bg-surface-hover"

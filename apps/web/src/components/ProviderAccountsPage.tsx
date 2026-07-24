@@ -23,14 +23,23 @@ export function ProviderAccountsPage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-[100dvh] bg-black" />;
+    return <div className="min-h-[100dvh] bg-background" />;
   }
 
   return (
-    <main className="relative h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="workspace-page relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-12 md:mx-auto md:max-w-[1400px] md:px-8 md:pt-28">
-        <LocalPlaylistsOverview />
+      <div className="workspace-page__inner relative z-10 pt-6 sm:pt-12 md:pt-20">
+        <header className="workspace-page__header">
+          <div className="workspace-page__heading">
+            <p className="workspace-page__eyebrow">Library</p>
+            <h1 className="workspace-page__title">我的</h1>
+            <p className="workspace-page__description">管理本地歌单和音乐内容。</p>
+          </div>
+        </header>
+        <div className="mt-8">
+          <LocalPlaylistsOverview />
+        </div>
       </div>
     </main>
   );
@@ -38,10 +47,6 @@ export function ProviderAccountsPage() {
 
 function AppPageBackground() {
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
-      <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
-      <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
-    </div>
+    <div aria-hidden="true" className="workspace-page-background" />
   );
 }

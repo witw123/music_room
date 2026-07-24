@@ -9,9 +9,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className = "", variant = "default", size = "default", ...props }, ref) => {
     let variantStyles = ""
     if (variant === "default") {
-      variantStyles = "bg-accent hover:bg-accent-hover text-white shadow-lg shadow-accent/20"
+      variantStyles = "bg-accent hover:bg-accent-hover text-white shadow-[0_6px_18px_var(--accent-glow)]"
     } else if (variant === "ghost") {
-      variantStyles = "hover:bg-white/10 text-foreground-muted hover:text-foreground"
+      variantStyles = "hover:bg-surface-hover text-foreground-muted hover:text-foreground"
     } else if (variant === "outline") {
       variantStyles = "border border-surface-border hover:bg-surface-hover text-foreground"
     } else if (variant === "glass") {
@@ -24,12 +24,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     } else if (size === "sm") {
       sizeStyles = "h-8 px-3 text-xs"
     } else if (size === "lg") {
-      sizeStyles = "h-12 px-8 text-base rounded-2xl"
+      sizeStyles = "h-12 px-8 text-base rounded-lg"
     } else if (size === "icon") {
       sizeStyles = "h-10 w-10 flex-shrink-0"
     }
 
-    const baseStyles = "inline-flex items-center justify-center rounded-xl text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50 active:scale-95"
+    const baseStyles = "inline-flex items-center justify-center rounded-lg text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97]"
 
     return (
       <button
