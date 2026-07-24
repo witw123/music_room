@@ -190,7 +190,7 @@ function RoomDashboardViewBase({
   }, [handleTabChange]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:overflow-hidden lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0">
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:overflow-hidden lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0" data-custom-layout-room-root="true">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
           <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" />
@@ -198,7 +198,7 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ LEFT: Immersive Stage ══════ */}
-      <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden">
+      <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
 
         {/* Vinyl + Track Info */}
         <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
@@ -228,7 +228,7 @@ function RoomDashboardViewBase({
       </div>
 
       {/* ══════ RIGHT: Management Panel ══════ */}
-      <div className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]">
+      <div className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
         <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.08] px-3 pb-2 pt-2 sm:px-5 sm:pt-4 lg:rounded-none">
           <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
             <span

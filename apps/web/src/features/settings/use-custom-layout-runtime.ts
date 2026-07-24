@@ -7,7 +7,7 @@ import {
   getCustomLayoutPageId
 } from "@/features/settings/settings-store";
 
-const layoutItemIds = ["sidebar", "content", "player", "mobile-navigation"] as const;
+const layoutItemIds = ["sidebar", "content", "player", "mobile-navigation", "room-stage", "room-panel"] as const;
 
 function getVisibilityDatasetKey(itemId: string) {
   return `customLayout${itemId.replace(/(^|-)([a-z])/g, (_match: string, _separator: string, letter: string) => letter.toUpperCase())}Visible` as keyof DOMStringMap;
@@ -18,7 +18,7 @@ export function useCustomLayoutRuntime(pathname: string | null) {
   useEffect(() => {
     const root = document.documentElement;
     const pageId = getCustomLayoutPageId(pathname);
-    const isWorkspaceRoute = pathname === "/rooms" || pathname?.startsWith("/app") === true;
+    const isWorkspaceRoute = pathname === "/rooms" || pathname?.startsWith("/app") === true || pathname?.startsWith("/room/") === true;
 
     const clearLayoutVariables = () => {
       for (const itemId of layoutItemIds) {

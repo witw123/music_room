@@ -451,19 +451,21 @@ function RoomStageBase({
             {!isLyricsOpen ? (
               <div
                 className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
+                data-room-stage-record="true"
               >
-          <div
-            className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
-            style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
-          >
-            <div
-              className="relative flex items-center justify-center overflow-visible"
-              style={{ width: "var(--record-size)", height: "var(--record-size)" }}
-            >
-              {playerStyle === "square-cover" ? (
-                <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[1rem] shadow-2xl" />
-              ) : (
-                <>
+                <div
+                  className="pointer-events-none relative flex min-h-0 w-full items-center justify-center"
+                  data-room-stage-record-surface="true"
+                  style={{ "--record-size": recordSize, height: "var(--record-size)" } as CSSProperties}
+                >
+                  <div
+                    className="relative flex items-center justify-center overflow-visible"
+                    style={{ width: "var(--record-size)", height: "var(--record-size)" }}
+                  >
+                    {playerStyle === "square-cover" ? (
+                      <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[1rem] shadow-2xl" />
+                    ) : (
+                      <>
                   <VinylAuraVisualizer accentColor={artworkPalette.accent} isPlaying={isPlaying} />
                   <div
                     className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out animate-spin-slow"
@@ -503,11 +505,11 @@ function RoomStageBase({
                     </div>
                   </div>
                   <VinylTonearm accentColor={artworkPalette.accent} isPlaying={isPlaying} />
-                </>
-              )}
-            </div>
+                      </>
+                    )}
+                  </div>
 
-          </div>
+                </div>
               </div>
             ) : null}
             {!isLyricsOpen ? (

@@ -22,6 +22,7 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MobileAppNavigation } from "@/components/MobileAppNavigation";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
+import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -140,6 +141,7 @@ function RoomWorkspaceBase({
   socket,
   playerSlot
 }: RoomWorkspaceProps) {
+  useCustomLayoutRuntime("/room/current");
   const playback = roomSnapshot?.room.playback;
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
   const isPlaying = playback?.status === "playing";
@@ -148,7 +150,7 @@ function RoomWorkspaceBase({
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
-    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-[4.5rem]">
+    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-[4.5rem]" data-custom-layout-room-host="true">
 
       <div className="hidden md:contents">
         <AppSidebar

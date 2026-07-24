@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +8,7 @@ import {
   customLayoutItemLabels,
   customLayoutPageIds,
   customLayoutPageLabels,
+  getCustomLayoutItemIds,
   getDefaultCustomLayoutSettings,
   type CustomLayoutItem,
   type CustomLayoutItemId,
@@ -26,24 +27,42 @@ type DragState = {
   pointerId: number;
   itemId: CustomLayoutItemId;
   mode: "move" | "resize";
+  handle?: ResizeHandle;
   startX: number;
   startY: number;
   initialItem: CustomLayoutItem;
 };
+
+type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+const resizeHandles: Array<{ id: ResizeHandle; className: string; cursor: string }> = [
+  { id: "n", className: "-top-1.5 left-1/2 h-3 w-8 -translate-x-1/2", cursor: "ns-resize" },
+  { id: "ne", className: "-right-1.5 -top-1.5 h-4 w-4", cursor: "nesw-resize" },
+  { id: "e", className: "-right-1.5 top-1/2 h-8 w-3 -translate-y-1/2", cursor: "ew-resize" },
+  { id: "se", className: "-bottom-1.5 -right-1.5 h-4 w-4", cursor: "nwse-resize" },
+  { id: "s", className: "-bottom-1.5 left-1/2 h-3 w-8 -translate-x-1/2", cursor: "ns-resize" },
+  { id: "sw", className: "-bottom-1.5 -left-1.5 h-4 w-4", cursor: "nesw-resize" },
+  { id: "w", className: "-left-1.5 top-1/2 h-8 w-3 -translate-y-1/2", cursor: "ew-resize" },
+  { id: "nw", className: "-left-1.5 -top-1.5 h-4 w-4", cursor: "nwse-resize" }
+];
 
 const gridSize = 8;
 const minimumItemSizes: Record<CustomLayoutItemId, { width: number; height: number }> = {
   sidebar: { width: 48, height: 180 },
   content: { width: 360, height: 300 },
   player: { width: 360, height: 48 },
-  "mobile-navigation": { width: 480, height: 48 }
+  "mobile-navigation": { width: 480, height: 48 },
+  "room-stage": { width: 360, height: 300 },
+  "room-panel": { width: 360, height: 300 }
 };
 
 const itemColors: Record<CustomLayoutItemId, string> = {
   sidebar: "#8b5cf6",
   content: "#007aff",
   player: "#f59e0b",
-  "mobile-navigation": "#10b981"
+  "mobile-navigation": "#10b981",
+  "room-stage": "#ec4899",
+  "room-panel": "#14b8a6"
 };
 
 export function CustomLayoutEditor({ value, onApply, onChange, onClose }: CustomLayoutEditorProps) {
@@ -54,6 +73,31 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+
+  const setDraftValue = useCallback((next: CustomLayoutSettings) => {
+    draftRef.current = next;
+    setDraft(next);
+  }, []);
+
+  const updatePageItem = useCallback((
+    targetPageId: CustomLayoutPageId,
+    itemId: CustomLayoutItemId,
+    item: CustomLayoutItem,
+    persist: boolean
+  ) => {
+    const next = {
+      ...draftRef.current,
+      pages: {
+        ...draftRef.current.pages,
+        [targetPageId]: {
+          ...draftRef.current.pages[targetPageId],
+          [itemId]: item
+        }
+      }
+    };
+    setDraftValue(next);
+    if (persist) onChange(next);
+  }, [onChange, setDraftValue]);
 
   useEffect(() => {
     setPortalTarget(document.body);
@@ -88,34 +132,15 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, pageId, selectedItemId]);
+  }, [onClose, pageId, selectedItemId, updatePageItem]);
 
   const currentPage = draft.pages[pageId];
+  const availableItemIds = getCustomLayoutItemIds(pageId);
   const selectedItem = currentPage[selectedItemId];
 
-  function setDraftValue(next: CustomLayoutSettings) {
-    draftRef.current = next;
-    setDraft(next);
-  }
-
-  function updatePageItem(
-    targetPageId: CustomLayoutPageId,
-    itemId: CustomLayoutItemId,
-    item: CustomLayoutItem,
-    persist: boolean
-  ) {
-    const next = {
-      ...draftRef.current,
-      pages: {
-        ...draftRef.current.pages,
-        [targetPageId]: {
-          ...draftRef.current.pages[targetPageId],
-          [itemId]: item
-        }
-      }
-    };
-    setDraftValue(next);
-    if (persist) onChange(next);
+  function selectPage(nextPageId: CustomLayoutPageId) {
+    setPageId(nextPageId);
+    setSelectedItemId(getCustomLayoutItemIds(nextPageId)[0]);
   }
 
   function updateSelectedItem(itemId: CustomLayoutItemId, patch: Partial<CustomLayoutItem>) {
@@ -150,11 +175,14 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
           x: drag.initialItem.x + dx,
           y: drag.initialItem.y + dy
         }, drag.itemId)
-      : clampItem({
-          ...drag.initialItem,
-          width: drag.initialItem.width + dx,
-          height: drag.initialItem.height + dy
-        }, drag.itemId);
+      : resizeItem(
+          drag.initialItem,
+          drag.itemId,
+          drag.handle ?? "se",
+          dx,
+          dy,
+          event.shiftKey
+        );
     updatePageItem(pageId, drag.itemId, nextItem, false);
   }
 
@@ -165,7 +193,12 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
     onChange(draftRef.current);
   }
 
-  function beginDrag(event: ReactPointerEvent<HTMLDivElement>, itemId: CustomLayoutItemId, mode: DragState["mode"]) {
+  function beginDrag(
+    event: ReactPointerEvent<HTMLElement>,
+    itemId: CustomLayoutItemId,
+    mode: DragState["mode"],
+    handle?: ResizeHandle
+  ) {
     event.stopPropagation();
     canvasRef.current?.focus({ preventScroll: true });
     setSelectedItemId(itemId);
@@ -178,6 +211,7 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
       pointerId: event.pointerId,
       itemId,
       mode,
+      handle,
       startX: point.x,
       startY: point.y,
       initialItem: { ...item }
@@ -219,7 +253,7 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
               aria-current={pageId === item ? "page" : undefined}
               className={`flex h-10 shrink-0 items-center rounded-lg px-3 text-left text-xs font-medium transition-colors ${pageId === item ? "bg-accent text-white shadow-[0_6px_18px_var(--accent-glow)]" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
               key={item}
-              onClick={() => setPageId(item)}
+              onClick={() => selectPage(item)}
               type="button"
             >
               {customLayoutPageLabels[item]}
@@ -249,7 +283,9 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
               style={{ aspectRatio: `${customLayoutCanvas.width} / ${customLayoutCanvas.height}` }}
             >
               <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-40" style={{ backgroundImage: "linear-gradient(to right, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px)", backgroundSize: `${(gridSize / customLayoutCanvas.width) * 100}% ${(gridSize / customLayoutCanvas.height) * 100}%` }} />
-              {(Object.entries(currentPage) as Array<[CustomLayoutItemId, CustomLayoutItem]>).map(([itemId, item]) => (
+              {availableItemIds.map((itemId) => {
+                const item = currentPage[itemId];
+                return (
                 <LayoutCanvasItem
                   item={item}
                   itemId={itemId}
@@ -257,7 +293,8 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
                   onPointerDown={beginDrag}
                   selected={selectedItemId === itemId}
                 />
-              ))}
+                );
+              })}
             </div>
           </div>
         </main>
@@ -268,10 +305,12 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
               <h3 className="text-xs font-semibold">组件</h3>
               <p className="mt-1 text-[11px] text-foreground-muted">当前页布局</p>
             </div>
-            <span className="text-[10px] tabular-nums text-foreground-muted">{Object.keys(currentPage).length}</span>
+            <span className="text-[10px] tabular-nums text-foreground-muted">{availableItemIds.length}</span>
           </div>
           <div className="space-y-2">
-            {(Object.entries(currentPage) as Array<[CustomLayoutItemId, CustomLayoutItem]>).map(([itemId, item]) => (
+            {availableItemIds.map((itemId) => {
+              const item = currentPage[itemId];
+              return (
               <div className={`rounded-xl border p-2 transition-colors ${selectedItemId === itemId ? "border-accent/60 bg-accent/8" : "border-surface-border bg-background-secondary/45"}`} key={itemId}>
                 <button className="flex w-full min-w-0 items-center gap-2 text-left" onClick={() => setSelectedItemId(itemId)} type="button">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: itemColors[itemId] }} />
@@ -287,7 +326,8 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           {selectedItem ? (
             <div className="mt-5 border-t border-surface-border pt-4">
@@ -320,14 +360,14 @@ function LayoutCanvasItem({
 }: {
   item: CustomLayoutItem;
   itemId: CustomLayoutItemId;
-  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: CustomLayoutItemId, mode: DragState["mode"]) => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLElement>, itemId: CustomLayoutItemId, mode: DragState["mode"], handle?: ResizeHandle) => void;
   selected: boolean;
 }) {
   const color = itemColors[itemId];
   return (
     <div
       aria-label={customLayoutItemLabels[itemId]}
-      className={`absolute select-none overflow-hidden rounded-lg border text-[10px] font-semibold shadow-lg transition-[box-shadow,opacity] ${selected ? "z-20 shadow-[0_0_0_2px_var(--accent),0_12px_30px_rgba(0,0,0,0.25)]" : "z-10"} ${item.visible ? "opacity-100" : "opacity-35"}`}
+      className={`absolute select-none overflow-visible rounded-lg border text-[10px] font-semibold shadow-lg transition-[box-shadow,opacity] ${selected ? "z-20 shadow-[0_0_0_2px_var(--accent),0_12px_30px_rgba(0,0,0,0.25)]" : "z-10"} ${item.visible ? "opacity-100" : "opacity-35"}`}
       onPointerDown={(event) => onPointerDown(event, itemId, "move")}
       style={{
         backgroundColor: `color-mix(in srgb, ${color} 18%, var(--background-secondary))`,
@@ -345,11 +385,21 @@ function LayoutCanvasItem({
         <span className="truncate">{customLayoutItemLabels[itemId]}</span>
         {item.locked ? <LockIcon /> : null}
       </div>
-      {selected && !item.locked ? (
-        <div aria-label={`调整${customLayoutItemLabels[itemId]}大小`} className="absolute bottom-0 right-0 h-5 w-5 cursor-se-resize" onPointerDown={(event) => onPointerDown(event, itemId, "resize")} title="调整大小">
-          <span className="absolute bottom-1 right-1 h-2 w-2 border-b-2 border-r-2" style={{ borderColor: color }} />
-        </div>
-      ) : null}
+      {selected && !item.locked
+        ? resizeHandles.map((handle) => (
+            <button
+              aria-label={`从${handle.id}方向调整${customLayoutItemLabels[itemId]}大小`}
+              className={`absolute z-10 rounded-sm border border-transparent bg-transparent ${handle.className}`}
+              key={handle.id}
+              onPointerDown={(event) => onPointerDown(event, itemId, "resize", handle.id)}
+              style={{ cursor: handle.cursor }}
+              title="调整大小"
+              type="button"
+            >
+              <span className="pointer-events-none absolute inset-1 rounded-sm" style={{ backgroundColor: color }} />
+            </button>
+          ))
+        : null}
     </div>
   );
 }
@@ -374,6 +424,75 @@ function getCanvasPoint(event: ReactPointerEvent, canvas: HTMLDivElement | null)
 
 function snap(value: number) {
   return Math.round(value / gridSize) * gridSize;
+}
+
+function resizeItem(
+  item: CustomLayoutItem,
+  itemId: CustomLayoutItemId,
+  handle: ResizeHandle,
+  dx: number,
+  dy: number,
+  keepRatio: boolean
+): CustomLayoutItem {
+  const minimum = minimumItemSizes[itemId];
+  const fromLeft = handle.includes("w");
+  const fromTop = handle.includes("n");
+  const fromRight = handle.includes("e");
+  const fromBottom = handle.includes("s");
+
+  if (keepRatio && handle.length === 2) {
+    const ratio = item.width / item.height;
+    const widthFromPointer = item.width + (fromRight ? dx : -dx);
+    const heightFromPointer = item.height + (fromBottom ? dy : -dy);
+    const widthDelta = Math.abs(widthFromPointer - item.width) / item.width;
+    const heightDelta = Math.abs(heightFromPointer - item.height) / item.height;
+    let width = widthDelta >= heightDelta ? widthFromPointer : heightFromPointer * ratio;
+    let height = width / ratio;
+
+    if (height < minimum.height) {
+      height = minimum.height;
+      width = height * ratio;
+    }
+    if (width < minimum.width) {
+      width = minimum.width;
+      height = width / ratio;
+    }
+
+    const next = {
+      ...item,
+      x: fromLeft ? item.x + item.width - width : item.x,
+      y: fromTop ? item.y + item.height - height : item.y,
+      width: snap(width),
+      height: snap(height)
+    };
+    return clampItem(next, itemId);
+  }
+
+  let left = item.x;
+  let top = item.y;
+  let right = item.x + item.width;
+  let bottom = item.y + item.height;
+  if (fromLeft) left = snap(item.x + dx);
+  if (fromRight) right = snap(item.x + item.width + dx);
+  if (fromTop) top = snap(item.y + dy);
+  if (fromBottom) bottom = snap(item.y + item.height + dy);
+
+  if (right - left < minimum.width) {
+    if (fromLeft) left = right - minimum.width;
+    else right = left + minimum.width;
+  }
+  if (bottom - top < minimum.height) {
+    if (fromTop) top = bottom - minimum.height;
+    else bottom = top + minimum.height;
+  }
+
+  return clampItem({
+    ...item,
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  }, itemId);
 }
 
 function clampItem(item: CustomLayoutItem, itemId: CustomLayoutItemId): CustomLayoutItem {

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appSettingsStorageKey,
   getDefaultAppSettings,
+  getCustomLayoutItemIds,
+  getDefaultCustomLayoutSettings,
   getCustomLayoutPageId,
   getAppSettings,
   normalizeSettings,
@@ -76,6 +78,29 @@ describe("app settings store", () => {
     expect(normalized.layout.customLayout.pages.discover.content).toMatchObject({ x: 1280, y: 0, width: 160, height: 900 });
     expect(getCustomLayoutPageId("/app/settings")).toBe("settings");
     expect(getCustomLayoutPageId("/rooms")).toBe("home");
+  });
+
+  it("provides a separate room layout aligned with the desktop player", () => {
+    const defaults = getDefaultCustomLayoutSettings();
+    const room = defaults.pages.room;
+
+    expect(getCustomLayoutItemIds("room")).toEqual([
+      "sidebar",
+      "room-stage",
+      "room-panel",
+      "player",
+      "mobile-navigation"
+    ]);
+    expect(room.sidebar).toMatchObject({ x: 0, y: 0, width: 64, height: 828 });
+    expect(room["room-stage"]).toMatchObject({ x: 64, y: 0, width: 792, height: 828, visible: true });
+    expect(room["room-panel"]).toMatchObject({ x: 856, y: 0, width: 584, height: 828, visible: true });
+    expect(room.player).toMatchObject({ x: 64, y: 828, width: 1376, height: 72 });
+    expect(defaults.pages.home["room-stage"].visible).toBe(false);
+  });
+
+  it("maps room routes to the room custom layout page", () => {
+    expect(getCustomLayoutPageId("/room/demo")).toBe("room");
+    expect(getCustomLayoutPageId("/room/demo/settings")).toBe("room");
   });
 
   it("persists normalized updates and can reset them", () => {

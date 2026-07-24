@@ -486,9 +486,78 @@
       max-height: none !important;
     }
 
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-room-host] {
+      padding-left: 0 !important;
+      padding-bottom: 0 !important;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-room-host] > [role="tabpanel"] {
+      overflow: visible !important;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-room-root="true"] {
+      position: fixed !important;
+      z-index: 10;
+      inset: 0 !important;
+      display: block !important;
+      width: 100% !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-stage"],
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-panel"] {
+      position: absolute !important;
+      z-index: 10;
+      top: var(--custom-room-stage-y);
+      left: var(--custom-room-stage-x);
+      width: var(--custom-room-stage-width);
+      height: var(--custom-room-stage-height);
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: hidden;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-stage"] {
+      container-type: size;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-stage"] > div,
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-stage"] > div > section {
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-stage"] [data-room-stage-record="true"] {
+      height: min(20rem, 42cqw, 40cqh, calc(100cqw - 4rem)) !important;
+      min-height: 9.5rem !important;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-stage"] [data-room-stage-record-surface="true"] {
+      width: min(20rem, 42cqw, 40cqh, calc(100cqw - 4rem)) !important;
+      height: 100% !important;
+      min-width: 9.5rem !important;
+      min-height: 9.5rem !important;
+    }
+
+    html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-item="room-panel"] {
+      z-index: 20;
+      top: var(--custom-room-panel-y);
+      left: var(--custom-room-panel-x);
+      width: var(--custom-room-panel-width);
+      height: var(--custom-room-panel-height);
+    }
+
     html[data-custom-layout-sidebar-visible="false"] [data-custom-layout-item="sidebar"],
     html[data-custom-layout-content-visible="false"] .custom-layout-content-region,
-    html[data-custom-layout-player-visible="false"] [data-custom-layout-item="player"] {
+    html[data-custom-layout-player-visible="false"] [data-custom-layout-item="player"],
+    html[data-custom-layout-room-stage-visible="false"] [data-custom-layout-item="room-stage"],
+    html[data-custom-layout-room-panel-visible="false"] [data-custom-layout-item="room-panel"] {
       display: none !important;
     }
   }

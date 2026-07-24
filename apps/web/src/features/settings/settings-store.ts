@@ -7,8 +7,8 @@ export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 export type PlayerStyle = "vinyl" | "square-cover";
 export type DiscoverProvider = "netease" | "qqmusic";
-export type CustomLayoutPageId = "home" | "discover" | "playlists" | "favorites" | "profile" | "settings";
-export type CustomLayoutItemId = "sidebar" | "content" | "player" | "mobile-navigation";
+export type CustomLayoutPageId = "home" | "discover" | "playlists" | "favorites" | "profile" | "settings" | "room";
+export type CustomLayoutItemId = "sidebar" | "content" | "player" | "mobile-navigation" | "room-stage" | "room-panel";
 
 export type CustomLayoutItem = {
   x: number;
@@ -37,7 +37,8 @@ export const customLayoutPageIds: CustomLayoutPageId[] = [
   "playlists",
   "favorites",
   "profile",
-  "settings"
+  "settings",
+  "room"
 ];
 
 export const customLayoutPageLabels: Record<CustomLayoutPageId, string> = {
@@ -46,15 +47,33 @@ export const customLayoutPageLabels: Record<CustomLayoutPageId, string> = {
   playlists: "歌单",
   favorites: "收藏",
   profile: "我的",
-  settings: "设置"
+  settings: "设置",
+  room: "房间"
 };
 
 export const customLayoutItemLabels: Record<CustomLayoutItemId, string> = {
   sidebar: "侧边栏",
   content: "主内容",
   player: "底部播放器",
-  "mobile-navigation": "移动端导航"
+  "mobile-navigation": "移动端导航",
+  "room-stage": "播放舞台",
+  "room-panel": "房间管理面板"
 };
+
+export const customLayoutWorkspaceItemIds: CustomLayoutItemId[] = [
+  "sidebar",
+  "content",
+  "player",
+  "mobile-navigation"
+];
+
+export const customLayoutRoomItemIds: CustomLayoutItemId[] = [
+  "sidebar",
+  "room-stage",
+  "room-panel",
+  "player",
+  "mobile-navigation"
+];
 
 export type AppSettings = {
   version: 1;
@@ -234,7 +253,7 @@ function cloneCustomLayoutSettings(settings: CustomLayoutSettings): CustomLayout
 
 export function getDefaultCustomLayoutSettings(): CustomLayoutSettings {
   const pages = Object.fromEntries(
-    customLayoutPageIds.map((pageId) => [pageId, createDefaultCustomLayoutPage()])
+    customLayoutPageIds.map((pageId) => [pageId, createDefaultCustomLayoutPage(pageId)])
   ) as Record<CustomLayoutPageId, CustomLayoutPage>;
   return { enabled: false, pages };
 }
@@ -264,6 +283,7 @@ export function normalizeCustomLayoutSettings(value: unknown): CustomLayoutSetti
 }
 
 export function getCustomLayoutPageId(pathname: string | null): CustomLayoutPageId {
+  if (pathname?.startsWith("/room/")) return "room";
   if (pathname?.startsWith("/app/discover")) return "discover";
   if (pathname?.startsWith("/app/playlists")) return "playlists";
   if (pathname?.startsWith("/app/favorites")) return "favorites";
@@ -272,12 +292,20 @@ export function getCustomLayoutPageId(pathname: string | null): CustomLayoutPage
   return "home";
 }
 
-function createDefaultCustomLayoutPage(): CustomLayoutPage {
+export function getCustomLayoutItemIds(pageId: CustomLayoutPageId): CustomLayoutItemId[] {
+  return pageId === "room" ? customLayoutRoomItemIds : customLayoutWorkspaceItemIds;
+}
+
+function createDefaultCustomLayoutPage(pageId: CustomLayoutPageId): CustomLayoutPage {
+  const isRoom = pageId === "room";
+  const roomContentHeight = customLayoutCanvas.height - 72;
   return {
-    sidebar: { x: 0, y: 0, width: 64, height: 840, visible: true, locked: false },
-    content: { x: 64, y: 0, width: 1376, height: 840, visible: true, locked: false },
-    player: { x: 64, y: 840, width: 1376, height: 60, visible: true, locked: false },
-    "mobile-navigation": { x: 0, y: 840, width: 1440, height: 60, visible: true, locked: true }
+    sidebar: { x: 0, y: 0, width: 64, height: isRoom ? roomContentHeight : 840, visible: true, locked: false },
+    content: { x: 64, y: 0, width: 1376, height: 840, visible: !isRoom, locked: false },
+    player: { x: 64, y: isRoom ? roomContentHeight : 840, width: 1376, height: isRoom ? 72 : 60, visible: true, locked: false },
+    "mobile-navigation": { x: 0, y: 840, width: 1440, height: 60, visible: true, locked: true },
+    "room-stage": { x: 64, y: 0, width: 792, height: roomContentHeight, visible: isRoom, locked: false },
+    "room-panel": { x: 856, y: 0, width: 584, height: roomContentHeight, visible: isRoom, locked: false }
   };
 }
 
