@@ -93,15 +93,32 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
     ? null
     : await findUsableLocalPlaybackAsset(input.track.id, input.track);
 
+  // A complete local playback asset is already a valid room source. Returning
+  // it immediately avoids making a listener wait for a provider request when
+  // the browser cache is cold but the segmented asset is ready.
+  if (localPlaybackAsset) {
+    return {
+      playbackAsset: localPlaybackAsset,
+      fileHash: localPlaybackAsset.sourceFileHash,
+      file: null
+    } satisfies OfflineFallbackResult;
+  }
+
   const importKey = `${input.roomSnapshot.room.id}:${input.track.id}:${input.source.provider}:${input.source.trackId}`;
   const existing = inFlightFallbackImports.get(importKey);
   if (existing) {
     return existing;
   }
 
+  // This operation is shared across render/effect lifetimes. A room snapshot
+  // refresh can dispose the caller that started it, but that must not abort a
+  // download which is still useful cache for the next render or next room
+  // visit. The caller's cancelled flag still prevents stale state updates.
   const operation = importOfflineProviderTrack({
     ...input,
-    fallbackPlaybackAsset: localPlaybackAsset
+    fallbackPlaybackAsset: localPlaybackAsset,
+    onStatus: undefined,
+    signal: undefined
   });
   inFlightFallbackImports.set(importKey, operation);
   const sharedOperation = operation.finally(() => {

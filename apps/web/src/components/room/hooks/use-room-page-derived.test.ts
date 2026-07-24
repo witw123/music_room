@@ -93,6 +93,26 @@ describe("room page derived state", () => {
     expect(resolveStableCurrentTrack(track, "track_cached", [refreshedTrack])).toBe(track);
   });
 
+  it("refreshes the stable track when provider identity arrives later", () => {
+    const initialTrack = {
+      ...track,
+      sourceType: "netease" as const
+    };
+    const refreshedTrack = {
+      ...initialTrack,
+      sourceRef: {
+        provider: "netease" as const,
+        trackId: "123456"
+      }
+    };
+
+    expect(resolveStableCurrentTrack(
+      initialTrack,
+      "track_cached",
+      [refreshedTrack]
+    )).toBe(refreshedTrack);
+  });
+
   it("derives playback identity from scalar fields instead of snapshot object identity", () => {
     const first = resolveRoomPagePlaybackState({
       roomSnapshot: createSnapshot({}),

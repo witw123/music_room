@@ -94,8 +94,22 @@ export function resolveRoomAudioPositionMs(
   return Math.max(0, playback.positionMs + Math.max(0, nowMs - anchorMs));
 }
 
-function resolveLocalAudioTrackKey(track: TrackMeta | null | undefined) {
-  return track ? `${track.id}:${track.fileHash}` : null;
+function resolveLocalAudioTrackKey(
+  track: TrackMeta | null | undefined,
+  forceProviderCache: boolean
+) {
+  if (!track) {
+    return null;
+  }
+
+  const providerSource = resolveProviderTrackSource(track);
+  return [
+    track.id,
+    track.fileHash,
+    forceProviderCache ? "provider-cache" : "room-cache",
+    providerSource?.provider ?? "local",
+    providerSource?.trackId ?? "none"
+  ].join(":");
 }
 
 function isProviderTrack(track: TrackMeta | null | undefined) {
@@ -187,6 +201,10 @@ export function shouldWaitForLocalAudioContext(input: {
 
 function isAudioPlaybackBlockedError(error: string | null) {
   return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
+}
+
+function isRecoverableLocalAudioError(error: string | null) {
+  return !!error && /abort|interrupted|cancelled|canceled|pause\(\)|playing request/i.test(error);
 }
 
 function waitForLocalAudioMetadata(audio: HTMLAudioElement) {
@@ -300,6 +318,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const sourceMemberPresenceState = input.roomSnapshot?.room.members.find(
     (member) => member.id === (input.roomSnapshot?.room.playback.sourceSessionId ?? input.currentTrack?.ownerSessionId)
   )?.presenceState ?? null;
+  const fallbackPresenceDependency = forceProviderCache
+    ? null
+    : sourceMemberPresenceState;
   const offlineFallbackInputRef = useRef({
     roomSnapshot: input.roomSnapshot,
     track: input.currentTrack,
@@ -311,7 +332,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     source: offlineSource
   };
   const [offlineFallbackAsset, setOfflineFallbackAsset] = useState<TrackMeta["playbackAsset"] | null>(null);
-  const localAudioTrackKey = resolveLocalAudioTrackKey(input.currentTrack);
+  const localAudioTrackKey = resolveLocalAudioTrackKey(
+    input.currentTrack,
+    forceProviderCache
+  );
   const [localAudioResolution, setLocalAudioResolution] = useState<LocalAudioResolution>({
     key: null,
     status: "idle",
@@ -545,7 +569,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     offlineSource?.trackId,
     preventOfflineAutoLoad,
     setStatusMessage,
-    sourceMemberPresenceState,
+    fallbackPresenceDependency,
     streamingOnlyPlayback,
     fullyCachedPlayback,
     forceProviderCache
@@ -1043,6 +1067,22 @@ export function useRoomSegmentedPlaybackRuntime(input: {
               });
               return;
             }
+            if (isRecoverableLocalAudioError(result.error)) {
+              // A source switch or a competing media-element operation can
+              // interrupt play(). Keep the resolved file and retry on the
+              // next sync tick instead of poisoning this cache key until the
+              // user re-enters the room.
+              localAudioReadyKeyRef.current = localAudioKey;
+              setMediaPlayback({
+                state: "buffering",
+                bufferedMs: 0,
+                ownedUnitCount: 0,
+                totalUnitCount,
+                audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+                lastError: result.error
+              });
+              return;
+            }
             markLocalAudioUnavailable(localAudioKey, result.error ?? "本地音频播放失败。");
             clearLocalAudioSource(audio);
             return;
@@ -1069,6 +1109,18 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           const detail = error instanceof Error && error.message.trim()
             ? error.message
             : "本地音频播放失败。";
+          if (isRecoverableLocalAudioError(detail)) {
+            localAudioReadyKeyRef.current = localAudioKey;
+            setMediaPlayback({
+              state: "buffering",
+              bufferedMs: 0,
+              ownedUnitCount: 0,
+              totalUnitCount,
+              audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+              lastError: detail
+            });
+            return;
+          }
           markLocalAudioUnavailable(localAudioKey, detail);
           clearLocalAudioSource(audio);
         }

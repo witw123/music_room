@@ -25,6 +25,10 @@ type StableTrackMeta = Pick<
   | "ownerSessionId"
   | "ownerNickname"
   | "sourceType"
+  | "sourceRef"
+  | "loudness"
+  | "originalAsset"
+  | "playbackAsset"
 >;
 
 type UseRoomPageDerivedInput = {
@@ -32,6 +36,30 @@ type UseRoomPageDerivedInput = {
   peerId: string;
   roomSnapshot: RoomSnapshot | null;
 };
+
+function resolveTrackSourceKey(track: StableTrackMeta) {
+  return track.sourceRef
+    ? `${track.sourceRef.provider}:${track.sourceRef.trackId}`
+    : null;
+}
+
+function resolveAssetKey(asset: StableTrackMeta["originalAsset"] | StableTrackMeta["playbackAsset"]) {
+  return asset
+    ? `${asset.kind}:${asset.assetId}:${asset.unitCount}:${asset.merkleRoot}`
+    : null;
+}
+
+function resolveLoudnessKey(loudness: StableTrackMeta["loudness"]) {
+  return loudness
+    ? [
+      loudness.integratedLufs,
+      loudness.truePeakDbtp,
+      loudness.gainDb,
+      loudness.targetLufs,
+      loudness.version
+    ].join(":")
+    : null;
+}
 
 function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
   return (
@@ -49,7 +77,11 @@ function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
     previous.artworkUrl === next.artworkUrl &&
     previous.ownerSessionId === next.ownerSessionId &&
     previous.ownerNickname === next.ownerNickname &&
-    previous.sourceType === next.sourceType
+    previous.sourceType === next.sourceType &&
+    resolveTrackSourceKey(previous) === resolveTrackSourceKey(next) &&
+    resolveLoudnessKey(previous.loudness) === resolveLoudnessKey(next.loudness) &&
+    resolveAssetKey(previous.originalAsset) === resolveAssetKey(next.originalAsset) &&
+    resolveAssetKey(previous.playbackAsset) === resolveAssetKey(next.playbackAsset)
   );
 }
 
