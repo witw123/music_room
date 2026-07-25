@@ -857,7 +857,7 @@ function buildSearchSuggestions(
   const query = keywords.trim().toLocaleLowerCase();
   const candidates: SearchSuggestion[] = [];
   const seen = new Set<string>();
-  const add = (label: string | null | undefined, hint?: string, provider?: Provider) => {
+  const add = (label: string | null | undefined, hint?: string | null, provider?: Provider) => {
     const value = label?.trim();
     if (!value) return;
     const key = `${value.toLocaleLowerCase()}:${provider ?? "local"}:${hint ?? ""}`;
