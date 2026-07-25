@@ -79,6 +79,33 @@ describe("QqMusicService", () => {
     expect(api.getAudioUrl.mock.calls.map(([input]) => input.quality)).toEqual(["exhigh", "high"]);
   });
 
+  it("falls back when the first QQ CDN URL is stale", async () => {
+    process.env.QQMUSIC_ENABLED = "true";
+    const api = {
+      getAudioUrl: jest.fn()
+        .mockResolvedValueOnce({ url: "https://dl.stream.qqmusic.qq.com/stale.flac" })
+        .mockResolvedValueOnce({ url: "https://dl.stream.qqmusic.qq.com/song.mp3" })
+        .mockResolvedValueOnce({ url: null })
+    };
+    const accounts = {
+      getCookieOrThrow: jest.fn().mockResolvedValue("cookie")
+    };
+    mockedFetchProviderUrl
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(new Response(Uint8Array.of(1, 2, 3), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg", "content-length": "3" }
+      }));
+    const service = new QqMusicService(api as never, accounts as never, {} as never);
+
+    await expect(service.openAudio("user_1", "song-mid", "exhigh")).resolves.toMatchObject({
+      mimeType: "audio/mpeg",
+      fileType: "mp3"
+    });
+    expect(api.getAudioUrl.mock.calls.map(([input]) => input.quality)).toEqual(["exhigh", "high"]);
+    expect(mockedFetchProviderUrl).toHaveBeenCalledTimes(2);
+  });
+
   it("exposes normalized lyrics, playlists, and albums", async () => {
     process.env.QQMUSIC_ENABLED = "true";
     const api = {

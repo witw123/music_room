@@ -1,4 +1,4 @@
-import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getDigitalAlbumLists, getLyric, getQQLoginQr, getRecommendBanner, getSearchByKey, getTopLists, getUserPlaylists, songListCategories, songLists, songListDetail } from "@sansenjian/qq-music-api/services";
+import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getDigitalAlbumLists, getLyric, getMusicPlay, getQQLoginQr, getRecommendBanner, getSearchByKey, getTopLists, getUserPlaylists, songListCategories, songLists, songListDetail } from "@sansenjian/qq-music-api/services";
 import { QqMusicApiClient } from "./qqmusic-api.client";
 import { fetchProviderUrl } from "../provider-fetch";
 
@@ -25,6 +25,7 @@ jest.mock("../provider-fetch", () => ({
 const mockedGetQQLoginQr = getQQLoginQr as jest.MockedFunction<typeof getQQLoginQr>;
 const mockedCheckQQLoginQr = checkQQLoginQr as jest.MockedFunction<typeof checkQQLoginQr>;
 const mockedGetSearchByKey = getSearchByKey as jest.MockedFunction<typeof getSearchByKey>;
+const mockedGetMusicPlay = getMusicPlay as jest.MockedFunction<typeof getMusicPlay>;
 const mockedGetLyric = getLyric as jest.MockedFunction<typeof getLyric>;
 const mockedGetUserPlaylists = getUserPlaylists as jest.MockedFunction<typeof getUserPlaylists>;
 const mockedSongListDetail = songListDetail as jest.MockedFunction<typeof songListDetail>;
@@ -162,6 +163,18 @@ describe("QqMusicApiClient", () => {
 
     await expect(new QqMusicApiClient().searchTracks({ keywords: "album", limit: 20, offset: 0, cookie: "secret", kind: "album" }))
       .resolves.toEqual([{ albumMID: "album-mid", albumName: "Album" }]);
+  });
+
+  it("reads QQ play URLs from current and nested response envelopes", async () => {
+    mockedGetMusicPlay
+      .mockResolvedValueOnce({ status: 200, body: { data: { playUrl: { "song-mid": { url: "http://aqqmusic.tc.qq.com/song.mp3" } } } } } as never)
+      .mockResolvedValueOnce({ status: 200, body: { response: { data: { playUrl: { "song-mid": "https://aqqmusic.tc.qq.com/song.mp3" } } } } } as never)
+      .mockResolvedValueOnce({ status: 200, body: { playUrl: { "song-mid": { purl: "https://aqqmusic.tc.qq.com/song.mp3" } } } } as never);
+
+    const client = new QqMusicApiClient();
+    await expect(client.getAudioUrl({ trackId: "song-mid", quality: "exhigh", cookie: "secret" })).resolves.toEqual({ url: "http://aqqmusic.tc.qq.com/song.mp3" });
+    await expect(client.getAudioUrl({ trackId: "song-mid", quality: "high", cookie: "secret" })).resolves.toEqual({ url: "https://aqqmusic.tc.qq.com/song.mp3" });
+    await expect(client.getAudioUrl({ trackId: "song-mid", quality: "standard", cookie: "secret" })).resolves.toEqual({ url: "https://aqqmusic.tc.qq.com/song.mp3" });
   });
 
   it("searches QQ playlists through the current songlist endpoint", async () => {

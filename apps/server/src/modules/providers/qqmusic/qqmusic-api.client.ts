@@ -144,10 +144,7 @@ export class QqMusicApiClient {
       const quality = input.quality === "standard" ? "128" : input.quality === "high" ? "320" : "flac";
       const response = await getMusicPlay({ params: { songmid: input.trackId, quality, resType: "play" }, option: { headers: { Cookie: input.cookie } } }) as ApiResponse;
       assertProviderStatus(response.status);
-      const body = asRecord(response.body);
-      const data = asRecord(body?.data) ?? asRecord(asRecord(body?.response)?.data);
-      const value = data?.playUrl?.[input.trackId];
-      const url = typeof value === "string" ? value : value?.url;
+      const url = readPlayUrl(response.body, input.trackId);
       if (!url) return { url: null };
       return { url: String(url) };
     });
@@ -269,6 +266,38 @@ function readCookie(session: any) {
 }
 function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
+
+function readPlayUrl(value: unknown, trackId: string) {
+  const body = asRecord(value);
+  if (!body) return null;
+  const containers = [
+    asRecord(asRecord(body.data)?.playUrl),
+    asRecord(asRecord(asRecord(body.response)?.data)?.playUrl),
+    asRecord(body.playUrl),
+    asRecord(asRecord(body.response)?.playUrl)
+  ];
+  for (const container of containers) {
+    if (!container) continue;
+    const candidate = container[trackId] ?? container[trackId.trim()];
+    const url = readUrlValue(candidate);
+    if (url) return url;
+  }
+
+  const data = asRecord(body.data) ?? asRecord(body.response) ?? body;
+  const midUrlInfo = Array.isArray(data?.midurlinfo) ? data.midurlinfo : [];
+  const item = midUrlInfo.find((entry: unknown) => {
+    const record = asRecord(entry);
+    return readString(record?.songmid ?? record?.songMid ?? record?.mid) === trackId;
+  });
+  return readUrlValue(item);
+}
+
+function readUrlValue(value: unknown) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  const record = asRecord(value);
+  const url = record?.url ?? record?.purl ?? record?.playUrl;
+  return typeof url === "string" && url.trim() ? url.trim() : null;
+}
 
 function readSearchResultList(data: Record<string, any>, kind: "song" | "album" | "playlist") {
   const candidateKeys = kind === "song"

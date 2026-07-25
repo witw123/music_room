@@ -376,27 +376,68 @@ export class QqMusicService {
   async openAudio(userId: string, trackId: string, quality: string, range?: string) {
     this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6);
     const selected = qqMusicQualitySchema.safeParse(quality).success ? quality as QqMusicQuality : this.defaultQuality();
-    const source = await this.resolveAudioSource(userId, trackId, selected);
-    const headers = new Headers(); if (range) headers.set("range", range); const upstream = await fetchProviderUrl(source.url, { headers }, this.requestTimeoutMs(), isAllowedHost, { allowSyntheticDns: true }).catch(() => null);
-    if (!upstream?.ok || !upstream.body) throw this.unavailableError(); const mimeType = resolveMime(upstream.headers.get("content-type"), source.url.toString());
-    if (!mimeType) { await upstream.body.cancel().catch(() => undefined); throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAudioUnsupported, "QQ Music returned an unsupported audio format."), HttpStatus.UNSUPPORTED_MEDIA_TYPE); }
-    const contentLength = Number(upstream.headers.get("content-length") ?? "0"); if (contentLength > this.maxImportBytes()) { await upstream.body.cancel().catch(() => undefined); throw new HttpException(createApiErrorResponse(errorCodes.qqMusicImportTooLarge, "QQ Music audio is too large."), HttpStatus.PAYLOAD_TOO_LARGE); }
-    return { upstream, mimeType, contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null, fileType: mimeType === "audio/flac" ? "flac" : "mp3", maxBytes: this.maxImportBytes() };
+    const cookie = await this.getCookie(userId);
+    const qualities = this.qualitiesForQuality(selected);
+
+    let sawUnsupported = false;
+    let sawOversized = false;
+    let sawUrl = false;
+    for (const candidateQuality of qualities) {
+      const result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: candidateQuality, cookie }));
+      if (!result.url) continue;
+      let source: URL;
+      try {
+        source = normalizeQqMusicAudioUrl(result.url);
+      } catch {
+        continue;
+      }
+      if (!isAllowedHost(source.hostname)) continue;
+      sawUrl = true;
+      const headers = new Headers({
+        accept: "audio/*,*/*;q=0.8",
+        referer: "https://y.qq.com/"
+      });
+      if (range) headers.set("range", range);
+      const upstream = await fetchProviderUrl(source, { headers }, this.requestTimeoutMs(), isAllowedHost, { allowSyntheticDns: true }).catch(() => null);
+      if (!upstream?.ok || !upstream.body) {
+        await upstream?.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      const mimeType = resolveMime(upstream.headers.get("content-type"), source.toString());
+      if (!mimeType) {
+        sawUnsupported = true;
+        await upstream.body.cancel().catch(() => undefined);
+        continue;
+      }
+      const contentLength = Number(upstream.headers.get("content-length") ?? "0");
+      if (contentLength > this.maxImportBytes()) {
+        sawOversized = true;
+        await upstream.body.cancel().catch(() => undefined);
+        continue;
+      }
+      return { upstream, mimeType, contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null, fileType: mimeType === "audio/flac" ? "flac" : "mp3", maxBytes: this.maxImportBytes() };
+    }
+
+    if (!sawUrl) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music audio is unavailable."), HttpStatus.NOT_FOUND);
+    if (sawOversized) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicImportTooLarge, "QQ Music audio is too large."), HttpStatus.PAYLOAD_TOO_LARGE);
+    if (sawUnsupported) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAudioUnsupported, "QQ Music returned an unsupported audio format."), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    throw this.unavailableError();
   }
 
   private async resolveAudioSource(userId: string, trackId: string, quality: QqMusicQuality) {
     const cookie = await this.getCookie(userId);
     const qualities = this.qualitiesForQuality(quality);
-    let result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: qualities[0], cookie }));
-    for (const fallbackQuality of qualities.slice(1)) {
-      if (result.url) break;
-      result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: fallbackQuality, cookie }));
+    for (const candidateQuality of qualities) {
+      const result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: candidateQuality, cookie }));
+      if (!result.url) continue;
+      try {
+        const url = normalizeQqMusicAudioUrl(result.url);
+        if (isAllowedHost(url.hostname)) return { url };
+      } catch {
+        // Keep trying a lower quality when QQ returns a stale or malformed URL.
+      }
     }
-    if (!result.url) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music audio is unavailable."), HttpStatus.NOT_FOUND);
-    let url: URL;
-    try { url = normalizeQqMusicAudioUrl(result.url); } catch { throw this.unavailableError(); }
-    if (!isAllowedHost(url.hostname)) throw this.unavailableError();
-    return { url };
+    throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music audio is unavailable."), HttpStatus.NOT_FOUND);
   }
   private toTrackCandidate(value: unknown): QqMusicTrackCandidate | null {
     const raw = asRecord(value);
