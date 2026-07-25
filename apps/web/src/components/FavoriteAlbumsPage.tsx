@@ -21,6 +21,7 @@ import {
   hasProviderTrackPlaybackCache,
   providerPlaybackCacheChangedEvent
 } from "@/features/playback/provider-track-cache";
+import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import {
   hashAudioBlob,
   listMergedLocalPlaylistTracks,
@@ -205,6 +206,7 @@ export function FavoriteAlbumsPage() {
         : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
       const fileHash = await hashAudioBlob(response.blob);
       const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+      const loudness = await analyzeAudioBlobLoudness(response.blob);
       const lyricPayload = existing?.lyrics
         ? null
         : await (resolvedTrack.provider === "netease"
@@ -236,6 +238,7 @@ export function FavoriteAlbumsPage() {
         sizeBytes: response.blob.size,
         mimeType,
         lyrics,
+        ...(loudness ? { loudness } : {}),
         availableOffline: true,
         updatedAt: new Date().toISOString()
       };

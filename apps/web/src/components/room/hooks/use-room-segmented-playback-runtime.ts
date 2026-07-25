@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
-import type { PlaybackSnapshot, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, RoomSnapshot, TrackLoudness, TrackMeta } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { maximumAudioBitrateKbps } from "@/features/p2p/audio-bitrate-policy";
 import {
@@ -22,6 +22,7 @@ import {
   appSettingsChangeEvent,
   getAppSettings
 } from "@/features/settings/settings-store";
+import { analyzeAudioBlobLoudness, resolveLoudnessGainDb } from "@/features/playback/loudness";
 import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 
 const receiverBufferingGraceMs = 3_000;
@@ -34,6 +35,7 @@ type LocalAudioResolution = {
   key: string | null;
   status: LocalAudioResolutionStatus;
   file: Blob | null;
+  loudness?: TrackLoudness;
   error: string | null;
 };
 
@@ -114,19 +116,6 @@ function resolveLocalAudioTrackKey(
 
 function isProviderTrack(track: TrackMeta | null | undefined) {
   return !!resolveProviderTrackSource(track);
-}
-
-function resolveLoudnessGainDb(
-  track: TrackMeta | null | undefined,
-  enabled: boolean
-) {
-  if (!enabled) {
-    return 0;
-  }
-  const gainDb = track?.loudness?.gainDb;
-  return typeof gainDb === "number" && Number.isFinite(gainDb)
-    ? Math.min(12, Math.max(-24, gainDb))
-    : 0;
 }
 
 function resolveLocalAudioTimelineKey(playback: PlaybackSnapshot) {
@@ -300,10 +289,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     fullyCachedPlayback,
     loudnessNormalization
   } = playbackPreferences;
-  const loudnessGainDb = resolveLoudnessGainDb(
-    input.currentTrack,
-    loudnessNormalization
-  );
   // Offline auto-cache prevention and stream-only playback take priority over
   // the provider-cache preference when multiple strategies are enabled.
   const forceProviderCache = !preventOfflineAutoLoad &&
@@ -342,6 +327,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     file: null,
     error: null
   });
+  const localAudioLoudness = localAudioResolution.key === localAudioTrackKey
+    ? localAudioResolution.loudness
+    : undefined;
+  const loudnessGainDb = resolveLoudnessGainDb(
+    input.currentTrack?.loudness
+      ? input.currentTrack
+      : localAudioLoudness
+        ? { loudness: localAudioLoudness }
+        : input.currentTrack,
+    loudnessNormalization
+  );
   const runtimeInputRef = useRef({
     ...input,
     localFallbackAsset: null as TrackMeta["playbackAsset"] | null,
@@ -402,6 +398,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           key: null,
           status: "idle",
           file: null,
+          loudness: undefined,
           error: null
         });
       return;
@@ -412,6 +409,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         key: localAudioTrackKey,
         status: "missing",
         file: null,
+        loudness: undefined,
         error: null
       });
       return;
@@ -422,6 +420,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         key: localAudioTrackKey,
         status: "missing",
         file: null,
+        loudness: undefined,
         error: "本地音频文件不可播放。"
       });
       return;
@@ -441,6 +440,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         key: localAudioTrackKey,
         status: "checking",
         file: null,
+        loudness: undefined,
         error: null
       };
     });
@@ -460,8 +460,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         key: localAudioTrackKey,
         status: file ? "available" : "missing",
         file,
+        ...(track.loudness ? { loudness: track.loudness } : {}),
         error: null
       });
+      if (!track.loudness && file) {
+        void analyzeAudioBlobLoudness(file).then((loudness) => {
+          if (cancelled || !loudness) return;
+          setLocalAudioResolution((current) => current.key === localAudioTrackKey
+            ? { ...current, loudness }
+            : current);
+        });
+      }
     }).catch((error) => {
       if (cancelled) return;
       setLocalAudioResolution({
@@ -530,8 +539,19 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             key: localAudioTrackKey,
             status: "available",
             file: result.file,
+            ...(fallbackInput.track?.loudness || result.loudness
+              ? { loudness: fallbackInput.track?.loudness ?? result.loudness }
+              : {}),
             error: null
           });
+          if (!fallbackInput.track?.loudness && !result.loudness) {
+            void analyzeAudioBlobLoudness(result.file).then((loudness) => {
+              if (cancelled || !loudness) return;
+              setLocalAudioResolution((current) => current.key === localAudioTrackKey
+                ? { ...current, loudness }
+                : current);
+            });
+          }
         } else {
           setOfflineFallbackAsset(result.playbackAsset);
         }

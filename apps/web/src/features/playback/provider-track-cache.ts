@@ -19,6 +19,7 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
+import { analyzeAudioBlobLoudness } from "./loudness";
 
 export const providerPlaybackCacheChangedEvent = "music-room-provider-playback-cache-changed";
 
@@ -46,6 +47,7 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
   ).catch(() => null);
   const lyrics = lyricPayload?.plainLyric ?? null;
+  const loudness = await analyzeAudioBlobLoudness(response.blob);
 
   await upsertCachedLibraryTrack({
     fileHash,
@@ -59,6 +61,7 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     mimeType,
     durationMs: resolvedTrack.durationMs,
     sizeBytes: response.blob.size,
+    ...(loudness ? { loudness } : {}),
     file: response.blob,
     sourceTrackIds: [],
     sourceRoomIds: [],
@@ -83,6 +86,7 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     sizeBytes: response.blob.size,
     mimeType,
     lyrics,
+    ...(loudness ? { loudness } : {}),
     availableOffline: false,
     updatedAt: new Date().toISOString()
   };
@@ -166,6 +170,14 @@ async function findReusableProviderPlaybackCache(track: ProviderTrack) {
     getLocalAudioCacheFileRecord(summary.fileHash).catch(() => null)
   ]);
   if (!browserCache && !localCacheFile) return null;
+  const loudness = summary.loudness
+    ?? (browserCache?.file ? await analyzeAudioBlobLoudness(browserCache.file) : null);
+  if (loudness && !summary.loudness && browserCache) {
+    await upsertCachedLibraryTrack({
+      ...browserCache,
+      loudness
+    }).catch(() => undefined);
+  }
 
   return {
     ...toProviderTrackRecord(track),
@@ -175,6 +187,7 @@ async function findReusableProviderPlaybackCache(track: ProviderTrack) {
     sizeBytes: summary.sizeBytes,
     mimeType: summary.mimeType,
     lyrics: summary.lyrics ?? null,
+    ...(loudness ? { loudness } : {}),
     availableOffline: false,
     updatedAt: summary.cachedAt
   } satisfies LocalPlaylistTrackRecord;

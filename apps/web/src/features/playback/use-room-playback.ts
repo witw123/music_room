@@ -6,6 +6,7 @@ import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
 import { roomAudioOutput } from "./room-audio-output";
 import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
+import { resolveLoudnessGainDb } from "./loudness";
 
 const playbackProgressPollIntervalMs = 150;
 const hiddenPlaybackProgressPollIntervalMs = 1_000;
@@ -216,6 +217,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const [audioDurationMs, setAudioDurationMs] = useState(0);
   const [volume, setVolume] = useState(0.72);
+  const [loudnessNormalization, setLoudnessNormalization] = useState(false);
   const [displayClockSource, setDisplayClockSource] = useState<DisplayClockSource>("room-fallback");
   const [displayDriftMs, setDisplayDriftMs] = useState(0);
   const [acceptedPlayback, setAcceptedPlayback] = useState<PlaybackSnapshot | null>(null);
@@ -237,7 +239,11 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   acceptedPlaybackRef.current = acceptedPlayback;
 
   useEffect(() => {
-    const syncVolume = () => setVolume(getAppSettings().playback.defaultVolume);
+    const syncVolume = () => {
+      const settings = getAppSettings();
+      setVolume(settings.playback.defaultVolume);
+      setLoudnessNormalization(settings.playback.loudnessNormalization);
+    };
     syncVolume();
     window.addEventListener(appSettingsChangeEvent, syncVolume);
     window.addEventListener("storage", syncVolume);
@@ -278,6 +284,9 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
     return tracks.find((item) => item.id === acceptedPlayback.currentTrackId) ?? null;
   }, [acceptedPlayback?.currentTrackId, tracks]);
+  const loudnessGainDb = progressTrack
+    ? resolveLoudnessGainDb(progressTrack, loudnessNormalization)
+    : undefined;
 
   useEffect(() => {
     if (!acceptedPlayback || !progressTrack) {
@@ -431,9 +440,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   useEffect(() => {
     roomAudioOutput.applyVolume({
       localAudio: audioRef.current,
-      volume
+      volume,
+      loudnessGainDb
     });
-  }, [audioRef, volume]);
+  }, [audioRef, loudnessGainDb, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
     const currentPlayback = acceptedPlaybackRef.current;

@@ -34,6 +34,7 @@ export class RoomAudioOutput {
     { context: AudioContext; source: MediaElementAudioSourceNode }
   >();
   private readonly volumeAnimationFrames = new WeakMap<HTMLAudioElement, number>();
+  private readonly elementLoudnessGains = new WeakMap<HTMLAudioElement, number>();
 
   async primeOutputs(input: PrimeRoomAudioOutputInput): Promise<PrimeRoomAudioOutputsResult> {
     return roomAudioActivationManager.activateOutputs(input);
@@ -48,9 +49,16 @@ export class RoomAudioOutput {
 
   applyVolume(input: ApplyRoomAudioVolumeInput) {
     const safeVolume = normalizeOutputVolume(input.volume);
-    const safeLoudnessGain = normalizeGainDb(input.loudnessGainDb ?? 0);
+    const loudnessGain = typeof input.loudnessGainDb === "number"
+      ? normalizeGainDb(input.loudnessGainDb)
+      : input.localAudio
+        ? this.elementLoudnessGains.get(input.localAudio) ?? 1
+        : 1;
     if (input.localAudio) {
       const element = input.localAudio;
+      if (typeof input.loudnessGainDb === "number") {
+        this.elementLoudnessGains.set(element, loudnessGain);
+      }
       const localGraph = this.localAudioElementGraph?.element === element
         ? this.localAudioElementGraph
         : null;
@@ -66,7 +74,9 @@ export class RoomAudioOutput {
         } catch {
           localGraph.localGain.gain.value = safeVolume;
         }
-        this.setGraphLoudnessGain(localGraph, safeLoudnessGain);
+        if (typeof input.loudnessGainDb === "number") {
+          this.setGraphLoudnessGain(localGraph, loudnessGain);
+        }
         element.volume = 1;
         return;
       }
@@ -74,11 +84,15 @@ export class RoomAudioOutput {
         typeof window === "undefined" ||
         typeof window.requestAnimationFrame !== "function"
       ) {
-        element.volume = normalizeOutputVolume(safeVolume * safeLoudnessGain);
+        element.volume = normalizeOutputVolume(
+          safeVolume * loudnessGain
+        );
         return;
       }
       const startVolume = element.volume;
-      const targetVolume = normalizeOutputVolume(safeVolume * safeLoudnessGain);
+      const targetVolume = normalizeOutputVolume(
+        safeVolume * loudnessGain
+      );
       const startedAt = performance.now();
       const durationMs = 20;
       const animate = (now: number) => {
@@ -123,9 +137,15 @@ export class RoomAudioOutput {
       this.localAudioElementGraph.context === context &&
       this.localAudioElementGraph.broadcastDestination === destination
     ) {
+      const graphGain = typeof options?.loudnessGainDb === "number"
+        ? normalizeGainDb(options.loudnessGainDb)
+        : this.elementLoudnessGains.get(element) ?? 1;
+      if (typeof options?.loudnessGainDb === "number") {
+        this.elementLoudnessGains.set(element, graphGain);
+      }
       this.setGraphLoudnessGain(
         this.localAudioElementGraph,
-        normalizeGainDb(options?.loudnessGainDb ?? 0)
+        graphGain
       );
       return destination?.stream ?? null;
     }
@@ -140,7 +160,11 @@ export class RoomAudioOutput {
       source.disconnect();
 
       const normalizationGain = context.createGain();
-      normalizationGain.gain.value = normalizeGainDb(options?.loudnessGainDb ?? 0);
+      const graphGain = typeof options?.loudnessGainDb === "number"
+        ? normalizeGainDb(options.loudnessGainDb)
+        : this.elementLoudnessGains.get(element) ?? 1;
+      normalizationGain.gain.value = graphGain;
+      this.elementLoudnessGains.set(element, graphGain);
       const localGain = context.createGain();
       localGain.gain.value = normalizeOutputVolume(element.volume);
       source.connect(normalizationGain);

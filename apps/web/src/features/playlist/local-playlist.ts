@@ -579,6 +579,7 @@ function fromCachedSummary(
     sizeBytes: summary.sizeBytes,
     artworkUrl: summary.artworkUrl ?? null,
     lyrics: summary.lyrics ?? null,
+    ...(summary.loudness ? { loudness: summary.loudness } : {}),
     provider: summary.provider ?? "local_upload",
     providerTrackId: summary.providerTrackId ?? null,
     fileHash: summary.fileHash,

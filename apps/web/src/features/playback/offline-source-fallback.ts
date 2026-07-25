@@ -3,6 +3,7 @@
 import type {
   PlaybackAssetManifest,
   RoomSnapshot,
+  TrackLoudness,
   TrackMeta
 } from "@music-room/shared";
 import {
@@ -25,6 +26,7 @@ import {
   playbackProfileId
 } from "@/features/upload/audio-asset-builder";
 import { resolveProviderTrackSource } from "@/features/upload/provider-track-identity";
+import { analyzeAudioBlobLoudness } from "./loudness";
 
 export type OfflineProviderSource = {
   provider: "netease" | "qqmusic";
@@ -36,6 +38,7 @@ type OfflineFallbackResult = {
   playbackAsset: PlaybackAssetManifest | null;
   fileHash: string;
   file: File | null;
+  loudness?: TrackLoudness;
 };
 
 const inFlightFallbackImports = new Map<
@@ -172,6 +175,7 @@ async function importOfflineProviderTrack(input: {
     );
 
     const lyrics = track.lyrics?.trim() || await resolveProviderLyrics(source);
+    const loudness = track.loudness ?? await analyzeAudioBlobLoudness(file);
     // The room track already owns its content hash. Avoid decoding or creating
     // playback segments here: the downloaded provider file is the local source.
     await upsertCachedLibraryTrack(
@@ -183,7 +187,8 @@ async function importOfflineProviderTrack(input: {
           fileHash: track.fileHash,
           sizeBytes: file.size,
           mimeType,
-          lyrics: lyrics || null
+          lyrics: lyrics || null,
+          ...(loudness ? { loudness } : {})
         }
       })
     );
@@ -214,7 +219,8 @@ async function importOfflineProviderTrack(input: {
     return {
       playbackAsset: fallbackPlaybackAsset,
       fileHash: track.fileHash,
-      file
+      file,
+      ...(loudness ? { loudness } : {})
     };
   } catch (error) {
     if (signal?.aborted || !fallbackPlaybackAsset) {
@@ -225,7 +231,8 @@ async function importOfflineProviderTrack(input: {
     return {
       playbackAsset: fallbackPlaybackAsset,
       fileHash: fallbackPlaybackAsset.sourceFileHash,
-      file: null
+      file: null,
+      ...(track.loudness ? { loudness: track.loudness } : {})
     };
   }
 }

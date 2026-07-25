@@ -66,6 +66,35 @@ describe("room audio output", () => {
     expect(audio.volume).toBe(1);
   });
 
+  it("does not clear graph loudness when a volume update omits normalization", () => {
+    const { context, gain } = createAudioContextMock();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(context as unknown as AudioContext);
+    const audio = { volume: 1 } as HTMLAudioElement;
+
+    roomAudioOutput.bindLocalAudioElement(audio, {
+      broadcast: false,
+      loudnessGainDb: 6
+    });
+    roomAudioOutput.applyVolume({ localAudio: audio, volume: 0.4 });
+
+    expect(gain.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
+    expect(gain.gain.setTargetAtTime).toHaveBeenCalledWith(0.4, 12, 0.02);
+  });
+
+  it("keeps normalization for native elements when the graph is unavailable", () => {
+    const audio = { volume: 1 } as HTMLAudioElement;
+
+    roomAudioOutput.applyVolume({
+      localAudio: audio,
+      volume: 0.4,
+      loudnessGainDb: 6
+    });
+    roomAudioOutput.applyVolume({ localAudio: audio, volume: 0.2 });
+
+    expect(audio.volume).toBeCloseTo(0.398, 2);
+  });
+
   it("disconnects the local graph before a new source is bound", () => {
     const { context, gain, source } = createAudioContextMock();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext")

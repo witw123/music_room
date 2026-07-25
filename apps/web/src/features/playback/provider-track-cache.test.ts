@@ -185,4 +185,25 @@ describe("provider playback cache lifecycle", () => {
     expect(apiMocks.musicRoomApi.downloadNeteaseTrack).not.toHaveBeenCalled();
     await expect(hasProviderTrackPlaybackCache("hash_1")).resolves.toBe(true);
   });
+
+  it("keeps cached loudness metadata when reusing a provider track", async () => {
+    const summary = buildSummary({
+      loudness: {
+        integratedLufs: -18,
+        truePeakDbtp: -2,
+        gainDb: 4,
+        targetLufs: -14,
+        version: 1
+      }
+    });
+    indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([summary]);
+    indexedDbMocks.getLocalAudioCacheFileRecord.mockResolvedValue({
+      fileHash: "hash_1",
+      fileName: "Song [hash_1].mp3"
+    });
+
+    const record = await cacheProviderTrackForPlayback(buildTrack("netease"));
+
+    expect(record.loudness?.gainDb).toBe(4);
+  });
 });

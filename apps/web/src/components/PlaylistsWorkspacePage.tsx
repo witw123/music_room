@@ -54,6 +54,7 @@ import {
   hasProviderTrackPlaybackCache,
   providerPlaybackCacheChangedEvent
 } from "@/features/playback/provider-track-cache";
+import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import { AnchoredDialog, getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import {
   getCachedPlaylistData,
@@ -1235,6 +1236,7 @@ function PlaylistDetailView({
         : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId!);
       const fileHash = await hashAudioBlob(response.blob);
       const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+      const loudness = await analyzeAudioBlobLoudness(response.blob);
       const lyricPayload = resolvedTrack.lyrics
         ? null
         : await (provider === "netease"
@@ -1266,6 +1268,7 @@ function PlaylistDetailView({
         sizeBytes: response.blob.size,
         mimeType,
         lyrics,
+        ...(loudness ? { loudness } : {}),
         availableOffline: true,
         updatedAt: new Date().toISOString()
       };

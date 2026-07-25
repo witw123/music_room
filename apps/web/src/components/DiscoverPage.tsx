@@ -31,6 +31,7 @@ import {
   hasProviderTrackPlaybackCache,
   providerPlaybackCacheChangedEvent
 } from "@/features/playback/provider-track-cache";
+import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import {
   hashAudioBlob,
   listMergedLocalPlaylistTracks,
@@ -463,6 +464,7 @@ export function DiscoverPage() {
         : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
       const fileHash = await hashAudioBlob(response.blob);
       const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+      const loudness = await analyzeAudioBlobLoudness(response.blob);
       const lyrics = await (resolvedTrack.provider === "netease"
         ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
         : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
@@ -491,6 +493,7 @@ export function DiscoverPage() {
         sizeBytes: response.blob.size,
         mimeType,
         lyrics,
+        ...(loudness ? { loudness } : {}),
         availableOffline: true,
         updatedAt: new Date().toISOString()
       };

@@ -21,7 +21,6 @@ import {
   requestMiniPlayerWindow
 } from "@/components/bottom-player/MiniPlayerOverlay";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
-import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
@@ -365,12 +364,8 @@ function BottomPlayerBase({
     (nextVolume: number) => {
       const boundedVolume = Math.min(1, Math.max(0, nextVolume));
       setVolume(boundedVolume);
-      roomAudioOutput.applyVolume({
-        localAudio: audioRef.current,
-        volume: boundedVolume
-      });
     },
-    [audioRef, setVolume]
+    [setVolume]
   );
 
   return (

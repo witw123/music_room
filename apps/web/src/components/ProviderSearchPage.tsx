@@ -40,6 +40,7 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/lib/indexeddb";
 import { cacheProviderTrackForPlayback } from "@/features/playback/provider-track-cache";
+import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -337,6 +338,7 @@ export function ProviderSearchPage({
         : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
       const fileHash = await hashAudioBlob(response.blob);
       const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+      const loudness = await analyzeAudioBlobLoudness(response.blob);
       const lyricPayload = await (resolvedTrack.provider === "netease"
         ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
         : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
@@ -366,6 +368,7 @@ export function ProviderSearchPage({
         sizeBytes: response.blob.size,
         mimeType,
         lyrics,
+        ...(loudness ? { loudness } : {}),
         availableOffline: true,
         updatedAt: new Date().toISOString()
       };

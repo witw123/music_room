@@ -39,6 +39,7 @@ import {
   getAppSettings,
   updateAppSettings
 } from "@/features/settings/settings-store";
+import { analyzeAudioBlobLoudness, resolveLoudnessGainDb } from "./loudness";
 
 const localQueueOwnerId = "local-playlist";
 
@@ -99,7 +100,12 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const [audioDurationMs, setAudioDurationMs] = useState(0);
   const [volume, setVolume] = useState(0.8);
+  const [loudnessNormalization, setLoudnessNormalization] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("sequence");
+  const loudnessGainDb = resolveLoudnessGainDb(
+    currentRecord,
+    loudnessNormalization
+  );
 
   const refreshLibraryRecords = useCallback(async () => {
     const tracks = await listMergedLocalPlaylistTracks();
@@ -140,6 +146,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const syncPlaybackSettings = () => {
       const settings = getAppSettings();
       setVolume(settings.playback.defaultVolume);
+      setLoudnessNormalization(settings.playback.loudnessNormalization);
       setPlaybackMode(settings.playback.localPlaybackMode);
     };
     syncPlaybackSettings();
@@ -243,7 +250,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       || !Number.isFinite(track.durationMs)
       || track.durationMs <= 0
       || !track.artworkUrl
-      || !track.lyrics;
+      || !track.lyrics
+      || !track.loudness;
     if (!needsMetadata || (track.fileHash && metadataEnrichedHashesRef.current.has(track.fileHash))) {
       return track;
     }
@@ -252,6 +260,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       readEmbeddedAudioMetadata(file),
       track.fileHash ? getCachedLibraryTrack(track.fileHash).catch(() => null) : Promise.resolve(null)
     ]);
+    const loudness = track.loudness ?? cached?.loudness ?? await analyzeAudioBlobLoudness(file);
     if (track.fileHash) metadataEnrichedHashesRef.current.add(track.fileHash);
     const preferEmbedded = track.provider === "local_upload";
     const nextTrack: LocalPlaylistTrackRecord = {
@@ -291,6 +300,9 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         track.lyrics,
         embedded.lyrics
       ),
+      ...(loudness
+        ? { loudness }
+        : {}),
       mimeType: track.mimeType || file.type || cached?.mimeType || track.mimeType,
       sizeBytes: track.sizeBytes || file.size || cached?.sizeBytes || track.sizeBytes
     };
@@ -303,7 +315,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       || nextTrack.lyrics !== track.lyrics
       || nextTrack.mimeType !== track.mimeType
       || nextTrack.sizeBytes !== track.sizeBytes;
-    if (!changed) return nextTrack;
+    const loudnessChanged = nextTrack.loudness?.gainDb !== track.loudness?.gainDb;
+    if (!changed && !loudnessChanged) return nextTrack;
 
     const persistedTrack = {
       ...nextTrack,
@@ -672,7 +685,11 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    audio.volume = volume;
+    roomAudioOutput.applyVolume({
+      localAudio: audio,
+      volume,
+      loudnessGainDb
+    });
     const handleEnded = () => handleAudioEnded();
     const handleTimeUpdate = () => {
       if (Number.isFinite(audio.currentTime)) {
@@ -692,7 +709,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("durationchange", handleDurationChange);
     };
-  }, [currentRecord, handleAudioEnded, volume]);
+  }, [currentRecord, handleAudioEnded, loudnessGainDb, volume]);
 
   const syncProgressFromAudio = useCallback(() => {
     const audio = audioRef.current;
@@ -897,6 +914,7 @@ function mergeLocalTrackRecord(
       ? libraryTrack.artworkUrl
       : track.artworkUrl ?? libraryTrack.artworkUrl,
     lyrics: track.lyrics ?? libraryTrack.lyrics,
+    loudness: track.loudness ?? libraryTrack.loudness,
     fileHash: track.fileHash ?? libraryTrack.fileHash,
     fileName: track.fileName ?? libraryTrack.fileName,
     sourceDirectoryId: track.sourceDirectoryId ?? libraryTrack.sourceDirectoryId,
@@ -937,6 +955,7 @@ function toTrackMeta(track: LocalPlaylistTrackRecord): TrackMeta {
     ownerSessionId: localQueueOwnerId,
     ownerNickname: "本地歌单",
     sourceType: track.provider,
-    sourceRef
+    sourceRef,
+    ...(track.loudness ? { loudness: track.loudness } : {})
   };
 }

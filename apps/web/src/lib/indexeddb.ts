@@ -159,6 +159,7 @@ export type LocalPlaylistTrackRecord = {
   sizeBytes: number;
   artworkUrl: string | null;
   lyrics: string | null;
+  loudness?: TrackLoudness;
   provider: "netease" | "qqmusic" | "local_upload";
   providerTrackId: string | null;
   fileHash: string | null;
