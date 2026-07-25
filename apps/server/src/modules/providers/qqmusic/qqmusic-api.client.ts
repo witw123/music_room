@@ -8,6 +8,8 @@ import {
   getMusicPlay,
   getQQLoginQr,
   getRecommendBanner,
+  getSmartbox,
+  getHotKey,
   getSearchByKey,
   getTopLists,
   getUserPlaylists,
@@ -74,6 +76,22 @@ export class QqMusicApiClient {
         throw new QqMusicApiError("invalid-response");
       }
       return list;
+    });
+  }
+
+  async searchSuggestions(input: { keywords: string }) {
+    return this.call(async () => {
+      const response = await getSmartbox({ params: { key: input.keywords } }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getSearchHot() {
+    return this.call(async () => {
+      const response = await getHotKey({}) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readSuccessfulProviderBody(response.body);
     });
   }
   async searchPlaylists(input: { keywords: string; limit: number; offset: number; cookie: string }) {

@@ -23,6 +23,7 @@ import { ProviderAlbumTrackTable, type ProviderAlbumTrackActions } from "@/compo
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
+import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
@@ -60,7 +61,7 @@ type Detail =
   | { kind: "playlist"; summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail }
   | { kind: "album"; summary: ProviderAlbumSummary; value: ProviderAlbumDetail };
 type HeroItem = ProviderDiscoveryBanner & { fallbackPlaylist?: ProviderPlaylistSummary };
-type SearchSuggestion = { label: string; hint?: string };
+type SearchSuggestion = SearchSuggestionItem;
 
 const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
@@ -132,6 +133,8 @@ export function DiscoverPage() {
   const [searchKeywords, setSearchKeywords] = useState(() => searchParams.get("q") ?? "");
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [remoteSuggestions, setRemoteSuggestions] = useState<SearchSuggestion[]>([]);
+  const [remoteHotWords, setRemoteHotWords] = useState<SearchSuggestion[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const nextSearchOpen = searchParams.get("search") === "1";
@@ -150,6 +153,52 @@ export function DiscoverPage() {
       setSearchHistory([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!activeSession || searchOpen || !searchSuggestionsOpen) {
+      setRemoteSuggestions([]);
+      setRemoteHotWords([]);
+      return;
+    }
+
+    let cancelled = false;
+    const query = searchKeywords.trim();
+    if (query) {
+      setRemoteSuggestions([]);
+    } else {
+      setRemoteHotWords([]);
+    }
+    const timerId = window.setTimeout(async () => {
+      const requests = enabledProviders.map((provider) => {
+        if (query) {
+          return provider === "netease"
+            ? musicRoomApi.searchNeteaseSuggestions(query)
+            : musicRoomApi.searchQqMusicSuggestions(query);
+        }
+        return provider === "netease"
+          ? musicRoomApi.getNeteaseSearchHot()
+          : musicRoomApi.getQqMusicSearchHot();
+      });
+      const settled = await Promise.allSettled(requests);
+      if (cancelled) return;
+      const items = settled.flatMap((result) => result.status === "fulfilled" ? result.value.items : [])
+        .map((item) => ({
+          label: item.label,
+          hint: item.hint ?? (query ? "联想" : "热词"),
+          provider: item.provider
+        }));
+      if (query) {
+        setRemoteSuggestions(items);
+      } else {
+        setRemoteHotWords(items);
+      }
+    }, query ? 220 : 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [activeSession, searchKeywords, searchOpen, searchSuggestionsOpen]);
 
   useEffect(() => {
     if (hydrated && !activeSession) {
@@ -617,7 +666,12 @@ export function DiscoverPage() {
   const heroItems: HeroItem[] = banners.length > 0
     ? banners
     : recommended.slice(0, 8).map((item) => ({ ...toFallbackBanner(item), fallbackPlaylist: item }));
-  const searchSuggestions = buildSearchSuggestions(searchKeywords, searchHistory, activeData);
+  const searchSuggestions = buildSearchSuggestions(
+    searchKeywords,
+    searchHistory,
+    activeData,
+    searchKeywords.trim() ? remoteSuggestions : remoteHotWords
+  );
 
   return (
     <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
@@ -794,21 +848,27 @@ function toFallbackBanner(summary: ProviderPlaylistSummary): ProviderDiscoveryBa
   };
 }
 
-function buildSearchSuggestions(keywords: string, history: string[], data: ProviderDiscoveryData): SearchSuggestion[] {
+function buildSearchSuggestions(
+  keywords: string,
+  history: string[],
+  data: ProviderDiscoveryData,
+  remote: SearchSuggestion[] = []
+): SearchSuggestion[] {
   const query = keywords.trim().toLocaleLowerCase();
   const candidates: SearchSuggestion[] = [];
   const seen = new Set<string>();
-  const add = (label: string | null | undefined, hint?: string) => {
+  const add = (label: string | null | undefined, hint?: string, provider?: Provider) => {
     const value = label?.trim();
     if (!value) return;
-    const key = `${value.toLocaleLowerCase()}:${hint ?? ""}`;
+    const key = `${value.toLocaleLowerCase()}:${provider ?? "local"}:${hint ?? ""}`;
     if (seen.has(key)) return;
     if (query && !value.toLocaleLowerCase().includes(query)) return;
     seen.add(key);
-    candidates.push({ label: value, hint });
+    candidates.push({ label: value, hint, provider });
   };
 
   history.forEach((item) => add(item, "最近搜索"));
+  remote.forEach((item) => add(item.label, item.hint, item.provider));
   data.dailyTracks.slice(0, 8).forEach((track) => {
     add(track.title, "歌曲");
     add(track.artist, "歌手");
@@ -961,28 +1021,6 @@ function scrollHeroRail(rail: HTMLDivElement | null, index: number) {
   const slide = rail.children[index];
   if (!(slide instanceof HTMLElement)) return;
   rail.scrollTo({ left: slide.offsetLeft, behavior: "smooth" });
-}
-
-function SearchSuggestions({ items, onSelect }: { items: SearchSuggestion[]; onSelect: (value: string) => void }) {
-  if (!items.length) return null;
-  return (
-    <div className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-surface-border bg-surface/95 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-xl" role="listbox">
-      {items.map((item) => (
-        <button
-          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground"
-          key={`${item.label}:${item.hint ?? ""}`}
-          onClick={() => onSelect(item.label)}
-          onMouseDown={(event) => event.preventDefault()}
-          role="option"
-          type="button"
-        >
-          <span className="shrink-0 text-foreground-muted/80"><SearchIcon /></span>
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-          {item.hint ? <span className="shrink-0 rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">{item.hint}</span> : null}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function PlaylistRail({ items, onOpen, loadingKey, expanded, onToggleExpanded }: { items: ProviderPlaylistSummary[]; onOpen: (item: ProviderPlaylistSummary) => Promise<void>; loadingKey: string | null; expanded: boolean; onToggleExpanded: () => void }) {

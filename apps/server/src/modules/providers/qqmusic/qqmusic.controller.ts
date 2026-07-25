@@ -26,6 +26,7 @@ import {
   qqMusicPlaylistIdSchema,
   qqMusicQualitySchema,
   qqMusicSearchQuerySchema,
+  qqMusicSearchSuggestQuerySchema,
   qqMusicTrackIdSchema
 } from "./qqmusic.schemas";
 import { QqMusicService } from "./qqmusic.service";
@@ -66,6 +67,22 @@ export class QqMusicController {
       await this.user(token),
       parseRequestBody(qqMusicSearchQuerySchema, query)
     );
+  }
+
+  @Get("search/suggest")
+  async searchSuggest(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") token?: string
+  ) {
+    return this.service.searchSuggestions(
+      await this.user(token),
+      parseRequestBody(qqMusicSearchSuggestQuerySchema, query)
+    );
+  }
+
+  @Get("search/hot")
+  async searchHot(@Headers("x-session-token") token?: string) {
+    return this.service.getSearchHot(await this.user(token));
   }
 
   @Get("tracks/:trackId")

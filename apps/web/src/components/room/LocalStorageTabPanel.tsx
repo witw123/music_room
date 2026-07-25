@@ -15,6 +15,7 @@ import { formatDuration } from "@/lib/music-room-ui";
 import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { musicRoomApi } from "@/lib/music-room-api";
+import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { LocalPlaylistPanel } from "./LocalPlaylistPanel";
 import { FavoriteAlbumsPanel } from "./FavoriteAlbumsPanel";
@@ -206,7 +207,11 @@ function NetworkPlaylistSearch({
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [remoteSuggestions, setRemoteSuggestions] = useState<SearchSuggestionItem[]>([]);
+  const [remoteHotWords, setRemoteHotWords] = useState<SearchSuggestionItem[]>([]);
   const searchRequestRef = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (enabledSearchProviders.length === 0) return;
@@ -215,6 +220,9 @@ function NetworkPlaylistSearch({
     setAccount(null);
     setResults([]);
     setErrorMessage(null);
+    setSearchSuggestionsOpen(false);
+    setRemoteSuggestions([]);
+    setRemoteHotWords([]);
     const load = provider === "netease"
       ? musicRoomApi.getNeteaseAccount
       : musicRoomApi.getQqMusicAccount;
@@ -233,6 +241,56 @@ function NetworkPlaylistSearch({
 
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
   const isConnected = account?.connected === true;
+
+  useEffect(() => {
+    if (!isConnected || !searchSuggestionsOpen) {
+      setRemoteSuggestions([]);
+      setRemoteHotWords([]);
+      return;
+    }
+
+    let cancelled = false;
+    const query = keywords.trim();
+    if (query) {
+      setRemoteSuggestions([]);
+    } else {
+      setRemoteHotWords([]);
+    }
+    const timerId = window.setTimeout(async () => {
+      try {
+        const response = query
+          ? provider === "netease"
+            ? await musicRoomApi.searchNeteaseSuggestions(query)
+            : await musicRoomApi.searchQqMusicSuggestions(query)
+          : provider === "netease"
+            ? await musicRoomApi.getNeteaseSearchHot()
+            : await musicRoomApi.getQqMusicSearchHot();
+        if (cancelled) return;
+        const items = response.items.map((item) => ({
+          label: item.label,
+          hint: item.hint ?? (query ? "联想" : "热词"),
+          provider: item.provider
+        }));
+        if (query) {
+          setRemoteSuggestions(items);
+        } else {
+          setRemoteHotWords(items);
+        }
+      } catch {
+        if (cancelled) return;
+        if (query) {
+          setRemoteSuggestions([]);
+        } else {
+          setRemoteHotWords([]);
+        }
+      }
+    }, query ? 220 : 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [isConnected, keywords, provider, searchSuggestionsOpen]);
   const libraryTrackIds = new Set(
     roomTracks
       .filter((track) => track.sourceType === provider && track.sourceRef?.provider === provider)
@@ -347,17 +405,40 @@ function NetworkPlaylistSearch({
           </div>
 
           <form className="flex flex-col gap-2 sm:flex-row" onSubmit={handleSearchSubmit}>
-            <label className="sr-only" htmlFor="network-playlist-search-input">搜索歌曲</label>
-            <input
-              id="network-playlist-search-input"
-              className="min-w-0 flex-1 border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-              disabled={!isConnected}
-              maxLength={100}
-              onChange={(event) => setKeywords(event.target.value)}
-              placeholder={`搜索${providerName}歌曲、歌手或专辑`}
-              type="search"
-              value={keywords}
-            />
+            <div className="relative min-w-0 flex-1">
+              <label className="sr-only" htmlFor="network-playlist-search-input">搜索歌曲</label>
+              <input
+                ref={searchInputRef}
+                id="network-playlist-search-input"
+                className="w-full min-w-0 border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                disabled={!isConnected}
+                maxLength={100}
+                onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 120)}
+                onChange={(event) => {
+                  setKeywords(event.target.value);
+                  if (isConnected) setSearchSuggestionsOpen(true);
+                }}
+                onFocus={() => {
+                  if (isConnected) setSearchSuggestionsOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setSearchSuggestionsOpen(false);
+                }}
+                placeholder={`搜索${providerName}歌曲、歌手或专辑`}
+                type="search"
+                value={keywords}
+              />
+              {searchSuggestionsOpen ? (
+                <SearchSuggestions
+                  items={querySuggestions(keywords, remoteSuggestions, remoteHotWords)}
+                  onSelect={(value) => {
+                    setKeywords(value);
+                    setSearchSuggestionsOpen(false);
+                    searchInputRef.current?.focus();
+                  }}
+                />
+              ) : null}
+            </div>
             <button
               type="submit"
               disabled={!isConnected || !keywords.trim()}
@@ -403,6 +484,10 @@ function NetworkPlaylistSearch({
       </div>
     </section>
   );
+}
+
+function querySuggestions(keywords: string, suggestions: SearchSuggestionItem[], hotWords: SearchSuggestionItem[]) {
+  return keywords.trim() ? suggestions : hotWords;
 }
 
 function toLocalSearchErrorMessage(error: unknown) {

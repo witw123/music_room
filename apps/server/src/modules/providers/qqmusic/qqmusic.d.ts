@@ -3,6 +3,8 @@ declare module "@sansenjian/qq-music-api/services" {
   export const getMusicPlay: (options: any) => Promise<any>;
   export const getQQLoginQr: (options: any) => Promise<any>;
   export const getSearchByKey: (options: any) => Promise<any>;
+  export const getSmartbox: (options: any) => Promise<any>;
+  export const getHotKey: (options: any) => Promise<any>;
   export const getLyric: (options: any) => Promise<any>;
   export const getUserPlaylists: (options: any) => Promise<any>;
   export const getDigitalAlbumLists: (options: any) => Promise<any>;

@@ -140,6 +140,12 @@ export const neteaseSearchQuerySchema = z
   })
   .strict();
 
+export const neteaseSearchSuggestQuerySchema = z
+  .object({
+    keywords: z.string().trim().min(1).max(100)
+  })
+  .strict();
+
 export const neteaseTrackIdSchema = z.string().trim().regex(/^\d+$/).max(32);
 
 export const neteaseQualitySchema = z.enum(["standard", "high", "exhigh"]);
@@ -193,6 +199,7 @@ export const neteaseAccountStatusSchema = z
   .strict();
 
 export type NeteaseSearchQuery = z.infer<typeof neteaseSearchQuerySchema>;
+export type NeteaseSearchSuggestQuery = z.infer<typeof neteaseSearchSuggestQuerySchema>;
 export type NeteaseQuality = z.infer<typeof neteaseQualitySchema>;
 export type NeteaseApiSong = z.infer<typeof neteaseApiSongSchema>;
 export type NeteaseQrCheckBody = z.infer<typeof neteaseQrCheckBodySchema>;

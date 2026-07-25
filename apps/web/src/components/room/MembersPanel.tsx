@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   dedupeRoomMembers,
+  formatMemberDuration,
   hasFreshMediaObservation,
+  getMemberDurationMs,
 } from "./member-data";
 
 type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
@@ -31,6 +33,7 @@ export type LocalMemberPanelState = {
 
 type MembersPanelProps = {
   members: RoomMember[];
+  now: number;
   activeSessionId: string | null;
   isHost: boolean;
   onUpdateMemberPermissions: (memberId: string, permissions: RoomMemberPermissions) => Promise<boolean>;
@@ -302,6 +305,7 @@ export function resolveMemberMediaRates(input: {
 
 function MembersPanelBase({
   members,
+  now,
   activeSessionId,
   isHost,
   onUpdateMemberPermissions,
@@ -376,6 +380,12 @@ function MembersPanelBase({
                     </div>
                     <span className="mt-0.5 block text-[11px] text-foreground-muted">
                       {member.role === "host" ? "房主" : "成员"}
+                    </span>
+                    <span
+                      className="mt-1 block text-[10px] tabular-nums text-foreground-muted"
+                      data-testid={`member-duration-${member.id}`}
+                    >
+                      已在房间 {formatMemberDuration(getMemberDurationMs(member, now))}
                     </span>
                   </div>
                   <span className={`flex shrink-0 items-center gap-1.5 text-xs ${presence.text}`}>

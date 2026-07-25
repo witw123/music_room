@@ -14,6 +14,7 @@ import { MeshStatusPanel } from "./MeshStatusPanel";
 
 type MembersTabPanelProps = {
   members: RoomMember[];
+  now: number;
   activeSessionId: string | null;
   isHost: boolean;
   onUpdateMemberPermissions: (memberId: string, permissions: RoomMemberPermissions) => Promise<boolean>;
@@ -31,6 +32,7 @@ type MembersTabPanelProps = {
 
 function MembersTabPanelBase({
   members,
+  now,
   activeSessionId,
   isHost,
   onUpdateMemberPermissions,
@@ -49,6 +51,7 @@ function MembersTabPanelBase({
     <div className="animate-fade-in flex w-full flex-col gap-5">
       <MembersPanel
         members={members}
+        now={now}
         activeSessionId={activeSessionId}
         isHost={isHost}
         onUpdateMemberPermissions={onUpdateMemberPermissions}

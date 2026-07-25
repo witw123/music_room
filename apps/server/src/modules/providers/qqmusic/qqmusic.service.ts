@@ -12,6 +12,8 @@ import type {
   ProviderPlaylistDetail,
   ProviderPlaylistListResponse,
   ProviderPlaylistSummary,
+  ProviderSearchSuggestion,
+  ProviderSearchSuggestionListResponse,
   QqMusicSearchResponse,
   QqMusicTrackCandidate
 } from "@music-room/shared";
@@ -26,15 +28,19 @@ import {
   type QqMusicDiscoverPageQuery,
   type QqMusicDiscoverPlaylistQuery,
   type QqMusicQuality,
-  type QqMusicSearchQuery
+  type QqMusicSearchQuery,
+  type QqMusicSearchSuggestQuery
 } from "./qqmusic.schemas";
 
 type QrAttempt = { userId: string; qrsig: string; ptqrtoken: string };
+type SearchTermCache = { expiresAt: number; items: ProviderSearchSuggestion[] };
 const qrTtlSeconds = 180;
 const qrKeyPrefix = "music-room:qqmusic:qr:";
 @Injectable()
 export class QqMusicService {
   private readonly rateLimits = new Map<string, number[]>();
+  private readonly searchSuggestionCache = new Map<string, SearchTermCache>();
+  private searchHotCache: SearchTermCache | null = null;
   constructor(private readonly api: QqMusicApiClient, private readonly accounts: QqMusicAccountService, private readonly redis: RedisService) {}
   async getAccountStatus(userId: string) { this.assertEnabled(); return this.accounts.getStatus(userId); }
   async startQrLogin(userId: string) {
@@ -94,6 +100,40 @@ export class QqMusicService {
       limit: query.limit,
       offset: query.offset
     };
+  }
+
+  async searchSuggestions(userId: string, query: QqMusicSearchSuggestQuery): Promise<ProviderSearchSuggestionListResponse> {
+    this.assertEnabled();
+    this.assertRateLimit(`search-suggest:${userId}`, 60);
+    const key = query.keywords.trim().toLocaleLowerCase();
+    const cached = readTermCache(this.searchSuggestionCache.get(key));
+    if (cached) return { items: cached };
+
+    try {
+      const body = await this.callProvider(() => this.api.searchSuggestions({ keywords: query.keywords }));
+      const items = toSearchSuggestions(readSearchTerms(body, ["keyword", "name", "searchWord", "word", "title", "query", "k"]), "联想");
+      this.searchSuggestionCache.set(key, { items, expiresAt: Date.now() + 45_000 });
+      trimTermCache(this.searchSuggestionCache);
+      return { items };
+    } catch {
+      return { items: readTermCache(this.searchSuggestionCache.get(key), true) ?? [] };
+    }
+  }
+
+  async getSearchHot(userId: string): Promise<ProviderSearchSuggestionListResponse> {
+    this.assertEnabled();
+    this.assertRateLimit(`search-hot:${userId}`, 12);
+    const cached = readTermCache(this.searchHotCache);
+    if (cached) return { items: cached };
+
+    try {
+      const body = await this.callProvider(() => this.api.getSearchHot());
+      const items = toSearchSuggestions(readSearchTerms(body, ["searchWord", "searchword", "keyword", "word", "name", "k", "title"]), "热词");
+      this.searchHotCache = { items, expiresAt: Date.now() + 10 * 60_000 };
+      return { items };
+    } catch {
+      return { items: readTermCache(this.searchHotCache, true) ?? [] };
+    }
   }
 
   async getPlaylistCategories(userId: string): Promise<ProviderPlaylistCategoryListResponse> {
@@ -631,3 +671,59 @@ function normalizeQqMusicAudioUrl(value: string) {
   return url;
 }
 function isAllowedHost(host: string) { const h = host.toLowerCase(); return h === "qq.com" || h.endsWith(".qq.com") || h === "gtimg.cn" || h.endsWith(".gtimg.cn"); }
+
+function readTermCache(cache: SearchTermCache | null | undefined, allowExpired = false) {
+  if (!cache) return null;
+  if (!allowExpired && cache.expiresAt <= Date.now()) return null;
+  return cache.items;
+}
+
+function trimTermCache(cache: Map<string, SearchTermCache>) {
+  while (cache.size > 128) {
+    const oldest = cache.keys().next().value;
+    if (typeof oldest !== "string") return;
+    cache.delete(oldest);
+  }
+}
+
+function toSearchSuggestions(labels: string[], hint: string): ProviderSearchSuggestion[] {
+  return labels.slice(0, 10).map((label) => ({ provider: "qqmusic" as const, label, hint }));
+}
+
+function readSearchTerms(value: unknown, preferredKeys: string[]) {
+  const terms: string[] = [];
+  const seenTerms = new Set<string>();
+  const ignoredTerms = new Set(["专辑", "歌手", "单曲", "歌曲", "歌单", "用户", "mv", "热搜"]);
+  const visited = new Set<object>();
+  const visit = (current: unknown, depth: number) => {
+    if (depth > 6 || terms.length >= 20) return;
+    if (Array.isArray(current)) {
+      current.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    if (!current || typeof current !== "object") return;
+    if (visited.has(current)) return;
+    visited.add(current);
+    const record = current as Record<string, unknown>;
+    for (const key of preferredKeys) {
+      const candidate = record[key];
+      if (typeof candidate === "string" && candidate.trim()) {
+        const label = candidate.trim();
+        const normalized = label.toLocaleLowerCase();
+        if (ignoredTerms.has(normalized)) continue;
+        if (!seenTerms.has(normalized)) {
+          seenTerms.add(normalized);
+          terms.push(label);
+        }
+      } else if (candidate && typeof candidate === "object") {
+        visit(candidate, depth + 1);
+      }
+    }
+    for (const [key, nested] of Object.entries(record)) {
+      if (key === "code" || preferredKeys.includes(key)) continue;
+      if (nested && typeof nested === "object") visit(nested, depth + 1);
+    }
+  };
+  visit(value, 0);
+  return terms;
+}

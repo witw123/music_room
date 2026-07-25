@@ -3,7 +3,9 @@ import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import {
   dedupePeerDiagnostics,
   dedupeRoomMembers,
+  formatMemberDuration,
   getMediaSampleAgeMs,
+  getMemberDurationMs,
   hasFreshMediaObservation,
   hasRecentMediaSample
 } from "./member-data";
@@ -31,6 +33,19 @@ describe("member data normalization", () => {
 
     expect(members).toHaveLength(1);
     expect(members[0]).toMatchObject({ peerId: "peer_1", presenceState: "online" });
+  });
+
+  it("calculates and formats the duration since a member joined", () => {
+    const joinedAt = "2026-07-15T09:00:00.000Z";
+    const now = Date.parse("2026-07-15T10:02:03.000Z");
+
+    expect(getMemberDurationMs({ joinedAt }, now)).toBe(3_723_000);
+    expect(formatMemberDuration(getMemberDurationMs({ joinedAt }, now))).toBe("01:02:03");
+  });
+
+  it("keeps invalid join timestamps safe for member cards", () => {
+    expect(getMemberDurationMs({ joinedAt: "not-a-date" }, Date.now())).toBe(0);
+    expect(formatMemberDuration(-1)).toBe("00:00:00");
   });
 
   it("keeps the newest diagnostic record per peer", () => {

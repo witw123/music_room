@@ -23,6 +23,29 @@ export function dedupeRoomMembers(members: RoomMember[]) {
   return [...byMemberId.values()];
 }
 
+export function getMemberDurationMs(
+  member: Pick<RoomMember, "joinedAt">,
+  now = Date.now()
+) {
+  const joinedAtMs = getTimestampMs(member.joinedAt);
+  if (!Number.isFinite(joinedAtMs) || !Number.isFinite(now)) {
+    return 0;
+  }
+
+  return Math.max(0, now - joinedAtMs);
+}
+
+export function formatMemberDuration(durationMs: number) {
+  const totalSeconds = Math.floor(Math.max(0, durationMs) / 1_000);
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3_600);
+
+  return [hours, minutes, seconds]
+    .map((value) => String(value).padStart(2, "0"))
+    .join(":");
+}
+
 export function dedupePeerDiagnostics(diagnostics: PeerDiagnosticsSnapshot[]) {
   const byPeerId = new Map<string, PeerDiagnosticsSnapshot>();
   for (const diagnostic of diagnostics) {

@@ -27,6 +27,7 @@ import {
   neteaseRecommendedPlaylistQuerySchema,
   neteasePlaylistIdSchema,
   neteaseSearchQuerySchema,
+  neteaseSearchSuggestQuerySchema,
   neteaseTrackIdSchema
 } from "./netease.schemas";
 import { NeteaseService } from "./netease.service";
@@ -69,6 +70,22 @@ export class NeteaseController {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(neteaseSearchQuerySchema, query);
     return this.service.searchTracks(userId, payload);
+  }
+
+  @Get("search/suggest")
+  async searchSuggest(
+    @Query() query: Record<string, unknown>,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    return this.service.searchSuggestions(
+      await this.getCurrentUserId(sessionToken),
+      parseRequestBody(neteaseSearchSuggestQuerySchema, query)
+    );
+  }
+
+  @Get("search/hot")
+  async searchHot(@Headers("x-session-token") sessionToken: string | undefined) {
+    return this.service.getSearchHot(await this.getCurrentUserId(sessionToken));
   }
 
   @Get("tracks/:trackId")

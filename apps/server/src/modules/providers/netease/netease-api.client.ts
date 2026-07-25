@@ -18,7 +18,9 @@ import {
   song_detail,
   song_url,
   top_playlist,
-  toplist
+  toplist,
+  search_suggest,
+  search_hot
 } from "@neteasecloudmusicapienhanced/api";
 import type { RequestBaseConfig } from "@neteasecloudmusicapienhanced/api";
 import type {
@@ -151,6 +153,32 @@ export class NeteaseApiClient {
 
   async searchAlbums(input: { keywords: string; limit: number; offset: number; cookie: string }) {
     return this.search({ ...input, type: 10 });
+  }
+
+  async searchSuggestions(input: { keywords: string }) {
+    return this.call(async () => {
+      const response = (await search_suggest(withProviderOptions({
+        keywords: input.keywords,
+        type: "mobile" as never
+      }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      if (body.code !== undefined) {
+        assertSuccessfulCode(readCatalogCode(body));
+      }
+      if (!body.result || typeof body.result !== "object" || Array.isArray(body.result)) {
+        throw new NeteaseApiError("invalid-response");
+      }
+      return body;
+    });
+  }
+
+  async getSearchHot() {
+    return this.call(async () => {
+      const response = (await search_hot(withProviderOptions({}, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
   }
 
   async searchPlaylists(input: { keywords: string; limit: number; offset: number; cookie: string }) {

@@ -19,6 +19,7 @@ import {
   type ProviderPlaylistCategoryListResponse,
   type ProviderPlaylistDetail,
   type ProviderPlaylistListResponse,
+  type ProviderSearchSuggestionListResponse,
   type ProviderTrackListResponse,
   type ProviderTrackCandidate,
   type ProviderTrackFavorite,
@@ -350,6 +351,12 @@ export const musicRoomApi = {
     });
     return request<NeteaseSearchResponse>(`/v1/providers/netease/search?${params.toString()}`);
   },
+  searchNeteaseSuggestions: (keywords: string) => {
+    const params = new URLSearchParams({ keywords });
+    return request<ProviderSearchSuggestionListResponse>(`/v1/providers/netease/search/suggest?${params.toString()}`);
+  },
+  getNeteaseSearchHot: () =>
+    request<ProviderSearchSuggestionListResponse>("/v1/providers/netease/search/hot"),
   getNeteaseTrack: (trackId: string) =>
     request<NeteaseTrackCandidate>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}`),
   getNeteaseLyrics: (trackId: string) =>
@@ -437,6 +444,12 @@ export const musicRoomApi = {
     });
     return request<QqMusicSearchResponse>(`/v1/providers/qqmusic/search?${params.toString()}`);
   },
+  searchQqMusicSuggestions: (keywords: string) => {
+    const params = new URLSearchParams({ keywords });
+    return request<ProviderSearchSuggestionListResponse>(`/v1/providers/qqmusic/search/suggest?${params.toString()}`);
+  },
+  getQqMusicSearchHot: () =>
+    request<ProviderSearchSuggestionListResponse>("/v1/providers/qqmusic/search/hot"),
   searchQqMusicPlaylists: (keywords: string, options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       keywords,

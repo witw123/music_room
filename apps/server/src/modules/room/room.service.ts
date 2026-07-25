@@ -309,7 +309,13 @@ export class RoomService {
     }
     this.assertUniqueNickname(record, session.id, session.nickname);
 
-    if (!record.room.members.some((member) => member.id === session.id)) {
+    const existingMember = record.room.members.find((member) => member.id === session.id);
+    const currentPresence = existingMember
+      ? (await this.roomPresenceService.getPresenceSnapshot(record.room.id, record.room.members)).get(session.id)
+      : undefined;
+    let membershipChanged = false;
+
+    if (!existingMember) {
       const savedPermissions = record.memberPermissionProfiles?.[session.id];
       const permissions = savedPermissions
         ? { ...savedPermissions }
@@ -324,6 +330,17 @@ export class RoomService {
       };
       this.incrementPresenceRevision(record.room);
       this.incrementRoomRevision(record.room);
+      membershipChanged = true;
+    } else if (currentPresence?.presenceState !== "online") {
+      // Hosts stay in the room record while away so room ownership survives.
+      // Starting a new online session must therefore start a new membership timer.
+      existingMember.joinedAt = new Date().toISOString();
+      this.incrementPresenceRevision(record.room);
+      this.incrementRoomRevision(record.room);
+      membershipChanged = true;
+    }
+
+    if (membershipChanged) {
       await this.roomRecordRepository.persistRecord(record);
     }
 

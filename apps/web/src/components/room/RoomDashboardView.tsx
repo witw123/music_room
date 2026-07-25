@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useState, type KeyboardEvent } from "react";
+import { memo, useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import type {
   AuthSession,
@@ -168,7 +168,15 @@ function RoomDashboardViewBase({
   onToggleLyrics
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("library");
+  const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const currentSourcePeerId = resolveCurrentSourcePeerId(roomSnapshot, roomSnapshot.room.playback);
+
+  useEffect(() => {
+    const updateMembershipNow = () => setMembershipNow(Date.now());
+    updateMembershipNow();
+    const timer = window.setInterval(updateMembershipNow, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleTabChange = useCallback(
     (tab: TabId) => {
@@ -308,6 +316,7 @@ function RoomDashboardViewBase({
           {activeTab === "members" ? (
             <MembersTabPanel
               members={roomSnapshot.room.members}
+              now={membershipNow}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               localMemberState={localMemberState}

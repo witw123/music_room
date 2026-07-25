@@ -476,6 +476,30 @@ describe("RoomService", () => {
     });
   });
 
+  it("starts a new membership timer when the host leaves and rejoins", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-15T09:00:00.000Z"));
+
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    const firstJoinedAt = snapshot.room.members.find((member) => member.id === host.id)?.joinedAt;
+
+    await roomService.leaveRoom(snapshot.room.id, host.id);
+    jest.setSystemTime(new Date("2026-07-15T09:12:00.000Z"));
+    await roomService.joinRoom(snapshot.room.id, host.id);
+
+    const rejoined = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(rejoined.room.members.find((member) => member.id === host.id)?.joinedAt).toBe(
+      "2026-07-15T09:12:00.000Z"
+    );
+    expect(firstJoinedAt).toBe("2026-07-15T09:00:00.000Z");
+  });
+
   it("clears the recent room record after a member leaves an existing room", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
