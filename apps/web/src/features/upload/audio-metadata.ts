@@ -48,6 +48,40 @@ export async function readEmbeddedAudioMetadata(file: Blob): Promise<EmbeddedAud
   }
 }
 
+/** Prefer a cover embedded in a downloaded audio file over a remote URL. */
+export async function resolveLocalArtworkUrl(
+  file: Blob,
+  fallbackArtworkUrl: string | null | undefined,
+  downloadedArtwork?: Blob | null
+) {
+  const fallback = fallbackArtworkUrl?.trim() || null;
+  if (!fallback) {
+    return downloadedArtwork ? blobToDataUrl(downloadedArtwork) : null;
+  }
+  if (/^(?:data|blob):/i.test(fallback)) {
+    return fallback;
+  }
+
+  const embedded = await readEmbeddedAudioMetadata(file);
+  if (embedded.artworkUrl) return embedded.artworkUrl;
+  if (downloadedArtwork) return blobToDataUrl(downloadedArtwork);
+  return fallback;
+}
+
+export async function blobToDataUrl(file: Blob, maxBytes = 4 * 1024 * 1024) {
+  if (file.size <= 0 || file.size > maxBytes || (file.type && !file.type.startsWith("image/"))) {
+    return null;
+  }
+  if (typeof btoa !== "function") return null;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return `data:${file.type || "image/jpeg"};base64,${btoa(binary)}`;
+}
+
 function normalizeText(value: string | undefined) {
   const normalized = value?.trim();
   return normalized || null;

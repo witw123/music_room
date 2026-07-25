@@ -42,6 +42,7 @@ import {
   getConfiguredLocalRepository,
   saveAudioFileToLocalDirectory
 } from "./local-audio-storage";
+import { resolveLocalArtworkUrl } from "./audio-metadata";
 import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
 
 type UploadPipelineActionsInput = {
@@ -445,6 +446,14 @@ async function importProviderTrack(input: {
       });
     }
     objectUrl = URL.createObjectURL(file);
+    const artworkResponse = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
+      ? await musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).catch(() => null)
+      : null;
+    const localArtworkUrl = await resolveLocalArtworkUrl(
+      file,
+      candidate.artworkUrl,
+      artworkResponse?.blob
+    );
     assets ??= await prepareAudioAssets({
       file,
       onProgress: ({ stage, completed, total }) => {
@@ -462,7 +471,7 @@ async function importProviderTrack(input: {
     });
     const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, {
       type: sourceType,
-      metadata: candidate,
+      metadata: { ...candidate, artworkUrl: localArtworkUrl },
       sourceRef
     });
     const lyrics = cachedTrack?.lyrics?.trim() || await lyricsPromise;

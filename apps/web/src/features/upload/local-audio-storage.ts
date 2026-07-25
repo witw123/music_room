@@ -32,6 +32,8 @@ import {
 import { createRepositoryTrackRecord, LocalRepository } from "./local-repository";
 import { hydrateLocalRepository } from "./local-repository-hydration";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
+import { resolveLocalArtworkUrl } from "./audio-metadata";
+import { musicRoomApi } from "@/lib/music-room-api";
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {
@@ -449,13 +451,21 @@ export async function saveAudioFileToLocalDirectory(input: {
       await deleteAudioAsset(playbackAsset.assetId).catch(() => undefined);
     }
   }
-  const artworkPath = input.track?.artworkUrl?.trim()
+  const remoteArtworkUrl = input.track?.artworkUrl?.trim() || null;
+  const downloadedArtwork = input.track?.provider === "qqmusic" && remoteArtworkUrl && /^https?:\/\//i.test(remoteArtworkUrl)
+    ? await musicRoomApi.downloadQqMusicArtwork(remoteArtworkUrl).then((response) => response.blob).catch(() => null)
+    : null;
+  const artworkUrl = remoteArtworkUrl
+    ? await resolveLocalArtworkUrl(input.file, remoteArtworkUrl, downloadedArtwork)
+    : existingTrack?.artworkUrl ?? null;
+  const artworkProvider = input.track?.provider;
+  const artworkPath = artworkUrl
     ? await repository.writeArtworkFromUrl({
         fileHash: input.fileHash,
-        artworkUrl: input.track.artworkUrl,
+        artworkUrl,
         retention: "library",
-        provider: input.track.provider === "netease" || input.track.provider === "qqmusic"
-          ? input.track.provider
+        provider: artworkProvider === "netease" || artworkProvider === "qqmusic"
+          ? artworkProvider
           : "local_upload"
       }) ?? existingTrack?.artworkPath ?? null
     : existingTrack?.artworkPath ?? null;
@@ -479,7 +489,7 @@ export async function saveAudioFileToLocalDirectory(input: {
       title: input.title,
       artist: input.track.artist,
       album: input.track.album,
-      artworkUrl: input.track.artworkUrl,
+      artworkUrl,
       lyrics: input.track.lyrics,
       provider: input.track.provider,
       providerTrackId: input.track.providerTrackId,
@@ -502,7 +512,7 @@ export async function saveAudioFileToLocalDirectory(input: {
   if (input.trackId) {
     await deleteOriginalAssetForTrack(input.trackId);
   }
-    return { fileName };
+    return { fileName, artworkUrl };
   });
 }
 

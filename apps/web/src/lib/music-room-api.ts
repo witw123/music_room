@@ -541,6 +541,10 @@ export const musicRoomApi = {
       fallback: () => requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }, { throttleImport: true }),
       signal
     }),
+  downloadQqMusicArtwork: (artworkUrl: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ url: artworkUrl });
+    return requestBlob(`/v1/providers/qqmusic/artwork?${params.toString()}`, { signal });
+  },
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),
   createPlaylist: (payload: {

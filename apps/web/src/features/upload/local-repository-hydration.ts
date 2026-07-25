@@ -15,6 +15,7 @@ import {
 } from "@/lib/indexeddb";
 import { LocalRepository, type LocalRepositoryTrackRecord } from "./local-repository";
 import { resolveProviderTrackSource } from "./provider-track-identity";
+import { blobToDataUrl } from "./audio-metadata";
 
 export async function hydrateLocalRepository(repository: LocalRepository) {
   const records = await repository.listTracks();
@@ -104,6 +105,10 @@ async function restoreTrackSummary(
   repository: LocalRepository,
   record: LocalRepositoryTrackRecord
 ) {
+  const localArtworkUrl = record.artworkPath
+    ? await readArtworkDataUrl(repository, record.artworkPath)
+    : null;
+  const artworkUrl = localArtworkUrl ?? record.artworkUrl ?? null;
   const lyrics = record.lyricsPath
     ? await repository.readPath(record.lyricsPath).then((file) => file?.text() ?? null).catch(() => null)
     : null;
@@ -116,7 +121,7 @@ async function restoreTrackSummary(
     title: record.title,
     artist: record.artist,
     ...(record.album !== undefined ? { album: record.album } : {}),
-    ...(record.artworkUrl !== undefined ? { artworkUrl: record.artworkUrl } : {}),
+    ...(artworkUrl !== null ? { artworkUrl } : record.artworkUrl !== undefined ? { artworkUrl: record.artworkUrl } : {}),
     ...(record.lyrics !== undefined || lyrics !== null
       ? { lyrics: lyrics ?? record.lyrics ?? null }
       : {}),
@@ -138,4 +143,13 @@ async function restoreTrackSummary(
     lastOwnerNickname: record.roomRefs?.at(-1)?.ownerNickname ?? null
   };
   await upsertCachedLibraryTrackSummary(summary);
+}
+
+async function readArtworkDataUrl(repository: LocalRepository, relativePath: string) {
+  try {
+    const file = await repository.readPath(relativePath);
+    return file ? blobToDataUrl(file) : null;
+  } catch {
+    return null;
+  }
 }

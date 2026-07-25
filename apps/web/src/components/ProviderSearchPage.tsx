@@ -360,6 +360,7 @@ export function ProviderSearchPage({
       });
       const updatedTrack = {
         ...toProviderTrackRecord(resolvedTrack, localTracks.find((item) => item.id === localPlaylistTrackId(resolvedTrack))),
+        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
         fileHash,
         fileName: saved.fileName,
         sizeBytes: response.blob.size,

@@ -230,6 +230,7 @@ export function FavoriteAlbumsPage() {
       });
       const updatedTrack: LocalPlaylistTrackRecord = {
         ...toProviderTrackRecord(resolvedTrack, existing),
+        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
         fileHash,
         fileName: saved.fileName,
         sizeBytes: response.blob.size,

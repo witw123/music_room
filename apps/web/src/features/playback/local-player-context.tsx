@@ -893,7 +893,9 @@ function mergeLocalTrackRecord(
     durationMs: track.durationMs || libraryTrack.durationMs,
     mimeType: track.mimeType || libraryTrack.mimeType,
     sizeBytes: track.sizeBytes || libraryTrack.sizeBytes,
-    artworkUrl: track.artworkUrl ?? libraryTrack.artworkUrl,
+    artworkUrl: isBrowserLocalArtwork(libraryTrack.artworkUrl)
+      ? libraryTrack.artworkUrl
+      : track.artworkUrl ?? libraryTrack.artworkUrl,
     lyrics: track.lyrics ?? libraryTrack.lyrics,
     fileHash: track.fileHash ?? libraryTrack.fileHash,
     fileName: track.fileName ?? libraryTrack.fileName,
@@ -908,6 +910,10 @@ function buildLocalQueueItemId(trackId: string) {
 
 function firstMetadataText(...values: Array<string | null | undefined>) {
   return values.find((value) => Boolean(value?.trim()))?.trim() ?? null;
+}
+
+function isBrowserLocalArtwork(value: string | null | undefined) {
+  return Boolean(value && /^(?:data|blob):/i.test(value));
 }
 
 function toTrackMeta(track: LocalPlaylistTrackRecord): TrackMeta {

@@ -3,6 +3,7 @@ import {
   normalizeLocalAudioMimeType,
   saveCachedAudioFileToLocalDirectory
 } from "@/features/upload/local-audio-storage";
+import { resolveLocalArtworkUrl } from "@/features/upload/audio-metadata";
 import {
   deleteCachedLibraryTrack,
   deleteCachedLibraryTrackFile,
@@ -32,6 +33,14 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
   const fileHash = await hashAudioBlob(response.blob);
   const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+  const artworkResponse = resolvedTrack.provider === "qqmusic" && resolvedTrack.artworkUrl && /^https?:\/\//i.test(resolvedTrack.artworkUrl)
+    ? await musicRoomApi.downloadQqMusicArtwork(resolvedTrack.artworkUrl).catch(() => null)
+    : null;
+  const artworkUrl = await resolveLocalArtworkUrl(
+    response.blob,
+    resolvedTrack.artworkUrl,
+    artworkResponse?.blob
+  );
   const lyricPayload = await (resolvedTrack.provider === "netease"
     ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
     : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
@@ -43,7 +52,7 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     title: resolvedTrack.title,
     artist: resolvedTrack.artist,
     album: resolvedTrack.album,
-    artworkUrl: resolvedTrack.artworkUrl,
+    artworkUrl,
     lyrics,
     provider: resolvedTrack.provider,
     providerTrackId: resolvedTrack.providerTrackId,
@@ -67,7 +76,7 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
   });
 
   return {
-    ...toProviderTrackRecord(resolvedTrack),
+    ...toProviderTrackRecord({ ...resolvedTrack, artworkUrl }),
     id: localPlaylistTrackId(resolvedTrack),
     fileHash,
     fileName: cachedFile?.fileName ?? null,
