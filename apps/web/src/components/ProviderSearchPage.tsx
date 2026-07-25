@@ -73,6 +73,7 @@ type ProviderSearchPageProps = {
   embedded?: boolean;
   keywords?: string;
   onKeywordsChange?: (keywords: string) => void;
+  searchRequestKey?: number | null;
 };
 
 export function ProviderSearchPage({
@@ -80,7 +81,8 @@ export function ProviderSearchPage({
   initialProvider,
   embedded = false,
   keywords: controlledKeywords,
-  onKeywordsChange
+  onKeywordsChange,
+  searchRequestKey
 }: ProviderSearchPageProps = {}) {
   const router = useRouter();
   const player = useLocalPlayer();
@@ -124,6 +126,9 @@ export function ProviderSearchPage({
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
+  const keywordsRef = useRef(keywords);
+  keywordsRef.current = keywords;
+  const lastSearchRequestKeyRef = useRef<number | null>(null);
 
   const updateKeywords = useCallback((value: string) => {
     if (onKeywordsChange) {
@@ -173,6 +178,7 @@ export function ProviderSearchPage({
         ? getCachedProviderAccount(activeSession.userId, provider) ?? null
         : null
     );
+    searchRequestRef.current += 1;
     setResults([]);
     setPlaylists([]);
     setPlaylist(null);
@@ -237,21 +243,24 @@ export function ProviderSearchPage({
   }, [isConnected, provider]);
 
   useEffect(() => {
-    const query = keywords.trim();
-    const requestId = ++searchRequestRef.current;
+    searchRequestRef.current += 1;
     setResults([]);
-    if (!query || !isConnected) {
+    setPending((current) => current === "search" ? null : current);
+  }, [keywords]);
+
+  useEffect(() => {
+    if (searchRequestKey == null || lastSearchRequestKeyRef.current === searchRequestKey) return;
+    const query = keywordsRef.current.trim();
+    if (!query) {
+      lastSearchRequestKeyRef.current = searchRequestKey;
+      searchRequestRef.current += 1;
       setPending((current) => current === "search" ? null : current);
       return;
     }
-
-    const timerId = window.setTimeout(() => {
-      if (searchRequestRef.current === requestId) {
-        void searchTracksForQuery(query);
-      }
-    }, 320);
-    return () => window.clearTimeout(timerId);
-  }, [isConnected, keywords, searchTracksForQuery]);
+    if (!isConnected) return;
+    lastSearchRequestKeyRef.current = searchRequestKey;
+    void searchTracksForQuery(query);
+  }, [isConnected, searchRequestKey, searchTracksForQuery]);
 
   function searchTracks(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

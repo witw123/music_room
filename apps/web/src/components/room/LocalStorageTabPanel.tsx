@@ -329,20 +329,11 @@ function NetworkPlaylistSearch({
   }, [isConnected, provider]);
 
   useEffect(() => {
-    const requestId = ++searchRequestRef.current;
-    const query = keywords.trim();
-    if (!query || !isConnected) {
-      setResults([]);
-      setMessage(null);
-      setPending((current) => current === "search" ? null : current);
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      void searchTracks(query, requestId);
-    }, 320);
-    return () => window.clearTimeout(timerId);
-  }, [isConnected, keywords, searchTracks]);
+    searchRequestRef.current += 1;
+    setResults([]);
+    setMessage(null);
+    setPending((current) => current === "search" ? null : current);
+  }, [keywords]);
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

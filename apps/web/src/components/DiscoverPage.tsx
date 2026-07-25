@@ -131,6 +131,7 @@ export function DiscoverPage() {
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(() => searchParams.get("search") === "1");
   const [searchKeywords, setSearchKeywords] = useState(() => searchParams.get("q") ?? "");
+  const [searchRequestKey, setSearchRequestKey] = useState<number | null>(null);
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [remoteSuggestions, setRemoteSuggestions] = useState<SearchSuggestion[]>([]);
@@ -345,6 +346,7 @@ export function DiscoverPage() {
       window.localStorage.setItem(discoverSearchHistoryKey, JSON.stringify(nextHistory));
     }
     setSearchOpen(true);
+    setSearchRequestKey((current) => (current ?? 0) + 1);
     setSearchSuggestionsOpen(false);
     setDetail(null);
     const params = new URLSearchParams({ search: "1" });
@@ -735,6 +737,7 @@ export function DiscoverPage() {
             initialProvider={discoverProvider}
             keywords={searchKeywords}
             onKeywordsChange={setSearchKeywords}
+            searchRequestKey={searchRequestKey}
           />
         ) : (
           <>
