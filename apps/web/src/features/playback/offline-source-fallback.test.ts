@@ -163,6 +163,35 @@ describe("offline provider fallback", () => {
     expect(apiMocks.musicRoomApi.downloadNeteaseTrack).not.toHaveBeenCalled();
   });
 
+  it("falls back to an existing segmented asset when forced provider caching fails", async () => {
+    const manifest = buildManifest();
+    indexedDbMocks.getTrackAssetLink.mockResolvedValue({
+      originalAssetId: "d".repeat(64),
+      playbackAssetId: manifest.assetId
+    });
+    indexedDbMocks.getAssetManifest.mockResolvedValue({
+      complete: true,
+      manifest
+    });
+    indexedDbMocks.getAssetUnit.mockResolvedValue({
+      unitIndex: 0,
+      payloadBytes: 1,
+      payload: new Uint8Array([1]).buffer
+    });
+    apiMocks.musicRoomApi.downloadNeteaseTrack.mockRejectedValue(
+      new Error("NetEase account is not available.")
+    );
+
+    await expect(ensureOfflineProviderPlaybackAsset({
+      ...buildInput(),
+      forceDownload: true
+    })).resolves.toEqual({
+      playbackAsset: manifest,
+      fileHash: manifest.sourceFileHash,
+      file: null
+    });
+  });
+
   it("keeps a shared download alive when the first caller is cancelled", async () => {
     let resolveDownload!: (value: { blob: Blob; contentType: string }) => void;
     const download = new Promise<{ blob: Blob; contentType: string }>((resolve) => {

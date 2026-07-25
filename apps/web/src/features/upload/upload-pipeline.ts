@@ -6,7 +6,13 @@ type TrackRegistrationDraft = Omit<TrackMeta, "id"> & {
   lyrics?: string | null;
 };
 
+// The room API accepts artwork URLs up to 4096 characters. Provider artwork
+// is also kept locally as a data URL, which can be much larger than that
+// limit, so never send an oversized local representation to the server.
+const maxRegisterArtworkUrlLength = 4096;
+
 export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
+  const artworkUrl = track.artworkUrl?.trim() || null;
   return {
     ...(track.id ? { id: track.id } : {}),
     title: track.title,
@@ -19,7 +25,9 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
     codec: track.codec,
     mimeType: track.mimeType,
     fileHash: track.fileHash,
-    artworkUrl: track.artworkUrl,
+    artworkUrl: artworkUrl && artworkUrl.length <= maxRegisterArtworkUrlLength
+      ? artworkUrl
+      : null,
     ownerSessionId: track.ownerSessionId,
     ownerNickname: track.ownerNickname,
     sourceType: track.sourceType,
@@ -107,7 +115,12 @@ export async function processSelectedTrackFiles(input: {
       } satisfies UploadedTrack;
       try {
         await input.persistTrackIntoLibrary({
-          track: registered,
+          // Keep the server's normalized metadata while retaining an
+          // embedded/local cover for the browser cache and local repository.
+          track: {
+            ...registered,
+            artworkUrl: track.artworkUrl ?? registered.artworkUrl
+          },
           roomId: input.roomId,
           file,
           lyrics: track.lyrics ?? null

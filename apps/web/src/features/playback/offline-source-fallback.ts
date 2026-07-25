@@ -89,14 +89,19 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
   onStatus?: (message: string) => void;
   signal?: AbortSignal;
 }) {
-  const localPlaybackAsset = input.forceDownload
-    ? null
-    : await findUsableLocalPlaybackAsset(input.track.id, input.track);
+  // Always discover a complete local segmented asset so a forced provider
+  // cache attempt still has a streamable fallback when the account is missing
+  // or lacks permission. `forceDownload` only controls whether we prefer a
+  // fresh provider file; it must not discard an already usable room asset.
+  const localPlaybackAsset = await findUsableLocalPlaybackAsset(
+    input.track.id,
+    input.track
+  );
 
   // A complete local playback asset is already a valid room source. Returning
   // it immediately avoids making a listener wait for a provider request when
   // the browser cache is cold but the segmented asset is ready.
-  if (localPlaybackAsset) {
+  if (localPlaybackAsset && !input.forceDownload) {
     return {
       playbackAsset: localPlaybackAsset,
       fileHash: localPlaybackAsset.sourceFileHash,

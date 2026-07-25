@@ -475,9 +475,16 @@ async function importProviderTrack(input: {
       sourceRef
     });
     const lyrics = cachedTrack?.lyrics?.trim() || await lyricsPromise;
+    // Register the provider's remote cover with the room. The local data URL
+    // is intentionally kept out of this request because it can exceed the
+    // room API's 4096-character artwork limit.
     const registered = await musicRoomApi.registerTrack(
       roomSnapshot.room.id,
-      buildRegisterTrackPayload({ ...draft, lyrics: lyrics || null })
+      buildRegisterTrackPayload({
+        ...draft,
+        artworkUrl: candidate.artworkUrl ?? null,
+        lyrics: lyrics || null
+      })
     );
     registeredTrackId = registered.id;
     shouldRollbackRegisteredTrack = !existingTrack;
@@ -489,7 +496,9 @@ async function importProviderTrack(input: {
       });
     }
     await persistTrackIntoLibrary({
-      track: registered,
+      // Persist the locally resolved cover for playback/color extraction while
+      // the room snapshot continues to use the provider URL from `registered`.
+      track: { ...registered, artworkUrl: localArtworkUrl },
       roomId: roomSnapshot.room.id,
       file
     });

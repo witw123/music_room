@@ -40,6 +40,41 @@ describe("processSelectedTrackFiles", () => {
     });
   });
 
+  it("does not send an oversized local artwork data URL to the room API", () => {
+    const payload = buildRegisterTrackPayload({
+      ...buildTrack("draft", "hash"),
+      artworkUrl: `data:image/jpeg;base64,${"a".repeat(5_000)}`
+    });
+
+    expect(payload.artworkUrl).toBeNull();
+  });
+
+  it("keeps local artwork when persisting after server registration", async () => {
+    const file = new File(["new"], "new.mp3", { type: "audio/mpeg" });
+    const localArtworkUrl = `data:image/jpeg;base64,${"a".repeat(4_500)}`;
+    const draft = { ...buildTrack("draft", "hash_new"), artworkUrl: localArtworkUrl };
+    const registered = { ...buildTrack("track_new", "hash_new"), artworkUrl: "https://img.qq.com/cover.jpg" };
+    let persistedArtworkUrl: string | null | undefined;
+
+    await processSelectedTrackFiles({
+      files: [file],
+      activeSession: { userId: "user_1", nickname: "Host" },
+      roomId: "room_1",
+      roomTracks: [],
+      inFlightUploadHashes: new Set(),
+      createObjectUrl: () => "blob:new.mp3",
+      revokeObjectUrl: () => undefined,
+      buildTrackMeta: async () => draft,
+      buildRegisterTrackPayload: (track) => ({ artworkUrl: track.artworkUrl }),
+      registerTrack: async () => registered,
+      persistTrackIntoLibrary: async ({ track }) => {
+        persistedArtworkUrl = track.artworkUrl;
+      }
+    });
+
+    expect(persistedArtworkUrl).toBe(localArtworkUrl);
+  });
+
   it("registers new files and skips existing or in-flight hashes", async () => {
     const newFile = new File(["new"], "new.flac", { type: "audio/flac" });
     const existingFile = new File(["existing"], "existing.flac", { type: "audio/flac" });
