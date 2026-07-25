@@ -9,7 +9,7 @@ import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { parseRoomLyrics } from "@/components/room/room-lyrics";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
-import { useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { type PlaybackMode } from "@/components/bottom-player/playback-mode";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
@@ -131,7 +131,7 @@ export function ImmersivePlayerOverlay({
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -inset-[8%] z-0 scale-110 bg-cover bg-center opacity-35 blur-3xl transition-[opacity,transform] duration-700 motion-reduce:transition-none"
-          style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
+          style={{ backgroundImage: `url("${getArtworkSourceUrl(currentTrack.artworkUrl)}")` }}
         />
       ) : null}
       <div
@@ -604,7 +604,7 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, isPlaying, mobile = false
               <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
               <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)` }} />
               {Array.from({ length: 6 }).map((_, index) => <div key={index} className="absolute rounded-full border border-white/[0.02]" style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }} />)}
-              {artworkUrl ? <div className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]" style={{ backgroundImage: `url("${artworkUrl}")` }} /> : null}
+              {artworkUrl ? <div className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]" style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }} /> : null}
               <div className="absolute z-20 flex aspect-square w-[26%] items-center justify-center rounded-full border shadow-inner" style={{ borderColor: palette.border, backgroundColor: palette.accentSoft }}><div className="aspect-square w-[32%] rounded-full border border-white/5 bg-black shadow-inner" /></div>
             </div>
           </>

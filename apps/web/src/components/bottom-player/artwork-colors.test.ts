@@ -11,4 +11,9 @@ describe("getArtworkSourceUrl", () => {
     expect(getArtworkSourceUrl("http://y.gtimg.cn/music/photo_new/cover.jpg"))
       .toBe("https://y.gtimg.cn/music/photo_new/cover.jpg");
   });
+
+  it("keeps browser-local artwork unchanged", () => {
+    expect(getArtworkSourceUrl("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA");
+    expect(getArtworkSourceUrl("blob:http://localhost:3000/local-cover")).toBe("blob:http://localhost:3000/local-cover");
+  });
 });

@@ -1,5 +1,6 @@
 import { fetchProviderUrl } from "../provider-fetch";
 import { QqMusicService } from "./qqmusic.service";
+import { QqMusicApiError } from "./qqmusic-api.client";
 
 jest.mock("../provider-fetch", () => ({
   fetchProviderUrl: jest.fn()
@@ -104,6 +105,30 @@ describe("QqMusicService", () => {
     });
     expect(api.getAudioUrl.mock.calls.map(([input]) => input.quality)).toEqual(["exhigh", "high"]);
     expect(mockedFetchProviderUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears an expired QQ account before requesting audio", async () => {
+    process.env.QQMUSIC_ENABLED = "true";
+    const api = {
+      validateCookie: jest.fn().mockRejectedValue(new QqMusicApiError("auth-expired")),
+      getAudioUrl: jest.fn()
+    };
+    const accounts = {
+      getCookieOrThrow: jest.fn().mockResolvedValue("uin=o123; qqmusic_key=expired"),
+      getValidationState: jest.fn().mockResolvedValue({
+        cookie: "uin=o123; qqmusic_key=expired",
+        qqMusicUserId: "123",
+        lastValidatedAt: new Date(0)
+      }),
+      invalidate: jest.fn().mockResolvedValue(undefined)
+    };
+    const service = new QqMusicService(api as never, accounts as never, {} as never);
+
+    await expect(service.openAudio("user_1", "song-mid", "exhigh")).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "QQMUSIC_AUTH_EXPIRED" })
+    });
+    expect(accounts.invalidate).toHaveBeenCalledWith("user_1");
+    expect(api.getAudioUrl).not.toHaveBeenCalled();
   });
 
   it("exposes normalized lyrics, playlists, and albums", async () => {

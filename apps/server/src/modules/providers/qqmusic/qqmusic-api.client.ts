@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import * as qqMusicServices from "@sansenjian/qq-music-api/services";
 import {
   checkQQLoginQr,
   getAlbumInfo,
@@ -18,6 +19,12 @@ import {
   songListDetail
 } from "@sansenjian/qq-music-api/services";
 import { fetchProviderUrl } from "../provider-fetch";
+
+// The installed SDK exports this helper at runtime but omits it from its
+// services declaration file. Keep the compatibility access local and typed.
+const getUserDetail = (qqMusicServices as unknown as {
+  getUserDetail?: (input: { uin: string; cookie: string }) => Promise<unknown>;
+}).getUserDetail;
 
 export type QqMusicApiErrorKind = "auth-expired" | "unavailable" | "invalid-response";
 export class QqMusicApiError extends Error {
@@ -150,6 +157,25 @@ export class QqMusicApiClient {
     });
   }
 
+  async validateCookie(input: { userId: string; cookie: string }) {
+    return this.call(async () => {
+      if (!input.userId.trim()) throw new QqMusicApiError("auth-expired");
+      if (!getUserDetail) throw new QqMusicApiError("unavailable");
+      const response = await getUserDetail({ uin: normalizeQqUserId(input.userId), cookie: input.cookie }) as ApiResponse;
+      assertProviderStatus(response.status);
+      const body = asRecord(response.body);
+      if (!body) throw new QqMusicApiError("invalid-response");
+      throwIfAuthExpired(body);
+      const item = asRecord(body.response) ?? body;
+      if (!item) throw new QqMusicApiError("invalid-response");
+      const code = readBusinessCode(item);
+      if (code !== null && code !== 0 && code !== 200) {
+        throw new QqMusicApiError("unavailable");
+      }
+      return { valid: true as const };
+    });
+  }
+
   async getLyrics(input: { trackId: string; cookie: string }) {
     return this.call(async () => {
       const response = await getLyric({
@@ -164,7 +190,7 @@ export class QqMusicApiClient {
   async getUserPlaylists(input: { userId: string; limit: number; offset: number; cookie: string }) {
     return this.call(async () => {
       const response = await getUserPlaylists({
-        uin: input.userId,
+        uin: normalizeQqUserId(input.userId),
         limit: input.limit,
         offset: input.offset,
         cookie: input.cookie
@@ -259,17 +285,37 @@ export class QqMusicApiClient {
   }
 }
 function readCookie(session: any) {
-  if (typeof session?.cookie === "string" && session.cookie.trim()) return session.cookie.trim();
-  if (Array.isArray(session?.cookieList)) return session.cookieList.filter((item: unknown): item is string => typeof item === "string").join("; ");
-  if (session?.cookieObject && typeof session.cookieObject === "object") return Object.entries(session.cookieObject).map(([key, value]) => `${key}=${String(value)}`).join("; ");
-  return null;
+  const cookies = new Map<string, string>();
+  const add = (value: unknown) => {
+    if (typeof value !== "string") return;
+    for (const part of value.split(";")) {
+      const separator = part.indexOf("=");
+      if (separator <= 0) continue;
+      const name = part.slice(0, separator).trim();
+      const cookieValue = part.slice(separator + 1).trim();
+      if (name && cookieValue) cookies.set(name, `${name}=${cookieValue}`);
+    }
+  };
+  add(session?.cookie);
+  if (Array.isArray(session?.cookieList)) session.cookieList.forEach(add);
+  if (session?.cookieObject && typeof session.cookieObject === "object") {
+    for (const [key, value] of Object.entries(session.cookieObject)) {
+      if (typeof value === "string" && value.trim()) cookies.set(key, `${key}=${value.trim()}`);
+    }
+  }
+  return cookies.size > 0 ? [...cookies.values()].join("; ") : null;
 }
 function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
+function normalizeQqUserId(value: string) {
+  const normalized = value.trim();
+  return /^o\d+$/i.test(normalized) ? normalized.slice(1) : normalized;
+}
 
 function readPlayUrl(value: unknown, trackId: string) {
   const body = asRecord(value);
   if (!body) return null;
+  throwIfAuthExpired(body);
   const containers = [
     asRecord(asRecord(body.data)?.playUrl),
     asRecord(asRecord(asRecord(body.response)?.data)?.playUrl),
@@ -297,6 +343,30 @@ function readUrlValue(value: unknown) {
   const record = asRecord(value);
   const url = record?.url ?? record?.purl ?? record?.playUrl;
   return typeof url === "string" && url.trim() ? url.trim() : null;
+}
+
+function readBusinessCode(value: Record<string, any>) {
+  for (const key of ["code", "retcode", "subcode"]) {
+    const number = Number(value[key]);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function throwIfAuthExpired(value: Record<string, any>) {
+  const records = [value, asRecord(value.response), asRecord(value.data), asRecord(asRecord(value.data)?.response)].filter(
+    (record): record is Record<string, any> => !!record
+  );
+  for (const record of records) {
+    const codes = [record.code, record.retcode, record.subcode].map(Number);
+    if (codes.some((code) => code === 1000 || code === 1001 || code === 401 || code === 403)) {
+      throw new QqMusicApiError("auth-expired");
+    }
+    const message = [record.message, record.msg, record.errmsg, record.error].find((item) => typeof item === "string");
+    if (message && /(未登录|未登陆|登录失效|登陆失效|登录过期|登陆过期|请登录|请登陆|login\s+required|auth(?:entication)?\s+(?:expired|invalid)|invalid\s+cookie)/i.test(message)) {
+      throw new QqMusicApiError("auth-expired");
+    }
+  }
 }
 
 function readSearchResultList(data: Record<string, any>, kind: "song" | "album" | "playlist") {
@@ -346,6 +416,7 @@ function readSearchResultList(data: Record<string, any>, kind: "song" | "album" 
 function readProviderBody(value: unknown): Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new QqMusicApiError("invalid-response");
   const body = value as Record<string, any>;
+  throwIfAuthExpired(body);
   if (body.error) throw new QqMusicApiError("unavailable");
   const response = body.response;
   return response && typeof response === "object" && !Array.isArray(response) ? response : body;
@@ -362,6 +433,7 @@ function readSuccessfulProviderBody(value: unknown): Record<string, any> {
 
 function assertProviderStatus(status: unknown) {
   const code = Number(status);
+  if (code === 401 || code === 403) throw new QqMusicApiError("auth-expired");
   if (Number.isFinite(code) && code >= 400) throw new QqMusicApiError("unavailable");
 }
 

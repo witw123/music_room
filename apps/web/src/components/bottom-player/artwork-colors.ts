@@ -71,7 +71,6 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
 
     let cancelled = false;
     const image = new Image();
-    image.crossOrigin = "anonymous";
     image.decoding = "async";
     image.onload = () => {
       if (!cancelled) setPalette(extractArtworkPalette(image));
@@ -79,7 +78,13 @@ export function useArtworkPalette(artworkUrl: string | null | undefined) {
     image.onerror = () => {
       if (!cancelled) setPalette(fallbackPalette);
     };
-    image.src = getArtworkSourceUrl(artworkUrl);
+    const sourceUrl = getArtworkSourceUrl(artworkUrl);
+    // CORS mode is needed for remote pixel sampling, but local data/blob
+    // artwork must stay in the browser's normal same-origin loading path.
+    if (/^https?:\/\//i.test(sourceUrl)) {
+      image.crossOrigin = "anonymous";
+    }
+    image.src = sourceUrl;
 
     return () => {
       cancelled = true;

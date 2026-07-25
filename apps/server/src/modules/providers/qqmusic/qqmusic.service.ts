@@ -35,14 +35,34 @@ import {
 type QrAttempt = { userId: string; qrsig: string; ptqrtoken: string };
 type SearchTermCache = { expiresAt: number; items: ProviderSearchSuggestion[] };
 const qrTtlSeconds = 180;
+const accountValidationTtlMs = 5 * 60_000;
 const qrKeyPrefix = "music-room:qqmusic:qr:";
 @Injectable()
 export class QqMusicService {
   private readonly rateLimits = new Map<string, number[]>();
   private readonly searchSuggestionCache = new Map<string, SearchTermCache>();
+  private readonly accountValidation = new Map<string, Promise<void>>();
   private searchHotCache: SearchTermCache | null = null;
   constructor(private readonly api: QqMusicApiClient, private readonly accounts: QqMusicAccountService, private readonly redis: RedisService) {}
-  async getAccountStatus(userId: string) { this.assertEnabled(); return this.accounts.getStatus(userId); }
+  async getAccountStatus(userId: string) {
+    this.assertEnabled();
+    const status = await this.accounts.getStatus(userId);
+    if (!status.connected || !status.qqMusicUserId || typeof this.api.validateCookie !== "function" || typeof this.accounts.getValidationState !== "function") {
+      return status;
+    }
+    try {
+      const state = await this.accounts.getValidationState(userId);
+      if (!state.qqMusicUserId) return status;
+      if (state.lastValidatedAt && Date.now() - state.lastValidatedAt.getTime() < accountValidationTtlMs) return status;
+      await this.validateAccount(userId, state.cookie, state.qqMusicUserId, true);
+      return this.accounts.getStatus(userId);
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.CONFLICT) {
+        return { connected: false, qqMusicUserId: null, nickname: null, avatarUrl: null, lastValidatedAt: null };
+      }
+      return status;
+    }
+  }
   async startQrLogin(userId: string) {
     this.assertEnabled(); this.assertRateLimit(`qr:${userId}`, 3);
     const qr = await this.callProvider(() => this.api.createQrCode()); const attemptId = randomUUID();
@@ -54,6 +74,15 @@ export class QqMusicService {
     if (!attempt) return { status: "expired" as const }; if (attempt.userId !== userId) throw new HttpException(createApiErrorResponse(errorCodes.unauthorized, "This QR login attempt belongs to another user."), HttpStatus.FORBIDDEN);
     const result = await this.callProvider(() => this.api.checkQrCode(attempt));
     if (result.status === "connected" && result.session) {
+      if (typeof this.api.validateCookie === "function") {
+        try {
+          if (!result.session.userId) throw new QqMusicApiError("auth-expired");
+          await this.api.validateCookie({ userId: result.session.userId, cookie: result.session.cookie });
+        } catch {
+          await this.redis.delete(key);
+          return { status: "failed" as const, message: "二维码已扫码，但 QQ 音乐登录验证失败，请重新生成二维码。" };
+        }
+      }
       await this.accounts.saveAccount({ userId, cookie: result.session.cookie, qqMusicUserId: result.session.userId, nickname: result.session.nickname, avatarUrl: result.session.avatarUrl });
       await this.redis.delete(key); return { status: "connected" as const, account: await this.accounts.getStatus(userId) };
     }
@@ -377,6 +406,7 @@ export class QqMusicService {
     this.assertEnabled(); this.assertRateLimit(`audio:${userId}`, 6);
     const selected = qqMusicQualitySchema.safeParse(quality).success ? quality as QqMusicQuality : this.defaultQuality();
     const cookie = await this.getCookie(userId);
+    await this.ensureAccountValidated(userId, cookie);
     const qualities = this.qualitiesForQuality(selected);
 
     let sawUnsupported = false;
@@ -426,6 +456,7 @@ export class QqMusicService {
 
   private async resolveAudioSource(userId: string, trackId: string, quality: QqMusicQuality) {
     const cookie = await this.getCookie(userId);
+    await this.ensureAccountValidated(userId, cookie);
     const qualities = this.qualitiesForQuality(quality);
     for (const candidateQuality of qualities) {
       const result = await this.callProvider(() => this.api.getAudioUrl({ trackId, quality: candidateQuality, cookie }));
@@ -568,6 +599,33 @@ export class QqMusicService {
     };
   }
   private async getCookie(userId: string) { try { return await this.accounts.getCookieOrThrow(userId); } catch { throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAccountRequired, "QQ Music account is required."), HttpStatus.CONFLICT); } }
+  private async ensureAccountValidated(userId: string, cookie: string) {
+    if (typeof this.api.validateCookie !== "function" || typeof this.accounts.getValidationState !== "function") return;
+    const state = await this.accounts.getValidationState(userId).catch(() => null);
+    if (!state?.qqMusicUserId) throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAuthExpired, "The QQ Music account needs to be bound again."), HttpStatus.CONFLICT);
+    if (state.lastValidatedAt && Date.now() - state.lastValidatedAt.getTime() < accountValidationTtlMs) return;
+    await this.validateAccount(userId, cookie, state.qqMusicUserId, false);
+  }
+  private async validateAccount(userId: string, cookie: string, qqMusicUserId: string, returnHttpError: boolean) {
+    const pending = this.accountValidation.get(userId);
+    if (pending) return pending;
+    const validation = (async () => {
+      try {
+        await this.api.validateCookie({ userId: qqMusicUserId, cookie });
+        if (typeof this.accounts.markValidated === "function") await this.accounts.markValidated(userId);
+      } catch (error) {
+        if (error instanceof QqMusicApiError && error.kind === "auth-expired") {
+          await this.accounts.invalidate(userId).catch(() => undefined);
+          throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAuthExpired, "The QQ Music account needs to be bound again."), HttpStatus.CONFLICT);
+        }
+        if (returnHttpError) throw this.unavailableError();
+      } finally {
+        this.accountValidation.delete(userId);
+      }
+    })();
+    this.accountValidation.set(userId, validation);
+    return validation;
+  }
   private assertEnabled() { if (process.env.QQMUSIC_ENABLED !== "true") throw new HttpException(createApiErrorResponse(errorCodes.qqMusicDisabled, "QQ Music integration is disabled."), HttpStatus.SERVICE_UNAVAILABLE); }
   private assertRateLimit(key: string, limit: number) { const now = Date.now(); const values = (this.rateLimits.get(key) ?? []).filter((time) => now - time < 60_000); if (values.length >= limit) throw new HttpException(createApiErrorResponse(errorCodes.rateLimited, "QQ Music request rate limit exceeded."), HttpStatus.TOO_MANY_REQUESTS); values.push(now); this.rateLimits.set(key, values); }
   private async callProvider<T>(operation: () => Promise<T>) { try { return await operation(); } catch (error) { if (error instanceof HttpException) throw error; if (error instanceof QqMusicApiError && error.kind === "auth-expired") throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAuthExpired, "The QQ Music account needs to be bound again."), HttpStatus.CONFLICT); throw this.unavailableError(); } }

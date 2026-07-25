@@ -1,3 +1,4 @@
+import * as qqMusicServices from "@sansenjian/qq-music-api/services";
 import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getDigitalAlbumLists, getLyric, getMusicPlay, getQQLoginQr, getRecommendBanner, getSearchByKey, getTopLists, getUserPlaylists, songListCategories, songLists, songListDetail } from "@sansenjian/qq-music-api/services";
 import { QqMusicApiClient } from "./qqmusic-api.client";
 import { fetchProviderUrl } from "../provider-fetch";
@@ -15,6 +16,7 @@ jest.mock("@sansenjian/qq-music-api/services", () => ({
   getDigitalAlbumLists: jest.fn(),
   getRecommendBanner: jest.fn(),
   getTopLists: jest.fn(),
+  getUserDetail: jest.fn(),
   songListCategories: jest.fn(),
   songLists: jest.fn()
 }));
@@ -34,6 +36,7 @@ const mockedGetAlbumSongs = getAlbumSongs as jest.MockedFunction<typeof getAlbum
 const mockedGetDigitalAlbumLists = getDigitalAlbumLists as jest.MockedFunction<typeof getDigitalAlbumLists>;
 const mockedGetRecommendBanner = getRecommendBanner as jest.MockedFunction<typeof getRecommendBanner>;
 const mockedGetTopLists = getTopLists as jest.MockedFunction<typeof getTopLists>;
+const mockedGetUserDetail = (qqMusicServices as unknown as { getUserDetail: jest.Mock }).getUserDetail;
 const mockedSongListCategories = songListCategories as jest.MockedFunction<typeof songListCategories>;
 const mockedSongLists = songLists as jest.MockedFunction<typeof songLists>;
 const mockedFetchProviderUrl = fetchProviderUrl as jest.MockedFunction<typeof fetchProviderUrl>;
@@ -175,6 +178,27 @@ describe("QqMusicApiClient", () => {
     await expect(client.getAudioUrl({ trackId: "song-mid", quality: "exhigh", cookie: "secret" })).resolves.toEqual({ url: "http://aqqmusic.tc.qq.com/song.mp3" });
     await expect(client.getAudioUrl({ trackId: "song-mid", quality: "high", cookie: "secret" })).resolves.toEqual({ url: "https://aqqmusic.tc.qq.com/song.mp3" });
     await expect(client.getAudioUrl({ trackId: "song-mid", quality: "standard", cookie: "secret" })).resolves.toEqual({ url: "https://aqqmusic.tc.qq.com/song.mp3" });
+  });
+
+  it("detects an expired QQ login from the profile response", async () => {
+    mockedGetUserDetail.mockResolvedValue({
+      status: 200,
+      body: { response: { code: 1000, subcode: 1000, data: {} } }
+    } as never);
+
+    await expect(new QqMusicApiClient().validateCookie({ userId: "123", cookie: "uin=o123; qqmusic_key=expired" }))
+      .rejects.toMatchObject({ kind: "auth-expired" });
+  });
+
+  it("accepts a valid QQ profile response", async () => {
+    mockedGetUserDetail.mockResolvedValue({
+      status: 200,
+      body: { response: { code: 0, data: { nickname: "用户" } } }
+    } as never);
+
+    await expect(new QqMusicApiClient().validateCookie({ userId: "o123", cookie: "uin=o123; qqmusic_key=valid" }))
+      .resolves.toEqual({ valid: true });
+    expect(mockedGetUserDetail).toHaveBeenCalledWith({ uin: "123", cookie: "uin=o123; qqmusic_key=valid" });
   });
 
   it("searches QQ playlists through the current songlist endpoint", async () => {

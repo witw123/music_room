@@ -18,7 +18,7 @@ import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
-import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
@@ -489,7 +489,7 @@ function RoomStageBase({
                       <div
                         aria-hidden="true"
                         className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
-                        style={{ backgroundImage: `url("${artworkUrl}")` }}
+                        style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
                       />
                     ) : null}
                     <div

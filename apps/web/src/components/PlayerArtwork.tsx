@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type SquareAlbumCoverProps = {
   artworkUrl: string | null;
@@ -17,7 +18,7 @@ export function SquareAlbumCover({ artworkUrl, className = "", style }: SquareAl
       {artworkUrl ? (
         <div
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url("${artworkUrl}")` }}
+          style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-white">

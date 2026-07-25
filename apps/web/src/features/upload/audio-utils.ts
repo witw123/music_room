@@ -71,8 +71,11 @@ export async function buildTrackMeta(
   }
 ) {
   const fileHash = preparedAssets?.fileHash ?? await hashFile(file);
+  // Provider downloads can also contain an embedded cover. Read it locally so
+  // the player can sample a data URL without depending on remote CORS headers.
+  const parsedEmbeddedMetadata = await readEmbeddedAudioMetadata(file);
   const embeddedMetadata = source?.type === undefined || source.type === "local_upload"
-    ? await readEmbeddedAudioMetadata(file)
+    ? parsedEmbeddedMetadata
     : null;
   const durationMs = preparedAssets?.playbackAsset.durationMs
     ?? embeddedMetadata?.durationMs
@@ -104,7 +107,7 @@ export async function buildTrackMeta(
     codec,
     mimeType: file.type || null,
     fileHash,
-    artworkUrl: source?.metadata?.artworkUrl ?? embeddedMetadata?.artworkUrl ?? null,
+    artworkUrl: parsedEmbeddedMetadata.artworkUrl ?? source?.metadata?.artworkUrl ?? null,
     lyrics: embeddedMetadata?.lyrics ?? null,
     ownerSessionId: session.userId,
     ownerNickname: session.nickname,

@@ -9,6 +9,7 @@ import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
+import { getArtworkSourceUrl } from "./artwork-colors";
 import type { PlayerStyle } from "@/features/settings/settings-store";
 
 type LayoutProps = {
@@ -96,7 +97,7 @@ export function VinylBadge({
           <div
             aria-hidden="true"
             className="absolute z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_12px_rgba(0,0,0,0.4)]"
-            style={{ backgroundImage: `url("${artworkUrl}")` }}
+            style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
           />
         ) : null}
         <div
