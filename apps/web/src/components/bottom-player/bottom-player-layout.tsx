@@ -212,7 +212,12 @@ export function LyricsToggleButton({
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
       style={{ color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
     >
-      词
+      <svg aria-hidden="true" fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
+        <path d="M5 6h14" />
+        <path d="M5 10h10" />
+        <path d="M5 14h14" />
+        <path d="M5 18h8" />
+      </svg>
     </button>
   );
 }

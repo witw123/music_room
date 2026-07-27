@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import type { QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,19 @@ type PlayerQueueDrawerProps = {
   testId?: string;
 };
 
+type TouchReorderState = {
+  itemId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  targetItemId: string | null;
+  active: boolean;
+  targetElement: HTMLElement | null;
+};
+
+const touchReorderDelayMs = 420;
+const touchReorderMoveTolerancePx = 10;
+
 export function PlayerQueueDrawer({
   queue,
   tracks,
@@ -43,7 +56,10 @@ export function PlayerQueueDrawer({
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
+  const [dragOverQueueItemId, setDragOverQueueItemId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const touchReorderRef = useRef<TouchReorderState | null>(null);
+  const touchReorderTimerRef = useRef<number | null>(null);
 
   const queueWithTracks = useMemo(
     () =>
@@ -56,9 +72,105 @@ export function PlayerQueueDrawer({
 
   const toggleDrawer = () => setIsOpen((current) => !current);
 
+  useEffect(() => {
+    return () => {
+      if (touchReorderTimerRef.current !== null) {
+        window.clearTimeout(touchReorderTimerRef.current);
+      }
+    };
+  }, []);
+
+  function cancelTouchReorderTimer() {
+    if (touchReorderTimerRef.current !== null) {
+      window.clearTimeout(touchReorderTimerRef.current);
+      touchReorderTimerRef.current = null;
+    }
+  }
+
+  function reorderQueueItem(sourceItemId: string, targetItemId: string) {
+    if (sourceItemId === targetItemId || isPending) return;
+    const reorderedIds = queue.map((item) => item.id);
+    const fromIndex = reorderedIds.indexOf(sourceItemId);
+    const toIndex = reorderedIds.indexOf(targetItemId);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    reorderedIds.splice(fromIndex, 1);
+    reorderedIds.splice(toIndex, 0, sourceItemId);
+    void onReorderQueue(reorderedIds);
+  }
+
+  function handleTouchReorderStart(event: ReactPointerEvent<HTMLDivElement>, itemId: string) {
+    if (!canReorderQueue || (event.pointerType !== "touch" && event.pointerType !== "pen")) {
+      return;
+    }
+    if ((event.target as HTMLElement).closest("button")) return;
+
+    cancelTouchReorderTimer();
+    const targetElement = event.currentTarget;
+    touchReorderRef.current = {
+      itemId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      targetItemId: itemId,
+      active: false,
+      targetElement
+    };
+    touchReorderTimerRef.current = window.setTimeout(() => {
+      const current = touchReorderRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      current.active = true;
+      setDraggingQueueItemId(current.itemId);
+      setDragOverQueueItemId(current.itemId);
+      current.targetElement?.setPointerCapture(current.pointerId);
+    }, touchReorderDelayMs);
+  }
+
+  function handleTouchReorderMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const current = touchReorderRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+
+    if (!current.active) {
+      const movedDistance = Math.hypot(
+        event.clientX - current.startX,
+        event.clientY - current.startY
+      );
+      if (movedDistance > touchReorderMoveTolerancePx) {
+        cancelTouchReorderTimer();
+        touchReorderRef.current = null;
+      }
+      return;
+    }
+
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-queue-item-id]");
+    const targetItemId = target?.dataset.queueItemId ?? current.itemId;
+    current.targetItemId = targetItemId;
+    setDragOverQueueItemId(targetItemId);
+  }
+
+  function finishTouchReorder(event: ReactPointerEvent<HTMLDivElement>) {
+    const current = touchReorderRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+
+    cancelTouchReorderTimer();
+    if (current.active) {
+      event.preventDefault();
+      reorderQueueItem(current.itemId, current.targetItemId ?? current.itemId);
+      if (current.targetElement?.hasPointerCapture(current.pointerId)) {
+        current.targetElement.releasePointerCapture(current.pointerId);
+      }
+    }
+    touchReorderRef.current = null;
+    setDraggingQueueItemId(null);
+    setDragOverQueueItemId(null);
+  }
+
   async function handleDrop(targetQueueItemId: string) {
     if (!draggingQueueItemId || draggingQueueItemId === targetQueueItemId || !canReorderQueue) {
       setDraggingQueueItemId(null);
+      setDragOverQueueItemId(null);
       return;
     }
 
@@ -68,26 +180,14 @@ export function PlayerQueueDrawer({
 
     if (fromIndex < 0 || toIndex < 0) {
       setDraggingQueueItemId(null);
+      setDragOverQueueItemId(null);
       return;
     }
 
     reorderedIds.splice(fromIndex, 1);
     reorderedIds.splice(toIndex, 0, draggingQueueItemId);
     setDraggingQueueItemId(null);
-    await onReorderQueue(reorderedIds);
-  }
-
-  async function moveQueueItem(queueItemId: string, direction: -1 | 1) {
-    if (!canReorderQueue) return;
-    const currentIndex = queue.findIndex((item) => item.id === queueItemId);
-    const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= queue.length) return;
-
-    const reorderedIds = queue.map((item) => item.id);
-    [reorderedIds[currentIndex], reorderedIds[targetIndex]] = [
-      reorderedIds[targetIndex],
-      reorderedIds[currentIndex]
-    ];
+    setDragOverQueueItemId(null);
     await onReorderQueue(reorderedIds);
   }
 
@@ -101,7 +201,8 @@ export function PlayerQueueDrawer({
         style={compactMobile ? undefined : { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
         onClick={toggleDrawer}
         aria-expanded={isOpen}
-        title="播放队列"
+        aria-label="歌曲队列"
+        title="歌曲队列"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h12" /><path d="M4 12h16" /><path d="M4 18h12" /><path d="m18 4 2 2-2 2" /></svg>
         {queue.length > 0 && (
@@ -133,9 +234,13 @@ export function PlayerQueueDrawer({
                     data-testid="queue-item"
                     className={`group flex items-center gap-3 rounded-xl border p-3 transition-all ${
                       isCurrent ? "border-accent/50 bg-accent/20" : "border-transparent hover:border-white/10 hover:bg-white/[0.07]"
-                    } ${draggingQueueItemId === item.id ? "opacity-50 scale-95" : ""}`}
+                    } ${draggingQueueItemId === item.id ? "scale-95 touch-none opacity-50" : "touch-pan-y"} ${dragOverQueueItemId === item.id && draggingQueueItemId !== item.id ? "border-accent/60 bg-accent/10" : ""}`}
+                    data-queue-item-id={item.id}
                     draggable={canReorderQueue}
-                    onDragStart={() => setDraggingQueueItemId(item.id)}
+                    onDragStart={() => {
+                      setDraggingQueueItemId(item.id);
+                      setDragOverQueueItemId(item.id);
+                    }}
                     onDragOver={(event) => {
                       if (canReorderQueue) {
                         event.preventDefault();
@@ -145,7 +250,14 @@ export function PlayerQueueDrawer({
                       event.preventDefault();
                       void handleDrop(item.id);
                     }}
-                    onDragEnd={() => setDraggingQueueItemId(null)}
+                    onDragEnd={() => {
+                      setDraggingQueueItemId(null);
+                      setDragOverQueueItemId(null);
+                    }}
+                    onPointerCancel={finishTouchReorder}
+                    onPointerDown={(event) => handleTouchReorderStart(event, item.id)}
+                    onPointerMove={handleTouchReorderMove}
+                    onPointerUp={finishTouchReorder}
                   >
                     <span className={`w-4 text-center font-mono text-xs font-bold ${isCurrent ? "text-sky-300" : "text-zinc-400"}`}>
                       {String(index + 1).padStart(2, "0")}
@@ -167,34 +279,6 @@ export function PlayerQueueDrawer({
                        </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                      {canReorderQueue ? (
-                        <div className="flex items-center gap-0.5 sm:hidden">
-                          <Button
-                            aria-label={`上移《${title}》`}
-                            className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
-                            disabled={index === 0 || isPending}
-                            onClick={() => void moveQueueItem(item.id, -1)}
-                            size="icon"
-                            title="上移"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 14 6-6 6 6" /></svg>
-                          </Button>
-                          <Button
-                            aria-label={`下移《${title}》`}
-                            className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300"
-                            disabled={index === queue.length - 1 || isPending}
-                            onClick={() => void moveQueueItem(item.id, 1)}
-                            size="icon"
-                            title="下移"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 10 6 6 6-6" /></svg>
-                          </Button>
-                        </div>
-                      ) : null}
                       {canControlPlayback ? (
                         <Button
                           aria-label={`将《${title}》设为下一首播放`}
@@ -211,8 +295,17 @@ export function PlayerQueueDrawer({
                           type="button"
                           variant="ghost"
                         >
-                          <svg aria-hidden="true" data-testid="queue-item-next-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
-                            <path d="M4 5v14l10-7zm13 0h3v14h-3z" />
+                          <svg
+                            aria-hidden="true"
+                            className="block shrink-0"
+                            data-testid="queue-item-next-icon"
+                            fill="currentColor"
+                            height="16"
+                            style={{ color: isNext ? accentColor : "rgb(212 212 216)" }}
+                            viewBox="0 0 24 24"
+                            width="16"
+                          >
+                            <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
                           </svg>
                         </Button>
                       ) : null}

@@ -322,7 +322,7 @@ function MobileImmersivePlayer({
               </button>
               <div className="mt-[clamp(1.5rem,4vh,3rem)] flex w-full items-start gap-3">
                 <div className="min-w-0 flex-1"><TrackDetails currentTrack={currentTrack} mobile /></div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-center">
                   <FavoriteTrackButton
                     accentColor={artworkPalette.accent}
                     isFavorite={favoriteTrackIsFavorite}
@@ -332,7 +332,6 @@ function MobileImmersivePlayer({
                     track={favoriteTrack}
                     className="text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-white"
                   />
-                  <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/70 transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} style={{ color: artworkPalette.accent }} title="切换播放模式" type="button"><MoreGlyph /></button>
                 </div>
               </div>
             </div>
@@ -383,8 +382,8 @@ function MobileImmersivePlayer({
         </div>
 
         <div className="mt-5 grid grid-cols-3 items-center justify-items-center" style={{ color: artworkPalette.accent }}>
-          <button aria-label="显示歌词" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button"><LyricsGlyph /></button>
-          <button aria-label="切换播放模式" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="切换播放模式" type="button"><PlaybackModeGlyph mode={playbackMode} /></button>
+          <button aria-label="歌词" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" data-testid="immersive-player-lyrics-button" onClick={() => onSetMobileView("lyrics")} title="歌词" type="button"><LyricsGlyph /></button>
+          <button aria-label="播放顺序" className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" data-testid="immersive-player-playback-mode-button" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} title="播放顺序" type="button"><PlaybackModeGlyph mode={playbackMode} /></button>
           <PlayerQueueDrawer
             accentColor={artworkPalette.accent}
             accentSoft={artworkPalette.accentSoft}
@@ -599,10 +598,6 @@ function PlaybackModeGlyph({ mode }: { mode: PlaybackMode }) {
   if (mode === "shuffle") return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 7h3.5c3.5 0 4.5 10 9 10H20" /><path d="m17 14 3 3-3 3" /><path d="M4 17h3c1.4 0 2.4-1.1 3.1-2.4" /><path d="M14 9.4C14.8 8 15.8 7 17.2 7H20" /><path d="m17 4 3 3-3 3" /></svg>;
   if (mode === "single") return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="m7 22-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /><path d="M12 10v4" /></svg>;
   return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M4 7h12" /><path d="m13 4 3 3-3 3" /><path d="M20 17H8" /><path d="m11 14-3 3 3 3" /></svg>;
-}
-
-function MoreGlyph() {
-  return <svg aria-hidden="true" fill="currentColor" height="20" viewBox="0 0 24 24" width="20"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>;
 }
 
 function LyricsGlyph() {
