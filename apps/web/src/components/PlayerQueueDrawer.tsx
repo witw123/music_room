@@ -198,20 +198,25 @@ export function PlayerQueueDrawer({
                       {canControlPlayback ? (
                         <Button
                           aria-label={`将《${title}》设为下一首播放`}
-                          className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300 sm:h-8 sm:w-8"
+                          aria-pressed={isNext}
+                          className={`h-10 w-10 sm:h-8 sm:w-8 ${
+                            isNext
+                              ? "bg-sky-400/15 text-sky-300 hover:bg-sky-400/20 hover:text-sky-200"
+                              : "text-zinc-300 hover:bg-white/10 hover:text-sky-300"
+                          }`}
                           data-testid="queue-item-next-button"
-                          disabled={isCurrent || isNext || isPending}
+                          disabled={isCurrent || isPending}
                           onClick={() => void onPlayNextQueueItem(item.id)}
                           title="下一首播放"
                           type="button"
                           variant="ghost"
                         >
-                          <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
-                            <path d="M4 6h8" />
-                            <path d="M4 12h8" />
+                          <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                            <path d="M4 6h9" />
+                            <path d="M4 12h9" />
                             <path d="M4 18h6" />
-                            <path d="M15 15h6" />
-                            <path d="m18 12 3 3-3 3" />
+                            <path d="M17 13v8" />
+                            <path d="M14 17h6" />
                           </svg>
                         </Button>
                       ) : null}
