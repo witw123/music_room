@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
+  RoomPlaybackReadinessPayload,
   RoomPresencePatchPayload,
   RoomQueuePatchPayload,
   RoomMemberRemovedPayload,
@@ -16,6 +17,7 @@ import {
   roomLibraryPatchChannel,
   roomMemberRemovedChannel,
   roomPlaybackPatchChannel,
+  roomPlaybackReadinessChannel,
   roomPresencePatchChannel,
   roomQueuePatchChannel,
   roomSnapshotChannel,
@@ -130,6 +132,19 @@ export class RoomRealtimeBroadcaster {
     };
     this.server?.to(roomId).emit("room.library.patch", message);
     this.publish(roomLibraryPatchChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitPlaybackReadiness(roomId: string, payload: Omit<RoomPlaybackReadinessPayload, "roomId">) {
+    const message: RoomPlaybackReadinessPayload = {
+      roomId,
+      ...payload
+    };
+    this.server?.to(roomId).emit("room.playback.readiness", message);
+    this.publish(roomPlaybackReadinessChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message

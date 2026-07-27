@@ -18,6 +18,7 @@ import type {
   RoomLibraryPatchPayload,
   RoomMemberRemovedPayload,
   RoomPlaybackPatchPayload,
+  RoomPlaybackReadinessPayload,
   RoomPresencePatchPayload,
   RoomPresencePayload,
   RoomQueuePatchPayload,
@@ -35,6 +36,8 @@ import {
   roomLibraryPatchPayloadSchema,
   roomMemberRemovedPayloadSchema,
   roomPlaybackPatchPayloadSchema,
+  roomPlaybackReadinessInputPayloadSchema,
+  roomPlaybackReadinessPayloadSchema,
   roomPresencePayloadSchema,
   roomPresencePatchPayloadSchema,
   roomQueuePatchPayloadSchema,
@@ -59,6 +62,7 @@ import {
   roomLibraryPatchChannel,
   roomMemberRemovedChannel,
   roomPlaybackPatchChannel,
+  roomPlaybackReadinessChannel,
   roomPresencePatchChannel,
   roomQueuePatchChannel,
   roomTrackDeletedChannel,
@@ -125,6 +129,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private readonly recoveryGenerationByRoomPeer = new Map<string, Map<string, number>>();
   private readonly pendingPeerSignalsByRoomPeer = new Map<string, PendingPeerSignal[]>();
   private readonly telemetryLastReportAt = new Map<string, number>();
+  private readonly playbackReadinessByRoom = new Map<string, Map<string, RoomPlaybackReadinessPayload>>();
+  private readonly playbackBarrierByRoom = new Map<string, {
+    key: string;
+    state: "waiting" | "open";
+    resumeAt: string | null;
+  }>();
 
   constructor(
     private readonly redisService: RedisService,
@@ -149,6 +159,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.activeSessionsByRoom.delete(roomId);
     this.metrics.clearRoom(roomId);
     this.clearRoomRecoveryState(roomId);
+    this.playbackReadinessByRoom.delete(roomId);
+    this.playbackBarrierByRoom.delete(roomId);
     this.roomRealtimeBroadcaster.emitRoomMissing(roomId);
   }
 
@@ -158,6 +170,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.activeSessionsByRoom.delete(roomId);
     this.metrics.clearRoom(roomId);
     this.clearRoomRecoveryState(roomId);
+    this.playbackReadinessByRoom.delete(roomId);
+    this.playbackBarrierByRoom.delete(roomId);
     this.roomRealtimeBroadcaster.emitRoomDeleted(roomId, trackIds);
   }
 
@@ -386,6 +400,30 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.redisUnsubscribers.push(unsubscribe);
     });
 
+    void this.redisService.subscribe(roomPlaybackReadinessChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomPlaybackReadinessPayload;
+      };
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+      const parsed = roomPlaybackReadinessPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+      // Keep a local copy as well. Readiness is a room-wide barrier, so a
+      // reconnect or cleanup on this instance must include reports received
+      // through Redis from other signaling instances.
+      const readinessBySession = this.playbackReadinessByRoom.get(message.roomId) ?? new Map();
+      readinessBySession.set(parsed.data.sessionId, parsed.data);
+      this.playbackReadinessByRoom.set(message.roomId, readinessBySession);
+      this.server.to(message.roomId).emit("room.playback.readiness", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
     void this.redisService.subscribe(roomTrackDeletedChannel, (payload) => {
       const message = payload as {
         sourceId?: string;
@@ -471,6 +509,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.peerSocketsByRoom.clear();
     this.activeSessionsByRoom.clear();
     this.pendingPeerSignalsByRoomPeer.clear();
+    this.playbackReadinessByRoom.clear();
+    this.playbackBarrierByRoom.clear();
     this.telemetryLastReportAt.clear();
     this.recoveryGenerationByRoomSession.clear();
     this.recoveryGenerationByRoomPeer.clear();
@@ -536,6 +576,88 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
     this.metrics.incrementDiagnosticsReport();
     return { ok: true };
+  }
+
+  @SubscribeMessage("room.playback.readiness")
+  async handlePlaybackReadiness(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: unknown,
+    callback?: (payload: RoomPlaybackReadinessPayload) => void
+  ) {
+    this.assertRealtimeRateLimit(client, "room.playback.readiness", 60);
+    const parsed = roomPlaybackReadinessInputPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid playback readiness payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const message = parsed.data;
+    this.assertRealtimeClient(client, message.roomId);
+    await this.assertUserStillActive(client.data.sessionId as string);
+    await this.assertSessionLease(client);
+    if (client.data.sessionId !== message.sessionId || client.data.peerId !== message.peerId) {
+      throw new WsException("Playback readiness identity mismatch.");
+    }
+
+    const snapshot = await this.roomService.getAccessibleRoomSnapshot(
+      message.roomId,
+      [],
+      message.sessionId
+    );
+    const playback = snapshot.room.playback;
+    const trackId = playback.currentTrackId;
+    const mediaEpoch = playback.mediaEpoch;
+    const key = `${trackId ?? "none"}:${mediaEpoch}`;
+    const readinessBySession = this.playbackReadinessByRoom.get(message.roomId) ?? new Map();
+    this.playbackReadinessByRoom.set(message.roomId, readinessBySession);
+    const normalizedState = message.cacheEnabled && message.state === "waiting"
+      ? "waiting"
+      : "ready";
+    const activeMembers = snapshot.room.members.filter(
+      (member) => member.presenceState === "online" && !!member.peerId
+    );
+    const previousBarrier = this.playbackBarrierByRoom.get(message.roomId);
+    const canonicalBase: RoomPlaybackReadinessPayload = {
+      roomId: message.roomId,
+      sessionId: message.sessionId,
+      peerId: message.peerId,
+      trackId,
+      mediaEpoch,
+      cacheEnabled: message.cacheEnabled,
+      state: normalizedState,
+      barrier: "waiting",
+      resumeAt: null,
+      updatedAt: new Date().toISOString()
+    };
+    readinessBySession.set(message.sessionId, canonicalBase);
+
+    const allReady = playback.status !== "playing" || activeMembers.every((member) => {
+      const entry = readinessBySession.get(member.id);
+      if (!entry || entry.trackId !== trackId || entry.mediaEpoch !== mediaEpoch) {
+        return false;
+      }
+      return !entry.cacheEnabled || entry.state !== "waiting";
+    });
+    const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
+    const resumeAt = barrierState === "open"
+      ? previousBarrier?.key === key && previousBarrier.state === "open"
+        ? previousBarrier.resumeAt
+        : new Date(Date.now() + 650).toISOString()
+      : null;
+    this.playbackBarrierByRoom.set(message.roomId, { key, state: barrierState, resumeAt });
+    const canonical: RoomPlaybackReadinessPayload = {
+      ...canonicalBase,
+      barrier: barrierState,
+      resumeAt,
+      updatedAt: new Date().toISOString()
+    };
+    readinessBySession.set(message.sessionId, canonical);
+    this.ensureBroadcasterServer();
+    this.roomRealtimeBroadcaster.emitPlaybackReadiness(message.roomId, canonical);
+    callback?.(canonical);
+    return canonical;
   }
 
   @SubscribeMessage("room.chat")
@@ -714,6 +836,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           return;
         }
         client.emit("room.snapshot", snapshot);
+        const readiness = this.playbackReadinessByRoom.get(message.roomId);
+        const key = `${snapshot.room.playback.currentTrackId ?? "none"}:${snapshot.room.playback.mediaEpoch}`;
+        for (const item of readiness?.values() ?? []) {
+          if (`${item.trackId ?? "none"}:${item.mediaEpoch}` === key) {
+            client.emit("room.playback.readiness", item);
+          }
+        }
       });
       return this.buildSubscribeAck(snapshot, recoveryGeneration);
     } catch (error) {
@@ -809,6 +938,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     if (peerId) {
       this.clearPendingPeerSignals(message.roomId, peerId);
     }
+    this.clearPlaybackReadiness(message.roomId, sessionId);
     this.clearRecoveryGeneration(message.roomId, sessionId, peerId);
     this.realtimeRateLimits.delete(client.id);
     client.data.roomId = undefined;
@@ -838,7 +968,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       if (!ownsLease) {
         return;
       }
-      void this.updatePeerPresence(roomId, sessionId, null, "reconnecting");
+      void this.updatePeerPresence(roomId, sessionId, null, "reconnecting").finally(() => {
+        this.clearPlaybackReadiness(roomId, sessionId);
+      });
       this.scheduleDisconnectCleanup(
         roomId,
         sessionId,
@@ -1187,6 +1319,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
 
     await this.updatePeerPresence(roomId, sessionId, null, "offline");
+    this.clearPlaybackReadiness(roomId, sessionId);
     if (peerId) {
       this.clearPendingPeerSignals(roomId, peerId);
     }
@@ -1304,6 +1437,65 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     } catch {
       // A transient Redis outage should not interrupt local presence.
       return true;
+    }
+  }
+
+  private clearPlaybackReadiness(roomId?: string, sessionId?: string) {
+    if (!roomId) return;
+    const readiness = this.playbackReadinessByRoom.get(roomId);
+    if (readiness && sessionId) readiness.delete(sessionId);
+    if (readiness?.size === 0) this.playbackReadinessByRoom.delete(roomId);
+    // A departed member may have been the last blocker. Re-evaluate promptly
+    // instead of waiting for another member's heartbeat.
+    void this.recomputePlaybackBarrier(roomId);
+  }
+
+  private async recomputePlaybackBarrier(roomId: string) {
+    let snapshot: RoomSnapshot;
+    try {
+      snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    } catch {
+      return;
+    }
+
+    const playback = snapshot.room.playback;
+    const trackId = playback.currentTrackId;
+    const mediaEpoch = playback.mediaEpoch;
+    const key = `${trackId ?? "none"}:${mediaEpoch}`;
+    const readinessBySession = this.playbackReadinessByRoom.get(roomId);
+    if (!readinessBySession || !trackId || playback.status !== "playing") {
+      this.playbackBarrierByRoom.delete(roomId);
+      return;
+    }
+
+    const activeMembers = snapshot.room.members.filter(
+      (member) => member.presenceState === "online" && !!member.peerId
+    );
+    const allReady = activeMembers.every((member) => {
+      const entry = readinessBySession.get(member.id);
+      return !!entry && entry.trackId === trackId && entry.mediaEpoch === mediaEpoch &&
+        (!entry.cacheEnabled || entry.state !== "waiting");
+    });
+    const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
+    const previous = this.playbackBarrierByRoom.get(roomId);
+    const resumeAt = barrierState === "open"
+      ? previous?.key === key && previous.state === "open"
+        ? previous.resumeAt
+        : new Date(Date.now() + 650).toISOString()
+      : null;
+    this.playbackBarrierByRoom.set(roomId, { key, state: barrierState, resumeAt });
+
+    this.ensureBroadcasterServer();
+    for (const entry of readinessBySession.values()) {
+      if (entry.trackId !== trackId || entry.mediaEpoch !== mediaEpoch) continue;
+      const nextEntry: RoomPlaybackReadinessPayload = {
+        ...entry,
+        barrier: barrierState,
+        resumeAt,
+        updatedAt: new Date().toISOString()
+      };
+      readinessBySession.set(entry.sessionId, nextEntry);
+      this.roomRealtimeBroadcaster.emitPlaybackReadiness(roomId, nextEntry);
     }
   }
 

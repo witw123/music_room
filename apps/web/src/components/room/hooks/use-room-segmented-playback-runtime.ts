@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
-import type { PlaybackSnapshot, RoomSnapshot, TrackLoudness, TrackMeta } from "@music-room/shared";
+import type {
+  PlaybackSnapshot,
+  RoomPlaybackReadinessInputPayload,
+  RoomPlaybackReadinessPayload,
+  RoomSnapshot,
+  TrackLoudness,
+  TrackMeta
+} from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { maximumAudioBitrateKbps } from "@/features/p2p/audio-bitrate-policy";
 import {
@@ -259,6 +266,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   audibleRef: MutableRefObject<boolean | null>;
   localFallbackAsset?: TrackMeta["playbackAsset"] | null;
+  playbackReadiness: RoomPlaybackReadinessPayload[];
+  publishPlaybackReadiness: (payload: RoomPlaybackReadinessInputPayload) => void;
+  activeSessionId: string | null;
 }) {
   const setStatusMessage = input.setStatusMessage;
   const onPlaybackEnded = input.onPlaybackEnded;
@@ -268,6 +278,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const setMediaConnectionState = input.setMediaConnectionState;
   const setSourceStartState = input.setSourceStartState;
   const setAudioUnlocked = input.setAudioUnlocked;
+  const playbackReadiness = input.playbackReadiness;
   const [playbackPreferences, setPlaybackPreferences] = useState(
     () => getAppSettings().playback
   );
@@ -295,6 +306,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     !streamingOnlyPlayback &&
     fullyCachedPlayback &&
     isProviderTrack(input.currentTrack);
+  const cacheBarrierEnabled = fullyCachedPlayback &&
+    !preventOfflineAutoLoad &&
+    !streamingOnlyPlayback &&
+    !!input.currentTrack;
   const offlineSource = resolveOfflineProviderSource({
     roomSnapshot: input.roomSnapshot,
     track: input.currentTrack,
@@ -327,6 +342,28 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     file: null,
     error: null
   });
+  const [barrierClockMs, setBarrierClockMs] = useState(() => Date.now());
+  const playbackBarrier = resolvePlaybackBarrierState({
+    playback: input.roomSnapshot?.room.playback ?? null,
+    activeMembers: input.roomSnapshot?.room.members ?? [],
+    readiness: playbackReadiness,
+    cacheEnabled: cacheBarrierEnabled,
+    nowMs: barrierClockMs
+  });
+  const readinessRoomId = input.roomSnapshot?.room.id;
+  const readinessTrackId = input.roomSnapshot?.room.playback.currentTrackId ?? null;
+  const readinessMediaEpoch = input.roomSnapshot?.room.playback.mediaEpoch ?? 0;
+  const readinessPlaybackStatus = input.roomSnapshot?.room.playback.status;
+  const readinessActiveSessionId = input.activeSessionId;
+  const readinessPeerId = input.peerId;
+  const publishReadiness = input.publishPlaybackReadiness;
+  useEffect(() => {
+    if (!playbackBarrier.resumeAtMs || playbackBarrier.resumeAtMs <= Date.now()) {
+      return;
+    }
+    const interval = window.setInterval(() => setBarrierClockMs(Date.now()), 100);
+    return () => window.clearInterval(interval);
+  }, [playbackBarrier.resumeAtMs]);
   const localAudioLoudness = localAudioResolution.key === localAudioTrackKey
     ? localAudioResolution.loudness
     : undefined;
@@ -342,6 +379,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     ...input,
     localFallbackAsset: null as TrackMeta["playbackAsset"] | null,
     forceProviderCache: false,
+    cacheBarrierEnabled: false,
+    playbackBarrier,
     loudnessGainDb: 0,
     localAudioResolution: {
       key: null as string | null,
@@ -355,6 +394,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     localFallbackAsset: offlineFallbackAsset,
     localAudioResolution,
     forceProviderCache,
+    cacheBarrierEnabled,
+    playbackBarrier,
     loudnessGainDb
   };
   const { audioRef, isCurrentSource, peerId: runtimePeerId } = input;
@@ -373,12 +414,18 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     lastRecoveryAtMs: 0,
     recoveryCount: 0
   });
+  const nativeAudioHealthRef = useRef({
+    lastProgressAtMs: 0,
+    lastCurrentTime: null as number | null,
+    hasStarted: false
+  });
   const localMediaBindingRef = useRef<string | null>(null);
   const localAudioObjectUrlRef = useRef<LocalAudioObjectUrl | null>(null);
   const localAudioReadyKeyRef = useRef<string | null>(null);
   const localAudioTimelineKeyRef = useRef<string | null>(null);
   const remoteAudioTimelineKeyRef = useRef<string | null>(null);
   const failedLocalAudioKeysRef = useRef<Set<string>>(new Set());
+  const readinessPublishKeyRef = useRef<string | null>(null);
   const roomId = input.roomSnapshot?.room.id ?? null;
   const [mediaPlayback, setMediaPlayback] = useState<SegmentedPlaybackSnapshot>(() => ({
     state: "idle",
@@ -499,6 +546,57 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     localAudioTrackKey,
     streamingOnlyPlayback,
     forceProviderCache
+  ]);
+
+  useEffect(() => {
+    const trackId = readinessTrackId;
+    const mediaEpoch = readinessMediaEpoch;
+    const cacheEnabled = cacheBarrierEnabled && !!trackId;
+    const localReady = localAudioResolution.status === "available" || !!offlineFallbackAsset;
+    const state: RoomPlaybackReadinessInputPayload["state"] = !cacheEnabled || localReady
+      ? "ready"
+      : localAudioResolution.status === "missing"
+        ? "failed"
+        : "waiting";
+    const key = [
+      readinessRoomId ?? "none",
+      trackId ?? "none",
+      mediaEpoch,
+      cacheEnabled,
+      state
+    ].join(":");
+    if (!readinessRoomId || !readinessActiveSessionId || !readinessPeerId) {
+      return;
+    }
+    const payload: RoomPlaybackReadinessInputPayload = {
+      roomId: readinessRoomId,
+      sessionId: readinessActiveSessionId,
+      peerId: readinessPeerId,
+      trackId,
+      mediaEpoch,
+      cacheEnabled,
+      state
+    };
+    if (readinessPublishKeyRef.current !== key) {
+      readinessPublishKeyRef.current = key;
+      publishReadiness(payload);
+    }
+    const interval = window.setInterval(
+      () => publishReadiness(payload),
+      4_000
+    );
+    return () => window.clearInterval(interval);
+  }, [
+    cacheBarrierEnabled,
+    readinessActiveSessionId,
+    readinessPeerId,
+    publishReadiness,
+    readinessRoomId,
+    readinessTrackId,
+    readinessMediaEpoch,
+    readinessPlaybackStatus,
+    localAudioResolution.status,
+    offlineFallbackAsset
   ]);
 
   useEffect(() => {
@@ -700,7 +798,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     disableSourcePlayback: shouldDisableSourcePlayback({
       isCurrentSource: input.isCurrentSource,
       localAudioStatus: localAudioResolution.status
-    }),
+    }) || playbackBarrier.blocked,
     volume: input.volume,
     loudnessGainDb,
     audioUnlocked: input.audioUnlocked,
@@ -819,6 +917,28 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         ? maximumAudioBitrateKbps
         : null;
       const audio = audioRef.current;
+
+      if (runtime.playbackBarrier.blocked && roomPlayback?.status === "playing") {
+        runtime.setMediaPlaybackEnabled(runtime.isCurrentSource);
+        runtime.setLocalAudioStream(null, null, null);
+        if (audio) {
+          audio.pause();
+          if (runtime.isCurrentSource) {
+            roomAudioOutput.unbindLocalAudioElement(audio);
+          }
+        }
+        if (!cancelled) {
+          setMediaPlayback({
+            state: "buffering",
+            bufferedMs: 0,
+            ownedUnitCount: 0,
+            totalUnitCount: runtime.currentTrack?.playbackAsset?.unitCount ?? 0,
+            audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+            lastError: "正在等待房间成员完成缓存，随后统一开始播放。"
+          });
+        }
+        return;
+      }
 
       if (runtime.isCurrentSource && runtime.localAudioResolution.status !== "available") {
         runtime.setMediaPlaybackEnabled(true);
@@ -940,6 +1060,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             audio.src = objectUrl;
             localAudioReadyKeyRef.current = null;
             localAudioTimelineKeyRef.current = null;
+            nativeAudioHealthRef.current = {
+              lastProgressAtMs: 0,
+              lastCurrentTime: null,
+              hasStarted: false
+            };
             const metadataReady = waitForLocalAudioMetadata(audio);
             audio.load();
             await metadataReady;
@@ -1126,14 +1251,31 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             // overlay while preserving the source-side context guard.
             setAudioUnlocked(true);
           }
-          activeRuntime.setMediaConnectionState("live");
+          const now = Date.now();
+          const nativeHealth = nativeAudioHealthRef.current;
+          const currentTime = Number.isFinite(audio.currentTime) ? audio.currentTime : null;
+          const advanced = currentTime !== null && (
+            nativeHealth.lastCurrentTime === null
+              ? currentTime > 0.01
+              : currentTime > nativeHealth.lastCurrentTime + 0.01
+          );
+          if (advanced) {
+            nativeHealth.lastProgressAtMs = now;
+          }
+          nativeHealth.lastCurrentTime = currentTime;
+          nativeHealth.hasStarted = nativeHealth.hasStarted || !audio.paused;
+          const actuallyPlaying = !audio.paused &&
+            audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+            nativeHealth.hasStarted &&
+            now - nativeHealth.lastProgressAtMs < 1_500;
+          activeRuntime.setMediaConnectionState(actuallyPlaying ? "live" : "buffering");
           setMediaPlayback({
-            state: "live",
+            state: actuallyPlaying ? "live" : "buffering",
             bufferedMs: 0,
             ownedUnitCount: 0,
             totalUnitCount,
             audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-            lastError: null
+            lastError: actuallyPlaying ? null : "音频元素尚未产生实际播放进度。"
           });
         } catch (error) {
           if (cancelled) return;
@@ -1349,6 +1491,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             state: resolveReceiverPlaybackState({
               receiverRtpActive: remote?.receiverRtpActive,
               hasStarted: health.hasStarted,
+              lastProgressAtMs: health.lastProgressAtMs,
               missingMediaSinceMs: missingMediaSinceRef.current,
               nowMs: now
             }),
@@ -1685,15 +1828,28 @@ function idlePlaybackSnapshot(): SegmentedPlaybackSnapshot {
 export function resolveReceiverPlaybackState(input: {
   receiverRtpActive?: boolean;
   hasStarted: boolean;
+  lastProgressAtMs?: number;
   missingMediaSinceMs: number | null;
   nowMs: number;
   graceMs?: number;
 }): "buffering" | "live" {
-  if (input.receiverRtpActive === true) {
-    return "live";
-  }
+  const hasRecentProgress = typeof input.lastProgressAtMs === "number" &&
+    input.nowMs - input.lastProgressAtMs < 1_500;
   if (!input.hasStarted) {
     return "buffering";
+  }
+  if (input.receiverRtpActive === true && hasRecentProgress) {
+    return "live";
+  }
+  // When progress telemetry is available, a live RTP track without a moving
+  // media clock is not audible. Keep a short grace window for jitter, then
+  // expose buffering so the UI does not claim that the member is speaking.
+  if (typeof input.lastProgressAtMs === "number" && !hasRecentProgress) {
+    const staleSince = input.missingMediaSinceMs ?? input.lastProgressAtMs;
+    if (input.nowMs - staleSince >= (input.graceMs ?? receiverBufferingGraceMs)) {
+      return "buffering";
+    }
+    return "live";
   }
   if (input.missingMediaSinceMs === null) {
     return "live";
@@ -1715,6 +1871,51 @@ export function isSegmentedPlaybackAudible(input: {
     !input.isCurrentSource ||
     input.sourceHealth === "source-ready"
   );
+}
+
+export function resolvePlaybackBarrierState(input: {
+  playback: PlaybackSnapshot | null;
+  activeMembers: RoomSnapshot["room"]["members"];
+  readiness: RoomPlaybackReadinessPayload[];
+  cacheEnabled: boolean;
+  nowMs: number;
+}) {
+  const playback = input.playback;
+  if (!input.cacheEnabled || !playback?.currentTrackId || playback.status !== "playing") {
+    return { blocked: false, resumeAtMs: null as number | null };
+  }
+  const current = input.readiness.filter((item) =>
+    item.trackId === playback.currentTrackId && item.mediaEpoch === playback.mediaEpoch
+  );
+  const latestBySession = new Map<string, RoomPlaybackReadinessPayload>();
+  for (const item of current) {
+    const previous = latestBySession.get(item.sessionId);
+    if (!previous || item.updatedAt > previous.updatedAt) {
+      latestBySession.set(item.sessionId, item);
+    }
+  }
+  const activeMembers = input.activeMembers.filter(
+    (member) => member.presenceState === "online" && !!member.peerId
+  );
+  const relevant = activeMembers.map((member) => latestBySession.get(member.id) ?? null);
+  const allReady = activeMembers.length > 0 && relevant.every((item) =>
+    !!item && (!item.cacheEnabled || item.state !== "waiting") && item.barrier === "open"
+  );
+  if (allReady) {
+    const resumeAtMs = relevant.reduce<number | null>((latestResume, item) => {
+      const parsed = item?.resumeAt ? Date.parse(item.resumeAt) : null;
+      if (parsed === null || !Number.isFinite(parsed)) return latestResume;
+      return latestResume === null ? parsed : Math.max(latestResume, parsed);
+    }, null);
+    return {
+      blocked: resumeAtMs !== null && input.nowMs < resumeAtMs,
+      resumeAtMs: Number.isFinite(resumeAtMs) ? resumeAtMs : null
+    };
+  }
+  return {
+    blocked: true,
+    resumeAtMs: null
+  };
 }
 
 function toDiagnosticPlaybackState(state: SegmentedPlaybackSnapshot["state"]) {

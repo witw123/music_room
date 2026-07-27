@@ -5,6 +5,7 @@ import {
   resolveRoomAudioPath,
   resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
+  resolvePlaybackBarrierState,
   resolveRoomAudioPositionMs,
   shouldDisableSourcePlayback,
   shouldWaitForLocalAudioContext
@@ -73,6 +74,16 @@ describe("receiver playback state", () => {
     })).toBe("live");
   });
 
+  it("reports buffering when RTP is live but the media clock has stalled", () => {
+    expect(resolveReceiverPlaybackState({
+      receiverRtpActive: true,
+      hasStarted: true,
+      lastProgressAtMs: 10_000,
+      missingMediaSinceMs: null,
+      nowMs: 13_000
+    })).toBe("buffering");
+  });
+
   it("shows buffering only after the receiver gap exceeds the grace period", () => {
     expect(resolveReceiverPlaybackState({
       receiverRtpActive: false,
@@ -89,6 +100,61 @@ describe("receiver playback state", () => {
       missingMediaSinceMs: null,
       nowMs: 10_000
     })).toBe("buffering");
+  });
+});
+
+describe("room playback cache barrier", () => {
+  const playback = {
+    currentTrackId: "track-1",
+    mediaEpoch: 4,
+    status: "playing"
+  } as never;
+  const member = (id: string) => ({
+    id,
+    peerId: `peer-${id}`,
+    presenceState: "online"
+  });
+  const readiness = (sessionId: string, state: "waiting" | "ready", barrier: "waiting" | "open", resumeAt: string | null = null) => ({
+    roomId: "room-1",
+    sessionId,
+    peerId: `peer-${sessionId}`,
+    trackId: "track-1",
+    mediaEpoch: 4,
+    cacheEnabled: true,
+    state,
+    barrier,
+    resumeAt,
+    updatedAt: `${sessionId === "one" ? "2026-07-27T00:00:01.000Z" : "2026-07-27T00:00:02.000Z"}`
+  });
+
+  it("blocks until every online member is ready", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [readiness("one", "ready", "open"), readiness("two", "waiting", "waiting")],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:03.000Z")
+    }).blocked).toBe(true);
+  });
+
+  it("waits for the shared resume time after the barrier opens", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one")] as never,
+      readiness: [readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z")],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
+    }).blocked).toBe(true);
+  });
+
+  it("opens after the shared resume time", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one")] as never,
+      readiness: [readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z")],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:06.000Z")
+    }).blocked).toBe(false);
   });
 });
 

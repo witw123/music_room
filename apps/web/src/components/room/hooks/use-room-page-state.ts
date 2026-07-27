@@ -5,7 +5,8 @@ import type {
   IceConfigResponse,
   RoomMediaConnectionState,
   RoomSnapshot,
-  Playlist
+  Playlist,
+  RoomPlaybackReadinessPayload
 } from "@music-room/shared";
 import type { PlaybackStartRequest } from "@/features/playback/playback-start-request";
 
@@ -39,6 +40,7 @@ export type RoomPageState = {
   playlists: Playlist[];
   connectedPeers: string[];
   mediaConnectedPeers: string[];
+  playbackReadiness: RoomPlaybackReadinessPayload[];
   suppressRoomRecovery: boolean;
   isRecoveringRoom: boolean;
   isNavigatingRoomExit: boolean;
@@ -89,6 +91,7 @@ export function createInitialRoomPageState(input: {
     playlists: [],
     connectedPeers: [],
     mediaConnectedPeers: [],
+    playbackReadiness: [],
     suppressRoomRecovery: false,
     isRecoveringRoom: false,
     isNavigatingRoomExit: false,
@@ -219,6 +222,11 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
     (value: SetStateAction<number>) => dispatch({ type: "set", key: "volume", value }),
     []
   );
+  const setPlaybackReadiness = useCallback(
+    (value: SetStateAction<RoomPlaybackReadinessPayload[]>) =>
+      dispatch({ type: "set", key: "playbackReadiness", value }),
+    []
+  );
   const setPlayerResetEpoch = useCallback(
     (value: SetStateAction<number>) => dispatch({ type: "set", key: "playerResetEpoch", value }),
     []
@@ -254,6 +262,7 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
     setPlaylists,
     setConnectedPeers,
     setMediaConnectedPeers,
+    setPlaybackReadiness,
     setSuppressRoomRecovery,
     setIsRecoveringRoom,
     setIsNavigatingRoomExit,

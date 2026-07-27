@@ -221,6 +221,7 @@ function getDiagnosticPriority(peerId: string, sourcePeerId: string | null) {
 export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"]) {
   return new Set(
     members
+      .filter((member) => member.presenceState === "online")
       .map((member) => member.peerId)
       .filter((memberPeerId): memberPeerId is string => !!memberPeerId)
   );

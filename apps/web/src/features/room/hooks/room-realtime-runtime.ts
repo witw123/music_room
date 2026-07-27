@@ -6,6 +6,7 @@ import type {
   PeerDiagnosticsSnapshot,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
+  RoomPlaybackReadinessPayload,
   RoomTrackDeletedPayload,
   RoomSnapshotMissingPayload,
   RoomSnapshot
@@ -173,6 +174,7 @@ type RoomRealtimeRuntimeInput = {
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
+  setPlaybackReadiness: Dispatch<SetStateAction<RoomPlaybackReadinessPayload[]>>;
   setStatusMessage: (value: string) => void;
   isNavigatingRoomExit: boolean;
   audioUnlocked: boolean;
@@ -524,6 +526,19 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
   });
 
+  socket.on("room.playback.readiness", (payload) => {
+    if (
+      payload.roomId !== input.roomId ||
+      input.activeRouteRoomIdRef.current !== input.roomId
+    ) {
+      return;
+    }
+    input.setPlaybackReadiness((current) => [
+      ...current.filter((item) => item.sessionId !== payload.sessionId),
+      payload
+    ]);
+  });
+
   socket.on("room.track.deleted", (payload: RoomTrackDeletedPayload) => {
     if (payload.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
@@ -648,6 +663,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   return () => {
     clearSubscribeTimers();
     input.stopPresenceHeartbeat();
+    input.setPlaybackReadiness([]);
     input.resubscribeRoomRef.current = null;
     socket.emit("room.unsubscribe", { roomId: input.roomId });
     socket.removeAllListeners();

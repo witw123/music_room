@@ -11,7 +11,8 @@ import {
 import type {
   AuthSession,
   IceConfigResponse,
-  RoomSnapshot
+  RoomSnapshot,
+  RoomPlaybackReadinessPayload
 } from "@music-room/shared";
 import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -90,6 +91,7 @@ type UseRoomRuntimeInput = {
   connectedPeers: string[];
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
+  setPlaybackReadiness: Dispatch<SetStateAction<RoomPlaybackReadinessPayload[]>>;
   suppressRoomRecovery: boolean;
   setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
   setIsRecoveringRoom: Dispatch<SetStateAction<boolean>>;
@@ -173,6 +175,7 @@ export function useRoomRuntime({
   connectedPeers,
   setConnectedPeers,
   setMediaConnectedPeers,
+  setPlaybackReadiness,
   suppressRoomRecovery,
   setSuppressRoomRecovery,
   setIsRecoveringRoom,
@@ -541,6 +544,7 @@ export function useRoomRuntime({
       withSupervisorDiagnosticPatch,
       setConnectedPeers,
       setMediaConnectedPeers,
+      setPlaybackReadiness,
       isPageVisible: realtimeRuntimeState.isPageVisible,
       playbackStatus: realtimeRuntimeState.playbackStatus ?? "paused",
       currentTrackId: realtimeRuntimeState.currentTrackId,
@@ -597,6 +601,7 @@ export function useRoomRuntime({
     clearSocketDisconnectGrace,
     setConnectedPeers,
     setMediaConnectedPeers,
+    setPlaybackReadiness,
     setRoomRecoveryState,
     setStatusMessage,
     updateConnectionSupervisorSignalState,

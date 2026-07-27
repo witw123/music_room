@@ -2,6 +2,7 @@ export const roomSnapshotChannel = "music-room:room-snapshot";
 export const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
 export const roomDeletedChannel = "music-room:room-deleted";
 export const roomPlaybackPatchChannel = "music-room:room-playback-patch";
+export const roomPlaybackReadinessChannel = "music-room:room-playback-readiness";
 export const roomQueuePatchChannel = "music-room:room-queue-patch";
 export const roomPresencePatchChannel = "music-room:room-presence-patch";
 export const roomLibraryPatchChannel = "music-room:room-library-patch";

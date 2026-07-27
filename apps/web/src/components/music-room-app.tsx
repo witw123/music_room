@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { usePeerDiagnostics } from "@/features/p2p";
 import { RoomAppShell } from "@/components/room/RoomAppShell";
 import { useRouter } from "next/navigation";
@@ -20,6 +20,7 @@ import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries"
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
 import type { Route } from "next";
+import type { RoomPlaybackReadinessInputPayload } from "@music-room/shared";
 import {
   awayRoomChangeEvent,
   clearAwayRoomId,
@@ -163,6 +164,9 @@ export function MusicRoomApp({
   const appRefs = useRoomAppRefs({
     roomPlayback: pageDerived.roomPlayback
   });
+  const publishPlaybackReadiness = useCallback((payload: RoomPlaybackReadinessInputPayload) => {
+    appRefs.socketRef.current?.emit("room.playback.readiness", payload);
+  }, [appRefs.socketRef]);
 
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
     usePeerDiagnostics({
@@ -278,6 +282,7 @@ export function MusicRoomApp({
     connectedPeers: pageState.connectedPeers,
     setConnectedPeers: pageState.setConnectedPeers,
     setMediaConnectedPeers: pageState.setMediaConnectedPeers,
+    setPlaybackReadiness: pageState.setPlaybackReadiness,
     suppressRoomRecovery: pageState.suppressRoomRecovery,
     setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
     setIsRecoveringRoom: pageState.setIsRecoveringRoom,
@@ -322,7 +327,10 @@ export function MusicRoomApp({
     setLastSourceStartError: pageState.setLastSourceStartError,
     setStatusMessage,
     recordPeerDiagnostic,
-    audibleRef: localAudibleRef
+    audibleRef: localAudibleRef,
+    playbackReadiness: pageState.playbackReadiness,
+    publishPlaybackReadiness,
+    activeSessionId: activeSession?.userId ?? null
   });
   const playbackActions = useRoomPlaybackActions({
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,

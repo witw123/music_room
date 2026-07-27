@@ -14,6 +14,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.snapshot.missing"),
   z.literal("room.deleted"),
   z.literal("room.playback.patch"),
+  z.literal("room.playback.readiness"),
   z.literal("room.queue.patch"),
   z.literal("room.presence.patch"),
   z.literal("room.library.patch"),
@@ -118,6 +119,29 @@ export const roomLibraryPatchPayloadSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+export const roomPlaybackReadinessPayloadSchema = z.object({
+  roomId: z.string(),
+  sessionId: z.string(),
+  peerId: z.string(),
+  trackId: z.string().nullable(),
+  mediaEpoch: z.number().int().nonnegative(),
+  cacheEnabled: z.boolean(),
+  state: z.enum(["waiting", "ready", "failed"]),
+  barrier: z.enum(["waiting", "open"]),
+  resumeAt: z.string().datetime().nullable(),
+  updatedAt: z.string().datetime()
+});
+
+export const roomPlaybackReadinessInputPayloadSchema = roomPlaybackReadinessPayloadSchema.pick({
+  roomId: true,
+  sessionId: true,
+  peerId: true,
+  trackId: true,
+  mediaEpoch: true,
+  cacheEnabled: true,
+  state: true
+});
+
 export const roomTrackDeletedPayloadSchema = roomTrackDeletionSchema.extend({
   roomId: z.string()
 });
@@ -167,6 +191,11 @@ export const roomLibraryPatchEventSchema = z.object({
   payload: roomLibraryPatchPayloadSchema
 });
 
+export const roomPlaybackReadinessEventSchema = z.object({
+  event: z.literal("room.playback.readiness"),
+  payload: roomPlaybackReadinessPayloadSchema
+});
+
 export const roomTrackDeletedEventSchema = z.object({
   event: z.literal("room.track.deleted"),
   payload: roomTrackDeletedPayloadSchema
@@ -213,6 +242,8 @@ export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPaylo
 export type RoomDeletedPayload = z.infer<typeof roomDeletedPayloadSchema>;
 export type RoomSessionReplacedPayload = z.infer<typeof roomSessionReplacedPayloadSchema>;
 export type RoomPlaybackPatchPayload = z.infer<typeof roomPlaybackPatchPayloadSchema>;
+export type RoomPlaybackReadinessPayload = z.infer<typeof roomPlaybackReadinessPayloadSchema>;
+export type RoomPlaybackReadinessInputPayload = z.infer<typeof roomPlaybackReadinessInputPayloadSchema>;
 export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
@@ -228,6 +259,7 @@ export type ServerToClientEvents = {
   "room.deleted": (payload: RoomDeletedPayload) => void;
   "room.session.replaced": (payload: RoomSessionReplacedPayload) => void;
   "room.playback.patch": (payload: RoomPlaybackPatchPayload) => void;
+  "room.playback.readiness": (payload: RoomPlaybackReadinessPayload) => void;
   "room.queue.patch": (payload: RoomQueuePatchPayload) => void;
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
@@ -250,4 +282,8 @@ export type ClientToServerEvents = {
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatInputPayload) => void;
   "diagnostics.report": (payload: DiagnosticsReportPayload) => void;
+  "room.playback.readiness": (
+    payload: RoomPlaybackReadinessInputPayload,
+    ack?: (payload: RoomPlaybackReadinessPayload) => void
+  ) => void;
 };

@@ -225,7 +225,14 @@ export function createRoomDataMeshRuntime(input: {
         if (linkKind === "media") {
           input.setMediaConnectedPeers((current) => {
             const next = new Set(current);
-            if (state === "connected") next.add(peerId);
+            if (state === "connected") {
+              const media = input.meshRef.current?.getPeerMediaState(peerId);
+              const operational = media?.receiverTrackState === "live" &&
+                media.receiverRtpActive === true ||
+                media?.senderTrackState === "live";
+              if (operational) next.add(peerId);
+              else next.delete(peerId);
+            }
             else next.delete(peerId);
             return [...next];
           });
@@ -312,6 +319,20 @@ export function createRoomDataMeshRuntime(input: {
         });
         const isMediaSample = linkKind === "media";
         if (isMediaSample) {
+          // RTP activity can become usable after the peer connection reaches
+          // `connected`. Re-evaluate the transport on every media sample so
+          // the member count follows the actual receiver/sender state rather
+          // than the earlier ICE transition alone.
+          input.setMediaConnectedPeers((current) => {
+            const next = new Set(current);
+            const media = input.meshRef.current?.getPeerMediaState(peerId);
+            const operational = (media?.receiverTrackState === "live" &&
+              media.receiverRtpActive === true) ||
+              media?.senderTrackState === "live";
+            if (operational) next.add(peerId);
+            else next.delete(peerId);
+            return [...next];
+          });
           playbackBandwidthMonitor.update(peerId, {
             availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
             mediaReceiveBitrateKbps: sample.mediaReceiveBitrateKbps,
@@ -405,6 +426,18 @@ export function createRoomDataMeshRuntime(input: {
                   : snapshot.mediaConnectionState,
           })
         });
+        if (direction === "receiver") {
+          input.setMediaConnectedPeers((current) => {
+            const next = new Set(current);
+            const media = input.meshRef.current?.getPeerMediaState(peerId);
+            const operational = (media?.receiverTrackState === "live" &&
+              media.receiverRtpActive === true) ||
+              media?.senderTrackState === "live";
+            if (state === "live" && operational) next.add(peerId);
+            else if (state !== "live") next.delete(peerId);
+            return [...next];
+          });
+        }
       },
       onMediaRecovery: ({ peerId, reason, restartCount }) => {
         const currentSupervisorState =
