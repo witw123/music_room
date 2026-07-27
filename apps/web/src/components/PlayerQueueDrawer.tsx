@@ -212,7 +212,7 @@ export function PlayerQueueDrawer({
                           variant="ghost"
                         >
                           <svg aria-hidden="true" data-testid="queue-item-next-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
-                            <path d="M3 5h10v2H3zm0 6h8v2H3zm0 6h6v2H3zM16 5l6 7-6 7v-4h-3V9h3z" />
+                            <path d="M4 5v14l10-7zm13 0h3v14h-3z" />
                           </svg>
                         </Button>
                       ) : null}

@@ -22,6 +22,7 @@ type ImmersivePlayerOverlayProps = {
   isPlaying: boolean;
   positionMs: number;
   currentTrack: TrackMeta | null;
+  artworkUrl: string | null;
   canControlPlayback: boolean;
   canSeekPlayback: boolean;
   playbackTrackId: string | null | undefined;
@@ -57,6 +58,7 @@ export function ImmersivePlayerOverlay({
   isPlaying,
   positionMs,
   currentTrack,
+  artworkUrl,
   canControlPlayback,
   canSeekPlayback,
   playbackTrackId,
@@ -119,7 +121,7 @@ export function ImmersivePlayerOverlay({
 
   const sourceProvider = currentTrack?.sourceRef?.provider;
   const sourceTrackId = currentTrack?.sourceRef?.trackId;
-  const artworkPalette = useArtworkPalette(currentTrack?.artworkUrl);
+  const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
 
   return (
@@ -131,11 +133,11 @@ export function ImmersivePlayerOverlay({
       role="dialog"
       style={{ backgroundColor: artworkPalette.background }}
     >
-      {currentTrack?.artworkUrl ? (
+      {artworkUrl ? (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -inset-[8%] z-0 scale-110 bg-cover bg-center opacity-35 blur-3xl transition-[opacity,transform] duration-700 motion-reduce:transition-none"
-          style={{ backgroundImage: `url("${getArtworkSourceUrl(currentTrack.artworkUrl)}")` }}
+          style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
         />
       ) : null}
       <div
@@ -153,7 +155,7 @@ export function ImmersivePlayerOverlay({
 
       <MobileImmersivePlayer
         artworkPalette={artworkPalette}
-        artworkUrl={currentTrack?.artworkUrl ?? null}
+        artworkUrl={artworkUrl}
         canControlPlayback={canControlPlayback}
         canRemoveQueue={canRemoveQueue}
         canReorderQueue={canReorderQueue}
@@ -208,7 +210,7 @@ export function ImmersivePlayerOverlay({
         <div className="relative flex min-h-0 w-full min-w-0 items-center justify-center">
           <DesktopImmersivePlayer
             artworkPalette={artworkPalette}
-            artworkUrl={currentTrack?.artworkUrl ?? null}
+            artworkUrl={artworkUrl}
             canControlPlayback={canControlPlayback}
             canSeekPlayback={canSeekPlayback}
             currentTrack={currentTrack}

@@ -19,6 +19,7 @@ import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { resolvePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
@@ -126,7 +127,9 @@ function RoomStageBase({
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
-  const artworkUrl = currentTrack?.artworkUrl ?? cachedArtworkUrl;
+  const artworkUrl = resolvePreferredArtworkUrl(cachedArtworkUrl, currentTrack?.artworkUrl)
+    ?? cachedArtworkUrl
+    ?? null;
   const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
   const recordSize = ultraCompactStage

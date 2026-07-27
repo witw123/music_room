@@ -21,6 +21,7 @@ import {
   requestMiniPlayerWindow
 } from "@/components/bottom-player/MiniPlayerOverlay";
 import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
+import { usePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
@@ -172,7 +173,8 @@ function BottomPlayerBase({
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
   const album = currentTrack?.album ?? "未知专辑";
   const playbackMode = playback?.playbackMode ?? "sequence";
-  const artworkPalette = useArtworkPalette(currentTrack?.artworkUrl);
+  const artworkUrl = usePreferredArtworkUrl(currentTrack);
+  const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
   const { activeSession } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
@@ -435,7 +437,7 @@ function BottomPlayerBase({
         onToggleLyrics={onToggleLyrics}
         artworkAccent={artworkPalette.accent}
         artworkAccentSoft={artworkPalette.accentSoft}
-        artworkUrl={currentTrack?.artworkUrl ?? null}
+        artworkUrl={artworkUrl}
         playerStyle={playerStyle}
         mobileVariant={mobileVariant}
       />
@@ -476,7 +478,7 @@ function BottomPlayerBase({
         onToggleLyrics={onToggleLyrics}
         artworkAccent={artworkPalette.accent}
         artworkAccentSoft={artworkPalette.accentSoft}
-        artworkUrl={currentTrack?.artworkUrl ?? null}
+        artworkUrl={artworkUrl}
         playerStyle={playerStyle}
         mobileVariant={mobileVariant}
         favoriteTrack={favoriteTrack}
@@ -512,6 +514,7 @@ function BottomPlayerBase({
       isPlaying={isPlaying}
       positionMs={boundedProgressMs}
       currentTrack={currentTrack}
+      artworkUrl={artworkUrl}
       canControlPlayback={canControlPlayback}
       canSeekPlayback={canSeekPlayback && canControlPlayback}
       playbackTrackId={playback?.currentTrackId}
@@ -551,7 +554,7 @@ function BottomPlayerBase({
       artist={artist}
       positionMs={boundedProgressMs}
       durationMs={currentTrackDuration}
-      artworkUrl={currentTrack?.artworkUrl ?? null}
+      artworkUrl={artworkUrl}
       setSeekDraft={setSeekDraft}
       commitSeek={commitSeek}
       onPrev={playPrev}
