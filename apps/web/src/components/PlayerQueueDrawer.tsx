@@ -10,10 +10,12 @@ type PlayerQueueDrawerProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
+  nextQueueItemId: string | null;
   canControlPlayback: boolean;
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   accentColor?: string;
@@ -26,10 +28,12 @@ export function PlayerQueueDrawer({
   queue,
   tracks,
   currentQueueItemId,
+  nextQueueItemId,
   canControlPlayback,
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
   accentColor = "rgb(0 148 255)",
@@ -117,6 +121,7 @@ export function PlayerQueueDrawer({
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;
                 const isCurrent = currentQueueItemId === item.id;
+                const isNext = nextQueueItemId === item.id;
                 const title = track?.title ?? "未知曲目";
                 const artistName = track?.artist?.trim() || "未知歌手";
                 const albumName = track?.album?.trim() || "未知专辑";
@@ -189,6 +194,26 @@ export function PlayerQueueDrawer({
                             <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="m6 10 6 6 6-6" /></svg>
                           </Button>
                         </div>
+                      ) : null}
+                      {canControlPlayback ? (
+                        <Button
+                          aria-label={`将《${title}》设为下一首播放`}
+                          className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300 sm:h-8 sm:w-8"
+                          data-testid="queue-item-next-button"
+                          disabled={isCurrent || isNext || isPending}
+                          onClick={() => void onPlayNextQueueItem(item.id)}
+                          title="下一首播放"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
+                            <path d="M4 6h8" />
+                            <path d="M4 12h8" />
+                            <path d="M4 18h6" />
+                            <path d="M15 15h6" />
+                            <path d="m18 12 3 3-3 3" />
+                          </svg>
+                        </Button>
                       ) : null}
                       <Button
                         variant="ghost"

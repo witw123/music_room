@@ -135,6 +135,10 @@ describe("BottomPlayer source", () => {
     expect(queueSource).toContain('data-testid="queue-item-artwork"');
     expect(queueSource).toContain("getArtworkSourceUrl");
     expect(queueSource).toContain("const albumName = track?.album?.trim() || \"未知专辑\"");
+    expect(queueSource).toContain('data-testid="queue-item-next-button"');
+    expect(queueSource).toContain('title="下一首播放"');
+    expect(queueSource).toContain("onPlayNextQueueItem");
+    expect(queueSource).not.toContain("function playNextQueueItem");
     expect(playerSource).toContain("requestMiniPlayerWindow()");
     expect(playerSource).toContain("pipWindow={miniPlayerWindow}");
   });

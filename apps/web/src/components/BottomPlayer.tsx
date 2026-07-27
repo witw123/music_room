@@ -51,9 +51,11 @@ type BottomPlayerProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
+  nextQueueItemId: string | null;
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isLyricsOpen?: boolean;
@@ -90,9 +92,11 @@ function BottomPlayerBase({
   queue,
   tracks,
   currentQueueItemId,
+  nextQueueItemId,
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
   isLyricsOpen = false,
@@ -391,7 +395,7 @@ function BottomPlayerBase({
       ) : null}
 
       <div
-        className="relative z-10 flex h-full min-h-0 w-full min-w-0 flex-col justify-center overflow-hidden"
+        className="relative z-10 flex h-full min-h-0 w-full min-w-0 flex-col justify-center overflow-visible"
         data-custom-layout-player-content="true"
       >
       <MobileBottomPlayerLayout
@@ -416,9 +420,11 @@ function BottomPlayerBase({
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}
+        nextQueueItemId={nextQueueItemId}
         canReorderQueue={canReorderQueue}
         canRemoveQueue={canRemoveQueue}
         onPlayQueueItem={onPlayQueueItem}
+        onPlayNextQueueItem={onPlayNextQueueItem}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
@@ -455,9 +461,11 @@ function BottomPlayerBase({
         queue={queue}
         tracks={tracks}
         currentQueueItemId={currentQueueItemId}
+        nextQueueItemId={nextQueueItemId}
         canReorderQueue={canReorderQueue}
         canRemoveQueue={canRemoveQueue}
         onPlayQueueItem={onPlayQueueItem}
+        onPlayNextQueueItem={onPlayNextQueueItem}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
         isImmersiveOpen={isImmersiveOpen}
@@ -520,9 +528,11 @@ function BottomPlayerBase({
       queue={queue}
       tracks={tracks}
       currentQueueItemId={currentQueueItemId}
+      nextQueueItemId={nextQueueItemId}
       canReorderQueue={canReorderQueue}
       canRemoveQueue={canRemoveQueue}
       onPlayQueueItem={onPlayQueueItem}
+      onPlayNextQueueItem={onPlayNextQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
       onReorderQueue={onReorderQueue}
       favoriteTrack={favoriteTrack}

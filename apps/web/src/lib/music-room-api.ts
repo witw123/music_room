@@ -307,6 +307,11 @@ export const musicRoomApi = {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
+  setNextQueueItem: (roomId: string, payload: { queueItemId: string }) =>
+    request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/next`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   removeQueueItem: (roomId: string, queueItemId: string) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/${queueItemId}`, {
       method: "DELETE"

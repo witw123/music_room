@@ -141,6 +141,12 @@ export const reorderQueueRequestSchema = z
   })
   .strict();
 
+export const setNextQueueItemRequestSchema = z
+  .object({
+    queueItemId: stringId
+  })
+  .strict();
+
 export const updatePlaybackRequestSchema = z
   .object({
     action: z.enum(["play", "pause", "seek", "next", "prev", "gapless-next", "set-mode"]),
@@ -206,6 +212,7 @@ export type JoinRoomByCodeRequest = z.infer<typeof joinRoomByCodeRequestSchema>;
 export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;
 export type ReorderQueueRequest = z.infer<typeof reorderQueueRequestSchema>;
+export type SetNextQueueItemRequest = z.infer<typeof setNextQueueItemRequestSchema>;
 export type UpdatePlaybackRequest = z.infer<typeof updatePlaybackRequestSchema>;
 export type CreatePlaylistRequest = z.infer<typeof createPlaylistRequestSchema>;
 export type UpdatePlaylistRequest = z.infer<typeof updatePlaylistRequestSchema>;

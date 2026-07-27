@@ -148,6 +148,26 @@ describe("RoomPlaybackService gapless playback", () => {
     expect(room.room.playback.sourcePeerId).toBeNull();
   });
 
+  it("plays the selected next item without changing queue order", async () => {
+    const room = record(0);
+    room.room.playback.nextQueueItemId = "queue_2";
+    const originalQueueIds = room.queue.map((item) => item.id);
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([[
+        "owner",
+        "peer-owner"
+      ]])
+    } as never);
+
+    const snapshot = await service.updatePlayback(room, { action: "next" });
+
+    expect(snapshot.currentQueueItemId).toBe("queue_2");
+    expect(snapshot.currentTrackId).toBe("track_2");
+    expect(snapshot.nextQueueItemId).toBeNull();
+    expect(room.queue.map((item) => item.id)).toEqual(originalQueueIds);
+    expect(room.queue.map((item) => item.position)).toEqual([0, 1]);
+  });
+
   it("plays each unique track once per shuffle cycle and avoids a boundary repeat", async () => {
     const room = record(0);
     const extraTracks = ["track_3", "track_4"].map((id) => track(id, "owner", 7_000));

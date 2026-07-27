@@ -176,6 +176,7 @@ export function isSamePlaybackSnapshot(
     current.playbackRevision === incoming.playbackRevision &&
     current.mediaEpoch === incoming.mediaEpoch &&
     (current.playbackMode ?? "sequence") === (incoming.playbackMode ?? "sequence") &&
+    (current.nextQueueItemId ?? null) === (incoming.nextQueueItemId ?? null) &&
     JSON.stringify(current.gaplessNext ?? null) === JSON.stringify(incoming.gaplessNext ?? null)
   );
 }

@@ -9,7 +9,11 @@ import {
   Post,
   UnauthorizedException
 } from "@nestjs/common";
-import { addQueueItemRequestSchema, reorderQueueRequestSchema } from "@music-room/shared";
+import {
+  addQueueItemRequestSchema,
+  reorderQueueRequestSchema,
+  setNextQueueItemRequestSchema
+} from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
@@ -81,6 +85,22 @@ export class QueueController {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(reorderQueueRequestSchema, body);
     await this.roomService.reorderQueue(roomId, userId, payload.queueItemIds);
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
+  }
+
+  @Patch("next")
+  async setNextQueueItem(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: { queueItemId: string }
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(setNextQueueItemRequestSchema, body);
+    await this.roomService.setNextQueueItem(roomId, userId, payload.queueItemId);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
       queue: snapshot.queue,

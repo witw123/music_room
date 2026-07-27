@@ -72,6 +72,7 @@ type LocalPlayerContextValue = {
   onNext: () => void;
   onCyclePlaybackMode: () => void;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
@@ -86,6 +87,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const playbackSequenceKindRef = useRef<"queue" | "direct" | "playlist">("direct");
   const currentRecordRef = useRef<LocalPlaylistTrackRecord | null>(null);
   const currentIndexRef = useRef(0);
+  const nextQueueItemIdRef = useRef<string | null>(null);
   const shuffleBagRef = useRef<string[]>([]);
   const playRequestRef = useRef(0);
   const metadataEnrichedHashesRef = useRef(new Set<string>());
@@ -215,7 +217,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         queueVersion: 1,
         playbackRevision: revisionRef.current,
         mediaEpoch: mediaEpochRef.current,
-        playbackMode
+        playbackMode,
+        nextQueueItemId: nextQueueItemIdRef.current
       };
     },
     [playbackMode]
@@ -334,6 +337,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     startIndex = 0,
     sequenceKind: "queue" | "direct" | "playlist" = "direct"
   ) => {
+    nextQueueItemIdRef.current = null;
     let nextRecords = records.filter((track, index, list) =>
       list.findIndex((candidate) => candidate.id === track.id) === index
     );
@@ -504,7 +508,14 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       const records = queueRef.current.length > 0
         ? queueRef.current
         : await refreshLibraryRecords().catch(() => libraryRecords);
-      const firstQueueIndex = records.findIndex((track) => Boolean(track.fileHash));
+      const preferredQueueIndex = nextQueueItemIdRef.current
+        ? records.findIndex(
+            (track) => buildLocalQueueItemId(track.id) === nextQueueItemIdRef.current
+          )
+        : -1;
+      const firstQueueIndex = preferredQueueIndex >= 0
+        ? preferredQueueIndex
+        : records.findIndex((track) => Boolean(track.fileHash));
       if (firstQueueIndex >= 0) {
         if (queueRef.current.length === 0) {
           queueRef.current = records;
@@ -540,6 +551,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
   const clearCurrentPlayback = useCallback(() => {
     playRequestRef.current += 1;
+    nextQueueItemIdRef.current = null;
     const audio = audioRef.current;
     audio?.pause();
     if (audio) {
@@ -628,9 +640,25 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     });
   }, [findPlayableIndex, onSeek, playRecords]);
 
-  const onNext = useCallback(() => {
+  const onNext = useCallback(async () => {
+    const records = playbackRecordsRef.current;
+    const queuedNextId = nextQueueItemIdRef.current;
+    if (queuedNextId) {
+      nextQueueItemIdRef.current = null;
+      const nextIndex = records.findIndex(
+        (track) => buildLocalQueueItemId(track.id) === queuedNextId
+      );
+      const currentId = currentRecordRef.current?.id ?? null;
+      if (nextIndex >= 0 && records[nextIndex]?.id !== currentId) {
+        const candidateFile = await loadAudioFile(records[nextIndex]!).catch(() => null);
+        if (candidateFile) {
+          await playRecords(records, nextIndex, playbackSequenceKindRef.current);
+          return;
+        }
+      }
+    }
+
     if (playbackMode === "shuffle") {
-      const records = playbackRecordsRef.current;
       const currentTrackId = records[currentIndexRef.current]?.id ?? currentRecordRef.current?.id ?? null;
       const selection = takeNextShuffleTrack(
         records,
@@ -661,7 +689,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
         stopAtEnd();
       }
     });
-  }, [findPlayableIndex, isTrackPlayable, playbackMode, playRecords, stopAtEnd]);
+  }, [findPlayableIndex, isTrackPlayable, loadAudioFile, playbackMode, playRecords, stopAtEnd]);
 
   const onCyclePlaybackMode = useCallback(() => {
     const nextMode = playbackMode === "sequence" ? "shuffle" : playbackMode === "shuffle" ? "single" : "sequence";
@@ -670,7 +698,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   }, [playbackMode]);
 
   const handleAudioEnded = useCallback(() => {
-    if (playbackMode === "single") {
+    if (playbackMode === "single" && !nextQueueItemIdRef.current) {
       void playRecords(
         playbackRecordsRef.current,
         currentIndexRef.current,
@@ -732,11 +760,42 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     if (index >= 0) await playRecords(queueRef.current, index, "queue");
   }, [playRecords]);
 
+  const onPlayNextQueueItem = useCallback(async (queueItemId: string) => {
+    const index = queueRef.current.findIndex(
+      (track) => buildLocalQueueItemId(track.id) === queueItemId
+    );
+    const currentQueueItemId = currentRecordRef.current
+      ? buildLocalQueueItemId(currentRecordRef.current.id)
+      : null;
+    if (index < 0 || queueItemId === currentQueueItemId) return;
+
+    nextQueueItemIdRef.current = queueItemId;
+    setPlayback((current) => current
+      ? {
+          ...current,
+          nextQueueItemId: queueItemId,
+          playbackRevision: current.playbackRevision + 1
+        }
+      : current
+    );
+  }, []);
+
   const onRemoveQueueItem = useCallback(async (queueItemId: string) => {
     const index = queueRef.current.findIndex((track) => buildLocalQueueItemId(track.id) === queueItemId);
     if (index < 0) return;
     const removedTrack = queueRef.current[index];
     const nextRecords = queueRef.current.filter((_, itemIndex) => itemIndex !== index);
+    if (nextQueueItemIdRef.current === queueItemId) {
+      nextQueueItemIdRef.current = null;
+      setPlayback((current) => current
+        ? {
+            ...current,
+            nextQueueItemId: null,
+            playbackRevision: current.playbackRevision + 1
+          }
+        : current
+      );
+    }
     shuffleBagRef.current = shuffleBagRef.current.filter((trackId) => trackId !== removedTrack.id);
     queueRef.current = nextRecords;
     setQueueRecords(nextRecords);
@@ -838,6 +897,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     onNext,
     onCyclePlaybackMode,
     onPlayQueueItem,
+    onPlayNextQueueItem,
     onRemoveQueueItem,
     onReorderQueue
   }), [
@@ -851,6 +911,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     onPause,
     onPlay,
     onPlayQueueItem,
+    onPlayNextQueueItem,
     onPrev,
     onRemoveQueueItem,
     onReorderQueue,

@@ -36,6 +36,9 @@ export const playbackSnapshotSchema = z.object({
   playbackMode: playbackModeSchema.optional(),
   // Remaining unique track ids in the current pseudo-random playback cycle.
   shuffleBagTrackIds: z.array(z.string()).optional(),
+  // Queue item selected to play immediately after the current item without
+  // changing the queue's displayed order.
+  nextQueueItemId: z.string().nullable().optional(),
   // The source can schedule this track before the server promotes it.
   gaplessNext: gaplessTransitionSchema.nullable().optional()
 });

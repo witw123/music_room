@@ -432,6 +432,9 @@ export function roomStateReducer(
         .filter((item) => item.trackId !== event.trackId)
         .map((item, index) => ({ ...item, position: index }));
       const isPlayingTrack = snapshot.room.playback.currentTrackId === event.trackId;
+      const isNextTrack = snapshot.room.playback.nextQueueItemId
+        ? nextQueue.some((item) => item.id === snapshot.room.playback.nextQueueItemId)
+        : true;
       return {
         ...current,
         snapshot: {
@@ -449,12 +452,19 @@ export function roomStateReducer(
                   currentQueueItemId: null,
                   playbackAssetId: null,
                   sourceTrackId: null,
+                  nextQueueItemId: null,
                   positionMs: 0,
                   startedAt: null,
                   startAt: null,
                   playbackRevision: snapshot.room.playback.playbackRevision + 1,
                   mediaEpoch: snapshot.room.playback.mediaEpoch + 1
                 }
+              : !isNextTrack
+                ? {
+                    ...snapshot.room.playback,
+                    nextQueueItemId: null,
+                    playbackRevision: snapshot.room.playback.playbackRevision + 1
+                  }
               : snapshot.room.playback
           }
         }

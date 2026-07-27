@@ -226,6 +226,7 @@ export function useRoomPageRoomActions({
     loadPlaylistIntoRoom,
     removeQueueItem,
     reorderQueue,
+    setNextQueueItem,
     setPlaybackMode,
     seekTrack
   } = useRoomActions({
@@ -290,6 +291,7 @@ export function useRoomPageRoomActions({
     refreshPlaylists,
     removeQueueItem,
     reorderQueue,
+    setNextQueueItem,
     setPlaybackMode,
     resetPlayerSurface,
     seekTrack

@@ -73,9 +73,17 @@ export class RoomPlaybackService {
     }
 
     if (input.action === "play") {
-      let nextTrackId = input.trackId ?? playback.currentTrackId ?? record.queue[0]?.trackId ?? null;
+      const queuedNext = playback.nextQueueItemId
+        ? record.queue.find((item) => item.id === playback.nextQueueItemId)
+        : undefined;
+      let nextTrackId =
+        input.trackId ?? playback.currentTrackId ?? queuedNext?.trackId ?? record.queue[0]?.trackId ?? null;
       let nextQueueItemId: string | null =
-        input.queueItemId ?? (input.trackId === undefined ? playback.currentQueueItemId : null);
+        input.queueItemId ?? (
+          input.trackId === undefined
+            ? playback.currentQueueItemId ?? queuedNext?.id ?? null
+            : null
+        );
 
       if (input.queueItemId) {
         const queueItem = record.queue.find((item) => item.id === input.queueItemId);
@@ -233,6 +241,7 @@ export class RoomPlaybackService {
     const startAt = options?.startAt ?? new Date().toISOString();
     playback.startAt = startAt;
     playback.startedAt = startAt;
+    playback.nextQueueItemId = null;
     // Queue-item switches need a media epoch bump so clients remount local
     // playback even when the underlying track asset is unchanged.
     if ((isTrackSwitch || isQueueItemSwitch || isSwitchingSource) && !options?.preserveMediaEpoch) {
@@ -288,6 +297,30 @@ export class RoomPlaybackService {
     direction: "next" | "prev",
     positionMs: number
   ) {
+    if (direction === "next") {
+      const playback = record.room.playback;
+      const queuedNextId = playback.nextQueueItemId;
+      if (queuedNextId) {
+        // Consume the preference before resolving the fallback path. A stale
+        // or offline item must not block the normal playback mode forever.
+        playback.nextQueueItemId = null;
+        const queuedNext = record.queue.find((item) => item.id === queuedNextId);
+        if (
+          queuedNext &&
+          queuedNext.id !== playback.currentQueueItemId &&
+          await this.resolveTrackSourceCandidate(record, queuedNext.trackId)
+        ) {
+          await this.applyTrackPlayback(
+            record,
+            queuedNext.trackId,
+            positionMs,
+            queuedNext.id
+          );
+          return "advanced" as const;
+        }
+      }
+    }
+
     const mode = record.room.playback.playbackMode ?? "sequence";
 
     if (mode === "single") {
@@ -518,6 +551,7 @@ export class RoomPlaybackService {
     playback.status = "paused";
     playback.currentTrackId = null;
     playback.currentQueueItemId = null;
+    playback.nextQueueItemId = null;
     playback.playbackAssetId = null;
     playback.startAt = null;
     playback.sourceSessionId = null;
@@ -709,7 +743,8 @@ export class RoomPlaybackService {
       playback.playbackMode !== "sequence" ||
       !playback.currentTrackId ||
       !playback.startAt ||
-      !playback.sourceSessionId
+      !playback.sourceSessionId ||
+      playback.nextQueueItemId
     ) {
       return null;
     }
@@ -758,7 +793,8 @@ export class RoomPlaybackService {
       playback.playbackMode !== "sequence" ||
       !playback.currentTrackId ||
       !playback.startAt ||
-      !playback.sourceSessionId
+      !playback.sourceSessionId ||
+      playback.nextQueueItemId
     ) {
       return null;
     }

@@ -34,9 +34,11 @@ type LayoutProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
+  nextQueueItemId: string | null;
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isImmersiveOpen: boolean;
@@ -347,9 +349,11 @@ export function MobileBottomPlayerLayout({
   queue,
   tracks,
   currentQueueItemId,
+  nextQueueItemId,
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
@@ -410,12 +414,14 @@ export function MobileBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
+            nextQueueItemId={nextQueueItemId}
             accentColor={artworkAccent}
             accentSoft={artworkAccentSoft}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
+            onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
             compactMobile
@@ -460,12 +466,14 @@ export function MobileBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
+            nextQueueItemId={nextQueueItemId}
             accentColor={artworkAccent}
             accentSoft={artworkAccentSoft}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
+            onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />
@@ -588,9 +596,11 @@ export function DesktopBottomPlayerLayout({
   queue,
   tracks,
   currentQueueItemId,
+  nextQueueItemId,
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
   isImmersiveOpen,
@@ -709,12 +719,14 @@ export function DesktopBottomPlayerLayout({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
+            nextQueueItemId={nextQueueItemId}
             accentColor={artworkAccent}
             accentSoft={artworkAccentSoft}
             canControlPlayback={canControlPlayback}
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
+            onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />

@@ -136,7 +136,8 @@ export class RoomService {
         playbackRevision: 1,
         mediaEpoch: 0,
         playbackMode: "sequence",
-        shuffleBagTrackIds: []
+        shuffleBagTrackIds: [],
+        nextQueueItemId: null
       }
     };
 
@@ -738,6 +739,7 @@ export class RoomService {
 
     const playback = record.room.playback;
     const removesCurrentQueueItem = playback.currentQueueItemId === removed.id;
+    const removesNextQueueItem = playback.nextQueueItemId === removed.id;
     const removesDirectlyPlayingTrack =
       playback.currentQueueItemId === null && playback.currentTrackId === removed.trackId;
 
@@ -752,11 +754,34 @@ export class RoomService {
     }
 
     record.queue = nextQueue;
+    if (removesNextQueueItem) {
+      playback.nextQueueItemId = null;
+    }
     this.roomPlaybackService.syncShuffleBagWithQueue(record);
     this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
+  }
+
+  async setNextQueueItem(roomId: string, actorSessionId: string, queueItemId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, actorSessionId);
+    this.assertPermission(record, actorSessionId, "player");
+
+    const queueItem = record.queue.find((item) => item.id === queueItemId);
+    if (!queueItem) {
+      throw new Error("Queue item not found in this room.");
+    }
+    if (record.room.playback.currentQueueItemId === queueItemId) {
+      throw new Error("The current queue item is already playing.");
+    }
+
+    record.room.playback.nextQueueItemId = queueItemId;
+    this.incrementPlaybackRevision(record.room.playback);
+    this.incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.room.playback;
   }
 
   async reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
@@ -980,6 +1005,14 @@ export class RoomService {
     record.queue = record.queue
       .filter((item) => !trackIds.has(item.trackId))
       .map((item, index) => ({ ...item, position: index }));
+    if (record.room.playback.nextQueueItemId) {
+      const nextQueueItem = record.queue.find(
+        (item) => item.id === record.room.playback.nextQueueItemId
+      );
+      if (!nextQueueItem) {
+        record.room.playback.nextQueueItemId = null;
+      }
+    }
     this.roomPlaybackService.syncShuffleBagWithQueue(record);
 
     if (

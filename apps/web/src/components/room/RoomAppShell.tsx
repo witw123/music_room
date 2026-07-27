@@ -179,6 +179,7 @@ export function RoomAppShell({
         canReorderQueue={canReorderQueue}
         canRemoveQueue={!!activeSession && canReorderQueue}
         onPlayQueueItem={playbackActions.handlePlayQueueItem}
+        onPlayNextQueueItem={roomActions.setNextQueueItem}
         onRemoveQueueItem={roomActions.removeQueueItem}
         onReorderQueue={roomActions.reorderQueue}
         isLyricsOpen={isLyricsOpen}

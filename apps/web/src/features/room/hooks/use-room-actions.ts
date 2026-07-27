@@ -761,6 +761,37 @@ export function useRoomActions({
     [roomSnapshot, activeSession, setStatusMessage, syncRoomSnapshot]
   );
 
+  const setNextQueueItem = useCallback(
+    async (queueItemId: string) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
+
+      try {
+        const result = await musicRoomApi.setNextQueueItem(roomSnapshot.room.id, {
+          queueItemId
+        });
+        dispatchRoomStateEvent({
+          type: "server-queue-patch",
+          roomId: roomSnapshot.room.id,
+          queue: result.queue,
+          playback: result.playback
+        });
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
+        setStatusMessage("已设为下一首播放，队列顺序保持不变。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [
+      activeSession,
+      dispatchRoomStateEvent,
+      roomSnapshot,
+      setStatusMessage,
+      syncRoomSnapshot
+    ]
+  );
+
   const setPlaybackMode = useCallback(
     async (playbackMode: PlaybackMode) => {
       if (!roomSnapshot || !activeSession) {
@@ -867,6 +898,7 @@ export function useRoomActions({
     loadPlaylistIntoRoom,
     removeQueueItem,
     reorderQueue,
+    setNextQueueItem,
     setPlaybackMode,
     seekTrack,
     handleEnded

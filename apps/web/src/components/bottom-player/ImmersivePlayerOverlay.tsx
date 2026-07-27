@@ -38,9 +38,11 @@ type ImmersivePlayerOverlayProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
+  nextQueueItemId: string | null;
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   favoriteTrack: ProviderTrackCandidate | null;
@@ -71,9 +73,11 @@ export function ImmersivePlayerOverlay({
   queue,
   tracks,
   currentQueueItemId,
+  nextQueueItemId,
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
   favoriteTrack,
@@ -155,6 +159,7 @@ export function ImmersivePlayerOverlay({
         canReorderQueue={canReorderQueue}
         canSeekPlayback={canSeekPlayback}
         currentQueueItemId={currentQueueItemId}
+        nextQueueItemId={nextQueueItemId}
         currentTrack={currentTrack}
         durationMs={durationMs}
         isOpen={isOpen}
@@ -164,6 +169,7 @@ export function ImmersivePlayerOverlay({
         onCyclePlaybackMode={onCyclePlaybackMode}
         onNext={onNext}
         onPlayQueueItem={onPlayQueueItem}
+        onPlayNextQueueItem={onPlayNextQueueItem}
         onPrev={onPrev}
         onRemoveQueueItem={onRemoveQueueItem}
         onReorderQueue={onReorderQueue}
@@ -223,9 +229,11 @@ export function ImmersivePlayerOverlay({
             queue={queue}
             tracks={tracks}
             currentQueueItemId={currentQueueItemId}
+            nextQueueItemId={nextQueueItemId}
             canReorderQueue={canReorderQueue}
             canRemoveQueue={canRemoveQueue}
             onPlayQueueItem={onPlayQueueItem}
+            onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
             setSeekDraft={setSeekDraft}
@@ -261,6 +269,7 @@ function MobileImmersivePlayer({
   canSeekPlayback,
   commitSeek,
   currentQueueItemId,
+  nextQueueItemId,
   currentTrack,
   durationMs,
   favoriteTrack,
@@ -273,6 +282,7 @@ function MobileImmersivePlayer({
   onCyclePlaybackMode,
   onNext,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onPrev,
   onRemoveQueueItem,
   onReorderQueue,
@@ -381,7 +391,9 @@ function MobileImmersivePlayer({
             canReorderQueue={canReorderQueue}
             compactMobile
             currentQueueItemId={currentQueueItemId}
+            nextQueueItemId={nextQueueItemId}
             onPlayQueueItem={onPlayQueueItem}
+            onPlayNextQueueItem={onPlayNextQueueItem}
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
             queue={queue}
@@ -417,9 +429,11 @@ type DesktopImmersivePlayerProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
+  nextQueueItemId: string | null;
   canReorderQueue: boolean;
   canRemoveQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   setSeekDraft: (value: number | null) => void;
@@ -451,9 +465,11 @@ function DesktopImmersivePlayer({
   queue,
   tracks,
   currentQueueItemId,
+  nextQueueItemId,
   canReorderQueue,
   canRemoveQueue,
   onPlayQueueItem,
+  onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
   setSeekDraft,
@@ -534,7 +550,9 @@ function DesktopImmersivePlayer({
           canRemoveQueue={canRemoveQueue}
           canReorderQueue={canReorderQueue}
           currentQueueItemId={currentQueueItemId}
+          nextQueueItemId={nextQueueItemId}
           onPlayQueueItem={onPlayQueueItem}
+          onPlayNextQueueItem={onPlayNextQueueItem}
           onRemoveQueueItem={onRemoveQueueItem}
           onReorderQueue={onReorderQueue}
           queue={queue}

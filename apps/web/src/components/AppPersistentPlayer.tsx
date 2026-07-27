@@ -33,9 +33,11 @@ export function AppPersistentPlayer() {
       queue={player.queue}
       tracks={player.tracks}
       currentQueueItemId={player.currentQueueItemId}
+      nextQueueItemId={player.playback?.nextQueueItemId ?? null}
       canReorderQueue={true}
       canRemoveQueue={true}
       onPlayQueueItem={player.onPlayQueueItem}
+      onPlayNextQueueItem={player.onPlayNextQueueItem}
       onRemoveQueueItem={player.onRemoveQueueItem}
       onReorderQueue={player.onReorderQueue}
     />
