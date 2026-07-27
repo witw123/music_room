@@ -379,6 +379,7 @@ async function importProviderTrack(input: {
   if (inFlightUploadHashesRef.current.has(importKey)) return;
 
   inFlightUploadHashesRef.current.add(importKey);
+  setStatusMessage(`正在准备导入《${candidate.title}》…`);
   let objectUrl: string | null = null;
   let retainedObjectUrl = false;
   let registeredTrackId: string | null = null;

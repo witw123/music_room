@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import {
   appSettingsChangeEvent,
+  customLayoutCanvas,
   getAppSettings,
   getCustomLayoutPageId
 } from "@/features/settings/settings-store";
@@ -44,7 +45,7 @@ export function useCustomLayoutRuntime(pathname: string | null) {
         const item = page[itemId];
         root.dataset[getVisibilityDatasetKey(itemId)] = String(item.visible);
         for (const property of ["x", "y", "width", "height"] as const) {
-          const base = property === "x" || property === "width" ? 1440 : 900;
+          const base = property === "x" || property === "width" ? customLayoutCanvas.width : customLayoutCanvas.height;
           root.style.setProperty(`--custom-${itemId}-${property}`, `${(item[property] / base) * 100}%`);
         }
       }

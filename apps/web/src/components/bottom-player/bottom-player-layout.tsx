@@ -366,7 +366,7 @@ export function MobileBottomPlayerLayout({
 }: LayoutProps) {
   if (mobileVariant === "compact") {
     return (
-      <div className="mx-auto w-full max-w-[760px] md:hidden">
+      <div className="mx-auto w-full max-w-[760px] md:hidden" data-player-layout="mobile">
         <div className="flex min-h-[3.5rem] items-center gap-1.5">
           <button
             aria-label="打开沉浸式播放"
@@ -426,7 +426,7 @@ export function MobileBottomPlayerLayout({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] lg:hidden">
+    <div className="mx-auto w-full max-w-[1400px] lg:hidden" data-player-layout="mobile">
       <div className="grid min-h-[4.25rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 sm:gap-x-3 sm:gap-y-1.5">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
           <VinylBadge
@@ -610,7 +610,7 @@ export function DesktopBottomPlayerLayout({
   onToggleFavoriteTrack
 }: LayoutProps) {
   return (
-    <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`}>
+    <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`} data-player-layout="desktop">
       <div className="flex min-w-0 items-center gap-3">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
         <VinylBadge

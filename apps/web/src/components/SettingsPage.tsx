@@ -107,6 +107,8 @@ export function SettingsPage() {
     setStatusMessage("已恢复默认设置");
   }
 
+  const customLayoutEnabled = settings.layout.customLayout.enabled;
+
   async function handleLogout() {
     try {
       await musicRoomApi.logout();
@@ -182,10 +184,11 @@ export function SettingsPage() {
                 ))}
               </div>
             </SettingRow>
-            <SettingRow label="侧边栏默认收纳" description="在桌面端优先为内容留出空间。">
+            <SettingRow label="侧边栏默认收纳" description={customLayoutEnabled ? "自定义界面已启用，请在自定义面板中调整侧边栏宽度。" : "在桌面端优先为内容留出空间。"}>
               <Toggle
                 checked={settings.layout.sidebarCollapsed}
                 label="侧边栏默认收纳"
+                disabled={customLayoutEnabled}
                 onChange={(checked) => patchSettings({ layout: { sidebarCollapsed: checked } })}
               />
             </SettingRow>
@@ -359,9 +362,12 @@ export function SettingsPage() {
       </div>
       {isCustomLayoutEditorOpen ? (
         <CustomLayoutEditor
-          onChange={(customLayout) => patchSettings({ layout: { customLayout } })}
           onApply={(customLayout) => {
             patchSettings({ layout: { customLayout: { ...customLayout, enabled: true } } });
+            setIsCustomLayoutEditorOpen(false);
+          }}
+          onReset={() => {
+            patchSettings({ layout: { customLayout: getDefaultAppSettings().layout.customLayout } });
             setIsCustomLayoutEditorOpen(false);
           }}
           onClose={() => setIsCustomLayoutEditorOpen(false)}
@@ -401,13 +407,14 @@ function SettingRow({
   );
 }
 
-function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+function Toggle({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
-    <label className="inline-flex min-h-11 min-w-12 cursor-pointer items-center justify-center" title={label}>
+    <label className={`inline-flex min-h-11 min-w-12 items-center justify-center ${disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer"}`} title={label}>
       <input
         aria-label={label}
         checked={checked}
         className="peer sr-only"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
         type="checkbox"
       />

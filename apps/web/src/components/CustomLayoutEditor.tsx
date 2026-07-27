@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   customLayoutCanvas,
   customLayoutItemLabels,
+  customLayoutItemMinimumSizes,
   customLayoutPageIds,
   customLayoutPageLabels,
   getCustomLayoutItemIds,
@@ -18,8 +19,8 @@ import {
 
 type CustomLayoutEditorProps = {
   value: CustomLayoutSettings;
-  onChange: (value: CustomLayoutSettings) => void;
   onApply: (value: CustomLayoutSettings) => void;
+  onReset: () => void;
   onClose: () => void;
 };
 
@@ -47,15 +48,6 @@ const resizeHandles: Array<{ id: ResizeHandle; className: string; cursor: string
 ];
 
 const gridSize = 8;
-const minimumItemSizes: Record<CustomLayoutItemId, { width: number; height: number }> = {
-  sidebar: { width: 48, height: 180 },
-  content: { width: 360, height: 300 },
-  player: { width: 360, height: 48 },
-  "mobile-navigation": { width: 480, height: 48 },
-  "room-stage": { width: 360, height: 300 },
-  "room-panel": { width: 360, height: 300 }
-};
-
 const itemColors: Record<CustomLayoutItemId, string> = {
   sidebar: "#8b5cf6",
   content: "#007aff",
@@ -65,7 +57,7 @@ const itemColors: Record<CustomLayoutItemId, string> = {
   "room-panel": "#14b8a6"
 };
 
-export function CustomLayoutEditor({ value, onApply, onChange, onClose }: CustomLayoutEditorProps) {
+export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomLayoutEditorProps) {
   const [draft, setDraft] = useState(value);
   const draftRef = useRef(value);
   const [pageId, setPageId] = useState<CustomLayoutPageId>("home");
@@ -82,8 +74,7 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
   const updatePageItem = useCallback((
     targetPageId: CustomLayoutPageId,
     itemId: CustomLayoutItemId,
-    item: CustomLayoutItem,
-    persist: boolean
+    item: CustomLayoutItem
   ) => {
     const next = {
       ...draftRef.current,
@@ -96,8 +87,7 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
       }
     };
     setDraftValue(next);
-    if (persist) onChange(next);
-  }, [onChange, setDraftValue]);
+  }, [setDraftValue]);
 
   useEffect(() => {
     setPortalTarget(document.body);
@@ -127,7 +117,7 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
         x: item.x + direction.x * amount,
         y: item.y + direction.y * amount
       }, selectedItemId);
-      updatePageItem(pageId, selectedItemId, nextItem, true);
+      updatePageItem(pageId, selectedItemId, nextItem);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -145,7 +135,7 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
 
   function updateSelectedItem(itemId: CustomLayoutItemId, patch: Partial<CustomLayoutItem>) {
     const item = draftRef.current.pages[pageId][itemId];
-    updatePageItem(pageId, itemId, { ...item, ...patch }, true);
+    updatePageItem(pageId, itemId, { ...item, ...patch });
   }
 
   function restorePage() {
@@ -158,7 +148,10 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
       }
     };
     setDraftValue(next);
-    onChange(next);
+  }
+
+  function restoreAll() {
+    setDraftValue(getDefaultCustomLayoutSettings());
   }
 
   function handleCanvasPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -183,14 +176,13 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
           dy,
           event.shiftKey
         );
-    updatePageItem(pageId, drag.itemId, nextItem, false);
+    updatePageItem(pageId, drag.itemId, nextItem);
   }
 
   function handleCanvasPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    onChange(draftRef.current);
   }
 
   function beginDrag(
@@ -234,6 +226,14 @@ export function CustomLayoutEditor({ value, onApply, onChange, onClose }: Custom
           <Button className="gap-2" onClick={restorePage} size="sm" type="button" variant="outline">
             <ResetIcon />
             恢复当前页
+          </Button>
+          <Button className="hidden gap-2 sm:inline-flex" onClick={restoreAll} size="sm" type="button" variant="outline">
+            <ResetIcon />
+            恢复全部
+          </Button>
+          <Button className="hidden gap-2 md:inline-flex" onClick={onReset} size="sm" type="button" variant="ghost">
+            <CloseIcon />
+            退出并还原默认
           </Button>
           <Button className="gap-2" onClick={() => onApply(draftRef.current)} size="sm" type="button">
             <CheckIcon />
@@ -434,7 +434,7 @@ function resizeItem(
   dy: number,
   keepRatio: boolean
 ): CustomLayoutItem {
-  const minimum = minimumItemSizes[itemId];
+  const minimum = customLayoutItemMinimumSizes[itemId];
   const fromLeft = handle.includes("w");
   const fromTop = handle.includes("n");
   const fromRight = handle.includes("e");
@@ -496,7 +496,7 @@ function resizeItem(
 }
 
 function clampItem(item: CustomLayoutItem, itemId: CustomLayoutItemId): CustomLayoutItem {
-  const minimum = minimumItemSizes[itemId];
+  const minimum = customLayoutItemMinimumSizes[itemId];
   const width = Math.min(customLayoutCanvas.width, Math.max(minimum.width, Math.round(item.width)));
   const height = Math.min(customLayoutCanvas.height, Math.max(minimum.height, Math.round(item.height)));
   return {

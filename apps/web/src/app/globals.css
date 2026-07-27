@@ -437,10 +437,6 @@
 
     /* The layout editor uses a 1440 x 900 reference canvas. Percent variables
        keep the saved arrangement proportional on larger desktop windows. */
-    html[data-custom-layout-enabled="true"] {
-      --app-sidebar-width: var(--custom-sidebar-width);
-    }
-
     html[data-custom-layout-enabled="true"] .app-sidebar[data-custom-layout-item="sidebar"] {
       position: fixed !important;
       top: var(--custom-sidebar-y) !important;
@@ -484,6 +480,52 @@
       height: var(--custom-player-height) !important;
       min-height: 0 !important;
       max-height: none !important;
+    }
+
+    html[data-custom-layout-enabled="true"] [data-custom-layout-item="player"] {
+      display: flex !important;
+      align-items: stretch !important;
+      min-width: 0 !important;
+      padding: 0.25rem 0.75rem !important;
+    }
+
+    html[data-custom-layout-enabled="true"]
+      [data-custom-layout-item="player"]
+      [data-custom-layout-player-content="true"] {
+      display: flex !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      max-height: 100% !important;
+      overflow: visible !important;
+    }
+
+    html[data-custom-layout-enabled="true"]
+      [data-custom-layout-item="player"]
+      [data-player-layout="mobile"],
+    html[data-custom-layout-enabled="true"]
+      [data-custom-layout-item="player"]
+      [data-player-layout="desktop"] {
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      overflow: visible !important;
+    }
+
+    html[data-custom-layout-enabled="true"]
+      [data-custom-layout-item="player"]
+      [data-player-layout="mobile"] > div {
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+
+    html[data-custom-layout-enabled="true"]
+      [data-custom-layout-item="player"]
+      [data-player-layout] > * {
+      min-height: 0 !important;
     }
 
     html[data-custom-layout-enabled="true"][data-custom-layout-page="room"] [data-custom-layout-room-host] {

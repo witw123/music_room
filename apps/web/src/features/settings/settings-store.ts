@@ -75,6 +75,15 @@ export const customLayoutRoomItemIds: CustomLayoutItemId[] = [
   "mobile-navigation"
 ];
 
+export const customLayoutItemMinimumSizes: Record<CustomLayoutItemId, { width: number; height: number }> = {
+  sidebar: { width: 48, height: 180 },
+  content: { width: 360, height: 300 },
+  player: { width: 360, height: 56 },
+  "mobile-navigation": { width: 480, height: 48 },
+  "room-stage": { width: 360, height: 300 },
+  "room-panel": { width: 360, height: 300 }
+};
+
 export type AppSettings = {
   version: 1;
   theme: ThemePreference;
@@ -269,7 +278,7 @@ export function normalizeCustomLayoutSettings(value: unknown): CustomLayoutSetti
       const page = Object.fromEntries(
         (Object.keys(defaultPage) as CustomLayoutItemId[]).map((itemId) => [
           itemId,
-          normalizeCustomLayoutItem(pageInput[itemId], defaultPage[itemId])
+          normalizeCustomLayoutItem(pageInput[itemId], defaultPage[itemId], itemId)
         ])
       ) as CustomLayoutPage;
       return [pageId, page];
@@ -292,6 +301,16 @@ export function getCustomLayoutPageId(pathname: string | null): CustomLayoutPage
   return "home";
 }
 
+export function isCustomLayoutSidebarCollapsed(settings: AppSettings, pathname: string | null) {
+  if (!settings.layout.customLayout.enabled) {
+    return settings.layout.sidebarCollapsed;
+  }
+
+  const pageId = getCustomLayoutPageId(pathname);
+  const sidebar = settings.layout.customLayout.pages[pageId].sidebar;
+  return !sidebar.visible || sidebar.width < 160;
+}
+
 export function getCustomLayoutItemIds(pageId: CustomLayoutPageId): CustomLayoutItemId[] {
   return pageId === "room" ? customLayoutRoomItemIds : customLayoutWorkspaceItemIds;
 }
@@ -309,10 +328,11 @@ function createDefaultCustomLayoutPage(pageId: CustomLayoutPageId): CustomLayout
   };
 }
 
-function normalizeCustomLayoutItem(value: unknown, fallback: CustomLayoutItem): CustomLayoutItem {
+function normalizeCustomLayoutItem(value: unknown, fallback: CustomLayoutItem, itemId: CustomLayoutItemId): CustomLayoutItem {
   const input = isRecord(value) ? value : {};
-  const width = normalizeLayoutNumber(input.width, fallback.width, 160, customLayoutCanvas.width);
-  const height = normalizeLayoutNumber(input.height, fallback.height, 56, customLayoutCanvas.height);
+  const minimum = customLayoutItemMinimumSizes[itemId];
+  const width = normalizeLayoutNumber(input.width, fallback.width, minimum.width, customLayoutCanvas.width);
+  const height = normalizeLayoutNumber(input.height, fallback.height, minimum.height, customLayoutCanvas.height);
   return {
     x: normalizeLayoutNumber(input.x, fallback.x, 0, customLayoutCanvas.width - width),
     y: normalizeLayoutNumber(input.y, fallback.y, 0, customLayoutCanvas.height - height),

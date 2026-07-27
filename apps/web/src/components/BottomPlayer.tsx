@@ -390,7 +390,10 @@ function BottomPlayerBase({
         </div>
       ) : null}
 
-      <div className="relative z-10 w-full flex flex-col justify-center">
+      <div
+        className="relative z-10 flex h-full min-h-0 w-full min-w-0 flex-col justify-center overflow-hidden"
+        data-custom-layout-player-content="true"
+      >
       <MobileBottomPlayerLayout
         isPlaying={isPlaying}
         canControlPlayback={canControlPlayback}

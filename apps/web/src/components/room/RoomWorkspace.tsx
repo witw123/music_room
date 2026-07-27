@@ -170,6 +170,7 @@ function RoomWorkspaceBase({
           aria-live="polite"
         >
           <div
+            key={statusMessage}
             data-testid="room-status-message"
             className={`pointer-events-auto w-fit max-w-full break-words whitespace-normal rounded-2xl px-4 py-2.5 text-center text-sm font-medium shadow-xl backdrop-blur-md transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-out animate-slide-up ${
               statusTone === "warning"

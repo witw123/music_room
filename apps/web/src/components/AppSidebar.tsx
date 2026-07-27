@@ -10,6 +10,7 @@ import {
   applyAppTheme,
   appSettingsChangeEvent,
   getAppSettings,
+  isCustomLayoutSidebarCollapsed,
   resolveAppTheme,
   updateAppSettings,
   type ThemePreference
@@ -59,6 +60,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const currentItem = activeItem ?? resolveActiveItem(pathname);
   const [collapsed, setCollapsed] = useState(true);
+  const [customLayoutEnabled, setCustomLayoutEnabled] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>("dark");
   const desktopBottomOffsetClass = hasBottomPlayer
     ? "md:bottom-[11.5rem] lg:bottom-[4.5rem]"
@@ -73,12 +75,14 @@ export function AppSidebar({
     };
     const syncSidebarState = () => {
       const settings = getAppSettings();
-      setCollapsed(settings.layout.sidebarCollapsed);
+      const nextCollapsed = isCustomLayoutSidebarCollapsed(settings, pathname);
+      setCollapsed(nextCollapsed);
+      setCustomLayoutEnabled(settings.layout.customLayout.enabled);
       setThemePreference(settings.theme);
       // Keep the shared content offset aligned with the persisted setting. The
       // sidebar can briefly coexist with another route's instance during a
       // client transition, so it must not publish its own initial state here.
-      document.documentElement.dataset.sidebarCollapsed = String(settings.layout.sidebarCollapsed);
+      document.documentElement.dataset.sidebarCollapsed = String(nextCollapsed);
       document.documentElement.dataset.reduceMotion = String(settings.layout.reduceMotion);
       applyAppTheme(settings.theme);
       themeMediaQuery?.removeEventListener("change", syncTheme);
@@ -96,7 +100,7 @@ export function AppSidebar({
       window.removeEventListener("storage", syncSidebarState);
       themeMediaQuery?.removeEventListener("change", syncTheme);
     };
-  }, []);
+  }, [pathname]);
 
   function handleThemeToggle() {
     const resolvedTheme = resolveAppTheme(themePreference);
@@ -197,8 +201,9 @@ export function AppSidebar({
           <button
             aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
             aria-expanded={!collapsed}
-            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
+            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${footerControlSizeClass} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
             onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
+            disabled={customLayoutEnabled}
             title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
             type="button"
           >

@@ -6,6 +6,7 @@ import {
   getDefaultCustomLayoutSettings,
   getCustomLayoutPageId,
   getAppSettings,
+  isCustomLayoutSidebarCollapsed,
   normalizeSettings,
   resolveAppTheme,
   resetAppSettings,
@@ -75,9 +76,35 @@ describe("app settings store", () => {
       }
     });
     expect(normalized.layout.customLayout.enabled).toBe(true);
-    expect(normalized.layout.customLayout.pages.discover.content).toMatchObject({ x: 1280, y: 0, width: 160, height: 900 });
+    expect(normalized.layout.customLayout.pages.discover.content).toMatchObject({ x: 1080, y: 0, width: 360, height: 900 });
     expect(getCustomLayoutPageId("/app/settings")).toBe("settings");
     expect(getCustomLayoutPageId("/rooms")).toBe("home");
+  });
+
+  it("keeps custom sidebar geometry independent from the legacy collapse setting", () => {
+    const expanded = normalizeSettings({
+      layout: {
+        sidebarCollapsed: true,
+        customLayout: {
+          enabled: true,
+          pages: { home: { sidebar: { width: 240, height: 840 } } }
+        }
+      }
+    });
+    const collapsed = normalizeSettings({
+      layout: {
+        sidebarCollapsed: false,
+        customLayout: {
+          enabled: true,
+          pages: { home: { sidebar: { width: 64, height: 840 } } }
+        }
+      }
+    });
+
+    expect(expanded.layout.customLayout.pages.home.sidebar.width).toBe(240);
+    expect(collapsed.layout.customLayout.pages.home.sidebar.width).toBe(64);
+    expect(isCustomLayoutSidebarCollapsed(expanded, "/app")).toBe(false);
+    expect(isCustomLayoutSidebarCollapsed(collapsed, "/app")).toBe(true);
   });
 
   it("provides a separate room layout aligned with the desktop player", () => {

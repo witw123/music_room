@@ -197,6 +197,7 @@ export function useTrackUploads(options: {
   });
 
   const importCachedTrack = useCallback(async (cachedTrack: CachedLibraryTrack) => {
+    setStatusMessage(`正在导入《${cachedTrack.title}》到当前房间曲库…`);
     try {
       const localFile =
         (await getLocalAudioCacheFile(cachedTrack.fileHash)) ??

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AuthSession,
   NeteaseTrackCandidate,
@@ -194,12 +194,32 @@ function FavoriteAlbumDetail({
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
 }) {
-  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
+  const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());
+  const pendingTrackIdsRef = useRef(new Set<string>());
+  const [isImportingSelected, setIsImportingSelected] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const trackKey = (track: FavoriteTrack) => `${track.provider}:${track.providerTrackId}`;
+  const selectableTracks = tracks.filter((track) => !roomTrackKeys.has(trackKey(track)));
+  const selectableTrackIds = selectableTracks.map(trackKey);
+  const selectableTrackIdsKey = JSON.stringify(selectableTrackIds);
+  const selectedTracks = selectableTracks.filter((track) => selectedTrackIds.includes(trackKey(track)));
+  const allSelectableSelected = selectableTracks.length > 0 && selectedTracks.length === selectableTracks.length;
+  const isImportBusy = pendingTrackIds.size > 0 || isImportingSelected;
+
+  useEffect(() => {
+    const availableIds = new Set(JSON.parse(selectableTrackIdsKey) as string[]);
+    setSelectedTrackIds((current) => {
+      const next = current.filter((trackId) => availableIds.has(trackId));
+      return next.length === current.length ? current : next;
+    });
+  }, [selectableTrackIdsKey]);
 
   const importTrack = async (track: FavoriteTrack) => {
-    if (pendingTrackId) return;
-    setPendingTrackId(track.providerTrackId);
+    const key = trackKey(track);
+    if (pendingTrackIdsRef.current.has(key)) return;
+    pendingTrackIdsRef.current.add(key);
+    setPendingTrackIds((current) => new Set(current).add(key));
     setImportError(null);
     try {
       if (track.provider === "netease") {
@@ -207,11 +227,44 @@ function FavoriteAlbumDetail({
       } else {
         await onImportQqMusicTrack(track);
       }
+      setSelectedTrackIds((current) => current.filter((trackId) => trackId !== key));
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "歌曲导入失败。");
     } finally {
-      setPendingTrackId(null);
+      pendingTrackIdsRef.current.delete(key);
+      setPendingTrackIds((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
     }
+  };
+
+  const importSelectedTracks = async () => {
+    if (isImportBusy || selectedTracks.length === 0) return;
+    setIsImportingSelected(true);
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < selectedTracks.length) {
+        const track = selectedTracks[nextIndex++];
+        if (track) await importTrack(track);
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(2, selectedTracks.length) }, () => worker()));
+    } finally {
+      setIsImportingSelected(false);
+    }
+  };
+
+  const toggleTrackSelection = (trackId: string) => {
+    setSelectedTrackIds((current) => current.includes(trackId)
+      ? current.filter((item) => item !== trackId)
+      : [...current, trackId]);
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedTrackIds(allSelectableSelected ? [] : selectableTrackIds);
   };
 
   return (
@@ -234,35 +287,70 @@ function FavoriteAlbumDetail({
       {errorMessage ? <p className="text-xs text-amber-200" role="alert">{errorMessage}</p> : null}
       {importError ? <p className="text-xs text-red-300" role="alert">{importError}</p> : null}
       {tracks.length > 0 ? (
-        <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
-          {tracks.map((track) => {
-            const key = `${track.provider}:${track.providerTrackId}`;
-            const isInRoom = roomTrackKeys.has(key);
-            const isPending = pendingTrackId === track.providerTrackId;
-            return (
-              <article className="flex min-w-0 items-center gap-3 px-3 py-3" key={key}>
-                <Artwork artworkUrl={track.artworkUrl ?? album.artworkUrl} size="sm" title={track.title} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
-                  <p className="mt-0.5 truncate text-[10px] text-foreground-muted">
-                    {track.artist} · {track.album || album.title} · {formatDuration(track.durationMs)}
-                  </p>
-                </div>
-                <button
-                  className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                    isInRoom
-                      ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
-                      : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
-                  }`}
-                  disabled={isInRoom || isPending || pendingTrackId !== null}
-                  onClick={() => void importTrack(track)}
-                  type="button"
-                >
-                  {isInRoom ? "已在曲库" : isPending ? "导入中…" : "导入曲库"}
-                </button>
-              </article>
-            );
-          })}
+        <div className="flex flex-col gap-2 rounded-lg border border-surface-border bg-surface/40 p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface/40 px-3 py-2">
+            <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[11px] text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={allSelectableSelected}
+                disabled={selectableTracks.length === 0 || isImportBusy}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 accent-accent"
+              />
+              <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
+              <button
+                type="button"
+                disabled={selectedTracks.length === 0 || isImportBusy}
+                onClick={() => void importSelectedTracks()}
+                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isImportBusy ? "导入中…" : "导入所选歌曲"}
+              </button>
+            </div>
+          </div>
+          <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
+            {tracks.map((track) => {
+              const key = trackKey(track);
+              const isInRoom = roomTrackKeys.has(key);
+              const isPending = pendingTrackIds.has(key);
+              return (
+                <article className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between" key={key}>
+                  <div className="flex min-w-0 items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!isInRoom && selectedTrackIds.includes(key)}
+                      disabled={isInRoom || isImportBusy}
+                      onChange={() => toggleTrackSelection(key)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                      aria-label={`选择《${track.title}》`}
+                    />
+                    <Artwork artworkUrl={track.artworkUrl ?? album.artworkUrl} size="sm" title={track.title} />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-foreground-muted">
+                        {track.artist} · {track.album || album.title} · {formatDuration(track.durationMs)}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                      isInRoom
+                        ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                        : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    }`}
+                    disabled={isInRoom || isPending || isImportBusy}
+                    onClick={() => void importTrack(track)}
+                    type="button"
+                  >
+                    {isInRoom ? "已在曲库" : isPending ? "导入中…" : "导入曲库"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
         </div>
       ) : detailLoading ? (
         <div className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">

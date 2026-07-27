@@ -143,6 +143,54 @@ function LocalPlaylistDetail({
   pendingCachedImport: string | null;
 }) {
   const roomFileHashes = new Set(roomTracks.map((track) => track.fileHash));
+  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
+  const [isImportingSelected, setIsImportingSelected] = useState(false);
+  const selectableTracks = tracks.filter((track) => {
+    const cachedTrack = toCachedLibraryTrack(track);
+    return !!cachedTrack && !!track.fileHash && !roomFileHashes.has(track.fileHash);
+  });
+  const selectableTrackIds = selectableTracks.map((track) => track.id);
+  const selectableTrackIdsKey = JSON.stringify(selectableTrackIds);
+  const selectedTracks = selectableTracks.filter((track) => selectedTrackIds.includes(track.id));
+  const allSelectableSelected = selectableTracks.length > 0 && selectedTracks.length === selectableTracks.length;
+  const isImportBusy = isImportingSelected || pendingCachedImport !== null;
+
+  useEffect(() => {
+    const availableIds = new Set(JSON.parse(selectableTrackIdsKey) as string[]);
+    setSelectedTrackIds((current) => {
+      const next = current.filter((trackId) => availableIds.has(trackId));
+      return next.length === current.length ? current : next;
+    });
+  }, [selectableTrackIdsKey]);
+
+  const importTrack = async (track: LocalPlaylistTrackRecord) => {
+    const cachedTrack = toCachedLibraryTrack(track);
+    if (!cachedTrack || !track.fileHash || roomFileHashes.has(track.fileHash)) return;
+    await onImportCachedTrack(cachedTrack);
+    setSelectedTrackIds((current) => current.filter((trackId) => trackId !== track.id));
+  };
+
+  const importSelectedTracks = async () => {
+    if (isImportBusy || selectedTracks.length === 0) return;
+    setIsImportingSelected(true);
+    try {
+      for (const track of selectedTracks) {
+        await importTrack(track);
+      }
+    } finally {
+      setIsImportingSelected(false);
+    }
+  };
+
+  const toggleTrackSelection = (trackId: string) => {
+    setSelectedTrackIds((current) => current.includes(trackId)
+      ? current.filter((item) => item !== trackId)
+      : [...current, trackId]);
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedTrackIds(allSelectableSelected ? [] : selectableTrackIds);
+  };
 
   return (
     <section className="flex w-full flex-col gap-4" data-testid="local-playlist-detail">
@@ -169,40 +217,75 @@ function LocalPlaylistDetail({
       </div>
 
       {tracks.length > 0 ? (
-        <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
-          {tracks.map((track) => {
-            const cachedTrack = toCachedLibraryTrack(track);
-            const isInRoom = !!track.fileHash && roomFileHashes.has(track.fileHash);
-            const isPending = !!track.fileHash && pendingCachedImport === track.fileHash;
-            const canImport = !!cachedTrack && !isInRoom;
-            return (
-              <article key={track.id} className="flex min-w-0 items-center gap-3 px-3 py-3">
-                <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
-                  <p className="mt-0.5 truncate text-[10px] text-foreground-muted">
-                    {track.artist} · {track.album || "本地歌曲"} · {formatDuration(track.durationMs)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={!canImport || isPending || pendingCachedImport !== null}
-                  onClick={() => {
-                    if (cachedTrack) void onImportCachedTrack(cachedTrack);
-                  }}
-                  className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                    isInRoom
-                      ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
-                      : canImport
-                        ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
-                        : "cursor-default border-surface-border text-foreground-muted"
-                  }`}
-                >
-                  {isInRoom ? "已在本房间" : isPending ? "导入中…" : cachedTrack ? "导入曲库" : "未保存到本地"}
-                </button>
-              </article>
-            );
-          })}
+        <div className="flex flex-col gap-2 rounded-lg border border-surface-border bg-surface/40 p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface/40 px-3 py-2">
+            <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[11px] text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={allSelectableSelected}
+                disabled={selectableTracks.length === 0 || isImportBusy}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 accent-accent"
+              />
+              <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
+              <button
+                type="button"
+                disabled={selectedTracks.length === 0 || isImportBusy}
+                onClick={() => void importSelectedTracks()}
+                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isImportBusy ? "导入中…" : "导入所选歌曲"}
+              </button>
+            </div>
+          </div>
+          <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
+            {tracks.map((track) => {
+              const cachedTrack = toCachedLibraryTrack(track);
+              const isInRoom = !!track.fileHash && roomFileHashes.has(track.fileHash);
+              const isPending = !!track.fileHash && pendingCachedImport === track.fileHash;
+              const canImport = !!cachedTrack && !isInRoom;
+              return (
+                <article key={track.id} className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={canImport && selectedTrackIds.includes(track.id)}
+                      disabled={!canImport || isImportBusy}
+                      onChange={() => toggleTrackSelection(track.id)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                      aria-label={`选择《${track.title}》`}
+                    />
+                    <TrackArtwork artworkUrl={track.artworkUrl} title={track.title} />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-foreground">{track.title}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-foreground-muted">
+                        {track.artist} · {track.album || "本地歌曲"} · {formatDuration(track.durationMs)}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canImport || isPending || isImportBusy}
+                    onClick={() => {
+                      if (cachedTrack) void importTrack(track);
+                    }}
+                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                      isInRoom
+                        ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                        : canImport
+                          ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          : "cursor-default border-surface-border text-foreground-muted"
+                    }`}
+                  >
+                    {isInRoom ? "已在本房间" : isPending ? "导入中…" : cachedTrack ? "导入曲库" : "未保存到本地"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
