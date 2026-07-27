@@ -1,6 +1,6 @@
 # 共享模型
 
-最后更新：`2026-07-23`
+最后更新：`2026-07-27`
 当前版本：`0.2.8`
 
 ## 使用原则
@@ -16,7 +16,8 @@
 
 - REST 和 Socket.IO 共用的登录态对象
 - `id` / `userId`：当前实现两者值相同，都是用户 ID
-- `username`、`nickname`、`createdAt`
+- `username`、
+ickname`、`createdAt`
 - `token`：写入 REST 的 `x-session-token` 或 Socket.IO 的 `auth.sessionToken`
 
 ### `RoomSnapshot`
@@ -30,14 +31,16 @@
 `Room` 关键字段：
 
 - `id`、`hostId`、`joinCode`
-- `name`、`description`、`hasPassword`
+- 
+ame`、`description`、`hasPassword`
 - `visibility`: `private | public`
 - `members`、`playback`
 - `presenceRevision`、`roomRevision`
 
 `RoomMember` 关键字段：
 
-- `id`、`nickname`、`role`: `host | member`
+- `id`、
+ickname`、`role`: `host | member`
 - `joinedAt`、`peerId`
 - `presenceState`: `online | reconnecting | offline`
 
@@ -52,7 +55,7 @@
 - `playbackAssetId`：当前播放资产 ID，可为空
 - `startAt`、`startedAt`、`positionMs`
 - `sourceSessionId`、`sourcePeerId`、`sourceTrackId`
-- `queueVersion`、`playbackRevision`、`mediaEpoch`
+- `queueVersion`、`playbackRevision`、`mediaEpoch`、可选 `playbackMode`、`shuffleBagTrackIds`、`gaplessNext`
 
 语义：
 
@@ -60,6 +63,7 @@
 - `queueVersion` 只表示队列结构版本
 - `mediaEpoch` 表示当前媒体发布代次；媒体拓扑彻底变化或重新协商时递增
 - `sourcePeerId` 对应当前曲目拥有者的媒体源 peer
+- 播放控制需要成员 `player` 权限（默认 true；房主始终可写）
 
 ### `TrackMeta`
 
@@ -69,7 +73,8 @@
 - `durationMs`、`bitrate`、`sizeBytes`
 - `codec`、`mimeType`、`fileHash`、`artworkUrl`
 - `ownerSessionId`、`ownerNickname`
-- `sourceType`: `local_upload` 或 `netease`
+- `sourceType`: `local_upload` 或 
+etease`
 - `sourceRef`: provider 曲目携带 `{ provider: "netease" | "qqmusic", trackId: string }`；本地上传不得携带该字段
 - `originalAsset`：可选的本地原始资产清单
 - `playbackAsset`：可选的本地分段 Opus 资产清单

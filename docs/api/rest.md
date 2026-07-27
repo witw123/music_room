@@ -1,6 +1,6 @@
 # REST API
 
-最后更新：`2026-07-23`
+最后更新：`2026-07-27`
 当前版本：`0.2.8`
 
 ## 使用约定
@@ -15,7 +15,7 @@
 
 - 注册曲目上传元数据和经过校验的 `originalAsset` / `playbackAsset` 清单，不上传音频文件本体
 - 房间、队列、曲库、歌单接口除了返回 REST 响应外，通常还会触发 Socket.IO 快照或 patch 广播
-- 播放控制仅房主可写，依赖 Redis 可用；当 Realtime 不可用时，`PATCH /v1/rooms/{roomId}/playback` 会直接失败
+- 播放控制要求 `player` 权限（默认成员拥有），依赖 Redis 可用；当 Realtime 不可用时，`PATCH /v1/rooms/{roomId}/playback` 会直接失败
 
 ## 网易云 provider
 
@@ -723,14 +723,14 @@ null
 
 ### `PATCH /v1/rooms/{roomId}/playback`
 
-- 权限：房间 host 可调用全部播放动作；当前媒体源 session 仅可调用 `next`/`prev`（用于曲终自动切歌）。其他非 host 返回 `403 UNAUTHORIZED_ROOM_ACTION`
+- 权限：需要房间成员的 `player` 权限（默认成员拥有；房主始终拥有）。无 `player` 权限时返回 `403 UNAUTHORIZED_ROOM_ACTION`
 - `next` 不循环队列；会跳过 owner 离线的曲目，队尾无可播放项时暂停
 - 服务端 watchdog 会在曲目播放超过 duration 时自动 next/pause
 
 - 用途：修改房间权威播放状态
 - 认证：是
 - 路径参数：`roomId`
-- 支持动作：`play`、`pause`、`seek`、`next`、`prev`
+- 支持动作：`play`、`pause`、`seek`、`next`、`prev`、`gapless-next`、`set-mode`
 - 请求体：
 
 ```json

@@ -1,6 +1,6 @@
 # 实时链路
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-27`
 
 ## 角色划分
 
@@ -62,7 +62,7 @@ Socket.IO 不传输音频文件、播放资产或缓存分片。
 - 宽限期内同一成员重新订阅，在线态可以恢复为 `online`
 - 同一 `roomId + sessionId` 被不同 `peerId` 重复订阅时，旧连接会收到 `room.session.replaced`
 - 目标 peer 不在线时，`peer.signal` 会做短时缓存并在其重新订阅后回放
-- 当前媒体源（曲目拥有者）离线时，服务端暂停播放并清空 startAt/sourcePeerId；不会切换到未拥有资产的成员。播放控制仅房主可写。
+- 当前媒体源（曲目拥有者）离线时：本地上传曲目会暂停并清空 startAt/sourcePeerId；provider 曲目可继续由监听端 offline fallback 播放。播放控制需要 `player` 权限（默认成员拥有）。
 
 ## 当前诊断意义
 

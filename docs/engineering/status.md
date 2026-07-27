@@ -1,6 +1,6 @@
 # 项目状态
 
-最后更新：`2026-07-23`
+最后更新：`2026-07-27`
 当前版本：`0.2.8`
 
 ## 当前主链路
@@ -9,7 +9,7 @@
 - 用户上传阶段在浏览器本地生成原始资产和分段 Opus 播放资产
 - IndexedDB 保存当前用户自己上传或 provider 导入的歌曲及其本地资产
 - `SegmentedOpusEngine` 使用固定的共享 AudioContext 输出总线
-- 源端通过 `MediaStreamAudioDestinationNode` 发布 RTP Opus
+- 源端通过 `SegmentedOpusEngine` + shared AudioContext + broadcastDestination 发布 RTP Opus（owner 是唯一媒体源）
 - 监听端只使用一个 `audio.srcObject`
 - `music-room-control` DataChannel 只用于控制和连接健康协调
 - 诊断协议使用 `segmentedPlaybackStatus`
@@ -48,6 +48,6 @@
 - 仍需在 CI 中持续运行双 Chromium context 的长时间 WebRTC 播放回归
 - 需要采集真实设备上的 limiter peak、RMS、瞬时跃变和欠载恢复数据
 - TURN 配置异常时跨网络媒体仍可能进入 `reconnecting`，但不应改变播放链路设计
-- 曲目拥有者离线时服务端暂停播放；其他成员无法从服务端或其他成员获得该曲目的替代音频源。播放控制仅房主可写；队列 next 不循环并会跳过 owner 离线曲目。服务端 watchdog 会在曲目超时未切歌时自动推进。
+- 本地上传曲目 owner 离线时服务端暂停播放；provider 曲目支持监听端 offline fallback。有 `player` 权限的成员可控制播放（默认 true）；房主拥有全部权限。队列 next 不循环并会跳过 owner 离线曲目。服务端 watchdog 会在曲目超时未切歌时自动推进。
 - 当前正式部署仍限制为单个 `server` 实例；多实例房间权威和事件顺序尚未完成生产验证
 - 外部 provider 受上游登录态、接口、版权和可用音质影响，不是本地曲库的可靠替代

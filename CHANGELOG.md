@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 文档
+
+- 同步播放链路与权限模型文档：明确 `player` 权限、owner 唯一媒体源、provider offline fallback、gapless/watchdog 与单实例部署约束
+
 ### 新增
 
 - 完善 `/app` 响应式工作区，接入 provider 搜索、歌单、收藏专辑、个人资料和设置入口

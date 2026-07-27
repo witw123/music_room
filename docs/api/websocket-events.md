@@ -1,6 +1,6 @@
 # WebSocket 事件
 
-最后更新：`2026-07-23`
+最后更新：`2026-07-27`
 当前版本：`0.2.8`
 
 ## 连接规范
@@ -35,7 +35,7 @@ Socket.IO 只负责房间状态、presence、聊天和 WebRTC 协商信令，不
 - Socket 断线后先进入 `reconnecting`，当前重连宽限期为 `25s`，超时转为 `offline`
 - 目标 peer 不在线时，`peer.signal` 按 `roomId + peerId` 暂存，当前 TTL 为 `10s`
 - peer 重新订阅后回放未过期信令
-- source owner 离线时，服务端暂停当前播放，不从其他成员寻找替代音频资产
+- source owner 离线时：本地上传曲目会暂停；provider 曲目可继续由监听端 offline fallback 播放。不会从其他成员寻找替代音频资产
 
 ## Client -> Server
 
@@ -56,7 +56,7 @@ ack 成功时包含 `ok`、`serverNow`、`recoveryGeneration` 和 `bootstrap`：
 ```json
 {
   "ok": true,
-  "serverNow": "2026-07-15T10:10:00.000Z",
+  "serverNow": "2026-07-27T10:10:00.000Z"",
   "recoveryGeneration": 3,
   "bootstrap": {
     "roomId": "room_xxx",

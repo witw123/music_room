@@ -1,6 +1,6 @@
 # 播放同步
 
-最后更新：`2026-07-15`
+最后更新：`2026-07-27`
 
 ## 权威模型
 
@@ -20,7 +20,7 @@
 
 `playbackRevision` 变化表示需要重新定位时间线，`mediaEpoch` 变化表示媒体拓扑发生变化。普通房间快照刷新不改变媒体会话身份。
 
-## 唯一播放链路
+## 唯一播放链路（owner 浏览器作为媒体源）
 
 源端从 IndexedDB 读取播放资产的分段 Opus 数据，由 `SegmentedOpusEngine` 解码并按房间时钟调度。所有分段经过同一个共享 AudioContext 图：
 
@@ -34,7 +34,7 @@ AudioBufferSource -> sourceGain -> limiter -> playbackGate
 
 曲终后队列不循环：没有下一首可播放（或剩余曲目 owner 均离线）时暂停在队尾。服务端 watchdog 会在 `positionMs` 越过 `durationMs` 且客户端未切歌时自动推进。
 
-播放控制：房主可写全部动作；当前媒体源 session 可调用 next/prev（曲终自动切歌）。媒体源始终是曲目拥有者（在线时）。
+播放控制：有 `player` 权限的成员（默认 true）可调用 play/pause/seek/next/prev/set-mode；房主拥有全部权限。当前媒体源始终是曲目拥有者（在线时）。
 
 监听端只绑定同一个远端 `MediaStream`。`remoteTrackId` 或媒体会话 key 真正变化时才重新绑定 `audio.srcObject`；`waiting`、`stalled` 恢复只重新调用 `play()`，不清空或重新设置 `srcObject`。
 
@@ -60,6 +60,12 @@ startAt | sourcePeerId | remoteTrackId
 | underrun guard | 1000ms |
 | fade duration | 20ms |
 | sync interval | 100ms |
+
+## 离线与 fallback
+
+- 本地上传曲目：owner 离线后服务端暂停，保留 sourceSessionId，清空 sourcePeerId，并递增 mediaEpoch
+- provider 曲目：owner 离线后可保持时间线；监听端可走 offline provider fallback 本地播放
+- 监听端若已有完整本地文件，也可走 local-file / local-segmented 路径优化体验，但这不是换源模型
 
 ## 诊断
 

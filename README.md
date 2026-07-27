@@ -8,7 +8,7 @@
 Music Room is a browser-first collaborative music-room application for listening to users' own local audio together. The monorepo contains the Next.js web app, NestJS server, and shared frontend/server contracts.
 
 Current workspace version: `0.2.8`<br>
-Documentation snapshot: `2026-07-23`
+Documentation snapshot: `2026-07-27`
 
 ## Product Scope
 
@@ -21,11 +21,11 @@ The room does not download or exchange audio assets between members. A track own
 The core product loop is runnable and is in the "usable product, ongoing hardening" stage:
 
 - `/` is the public website entry, and `/app` is the client workspace
-- Registration/login, room creation/join/recovery, member permissions, away-room resume, shared queue, and host playback control are connected
+- Registration/login, room creation/join/recovery, member permissions, away-room resume, shared queue, and playback control (player permission) are connected
 - The client workspace includes rooms, provider search, playlists, favorite albums, profile, settings, and a persistent player
 - The room workspace currently focuses on `Library`, `My Playlists`, and `Members`; the shared queue is managed from the room stage and player
 - NetEase and QQ Music account binding, search, playlist/album browsing, and local import are implemented behind provider feature flags
-- Playback uses one Segmented Opus/WebRTC path with a stable room audio session
+- Playback uses SegmentedOpusEngine + shared AudioContext + WebRTC RTP broadcast (owner is the only media source)
 - Diagnostics expose AudioContext, buffer, limiter, RTP, ICE, and track identity state
 - The same responsive web application serves desktop and mobile browsers
 
@@ -73,11 +73,11 @@ Recommended reading order:
 
 - Room creation, join, recovery, and exit
 - Public website and `/app` client workspace split
-- Shared playback queue, host controls, and playback synchronization
+- Shared playback queue, playback control (player permission), and playback synchronization
 - Local audio import, personal library recovery, and playlist management
 - Optional NetEase and QQ Music account binding, search, playlists, albums, lyrics, and local import
 - Favorite albums, profile/settings workspace, theme preferences, and away-room resume
-- Segmented Opus playback through a stable WebRTC RTP media track
+- Segmented Opus playback with shared AudioContext + WebRTC RTP broadcast track (owner is the only media source)
 - Member-level connection, media, playback, and audio diagnostics
 - Server-issued short-lived TURN credentials with static ICE configuration fallback
 
@@ -142,7 +142,9 @@ pnpm deploy:check
 ## Web Origin Configuration
 
 - The web client falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
-- `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_WS_URL` can point the browser app at a separately deployed server.
+- 
+EXT_PUBLIC_API_BASE_URL` and 
+EXT_PUBLIC_WS_URL` can point the browser app at a separately deployed server.
 
 ## WebRTC / TURN Configuration
 
@@ -153,7 +155,9 @@ The response contains `iceServers`, `ttlSeconds`, and a `source` of `ephemeral`,
 Default behavior:
 
 - Prefer short-lived TURN credentials returned by the server
-- Fall back to static `NEXT_PUBLIC_TURN_*` / `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` if the endpoint is unavailable
+- Fall back to static 
+EXT_PUBLIC_TURN_*` / 
+EXT_PUBLIC_WEBRTC_ICE_SERVERS` if the endpoint is unavailable
 - Use STUN only if TURN is unavailable
 
 Important server variables:
@@ -171,18 +175,27 @@ Important server variables:
 
 Frontend static ICE fallback variables:
 
-- `NEXT_PUBLIC_STUN_URL`
-- `NEXT_PUBLIC_TURN_URL`
-- `NEXT_PUBLIC_TURN_USERNAME`
-- `NEXT_PUBLIC_TURN_CREDENTIAL`
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`
+- 
+EXT_PUBLIC_STUN_URL`
+- 
+EXT_PUBLIC_TURN_URL`
+- 
+EXT_PUBLIC_TURN_USERNAME`
+- 
+EXT_PUBLIC_TURN_CREDENTIAL`
+- 
+EXT_PUBLIC_WEBRTC_ICE_SERVERS`
 
 ### Optional provider integrations
 
 The current provider API supports NetEase and QQ Music. Both are disabled in `.env.example`. Enabling either provider requires the matching server flag and frontend build flag; production also requires a valid 32-byte hex or base64 cookie encryption key. Provider credentials remain encrypted on the server, and imported audio is not retained as a server-side library.
 
-- NetEase: `NETEASE_ENABLED`, `NETEASE_COOKIE_ENCRYPTION_KEY`, `NEXT_PUBLIC_NETEASE_ENABLED`
-- QQ Music: `QQMUSIC_ENABLED`, `QQMUSIC_COOKIE_ENCRYPTION_KEY`, `NEXT_PUBLIC_QQMUSIC_ENABLED`
+- NetEase: 
+ETEASE_ENABLED`, 
+ETEASE_COOKIE_ENCRYPTION_KEY`, 
+EXT_PUBLIC_NETEASE_ENABLED`
+- QQ Music: `QQMUSIC_ENABLED`, `QQMUSIC_COOKIE_ENCRYPTION_KEY`, 
+EXT_PUBLIC_QQMUSIC_ENABLED`
 
 ## Connection And Playback Diagnostics
 
@@ -231,10 +244,11 @@ Production releases use `Dockerfile.web`, `Dockerfile.server`, and the Compose d
 
 ## Known Boundaries
 
-- Playback depends on realtime signaling and the track owner's browser being online
+- Playback depends on realtime signaling and the track owner's browser being online (owner is the only media source)
 - Redis unavailability causes realtime-dependent playback control requests to fail
-- A listener cannot play a track that it has not uploaded locally while its owner is offline
+- Local-upload tracks pause when their owner is offline; provider tracks can continue via listener-side offline fallback
 - Provider availability, upstream platform login state, and music copyright restrictions can make external imports unavailable
+- Production deployment remains single-server; multi-instance room authority is not yet supported
 - Browser-level long-running WebRTC coverage, real-device audio measurements, and unified production observability are still being expanded
 
 ## License
