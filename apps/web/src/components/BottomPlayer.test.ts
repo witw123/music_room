@@ -136,6 +136,7 @@ describe("BottomPlayer source", () => {
     expect(queueSource).toContain("getArtworkSourceUrl");
     expect(queueSource).toContain("const albumName = track?.album?.trim() || \"未知专辑\"");
     expect(queueSource).toContain('data-testid="queue-item-next-button"');
+    expect(queueSource).toContain('data-testid="queue-item-next-icon"');
     expect(queueSource).toContain('title="下一首播放"');
     expect(queueSource).toContain("onPlayNextQueueItem");
     expect(queueSource).not.toContain("function playNextQueueItem");

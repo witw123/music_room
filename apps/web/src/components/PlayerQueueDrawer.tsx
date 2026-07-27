@@ -199,7 +199,7 @@ export function PlayerQueueDrawer({
                         <Button
                           aria-label={`将《${title}》设为下一首播放`}
                           aria-pressed={isNext}
-                          className={`h-10 w-10 sm:h-8 sm:w-8 ${
+                          className={`h-10 w-10 disabled:opacity-100 sm:h-8 sm:w-8 ${
                             isNext
                               ? "bg-sky-400/15 text-sky-300 hover:bg-sky-400/20 hover:text-sky-200"
                               : "text-zinc-300 hover:bg-white/10 hover:text-sky-300"
@@ -211,12 +211,8 @@ export function PlayerQueueDrawer({
                           type="button"
                           variant="ghost"
                         >
-                          <svg aria-hidden="true" fill="none" height="17" viewBox="0 0 24 24" width="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
-                            <path d="M4 6h9" />
-                            <path d="M4 12h9" />
-                            <path d="M4 18h6" />
-                            <path d="M17 13v8" />
-                            <path d="M14 17h6" />
+                          <svg aria-hidden="true" data-testid="queue-item-next-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
+                            <path d="M3 5h10v2H3zm0 6h8v2H3zm0 6h6v2H3zM16 5l6 7-6 7v-4h-3V9h3z" />
                           </svg>
                         </Button>
                       ) : null}
