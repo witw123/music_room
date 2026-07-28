@@ -919,13 +919,27 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       const audio = audioRef.current;
 
       if (runtime.playbackBarrier.blocked && roomPlayback?.status === "playing") {
-        runtime.setMediaPlaybackEnabled(runtime.isCurrentSource);
-        runtime.setLocalAudioStream(null, null, null);
+        runtime.setMediaPlaybackEnabled(true);
+        // Keep the media topology stable while cached participants wait. A
+        // null stream tears down the source sender and can leave receivers on
+        // a stale, silent track after the barrier opens.
+        const waitingSourceStream = runtime.isCurrentSource
+          ? (roomAudioOutput.getBroadcastStream() ??
+            roomAudioOutput.getBroadcastDestination()?.stream ??
+            null)
+          : null;
+        const waitingSourcePeerId = runtime.isCurrentSource
+          ? runtime.peerId
+          : sourcePeerId;
+        runtime.setLocalAudioStream(
+          waitingSourceStream,
+          waitingSourcePeerId,
+          runtime.isCurrentSource && waitingSourcePeerId
+            ? bitrateKbps
+            : null
+        );
         if (audio) {
           audio.pause();
-          if (runtime.isCurrentSource) {
-            roomAudioOutput.unbindLocalAudioElement(audio);
-          }
         }
         if (!cancelled) {
           setMediaPlayback({
@@ -1897,9 +1911,13 @@ export function resolvePlaybackBarrierState(input: {
   const activeMembers = input.activeMembers.filter(
     (member) => member.presenceState === "online" && !!member.peerId
   );
-  const relevant = activeMembers.map((member) => latestBySession.get(member.id) ?? null);
-  const allReady = activeMembers.length > 0 && relevant.every((item) =>
-    !!item && (!item.cacheEnabled || item.state !== "waiting") && item.barrier === "open"
+  // A room's normal stream must not be held by members who did not opt into
+  // fully-cached playback. Only online cache participants share this gate.
+  const relevant = activeMembers
+    .map((member) => latestBySession.get(member.id) ?? null)
+    .filter((item): item is RoomPlaybackReadinessPayload => !!item?.cacheEnabled);
+  const allReady = relevant.length > 0 && relevant.every(
+    (item) => item.state !== "waiting" && item.barrier === "open"
   );
   if (allReady) {
     const resumeAtMs = relevant.reduce<number | null>((latestResume, item) => {

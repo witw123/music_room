@@ -156,6 +156,23 @@ describe("room playback cache barrier", () => {
       nowMs: Date.parse("2026-07-27T00:00:06.000Z")
     }).blocked).toBe(false);
   });
+
+  it("does not wait for an online member using normal streaming playback", () => {
+    const streamingMember = {
+      ...readiness("two", "ready", "open"),
+      cacheEnabled: false
+    };
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [
+        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
+        streamingMember
+      ],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:06.000Z")
+    }).blocked).toBe(false);
+  });
 });
 
 describe("segmented playback audible state", () => {

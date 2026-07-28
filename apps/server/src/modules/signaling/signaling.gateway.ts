@@ -633,13 +633,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     };
     readinessBySession.set(message.sessionId, canonicalBase);
 
-    const allReady = playback.status !== "playing" || activeMembers.every((member) => {
-      const entry = readinessBySession.get(member.id);
-      if (!entry || entry.trackId !== trackId || entry.mediaEpoch !== mediaEpoch) {
-        return false;
-      }
-      return !entry.cacheEnabled || entry.state !== "waiting";
-    });
+    // Only online members that explicitly enabled fully-cached playback join
+    // this barrier. Streaming members retain the normal source/receiver path
+    // and must never delay, pause, or silence the room.
+    const cacheParticipants = activeMembers
+      .map((member) => readinessBySession.get(member.id))
+      .filter((entry): entry is RoomPlaybackReadinessPayload =>
+        !!entry &&
+        entry.trackId === trackId &&
+        entry.mediaEpoch === mediaEpoch &&
+        entry.cacheEnabled
+      );
+    const allReady = playback.status !== "playing" || cacheParticipants.every(
+      (entry) => entry.state !== "waiting"
+    );
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const resumeAt = barrierState === "open"
       ? previousBarrier?.key === key && previousBarrier.state === "open"
@@ -1471,11 +1478,15 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const activeMembers = snapshot.room.members.filter(
       (member) => member.presenceState === "online" && !!member.peerId
     );
-    const allReady = activeMembers.every((member) => {
-      const entry = readinessBySession.get(member.id);
-      return !!entry && entry.trackId === trackId && entry.mediaEpoch === mediaEpoch &&
-        (!entry.cacheEnabled || entry.state !== "waiting");
-    });
+    const cacheParticipants = activeMembers
+      .map((member) => readinessBySession.get(member.id))
+      .filter((entry): entry is RoomPlaybackReadinessPayload =>
+        !!entry &&
+        entry.trackId === trackId &&
+        entry.mediaEpoch === mediaEpoch &&
+        entry.cacheEnabled
+      );
+    const allReady = cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const previous = this.playbackBarrierByRoom.get(roomId);
     const resumeAt = barrierState === "open"
