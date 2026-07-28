@@ -123,6 +123,7 @@ function BottomPlayerControllerBase({
       mobileVariant={mobileVariant}
       audioRef={audioRef}
       playback={playback}
+      playbackBarrier={playbackBarrier}
       canControlPlayback={canControlPlayback}
       canSeekPlayback={canSeekPlayback}
       progressMs={progressMs}

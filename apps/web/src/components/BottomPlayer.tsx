@@ -25,10 +25,12 @@ import { usePreferredArtworkUrl } from "@/components/bottom-player/preferred-art
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
+import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   canControlPlayback: boolean;
   canSeekPlayback: boolean;
   progressMs: number;
@@ -73,6 +75,7 @@ function clampProgressMs(progressMs: number, durationMs: number) {
 function BottomPlayerBase({
   audioRef,
   playback,
+  playbackBarrier,
   canControlPlayback,
   canSeekPlayback,
   progressMs,
@@ -161,6 +164,7 @@ function BottomPlayerBase({
     };
   }, []);
   const isPlaying = playback?.status === "playing";
+  const isPlaybackBarrierBlocked = playbackBarrier?.blocked === true;
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
   const boundedProgressMs =
@@ -222,10 +226,10 @@ function BottomPlayerBase({
       };
       setRenderedProgressMs(clampProgressMs(progressMs, currentTrackDuration));
     }
-  }, [currentTrackDuration, isPlaying, progressMs, seekDraft]);
+  }, [currentTrackDuration, isPlaying, playbackBarrier, progressMs, seekDraft]);
 
   useEffect(() => {
-    if (seekDraft !== null || !isPlaying) {
+    if (seekDraft !== null || !isPlaying || isPlaybackBarrierBlocked) {
       return;
     }
 
@@ -246,7 +250,7 @@ function BottomPlayerBase({
     return () => {
       window.clearInterval(timerId);
     };
-  }, [currentTrackDuration, isPlaying, progressRenderIntervalMs, seekDraft]);
+  }, [currentTrackDuration, isPlaybackBarrierBlocked, isPlaying, progressRenderIntervalMs, seekDraft]);
 
   const clearPendingSeek = useCallback(
     (requestId: number) => {
@@ -344,14 +348,15 @@ function BottomPlayerBase({
   ]);
 
   const getLiveProgressMs = useCallback(
-    () =>
-      resolveAnchoredProgressMs({
-        progressMs: progressAnchorRef.current.progressMs,
-        receivedAtMs: progressAnchorRef.current.receivedAtMs,
-        durationMs: currentTrackDuration,
-        nowMs: Date.now()
-      }),
-    [currentTrackDuration]
+    () => isPlaybackBarrierBlocked
+      ? clampProgressMs(progressAnchorRef.current.progressMs, currentTrackDuration)
+      : resolveAnchoredProgressMs({
+          progressMs: progressAnchorRef.current.progressMs,
+          receivedAtMs: progressAnchorRef.current.receivedAtMs,
+          durationMs: currentTrackDuration,
+          nowMs: Date.now()
+        }),
+    [currentTrackDuration, isPlaybackBarrierBlocked]
   );
 
   const togglePlayback = useCallback(() => {
