@@ -59,15 +59,43 @@ function clampProgressMs(progressMs: number, durationMs: number) {
 }
 
 function isPlaybackBarrierHolding(
-  barrier: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null | undefined,
+  barrier: Pick<RoomPlaybackBarrierClock, "blocked" | "holdPositionMs" | "resumeAtMs"> | null | undefined,
   nowMs: number
 ) {
+  if (barrier?.blocked === true) {
+    return true;
+  }
   if (typeof barrier?.holdPositionMs !== "number" || !Number.isFinite(barrier.holdPositionMs)) {
     return false;
   }
   return typeof barrier.resumeAtMs !== "number" ||
     !Number.isFinite(barrier.resumeAtMs) ||
     nowMs < barrier.resumeAtMs;
+}
+
+export function resolveDisplayRoomPositionMs(input: {
+  playback: PlaybackSnapshot;
+  durationMs: number;
+  nowMs: number;
+  barrier?: RoomPlaybackBarrierClock | null;
+  previousProgressMs: number;
+  previousSessionKey: string;
+}) {
+  if (input.barrier?.blocked === true &&
+    (typeof input.barrier.holdPositionMs !== "number" ||
+      !Number.isFinite(input.barrier.holdPositionMs))) {
+    const sessionKey = getPlaybackClockSessionKey(input.playback);
+    if (sessionKey === input.previousSessionKey) {
+      return clampProgressMs(input.previousProgressMs, input.durationMs);
+    }
+    return clampProgressMs(input.playback.positionMs, input.durationMs);
+  }
+  return getPlaybackEffectivePositionMs(
+    input.playback,
+    input.durationMs,
+    input.nowMs,
+    input.barrier
+  );
 }
 
 export function resolveAudibleClockSample(input: {
@@ -371,12 +399,14 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       const now = getRoomPlaybackClockNowMs();
       const barrierHolding = isPlaybackBarrierHolding(playbackBarrier, now);
       const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
-      const roomClockMs = getPlaybackEffectivePositionMs(
-        currentPlayback,
-        progressTrack.durationMs,
-        now,
-        playbackBarrier
-      );
+      const roomClockMs = resolveDisplayRoomPositionMs({
+        playback: currentPlayback,
+        durationMs: progressTrack.durationMs,
+        nowMs: now,
+        barrier: playbackBarrier,
+        previousProgressMs: lastCommittedProgressRef.current,
+        previousSessionKey: lastCommittedSessionKeyRef.current
+      });
       const audibleClockResolution =
         currentPlayback.status === "playing" && !barrierHolding
           ? resolveAudibleClockSample({
@@ -491,12 +521,14 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     const now = getRoomPlaybackClockNowMs();
     const barrierHolding = isPlaybackBarrierHolding(playbackBarrier, now);
     const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
-    const roomClockMs = getPlaybackEffectivePositionMs(
-      currentPlayback,
-      progressTrack.durationMs,
-      now,
-      playbackBarrier
-    );
+    const roomClockMs = resolveDisplayRoomPositionMs({
+      playback: currentPlayback,
+      durationMs: progressTrack.durationMs,
+      nowMs: now,
+      barrier: playbackBarrier,
+      previousProgressMs: lastCommittedProgressRef.current,
+      previousSessionKey: lastCommittedSessionKeyRef.current
+    });
     const audibleClockResolution =
       currentPlayback.status === "playing" && !barrierHolding
         ? resolveAudibleClockSample({
@@ -576,15 +608,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     setSeekDraft(null);
 
     const currentPlayback = acceptedPlaybackRef.current;
-    const nextProgressMs =
-      progressTrack && currentPlayback
-        ? getPlaybackEffectivePositionMs(
-          currentPlayback,
-          progressTrack.durationMs,
-          getRoomPlaybackClockNowMs(),
-          playbackBarrier
-        )
-        : 0;
+    const nextProgressMs = progressTrack && currentPlayback
+      ? resolveDisplayRoomPositionMs({
+        playback: currentPlayback,
+        durationMs: progressTrack.durationMs,
+        nowMs: getRoomPlaybackClockNowMs(),
+        barrier: playbackBarrier,
+        previousProgressMs: lastCommittedProgressRef.current,
+        previousSessionKey: lastCommittedSessionKeyRef.current
+      })
+      : 0;
     setProgressMs(nextProgressMs);
     setDisplayClockSource("room-fallback");
     setDisplayDriftMs(0);

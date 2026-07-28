@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getPlaybackEffectivePositionMs,
+  resolveDisplayRoomPositionMs,
   resolveAudibleClockSample,
   resolveAudibleClockContinuitySample,
   resolveDisplayClockProgress,
@@ -66,6 +67,25 @@ describe("getPlaybackEffectivePositionMs", () => {
       Date.parse("2026-07-10T00:00:16.000Z"),
       { holdPositionMs: 18_000, resumeAtMs: Date.parse("2026-07-10T00:00:15.000Z") }
     )).toBe(19_000);
+  });
+
+  it("hard-freezes the progress display while a barrier is blocked without an anchor", () => {
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      mediaEpoch: 2,
+      positionMs: 4_000,
+      startedAt: "2026-07-10T00:00:01.000Z",
+      startAt: "2026-07-10T00:00:01.000Z"
+    } as never;
+    expect(resolveDisplayRoomPositionMs({
+      playback,
+      durationMs: 120_000,
+      nowMs: Date.parse("2026-07-10T00:01:00.000Z"),
+      barrier: { blocked: true, holdPositionMs: null, resumeAtMs: null },
+      previousProgressMs: 18_000,
+      previousSessionKey: "track_1|2|2026-07-10T00:00:01.000Z|playing"
+    })).toBe(18_000);
   });
 });
 
