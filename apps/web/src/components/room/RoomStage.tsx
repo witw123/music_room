@@ -24,9 +24,11 @@ import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { MemberPermissionControls } from "./MembersPanel";
+import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   currentTrack: TrackMeta | null;
   currentTrackDuration: number;
   isPlaying: boolean;
@@ -74,6 +76,7 @@ export function getSourceModeLabel(
 
 function RoomStageBase({
   roomSnapshot,
+  playbackBarrier,
   currentTrack,
   currentTrackDuration,
   isPlaying,
@@ -243,16 +246,25 @@ function RoomStageBase({
   useEffect(() => {
     const updatePosition = () => {
       setLyricsPositionMs(
-        getPlaybackEffectivePositionMs(playback, currentTrackDuration)
+        getPlaybackEffectivePositionMs(
+          playback,
+          currentTrackDuration,
+          undefined,
+          playbackBarrier
+        )
       );
     };
 
     updatePosition();
-    if (!isPlaying || playback.status !== "playing" || !playback.startedAt) return;
+    if (
+      !isPlaying ||
+      playback.status !== "playing" ||
+      (!playback.startedAt && !playback.startAt && playbackBarrier?.holdPositionMs === null)
+    ) return;
 
     const timer = window.setInterval(updatePosition, 250);
     return () => window.clearInterval(timer);
-  }, [currentTrackDuration, isPlaying, playback]);
+  }, [currentTrackDuration, isPlaying, playback, playbackBarrier]);
 
   useEffect(() => {
     if (!currentTrack) {

@@ -45,6 +45,28 @@ describe("getPlaybackEffectivePositionMs", () => {
       vi.useRealTimers();
     }
   });
+
+  it("freezes and resumes from the shared cache barrier anchor", () => {
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      positionMs: 4_000,
+      startedAt: "2026-07-10T00:00:01.000Z",
+      startAt: "2026-07-10T00:00:01.000Z"
+    } as never;
+    expect(getPlaybackEffectivePositionMs(
+      playback,
+      120_000,
+      Date.parse("2026-07-10T00:01:00.000Z"),
+      { holdPositionMs: 18_000, resumeAtMs: null }
+    )).toBe(18_000);
+    expect(getPlaybackEffectivePositionMs(
+      playback,
+      120_000,
+      Date.parse("2026-07-10T00:00:16.000Z"),
+      { holdPositionMs: 18_000, resumeAtMs: Date.parse("2026-07-10T00:00:15.000Z") }
+    )).toBe(19_000);
+  });
 });
 
 describe("resolveAudibleClockSample", () => {

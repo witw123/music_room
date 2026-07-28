@@ -10,6 +10,19 @@ type RoomPlaybackClockState = {
   calibratedAtMs: number | null;
 };
 
+export type RoomPlaybackBarrierClock = {
+  blocked: boolean;
+  holdPositionMs: number | null;
+  resumeAtMs: number | null;
+};
+
+type RoomPlaybackClockPlayback = {
+  status: "playing" | "paused" | "buffering";
+  positionMs: number;
+  startedAt?: string | null;
+  startAt?: string | null;
+};
+
 const roomPlaybackClockState: RoomPlaybackClockState = {
   offsetMs: 0,
   bestRoundTripMs: null,
@@ -47,6 +60,37 @@ export function calibrateRoomPlaybackClock(input: RoomPlaybackClockCalibrationIn
 
 export function getRoomPlaybackClockNowMs(clientNowMs = Date.now()) {
   return clientNowMs + roomPlaybackClockState.offsetMs;
+}
+
+export function resolveRoomPlaybackPositionMs(
+  playback: RoomPlaybackClockPlayback,
+  durationMs: number,
+  nowMs = getRoomPlaybackClockNowMs(),
+  barrier?: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null
+) {
+  const clamp = (value: number) => durationMs > 0
+    ? Math.min(Math.max(0, value), durationMs)
+    : Math.max(0, value);
+  if (playback.status !== "playing") {
+    return clamp(playback.positionMs);
+  }
+
+  const holdPositionMs = barrier?.holdPositionMs;
+  if (typeof holdPositionMs === "number" && Number.isFinite(holdPositionMs)) {
+    const resumeAtMs = barrier?.resumeAtMs;
+    const elapsedAfterResume = typeof resumeAtMs === "number" &&
+      Number.isFinite(resumeAtMs)
+      ? Math.max(0, nowMs - resumeAtMs)
+      : 0;
+    return clamp(holdPositionMs + elapsedAfterResume);
+  }
+
+  const anchorAt = playback.startedAt ?? playback.startAt ?? null;
+  const anchorMs = anchorAt ? Date.parse(anchorAt) : Number.NaN;
+  if (!Number.isFinite(anchorMs)) {
+    return clamp(playback.positionMs);
+  }
+  return clamp(playback.positionMs + Math.max(0, nowMs - anchorMs));
 }
 
 export function getRoomPlaybackClockSnapshot() {

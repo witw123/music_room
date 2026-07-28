@@ -405,6 +405,7 @@ export function MusicRoomApp({
       playbackActions={playbackActions}
       roomActions={roomActions}
       roomSnapshot={roomSnapshot}
+      playbackBarrier={segmentedPlayback.playbackBarrier}
       socket={appRefs.socketRef.current}
       isRoomAway={isRoomAway}
       awayRoomId={isRoomAway ? currentRoomId : null}

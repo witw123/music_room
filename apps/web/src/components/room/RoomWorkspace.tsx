@@ -23,12 +23,14 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { MobileAppNavigation } from "@/components/MobileAppNavigation";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
+import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
   statusMessage: string;
   statusTone: string;
   roomSnapshot: RoomSnapshot | null;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   roomId: string | null;
   currentTrack: TrackMeta | null;
   canControlPlayback: boolean;
@@ -88,6 +90,7 @@ function RoomWorkspaceBase({
   statusMessage,
   statusTone,
   roomSnapshot,
+  playbackBarrier,
   roomId,
   currentTrack,
   canControlPlayback,
@@ -190,6 +193,7 @@ function RoomWorkspaceBase({
           {roomSnapshot ? (
             <RoomDashboardView
               roomSnapshot={roomSnapshot}
+              playbackBarrier={playbackBarrier}
               currentTrack={currentTrack}
               currentTrackDuration={currentTrackDuration}
               isPlaying={isPlaying}

@@ -134,6 +134,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     key: string;
     state: "waiting" | "open";
     resumeAt: string | null;
+    holdPositionMs: number | null;
+    updatedAt: string;
   }>();
 
   constructor(
@@ -419,6 +421,16 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       const readinessBySession = this.playbackReadinessByRoom.get(message.roomId) ?? new Map();
       readinessBySession.set(parsed.data.sessionId, parsed.data);
       this.playbackReadinessByRoom.set(message.roomId, readinessBySession);
+      const currentBarrier = this.playbackBarrierByRoom.get(message.roomId);
+      if (!currentBarrier || parsed.data.updatedAt >= currentBarrier.updatedAt) {
+        this.playbackBarrierByRoom.set(message.roomId, {
+          key: `${parsed.data.trackId ?? "none"}:${parsed.data.mediaEpoch}`,
+          state: parsed.data.barrier,
+          resumeAt: parsed.data.resumeAt,
+          holdPositionMs: parsed.data.holdPositionMs,
+          updatedAt: parsed.data.updatedAt
+        });
+      }
       this.server.to(message.roomId).emit("room.playback.readiness", parsed.data);
     }).then((unsubscribe) => {
       this.redisUnsubscribers.push(unsubscribe);
@@ -629,6 +641,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       state: normalizedState,
       barrier: "waiting",
       resumeAt: null,
+      holdPositionMs: null,
       updatedAt: new Date().toISOString()
     };
     readinessBySession.set(message.sessionId, canonicalBase);
@@ -651,6 +664,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       cacheParticipants.length < 2 ||
       cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
+    const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
+      snapshot,
+      key,
+      previousBarrier,
+      barrierState
+    });
     // Ready caches follow the normal path immediately. A shared start time
     // is only needed when this exact track was actually held for at least one
     // member to finish caching.
@@ -661,16 +680,39 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           ? previousBarrier.resumeAt
           : null
       : null;
-    this.playbackBarrierByRoom.set(message.roomId, { key, state: barrierState, resumeAt });
     const canonical: RoomPlaybackReadinessPayload = {
       ...canonicalBase,
       barrier: barrierState,
       resumeAt,
+      holdPositionMs,
       updatedAt: new Date().toISOString()
     };
+    this.playbackBarrierByRoom.set(message.roomId, {
+      key,
+      state: barrierState,
+      resumeAt,
+      holdPositionMs,
+      updatedAt: canonical.updatedAt
+    });
     readinessBySession.set(message.sessionId, canonical);
     this.ensureBroadcasterServer();
-    this.roomRealtimeBroadcaster.emitPlaybackReadiness(message.roomId, canonical);
+    // A barrier transition is room-wide. Refresh every matching readiness
+    // entry so clients do not wait for an unrelated heartbeat before they can
+    // observe the shared hold/resume anchor.
+    for (const entry of readinessBySession.values()) {
+      if (entry.trackId !== trackId || entry.mediaEpoch !== mediaEpoch) continue;
+      const nextEntry = entry.sessionId === message.sessionId
+        ? canonical
+        : {
+            ...entry,
+            barrier: barrierState,
+            resumeAt,
+            holdPositionMs,
+            updatedAt: new Date().toISOString()
+          } satisfies RoomPlaybackReadinessPayload;
+      readinessBySession.set(entry.sessionId, nextEntry);
+      this.roomRealtimeBroadcaster.emitPlaybackReadiness(message.roomId, nextEntry);
+    }
     callback?.(canonical);
     return canonical;
   }
@@ -1498,6 +1540,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const previous = this.playbackBarrierByRoom.get(roomId);
+    const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
+      snapshot,
+      key,
+      previousBarrier: previous,
+      barrierState
+    });
     const resumeAt = barrierState === "open"
       ? previous?.key === key && previous.state === "waiting"
         ? new Date(Date.now() + 650).toISOString()
@@ -1505,7 +1553,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           ? previous.resumeAt
           : null
       : null;
-    this.playbackBarrierByRoom.set(roomId, { key, state: barrierState, resumeAt });
+    this.playbackBarrierByRoom.set(roomId, {
+      key,
+      state: barrierState,
+      resumeAt,
+      holdPositionMs,
+      updatedAt: new Date().toISOString()
+    });
 
     this.ensureBroadcasterServer();
     for (const entry of readinessBySession.values()) {
@@ -1514,11 +1568,62 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         ...entry,
         barrier: barrierState,
         resumeAt,
+        holdPositionMs,
         updatedAt: new Date().toISOString()
       };
       readinessBySession.set(entry.sessionId, nextEntry);
       this.roomRealtimeBroadcaster.emitPlaybackReadiness(roomId, nextEntry);
     }
+  }
+
+  private resolvePlaybackBarrierHoldPosition(input: {
+    snapshot: RoomSnapshot;
+    key: string;
+    previousBarrier: {
+      key: string;
+      state: "waiting" | "open";
+      resumeAt: string | null;
+      holdPositionMs: number | null;
+    } | undefined;
+    barrierState: "waiting" | "open";
+  }) {
+    const previous = input.previousBarrier;
+    if (
+      previous?.key === input.key &&
+      previous.state === "waiting" &&
+      previous.holdPositionMs !== null
+    ) {
+      return previous.holdPositionMs;
+    }
+    if (input.barrierState !== "waiting") {
+      return previous?.key === input.key && previous?.state === "waiting"
+        ? previous.holdPositionMs
+        : null;
+    }
+
+    // A member that newly becomes unready must freeze at the position that is
+    // current when this waiting transition is observed, not at the old hold
+    // point from a prior barrier cycle.
+    return this.resolveCurrentPlaybackPosition(input.snapshot);
+  }
+
+  private resolveCurrentPlaybackPosition(snapshot: RoomSnapshot) {
+    const playback = snapshot.room.playback;
+    if (playback.status !== "playing" || !playback.currentTrackId) {
+      return null;
+    }
+    const anchorAt = playback.startedAt ?? playback.startAt ?? null;
+    const anchorMs = anchorAt ? Date.parse(anchorAt) : Number.NaN;
+    const elapsedMs = Number.isFinite(anchorMs)
+      ? Math.max(0, Date.now() - anchorMs)
+      : 0;
+    const rawPositionMs = Math.max(0, playback.positionMs + elapsedMs);
+    const durationMs = snapshot.tracks.find(
+      (track) => track.id === playback.currentTrackId
+    )?.durationMs ?? 0;
+    return durationMs > 0
+      ? Math.min(rawPositionMs, durationMs)
+      : rawPositionMs;
   }
 
   private async releaseSessionLease(client: Socket) {

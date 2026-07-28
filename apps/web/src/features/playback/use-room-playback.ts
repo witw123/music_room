@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
-import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
+import {
+  getRoomPlaybackClockNowMs,
+  resolveRoomPlaybackPositionMs,
+  type RoomPlaybackBarrierClock
+} from "./room-playback-clock";
 import { roomAudioOutput } from "./room-audio-output";
 import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 import { resolveLoudnessGainDb } from "./loudness";
@@ -26,6 +30,7 @@ type UseRoomPlaybackOptions = {
   playback: PlaybackSnapshot | null | undefined;
   tracks: TrackMeta[];
   getLocalPlaybackPositionMs?: () => number | null;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
 };
 
 type AudibleClockSample = {
@@ -51,6 +56,18 @@ function clampProgressMs(progressMs: number, durationMs: number) {
   return durationMs > 0
     ? Math.min(Math.max(0, progressMs), durationMs)
     : Math.max(0, progressMs);
+}
+
+function isPlaybackBarrierHolding(
+  barrier: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null | undefined,
+  nowMs: number
+) {
+  if (typeof barrier?.holdPositionMs !== "number" || !Number.isFinite(barrier.holdPositionMs)) {
+    return false;
+  }
+  return typeof barrier.resumeAtMs !== "number" ||
+    !Number.isFinite(barrier.resumeAtMs) ||
+    nowMs < barrier.resumeAtMs;
 }
 
 export function resolveAudibleClockSample(input: {
@@ -210,8 +227,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     audioRef,
     playback,
     tracks,
-    
-    getLocalPlaybackPositionMs
+    getLocalPlaybackPositionMs,
+    playbackBarrier
   } = options;
   const [progressMs, setProgressMs] = useState(0);
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
@@ -352,10 +369,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       }
 
       const now = getRoomPlaybackClockNowMs();
+      const barrierHolding = isPlaybackBarrierHolding(playbackBarrier, now);
       const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
-      const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
+      const roomClockMs = getPlaybackEffectivePositionMs(
+        currentPlayback,
+        progressTrack.durationMs,
+        now,
+        playbackBarrier
+      );
       const audibleClockResolution =
-        currentPlayback.status === "playing"
+        currentPlayback.status === "playing" && !barrierHolding
           ? resolveAudibleClockSample({
               localPlaybackPositionMs:
                 typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null
@@ -434,7 +457,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     
     getLocalPlaybackPositionMs,
     seekDraft,
-    isPageVisible
+    isPageVisible,
+    playbackBarrier,
+    playbackBarrier?.holdPositionMs,
+    playbackBarrier?.resumeAtMs
   ]);
 
   useEffect(() => {
@@ -463,10 +489,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const now = getRoomPlaybackClockNowMs();
+    const barrierHolding = isPlaybackBarrierHolding(playbackBarrier, now);
     const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
-    const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
+    const roomClockMs = getPlaybackEffectivePositionMs(
+      currentPlayback,
+      progressTrack.durationMs,
+      now,
+      playbackBarrier
+    );
     const audibleClockResolution =
-      currentPlayback.status === "playing"
+      currentPlayback.status === "playing" && !barrierHolding
         ? resolveAudibleClockSample({
             localPlaybackPositionMs:
               typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null
@@ -546,7 +578,12 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     const currentPlayback = acceptedPlaybackRef.current;
     const nextProgressMs =
       progressTrack && currentPlayback
-        ? getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs)
+        ? getPlaybackEffectivePositionMs(
+          currentPlayback,
+          progressTrack.durationMs,
+          getRoomPlaybackClockNowMs(),
+          playbackBarrier
+        )
         : 0;
     setProgressMs(nextProgressMs);
     setDisplayClockSource("room-fallback");
@@ -566,7 +603,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     progressTrack?.id,
     progressTrack?.durationMs,
     progressTrack,
-    acceptedPlayback?.mediaEpoch
+    acceptedPlayback?.mediaEpoch,
+    playbackBarrier,
+    playbackBarrier?.holdPositionMs,
+    playbackBarrier?.resumeAtMs
   ]);
 
   return {
@@ -602,17 +642,11 @@ function getPlaybackClockSessionKey(playback: PlaybackSnapshot | null | undefine
 export function getPlaybackEffectivePositionMs(
   playback: PlaybackSnapshot | null | undefined,
   durationMs: number,
-  now = getRoomPlaybackClockNowMs()
+  now = getRoomPlaybackClockNowMs(),
+  barrier?: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null
 ) {
   if (!playback) {
     return 0;
   }
-
-  if (playback.status !== "playing" || !playback.startedAt) {
-    return durationMs > 0 ? Math.min(playback.positionMs, durationMs) : playback.positionMs;
-  }
-
-  const elapsed = Math.max(0, now - new Date(playback.startedAt).getTime());
-  const nextPositionMs = playback.positionMs + elapsed;
-  return durationMs > 0 ? Math.min(nextPositionMs, durationMs) : nextPositionMs;
+  return resolveRoomPlaybackPositionMs(playback, durationMs, now, barrier);
 }

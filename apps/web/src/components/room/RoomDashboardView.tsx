@@ -22,11 +22,13 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
+import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type TabId = "library" | "local" | "members";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   currentTrack: TrackMeta | null;
   currentTrackDuration: number;
   isPlaying: boolean;
@@ -119,6 +121,7 @@ const MembersTabPanel = dynamic(
 
 function RoomDashboardViewBase({
   roomSnapshot,
+  playbackBarrier,
   currentTrack,
   currentTrackDuration,
   isPlaying,
@@ -212,6 +215,7 @@ function RoomDashboardViewBase({
         <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
           <RoomStage
             roomSnapshot={roomSnapshot}
+            playbackBarrier={playbackBarrier}
             currentTrack={currentTrack}
             currentTrackDuration={currentTrackDuration}
             isPlaying={isPlaying}

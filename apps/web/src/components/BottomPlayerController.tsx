@@ -6,11 +6,13 @@ import { BottomPlayer } from "@/components/BottomPlayer";
 import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-visualizer";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type BottomPlayerControllerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   isSourceOwner: boolean;
   roomSnapshot: RoomSnapshot | null;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   activeSession: AuthSession | null;
   currentTrack: TrackMeta | null;
   canSeekPlayback: boolean;
@@ -38,6 +40,7 @@ function BottomPlayerControllerBase({
   audioRef,
   isSourceOwner,
   roomSnapshot,
+  playbackBarrier,
   activeSession,
   currentTrack,
   canSeekPlayback,
@@ -81,7 +84,8 @@ function BottomPlayerControllerBase({
     audioRef,
     playback,
     tracks: roomSnapshot?.tracks ?? [],
-    getLocalPlaybackPositionMs: undefined
+    getLocalPlaybackPositionMs: undefined,
+    playbackBarrier
   });
   const visualizer = usePlayerAudioVisualizer({
     audioRef,

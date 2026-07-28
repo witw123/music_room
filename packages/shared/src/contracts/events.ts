@@ -129,6 +129,10 @@ export const roomPlaybackReadinessPayloadSchema = z.object({
   state: z.enum(["waiting", "ready", "failed"]),
   barrier: z.enum(["waiting", "open"]),
   resumeAt: z.string().datetime().nullable(),
+  // When the cache barrier is waiting, all participants must use this
+  // position as the shared playback clock anchor. It remains attached to the
+  // open barrier until the scheduled resume time has elapsed.
+  holdPositionMs: z.number().nonnegative().nullable().default(null),
   updatedAt: z.string().datetime()
 });
 

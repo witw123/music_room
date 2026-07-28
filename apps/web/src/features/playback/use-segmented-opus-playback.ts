@@ -11,7 +11,10 @@ import {
   getAssetUnit,
   putAssetManifest
 } from "@/lib/indexeddb";
-import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
+import {
+  getRoomPlaybackClockNowMs,
+  type RoomPlaybackBarrierClock
+} from "./room-playback-clock";
 import { SegmentedOpusEngine } from "./segmented-opus-engine";
 import { roomAudioOutput } from "./room-audio-output";
 
@@ -66,6 +69,7 @@ export function useSegmentedOpusPlayback(input: {
   peerId: string;
   isCurrentSource: boolean;
   disableSourcePlayback?: boolean;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   volume: number;
   loudnessGainDb?: number;
   audioUnlocked: boolean;
@@ -83,6 +87,7 @@ export function useSegmentedOpusPlayback(input: {
   const roomId = roomSnapshot?.room.id ?? null;
   const localFallbackAsset = input.localFallbackAsset ?? null;
   const isLocalFallback = !isCurrentSource && !!localFallbackAsset;
+  const playbackBarrierBlocked = input.playbackBarrier?.blocked === true;
   const disableSourcePlayback = isCurrentSource && input.disableSourcePlayback === true;
   const activePlaybackAsset = isLocalFallback
     ? localFallbackAsset
@@ -91,7 +96,7 @@ export function useSegmentedOpusPlayback(input: {
     isCurrentSource,
     currentTrackId: roomSnapshot?.room.playback.currentTrackId,
     hasPlaybackAsset: isSupportedPlaybackAsset(activePlaybackAsset),
-    isLocalFallback,
+    isLocalFallback: isLocalFallback && !playbackBarrierBlocked,
     disableSourcePlayback
   });
   const playbackIdentity = resolveSegmentedPlaybackIdentity({
@@ -131,13 +136,17 @@ export function useSegmentedOpusPlayback(input: {
           ? runtime.currentTrack?.playbackAsset
           : runtime.localFallbackAsset;
         const currentLocalFallback = !runtime.isCurrentSource && !!runtime.localFallbackAsset;
-        const currentPlayback = runtime.roomSnapshot?.room.playback;
+        const currentRoomPlayback = runtime.roomSnapshot?.room.playback;
+        const currentPlayback = resolveBarrierPlaybackSnapshot(
+          currentRoomPlayback,
+          runtime.playbackBarrier
+        );
         const nextTransition = currentPlayback?.gaplessNext ?? null;
         const nextTrack = nextTransition
           ? runtime.roomSnapshot?.tracks.find((track) => track.id === nextTransition.trackId)
           : null;
         const currentPlaybackIdentity = resolveSegmentedPlaybackIdentity({
-          playback: currentPlayback,
+          playback: currentRoomPlayback,
           playbackAssetId: currentPlaybackAsset?.assetId
         });
         const currentPlaybackEngineIdentity = resolveSegmentedPlaybackEngineIdentity({
@@ -145,6 +154,10 @@ export function useSegmentedOpusPlayback(input: {
           playbackAssetId: currentPlaybackAsset?.assetId,
           localOnly: currentLocalFallback
         });
+        if (runtime.playbackBarrier?.blocked === true) {
+          setSnapshot({ ...idleSnapshot, playbackIdentity: currentPlaybackIdentity });
+          return;
+        }
         if (runtime.isCurrentSource && runtime.disableSourcePlayback) {
           setSnapshot({ ...idleSnapshot, playbackIdentity: currentPlaybackIdentity });
           return;
@@ -285,6 +298,9 @@ export function useSegmentedOpusPlayback(input: {
     isCurrentSource,
     localFallbackAsset,
     disableSourcePlayback,
+    playbackBarrierBlocked,
+    input.playbackBarrier?.holdPositionMs,
+    input.playbackBarrier?.resumeAtMs,
     releaseEngine
   ]);
 
@@ -330,6 +346,29 @@ export function resolveSegmentedPlaybackIdentity(input: {
     input.playback.mediaEpoch,
     input.playback.startAt ?? "none"
   ].join(":");
+}
+
+function resolveBarrierPlaybackSnapshot(
+  playback: RoomSnapshot["room"]["playback"] | null | undefined,
+  barrier?: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null
+) {
+  if (!playback || playback.status !== "playing") {
+    return playback;
+  }
+  const holdPositionMs = barrier?.holdPositionMs;
+  if (typeof holdPositionMs !== "number" || !Number.isFinite(holdPositionMs)) {
+    return playback;
+  }
+  const resumeAtMs = barrier?.resumeAtMs;
+  const resumeAt = typeof resumeAtMs === "number" && Number.isFinite(resumeAtMs)
+    ? new Date(resumeAtMs).toISOString()
+    : playback.startAt ?? null;
+  return {
+    ...playback,
+    positionMs: holdPositionMs,
+    startedAt: resumeAt,
+    startAt: resumeAt
+  };
 }
 
 /**

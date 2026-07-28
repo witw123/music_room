@@ -115,7 +115,13 @@ describe("room playback cache barrier", () => {
     peerId: `peer-${id}`,
     presenceState: "online"
   });
-  const readiness = (sessionId: string, state: "waiting" | "ready", barrier: "waiting" | "open", resumeAt: string | null = null) => ({
+  const readiness = (
+    sessionId: string,
+    state: "waiting" | "ready",
+    barrier: "waiting" | "open",
+    resumeAt: string | null = null,
+    holdPositionMs: number | null = null
+  ) => ({
     roomId: "room-1",
     sessionId,
     peerId: `peer-${sessionId}`,
@@ -125,6 +131,7 @@ describe("room playback cache barrier", () => {
     state,
     barrier,
     resumeAt,
+    holdPositionMs,
     updatedAt: `${sessionId === "one" ? "2026-07-27T00:00:01.000Z" : "2026-07-27T00:00:02.000Z"}`
   });
 
@@ -138,17 +145,34 @@ describe("room playback cache barrier", () => {
     }).blocked).toBe(true);
   });
 
+  it("keeps the shared hold position while the barrier is waiting", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [
+        readiness("one", "ready", "waiting", null, 12_500),
+        readiness("two", "waiting", "waiting", null, 12_500)
+      ],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:20.000Z")
+    })).toMatchObject({
+      blocked: true,
+      holdPositionMs: 12_500,
+      resumeAtMs: null
+    });
+  });
+
   it("waits for the shared resume time after the barrier opens", () => {
     expect(resolvePlaybackBarrierState({
       playback,
       activeMembers: [member("one"), member("two")] as never,
       readiness: [
-        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
-        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z")
+        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500),
+        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)
       ],
       cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    }).blocked).toBe(true);
+    })).toMatchObject({ blocked: true, holdPositionMs: 12_500 });
   });
 
   it("opens after the shared resume time", () => {
@@ -156,12 +180,12 @@ describe("room playback cache barrier", () => {
       playback,
       activeMembers: [member("one"), member("two")] as never,
       readiness: [
-        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
-        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z")
+        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500),
+        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)
       ],
       cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:06.000Z")
-    }).blocked).toBe(false);
+    })).toMatchObject({ blocked: false, holdPositionMs: 12_500 });
   });
 
   it("keeps a solo cache participant on the established audio route", () => {
@@ -343,6 +367,30 @@ describe("local room audio clock", () => {
       startedAt: "2026-07-22T00:00:10.000Z",
       startAt: "2026-07-22T00:00:10.000Z"
     }, Date.parse("2026-07-22T00:00:13.500Z"))).toBe(12_000);
+  });
+
+  it("freezes local audio at the barrier hold position", () => {
+    expect(resolveRoomAudioPositionMs({
+      status: "playing",
+      positionMs: 12_000,
+      startedAt: "2026-07-22T00:00:10.000Z",
+      startAt: "2026-07-22T00:00:10.000Z"
+    }, Date.parse("2026-07-22T00:01:00.000Z"), {
+      holdPositionMs: 18_250,
+      resumeAtMs: null
+    })).toBe(18_250);
+  });
+
+  it("resumes local audio from the held position instead of the stale room anchor", () => {
+    expect(resolveRoomAudioPositionMs({
+      status: "playing",
+      positionMs: 12_000,
+      startedAt: "2026-07-22T00:00:10.000Z",
+      startAt: "2026-07-22T00:00:10.000Z"
+    }, Date.parse("2026-07-22T00:00:16.000Z"), {
+      holdPositionMs: 18_250,
+      resumeAtMs: Date.parse("2026-07-22T00:00:15.000Z")
+    })).toBe(19_250);
   });
 });
 

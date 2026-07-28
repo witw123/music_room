@@ -16,6 +16,7 @@ import type { useRoomPageState } from "@/components/room/hooks/use-room-page-sta
 import type { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import type { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
 import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
+import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type RoomAppShellProps = {
   activeSession: AuthSession | null;
@@ -33,6 +34,7 @@ type RoomAppShellProps = {
   playbackActions: ReturnType<typeof useRoomPlaybackActions>;
   roomActions: ReturnType<typeof useRoomPageRoomActions>;
   roomSnapshot: RoomSnapshot | null;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
   isRoomAway: boolean;
   awayRoomId: string | null;
   onResumeRoom: () => void;
@@ -60,6 +62,7 @@ export function RoomAppShell({
   playbackActions,
   roomActions,
   roomSnapshot,
+  playbackBarrier,
   isRoomAway,
   awayRoomId,
   onResumeRoom,
@@ -99,6 +102,7 @@ export function RoomAppShell({
           statusMessage={statusMessage}
           statusTone={workspaceViewModel.statusTone}
           roomSnapshot={roomSnapshot}
+          playbackBarrier={playbackBarrier}
           roomId={roomSnapshot?.room.id ?? initialRoomId}
           currentTrack={currentTrack}
           canControlPlayback={canControlPlayback}
@@ -160,6 +164,7 @@ export function RoomAppShell({
         audioRef={audioRef}
         isSourceOwner={isSourceOwner}
         roomSnapshot={roomSnapshot}
+        playbackBarrier={playbackBarrier}
         activeSession={activeSession}
         currentTrack={currentTrack}
         canSeekPlayback={true}
