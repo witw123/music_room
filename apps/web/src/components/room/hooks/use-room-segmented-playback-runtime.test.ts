@@ -6,6 +6,7 @@ import {
   resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
   resolvePlaybackBarrierState,
+  resolveCacheReadinessState,
   resolveRoomAudioPositionMs,
   shouldDisableSourcePlayback,
   shouldWaitForLocalAudioContext
@@ -140,8 +141,11 @@ describe("room playback cache barrier", () => {
   it("waits for the shared resume time after the barrier opens", () => {
     expect(resolvePlaybackBarrierState({
       playback,
-      activeMembers: [member("one")] as never,
-      readiness: [readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z")],
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [
+        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
+        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z")
+      ],
       cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:04.000Z")
     }).blocked).toBe(true);
@@ -150,10 +154,36 @@ describe("room playback cache barrier", () => {
   it("opens after the shared resume time", () => {
     expect(resolvePlaybackBarrierState({
       playback,
-      activeMembers: [member("one")] as never,
-      readiness: [readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z")],
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [
+        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
+        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z")
+      ],
       cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:06.000Z")
+    }).blocked).toBe(false);
+  });
+
+  it("keeps a solo cache participant on the established audio route", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one")] as never,
+      readiness: [readiness("one", "waiting", "waiting")],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
+    }).blocked).toBe(false);
+  });
+
+  it("does not create a barrier when every cache participant already has the track", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [
+        readiness("one", "ready", "open"),
+        readiness("two", "ready", "open")
+      ],
+      cacheEnabled: true,
+      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
     }).blocked).toBe(false);
   });
 
@@ -172,6 +202,26 @@ describe("room playback cache barrier", () => {
       cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:06.000Z")
     }).blocked).toBe(false);
+  });
+});
+
+describe("cache readiness reporting", () => {
+  it("does not block the room while checking an already-cached local file", () => {
+    expect(resolveCacheReadinessState({
+      cacheEnabled: true,
+      localReady: false,
+      isPreparingProviderCache: false,
+      localAudioStatus: "checking"
+    })).toBe("ready");
+  });
+
+  it("only reports waiting during an actual provider-cache download", () => {
+    expect(resolveCacheReadinessState({
+      cacheEnabled: true,
+      localReady: false,
+      isPreparingProviderCache: true,
+      localAudioStatus: "missing"
+    })).toBe("waiting");
   });
 });
 

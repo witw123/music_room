@@ -195,6 +195,23 @@ export function shouldWaitForLocalAudioContext(input: {
   );
 }
 
+export function resolveCacheReadinessState(input: {
+  cacheEnabled: boolean;
+  localReady: boolean;
+  isPreparingProviderCache: boolean;
+  localAudioStatus: LocalAudioResolutionStatus;
+}): RoomPlaybackReadinessInputPayload["state"] {
+  if (!input.cacheEnabled || input.localReady) {
+    return "ready";
+  }
+  // IndexedDB lookup is intentionally not a barrier. A song that is already
+  // cached should retain the normal audio path while its local record is read.
+  if (input.isPreparingProviderCache) {
+    return "waiting";
+  }
+  return input.localAudioStatus === "missing" ? "failed" : "ready";
+}
+
 function isAudioPlaybackBlockedError(error: string | null) {
   return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
 }
@@ -332,6 +349,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     source: offlineSource
   };
   const [offlineFallbackAsset, setOfflineFallbackAsset] = useState<TrackMeta["playbackAsset"] | null>(null);
+  const [isPreparingProviderCache, setIsPreparingProviderCache] = useState(false);
   const localAudioTrackKey = resolveLocalAudioTrackKey(
     input.currentTrack,
     forceProviderCache
@@ -426,6 +444,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const remoteAudioTimelineKeyRef = useRef<string | null>(null);
   const failedLocalAudioKeysRef = useRef<Set<string>>(new Set());
   const readinessPublishKeyRef = useRef<string | null>(null);
+  const cacheBarrierParticipationRef = useRef(false);
   const roomId = input.roomSnapshot?.room.id ?? null;
   const [mediaPlayback, setMediaPlayback] = useState<SegmentedPlaybackSnapshot>(() => ({
     state: "idle",
@@ -552,12 +571,38 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const trackId = readinessTrackId;
     const mediaEpoch = readinessMediaEpoch;
     const cacheEnabled = cacheBarrierEnabled && !!trackId;
+    if (!readinessRoomId || !readinessActiveSessionId || !readinessPeerId) {
+      return;
+    }
+
+    // Normal playback is fully independent from the cache barrier. Send one
+    // leave notification when the setting is turned off, then stop all
+    // readiness traffic and leave the established audio route untouched.
+    if (!cacheEnabled) {
+      if (cacheBarrierParticipationRef.current) {
+        publishReadiness({
+          roomId: readinessRoomId,
+          sessionId: readinessActiveSessionId,
+          peerId: readinessPeerId,
+          trackId,
+          mediaEpoch,
+          cacheEnabled: false,
+          state: "ready"
+        });
+      }
+      cacheBarrierParticipationRef.current = false;
+      readinessPublishKeyRef.current = null;
+      return;
+    }
+
+    cacheBarrierParticipationRef.current = true;
     const localReady = localAudioResolution.status === "available" || !!offlineFallbackAsset;
-    const state: RoomPlaybackReadinessInputPayload["state"] = !cacheEnabled || localReady
-      ? "ready"
-      : localAudioResolution.status === "missing"
-        ? "failed"
-        : "waiting";
+    const state = resolveCacheReadinessState({
+      cacheEnabled,
+      localReady,
+      isPreparingProviderCache,
+      localAudioStatus: localAudioResolution.status
+    });
     const key = [
       readinessRoomId ?? "none",
       trackId ?? "none",
@@ -565,9 +610,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       cacheEnabled,
       state
     ].join(":");
-    if (!readinessRoomId || !readinessActiveSessionId || !readinessPeerId) {
-      return;
-    }
     const payload: RoomPlaybackReadinessInputPayload = {
       roomId: readinessRoomId,
       sessionId: readinessActiveSessionId,
@@ -596,7 +638,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     readinessMediaEpoch,
     readinessPlaybackStatus,
     localAudioResolution.status,
-    offlineFallbackAsset
+    offlineFallbackAsset,
+    isPreparingProviderCache
   ]);
 
   useEffect(() => {
@@ -612,12 +655,14 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       !fallbackInput.roomSnapshot ||
       !fallbackInput.track
     ) {
+      setIsPreparingProviderCache(false);
       setOfflineFallbackAsset(null);
       return;
     }
 
     let cancelled = false;
     const abortController = new AbortController();
+    setIsPreparingProviderCache(true);
     setOfflineFallbackAsset(null);
     setStatusMessage(forceProviderCache
       ? `正在从${fallbackInput.source.label}获取《${fallbackInput.track.title}》并缓存播放…`
@@ -631,6 +676,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       signal: abortController.signal
     }).then((result) => {
       if (!cancelled) {
+        setIsPreparingProviderCache(false);
         if (result.file) {
           setOfflineFallbackAsset(null);
           setLocalAudioResolution({
@@ -656,6 +702,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
     }).catch((error) => {
       if (cancelled) return;
+      setIsPreparingProviderCache(false);
       const detail = error instanceof Error && error.message.trim()
         ? error.message
         : "平台音频暂时不可用，请稍后重试。";
@@ -1916,7 +1963,12 @@ export function resolvePlaybackBarrierState(input: {
   const relevant = activeMembers
     .map((member) => latestBySession.get(member.id) ?? null)
     .filter((item): item is RoomPlaybackReadinessPayload => !!item?.cacheEnabled);
-  const allReady = relevant.length > 0 && relevant.every(
+  // There is no synchronization problem with one cache participant. Do not
+  // pause a solo room while waiting for the readiness event to round-trip.
+  if (relevant.length < 2) {
+    return { blocked: false, resumeAtMs: null as number | null };
+  }
+  const allReady = relevant.every(
     (item) => item.state !== "waiting" && item.barrier === "open"
   );
   if (allReady) {

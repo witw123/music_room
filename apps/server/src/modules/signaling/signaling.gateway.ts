@@ -644,14 +644,22 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         entry.mediaEpoch === mediaEpoch &&
         entry.cacheEnabled
       );
-    const allReady = playback.status !== "playing" || cacheParticipants.every(
-      (entry) => entry.state !== "waiting"
-    );
+    // A single cache-enabled member has nobody to synchronize with. Keep its
+    // established local/streaming source active instead of waiting for its
+    // own Socket.IO round trip.
+    const allReady = playback.status !== "playing" ||
+      cacheParticipants.length < 2 ||
+      cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
+    // Ready caches follow the normal path immediately. A shared start time
+    // is only needed when this exact track was actually held for at least one
+    // member to finish caching.
     const resumeAt = barrierState === "open"
-      ? previousBarrier?.key === key && previousBarrier.state === "open"
-        ? previousBarrier.resumeAt
-        : new Date(Date.now() + 650).toISOString()
+      ? previousBarrier?.key === key && previousBarrier.state === "waiting"
+        ? new Date(Date.now() + 650).toISOString()
+        : previousBarrier?.key === key && previousBarrier.state === "open"
+          ? previousBarrier.resumeAt
+          : null
       : null;
     this.playbackBarrierByRoom.set(message.roomId, { key, state: barrierState, resumeAt });
     const canonical: RoomPlaybackReadinessPayload = {
@@ -1486,13 +1494,16 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         entry.mediaEpoch === mediaEpoch &&
         entry.cacheEnabled
       );
-    const allReady = cacheParticipants.every((entry) => entry.state !== "waiting");
+    const allReady = cacheParticipants.length < 2 ||
+      cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const previous = this.playbackBarrierByRoom.get(roomId);
     const resumeAt = barrierState === "open"
-      ? previous?.key === key && previous.state === "open"
-        ? previous.resumeAt
-        : new Date(Date.now() + 650).toISOString()
+      ? previous?.key === key && previous.state === "waiting"
+        ? new Date(Date.now() + 650).toISOString()
+        : previous?.key === key && previous.state === "open"
+          ? previous.resumeAt
+          : null
       : null;
     this.playbackBarrierByRoom.set(roomId, { key, state: barrierState, resumeAt });
 
