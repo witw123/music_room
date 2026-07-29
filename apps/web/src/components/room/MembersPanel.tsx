@@ -8,7 +8,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   dedupeRoomMembers,
   formatMemberDuration,
-  hasFreshMediaObservation,
+  hasFreshLocalMediaObservation,
+  hasFreshReportedMediaObservation,
   getMemberDurationMs,
 } from "./member-data";
 
@@ -123,16 +124,30 @@ export function getPlaybackStatus(
       badgeText: "音频异常"
     };
   }
-  if (hasFreshMediaObservation(peerDiagnostics)) {
-    const isReceivingAudio =
-      (peerDiagnostics?.mediaReceiveBitrateKbps ?? 0) > 0 ||
-      !!peerDiagnostics?.receiverTrackId;
+  const hasFreshReceiveAudio = hasFreshLocalMediaObservation(peerDiagnostics, "receive");
+  const hasFreshSendAudio = hasFreshLocalMediaObservation(peerDiagnostics, "send");
+  const hasFreshReportedReceiveAudio = hasFreshReportedMediaObservation(peerDiagnostics, "receive");
+  const hasFreshReportedSourceAudio = hasFreshReportedMediaObservation(peerDiagnostics, "send");
+  const hasFreshReportedAudible = (() => {
+    const reportedAt = peerDiagnostics?.reportedAudibleAt ?? peerDiagnostics?.reportedTelemetryAt;
+    const ageMs = reportedAt ? Math.max(0, Date.now() - Date.parse(reportedAt)) : null;
+    return ageMs !== null && Number.isFinite(ageMs) && ageMs <= 6_000 &&
+      typeof peerDiagnostics?.reportedAudible === "boolean";
+  })();
+  if (
+    (isCurrentSource && (hasFreshReceiveAudio || hasFreshSendAudio || hasFreshReportedSourceAudio)) ||
+    (!isCurrentSource && (hasFreshReceiveAudio || hasFreshReportedReceiveAudio)) ||
+    hasFreshReportedAudible && peerDiagnostics?.reportedAudible === true
+  ) {
     return {
-      label: isCurrentSource || isReceivingAudio ? "正常出声" : "连接正常",
+      label: "正常出声",
       detail: "",
-      tone: isCurrentSource || isReceivingAudio ? "success" as const : "accent" as const,
-      badgeText: isCurrentSource || isReceivingAudio ? "正常出声" : "连接正常"
+      tone: "success" as const,
+      badgeText: "正常出声"
     };
+  }
+  if (!isCurrentSource && hasFreshSendAudio) {
+    return { label: "连接正常", detail: "", tone: "accent" as const, badgeText: "连接正常" };
   }
   if (peerDiagnostics?.mediaConnectionState === "connected" || peerDiagnostics?.senderTrackId || peerDiagnostics?.receiverTrackId) {
     return { label: "音频准备中", detail: "", tone: "warning" as const, badgeText: "音频准备中" };
@@ -229,25 +244,32 @@ export function getMemberAudibleStatus(input: {
         };
   }
 
-  // Older peers do not send an explicit audible flag. Their fresh self-reported
-  // RTP traffic remains a useful compatibility signal until they reconnect.
-  const hasReportedTraffic =
-    (input.diagnostic?.reportedSendRateKbps ?? 0) > 0 ||
-    (input.diagnostic?.reportedReceiveRateKbps ?? 0) > 0;
-  if (input.diagnostic?.reportedAudible === null && !hasReportedTraffic) {
+  // Older peers do not send an explicit audible flag. A source can fall back
+  // to its own outbound RTP; a listener can only be labelled as playing from
+  // its own inbound RTP, never as speaking from an inbound aggregate.
+  const hasReportedSourceTraffic = hasFreshReportedMediaObservation(
+    input.diagnostic,
+    "send",
+    input.now
+  );
+  const hasReportedListenerTraffic = hasFreshReportedMediaObservation(
+    input.diagnostic,
+    "receive",
+    input.now
+  );
+  if (!hasReportedSourceTraffic && !hasReportedListenerTraffic) {
     return { label: "等待音频", tone: "accent", active: false };
   }
-  return hasReportedTraffic
+  const hasExpectedTraffic = isCurrentSource
+    ? hasReportedSourceTraffic
+    : hasReportedListenerTraffic;
+  return hasExpectedTraffic
     ? {
         label: isCurrentSource ? "正在发声" : "正在播放",
         tone: "success",
         active: true
       }
-    : {
-        label: isCurrentSource ? "未发声" : "未播放",
-        tone: "warning",
-        active: false
-      };
+    : { label: "等待音频", tone: "accent", active: false };
 }
 
 export function resolveMemberMediaRates(input: {

@@ -312,7 +312,6 @@ function VolumeControl({
                 step={0.01}
                 value={volume}
                 onChange={(event) => onChange(Number(event.target.value))}
-                onInput={(event) => onChange(Number((event.target as HTMLInputElement).value))}
                 className="absolute left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer opacity-0 focus-visible:opacity-100 focus-visible:outline-none"
               />
             </div>
@@ -663,7 +662,17 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="relative flex items-center justify-center">
-        <div className="flex shrink-0 items-center justify-center gap-3">
+        <div className="flex min-w-0 shrink-0 items-center justify-center gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+          {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
+          <PlaybackModeButton
+            mode={playbackMode}
+            onCycle={onCyclePlaybackMode}
+            disabled={!canControlPlayback}
+            accentColor={artworkAccent}
+          />
+        </div>
+
         <Button
           data-testid="player-prev-button"
           variant="ghost"
@@ -715,16 +724,6 @@ export function DesktopBottomPlayerLayout({
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
           </svg>
         </Button>
-        </div>
-
-        <div className="absolute right-full mr-3 flex shrink-0 items-center gap-3">
-          {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
-          <PlaybackModeButton
-            mode={playbackMode}
-            onCycle={onCyclePlaybackMode}
-            disabled={!canControlPlayback}
-            accentColor={artworkAccent}
-          />
         </div>
       </div>
 

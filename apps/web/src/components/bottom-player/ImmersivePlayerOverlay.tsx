@@ -378,7 +378,7 @@ function MobileImmersivePlayer({
 
         <div className="mt-5 flex items-center gap-3 px-2 text-white/62" style={{ color: artworkPalette.accent }}>
           <SpeakerGlyph volume={volume} />
-          <Slider accentColor={artworkPalette.accent} className="[&>div]:h-1" max={1} onChange={(event) => applyVolume(Number(event.target.value))} onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))} step={0.01} value={volume} />
+          <Slider accentColor={artworkPalette.accent} className="[&>div]:h-1" max={1} onChange={(event) => applyVolume(Number(event.target.value))} step={0.01} value={volume} />
         </div>
 
         <div className="mt-5 grid grid-cols-3 items-center justify-items-center" style={{ color: artworkPalette.accent }}>
@@ -569,7 +569,6 @@ function DesktopImmersivePlayer({
           className="[&>div]:h-1"
           max={1}
           onChange={(event) => applyVolume(Number(event.target.value))}
-          onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))}
           step={0.01}
           value={volume}
         />

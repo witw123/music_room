@@ -37,6 +37,7 @@ export function useRoomRuntimeObservability(input: {
   });
 
   const updateDataTransportStatsRef = useRef((value: DataTransportStatsInput) => {
+    const sample = value.sample;
     recordPeerDiagnostic({
       peerId: value.peerId,
       channelKind: "data",
@@ -46,32 +47,45 @@ export function useRoomRuntimeObservability(input: {
       recordEvent: false,
       update: (snapshot) => ({
         ...snapshot,
-        dataConnectionState: value.sample?.connectionState ?? snapshot.dataConnectionState,
-        dataIceState: value.sample?.iceConnectionState ?? snapshot.dataIceState,
-        dataChannelState: value.sample?.dataChannelState ?? snapshot.dataChannelState,
-        dataCandidateType: value.sample?.candidateType ?? snapshot.dataCandidateType,
-        dataRemoteCandidateType:
-          value.sample?.remoteCandidateType ?? snapshot.dataRemoteCandidateType ?? null,
-        dataProtocol: value.sample?.protocol ?? snapshot.dataProtocol ?? null,
-        dataRelayProtocol: value.sample?.relayProtocol ?? snapshot.dataRelayProtocol ?? null,
-        currentRoundTripTimeMs:
-          value.sample?.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
-        availableOutgoingBitrateKbps:
-          value.sample?.availableOutgoingBitrateKbps ??
-          snapshot.availableOutgoingBitrateKbps,
-        transportReceiveBitrateKbps:
-          value.sample?.transportReceiveBitrateKbps ?? snapshot.transportReceiveBitrateKbps ?? null,
-        transportSendBitrateKbps:
-          value.sample?.transportSendBitrateKbps ?? snapshot.transportSendBitrateKbps ?? null,
-        packetsLost: value.sample?.packetsLost ?? snapshot.packetsLost,
-        jitterMs: value.sample?.jitterMs ?? snapshot.jitterMs,
-        packetLossRate: value.sample?.packetLossRate ?? snapshot.packetLossRate,
+        dataConnectionState: sample?.connectionState !== undefined
+          ? sample.connectionState
+          : snapshot.dataConnectionState,
+        dataIceState: sample?.iceConnectionState !== undefined
+          ? sample.iceConnectionState
+          : snapshot.dataIceState,
+        // RTCDataChannel.readyState is event-driven; the stats sampler emits
+        // null for it and must not erase an observed open channel.
+        dataChannelState: sample?.dataChannelState ?? snapshot.dataChannelState,
+        dataCandidateType: sample ? sample.candidateType : snapshot.dataCandidateType,
+        dataRemoteCandidateType: sample?.remoteCandidateType !== undefined
+          ? sample.remoteCandidateType
+          : snapshot.dataRemoteCandidateType,
+        dataProtocol: sample?.protocol !== undefined ? sample.protocol : snapshot.dataProtocol,
+        dataRelayProtocol: sample?.relayProtocol !== undefined
+          ? sample.relayProtocol
+          : snapshot.dataRelayProtocol,
+        currentRoundTripTimeMs: sample
+          ? sample.currentRoundTripTimeMs
+          : snapshot.currentRoundTripTimeMs,
+        availableOutgoingBitrateKbps: sample
+          ? sample.availableOutgoingBitrateKbps
+          : snapshot.availableOutgoingBitrateKbps,
+        transportReceiveBitrateKbps: sample?.transportReceiveBitrateKbps !== undefined
+          ? sample.transportReceiveBitrateKbps
+          : snapshot.transportReceiveBitrateKbps,
+        transportSendBitrateKbps: sample?.transportSendBitrateKbps !== undefined
+          ? sample.transportSendBitrateKbps
+          : snapshot.transportSendBitrateKbps,
+        packetsLost: sample ? sample.packetsLost : snapshot.packetsLost,
+        jitterMs: sample ? sample.jitterMs : snapshot.jitterMs,
+        packetLossRate: sample ? sample.packetLossRate : snapshot.packetLossRate,
         targetAudioBitrateKbps: snapshot.targetAudioBitrateKbps
       })
     });
   });
 
   const updateMediaTransportStatsRef = useRef((value: DataTransportStatsInput) => {
+    const sample = value.sample;
     recordPeerDiagnostic({
       peerId: value.peerId,
       channelKind: "media",
@@ -91,33 +105,61 @@ export function useRoomRuntimeObservability(input: {
               value.sample.mediaSendBitrateKbps > 0
             ? { lastMediaStatsProgressAt: new Date().toISOString() }
             : {}),
-        mediaConnectionState: value.sample?.connectionState ?? snapshot.mediaConnectionState,
-        mediaIceState: value.sample?.iceConnectionState ?? snapshot.mediaIceState,
-        mediaCandidateType: value.sample?.candidateType ?? snapshot.mediaCandidateType,
-        mediaProtocol: value.sample?.protocol ?? snapshot.mediaProtocol,
-        currentRoundTripTimeMs: value.sample?.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
-        mediaReceiveBitrateKbps: value.sample?.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
-        mediaSendBitrateKbps: value.sample?.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
-        targetAudioBitrateKbps: value.sample?.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
-        configuredAudioMaxBitrateKbps:
-          value.sample?.configuredAudioMaxBitrateKbps ?? snapshot.configuredAudioMaxBitrateKbps,
-        senderAudioMaxBitrateKbps:
-          value.sample?.senderAudioMaxBitrateKbps ?? snapshot.senderAudioMaxBitrateKbps,
-        opusFmtpLine: value.sample?.opusFmtpLine ?? snapshot.opusFmtpLine,
-        senderTrackId: value.sample?.senderTrackId ?? snapshot.senderTrackId,
-        receiverTrackId: value.sample?.receiverTrackId ?? snapshot.receiverTrackId,
-        senderCodecId: value.sample?.senderCodecId ?? snapshot.senderCodecId,
-        receiverCodecId: value.sample?.receiverCodecId ?? snapshot.receiverCodecId,
-        opusCodec: value.sample?.opusCodec ?? snapshot.opusCodec,
+        mediaConnectionState: sample?.connectionState !== undefined
+          ? sample.connectionState
+          : snapshot.mediaConnectionState,
+        mediaIceState: sample?.iceConnectionState !== undefined
+          ? sample.iceConnectionState
+          : snapshot.mediaIceState,
+        mediaCandidateType: sample ? sample.candidateType : snapshot.mediaCandidateType,
+        mediaProtocol: sample?.protocol !== undefined ? sample.protocol : snapshot.mediaProtocol,
+        currentRoundTripTimeMs: sample
+          ? sample.currentRoundTripTimeMs
+          : snapshot.currentRoundTripTimeMs,
+        // A nullable RTP rate is an explicit current sample. Retaining the
+        // previous positive value makes a stopped stream look alive.
+        mediaReceiveBitrateKbps: sample
+          ? sample.mediaReceiveBitrateKbps
+          : snapshot.mediaReceiveBitrateKbps,
+        mediaSendBitrateKbps: sample
+          ? sample.mediaSendBitrateKbps
+          : snapshot.mediaSendBitrateKbps,
+        targetAudioBitrateKbps: sample?.targetAudioBitrateKbps !== undefined
+          ? sample.targetAudioBitrateKbps
+          : snapshot.targetAudioBitrateKbps,
+        configuredAudioMaxBitrateKbps: sample?.configuredAudioMaxBitrateKbps !== undefined
+          ? sample.configuredAudioMaxBitrateKbps
+          : snapshot.configuredAudioMaxBitrateKbps,
+        senderAudioMaxBitrateKbps: sample?.senderAudioMaxBitrateKbps !== undefined
+          ? sample.senderAudioMaxBitrateKbps
+          : snapshot.senderAudioMaxBitrateKbps,
+        opusFmtpLine: sample?.opusFmtpLine !== undefined
+          ? sample.opusFmtpLine
+          : snapshot.opusFmtpLine,
+        senderTrackId: sample?.senderTrackId !== undefined
+          ? sample.senderTrackId
+          : snapshot.senderTrackId,
+        receiverTrackId: sample?.receiverTrackId !== undefined
+          ? sample.receiverTrackId
+          : snapshot.receiverTrackId,
+        senderCodecId: sample?.senderCodecId !== undefined
+          ? sample.senderCodecId
+          : snapshot.senderCodecId,
+        receiverCodecId: sample?.receiverCodecId !== undefined
+          ? sample.receiverCodecId
+          : snapshot.receiverCodecId,
+        opusCodec: sample?.opusCodec !== undefined ? sample.opusCodec : snapshot.opusCodec,
         mediaTrackEstablishedAt:
-          formatDiagnosticsTimestamp(value.sample?.mediaTrackEstablishedAtMs ?? null) ??
-          snapshot.mediaTrackEstablishedAt,
+          sample?.mediaTrackEstablishedAtMs !== undefined
+            ? formatDiagnosticsTimestamp(sample.mediaTrackEstablishedAtMs)
+            : snapshot.mediaTrackEstablishedAt,
         lastMediaPacketAt:
-          formatDiagnosticsTimestamp(value.sample?.lastMediaPacketAtMs ?? null) ??
-          snapshot.lastMediaPacketAt,
-        packetsLost: value.sample?.packetsLost ?? snapshot.packetsLost,
-        packetLossRate: value.sample?.packetLossRate ?? snapshot.packetLossRate,
-        jitterMs: value.sample?.jitterMs ?? snapshot.jitterMs
+          sample?.lastMediaPacketAtMs !== undefined
+            ? formatDiagnosticsTimestamp(sample.lastMediaPacketAtMs)
+            : snapshot.lastMediaPacketAt,
+        packetsLost: sample ? sample.packetsLost : snapshot.packetsLost,
+        packetLossRate: sample ? sample.packetLossRate : snapshot.packetLossRate,
+        jitterMs: sample ? sample.jitterMs : snapshot.jitterMs
       })
     });
   });

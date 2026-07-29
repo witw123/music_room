@@ -136,6 +136,31 @@ describe("MembersPanel WebRTC media status", () => {
     })).toMatchObject({ label: "等待音频", active: false });
   });
 
+  it("uses a fresh remote receive aggregate for listener playback, not speaking", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.reportedReceiveRateKbps = 32;
+    diagnostic.reportedAudible = null;
+    diagnostic.reportedTelemetryAt = new Date().toISOString();
+
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: false,
+      isCurrentSource: false,
+      localMemberState: null,
+      diagnostic
+    })).toMatchObject({ label: "正在播放", active: true });
+
+    expect(getMemberAudibleStatus({
+      presenceState: "online",
+      playbackActive: true,
+      isLocal: false,
+      isCurrentSource: true,
+      localMemberState: null,
+      diagnostic
+    })).toMatchObject({ label: "等待音频", active: false });
+  });
+
   it("reports the actual current media track", () => {
     const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
     diagnostic.mediaConnectionState = "connected";

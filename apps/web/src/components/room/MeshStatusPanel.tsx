@@ -8,7 +8,13 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { dedupePeerDiagnostics, dedupeRoomMembers } from "./member-data";
+import {
+  dedupePeerDiagnostics,
+  dedupeRoomMembers,
+  hasFreshLocalMediaObservation,
+  hasFreshReportedMediaObservation,
+  resolveMemberConnectionStatus
+} from "./member-data";
 import {
   getMemberAudibleStatus,
   isMemberCurrentSource,
@@ -200,13 +206,17 @@ function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
   return `${candidate ? candidateLabels[candidate] ?? candidate : "未知路径"}${protocol ? ` / ${protocolLabels[protocol] ?? protocol}` : ""}`;
 }
 
-function formatTrackStatus(peer: PeerDiagnosticsSnapshot | undefined) {
+function formatTrackStatus(peer: PeerDiagnosticsSnapshot | undefined, now = Date.now()) {
   const track = peer?.remoteTrackStatus;
   if (!track) return "暂无";
   if (track.trackReadyState === "live") {
     return track.trackMuted ? "已建立 · 静音" : "已建立";
   }
   if (track.trackReadyState === "ended") return "已结束";
+  if (
+    hasFreshLocalMediaObservation(peer, "receive", now) ||
+    hasFreshReportedMediaObservation(peer, "receive", now)
+  ) return "RTP 已收到";
   return track.received ? "已收到" : "未收到";
 }
 
@@ -258,10 +268,23 @@ function MemberDiagnosticCard({
     isLocal,
     localMemberState: isLocal ? localMemberState : null
   });
-  const dataConnectionState = peer?.dataChannelState ?? peer?.dataConnectionState;
-  const connectionState = dataConnectionState || peer?.mediaConnectionState
-    ? `${formatConnectionState(dataConnectionState)} / ${formatConnectionState(peer?.mediaConnectionState)}`
-    : "暂无样本";
+  const connection = resolveMemberConnectionStatus(peer);
+  const connectionState = isLocal
+    ? "本机"
+    : connection.dataReady || connection.mediaReady
+      ? `数据${connection.dataReady ? "已连接" : "未建立"} / 音频${
+          connection.localReceiveActive ||
+          connection.localSendActive ||
+          connection.reportedReceiveActive ||
+          connection.reportedSendActive
+            ? "收发中"
+            : connection.mediaReady
+              ? "已连接"
+              : "未建立"
+        }`
+      : peer
+        ? `数据${formatConnectionState(connection.dataState)} / 音频${formatConnectionState(connection.mediaState)}`
+        : "等待连接";
   const playbackPath = isLocal
     ? formatPlaybackPath(localMemberState?.playbackPath)
     : formatPlaybackTransport(peer?.playbackTransport ?? null);
@@ -295,6 +318,8 @@ function MemberDiagnosticCard({
     peer?.remoteTrackStatus?.received ||
     peer?.remoteTrackStatus?.trackReadyState ||
     peer?.remoteTrackStatus?.lastAudioEvent ||
+    connection.localReceiveActive ||
+    connection.reportedReceiveActive ||
     (peer?.segmentedPlaybackStatus?.listenerPlaybackState &&
       peer.segmentedPlaybackStatus.listenerPlaybackState !== "idle") ||
     (peer?.segmentedPlaybackStatus?.mediaRecoveryState &&
@@ -382,8 +407,11 @@ function MemberDiagnosticCard({
                 peer.segmentedPlaybackStatus.listenerPlaybackState !== "idle" ? (
                   <span>监听状态：{formatListenerPlaybackState(peer.segmentedPlaybackStatus)}</span>
                 ) : null}
-                {peer?.remoteTrackStatus?.received || peer?.remoteTrackStatus?.trackReadyState ? (
-                  <span>媒体轨道：{formatTrackStatus(peer)}</span>
+                {peer?.remoteTrackStatus?.received ||
+                peer?.remoteTrackStatus?.trackReadyState ||
+                connection.localReceiveActive ||
+                connection.reportedReceiveActive ? (
+                  <span>媒体轨道：{formatTrackStatus(peer, Date.now())}</span>
                 ) : null}
                 {peer?.remoteTrackStatus?.lastAudioEvent ? (
                   <span>音频事件：{formatAudioEvent(peer.remoteTrackStatus.lastAudioEvent)}</span>

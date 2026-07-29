@@ -273,6 +273,26 @@ export function createRoomDataMeshRuntime(input: {
         });
       },
       onDataChannelStateChange: ({ peerId, state }) => {
+        const supervisorState = input.updateConnectionSupervisorSignalState({
+          peerId,
+          channelKind: "data",
+          dataChannelState: state
+        });
+        input.recordPeerDiagnosticRef.current({
+          peerId,
+          channelKind: "data",
+          direction: "local",
+          event: "data-channel-state",
+          summary: `Data channel 状态：${state}`,
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) =>
+            input.withResolvedTransportHealth({
+              ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
+              dataChannelState: state,
+              lastDataActivityAt:
+                state === "open" ? new Date().toISOString() : snapshot.lastDataActivityAt
+            })
+        });
         input.setConnectedPeers((current) => {
           const next = new Set(current);
           if (state === "open") next.add(peerId);
@@ -370,6 +390,8 @@ export function createRoomDataMeshRuntime(input: {
           recordEvent: false,
           update: (snapshot) => ({
             ...snapshot,
+            dataChannelState: "open",
+            lastDataActivityAt: report.reportedAt,
             // Keep mediaSend/Receive as this browser's path samples for mesh diagnostics.
             // Store self-reported aggregates separately for the members panel.
             reportedSendRateKbps: report.sendRateKbps,

@@ -7,7 +7,9 @@ import {
   getMediaSampleAgeMs,
   getMemberDurationMs,
   hasFreshMediaObservation,
-  hasRecentMediaSample
+  hasFreshLocalMediaObservation,
+  hasRecentMediaSample,
+  resolveMemberConnectionStatus
 } from "./member-data";
 
 describe("member data normalization", () => {
@@ -68,5 +70,36 @@ describe("member data normalization", () => {
     diagnostic.lastMediaStatsProgressAt = "2026-07-15T10:00:00.000Z";
     expect(hasRecentMediaSample(diagnostic, now)).toBe(false);
     expect(hasFreshMediaObservation(diagnostic, now)).toBe(false);
+  });
+
+  it("keeps local RTP direction and freshness independent from remote telemetry", () => {
+    const now = Date.parse("2026-07-15T10:00:10.000Z");
+    const diagnostic = createPeerSnapshot("peer_1", "2026-07-15T10:00:10.000Z");
+    diagnostic.mediaReceiveBitrateKbps = 0;
+    diagnostic.mediaSendBitrateKbps = 192;
+    diagnostic.lastMediaStatsProgressAt = "2026-07-15T10:00:09.000Z";
+    diagnostic.reportedReceiveRateKbps = 32;
+    diagnostic.reportedTelemetryAt = "2026-07-15T10:00:09.000Z";
+
+    expect(hasFreshLocalMediaObservation(diagnostic, "receive", now)).toBe(false);
+    expect(hasFreshLocalMediaObservation(diagnostic, "send", now)).toBe(true);
+    expect(resolveMemberConnectionStatus(diagnostic, now)).toMatchObject({
+      mediaReady: true,
+      localReceiveActive: false,
+      localSendActive: true,
+      reportedReceiveActive: true,
+      dataReady: true,
+      dataState: "open"
+    });
+  });
+
+  it("does not retain a stale local positive rate as active media", () => {
+    const now = Date.parse("2026-07-15T10:00:10.000Z");
+    const diagnostic = createPeerSnapshot("peer_1", "2026-07-15T10:00:10.000Z");
+    diagnostic.mediaReceiveBitrateKbps = 192;
+    diagnostic.lastMediaStatsProgressAt = "2026-07-15T09:59:59.000Z";
+
+    expect(hasFreshLocalMediaObservation(diagnostic, "receive", now)).toBe(false);
+    expect(resolveMemberConnectionStatus(diagnostic, now).localReceiveActive).toBe(false);
   });
 });

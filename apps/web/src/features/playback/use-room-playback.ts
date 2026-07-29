@@ -263,6 +263,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const [audioDurationMs, setAudioDurationMs] = useState(0);
   const [volume, setVolume] = useState(0.72);
   const [loudnessNormalization, setLoudnessNormalization] = useState(false);
+  const lastSettingsDefaultVolumeRef = useRef<number | null>(null);
   const [displayClockSource, setDisplayClockSource] = useState<DisplayClockSource>("room-fallback");
   const [displayDriftMs, setDisplayDriftMs] = useState(0);
   const [acceptedPlayback, setAcceptedPlayback] = useState<PlaybackSnapshot | null>(null);
@@ -286,7 +287,12 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   useEffect(() => {
     const syncVolume = () => {
       const settings = getAppSettings();
-      setVolume(settings.playback.defaultVolume);
+      const defaultVolumeChanged = lastSettingsDefaultVolumeRef.current === null ||
+        lastSettingsDefaultVolumeRef.current !== settings.playback.defaultVolume;
+      lastSettingsDefaultVolumeRef.current = settings.playback.defaultVolume;
+      if (defaultVolumeChanged) {
+        setVolume(settings.playback.defaultVolume);
+      }
       setLoudnessNormalization(settings.playback.loudnessNormalization);
     };
     syncVolume();

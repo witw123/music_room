@@ -12,7 +12,7 @@ import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmente
 import {
   dedupePeerDiagnostics,
   dedupeRoomMembers,
-  hasRecentMediaSample
+  hasRecentLocalMediaSample
 } from "../member-data";
 import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 export type UseRoomDerivedStateInput = {
@@ -118,7 +118,7 @@ export function useRoomDerivedState({
     const activePeerDiagnostics = diagnostics.filter((peer) =>
       activeMemberPeerIds.has(peer.peerId)
     );
-    const activeMediaDiagnostics = activePeerDiagnostics.filter((peer) => hasRecentMediaSample(peer));
+    const activeMediaDiagnostics = activePeerDiagnostics.filter((peer) => hasRecentLocalMediaSample(peer));
     // Prefer the local aggregate that this browser itself measured and reported.
     // Fall back to summing live peer-link samples only when self-report is missing/stale.
     const reportedAgeMs = getReportedTelemetryAgeMs(systemDiagnostic);

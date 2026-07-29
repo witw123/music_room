@@ -109,6 +109,20 @@ describe("room audio output", () => {
     expect(gain.disconnect).toHaveBeenCalled();
   });
 
+  it("restores the requested volume after the local graph is rebound", () => {
+    const { context, gain } = createAudioContextMock();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(context as unknown as AudioContext);
+    const audio = { volume: 1 } as HTMLAudioElement;
+
+    roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false, volume: 0.24 });
+    roomAudioOutput.unbindLocalAudioElement(audio);
+    audio.volume = 1;
+    roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false });
+
+    expect(gain.gain.value).toBe(0.24);
+  });
+
   it("remembers elements that must stay on the Web Audio graph after cleanup", () => {
     const { context } = createAudioContextMock();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext")

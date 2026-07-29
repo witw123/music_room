@@ -103,6 +103,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const [audioDurationMs, setAudioDurationMs] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [loudnessNormalization, setLoudnessNormalization] = useState(false);
+  const lastSettingsDefaultVolumeRef = useRef<number | null>(null);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("sequence");
   const loudnessGainDb = resolveLoudnessGainDb(
     currentRecord,
@@ -147,7 +148,12 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const syncPlaybackSettings = () => {
       const settings = getAppSettings();
-      setVolume(settings.playback.defaultVolume);
+      const defaultVolumeChanged = lastSettingsDefaultVolumeRef.current === null ||
+        lastSettingsDefaultVolumeRef.current !== settings.playback.defaultVolume;
+      lastSettingsDefaultVolumeRef.current = settings.playback.defaultVolume;
+      if (defaultVolumeChanged) {
+        setVolume(settings.playback.defaultVolume);
+      }
       setLoudnessNormalization(settings.playback.loudnessNormalization);
       setPlaybackMode(settings.playback.localPlaybackMode);
     };

@@ -1224,7 +1224,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           if (activeRuntime.isCurrentSource) {
             sourceBroadcastStream = roomAudioOutput.bindLocalAudioElement(audio, {
               loudnessGainDb: activeRuntime.loudnessGainDb,
-              broadcast: true
+              broadcast: true,
+              volume: activeRuntime.volume
             });
           } else if (
             roomAudioOutput.hasLocalAudioElementSource(audio) ||
@@ -1236,7 +1237,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             // transition cannot strand the element in a disconnected graph.
             roomAudioOutput.bindLocalAudioElement(audio, {
               broadcast: false,
-              loudnessGainDb: activeRuntime.loudnessGainDb
+              loudnessGainDb: activeRuntime.loudnessGainDb,
+              volume: activeRuntime.volume
             });
           }
           if (activeRuntime.isCurrentSource && !sourceBroadcastStream) {
@@ -1503,7 +1505,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         ) {
           roomAudioOutput.bindLocalAudioElement(audio, {
             broadcast: false,
-            loudnessGainDb: runtime.loudnessGainDb
+            loudnessGainDb: runtime.loudnessGainDb,
+            volume: runtime.volume
           });
         }
         roomAudioOutput.applyVolume({

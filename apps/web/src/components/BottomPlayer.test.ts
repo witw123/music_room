@@ -35,9 +35,25 @@ describe("BottomPlayer source", () => {
 
     expect(layoutSource).toContain("VolumeControl");
     expect(layoutSource).toContain("player-volume-button");
+    expect(layoutSource).not.toContain("onInput={(event) => onChange");
+    expect(layoutSource).not.toContain("onInput={(event) => applyVolume");
     expect(miniPlayerSource).not.toContain("VolumeIcon");
     expect(miniPlayerSource).not.toContain("音量");
     expect(miniPlayerSource).toContain("flex items-center justify-center gap-3");
+  });
+
+  it("does not let unrelated settings events overwrite the active volume", () => {
+    const roomPlaybackSource = readFileSync(
+      new URL("../features/playback/use-room-playback.ts", import.meta.url),
+      "utf8"
+    );
+    const localPlaybackSource = readFileSync(
+      new URL("../features/playback/local-player-context.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(roomPlaybackSource).toContain("lastSettingsDefaultVolumeRef.current !== settings.playback.defaultVolume");
+    expect(localPlaybackSource).toContain("lastSettingsDefaultVolumeRef.current !== settings.playback.defaultVolume");
   });
 
   it("prioritizes the live display clock over the playback snapshot", () => {

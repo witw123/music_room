@@ -65,17 +65,138 @@ export function getMediaSampleAgeMs(
     return null;
   }
 
-  const timestamp =
-    diagnostic.reportedTelemetryAt ??
-    diagnostic.lastMediaStatsProgressAt ??
-    diagnostic.lastMediaPacketAt ??
-    null;
+  const ages = [
+    diagnostic.reportedTelemetryAt,
+    diagnostic.lastMediaStatsProgressAt,
+    diagnostic.lastMediaPacketAt
+  ]
+    .map((timestamp) => getTimestampAgeMs(timestamp, now))
+    .filter((age): age is number => age !== null);
+  if (ages.length === 0) {
+    return null;
+  }
+  return Math.min(...ages);
+}
+
+function getTimestampAgeMs(timestamp: string | null | undefined, now: number) {
   if (!timestamp) {
     return null;
   }
-
   const timestampMs = getTimestampMs(timestamp);
   return Number.isFinite(timestampMs) ? Math.max(0, now - timestampMs) : null;
+}
+
+export function getLocalMediaSampleAgeMs(
+  diagnostic: PeerDiagnosticsSnapshot | null | undefined,
+  now = Date.now()
+) {
+  if (!diagnostic) {
+    return null;
+  }
+  return getTimestampAgeMs(
+    diagnostic.lastMediaStatsProgressAt ?? diagnostic.lastMediaPacketAt ?? null,
+    now
+  );
+}
+
+export function hasRecentLocalMediaSample(
+  diagnostic: PeerDiagnosticsSnapshot | null | undefined,
+  now = Date.now()
+) {
+  const sampleAgeMs = getLocalMediaSampleAgeMs(diagnostic, now);
+  return sampleAgeMs !== null && sampleAgeMs <= realtimeMediaSampleWindowMs;
+}
+
+export function hasFreshLocalMediaObservation(
+  diagnostic: PeerDiagnosticsSnapshot | null | undefined,
+  direction: "send" | "receive",
+  now = Date.now()
+) {
+  if (!diagnostic) {
+    return false;
+  }
+
+  const rate = direction === "send"
+    ? diagnostic.mediaSendBitrateKbps
+    : diagnostic.mediaReceiveBitrateKbps;
+  const sampleAgeMs = getLocalMediaSampleAgeMs(diagnostic, now);
+  return typeof rate === "number" && rate > 0 &&
+    sampleAgeMs !== null && sampleAgeMs <= realtimeMediaSampleWindowMs;
+}
+
+export function hasFreshReportedMediaObservation(
+  diagnostic: PeerDiagnosticsSnapshot | null | undefined,
+  direction: "send" | "receive",
+  now = Date.now()
+) {
+  if (!diagnostic) {
+    return false;
+  }
+
+  const rate = direction === "send"
+    ? diagnostic.reportedSendRateKbps
+    : diagnostic.reportedReceiveRateKbps;
+  const sampleAgeMs = getTimestampAgeMs(diagnostic.reportedTelemetryAt, now);
+  return typeof rate === "number" && rate > 0 &&
+    sampleAgeMs !== null && sampleAgeMs <= realtimeMediaSampleWindowMs;
+}
+
+export type MemberConnectionStatus = {
+  dataState: string | null;
+  mediaState: string | null;
+  dataReady: boolean;
+  mediaReady: boolean;
+  localReceiveActive: boolean;
+  localSendActive: boolean;
+  reportedReceiveActive: boolean;
+  reportedSendActive: boolean;
+};
+
+export function resolveMemberConnectionStatus(
+  diagnostic: PeerDiagnosticsSnapshot | null | undefined,
+  now = Date.now()
+): MemberConnectionStatus {
+  const localReceiveActive = hasFreshLocalMediaObservation(diagnostic, "receive", now);
+  const localSendActive = hasFreshLocalMediaObservation(diagnostic, "send", now);
+  const reportedReceiveActive = hasFreshReportedMediaObservation(diagnostic, "receive", now);
+  const reportedSendActive = hasFreshReportedMediaObservation(diagnostic, "send", now);
+  const dataChannelState = diagnostic?.dataChannelState ?? null;
+  const dataConnectionState = diagnostic?.dataConnectionState ?? null;
+  const dataFailed = [dataChannelState, dataConnectionState].some((state) =>
+    ["closed", "failed", "disconnected"].includes(state ?? "")
+  );
+  const dataReady = !dataFailed && (
+    dataChannelState === "open" ||
+    dataConnectionState === "connected" ||
+    dataConnectionState === "completed" ||
+    reportedReceiveActive ||
+    reportedSendActive
+  );
+  const mediaState = diagnostic?.mediaConnectionState ?? null;
+  const mediaFailed = ["closed", "failed", "disconnected"].includes(mediaState ?? "");
+  const mediaReady = !mediaFailed && (
+    mediaState === "connected" ||
+    mediaState === "completed" ||
+    localReceiveActive ||
+    localSendActive ||
+    reportedReceiveActive ||
+    reportedSendActive
+  );
+
+  return {
+    dataState: dataChannelState ?? (
+      reportedReceiveActive || reportedSendActive ? "open" : dataConnectionState
+    ),
+    mediaState: localReceiveActive || localSendActive || reportedReceiveActive || reportedSendActive
+      ? "connected"
+      : mediaState,
+    dataReady,
+    mediaReady,
+    localReceiveActive,
+    localSendActive,
+    reportedReceiveActive,
+    reportedSendActive
+  };
 }
 
 export function hasFreshMediaObservation(
@@ -86,10 +207,10 @@ export function hasFreshMediaObservation(
     return false;
   }
 
-  const hasMediaRate =
-    (diagnostic.reportedReceiveRateKbps ?? diagnostic.mediaReceiveBitrateKbps ?? 0) > 0 ||
-    (diagnostic.reportedSendRateKbps ?? diagnostic.mediaSendBitrateKbps ?? 0) > 0;
-  return hasRecentMediaSample(diagnostic, now) && hasMediaRate;
+  return hasFreshLocalMediaObservation(diagnostic, "send", now) ||
+    hasFreshLocalMediaObservation(diagnostic, "receive", now) ||
+    hasFreshReportedMediaObservation(diagnostic, "send", now) ||
+    hasFreshReportedMediaObservation(diagnostic, "receive", now);
 }
 
 export function hasRecentMediaSample(
