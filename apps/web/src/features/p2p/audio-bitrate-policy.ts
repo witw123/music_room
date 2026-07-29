@@ -1,5 +1,9 @@
 export const minimumAudioBitrateKbps = 64;
 export const audioBitrateStepKbps = 8;
+// The playback asset is already lossy before WebRTC encodes it again. This
+// independent RTP preference keeps the second Opus pass from becoming the
+// audible quality bottleneck.
+export const preferredAudioRtpBitrateKbps = 320;
 export const maximumAudioBitrateKbps = 510;
 export const audioBitrateDegradationConfirmWindows = 2;
 

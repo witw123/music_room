@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   maximumAudioBitrateKbps,
+  preferredAudioRtpBitrateKbps,
   resolveAdaptiveAudioBitrateKbps,
   resolveAggregateAudioBitratesKbps
 } from "./audio-bitrate-policy";
+
+describe("RTP audio bitrate preference", () => {
+  it("uses an independent quality target", () => {
+    expect(preferredAudioRtpBitrateKbps).toBe(320);
+  });
+});
 
 describe("resolveAdaptiveAudioBitrateKbps", () => {
   it("keeps a healthy 192 kbps link at the requested quality", () => {
