@@ -12,6 +12,15 @@ const insecureTurnSecrets = new Set([
   "your-turn-shared-secret"
 ]);
 
+const insecureTurnstileValues = new Set([
+  "",
+  "replace-with-cloudflare-turnstile-site-key",
+  "replace-with-cloudflare-turnstile-secret-key",
+  "changeme",
+  "your-turnstile-site-key",
+  "your-turnstile-secret-key"
+]);
+
 export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   if (env.NODE_ENV !== "production") {
     return;
@@ -40,6 +49,20 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
   if (insecureJwtSecrets.has(jwtSecret.toLowerCase())) {
     throw new Error("Invalid JWT_SECRET for production startup.");
+  }
+
+  if (env.TURNSTILE_ENABLED?.trim().toLowerCase() !== "true") {
+    throw new Error("TURNSTILE_ENABLED must be true in production startup.");
+  }
+
+  const turnstileSiteKey = env.TURNSTILE_SITE_KEY?.trim() ?? "";
+  if (insecureTurnstileValues.has(turnstileSiteKey.toLowerCase())) {
+    throw new Error("Invalid TURNSTILE_SITE_KEY for production startup.");
+  }
+
+  const turnstileSecretKey = env.TURNSTILE_SECRET_KEY?.trim() ?? "";
+  if (insecureTurnstileValues.has(turnstileSecretKey.toLowerCase())) {
+    throw new Error("Invalid TURNSTILE_SECRET_KEY for production startup.");
   }
 
   const turnEnabled = env.TURN_ENABLED !== "false";

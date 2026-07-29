@@ -27,14 +27,16 @@ export const registerRequestSchema = z
   .object({
     username: trimmedString(64).regex(/^[a-zA-Z0-9_.-]+$/),
     password: z.string().min(6).max(256),
-    nickname: trimmedString(80)
+    nickname: trimmedString(80),
+    turnstileToken: z.string().trim().min(1).max(2048).optional()
   })
   .strict();
 
 export const loginRequestSchema = z
   .object({
     username: trimmedString(64),
-    password: z.string().min(1).max(256)
+    password: z.string().min(1).max(256),
+    turnstileToken: z.string().trim().min(1).max(2048).optional()
   })
   .strict();
 

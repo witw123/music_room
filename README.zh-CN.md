@@ -144,6 +144,18 @@ pnpm deploy:check
 - Web 默认使用当前页面 origin，不需要把生产域名硬编码进仓库。
 - `NEXT_PUBLIC_API_BASE_URL` 和 `NEXT_PUBLIC_WS_URL` 可指向独立部署的服务端。
 
+## Cloudflare Turnstile
+
+登录和注册页使用 Cloudflare Turnstile。开发环境默认关闭；生产环境启动时会强制要求开启并校验服务端密钥。
+
+在 Cloudflare Turnstile 控制台创建站点后，把以下变量写入环境文件：
+
+- `TURNSTILE_ENABLED=true`
+- `TURNSTILE_SITE_KEY`：站点公钥
+- `TURNSTILE_SECRET_KEY`：服务端密钥，只配置在 API 服务端
+
+验证请求由 API 服务端发送到 Cloudflare，前端不会接触 `TURNSTILE_SECRET_KEY`。修改生产环境变量后需要重启 `server` 容器。
+
 ## WebRTC / TURN 配置
 
 前端优先请求 `GET /v1/realtime/ice-config` 获取短期 ICE 配置。返回值包含 `iceServers`、`ttlSeconds` 以及 `ephemeral`、`static` 或 `stun-only` 的 `source`。

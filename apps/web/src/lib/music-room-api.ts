@@ -54,6 +54,11 @@ export type QueueMutationResponse = {
   playback: PlaybackSnapshot;
 };
 
+export type AuthConfig = {
+  enabled: boolean;
+  siteKey: string;
+};
+
 export const playlistsChangedEventName = "music-room-playlists-changed";
 export const playlistsChangedStorageKey = "music-room-playlists-version";
 
@@ -220,15 +225,21 @@ async function requestBlob(path: string, init?: RequestInit, options?: { throttl
 }
 
 export const musicRoomApi = {
-  register: (username: string, password: string, nickname: string) =>
+  getAuthConfig: () => request<AuthConfig>("/v1/auth/config"),
+  register: (
+    username: string,
+    password: string,
+    nickname: string,
+    turnstileToken?: string
+  ) =>
     request<AuthSession>("/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password, nickname })
+      body: JSON.stringify({ username, password, nickname, turnstileToken })
     }),
-  login: (username: string, password: string) =>
+  login: (username: string, password: string, turnstileToken?: string) =>
     request<AuthSession>("/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, turnstileToken })
     }),
   logout: () =>
     request<{ ok: boolean }>("/v1/auth/logout", {

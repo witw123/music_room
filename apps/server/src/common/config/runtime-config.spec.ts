@@ -1,5 +1,11 @@
 import { validateRuntimeConfig } from "./runtime-config";
 
+const validTurnstileConfig = {
+  TURNSTILE_ENABLED: "true",
+  TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
+  TURNSTILE_SECRET_KEY: "0x0000000000000000000000000000000AA"
+};
+
 describe("validateRuntimeConfig", () => {
   it("allows placeholder secrets outside production", () => {
     expect(() =>
@@ -16,6 +22,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "replace-this-with-a-long-random-secret",
         TURN_ENABLED: "false",
         NEXT_PUBLIC_TURN_URL: "turn:static.example.com:3478?transport=udp"
@@ -27,6 +34,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_PUBLIC_HOST: "turn.example.com",
         TURN_ENABLED: "true",
@@ -35,10 +43,24 @@ describe("validateRuntimeConfig", () => {
     ).toThrow("Invalid TURN_SHARED_SECRET for production startup.");
   });
 
+  it("requires Turnstile in production", () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: "production",
+        ...validTurnstileConfig,
+        TURNSTILE_ENABLED: "false",
+        JWT_SECRET: "super-secret-jwt",
+        TURN_ENABLED: "false",
+        NEXT_PUBLIC_TURN_URL: "turn:static.example.com:3478?transport=udp"
+      })
+    ).toThrow("TURNSTILE_ENABLED must be true in production startup.");
+  });
+
   it("requires an explicit TURN host or app domain in production when TURN is enabled", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         TURN_SHARED_SECRET: "super-secret-turn"
@@ -50,6 +72,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         TURN_PUBLIC_HOST_USE_REQUEST_HOST: "1",
@@ -63,6 +86,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         TURN_PUBLIC_HOST: "localhost",
@@ -76,6 +100,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         TURN_PUBLIC_HOST: "localhost",
@@ -88,6 +113,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "false"
       })
@@ -98,6 +124,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "false",
         NEXT_PUBLIC_TURN_URL: "turn:static.example.com:3478?transport=udp"
@@ -109,6 +136,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         NEXT_PUBLIC_WEBRTC_ICE_SERVERS: JSON.stringify([
@@ -123,6 +151,7 @@ describe("validateRuntimeConfig", () => {
     expect(() =>
       validateRuntimeConfig({
         NODE_ENV: "production",
+        ...validTurnstileConfig,
         JWT_SECRET: "super-secret-jwt",
         TURN_PUBLIC_HOST: "turn.example.com",
         TURN_ENABLED: "true",

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import Script from "next/script";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,25 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref } from "@/lib/client-shell";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          action: string;
+          theme: "dark";
+          callback: (token: string) => void;
+          "expired-callback": () => void;
+          "error-callback": () => void;
+        }
+      ) => string;
+      remove: (widgetId: string) => void;
+    };
+  }
+}
 
 type AuthMode = "login" | "register";
 
@@ -21,6 +41,10 @@ export function AuthPage() {
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerNickname, setRegisterNickname] = useState("");
+  const [authConfig, setAuthConfig] = useState<{ enabled: boolean; siteKey: string } | null>(null);
+  const [authConfigError, setAuthConfigError] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [isPending, startTransition] = useTransition();
   const {
     activeSession,
@@ -32,6 +56,25 @@ export function AuthPage() {
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    void musicRoomApi
+      .getAuthConfig()
+      .then((config) => {
+        if (cancelled) return;
+        setAuthConfig(config);
+        setAuthConfigError("");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAuthConfigError("安全验证配置加载失败，请刷新页面后重试。");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !activeSession) {
@@ -49,8 +92,16 @@ export function AuthPage() {
       return;
     }
 
+    if (!canSubmitAuth()) {
+      return;
+    }
+
     try {
-      const session = await musicRoomApi.login(loginUsername.trim(), loginPassword);
+      const session = await musicRoomApi.login(
+        loginUsername.trim(),
+        loginPassword,
+        turnstileToken ?? undefined
+      );
       setActiveSession(session);
       setStatusMessage(`欢迎回来，${session.nickname}。`);
       router.replace(
@@ -58,6 +109,7 @@ export function AuthPage() {
       );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
+      resetTurnstile();
     }
   }
 
@@ -67,11 +119,16 @@ export function AuthPage() {
       return;
     }
 
+    if (!canSubmitAuth()) {
+      return;
+    }
+
     try {
       const session = await musicRoomApi.register(
         registerUsername.trim(),
         registerPassword,
-        registerNickname.trim()
+        registerNickname.trim(),
+        turnstileToken ?? undefined
       );
       setActiveSession(session);
       setStatusMessage(`账号已创建，欢迎你，${session.nickname}。`);
@@ -80,8 +137,38 @@ export function AuthPage() {
       );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
+      resetTurnstile();
     }
   }
+
+  function resetTurnstile() {
+    setTurnstileToken(null);
+    setTurnstileResetKey((value) => value + 1);
+  }
+
+  function canSubmitAuth() {
+    if (authConfigError) {
+      setStatusMessage(authConfigError);
+      return false;
+    }
+    if (!authConfig) {
+      setStatusMessage("正在加载安全验证，请稍候。");
+      return false;
+    }
+    if (authConfig.enabled && !turnstileToken) {
+      setStatusMessage("请完成人机验证后再继续。");
+      return false;
+    }
+    return true;
+  }
+
+  const authUnavailable = !authConfig || !!authConfigError;
+  const authSubmitDisabled = authUnavailable || (authConfig?.enabled === true && !turnstileToken);
+  const turnstileEnabled = authConfig?.enabled === true && !!authConfig.siteKey;
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken(null);
+    setStatusMessage("安全验证加载失败，请刷新页面后重试。");
+  }, [setStatusMessage]);
 
   const statusToneClass =
     statusMessage.includes("失败") || statusMessage.includes("错误")
@@ -165,11 +252,25 @@ export function AuthPage() {
                     />
                   </label>
 
+                  {turnstileEnabled ? (
+                    <TurnstileWidget
+                      key={turnstileResetKey}
+                      siteKey={authConfig?.siteKey ?? ""}
+                      onToken={setTurnstileToken}
+                      onError={handleTurnstileError}
+                    />
+                  ) : null}
+
                   <Button
                     data-testid="auth-login-submit"
                     size="lg"
                     className="mt-4 h-12 w-full rounded-lg bg-accent text-base font-bold text-white transition-all hover:bg-accent-hover"
-                    disabled={!loginUsername.trim() || !loginPassword || isPending}
+                    disabled={
+                      !loginUsername.trim() ||
+                      !loginPassword ||
+                      authSubmitDisabled ||
+                      isPending
+                    }
                     onClick={() => startTransition(() => void handleLogin())}
                     type="button"
                   >
@@ -222,6 +323,15 @@ export function AuthPage() {
                     />
                   </label>
 
+                  {turnstileEnabled ? (
+                    <TurnstileWidget
+                      key={turnstileResetKey}
+                      siteKey={authConfig?.siteKey ?? ""}
+                      onToken={setTurnstileToken}
+                      onError={handleTurnstileError}
+                    />
+                  ) : null}
+
                   <Button
                     data-testid="auth-register-submit"
                     size="lg"
@@ -230,6 +340,7 @@ export function AuthPage() {
                       !registerUsername.trim() ||
                       !registerPassword ||
                       !registerNickname.trim() ||
+                      authSubmitDisabled ||
                       isPending
                     }
                     onClick={() => startTransition(() => void handleRegister())}
@@ -246,7 +357,11 @@ export function AuthPage() {
                   <button
                     data-testid="auth-mode-toggle"
                     className="ml-2 font-medium text-white transition-colors hover:text-accent"
-                    onClick={() => setMode(mode === "login" ? "register" : "login")}
+                    onClick={() => {
+                      setMode(mode === "login" ? "register" : "login");
+                      resetTurnstile();
+                      setStatusMessage("");
+                    }}
                     type="button"
                   >
                     {mode === "login" ? "去注册" : "去登录"}
@@ -259,5 +374,61 @@ export function AuthPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function TurnstileWidget({
+  siteKey,
+  onToken,
+  onError
+}: {
+  siteKey: string;
+  onToken: (token: string | null) => void;
+  onError: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const onTokenRef = useRef(onToken);
+  const onErrorRef = useRef(onError);
+  const [scriptReady, setScriptReady] = useState(false);
+
+  onTokenRef.current = onToken;
+  onErrorRef.current = onError;
+
+  useEffect(() => {
+    if (!scriptReady || !containerRef.current || !window.turnstile) {
+      return;
+    }
+
+    try {
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        action: "auth",
+        theme: "dark",
+        callback: (token) => onTokenRef.current(token),
+        "expired-callback": () => onTokenRef.current(null),
+        "error-callback": () => onErrorRef.current()
+      });
+    } catch {
+      onError();
+    }
+
+    return () => {
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+    };
+  }, [onError, scriptReady, siteKey]);
+
+  return (
+    <div className="min-h-[65px] overflow-hidden" data-testid="auth-turnstile">
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        strategy="afterInteractive"
+        onReady={() => setScriptReady(true)}
+      />
+      <div ref={containerRef} />
+    </div>
   );
 }

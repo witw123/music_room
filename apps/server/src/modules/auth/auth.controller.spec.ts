@@ -1,5 +1,6 @@
 import { ConflictException, HttpException, HttpStatus, UnauthorizedException } from "@nestjs/common";
 import { AuthController } from "./auth.controller";
+import { TurnstileService } from "./turnstile.service";
 
 describe("AuthController", () => {
   const request = {
@@ -12,7 +13,7 @@ describe("AuthController", () => {
     const authService = {
       login: jest.fn().mockRejectedValue(new Error("Invalid username or password."))
     };
-    const controller = new AuthController(authService as never);
+    const controller = new AuthController(authService as never, new TurnstileService());
 
     for (let index = 0; index < 6; index += 1) {
       await expect(
@@ -34,7 +35,7 @@ describe("AuthController", () => {
     const authService = {
       register: jest.fn().mockRejectedValue(new Error("Username already exists."))
     };
-    const controller = new AuthController(authService as never);
+    const controller = new AuthController(authService as never, new TurnstileService());
 
     for (let index = 0; index < 4; index += 1) {
       await expect(
@@ -64,7 +65,7 @@ describe("AuthController", () => {
     const authService = {
       login: jest.fn().mockRejectedValue(new Error("Invalid username or password."))
     };
-    const controller = new AuthController(authService as never);
+    const controller = new AuthController(authService as never, new TurnstileService());
     const spoofedRequest = {
       ...request,
       ip: "10.0.0.10",
@@ -103,7 +104,11 @@ describe("AuthController", () => {
       isAvailable: jest.fn(() => true),
       incrementWithTtlMs: jest.fn().mockResolvedValue(1)
     };
-    const controller = new AuthController(authService as never, redisService as never);
+    const controller = new AuthController(
+      authService as never,
+      new TurnstileService(),
+      redisService as never
+    );
 
     await expect(
       controller.login({ username: "tester", password: "bad-pass" }, request, "127.0.0.1")
@@ -117,5 +122,27 @@ describe("AuthController", () => {
       "auth:login:username:tester",
       60_000
     );
+  });
+
+  it("verifies Turnstile before authenticating when the challenge is enabled", async () => {
+    const authService = { login: jest.fn() };
+    const turnstileService = {
+      verify: jest.fn().mockRejectedValue(new HttpException("Human verification failed.", 400))
+    };
+    const controller = new AuthController(
+      authService as never,
+      turnstileService as never,
+      undefined
+    );
+
+    await expect(
+      controller.login(
+        { username: "tester", password: "password", turnstileToken: "token" },
+        request,
+        "127.0.0.1"
+      )
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(turnstileService.verify).toHaveBeenCalledWith("token", "127.0.0.1");
+    expect(authService.login).not.toHaveBeenCalled();
   });
 });

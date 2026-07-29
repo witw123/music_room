@@ -22,6 +22,7 @@ import { RedisService } from "../../infra/redis/redis.service";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { userSessionCookieName } from "./auth.cookies";
 import { AuthService } from "./auth.service";
+import { TurnstileService } from "./turnstile.service";
 
 type AuthRateLimitBucket = {
   timestamps: number[];
@@ -35,13 +36,25 @@ export class AuthController {
 
   constructor(
     private readonly authService: AuthService,
+    private readonly turnstileService: TurnstileService,
     @Optional()
     private readonly redisService?: RedisService
   ) {}
 
+  @Get("config")
+  getConfig() {
+    return this.turnstileService.getPublicConfig();
+  }
+
   @Post("register")
   async register(
-    @Body() body: { username?: string; password?: string; nickname?: string },
+    @Body()
+    body: {
+      username?: string;
+      password?: string;
+      nickname?: string;
+      turnstileToken?: string;
+    },
     @Req()
     request: {
       ip?: string;
@@ -55,6 +68,7 @@ export class AuthController {
     const username = payload.username;
     const clientIp = resolveClientIp(request, ipAddress);
     await this.assertAuthRateLimit("register", clientIp, username);
+    await this.turnstileService.verify(payload.turnstileToken, clientIp);
 
     try {
       const session = await this.authService.register({
@@ -84,7 +98,8 @@ export class AuthController {
 
   @Post("login")
   async login(
-    @Body() body: { username?: string; password?: string },
+    @Body()
+    body: { username?: string; password?: string; turnstileToken?: string },
     @Req()
     request: {
       ip?: string;
@@ -98,6 +113,7 @@ export class AuthController {
     const username = payload.username;
     const clientIp = resolveClientIp(request, ipAddress);
     await this.assertAuthRateLimit("login", clientIp, username);
+    await this.turnstileService.verify(payload.turnstileToken, clientIp);
 
     try {
       const session = await this.authService.login({
