@@ -13,7 +13,10 @@ import {
   buildWorkspaceAuthHref
 } from "@/lib/client-shell";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
-import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
+import {
+  buildRoomJoinBootstrapSnapshot,
+  storeRoomSnapshotHandoff
+} from "@/lib/room-snapshot-handoff";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
@@ -117,10 +120,10 @@ export function HomeRoomSection() {
     }
 
     try {
-      const snapshot = await musicRoomApi.joinRoomByCode(code.trim());
-      storeRoomSnapshotHandoff(snapshot);
-      window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-      router.push(buildRoomHref(snapshot.room.id) as Route);
+      const joined = await musicRoomApi.joinRoomByCode(code.trim());
+      storeRoomSnapshotHandoff(buildRoomJoinBootstrapSnapshot(joined));
+      window.localStorage.setItem(lastRoomStorageKey, joined.roomId);
+      router.push(buildRoomHref(joined.roomId) as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -141,9 +144,9 @@ export function HomeRoomSection() {
       }
 
       const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
-      storeRoomSnapshotHandoff(joined);
-      window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-      router.push(buildRoomHref(joined.room.id) as Route);
+      storeRoomSnapshotHandoff(buildRoomJoinBootstrapSnapshot(joined));
+      window.localStorage.setItem(lastRoomStorageKey, joined.roomId);
+      router.push(buildRoomHref(joined.roomId) as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RoomSnapshot } from "@music-room/shared";
-import { consumeRoomSnapshotHandoff, storeRoomSnapshotHandoff } from "./room-snapshot-handoff";
+import type { RoomJoinResponse, RoomSnapshot } from "@music-room/shared";
+import {
+  buildRoomJoinBootstrapSnapshot,
+  consumeRoomSnapshotHandoff,
+  storeRoomSnapshotHandoff
+} from "./room-snapshot-handoff";
 
 function buildSnapshot(roomId = "room_1"): RoomSnapshot {
   return {
@@ -69,6 +73,22 @@ describe("room snapshot handoff", () => {
 
     expect(consumeRoomSnapshotHandoff(snapshot.room.id)).toEqual(snapshot);
     expect(consumeRoomSnapshotHandoff(snapshot.room.id)).toBeNull();
+  });
+
+  it("builds a fast join bootstrap without library or queue payloads", () => {
+    const snapshot = buildSnapshot();
+    const joined = {
+      roomId: snapshot.room.id,
+      roomRevision: snapshot.room.roomRevision ?? 0,
+      room: snapshot.room
+    } satisfies RoomJoinResponse;
+
+    expect(buildRoomJoinBootstrapSnapshot(joined)).toEqual({
+      room: snapshot.room,
+      tracks: [],
+      queue: [],
+      playlists: []
+    });
   });
 
   it("ignores a handoff for another room", () => {

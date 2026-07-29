@@ -209,15 +209,19 @@ describe("RoomController", () => {
     expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith("room_1");
   });
 
-  it("emits a topology snapshot after joining by code", async () => {
+  it("returns a lightweight join ack without waiting for the topology snapshot", async () => {
     const snapshot = buildSnapshot();
     const roomService = {
       findRoomByJoinCode: jest.fn().mockResolvedValue(snapshot.room),
       joinRoom: jest.fn().mockResolvedValue(snapshot.room)
     };
+    let resolveTopologySnapshot: ((value: RoomSnapshot) => void) | undefined;
+    const topologySnapshotPromise = new Promise<RoomSnapshot>((resolve) => {
+      resolveTopologySnapshot = resolve;
+    });
     const roomRealtimePublisher = {
       ...createRoomRealtimePublisherMock(),
-      emitTopologySnapshot: jest.fn().mockResolvedValue(snapshot)
+      emitTopologySnapshot: jest.fn().mockReturnValue(topologySnapshotPromise)
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
@@ -232,11 +236,18 @@ describe("RoomController", () => {
       joinCode: "abc123"
     });
 
-    expect(result).toEqual(snapshot);
+    expect(result).toEqual({
+      roomId: snapshot.room.id,
+      roomRevision: snapshot.room.roomRevision,
+      room: snapshot.room
+    });
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("ABC123");
     expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_host");
     expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith(snapshot.room.id);
+
+    resolveTopologySnapshot?.(snapshot);
+    await topologySnapshotPromise;
   });
 
   it("rejects invalid create room payloads before calling the service", async () => {

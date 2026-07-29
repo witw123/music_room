@@ -10,7 +10,10 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
-import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
+import {
+  buildRoomJoinBootstrapSnapshot,
+  storeRoomSnapshotHandoff
+} from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
@@ -207,10 +210,10 @@ export function RoomsHomePage({
 
     primeRoomAudioFromUserGesture();
     try {
-      const snapshot = await musicRoomApi.joinRoomByCode(code.trim(), password);
-      storeRoomSnapshotHandoff(snapshot);
-      window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-      router.push(buildRoomHref(snapshot.room.id) as Route);
+      const joined = await musicRoomApi.joinRoomByCode(code.trim(), password);
+      storeRoomSnapshotHandoff(buildRoomJoinBootstrapSnapshot(joined));
+      window.localStorage.setItem(lastRoomStorageKey, joined.roomId);
+      router.push(buildRoomHref(joined.roomId) as Route);
     } catch (error) {
       if (selectedRoom) {
         setDialogError(toUserFacingError(error));

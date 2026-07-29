@@ -1283,7 +1283,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
   }
 
   private queuePeerSignal(roomId: string, peerId: string, payload: PeerSignalMessage) {
-    const key = this.roomPeerKey(roomId, peerId);
+    // A target can receive independent data/media negotiations from every
+    // member while its Socket.IO session is still registering. Sharing one
+    // short queue across all senders drops the tail of a ten-member fan-out,
+    // which leaves a media PC connected in the UI but without an SDP/candidate
+    // path. Keep ordering isolated per sender and link kind.
+    const key = this.pendingPeerSignalKey(roomId, peerId, payload);
     const now = Date.now();
     if (!this.pendingPeerSignalsByRoomPeer.has(key) && this.pendingPeerSignalsByRoomPeer.size >= this.pendingPeerSignalTargetLimit) {
       const oldestKey = this.pendingPeerSignalsByRoomPeer.keys().next().value;
@@ -1319,27 +1324,42 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     this.realtimeRateLimits.set(client.id, limits);
   }
 
-  private flushPendingPeerSignals(roomId: string, peerId: string) {
-    const key = this.roomPeerKey(roomId, peerId);
-    const queued = this.pendingPeerSignalsByRoomPeer.get(key);
-    if (!queued?.length) {
+  private async flushPendingPeerSignals(roomId: string, peerId: string) {
+    const prefix = `${this.roomPeerKey(roomId, peerId)}:`;
+    const queued = [...this.pendingPeerSignalsByRoomPeer.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .flatMap(([, entries]) => entries);
+    if (queued.length === 0) {
       return;
     }
 
     const now = Date.now();
-    this.pendingPeerSignalsByRoomPeer.delete(key);
+    for (const key of [...this.pendingPeerSignalsByRoomPeer.keys()]) {
+      if (key.startsWith(prefix)) {
+        this.pendingPeerSignalsByRoomPeer.delete(key);
+      }
+    }
+    queued.sort((left, right) =>
+      (left.payload.sequence ?? Number.MAX_SAFE_INTEGER) -
+      (right.payload.sequence ?? Number.MAX_SAFE_INTEGER)
+    );
     for (const entry of queued) {
       if (entry.expiresAtMs <= now) {
         continue;
       }
 
-      this.emitPeerSignalToPeer(roomId, peerId, entry.payload);
+      await this.emitPeerSignalToPeer(roomId, peerId, entry.payload);
     }
   }
 
   private clearPendingPeerSignals(roomId?: string, peerId?: string) {
     if (roomId && peerId) {
-      this.pendingPeerSignalsByRoomPeer.delete(this.roomPeerKey(roomId, peerId));
+      const prefix = `${this.roomPeerKey(roomId, peerId)}:`;
+      for (const key of [...this.pendingPeerSignalsByRoomPeer.keys()]) {
+        if (key.startsWith(prefix)) {
+          this.pendingPeerSignalsByRoomPeer.delete(key);
+        }
+      }
       return;
     }
 
@@ -1589,6 +1609,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     }
   }
 
+  private pendingPeerSignalKey(
+    roomId: string,
+    peerId: string,
+    payload: PeerSignalMessage
+  ) {
+    return `${this.roomPeerKey(roomId, peerId)}:${payload.fromPeerId}:${payload.linkKind ?? "data"}`;
+  }
+
   private clearPlaybackReadiness(roomId?: string, sessionId?: string) {
     if (!roomId) return;
     const readiness = this.playbackReadinessByRoom.get(roomId);
@@ -1798,7 +1826,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     peerSockets.add(socketId);
     roomPeers.set(peerId, peerSockets);
     this.peerSocketsByRoom.set(roomId, roomPeers);
-    this.flushPendingPeerSignals(roomId, peerId);
+    void this.flushPendingPeerSignals(roomId, peerId);
   }
 
   private unregisterPeerSocket(roomId?: string, peerId?: string, socketId?: string) {

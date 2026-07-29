@@ -24,14 +24,14 @@ export function buildPeerConnectionConfig(input: {
         ? input.iceServers
         : [{ urls: "stun:stun.l.google.com:19302" }]
     ),
-    // Keep every configured candidate (direct, TURN UDP, TURN TCP/TLS) so ICE
-    // can escape a lossy relay path after a restart. Bundle all media/control
-    // components onto one transport to leave the largest possible allocation
-    // for the live RTP audio track.
+    // Candidate gathering is started on demand. A ten-member mesh creates many
+    // data/media PeerConnections; pre-gathering a pool for every one consumes
+    // ICE/UDP resources before any media path is active and starves later
+    // connections during a source fan-out.
     iceTransportPolicy: "all",
     bundlePolicy: "max-bundle",
     rtcpMuxPolicy: "require",
-    iceCandidatePoolSize: 4,
+    iceCandidatePoolSize: 0,
     ...(input.resolveConnectionConfig?.(input.peerId) ?? {})
   };
 }

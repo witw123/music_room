@@ -22,6 +22,7 @@ import {
   updateRoomRequestSchema,
   type Playlist,
   type RegisterTrackRequest,
+  type RoomJoinResponse,
   type RoomMemberPermissions
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
@@ -157,12 +158,21 @@ export class RoomController {
     ], { limit: 30, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(joinRoomByCodeRequestSchema, body);
     const room = await this.roomService.findRoomByJoinCode(payload.joinCode);
-    if (payload.password !== undefined) {
-      await this.roomService.joinRoom(room.id, userId, payload.password);
-    } else {
-      await this.roomService.joinRoom(room.id, userId);
-    }
-    return this.roomRealtimePublisher.emitTopologySnapshot(room.id);
+    const joinedRoom = payload.password !== undefined
+      ? await this.roomService.joinRoom(room.id, userId, payload.password)
+      : await this.roomService.joinRoom(room.id, userId);
+
+    // Existing members still need the topology update, but generating the
+    // full snapshot must not keep the joining client's HTTP request open.
+    void Promise.resolve()
+      .then(() => this.roomRealtimePublisher.emitTopologySnapshot(joinedRoom.id))
+      .catch(() => undefined);
+
+    return {
+      roomId: joinedRoom.id,
+      roomRevision: joinedRoom.roomRevision ?? 0,
+      room: joinedRoom
+    } satisfies RoomJoinResponse;
   }
 
   @Post(":roomId/join")

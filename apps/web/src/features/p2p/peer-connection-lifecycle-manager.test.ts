@@ -176,7 +176,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     await manager.syncPeers(["peer_b", "peer_a", ""]);
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
     expect(bindChannel).toHaveBeenCalledWith(
       "peer_b",
       expect.any(Object),
@@ -195,38 +195,51 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(manager.getConnectedPeerIds()).toEqual([]);
   });
 
-  it("keeps a media peer for every room member before playback starts", async () => {
+  it("does not prewarm listener media peers before an active source is known", async () => {
     const { manager } = createManager();
 
     await manager.syncPeers(["peer_b", "peer_c"]);
 
     expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
     expect(manager.getPeerEntry("peer_c", "data")).not.toBeNull();
-    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
-    expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
-    expect(FakeRTCPeerConnection.instances).toHaveLength(4);
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).toBeNull();
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
   });
 
-  it("keeps all listener media peers while only the current source can signal media", async () => {
+  it("keeps only the current source media peer on a listener", async () => {
     const { manager } = createManager();
 
     await manager.syncPeers(["peer_b", "peer_c"]);
     manager.setLocalAudioStream(null, "peer_c");
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
     expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
     expect(FakeRTCPeerConnection.instances.filter((entry) => entry.mediaSender?.track)).toHaveLength(0);
   });
 
-  it("samples only the active listener media link while standby peers stay prewarmed", async () => {
+  it("keeps one receiver media peer for a listener in a ten-member room", async () => {
+    const { manager } = createManager();
+    const remotePeerIds = Array.from({ length: 9 }, (_, index) =>
+      `peer_${String.fromCharCode("b".charCodeAt(0) + index)}`
+    );
+
+    manager.setLocalAudioStream(null, "peer_b");
+    await manager.syncPeers(remotePeerIds);
+
+    expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "data"))).toHaveLength(9);
+    expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "media"))).toEqual(["peer_b"]);
+  });
+
+  it("samples only the active listener media link", async () => {
     const { manager } = createManager();
 
     await manager.syncPeers(["peer_b", "peer_c"]);
     manager.setLocalAudioStream(null, "peer_c");
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(manager.getPeerEntry("peer_b", "media")?.statsIntervalId).toBeNull();
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
     expect(manager.getPeerEntry("peer_c", "media")?.statsIntervalId).not.toBeNull();
 
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
@@ -236,15 +249,17 @@ describe("PeerConnectionLifecycleManager", () => {
     manager.setLocalAudioStream(stream, "peer_a", 510);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(manager.getPeerEntry("peer_b", "media")?.statsIntervalId).not.toBeNull();
+    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
     expect(manager.getPeerEntry("peer_c", "media")?.statsIntervalId).not.toBeNull();
   });
 
   it("releases listener media peers for local playback without dropping data peers", async () => {
     const { manager } = createManager();
 
+    manager.setLocalAudioStream(null, "peer_b");
     await manager.syncPeers(["peer_b", "peer_c"]);
     expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).toBeNull();
     expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
 
     await manager.setMediaPlaybackEnabled(false);
@@ -258,7 +273,7 @@ describe("PeerConnectionLifecycleManager", () => {
     await manager.setMediaPlaybackEnabled(true);
 
     expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
-    expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).toBeNull();
     expect(manager.getPeerEntry("peer_b", "data")).not.toBeNull();
     expect(manager.getPeerEntry("peer_c", "data")).not.toBeNull();
   });
@@ -290,6 +305,25 @@ describe("PeerConnectionLifecycleManager", () => {
       expect(manager.getPeerEntry(peerId, "data")).not.toBeNull();
       expect(manager.getPeerEntry(peerId, "media")?.audioSender?.track).toBe(track);
     }
+  });
+
+  it("fans out the source track to all nine listeners without creating standby receiver links", async () => {
+    const { manager } = createManager();
+    const track = { id: "ten-member-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+    const remotePeerIds = Array.from({ length: 9 }, (_, index) =>
+      `peer_${String.fromCharCode("b".charCodeAt(0) + index)}`
+    );
+
+    manager.setLocalAudioStream(stream, "peer_a", 510);
+    await manager.syncPeers(remotePeerIds);
+
+    expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "data"))).toHaveLength(9);
+    expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "media"))).toHaveLength(9);
+    expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "media")?.audioSender?.track === track))
+      .toHaveLength(9);
   });
 
   it("keeps source media fanout peers while the broadcast track is not live yet", async () => {
@@ -582,7 +616,7 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaOffers).toHaveLength(1);
   });
 
-  it("reuses media fanout peers when the source changes", async () => {
+  it("releases standby media peers when the source changes", async () => {
     const { manager } = createManager();
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
     const stream = {
@@ -597,9 +631,9 @@ describe("PeerConnectionLifecycleManager", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
-    expect(manager.getPeerEntry("peer_c", "media")).toBe(oldPeer);
-    expect(oldPeer.connection.connectionState).toBe("connected");
-    expect(oldPeer.audioSender?.track).toBeNull();
+    expect(manager.getPeerEntry("peer_c", "media")).toBeNull();
+    expect(oldPeer.connection.connectionState).toBe("closed");
+    expect(oldPeer.audioSender).toBeNull();
   });
 
   it("restarts ICE through the current peer entry without recreating it", async () => {
@@ -611,7 +645,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     await manager.restartIce("peer_b");
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
     expect(firstPeer.localDescription).toEqual({
       type: "offer",
       sdp: "fake-restart-offer"
@@ -636,7 +670,7 @@ describe("PeerConnectionLifecycleManager", () => {
     await Promise.all([removal, restart]);
 
     expect(manager.getPeerEntry("peer_b", "data")).toBeNull();
-    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
   });
 
   it("does not recreate a removed peer when delayed signaling arrives", async () => {
@@ -651,7 +685,7 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(delayedMediaEntry).toBeNull();
     expect(manager.getPeerEntry("peer_b", "data")).toBeNull();
     expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
-    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
   });
 
   it("does not admit a delayed media signal from a previous source", async () => {
@@ -666,7 +700,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     expect(delayedMediaEntry).toBeNull();
     await vi.advanceTimersByTimeAsync(0);
-    expect(manager.getPeerEntry("peer_b", "media")).not.toBeNull();
+    expect(manager.getPeerEntry("peer_b", "media")).toBeNull();
     expect(manager.getPeerEntry("peer_c", "media")).not.toBeNull();
   });
 
@@ -720,6 +754,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const { manager } = createManager();
     await manager.getOrCreateIncomingPeerEntry("peer_b", "media");
     await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
 
     await vi.advanceTimersByTimeAsync(8_000);
 
@@ -806,8 +841,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const { manager, sendSignal } = createManager();
     await manager.syncPeers(["peer_b"]);
 
-    const initialMediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender);
-    expect(initialMediaPeer?.mediaSender?.track).toBeNull();
+    expect(FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)).toBeUndefined();
 
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
     const stream = {

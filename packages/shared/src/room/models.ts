@@ -76,12 +76,22 @@ export const roomSyncResponseSchema = z.object({
   deletedTracks: z.array(roomTrackDeletionSchema)
 });
 
+// Joining only needs the room metadata and route id. Tracks, queue and
+// presence are loaded by the room runtime after navigation so large rooms do
+// not block the join request.
+export const roomJoinResponseSchema = z.object({
+  roomId: z.string().min(1),
+  roomRevision: z.number().int().nonnegative(),
+  room: roomSchema
+}).strict();
+
 export type RoomMember = z.infer<typeof roomMemberSchema>;
 export type Room = z.infer<typeof roomSchema>;
 export type RoomSnapshot = z.infer<typeof roomSnapshotSchema>;
 export type RoomDirectoryItem = RoomSnapshot;
 export type RoomTrackDeletion = z.infer<typeof roomTrackDeletionSchema>;
 export type RoomSyncResponse = z.infer<typeof roomSyncResponseSchema>;
+export type RoomJoinResponse = z.infer<typeof roomJoinResponseSchema>;
 
 export function getRoomMemberPermissions(
   member: Pick<RoomMember, "role" | "permissions">

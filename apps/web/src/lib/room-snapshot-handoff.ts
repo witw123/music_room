@@ -1,6 +1,6 @@
 "use client";
 
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomJoinResponse, RoomSnapshot } from "@music-room/shared";
 
 const roomSnapshotHandoffStorageKey = "music-room-pending-room-snapshot";
 const roomSnapshotHandoffTtlMs = 60_000;
@@ -10,6 +10,15 @@ type RoomSnapshotHandoffPayload = {
   snapshot: RoomSnapshot;
   savedAt: number;
 };
+
+export function buildRoomJoinBootstrapSnapshot(joined: RoomJoinResponse): RoomSnapshot {
+  return {
+    room: joined.room,
+    tracks: [],
+    queue: [],
+    playlists: []
+  };
+}
 
 export function storeRoomSnapshotHandoff(snapshot: RoomSnapshot) {
   if (typeof window === "undefined") {

@@ -32,6 +32,7 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
+  type RoomJoinResponse,
   type RoomMemberPermissions,
   type RoomSnapshot,
   type RoomSyncResponse,
@@ -263,7 +264,7 @@ export const musicRoomApi = {
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
   listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
   joinRoomByCode: (joinCode: string, password?: string) =>
-    request<RoomSnapshot>("/v1/rooms/join-by-code", {
+    request<RoomJoinResponse>("/v1/rooms/join-by-code", {
       method: "POST",
       body: JSON.stringify({ joinCode, ...(password ? { password } : {}) })
     }),

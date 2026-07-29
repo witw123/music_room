@@ -99,7 +99,7 @@ describe("peer connection lifecycle helpers", () => {
     ).toMatchObject({
       iceTransportPolicy: "all",
       rtcpMuxPolicy: "require",
-      iceCandidatePoolSize: 4
+      iceCandidatePoolSize: 0
     });
 
     expect(

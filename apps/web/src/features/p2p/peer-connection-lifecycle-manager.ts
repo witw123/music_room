@@ -322,9 +322,11 @@ export class PeerConnectionLifecycleManager {
     if (!this.mediaPlaybackEnabled) {
       return new Set<string>();
     }
-    // Media peer connections follow room membership. Which peer currently
-    // carries the broadcast must not decide whether a PC remains alive.
-    return new Set(this.expectedRemotePeerIds);
+    // A listener only needs the current source's receiver. Keeping a media PC
+    // for every room member turns a ten-person room into a second full mesh;
+    // it also makes ICE/DTLS contention look like a source-side RTP failure.
+    // The source still retains one sender PC per expected listener.
+    return this.activeMediaPeerIds();
   }
 
   private activeMediaPeerIds() {
@@ -1111,6 +1113,18 @@ export class PeerConnectionLifecycleManager {
 
   private releasePeer(peerId: string, entry: PeerEntry) {
     if (entry.linkKind === "media") {
+      // Closing a media PC does not reliably deliver a useful connection-state
+      // event because the entry is removed before the browser emits its final
+      // callback. Notify the room runtime explicitly so a source switch or a
+      // failed replacement cannot leave a stale "playing" member behind.
+      if (!this.destroyed) {
+        this.onMediaStateChange?.({
+          peerId,
+          entry,
+          direction: entry.senderTrackState !== "none" ? "sender" : "receiver",
+          state: "none"
+        });
+      }
       this.clearProvisionalIncomingMediaAdmission(entry);
       this.latestMediaSamples.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
