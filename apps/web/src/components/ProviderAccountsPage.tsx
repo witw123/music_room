@@ -31,16 +31,7 @@ export function ProviderAccountsPage() {
     <main className="workspace-page relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-12 md:pt-20">
-        <header className="workspace-page__header">
-          <div className="workspace-page__heading">
-            <p className="workspace-page__eyebrow">Library</p>
-            <h1 className="workspace-page__title">我的</h1>
-            <p className="workspace-page__description">管理你的音乐库和 Music Room 账户。</p>
-          </div>
-        </header>
-        <div className="mt-8">
-          <PersonalOverview activeSession={activeSession} />
-        </div>
+        <PersonalOverview activeSession={activeSession} />
         <div className="mt-8">
           <LocalPlaylistsOverview />
         </div>

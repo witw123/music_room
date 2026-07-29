@@ -18,6 +18,7 @@ import { NeteaseModule } from "./modules/providers/netease/netease.module";
 import { QqMusicModule } from "./modules/providers/qqmusic/qqmusic.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
+import { PlaybackHistoryModule } from "./modules/playback-history/playback-history.module";
 import { SecurityModule } from "./common/security/security.module";
 
 @Module({
@@ -46,7 +47,8 @@ import { SecurityModule } from "./common/security/security.module";
     NeteaseModule,
     QqMusicModule,
     AdminModule,
-    FavoritesModule
+    FavoritesModule,
+    PlaybackHistoryModule
   ]
 })
 export class AppModule {}

@@ -115,19 +115,19 @@ export function VinylAuraVisualizer({
 
       const blobScale = baseScale + smoothedPeak * boostScale * 0.8;
       
-      const minRadius = Math.min(width, height) * 0.35 + (smoothedAverage * 20); // Extends past the vinyl body
-      const blobRadius = minRadius + (Math.min(width, height) * 0.25 * blobScale);
+      const minRadius = Math.min(width, height) * 0.35 + (smoothedAverage * 12);
+      const blobRadius = minRadius + (Math.min(width, height) * 0.12 * blobScale);
 
       // Main Halo Aura
-      const grad1 = context.createRadialGradient(centerX, centerY, minRadius * 0.5, centerX, centerY, blobRadius * 1.5);
+      const grad1 = context.createRadialGradient(centerX, centerY, minRadius * 0.5, centerX, centerY, blobRadius * 1.15);
       grad1.addColorStop(0, withAlpha(accentColor, 0)); // Inner hole is transparent so vinyl sits cleanly
-      grad1.addColorStop(0.3, withAlpha(accentColor, 0.4 + smoothedAverage * 0.6)); // Peak color ring
-      grad1.addColorStop(0.7, withAlpha(accentColor, 0.15 + smoothedAverage * 0.3)); // Smooth palette falloff
+      grad1.addColorStop(0.3, withAlpha(accentColor, 0.22 + smoothedAverage * 0.35)); // Peak color ring
+      grad1.addColorStop(0.7, withAlpha(accentColor, 0.08 + smoothedAverage * 0.15)); // Smooth palette falloff
       grad1.addColorStop(1, withAlpha(accentColor, 0));
       
       context.fillStyle = grad1;
       context.beginPath();
-      context.arc(centerX, centerY, blobRadius * 1.5, 0, Math.PI * 2);
+      context.arc(centerX, centerY, blobRadius * 1.15, 0, Math.PI * 2);
       context.fill();
 
       // Deformed/Wavy Edge
@@ -166,14 +166,14 @@ export function VinylAuraVisualizer({
       }
       
       context.closePath();
-      context.lineWidth = 15 + smoothedPeak * 20;
-      context.strokeStyle = withAlpha(accentColor, 0.3 + smoothedPeak * 0.5);
+      context.lineWidth = 8 + smoothedPeak * 12;
+      context.strokeStyle = withAlpha(accentColor, 0.16 + smoothedPeak * 0.3);
       const lineBlur = context.filter;
-      context.filter = "blur(12px)";
+      context.filter = "blur(8px)";
       context.stroke();
       context.filter = lineBlur;
       
-      context.fillStyle = withAlpha(accentColor, 0.1 + smoothedAverage * 0.3);
+      context.fillStyle = withAlpha(accentColor, 0.04 + smoothedAverage * 0.12);
       context.fill();
       context.restore();
 
@@ -196,8 +196,9 @@ export function VinylAuraVisualizer({
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-70 mix-blend-screen transition-opacity duration-1000 scale-[1.35] blur-md"
+      className="pointer-events-none absolute inset-0 h-full w-full rounded-full opacity-45 mix-blend-screen transition-opacity duration-1000 scale-[1.04]"
       data-testid="vinyl-aura-visualizer"
+      style={{ clipPath: "circle(50% at 50% 50%)" }}
     />
   );
 }

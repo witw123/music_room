@@ -55,6 +55,24 @@ export type QueueMutationResponse = {
   playback: PlaybackSnapshot;
 };
 
+export type PlaybackHistoryProvider = "local_upload" | "netease" | "qqmusic";
+
+export type PlaybackHistoryRecord = {
+  provider: PlaybackHistoryProvider;
+  providerTrackId: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  durationMs: number;
+  listenedMs: number;
+};
+
+export type PlaybackHistoryStats = {
+  listenedMs: number;
+  trackCount: number;
+  rangeDays: number;
+};
+
 export type AuthConfig = {
   enabled: boolean;
   siteKey: string;
@@ -247,6 +265,14 @@ export const musicRoomApi = {
       method: "POST"
     }),
   me: () => request<AuthSession>("/v1/auth/me", undefined, { notifyAuthExpired: false }),
+  getPlaybackHistoryStats: () =>
+    request<PlaybackHistoryStats>("/v1/playback-history/stats"),
+  recordPlaybackHistory: (input: PlaybackHistoryRecord) =>
+    request<{ ok: boolean }>("/v1/playback-history", {
+      method: "POST",
+      body: JSON.stringify(input),
+      keepalive: true
+    }),
   createRoom: (input?: {
     visibility?: "private" | "public";
     name?: string;

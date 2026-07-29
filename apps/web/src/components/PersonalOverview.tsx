@@ -1,153 +1,126 @@
 "use client";
 
-import type { AuthSession } from "@music-room/shared";
-import Link from "next/link";
+import type { AuthSession, RoomSnapshot } from "@music-room/shared";
 import { useEffect, useState } from "react";
-import { isLocalPlaylistMirror } from "@/lib/local-playlist-database";
-import { musicRoomApi } from "@/lib/music-room-api";
-import {
-  listLocalPlaylists,
-  listMergedLocalPlaylistTracks,
-  restoreLocalPlaylistsFromRepository
-} from "@/features/playlist/local-playlist";
-import {
-  getCachedFavorites,
-  getCachedPlaylistData,
-  setCachedFavorites,
-  setCachedPlaylistData
-} from "@/features/workspace/page-data-cache";
+import { getMemberDurationMs } from "@/components/room/member-data";
+import { musicRoomApi, type PlaybackHistoryStats } from "@/lib/music-room-api";
 
-type ProfileStats = {
-  localPlaylistCount: number | null;
-  localTrackCount: number | null;
-  networkPlaylistCount: number | null;
-  favoriteTrackCount: number | null;
-  favoriteAlbumCount: number | null;
-};
-
-type StatDefinition = {
-  key: keyof ProfileStats;
-  label: string;
-};
-
-const statDefinitions: StatDefinition[] = [
-  { key: "localPlaylistCount", label: "本地歌单" },
-  { key: "localTrackCount", label: "本地歌曲" },
-  { key: "networkPlaylistCount", label: "网络歌单" },
-  { key: "favoriteTrackCount", label: "收藏歌曲" },
-  { key: "favoriteAlbumCount", label: "收藏专辑" }
-];
+const activityRefreshIntervalMs = 60_000;
 
 export function PersonalOverview({ activeSession }: { activeSession: AuthSession }) {
-  const [stats, setStats] = useState<ProfileStats>(() => getInitialStats(activeSession.userId));
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [recentRooms, setRecentRooms] = useState<RoomSnapshot[]>([]);
+  const [playbackStats, setPlaybackStats] = useState<PlaybackHistoryStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadStats() {
-      const [localResult, networkResult, favoriteTracksResult, favoriteAlbumsResult] = await Promise.all([
-        loadLocalStats(activeSession.userId),
-        musicRoomApi.listMyPlaylists()
-          .then((playlists) => {
-            const networkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
-            setCachedPlaylistData(activeSession.userId, {
-              networkPlaylists,
-              networkLoaded: true
-            });
-            return networkPlaylists.length;
-          })
-          .catch(() => null),
-        musicRoomApi.listFavoriteTracks()
-          .then((tracks) => tracks.length)
-          .catch(() => null),
-        musicRoomApi.listFavoriteAlbums()
-          .then((albums) => {
-            setCachedFavorites(activeSession.userId, albums);
-            return albums.length;
-          })
-          .catch(() => null)
+    async function loadActivity() {
+      const [rooms, stats] = await Promise.all([
+        musicRoomApi.getRecentRooms().catch(() => []),
+        musicRoomApi.getPlaybackHistoryStats().catch(() => null)
       ]);
 
-      if (cancelled) return;
-      setStats({
-        localPlaylistCount: localResult?.localPlaylistCount ?? null,
-        localTrackCount: localResult?.localTrackCount ?? null,
-        networkPlaylistCount: networkResult,
-        favoriteTrackCount: favoriteTracksResult,
-        favoriteAlbumCount: favoriteAlbumsResult
-      });
-      setStatsLoading(false);
+      if (cancelled) {
+        return;
+      }
+
+      setRecentRooms(rooms);
+      setPlaybackStats(stats);
+      setIsLoading(false);
+      setNow(Date.now());
     }
 
-    void loadStats();
+    void loadActivity();
+    const refreshId = window.setInterval(() => {
+      void loadActivity();
+    }, activityRefreshIntervalMs);
+
     return () => {
       cancelled = true;
+      window.clearInterval(refreshId);
     };
   }, [activeSession.userId]);
 
-  async function copyUserId() {
-    try {
-      await navigator.clipboard.writeText(activeSession.userId);
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1600);
-    } catch {
-      setCopyState("idle");
-    }
-  }
+  useEffect(() => {
+    const clockId = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(clockId);
+  }, []);
 
   return (
-    <section aria-labelledby="personal-overview-title" className="border-b border-surface-border pb-8">
-      <div className="grid gap-5 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(0,1.6fr)] lg:items-stretch">
-        <div className="workspace-surface flex min-w-0 flex-col justify-between gap-6 p-5 sm:p-6">
-          <div className="flex min-w-0 items-center gap-4">
-            <div aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-xl font-semibold text-white shadow-[0_8px_24px_var(--accent-glow)] sm:h-[4.5rem] sm:w-[4.5rem] sm:text-2xl">
-              {getInitials(activeSession.nickname)}
+    <section aria-labelledby="personal-overview-title" className="border-b border-surface-border pb-9">
+      <div className="flex min-w-0 items-center gap-4">
+        <div
+          aria-hidden="true"
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-semibold text-white shadow-[0_8px_24px_var(--accent-glow)] sm:h-16 sm:w-16 sm:text-xl"
+        >
+          {getInitials(activeSession.nickname)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-accent">Music Room 用户</p>
+          <h1 className="mt-1 truncate text-2xl font-semibold tracking-normal text-foreground" id="personal-overview-title">
+            {activeSession.nickname}
+          </h1>
+          <p className="mt-1 truncate text-sm text-foreground-muted">@{activeSession.username}</p>
+        </div>
+      </div>
+
+      <div className="mt-9 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.65fr)] lg:gap-12">
+        <div className="min-w-0">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">最近加入的房间</h2>
+              <p className="mt-1 text-xs text-foreground-muted">每次重新加入都会重新开始计时</p>
             </div>
-            <div className="min-w-0">
-              <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-accent">Music Room 用户</p>
-              <h2 className="mt-1 truncate text-xl font-semibold text-foreground" id="personal-overview-title">{activeSession.nickname}</h2>
-              <p className="mt-1 truncate text-sm text-foreground-muted">@{activeSession.username}</p>
-            </div>
+            {isLoading ? <span className="text-xs text-foreground-muted">加载中</span> : null}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-xs text-foreground-muted">
-            <div className="flex min-w-0 items-center gap-x-3">
-              <span className="truncate" title={activeSession.userId}>ID {activeSession.userId.slice(0, 12)}</span>
-              <span aria-hidden="true" className="text-surface-border">·</span>
-              <button
-                className="shrink-0 font-medium text-accent transition-colors hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                onClick={() => void copyUserId()}
-                type="button"
-              >
-                {copyState === "copied" ? "已复制" : "复制 ID"}
-              </button>
-            </div>
-            <Link className="shrink-0 font-medium text-accent transition-colors hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href="/app/settings">
-              账户设置 <span aria-hidden="true">→</span>
-            </Link>
+
+          <div className="mt-4 divide-y divide-surface-border border-y border-surface-border">
+            {recentRooms.slice(0, 3).map((room) => {
+              const member = room.room.members.find((item) => item.id === activeSession.userId);
+              const durationMs = member ? getMemberDurationMs(member, now) : 0;
+              return (
+                <div className="flex min-w-0 items-center justify-between gap-4 py-3" key={room.room.id}>
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-medium text-foreground">
+                      {room.room.name || "未命名房间"}
+                    </strong>
+                    <span className="mt-1 block truncate text-xs text-foreground-muted">
+                      房间码 {room.room.joinCode}
+                    </span>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <strong className="block text-sm font-medium tabular-nums text-foreground">
+                      {formatActivityDuration(durationMs)}
+                    </strong>
+                    <span className="mt-1 block text-xs text-foreground-muted">加入时长</span>
+                  </div>
+                </div>
+              );
+            })}
+            {!isLoading && recentRooms.length === 0 ? (
+              <p className="py-5 text-sm text-foreground-muted">最近还没有加入过房间</p>
+            ) : null}
           </div>
         </div>
 
         <div className="min-w-0">
-          <div className="mb-3 flex items-end justify-between gap-3">
+          <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Music Room 概览</h2>
-              <p className="mt-1 text-xs text-foreground-muted">你的音乐库和收藏</p>
+              <h2 className="text-sm font-semibold text-foreground">最近听歌</h2>
+              <p className="mt-1 text-xs text-foreground-muted">近 {playbackStats?.rangeDays ?? 30} 天</p>
             </div>
-            <span aria-live="polite" className="shrink-0 text-[0.6875rem] text-foreground-muted">
-              {statsLoading ? "同步中" : "已同步"}
-            </span>
           </div>
-          <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-surface-border bg-surface/40 sm:grid-cols-5">
-            {statDefinitions.map((definition) => (
-              <StatTile
-                key={definition.key}
-                label={definition.label}
-                loading={statsLoading && stats[definition.key] === null}
-                value={stats[definition.key]}
-              />
-            ))}
+          <div className="mt-4 grid grid-cols-2 border-y border-surface-border">
+            <ActivityStat
+              label="听歌时长"
+              value={playbackStats ? formatActivityDuration(playbackStats.listenedMs) : isLoading ? "加载中" : "—"}
+            />
+            <ActivityStat
+              label="听过歌曲"
+              value={playbackStats ? `${playbackStats.trackCount} 首` : isLoading ? "加载中" : "—"}
+            />
           </div>
         </div>
       </div>
@@ -155,58 +128,34 @@ export function PersonalOverview({ activeSession }: { activeSession: AuthSession
   );
 }
 
-function StatTile({ label, loading, value }: { label: string; loading: boolean; value: number | null }) {
+function ActivityStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 border-b border-surface-border px-4 py-4 last:border-b-0 even:border-l sm:border-b-0 sm:border-l sm:first:border-l-0">
-      {loading ? <span aria-label={`${label}加载中`} className="block h-7 w-10 animate-pulse rounded-md bg-surface-hover" /> : <strong className="block text-2xl font-semibold tabular-nums text-foreground">{value ?? "—"}</strong>}
+    <div className="min-w-0 px-0 py-4 first:pr-4 last:border-l last:border-surface-border last:pl-4">
+      <strong className="block truncate text-lg font-semibold tabular-nums text-foreground sm:text-xl">{value}</strong>
       <span className="mt-1 block truncate text-xs text-foreground-muted">{label}</span>
     </div>
   );
 }
 
-async function loadLocalStats(userId: string) {
-  const cached = getCachedPlaylistData(userId);
-  try {
-    const [restoredPlaylists, tracks] = await Promise.all([
-      restoreLocalPlaylistsFromRepository(),
-      listMergedLocalPlaylistTracks()
-    ]);
-    const localPlaylists = restoredPlaylists.length > 0 ? restoredPlaylists : listLocalPlaylists();
-    setCachedPlaylistData(userId, {
-      localPlaylists,
-      localTracks: tracks,
-      localLoaded: true
-    });
-    return {
-      localPlaylistCount: localPlaylists.length,
-      localTrackCount: tracks.length
-    };
-  } catch {
-    if (!cached) return null;
-    return {
-      localPlaylistCount: cached.localPlaylists.length,
-      localTrackCount: cached.localTracks.length
-    };
+function formatActivityDuration(durationMs: number) {
+  const totalMinutes = Math.floor(Math.max(0, durationMs) / 60_000);
+  if (totalMinutes < 1) {
+    return "不到 1 分钟";
   }
-}
 
-function getInitialStats(userId: string): ProfileStats {
-  const cachedPlaylistData = getCachedPlaylistData(userId);
-  const cachedFavorites = getCachedFavorites(userId);
-  return {
-    localPlaylistCount: cachedPlaylistData?.localLoaded ? cachedPlaylistData.localPlaylists.length : null,
-    localTrackCount: cachedPlaylistData?.localLoaded ? cachedPlaylistData.localTracks.length : null,
-    networkPlaylistCount: cachedPlaylistData?.networkLoaded
-      ? cachedPlaylistData.networkPlaylists.filter((playlist) => !isLocalPlaylistMirror(playlist)).length
-      : null,
-    favoriteTrackCount: null,
-    favoriteAlbumCount: cachedFavorites?.length ?? null
-  };
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) {
+    return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`;
+  }
+  return `${minutes} 分钟`;
 }
 
 function getInitials(value: string) {
   const normalized = value.trim();
-  if (!normalized) return "M";
+  if (!normalized) {
+    return "M";
+  }
   const characters = Array.from(normalized);
   return characters.length > 1 ? `${characters[0]}${characters[characters.length - 1]}` : characters[0];
 }

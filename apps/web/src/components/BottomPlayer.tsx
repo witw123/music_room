@@ -25,6 +25,7 @@ import { usePreferredArtworkUrl } from "@/components/bottom-player/preferred-art
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
+import { usePlaybackHistoryReporter } from "@/features/playback/use-playback-history-reporter";
 import {
   getRoomPlaybackClockNowMs,
   type RoomPlaybackBarrierClock
@@ -204,6 +205,12 @@ function BottomPlayerBase({
   const { activeSession } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
+  });
+  usePlaybackHistoryReporter({
+    userId: activeSession?.userId ?? null,
+    currentTrack,
+    isPlaying,
+    progressMs: boundedProgressMs
   });
   const favoriteTrack = toFavoriteTrackCandidate(currentTrack);
   const {

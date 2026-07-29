@@ -44,6 +44,7 @@ model User {
   qqMusicAccount QqMusicAccount?
   favoriteAlbums UserFavoriteAlbum[]
   favoriteTracks UserFavoriteTrack[]
+  playbackHistory UserPlaybackDaily[]
   adminSessions  AdminSession[]
   userSessions   UserSession[]
   auditLogs      AdminAuditLog[]
@@ -177,6 +178,28 @@ model UserFavoriteTrack {
 
   @@unique([userId, provider, providerTrackId])
   @@index([userId, updatedAt])
+}
+
+model UserPlaybackDaily {
+  id             String   @id
+  userId         String
+  day            DateTime @db.Date
+  provider       String
+  providerTrackId String
+  title          String
+  artist         String
+  album          String?
+  durationMs     Int      @default(0)
+  listenedMs     Int      @default(0)
+  lastPlayedAt   DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day, provider, providerTrackId])
+  @@index([userId, day])
+  @@index([userId, lastPlayedAt])
 }
 
 model OperationalIncident {
