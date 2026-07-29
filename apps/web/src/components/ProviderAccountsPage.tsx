@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { LocalPlaylistsOverview } from "@/components/LocalPlaylistsOverview";
+import { PersonalOverview } from "@/components/PersonalOverview";
 
 export function ProviderAccountsPage() {
   const router = useRouter();
@@ -29,14 +30,17 @@ export function ProviderAccountsPage() {
   return (
     <main className="workspace-page relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner relative z-10 pt-6 sm:pt-12 md:pt-20">
+      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-12 md:pt-20">
         <header className="workspace-page__header">
           <div className="workspace-page__heading">
             <p className="workspace-page__eyebrow">Library</p>
             <h1 className="workspace-page__title">我的</h1>
-            <p className="workspace-page__description">管理本地歌单和音乐内容。</p>
+            <p className="workspace-page__description">管理你的音乐库和 Music Room 账户。</p>
           </div>
         </header>
+        <div className="mt-8">
+          <PersonalOverview activeSession={activeSession} />
+        </div>
         <div className="mt-8">
           <LocalPlaylistsOverview />
         </div>
