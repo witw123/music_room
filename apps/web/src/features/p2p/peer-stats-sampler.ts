@@ -18,6 +18,11 @@ export class PeerStatsSampler {
     private readonly input: {
       activeStatsSamplingIntervalMs: number;
       steadyStatsSamplingIntervalMs: number;
+      activeMediaStatsSamplingIntervalMs?: number;
+      steadyMediaStatsSamplingIntervalMs?: number;
+      activeDataStatsSamplingIntervalMs?: number;
+      steadyDataStatsSamplingIntervalMs?: number;
+      shouldSampleEntry?: (peerId: string, entry: PeerEntry) => boolean;
       onStatsSample?: (payload: {
         peerId: string;
         linkKind: PeerEntry["linkKind"];
@@ -46,12 +51,21 @@ export class PeerStatsSampler {
   }
 
   start(peerId: string, entry: PeerEntry) {
+    if (this.input.shouldSampleEntry && !this.input.shouldSampleEntry(peerId, entry)) {
+      this.stop(entry);
+      return;
+    }
+    const isMedia = entry.linkKind === "media";
     startPeerStatsSampling({
       peerId,
       entry,
       mode: this.mode,
-      activeStatsSamplingIntervalMs: this.input.activeStatsSamplingIntervalMs,
-      steadyStatsSamplingIntervalMs: this.input.steadyStatsSamplingIntervalMs,
+      activeStatsSamplingIntervalMs: isMedia
+        ? this.input.activeMediaStatsSamplingIntervalMs ?? this.input.activeStatsSamplingIntervalMs
+        : this.input.activeDataStatsSamplingIntervalMs ?? this.input.activeStatsSamplingIntervalMs,
+      steadyStatsSamplingIntervalMs: isMedia
+        ? this.input.steadyMediaStatsSamplingIntervalMs ?? this.input.steadyStatsSamplingIntervalMs
+        : this.input.steadyDataStatsSamplingIntervalMs ?? this.input.steadyStatsSamplingIntervalMs,
       onStatsSample: this.input.onStatsSample,
       samplePeerConnectionStats: this.input.samplePeerConnectionStats ?? samplePeerConnectionStats
     });

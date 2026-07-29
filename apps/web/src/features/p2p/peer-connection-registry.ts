@@ -110,9 +110,30 @@ export function isPeerStalled(input: {
   const { entry } = input;
   const channelState = entry.channel?.readyState ?? null;
   const connectionState = entry.connection.connectionState;
+  const iceConnectionState = entry.connection.iceConnectionState;
+  const transportFailed = connectionState === "failed" ||
+    connectionState === "closed" ||
+    iceConnectionState === "failed" ||
+    iceConnectionState === "closed";
+  const transportDisconnected = connectionState === "disconnected" ||
+    iceConnectionState === "disconnected";
 
-  if (channelState === "open") {
+  if (transportFailed) {
+    return true;
+  }
+
+  // A DataChannel may stay open while ICE is disconnected. Give the browser
+  // time to repair the selected pair, then recover if the transport remains
+  // unusable instead of treating the stale channel as permanent health.
+  if (channelState === "open" && !transportDisconnected) {
     return false;
+  }
+
+  if (
+    transportDisconnected &&
+    input.nowMs - entry.lastSignalProgressAtMs >= input.connectionProgressTimeoutMs
+  ) {
+    return true;
   }
 
   if (input.nowMs - entry.createdAtMs >= input.dataOpenTimeoutMs) {

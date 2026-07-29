@@ -96,6 +96,25 @@ describe("PeerStatsSampler", () => {
     expect(entry.statsIntervalId).toBeNull();
   });
 
+  it("skips entries rejected by the sampling eligibility policy", () => {
+    const sampler = new PeerStatsSampler({
+      activeStatsSamplingIntervalMs: 1_000,
+      steadyStatsSamplingIntervalMs: 5_000,
+      onStatsSample: vi.fn(),
+      samplePeerConnectionStats: vi.fn(),
+      shouldSampleEntry: () => false
+    });
+    const entry = createPeerEntry({
+      connection: buildConnection(),
+      initiatorPeerId: "peer_a",
+      nowMs: 100
+    });
+
+    sampler.start("peer_b", entry);
+
+    expect(entry.statsIntervalId).toBeNull();
+  });
+
   it("does not overlap slow stats reads", async () => {
     vi.useFakeTimers();
     try {

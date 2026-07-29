@@ -125,7 +125,8 @@ type UseRoomRuntimeResult = {
   setLocalAudioStream: (
     stream: MediaStream | null,
     sourcePeerId: string | null,
-    maxBitrateKbps?: number | null
+    maxBitrateKbps?: number | null,
+    mediaTrafficExpected?: boolean
   ) => void;
   getPeerMediaState: (peerId: string) => ReturnType<P2PMesh["getPeerMediaState"]>;
   setMediaPlaybackEnabled: (enabled: boolean) => Promise<void>;
@@ -638,8 +639,17 @@ export function useRoomRuntime({
   }, [lastDataActivityAtRef, updateConnectionSupervisorPlayout, connectedPeers.length]);
 
   const setLocalAudioStream = useCallback(
-    (stream: MediaStream | null, sourcePeerId: string | null, maxBitrateKbps?: number | null) =>
-      meshRef.current?.setLocalAudioStream(stream, sourcePeerId, maxBitrateKbps),
+    (
+      stream: MediaStream | null,
+      sourcePeerId: string | null,
+      maxBitrateKbps?: number | null,
+      mediaTrafficExpected?: boolean
+    ) => meshRef.current?.setLocalAudioStream(
+      stream,
+      sourcePeerId,
+      maxBitrateKbps,
+      mediaTrafficExpected
+    ),
     [meshRef]
   );
   const getPeerMediaState = useCallback(

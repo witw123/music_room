@@ -218,6 +218,20 @@ describe("MembersPanel WebRTC media status", () => {
     });
   });
 
+  it("shows an ended media track as an audio failure until RTP returns", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.mediaConnectionState = "connected";
+    diagnostic.mediaTrackState = "ended";
+
+    expect(getPlaybackStatus("online", diagnostic, {
+      playbackActive: true,
+      isCurrentSource: true
+    })).toMatchObject({
+      label: "音频异常",
+      tone: "danger"
+    });
+  });
+
   it("keeps the member view on the live RTP model", () => {
     const source = readFileSync(new URL("./MembersPanel.tsx", import.meta.url), "utf8");
 

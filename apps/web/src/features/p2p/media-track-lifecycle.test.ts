@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import { SignalingTransport } from "./signaling-transport";
+import { maximumAudioBitrateKbps } from "./audio-bitrate-policy";
 
 class FakeSender {
   track: MediaStreamTrack | null;
@@ -107,7 +108,7 @@ describe("WebRTC media track lifecycle", () => {
     expect(connection.addTrack).toHaveBeenCalledWith(track, expect.anything());
     const sender = (manager.getPeerEntry("peer_b", "media")?.audioSender as unknown) as FakeSender;
     expect(sender.lastParameters?.encodings?.[0]).toMatchObject({
-      maxBitrate: 256_000,
+      maxBitrate: maximumAudioBitrateKbps * 1_000,
       priority: "high",
       networkPriority: "high"
     });

@@ -166,6 +166,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   dataConnectionState: z.string().nullable(),
   dataChannelState: z.string().nullable().optional(),
   mediaConnectionState: z.string().nullable(),
+  mediaTrackState: z.enum(["none", "live", "ended", "failed"]).nullable().optional(),
   dataIceState: z.string().nullable(),
   mediaIceState: z.string().nullable(),
   transportHealth: z

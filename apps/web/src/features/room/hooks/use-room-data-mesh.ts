@@ -17,10 +17,28 @@ import type {
   RoomDataMeshDiagnosticsRefs
 } from "./room-runtime-types";
 
+const telemetryPublishIntervalMs = 1_000;
+
 type DataMeshRuntime = Pick<
   P2PMesh,
   "syncPeers" | "restartPeer" | "getConnectedPeerIds"
 > & Pick<P2PMesh, "restartMediaPeer">;
+
+export function updatePeerMembership(
+  setPeers: Dispatch<SetStateAction<string[]>>,
+  peerId: string,
+  shouldBePresent: boolean
+) {
+  setPeers((current) => {
+    const index = current.indexOf(peerId);
+    if (shouldBePresent) {
+      return index >= 0 ? current : [...current, peerId];
+    }
+    return index < 0
+      ? current
+      : current.filter((currentPeerId) => currentPeerId !== peerId);
+  });
+}
 
 export function useRoomDataMesh(input: {
   meshRef: MutableRefObject<P2PMesh | null>;
@@ -119,7 +137,7 @@ export function createRoomDataMeshRuntime(input: {
 
   const publishLocalTelemetry = (force = false) => {
     const now = Date.now();
-    if (!force && now - lastTelemetryBroadcastAtMs < 750) {
+    if (!force && now - lastTelemetryBroadcastAtMs < telemetryPublishIntervalMs) {
       return;
     }
 
@@ -218,24 +236,27 @@ export function createRoomDataMeshRuntime(input: {
             input.withResolvedTransportHealth({
               ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
               ...(linkKind === "media"
-                ? { mediaConnectionState: state }
+                ? {
+                    mediaConnectionState: state,
+                    ...(state === "new" || state === "connecting"
+                      ? { mediaTrackState: "none" as const }
+                      : state === "failed" || state === "closed"
+                        ? { mediaTrackState: "failed" as const }
+                        : {})
+                  }
                 : { dataConnectionState: state })
             })
         });
         if (linkKind === "media") {
-          input.setMediaConnectedPeers((current) => {
-            const next = new Set(current);
-            if (state === "connected") {
-              const media = input.meshRef.current?.getPeerMediaState(peerId);
-              const operational = media?.receiverTrackState === "live" &&
-                media.receiverRtpActive === true ||
-                media?.senderTrackState === "live";
-              if (operational) next.add(peerId);
-              else next.delete(peerId);
-            }
-            else next.delete(peerId);
-            return [...next];
-          });
+          const latestSample = latestMediaSamples.get(peerId);
+          const sampleIsFresh = latestSample !== undefined &&
+            Date.now() - latestSample.updatedAtMs <= 4_000;
+          const operational = state === "connected" &&
+            sampleIsFresh && (
+              (latestSample?.receiveRateKbps ?? 0) > 0 ||
+              (latestSample?.sendRateKbps ?? 0) > 0
+            );
+          updatePeerMembership(input.setMediaConnectedPeers, peerId, operational);
           if (state === "failed" || state === "closed") {
             latestMediaSamples.delete(peerId);
             playbackBandwidthMonitor.remove(peerId);
@@ -243,12 +264,16 @@ export function createRoomDataMeshRuntime(input: {
           }
           return;
         }
-        input.setConnectedPeers((current) => {
-          const next = new Set(current);
-          if (state === "connected") next.add(peerId);
-          else next.delete(peerId);
-          return [...next];
-        });
+        // A connected RTCPeerConnection can still have a connecting or
+        // closed control channel. DataChannel open is the authoritative
+        // readiness signal for room presence/recovery traffic.
+        // ICE can recover in place while the DataChannel stays open, so
+        // re-read the channel state on the connection transition.
+        updatePeerMembership(
+          input.setConnectedPeers,
+          peerId,
+          state === "connected" && input.meshRef.current?.getConnectedPeerIds().includes(peerId) === true
+        );
         if (["closed", "failed", "disconnected"].includes(state)) {
           peerBufferedAmountBytes.delete(peerId);
           queueDataPeerRecovery(peerId, state === "disconnected" ? "data-disconnected" : "data-failed", state);
@@ -293,12 +318,7 @@ export function createRoomDataMeshRuntime(input: {
                 state === "open" ? new Date().toISOString() : snapshot.lastDataActivityAt
             })
         });
-        input.setConnectedPeers((current) => {
-          const next = new Set(current);
-          if (state === "open") next.add(peerId);
-          else next.delete(peerId);
-          return [...next];
-        });
+        updatePeerMembership(input.setConnectedPeers, peerId, state === "open");
         if (state === "open") {
           // Push current aggregate immediately so the new peer does not wait a full sample cycle.
           publishLocalTelemetry(true);
@@ -343,16 +363,12 @@ export function createRoomDataMeshRuntime(input: {
           // `connected`. Re-evaluate the transport on every media sample so
           // the member count follows the actual receiver/sender state rather
           // than the earlier ICE transition alone.
-          input.setMediaConnectedPeers((current) => {
-            const next = new Set(current);
-            const media = input.meshRef.current?.getPeerMediaState(peerId);
-            const operational = (media?.receiverTrackState === "live" &&
-              media.receiverRtpActive === true) ||
-              media?.senderTrackState === "live";
-            if (operational) next.add(peerId);
-            else next.delete(peerId);
-            return [...next];
-          });
+          updatePeerMembership(
+            input.setMediaConnectedPeers,
+            peerId,
+            (sample.mediaReceiveBitrateKbps ?? 0) > 0 ||
+              (sample.mediaSendBitrateKbps ?? 0) > 0
+          );
           playbackBandwidthMonitor.update(peerId, {
             availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps,
             mediaReceiveBitrateKbps: sample.mediaReceiveBitrateKbps,
@@ -446,19 +462,19 @@ export function createRoomDataMeshRuntime(input: {
                 : state === "failed"
                   ? "failed"
                   : snapshot.mediaConnectionState,
+            mediaTrackState: state,
           })
         });
         if (direction === "receiver") {
-          input.setMediaConnectedPeers((current) => {
-            const next = new Set(current);
-            const media = input.meshRef.current?.getPeerMediaState(peerId);
-            const operational = (media?.receiverTrackState === "live" &&
-              media.receiverRtpActive === true) ||
-              media?.senderTrackState === "live";
-            if (state === "live" && operational) next.add(peerId);
-            else if (state !== "live") next.delete(peerId);
-            return [...next];
-          });
+          const latestSample = latestMediaSamples.get(peerId);
+          const sampleIsFresh = latestSample !== undefined &&
+            Date.now() - latestSample.updatedAtMs <= 4_000;
+          const operational = state === "live" &&
+            sampleIsFresh && (
+              (latestSample?.receiveRateKbps ?? 0) > 0 ||
+              (latestSample?.sendRateKbps ?? 0) > 0
+            );
+          updatePeerMembership(input.setMediaConnectedPeers, peerId, operational);
         }
       },
       onMediaRecovery: ({ peerId, reason, restartCount }) => {

@@ -11,6 +11,8 @@ import {
   hasFreshLocalMediaObservation,
   hasFreshReportedMediaObservation,
   getMemberDurationMs,
+  isMemberDataUnavailable,
+  resolveMemberConnectionStatus,
 } from "./member-data";
 
 type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
@@ -100,10 +102,11 @@ function getPresence(member: RoomMember) {
 export function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
   peerDiagnostics: PeerDiagnosticsSnapshot | undefined,
-  options: { playbackActive?: boolean; isCurrentSource?: boolean } = {}
+  options: { playbackActive?: boolean; isCurrentSource?: boolean; now?: number } = {}
 ) {
   const playbackActive = options.playbackActive ?? true;
   const isCurrentSource = options.isCurrentSource ?? true;
+  const now = options.now ?? Date.now();
 
   if (presenceState === "offline") {
     return { label: "离线", detail: "", tone: "neutral" as const, badgeText: "离线" };
@@ -111,12 +114,38 @@ export function getPlaybackStatus(
   if (presenceState === "reconnecting") {
     return { label: "正在重连", detail: "", tone: "warning" as const, badgeText: "正在重连" };
   }
+  const connection = resolveMemberConnectionStatus(peerDiagnostics, now);
+  const hasFreshReceiveAudio = hasFreshLocalMediaObservation(peerDiagnostics, "receive", now);
+  const hasFreshSendAudio = hasFreshLocalMediaObservation(peerDiagnostics, "send", now);
+  const hasFreshReportedReceiveAudio = hasFreshReportedMediaObservation(peerDiagnostics, "receive", now);
+  const hasFreshReportedSourceAudio = hasFreshReportedMediaObservation(peerDiagnostics, "send", now);
+  const hasFreshReportedAudible = (() => {
+    const reportedAt = peerDiagnostics?.reportedAudibleAt ?? peerDiagnostics?.reportedTelemetryAt;
+    const ageMs = reportedAt ? Math.max(0, now - Date.parse(reportedAt)) : null;
+    return ageMs !== null && Number.isFinite(ageMs) && ageMs <= 6_000 &&
+      typeof peerDiagnostics?.reportedAudible === "boolean";
+  })();
+  const hasFreshExpectedAudio = (isCurrentSource && (
+    hasFreshReceiveAudio || hasFreshSendAudio || hasFreshReportedSourceAudio
+  )) || (!isCurrentSource && (
+    hasFreshReceiveAudio || hasFreshReportedReceiveAudio
+  ));
+  const hasFreshLocalExpectedAudio = isCurrentSource
+    ? hasFreshReceiveAudio || hasFreshSendAudio
+    : hasFreshReceiveAudio;
+  const mediaTrackUnavailable = ["ended", "failed"].includes(
+    peerDiagnostics?.mediaTrackState ?? ""
+  );
   if (!playbackActive) {
-    return peerDiagnostics?.dataChannelState === "open" || peerDiagnostics?.mediaConnectionState === "connected"
+    return connection.dataReady || connection.mediaReady
       ? { label: "连接正常", detail: "", tone: "accent" as const, badgeText: "连接正常" }
       : { label: "连接中", detail: "", tone: "neutral" as const, badgeText: "连接中" };
   }
-  if (peerDiagnostics?.mediaConnectionState === "failed" || peerDiagnostics?.transportScore === "failed") {
+  if (!hasFreshLocalExpectedAudio &&
+    (peerDiagnostics?.mediaConnectionState === "failed" ||
+      peerDiagnostics?.mediaTrackState === "ended" ||
+      peerDiagnostics?.mediaTrackState === "failed" ||
+      peerDiagnostics?.transportScore === "failed")) {
     return {
       label: "音频异常",
       detail: "",
@@ -124,20 +153,9 @@ export function getPlaybackStatus(
       badgeText: "音频异常"
     };
   }
-  const hasFreshReceiveAudio = hasFreshLocalMediaObservation(peerDiagnostics, "receive");
-  const hasFreshSendAudio = hasFreshLocalMediaObservation(peerDiagnostics, "send");
-  const hasFreshReportedReceiveAudio = hasFreshReportedMediaObservation(peerDiagnostics, "receive");
-  const hasFreshReportedSourceAudio = hasFreshReportedMediaObservation(peerDiagnostics, "send");
-  const hasFreshReportedAudible = (() => {
-    const reportedAt = peerDiagnostics?.reportedAudibleAt ?? peerDiagnostics?.reportedTelemetryAt;
-    const ageMs = reportedAt ? Math.max(0, Date.now() - Date.parse(reportedAt)) : null;
-    return ageMs !== null && Number.isFinite(ageMs) && ageMs <= 6_000 &&
-      typeof peerDiagnostics?.reportedAudible === "boolean";
-  })();
   if (
-    (isCurrentSource && (hasFreshReceiveAudio || hasFreshSendAudio || hasFreshReportedSourceAudio)) ||
-    (!isCurrentSource && (hasFreshReceiveAudio || hasFreshReportedReceiveAudio)) ||
-    hasFreshReportedAudible && peerDiagnostics?.reportedAudible === true
+    hasFreshExpectedAudio && (!mediaTrackUnavailable || hasFreshLocalExpectedAudio) ||
+    hasFreshReportedAudible && peerDiagnostics?.reportedAudible === true && !mediaTrackUnavailable
   ) {
     return {
       label: "正常出声",
@@ -149,7 +167,14 @@ export function getPlaybackStatus(
   if (!isCurrentSource && hasFreshSendAudio) {
     return { label: "连接正常", detail: "", tone: "accent" as const, badgeText: "连接正常" };
   }
-  if (peerDiagnostics?.mediaConnectionState === "connected" || peerDiagnostics?.senderTrackId || peerDiagnostics?.receiverTrackId) {
+  if (
+    connection.mediaReady ||
+    connection.mediaState === "connected" ||
+    connection.mediaState === "completed" ||
+    connection.dataReady ||
+    connection.mediaTrackState === "ended" ||
+    connection.mediaTrackState === "failed"
+  ) {
     return { label: "音频准备中", detail: "", tone: "warning" as const, badgeText: "音频准备中" };
   }
   return { label: "连接中", detail: "", tone: "neutral" as const, badgeText: "连接中" };
@@ -219,6 +244,13 @@ export function getMemberAudibleStatus(input: {
       };
     }
     return { label: "等待音频", tone: "accent", active: false };
+  }
+
+  if (isMemberDataUnavailable(input.diagnostic)) {
+    return { label: "等待重连", tone: "warning", active: false };
+  }
+  if (["ended", "failed"].includes(input.diagnostic?.mediaTrackState ?? "")) {
+    return { label: "等待音频", tone: "warning", active: false };
   }
 
   const reportedAt = input.diagnostic?.reportedAudibleAt ?? input.diagnostic?.reportedTelemetryAt;
@@ -305,6 +337,20 @@ export function resolveMemberMediaRates(input: {
 
   // Only use the remote peer's self-reported aggregate rates. Local path samples
   // (mediaSend/Receive on this browser) describe this browser's link, not that member's totals.
+  if (isMemberDataUnavailable(input.diagnostic)) {
+    return {
+      sendRateKbps: null,
+      receiveRateKbps: null,
+      sampleAgeMs: null
+    };
+  }
+  if (["ended", "failed"].includes(input.diagnostic?.mediaTrackState ?? "")) {
+    return {
+      sendRateKbps: null,
+      receiveRateKbps: null,
+      sampleAgeMs: null
+    };
+  }
   const reportedAt = input.diagnostic?.reportedTelemetryAt;
   const reportedAtMs = reportedAt ? Date.parse(reportedAt) : Number.NaN;
   const sampleAgeMs = Number.isFinite(reportedAtMs) ? Math.max(0, now - reportedAtMs) : null;

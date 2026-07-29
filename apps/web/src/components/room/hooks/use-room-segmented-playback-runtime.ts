@@ -37,8 +37,12 @@ import { analyzeAudioBlobLoudness, resolveLoudnessGainDb } from "@/features/play
 import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 
 const receiverBufferingGraceMs = 3_000;
+const receiverStartupGraceMs = 2_500;
+const receiverProgressRecoveryMs = 5_000;
+const receiverRecoveryRetryMs = 10_000;
 const localAudioSeekToleranceSeconds = 0.35;
 const localAudioMetadataTimeoutMs = 8_000;
+const mediaPlaybackCommitIntervalMs = 500;
 
 type LocalAudioResolutionStatus = "idle" | "checking" | "available" | "missing";
 
@@ -60,6 +64,8 @@ export type ReceiverAudioHealth = {
   lastCurrentTime: number | null;
   hasStarted: boolean;
   waitingSinceMs: number | null;
+  lastRecoveryAtMs?: number;
+  recoveryCount?: number;
 };
 
 export function recordReceiverAudioProgress(input: {
@@ -88,6 +94,27 @@ export function recordReceiverAudioProgress(input: {
   }
   input.health.lastCurrentTime = currentTime;
   return advanced;
+}
+
+export function shouldRecoverStalledReceiverAudio(input: {
+  boundAtMs: number;
+  hasStarted: boolean;
+  lastProgressAtMs: number;
+  nowMs: number;
+  receiverRtpActive?: boolean;
+  audioPaused?: boolean;
+  startupGraceMs?: number;
+  recoveryAfterMs?: number;
+}) {
+  if (!input.hasStarted || input.audioPaused === true) {
+    return false;
+  }
+  const startupStalled = input.receiverRtpActive === false &&
+    input.nowMs - input.boundAtMs >= (input.startupGraceMs ?? receiverStartupGraceMs);
+  const progressStalled = input.nowMs - input.boundAtMs >=
+    (input.startupGraceMs ?? receiverStartupGraceMs) &&
+    input.nowMs - input.lastProgressAtMs >= (input.recoveryAfterMs ?? receiverProgressRecoveryMs);
+  return startupStalled || progressStalled;
 }
 
 export function resolveRoomAudioPositionMs(
@@ -266,7 +293,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   volume: number;
   audioUnlocked: boolean;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
-  setLocalAudioStream: (stream: MediaStream | null, sourcePeerId: string | null, maxBitrateKbps?: number | null) => void;
+  setLocalAudioStream: (
+    stream: MediaStream | null,
+    sourcePeerId: string | null,
+    maxBitrateKbps?: number | null,
+    mediaTrafficExpected?: boolean
+  ) => void;
   setMediaPlaybackEnabled: (enabled: boolean) => void | Promise<void>;
   getPeerMediaState: (peerId: string) => {
     receiverTrackState: "none" | "live" | "ended" | "failed";
@@ -458,7 +490,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const readinessPublishKeyRef = useRef<string | null>(null);
   const cacheBarrierParticipationRef = useRef(false);
   const roomId = input.roomSnapshot?.room.id ?? null;
-  const [mediaPlayback, setMediaPlayback] = useState<SegmentedPlaybackSnapshot>(() => ({
+  const [mediaPlayback, setMediaPlaybackState] = useState<SegmentedPlaybackSnapshot>(() => ({
     state: "idle",
     bufferedMs: 0,
     ownedUnitCount: 0,
@@ -466,6 +498,26 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     audioContextState: null,
     lastError: null
   }));
+  const lastMediaPlaybackCommitAtRef = useRef(0);
+  const setMediaPlayback = useCallback((
+    next: SetStateAction<SegmentedPlaybackSnapshot>
+  ) => {
+    setMediaPlaybackState((current) => {
+      const resolved = typeof next === "function" ? next(current) : next;
+      const immediate = current.state !== resolved.state ||
+        current.playbackIdentity !== resolved.playbackIdentity ||
+        current.audioContextState !== resolved.audioContextState ||
+        current.sourceHealth !== resolved.sourceHealth ||
+        current.lastError !== resolved.lastError ||
+        current.lastDecodeError !== resolved.lastDecodeError;
+      const now = Date.now();
+      if (!immediate && now - lastMediaPlaybackCommitAtRef.current < mediaPlaybackCommitIntervalMs) {
+        return current;
+      }
+      lastMediaPlaybackCommitAtRef.current = now;
+      return resolved;
+    });
+  }, []);
 
   useEffect(() => {
     const track = input.currentTrack;
@@ -758,6 +810,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     trackId: string;
     mediaEpoch: number;
     forceRecreate?: boolean;
+    forceRecovery?: boolean;
   }) => {
     const recoveryKey = `${input.sourcePeerId}:${input.trackId}:${input.mediaEpoch}`;
     if (mediaEnsureKeyRef.current !== recoveryKey) {
@@ -765,19 +818,21 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       lastMediaEnsureAtRef.current = 0;
     }
     const now = Date.now();
-    // Only make one recovery request for a given source track incarnation.
-    // Repeating the request every few seconds keeps flipping the UI to
-    // reconnecting and can create offer glare even when ICE is connected.
+    // Missing-track recovery stays one-shot. A stalled clock is different:
+    // the old track can remain live after a soft recovery fails, so permit a
+    // bounded retry while keeping the UI and signaling path rate-limited.
     if (
       mediaEnsureKeyRef.current === recoveryKey &&
-      lastMediaEnsureAtRef.current > 0
+      lastMediaEnsureAtRef.current > 0 &&
+      (!input.forceRecovery || now - lastMediaEnsureAtRef.current < receiverRecoveryRetryMs)
     ) {
       return;
     }
     lastMediaEnsureAtRef.current = now;
     const remote = input.runtime.getPeerMediaState(input.sourcePeerId);
     const hasLiveReceiver = remote?.receiverTrackState === "live" && !!remote.remoteStream;
-    if (hasLiveReceiver && !input.forceRecreate) {
+    const hasRecentReceiverRtp = hasLiveReceiver && remote?.receiverRtpActive === true;
+    if (hasRecentReceiverRtp && !input.forceRecovery && !input.forceRecreate) {
       return;
     }
     input.runtime.setMediaConnectionState("reconnecting");
@@ -792,7 +847,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     void input.runtime.restartMediaPeer(input.sourcePeerId, {
       // Never force-recreate from the poll path. Force recreate is reserved for
       // explicit source-side wedged-sender recovery and races empty media offers.
-      forceRecreate: false
+      forceRecreate: input.forceRecreate === true
     }).catch((error) => {
       if (mediaEnsureKeyRef.current === recoveryKey) {
         // A rejected request is safe to retry on a later poll. A successful
@@ -996,7 +1051,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           waitingSourcePeerId,
           runtime.isCurrentSource && waitingSourcePeerId
             ? bitrateKbps
-            : null
+            : null,
+          runtime.audibleRef.current === true
         );
         if (audio) {
           audio.pause();
@@ -1044,7 +1100,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         runtime.setLocalAudioStream(
           sourceStream,
           sourcePeerId,
-          sourcePeerId ? bitrateKbps : null
+          sourcePeerId ? bitrateKbps : null,
+          runtime.audibleRef.current === true
         );
         if (!cancelled) {
           setMediaPlayback({
@@ -1080,7 +1137,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           // A source keeps its media peer while actively playing. Clearing the
           // source stream before every local-file sync tick releases the media
           // topology and makes seek/playback look like a reconnect loop.
-          runtime.setLocalAudioStream(null, null, null);
+          runtime.setLocalAudioStream(null, null, null, false);
           if (audio) {
             audio.pause();
             audio.srcObject = null;
@@ -1204,7 +1261,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             activeRuntime.setLocalAudioStream(
               sourceBroadcastStream,
               activeMediaSourcePeerId,
-              activeRuntime.isCurrentSource ? bitrateKbps : null
+              activeRuntime.isCurrentSource ? bitrateKbps : null,
+              false
             );
             audio.pause();
             if (!cancelled) {
@@ -1253,7 +1311,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             activeMediaSourcePeerId,
             activeRuntime.currentTrack?.playbackAsset
               ? preferredAudioRtpBitrateKbps
-              : null
+              : null,
+            activeRuntime.audibleRef.current === true
           );
 
           const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
@@ -1391,7 +1450,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           localMediaBindingRef.current = "listener:local-fallback";
           roomAudioOutput.releaseRoomAudioSession();
         }
-        runtime.setLocalAudioStream(null, null, null);
+        runtime.setLocalAudioStream(null, null, null, false);
         if (audio && localAudioObjectUrlRef.current) {
           clearLocalAudioSource(audio);
         } else if (audio) {
@@ -1415,8 +1474,16 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       const listenerBindingKey = `listener:${expectedSourcePeerId ?? "none"}`;
       if (localMediaBindingRef.current !== listenerBindingKey) {
         localMediaBindingRef.current = listenerBindingKey;
-        runtime.setLocalAudioStream(null, expectedSourcePeerId, null);
       }
+      // Keep the media peer alive across pause/resume, but only let the
+      // lifecycle manager treat missing RTP as a failure after this browser
+      // has actually reached audible playback.
+      runtime.setLocalAudioStream(
+        null,
+        expectedSourcePeerId,
+        null,
+        roomPlayback?.status === "playing" && runtime.audibleRef.current === true
+      );
       const remote = sourcePeerId ? runtime.getPeerMediaState(sourcePeerId) : null;
       // Playback revisions and clock anchors can change while the negotiated
       // RTP track stays alive. The element binding follows only Track identity.
@@ -1477,20 +1544,35 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
       if (remote?.remoteStream && remote.receiverTrackState === "live" && audio) {
         const now = Date.now();
-        // A live track closes the recovery attempt even if it is briefly
-        // muted while RTP fills the jitter buffer. This also permits a later
-        // ended track on the same song to receive one fresh recovery attempt.
-        mediaEnsureKeyRef.current = null;
-        lastMediaEnsureAtRef.current = 0;
+        const health = receiverAudioHealthRef.current;
+        // Some browsers keep firing `playing` while the MediaStream clock is
+        // frozen. Poll the clock as well as listening for media events so a
+        // connected-but-silent receiver cannot stay falsely healthy forever.
+        recordReceiverAudioProgress({
+          health,
+          event: "progress",
+          currentTime: audio.currentTime,
+          nowMs: now
+        });
+        health.hasStarted = health.hasStarted || !audio.paused;
+        const mediaClockStalled = health.hasStarted &&
+          now - health.lastProgressAtMs >= receiverBufferingGraceMs;
+        // Only clear the one-shot recovery latch after the media clock is
+        // moving again. A live track with a frozen clock must remain eligible
+        // for recovery instead of resetting the latch every poll.
+        if (remote.receiverRtpActive && !mediaClockStalled) {
+          mediaEnsureKeyRef.current = null;
+          lastMediaEnsureAtRef.current = 0;
+        }
         const mediaElementStalled = audio.paused ||
-          audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+          audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+          mediaClockStalled;
         if (roomPlayback?.status === "playing" && !remote.receiverRtpActive && mediaElementStalled) {
           missingMediaSinceRef.current ??= now;
-        } else {
+        } else if (!mediaClockStalled) {
           missingMediaSinceRef.current = null;
           mediaEnsureKeyRef.current = null;
         }
-        const health = receiverAudioHealthRef.current;
         if (audio.srcObject !== remote.remoteStream) {
           audio.srcObject = remote.remoteStream;
           health.boundAtMs = Date.now();
@@ -1530,14 +1612,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         // A remote MediaStream is played directly by the media element. It
         // must not be blocked by the shared AudioContext unlock flag, which is
         // required by local Web Audio graphs but is not part of this path.
-        const startupGraceElapsed = now - health.boundAtMs >= 2_500;
         const waitingTooLong = health.waitingSinceMs !== null &&
           now - health.waitingSinceMs >= 1_500 &&
           mediaElementStalled;
-        const progressStalled = startupGraceElapsed &&
-          health.hasStarted &&
-          now - health.lastProgressAtMs >= 5_000 &&
-          audio.paused;
+        const progressStalled = shouldRecoverStalledReceiverAudio({
+          boundAtMs: health.boundAtMs,
+          hasStarted: health.hasStarted,
+          lastProgressAtMs: health.lastProgressAtMs,
+          nowMs: now,
+          receiverRtpActive: remote.receiverRtpActive,
+          audioPaused: audio.paused
+        });
         const shouldNudge = timelineChanged || waitingTooLong || progressStalled;
         if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
           health.lastRecoveryAtMs = now;
@@ -1546,6 +1631,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           // Keep the same MediaStream binding. Replacing srcObject here
           // destroys the browser jitter buffer and is a common source of
           // repeated silence during short packet-loss bursts.
+          if (progressStalled && sourcePeerId && roomPlayback?.currentTrackId) {
+            ensureListenerMediaConnection({
+              runtime,
+              sourcePeerId,
+              trackId: roomPlayback.currentTrackId,
+              mediaEpoch: roomPlayback.mediaEpoch,
+              forceRecovery: true
+            });
+          }
         }
         const result = await roomAudioOutput.playElement(audio, {
           force: shouldNudge
@@ -1640,7 +1734,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      runtimeInputRef.current.setLocalAudioStream(null, null, null);
+      runtimeInputRef.current.setLocalAudioStream(null, null, null, false);
       runtimeInputRef.current.audibleRef.current = false;
       const audio = mountedAudio;
       roomAudioOutput.unbindLocalAudioElement(audio);
@@ -1664,6 +1758,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     clearLocalAudioSource,
     markLocalAudioUnavailable,
     setAudioUnlocked,
+    setMediaPlayback,
     isCurrentSource,
     roomId,
     ensureListenerMediaConnection

@@ -62,6 +62,8 @@ const idleSnapshot: SegmentedPlaybackSnapshot = {
   lastError: null
 };
 
+const playbackSnapshotCommitIntervalMs = 250;
+
 export function useSegmentedOpusPlayback(input: {
   roomSnapshot: RoomSnapshot | null;
   currentTrack: TrackMeta | null;
@@ -83,7 +85,25 @@ export function useSegmentedOpusPlayback(input: {
   const storedManifestAssetIdRef = useRef<string | null>(null);
   const playbackEngineIdentityRef = useRef<string | null>(null);
   const playbackGenerationRef = useRef(0);
-  const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
+  const [snapshot, setSnapshotState] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
+  const lastSnapshotCommitAtRef = useRef(0);
+  const setSnapshot = useCallback((next: Parameters<typeof setSnapshotState>[0]) => {
+    setSnapshotState((current) => {
+      const resolved = typeof next === "function" ? next(current) : next;
+      const immediate = current.state !== resolved.state ||
+        current.playbackIdentity !== resolved.playbackIdentity ||
+        current.audioContextState !== resolved.audioContextState ||
+        current.sourceHealth !== resolved.sourceHealth ||
+        current.lastError !== resolved.lastError ||
+        current.lastDecodeError !== resolved.lastDecodeError;
+      const now = Date.now();
+      if (!immediate && now - lastSnapshotCommitAtRef.current < playbackSnapshotCommitIntervalMs) {
+        return current;
+      }
+      lastSnapshotCommitAtRef.current = now;
+      return resolved;
+    });
+  }, [setSnapshotState]);
   const roomId = roomSnapshot?.room.id ?? null;
   const localFallbackAsset = input.localFallbackAsset ?? null;
   const isLocalFallback = !isCurrentSource && !!localFallbackAsset;
@@ -119,7 +139,7 @@ export function useSegmentedOpusPlayback(input: {
 
     releaseEngine();
     setSnapshot(idleSnapshot);
-  }, [hasActivePlayback, releaseEngine]);
+  }, [hasActivePlayback, releaseEngine, setSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -301,6 +321,7 @@ export function useSegmentedOpusPlayback(input: {
     playbackBarrierBlocked,
     input.playbackBarrier?.holdPositionMs,
     input.playbackBarrier?.resumeAtMs,
+    setSnapshot,
     releaseEngine
   ]);
 

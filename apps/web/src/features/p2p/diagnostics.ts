@@ -159,6 +159,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     dataConnectionState: null,
     dataChannelState: null,
     mediaConnectionState: null,
+    mediaTrackState: null,
     dataIceState: null,
     mediaIceState: null,
     transportHealth: null,

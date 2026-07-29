@@ -144,6 +144,7 @@ export function hasFreshReportedMediaObservation(
 export type MemberConnectionStatus = {
   dataState: string | null;
   mediaState: string | null;
+  mediaTrackState: PeerDiagnosticsSnapshot["mediaTrackState"];
   dataReady: boolean;
   mediaReady: boolean;
   localReceiveActive: boolean;
@@ -165,31 +166,28 @@ export function resolveMemberConnectionStatus(
   const dataFailed = [dataChannelState, dataConnectionState].some((state) =>
     ["closed", "failed", "disconnected"].includes(state ?? "")
   );
+  const dataPending = dataChannelState !== null
+    ? dataChannelState !== "open"
+    : ["new", "connecting", "checking"].includes(dataConnectionState ?? "");
   const dataReady = !dataFailed && (
     dataChannelState === "open" ||
-    dataConnectionState === "connected" ||
-    dataConnectionState === "completed" ||
-    reportedReceiveActive ||
-    reportedSendActive
+    (!dataPending && (reportedReceiveActive || reportedSendActive))
   );
   const mediaState = diagnostic?.mediaConnectionState ?? null;
-  const mediaFailed = ["closed", "failed", "disconnected"].includes(mediaState ?? "");
+  const mediaTrackState = diagnostic?.mediaTrackState ?? null;
+  const mediaFailed = ["closed", "failed", "disconnected"].includes(mediaState ?? "") ||
+    ["ended", "failed"].includes(mediaTrackState ?? "");
   const mediaReady = !mediaFailed && (
-    mediaState === "connected" ||
-    mediaState === "completed" ||
     localReceiveActive ||
-    localSendActive ||
-    reportedReceiveActive ||
-    reportedSendActive
+    localSendActive
   );
 
   return {
-    dataState: dataChannelState ?? (
-      reportedReceiveActive || reportedSendActive ? "open" : dataConnectionState
+    dataState: dataChannelState ?? dataConnectionState ?? (
+      reportedReceiveActive || reportedSendActive ? "open" : null
     ),
-    mediaState: localReceiveActive || localSendActive || reportedReceiveActive || reportedSendActive
-      ? "connected"
-      : mediaState,
+    mediaState,
+    mediaTrackState,
     dataReady,
     mediaReady,
     localReceiveActive,
@@ -197,6 +195,19 @@ export function resolveMemberConnectionStatus(
     reportedReceiveActive,
     reportedSendActive
   };
+}
+
+export function isMemberDataUnavailable(
+  diagnostic: PeerDiagnosticsSnapshot | null | undefined
+) {
+  const dataChannelState = diagnostic?.dataChannelState ?? null;
+  const dataConnectionState = diagnostic?.dataConnectionState ?? null;
+  return (
+    ["disconnected", "failed", "closed"].includes(dataConnectionState ?? "") ||
+    (dataChannelState !== null
+      ? dataChannelState !== "open"
+      : ["new", "connecting", "checking"].includes(dataConnectionState ?? ""))
+  );
 }
 
 export function hasFreshMediaObservation(

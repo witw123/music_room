@@ -102,4 +102,39 @@ describe("member data normalization", () => {
     expect(hasFreshLocalMediaObservation(diagnostic, "receive", now)).toBe(false);
     expect(resolveMemberConnectionStatus(diagnostic, now).localReceiveActive).toBe(false);
   });
+
+  it("does not call a connected media transport audible without fresh RTP", () => {
+    const now = Date.parse("2026-07-15T10:00:10.000Z");
+    const diagnostic = createPeerSnapshot("peer_1", "2026-07-15T10:00:10.000Z");
+    diagnostic.mediaConnectionState = "connected";
+
+    expect(resolveMemberConnectionStatus(diagnostic, now)).toMatchObject({
+      mediaState: "connected",
+      mediaReady: false,
+      localReceiveActive: false,
+      localSendActive: false
+    });
+  });
+
+  it("does not keep a member connected after its media track ends", () => {
+    const now = Date.parse("2026-07-15T10:00:10.000Z");
+    const diagnostic = createPeerSnapshot("peer_1", "2026-07-15T10:00:10.000Z");
+    diagnostic.mediaConnectionState = "connected";
+    diagnostic.mediaTrackState = "ended";
+
+    expect(resolveMemberConnectionStatus(diagnostic, now)).toMatchObject({
+      mediaTrackState: "ended",
+      mediaReady: false
+    });
+  });
+
+  it("does not treat a connecting data channel as ready from stale telemetry", () => {
+    const now = Date.parse("2026-07-15T10:00:10.000Z");
+    const diagnostic = createPeerSnapshot("peer_1", "2026-07-15T10:00:10.000Z");
+    diagnostic.dataChannelState = "connecting";
+    diagnostic.reportedReceiveRateKbps = 192;
+    diagnostic.reportedTelemetryAt = "2026-07-15T10:00:09.000Z";
+
+    expect(resolveMemberConnectionStatus(diagnostic, now).dataReady).toBe(false);
+  });
 });

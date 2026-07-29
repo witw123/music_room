@@ -13,11 +13,17 @@ import {
 
 function buildConnection(
   input: Partial<
-    Pick<RTCPeerConnection, "connectionState" | "remoteDescription" | "addIceCandidate">
+    Pick<
+      RTCPeerConnection,
+      "connectionState" | "iceConnectionState" | "remoteDescription" | "addIceCandidate"
+    >
   > = {}
 ) {
   return {
     connectionState: input.connectionState ?? "new",
+    ...(input.iceConnectionState !== undefined
+      ? { iceConnectionState: input.iceConnectionState }
+      : {}),
     remoteDescription: input.remoteDescription ?? null,
     addIceCandidate: input.addIceCandidate ?? (async () => undefined)
   } as RTCPeerConnection;
@@ -267,6 +273,35 @@ describe("PeerConnectionRegistry", () => {
         connectionProgressTimeoutMs: 15_000
       })
     ).toBe(false);
+
+    const disconnectedEntry = createPeerEntry({
+      connection: buildConnection({
+        connectionState: "connected",
+        iceConnectionState: "disconnected"
+      }),
+      initiatorPeerId: null,
+      nowMs: 100
+    });
+    disconnectedEntry.channel = buildDataChannel("open");
+
+    expect(
+      isPeerStalled({
+        entry: disconnectedEntry,
+        nowMs: 1_000,
+        dataOpenTimeoutMs: 8_000,
+        dataConnectingTimeoutMs: 12_000,
+        connectionProgressTimeoutMs: 15_000
+      })
+    ).toBe(false);
+    expect(
+      isPeerStalled({
+        entry: disconnectedEntry,
+        nowMs: 16_000,
+        dataOpenTimeoutMs: 8_000,
+        dataConnectingTimeoutMs: 12_000,
+        connectionProgressTimeoutMs: 15_000
+      })
+    ).toBe(true);
 
     entry.channel = buildDataChannel("closed");
     expect(

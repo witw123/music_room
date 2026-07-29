@@ -5,6 +5,7 @@ import {
   resolveRoomAudioPath,
   resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
+  shouldRecoverStalledReceiverAudio,
   resolvePlaybackBarrierState,
   resolveCacheReadinessState,
   resolveRoomAudioPositionMs,
@@ -57,6 +58,52 @@ describe("receiver audio progress", () => {
 });
 
 describe("receiver playback state", () => {
+  it("recovers a receiver whose element claims to play but its clock is frozen", () => {
+    expect(shouldRecoverStalledReceiverAudio({
+      boundAtMs: 1_000,
+      hasStarted: true,
+      lastProgressAtMs: 4_000,
+      nowMs: 9_500
+    })).toBe(true);
+  });
+
+  it("does not recover before startup grace or without a started element", () => {
+    expect(shouldRecoverStalledReceiverAudio({
+      boundAtMs: 8_000,
+      hasStarted: false,
+      lastProgressAtMs: 8_000,
+      nowMs: 9_000
+    })).toBe(false);
+    expect(shouldRecoverStalledReceiverAudio({
+      boundAtMs: 1_000,
+      hasStarted: true,
+      lastProgressAtMs: 8_000,
+      nowMs: 9_000
+    })).toBe(false);
+  });
+
+  it("recovers a started element whose receiver track is live but has no RTP", () => {
+    expect(shouldRecoverStalledReceiverAudio({
+      boundAtMs: 1_000,
+      hasStarted: true,
+      lastProgressAtMs: 1_000,
+      receiverRtpActive: false,
+      audioPaused: false,
+      nowMs: 3_500
+    })).toBe(true);
+  });
+
+  it("does not treat an autoplay-paused element as a media failure", () => {
+    expect(shouldRecoverStalledReceiverAudio({
+      boundAtMs: 1_000,
+      hasStarted: true,
+      lastProgressAtMs: 1_000,
+      receiverRtpActive: false,
+      audioPaused: true,
+      nowMs: 8_000
+    })).toBe(false);
+  });
+
   it("keeps an already-playing receiver live during a short RTP gap", () => {
     expect(resolveReceiverPlaybackState({
       receiverRtpActive: false,

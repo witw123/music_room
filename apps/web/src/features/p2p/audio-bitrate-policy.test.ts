@@ -2,210 +2,36 @@ import { describe, expect, it } from "vitest";
 import {
   maximumAudioBitrateKbps,
   preferredAudioRtpBitrateKbps,
-  resolveAdaptiveAudioBitrateKbps,
-  resolveAggregateAudioBitratesKbps
+  resolveFixedAudioBitrateKbps
 } from "./audio-bitrate-policy";
 
-describe("RTP audio bitrate preference", () => {
-  it("uses an independent quality target", () => {
-    expect(preferredAudioRtpBitrateKbps).toBe(320);
+describe("fixed RTP audio bitrate policy", () => {
+  it("uses the project maximum as the preferred RTP target", () => {
+    expect(preferredAudioRtpBitrateKbps).toBe(maximumAudioBitrateKbps);
+    expect(maximumAudioBitrateKbps).toBe(510);
+  });
+
+  it("uses the same maximum for every valid request", () => {
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 64 })).toBe(510);
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 192 })).toBe(510);
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 320 })).toBe(510);
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 1_000 })).toBe(510);
+  });
+
+  it("does not change with network statistics because adaptation is disabled", () => {
+    const requests = [64, 192, 320, 510];
+    const results = requests.map((requestedKbps) =>
+      resolveFixedAudioBitrateKbps({ requestedKbps })
+    );
+
+    expect(results).toEqual([510, 510, 510, 510]);
+  });
+
+  it("keeps invalid requests disabled", () => {
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: null })).toBeNull();
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 0 })).toBeNull();
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: -1 })).toBeNull();
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: Number.NaN })).toBeNull();
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: Number.POSITIVE_INFINITY })).toBeNull();
   });
 });
-
-describe("resolveAdaptiveAudioBitrateKbps", () => {
-  it("keeps a healthy 192 kbps link at the requested quality", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 192,
-      currentKbps: 192,
-      availableOutgoingBitrateKbps: 1_200,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(192);
-  });
-
-  it("keeps a healthy 256 kbps stereo link at the requested quality", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 256,
-      currentKbps: 256,
-      availableOutgoingBitrateKbps: 1_200,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(256);
-  });
-
-  it("backs off when low capacity is accompanied by network degradation", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 192,
-      currentKbps: 192,
-      availableOutgoingBitrateKbps: 160,
-      packetLossRate: 3,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(128);
-  });
-
-  it("keeps the requested maximum while capacity is only an estimate", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 510,
-      currentKbps: 510,
-      availableOutgoingBitrateKbps: 160,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(510);
-  });
-
-  it("ignores a single transient degradation window", () => {
-    const input = {
-      requestedKbps: 510,
-      currentKbps: 510,
-      availableOutgoingBitrateKbps: 160,
-      packetLossRate: 3,
-      jitterMs: 4,
-      roundTripTimeMs: 45,
-      degradedNetworkWindows: 1
-    };
-
-    expect(resolveAdaptiveAudioBitrateKbps(input)).toBe(510);
-    expect(resolveAdaptiveAudioBitrateKbps({
-      ...input,
-      degradedNetworkWindows: 2
-    })).toBe(128);
-  });
-
-  it("uses a severe quality signal even when bandwidth is unavailable", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 192,
-      currentKbps: 192,
-      availableOutgoingBitrateKbps: null,
-      packetLossRate: 6,
-      jitterMs: 8,
-      roundTripTimeMs: 45
-    })).toBe(128);
-  });
-
-  it("ramps back up instead of jumping to the full target", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 192,
-      currentKbps: 96,
-      availableOutgoingBitrateKbps: 1_200,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(112);
-  });
-
-  it("never drops below the music-safe floor", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 192,
-      currentKbps: 192,
-      availableOutgoingBitrateKbps: 20,
-      packetLossRate: 10,
-      jitterMs: 80,
-      roundTripTimeMs: 400
-    })).toBe(64);
-  });
-
-  it("caps every request at the Opus 510 kbps ceiling", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: 1_000,
-      currentKbps: 1_000,
-      availableOutgoingBitrateKbps: 10_000,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(maximumAudioBitrateKbps);
-  });
-
-  it("ramps a healthy link upward toward 510 kbps", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: maximumAudioBitrateKbps,
-      currentKbps: 192,
-      availableOutgoingBitrateKbps: 5_000,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(208);
-
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: maximumAudioBitrateKbps,
-      currentKbps: 496,
-      availableOutgoingBitrateKbps: 5_000,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45
-    })).toBe(maximumAudioBitrateKbps);
-  });
-
-  it("does not round a near-limit shared budget above its capacity", () => {
-    expect(resolveAdaptiveAudioBitrateKbps({
-      requestedKbps: maximumAudioBitrateKbps,
-      currentKbps: maximumAudioBitrateKbps,
-      availableOutgoingBitrateKbps: 10_000,
-      packetLossRate: 0,
-      jitterMs: 4,
-      roundTripTimeMs: 45,
-      aggregateTargetKbps: 501
-    })).toBe(496);
-  });
-
-  it("keeps every sender at the requested bitrate when shared capacity is sufficient", () => {
-    const result = resolveAggregateAudioBitratesKbps([
-      createAggregateInput("peer_b", 1_200),
-      createAggregateInput("peer_c", 1_200),
-      createAggregateInput("peer_d", 1_200)
-    ]);
-
-    expect([...result.values()]).toEqual([192, 192, 192]);
-  });
-
-  it("shares a constrained source upload budget fairly", () => {
-    const result = resolveAggregateAudioBitratesKbps([
-      createAggregateInput("peer_b", 600),
-      createAggregateInput("peer_c", 600),
-      createAggregateInput("peer_d", 600)
-    ]);
-
-    expect([...result.values()]).toEqual([192, 192, 192]);
-  });
-
-  it("does not lower healthy senders from a low path estimate alone", () => {
-    const result = resolveAggregateAudioBitratesKbps([
-      createAggregateInput("peer_b", 1_200),
-      createAggregateInput("peer_c", 1_200),
-      createAggregateInput("peer_d", 400)
-    ]);
-
-    expect([...result.values()]).toEqual([192, 192, 192]);
-  });
-
-  it("keeps per-peer network degradation inside the shared allocation", () => {
-    const result = resolveAggregateAudioBitratesKbps([
-      createAggregateInput("peer_b", 600),
-      createAggregateInput("peer_c", 600, { packetLossRate: 6 }),
-      createAggregateInput("peer_d", 600)
-    ]);
-
-    expect(result.get("peer_b")).toBe(160);
-    expect(result.get("peer_c")).toBe(128);
-  });
-});
-
-function createAggregateInput(
-  peerId: string,
-  availableOutgoingBitrateKbps: number,
-  overrides: Partial<Parameters<typeof resolveAggregateAudioBitratesKbps>[0][number]> = {}
-) {
-  return {
-    peerId,
-    requestedKbps: 192,
-    currentKbps: 192,
-    availableOutgoingBitrateKbps,
-    packetLossRate: 0,
-    jitterMs: 4,
-    roundTripTimeMs: 45,
-    ...overrides
-  };
-}

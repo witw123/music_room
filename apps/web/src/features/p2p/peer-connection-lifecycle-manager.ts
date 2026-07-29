@@ -33,11 +33,7 @@ import {
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
-  audioBitrateDegradationConfirmWindows,
-  hasAudioNetworkDegradationSignal,
-  maximumAudioBitrateKbps,
-  resolveAggregateAudioBitratesKbps,
-  type AggregateAudioBitrateInput
+  resolveFixedAudioBitrateKbps
 } from "./audio-bitrate-policy";
 
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
@@ -117,6 +113,7 @@ const mediaNoReceiveRecoveryWindows = 4;
 const mediaNoSendRecoveryWindows = 4;
 const mediaRecoveryHealthyLossThreshold = 3;
 const mediaRecoveryHealthyJitterThreshold = 20;
+const mediaPositiveRtpFreshMs = 4_000;
 const incomingMediaAdmissionGraceMs = 8_000;
 const mediaIceRestartAttemptsBeforeRecreate = 2;
 // ICE can report `disconnected` while its connectivity checks are still
@@ -162,7 +159,6 @@ export class PeerConnectionLifecycleManager {
   private readonly onMediaRecovery?: PeerConnectionLifecycleManagerInput["onMediaRecovery"];
   private readonly mediaRecovery = new Map<string, MediaRecoveryState>();
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
-  private readonly audioBitrateDegradationWindows = new Map<string, number>();
   private readonly mediaRecoveryOperations = new Map<string, Promise<PeerEntry | null>>();
   private readonly provisionalIncomingMediaTimers = new WeakMap<
     PeerEntry,
@@ -173,6 +169,9 @@ export class PeerConnectionLifecycleManager {
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
   private localAudioMaxBitrateKbps: number | null = null;
+  // RTP recovery must follow playback intent. A live MediaStream can carry
+  // deliberate silence while a room is paused, which is not a broken link.
+  private localMediaTrafficExpected = true;
   // Data links remain room-wide, but a listener playing a local cache must
   // not keep an RTP receiver for the source alive in the background.
   private mediaPlaybackEnabled = true;
@@ -202,8 +201,15 @@ export class PeerConnectionLifecycleManager {
     this.onMediaRecovery = input.onMediaRecovery;
     this.peerConnections = new PeerConnectionRegistry(input.localPeerId);
     this.statsSampler = new PeerStatsSampler({
-      activeStatsSamplingIntervalMs: 750,
-      steadyStatsSamplingIntervalMs: 2_000,
+      // Media health needs a short cadence for no-packet detection. Data
+      // transport state is already event-driven, so its getStats cadence can
+      // be much lower when a room has many peer connections.
+      activeStatsSamplingIntervalMs: 3_000,
+      steadyStatsSamplingIntervalMs: 5_000,
+      activeMediaStatsSamplingIntervalMs: 1_000,
+      steadyMediaStatsSamplingIntervalMs: 2_000,
+      shouldSampleEntry: (peerId, entry) =>
+        entry.linkKind !== "media" || this.shouldSampleMediaStats(peerId),
       onStatsSample: (payload) => {
         const mediaEntry = this.peerConnections.get(payload.peerId, "media");
         const isMediaSample = payload.linkKind === "media" && !!mediaEntry;
@@ -221,7 +227,6 @@ export class PeerConnectionLifecycleManager {
           }
         });
         if (isMediaSample) {
-          this.adaptAudioBitrate(payload.peerId, mediaEntry, payload.sample);
           this.observeMediaHealth(payload.peerId, payload.sample);
         }
       },
@@ -434,6 +439,36 @@ export class PeerConnectionLifecycleManager {
       const entry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
       this.scheduleMediaWatchdog(peerId, entry);
       await this.enqueueMediaOperation(peerId, entry).catch(() => undefined);
+      this.syncMediaStatsSampling(peerId, entry);
+    }
+  }
+
+  private shouldSampleMediaStats(peerId: string) {
+    if (!this.mediaPlaybackEnabled) {
+      return false;
+    }
+
+    if (this.localAudioSourcePeerId === this.localPeerId) {
+      // A source has one active RTP sender per room member. Do not spend
+      // stats work on prewarmed media peers before the broadcast track exists.
+      return this.hasLiveLocalAudioTrack() && this.expectedRemotePeerIds.has(peerId);
+    }
+
+    // A listener only consumes RTP from the authoritative source. Other media
+    // peers may stay prewarmed for a source handoff, but have no media traffic
+    // to measure until they become the source.
+    return this.localAudioSourcePeerId === peerId &&
+      this.expectedRemotePeerIds.has(peerId);
+  }
+
+  private syncMediaStatsSampling(peerId: string, entry: PeerEntry) {
+    if (entry.linkKind !== "media") {
+      return;
+    }
+    if (this.shouldSampleMediaStats(peerId)) {
+      this.statsSampler.start(peerId, entry);
+    } else {
+      this.statsSampler.stop(entry);
     }
   }
 
@@ -481,7 +516,8 @@ export class PeerConnectionLifecycleManager {
   setLocalAudioStream(
     stream: MediaStream | null,
     sourcePeerId: string | null,
-    maxBitrateKbps: number | null = null
+    maxBitrateKbps: number | null = null,
+    mediaTrafficExpected = true
   ) {
     if (this.destroyed) {
       return;
@@ -493,6 +529,7 @@ export class PeerConnectionLifecycleManager {
       this.localAudioStream === stream &&
       this.localAudioSourcePeerId === sourcePeerId &&
       this.localAudioMaxBitrateKbps === normalizedBitrateKbps &&
+      this.localMediaTrafficExpected === mediaTrafficExpected &&
       previousTrack === nextTrack &&
       (nextTrack === null || nextTrack.readyState === "live")
     ) {
@@ -501,6 +538,7 @@ export class PeerConnectionLifecycleManager {
     this.localAudioStream = stream;
     this.localAudioSourcePeerId = sourcePeerId;
     this.localAudioMaxBitrateKbps = normalizedBitrateKbps;
+    this.localMediaTrafficExpected = mediaTrafficExpected;
     void this.enqueueTopologyOperation(() => this.reconcileMediaTopology()).catch(() => undefined);
   }
 
@@ -831,6 +869,7 @@ export class PeerConnectionLifecycleManager {
     this.localAudioStream = null;
     this.localAudioSourcePeerId = null;
     this.localAudioMaxBitrateKbps = null;
+    this.localMediaTrafficExpected = false;
     for (const [peerId, entry] of this.peerConnections.allEntries()) {
       this.releasePeer(peerId, entry);
     }
@@ -920,12 +959,10 @@ export class PeerConnectionLifecycleManager {
           if (linkKind === "media") {
             this.clearMediaDisconnectRecovery(payload.peerId);
             this.clearMediaWatchdog(entry);
+            const latestSample = this.latestMediaSamples.get(payload.peerId);
             const hasOperationalMedia =
-              (entry.receiverTrackState === "live" && entry.receiverRtpActive) ||
-              (!this.hasExpectedRemoteAudioTrack(payload.peerId) &&
-                entry.senderTrackState === "live") ||
-              (this.latestMediaSamples.get(payload.peerId)?.mediaReceiveBitrateKbps ?? 0) > 0 ||
-              (this.latestMediaSamples.get(payload.peerId)?.mediaSendBitrateKbps ?? 0) > 0;
+              (latestSample?.mediaReceiveBitrateKbps ?? 0) > 0 ||
+              (latestSample?.mediaSendBitrateKbps ?? 0) > 0;
             if (hasOperationalMedia) {
               this.markMediaRecovered(payload.peerId);
             }
@@ -1076,7 +1113,6 @@ export class PeerConnectionLifecycleManager {
     if (entry.linkKind === "media") {
       this.clearProvisionalIncomingMediaAdmission(entry);
       this.latestMediaSamples.delete(peerId);
-      this.audioBitrateDegradationWindows.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
       // Keep recovery history while an expected media peer is being replaced.
       // Otherwise every failed recreation starts at attempt zero and the
@@ -1364,89 +1400,6 @@ export class PeerConnectionLifecycleManager {
     }
   }
 
-  private adaptAudioBitrate(
-    peerId: string,
-    entry: PeerEntry | null,
-    sample: PeerConnectionStatsSample
-  ) {
-    if (
-      !entry ||
-      entry.releasing ||
-      !entry.audioSender?.track ||
-      this.localAudioSourcePeerId !== this.localPeerId ||
-      this.localAudioMaxBitrateKbps === null
-    ) {
-      return;
-    }
-
-    const degradationWindows = hasAudioNetworkDegradationSignal({
-      packetLossRate: sample.packetLossRate ?? null,
-      jitterMs: sample.jitterMs ?? null,
-      roundTripTimeMs: sample.currentRoundTripTimeMs
-    })
-      ? Math.min(
-          audioBitrateDegradationConfirmWindows,
-          (this.audioBitrateDegradationWindows.get(peerId) ?? 0) + 1
-        )
-      : 0;
-    if (degradationWindows > 0) {
-      this.audioBitrateDegradationWindows.set(peerId, degradationWindows);
-    } else {
-      this.audioBitrateDegradationWindows.delete(peerId);
-    }
-
-    const nextKbps = this.resolveAggregateAudioBitrate(peerId, sample);
-    const currentKbps = entry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps;
-    if (nextKbps === null || nextKbps === currentKbps) {
-      return;
-    }
-
-    void enqueuePeerOperation(entry, async () => {
-      if (
-        entry.releasing ||
-        entry.audioSender === null ||
-        this.localAudioSourcePeerId !== this.localPeerId ||
-        this.localAudioMaxBitrateKbps === null
-      ) {
-        return;
-      }
-      const latestKbps = this.resolveAggregateAudioBitrate(peerId, sample);
-      if (latestKbps !== null && latestKbps !== entry.appliedAudioBitrateKbps) {
-        await this.applyAudioSenderParameters(entry.audioSender, latestKbps);
-      }
-    }).catch(() => undefined);
-  }
-
-  private resolveAggregateAudioBitrate(
-    peerId: string,
-    fallbackSample: PeerConnectionStatsSample
-  ) {
-    if (this.localAudioMaxBitrateKbps === null) {
-      return null;
-    }
-
-    const inputs: AggregateAudioBitrateInput[] = [];
-    for (const [currentPeerId, currentEntry] of this.peerConnections.entries("media")) {
-      if (currentEntry.releasing || !currentEntry.audioSender?.track) {
-        continue;
-      }
-      const currentSample = currentPeerId === peerId
-        ? fallbackSample
-        : this.latestMediaSamples.get(currentPeerId);
-      inputs.push({
-        peerId: currentPeerId,
-        requestedKbps: this.localAudioMaxBitrateKbps,
-        currentKbps: currentEntry.appliedAudioBitrateKbps ?? this.localAudioMaxBitrateKbps,
-        availableOutgoingBitrateKbps: currentSample?.availableOutgoingBitrateKbps ?? null,
-        packetLossRate: currentSample?.packetLossRate ?? null,
-        jitterMs: currentSample?.jitterMs ?? null,
-        roundTripTimeMs: currentSample?.currentRoundTripTimeMs ?? null,
-        degradedNetworkWindows: this.audioBitrateDegradationWindows.get(currentPeerId) ?? 0
-      });
-    }
-    return resolveAggregateAudioBitratesKbps(inputs).get(peerId) ?? null;
-  }
-
   private async recreatePeerNow(peerId: string, entry: PeerEntry): Promise<PeerEntry | null> {
     if (
       entry.linkKind !== "data" ||
@@ -1542,19 +1495,38 @@ export class PeerConnectionLifecycleManager {
     const sendPacketTimestampStalled = currentSendPacketAtMs !== null &&
       previousSendPacketAtMs !== null &&
       !sendPacketTimestampAdvanced;
+    const positiveRtpStale = state.lastPositiveMediaAtMs !== null &&
+      Date.now() - state.lastPositiveMediaAtMs >= mediaPositiveRtpFreshMs;
+    const hasEstablishedPositiveRtp = state.lastPositiveMediaAtMs !== null;
     const noReceivePackets = entry.receiverTrackState === "live" &&
       sample.mediaReceiveBitrateKbps !== null &&
       sample.mediaReceiveBitrateKbps <= 0 &&
-      receivePacketTimestampStalled;
+      hasEstablishedPositiveRtp &&
+      (receivePacketTimestampStalled ||
+        (currentReceivePacketAtMs === null && positiveRtpStale));
     const noSendPackets = entry.senderTrackState === "live" &&
       sample.mediaSendBitrateKbps !== null &&
       sample.mediaSendBitrateKbps <= 0 &&
-      sendPacketTimestampStalled;
-    const localSourceIsActive = this.localAudioSourcePeerId === this.localPeerId &&
+      hasEstablishedPositiveRtp &&
+      (sendPacketTimestampStalled ||
+        (currentSendPacketAtMs === null && positiveRtpStale));
+    const localSourceIsActive = this.localMediaTrafficExpected &&
+      this.localAudioSourcePeerId === this.localPeerId &&
       !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
-    state.degradedWindows = loss >= 3 || jitter >= 20 ? state.degradedWindows + 1 : 0;
-    state.noPacketWindows = noReceivePackets ? state.noPacketWindows + 1 : 0;
-    state.noSendPacketWindows = noSendPackets ? state.noSendPacketWindows + 1 : 0;
+    const remoteSourceIsActive = this.localMediaTrafficExpected &&
+      this.localAudioSourcePeerId === peerId;
+    const mediaTrafficActive = localSourceIsActive || remoteSourceIsActive;
+    const receivePacketOutage = remoteSourceIsActive && noReceivePackets;
+    const sendPacketOutage = localSourceIsActive && noSendPackets;
+    state.degradedWindows = mediaTrafficActive && (loss >= 3 || jitter >= 20)
+      ? state.degradedWindows + 1
+      : 0;
+    state.noPacketWindows = receivePacketOutage
+      ? state.noPacketWindows + 1
+      : 0;
+    state.noSendPacketWindows = sendPacketOutage
+      ? state.noSendPacketWindows + 1
+      : 0;
     const hasPositiveMediaWindow =
       (sample.mediaReceiveBitrateKbps ?? 0) > 0 ||
       (sample.mediaSendBitrateKbps ?? 0) > 0;
@@ -1591,26 +1563,30 @@ export class PeerConnectionLifecycleManager {
           state: "live"
         });
       }
-    } else if (noReceivePackets && state.noPacketWindows >= 1) {
+    } else if (receivePacketOutage && state.noPacketWindows >= 1) {
       entry.receiverRtpActive = false;
     }
-    state.highLossWindows = loss >= 5 ? state.highLossWindows + 1 : 0;
-    state.highJitterWindows = jitter >= 30 ? state.highJitterWindows + 1 : 0;
+    state.highLossWindows = mediaTrafficActive && loss >= 5
+      ? state.highLossWindows + 1
+      : 0;
+    state.highJitterWindows = mediaTrafficActive && jitter >= 30
+      ? state.highJitterWindows + 1
+      : 0;
     if (hasHealthyMediaWindow) {
       this.markMediaRecovered(peerId);
     } else {
       state.positiveMediaWindows = 0;
       this.mediaRecovery.set(peerId, state);
     }
-    if (localSourceIsActive && noSendPackets && state.noSendPacketWindows === 1) {
+    if (sendPacketOutage && state.noSendPacketWindows === 1) {
       // Keep the source peer alive. A zero outbound sample can be a silent
       // audio window or a stats gap; refresh the sender binding without
       // tearing down the ICE/DTLS connection that is still carrying media.
       void this.enqueueMediaOperation(peerId, entry);
     }
     const reason = (
-      (noReceivePackets && state.noPacketWindows >= mediaNoReceiveRecoveryWindows) ||
-      (noSendPackets && state.noSendPacketWindows >= mediaNoSendRecoveryWindows)
+      (receivePacketOutage && state.noPacketWindows >= mediaNoReceiveRecoveryWindows) ||
+      (sendPacketOutage && state.noSendPacketWindows >= mediaNoSendRecoveryWindows)
     )
       ? "no-packets" as const
       : state.highLossWindows >= 3
@@ -1794,20 +1770,24 @@ export class PeerConnectionLifecycleManager {
       entry.connection.connectionState === "closed" ||
       entry.connection.iceConnectionState === "failed" ||
       entry.connection.iceConnectionState === "closed";
+    const now = Date.now();
+    const hasRecentPositiveRtp = state.lastPositiveMediaAtMs !== null &&
+      now - state.lastPositiveMediaAtMs < mediaPositiveRtpFreshMs;
     const liveMediaDuringIceRecovery = mediaTransportDisconnected &&
       (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
-      reason !== "no-packets";
+      reason !== "no-packets" &&
+      hasRecentPositiveRtp;
     const connectedLiveMedia = entry.connection.connectionState === "connected" &&
       !mediaTransportDisconnected &&
       !mediaTransportFailed &&
-      (entry.senderTrackState === "live" || entry.receiverTrackState === "live");
+      (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
+      hasRecentPositiveRtp &&
+      reason !== "no-packets";
     if (connectedLiveMedia || liveMediaDuringIceRecovery) {
       // A connected PeerConnection with a live negotiated track is still the
-      // least disruptive playback path. Re-offering or ICE-restarting it for
-      // a loss/jitter/no-packet window discards the browser jitter buffer and
-      // turns a recoverable RTP gap into a recurring silence cycle. The
-      // browser's ICE state and the sender/receiver track callbacks remain the
-      // authoritative recovery signals here.
+      // least disruptive playback path while RTP is still arriving. A live
+      // track alone is not enough: browsers can keep it live after the RTP
+      // flow has stopped, which is the connected-but-silent failure mode.
       state.degradedWindows = 0;
       state.noPacketWindows = 0;
       state.noSendPacketWindows = 0;
@@ -1816,7 +1796,6 @@ export class PeerConnectionLifecycleManager {
       this.mediaRecovery.set(peerId, state);
       return;
     }
-    const now = Date.now();
     state.restartTimesMs = state.restartTimesMs.filter((timestamp) => now - timestamp < 30_000);
     const lastRecoveryAtMs = state.restartTimesMs[state.restartTimesMs.length - 1] ?? null;
     if (lastRecoveryAtMs !== null && now - lastRecoveryAtMs < mediaRecoveryCooldownMs) {
@@ -1958,9 +1937,5 @@ export class PeerConnectionLifecycleManager {
 }
 
 function normalizeAudioBitrateKbps(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-
-  return Math.min(maximumAudioBitrateKbps, Math.round(value));
+  return resolveFixedAudioBitrateKbps({ requestedKbps: value });
 }
