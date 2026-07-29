@@ -17,6 +17,7 @@ import {
   appSettingsChangeEvent,
   getDefaultAppSettings,
   getAppSettings,
+  normalizeCustomLayoutSettings,
   resetAppSettings,
   updateAppSettings,
   type AppSettings,
@@ -363,7 +364,7 @@ export function SettingsPage() {
       {isCustomLayoutEditorOpen ? (
         <CustomLayoutEditor
           onApply={(customLayout) => {
-            patchSettings({ layout: { customLayout: { ...customLayout, enabled: true } } });
+            patchSettings({ layout: { customLayout: { ...normalizeCustomLayoutSettings(customLayout), enabled: true } } });
             setIsCustomLayoutEditorOpen(false);
           }}
           onReset={() => {

@@ -11,6 +11,7 @@ import {
   customLayoutPageLabels,
   getCustomLayoutItemIds,
   getDefaultCustomLayoutSettings,
+  normalizeCustomLayoutSettings,
   type CustomLayoutItem,
   type CustomLayoutItemId,
   type CustomLayoutPageId,
@@ -182,6 +183,9 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
   function handleCanvasPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    if (canvasRef.current?.hasPointerCapture(event.pointerId)) {
+      canvasRef.current.releasePointerCapture(event.pointerId);
+    }
     dragRef.current = null;
   }
 
@@ -198,7 +202,9 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
     if (item.locked) return;
     const point = getCanvasPoint(event, canvasRef.current);
     if (!point) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Keep the drag on the canvas. The resize handle is rerendered as the
+    // draft changes, so capturing on the handle itself can lose move events.
+    canvasRef.current?.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
       itemId,
@@ -235,7 +241,7 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
             <CloseIcon />
             退出并还原默认
           </Button>
-          <Button className="gap-2" onClick={() => onApply(draftRef.current)} size="sm" type="button">
+          <Button className="gap-2" onClick={() => onApply(normalizeCustomLayoutSettings(draftRef.current))} size="sm" type="button">
             <CheckIcon />
             应用布局
           </Button>
