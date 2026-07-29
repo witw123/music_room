@@ -5,6 +5,8 @@ import {
   Delete,
   Get,
   Headers,
+  Ip,
+  Optional,
   Query,
   Patch,
   Param,
@@ -23,6 +25,7 @@ import {
   type RoomMemberPermissions
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
+import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { AuthService } from "../auth/auth.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomService } from "./room.service";
@@ -34,7 +37,9 @@ export class RoomController {
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService,
-    private readonly playlistService: PlaylistService
+    private readonly playlistService: PlaylistService,
+    @Optional()
+    private readonly abuseProtection?: AbuseProtectionService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -56,9 +61,14 @@ export class RoomController {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
-    }
+    },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:create", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 10, windowMs: 60 * 60 * 1000 });
     const payload = parseRequestBody(createRoomRequestSchema, body);
     const metadata = {
       ...(payload.name !== undefined ? { name: payload.name } : {}),
@@ -76,15 +86,16 @@ export class RoomController {
   }
 
   @Get()
-  async listRooms(@Headers("x-session-token") sessionToken: string | undefined) {
+  async listRooms(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Ip() ipAddress?: string
+  ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const [accessibleRooms, publicRooms] = await Promise.all([
-      this.roomService.listRoomsForSession(userId),
-      this.roomService.listPublicRooms()
-    ]);
-    const deduped = new Map<string, (typeof accessibleRooms)[number]>();
-    for (const room of [...accessibleRooms, ...publicRooms]) deduped.set(room.room.id, room);
-    return [...deduped.values()];
+    await this.abuseProtection?.enforce("room:list", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 60, windowMs: 60 * 1000 });
+    return this.roomService.listRoomDirectoryForSession(userId);
   }
 
   @Get("recent/active")
@@ -136,9 +147,14 @@ export class RoomController {
   @Post("join-by-code")
   async joinRoomByCode(
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { joinCode: string; password?: string }
+    @Body() body: { joinCode: string; password?: string },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:join", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 30, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(joinRoomByCodeRequestSchema, body);
     const room = await this.roomService.findRoomByJoinCode(payload.joinCode);
     if (payload.password !== undefined) {
@@ -153,9 +169,14 @@ export class RoomController {
   async joinRoom(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body?: { password?: string }
+    @Body() body?: { password?: string },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:join", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 30, windowMs: 10 * 60 * 1000 });
     if (body?.password !== undefined) {
       await this.roomService.joinRoom(roomId, userId, body.password);
     } else {
@@ -175,9 +196,14 @@ export class RoomController {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
-    }
+    },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:update", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 10, windowMs: 60 * 60 * 1000 });
     const payload = parseRequestBody(updateRoomRequestSchema, body);
     await this.roomService.updateRoom(roomId, userId, payload);
     let playlists: Playlist[] = [];
@@ -257,9 +283,14 @@ export class RoomController {
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
-    body: RegisterTrackRequest
+    body: RegisterTrackRequest,
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:track-write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(registerTrackRequestSchema, body);
     if (!payload.originalAsset || !payload.playbackAsset) {
       throw new BadRequestException("P2P v4 tracks require original and playback assets.");

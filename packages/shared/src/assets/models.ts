@@ -9,7 +9,7 @@ export const playbackEncoderVersion = "3.3.0" as const;
 
 const assetManifestBaseSchema = z.object({
   assetId: sha256HexSchema,
-  unitCount: z.number().int().positive(),
+  unitCount: z.number().int().positive().max(10_000),
   merkleRoot: sha256HexSchema
 }).strict();
 
@@ -17,7 +17,7 @@ export const originalAssetManifestSchema = assetManifestBaseSchema.extend({
   kind: z.literal("original"),
   fileHash: sha256HexSchema,
   mimeType: z.string().trim().min(1).max(120),
-  sizeBytes: z.number().int().positive(),
+  sizeBytes: z.number().int().positive().max(1024 * 1024 * 1024),
   unitSize: z.literal(1024 * 1024)
 });
 
@@ -30,7 +30,7 @@ const playbackAssetManifestShapeSchema = assetManifestBaseSchema.extend({
   sampleRate: z.literal(48_000),
   channels: z.union([z.literal(1), z.literal(2)]),
   bitrate: z.union([z.literal(96_000), z.literal(192_000)]),
-  durationMs: z.number().int().positive(),
+  durationMs: z.number().int().positive().max(3 * 60 * 60 * 1000),
   segmentDurationMs: z.literal(2_000),
   seekPrerollMs: z.literal(80),
   encoder: z.object({

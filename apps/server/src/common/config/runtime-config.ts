@@ -26,12 +26,22 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     return;
   }
 
+  const trustProxy = env.TRUST_PROXY?.trim().toLowerCase();
+
   if (env.AUTH_FAKE_PERSISTENCE?.trim().toLowerCase() === "true") {
     throw new Error("AUTH_FAKE_PERSISTENCE must be false in production startup.");
   }
 
-  if (env.TRUST_PROXY?.trim().toLowerCase() === "true") {
+  if (trustProxy === "true") {
     throw new Error("TRUST_PROXY=true is not allowed in production startup.");
+  }
+
+  if (trustProxy === "loopback") {
+    throw new Error("TRUST_PROXY=loopback is not valid behind the production reverse proxy.");
+  }
+
+  if (trustProxy && trustProxy !== "false" && !/^\d+$/.test(trustProxy)) {
+    throw new Error("Production TRUST_PROXY must be false or a non-negative proxy hop count.");
   }
 
   if (env.NETEASE_ENABLED === "true" && !isValidNeteaseEncryptionKey(env.NETEASE_COOKIE_ENCRYPTION_KEY)) {

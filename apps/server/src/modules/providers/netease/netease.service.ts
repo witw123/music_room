@@ -39,6 +39,8 @@ import {
   type NeteaseSearchSuggestQuery
 } from "./netease.schemas";
 
+const maxProviderPlaylistTracks = 2_000;
+
 type SongRecord = {
   id?: unknown;
   name?: unknown;
@@ -400,18 +402,27 @@ export class NeteaseService {
     const summary = this.toPlaylistSummary(playlist);
     if (!summary) throw this.unavailableError();
     const rawTracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
-    const tracks = rawTracks.map((item) => this.toTrackCandidate(item)).filter((item): item is NeteaseTrackCandidate => !!item);
+    const tracks = rawTracks
+      .slice(0, maxProviderPlaylistTracks)
+      .map((item) => this.toTrackCandidate(item))
+      .filter((item): item is NeteaseTrackCandidate => !!item);
     const trackIds = Array.isArray(playlist.trackIds)
       ? playlist.trackIds.map((item) => readString(asRecord(item)?.id ?? item)).filter((item): item is string => !!item && /^\d+$/.test(item))
       : [];
-    if (trackIds.length > rawTracks.length) {
-      for (let offset = rawTracks.length; offset < trackIds.length; offset += 1_000) {
+    const boundedTrackCount = Math.min(trackIds.length, maxProviderPlaylistTracks);
+    if (boundedTrackCount > tracks.length) {
+      for (let offset = tracks.length; offset < boundedTrackCount; offset += 1_000) {
         const page = await this.callProvider(userId, () => this.api.getPlaylistTracks({ playlistId, limit: 1_000, offset, cookie }));
         const pageTracks = Array.isArray(page.songs) ? page.songs : [];
-        tracks.push(...pageTracks.map((item) => this.toTrackCandidate(item)).filter((item): item is NeteaseTrackCandidate => !!item));
+        tracks.push(
+          ...pageTracks
+            .map((item) => this.toTrackCandidate(item))
+            .filter((item): item is NeteaseTrackCandidate => !!item)
+            .slice(0, maxProviderPlaylistTracks - tracks.length)
+        );
       }
     }
-    return { ...summary, tracks };
+    return { ...summary, tracks: tracks.slice(0, maxProviderPlaylistTracks) };
   }
 
   async getAlbum(userId: string, albumId: string): Promise<ProviderAlbumDetail> {

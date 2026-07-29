@@ -5,6 +5,7 @@ import type {
   Playlist,
   QueueItem,
   Room,
+  RoomDirectoryItem,
   RoomMemberPermissions,
   RoomMember,
   RoomSnapshot,
@@ -26,6 +27,13 @@ import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPresenceService } from "./services/room-presence.service";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
+
+const maxRoomMembers = 100;
+const maxRoomTracks = 500;
+const maxRoomQueueItems = 500;
+const maxTrackDurationMs = 3 * 60 * 60 * 1000;
+const maxTrackSizeBytes = 1024 * 1024 * 1024;
+const maxAssetUnits = 10_000;
 
 @Injectable()
 export class RoomService {
@@ -265,6 +273,67 @@ export class RoomService {
     return snapshots;
   }
 
+  async listRoomDirectoryForSession(sessionId: string): Promise<RoomDirectoryItem[]> {
+    const records = await this.roomRecordRepository.listRecoverableRecords();
+    const accessible = records
+      .filter((record) =>
+        record.room.visibility === "public" ||
+        record.room.hostId === sessionId ||
+        record.room.members.some((member) => member.id === sessionId)
+      )
+      .slice(0, 100);
+
+    return Promise.all(accessible.map(async (record) => {
+      const snapshot = await this.roomSnapshotService.buildSnapshot(record, []);
+      const isMember =
+        record.room.hostId === sessionId ||
+        record.room.members.some((member) => member.id === sessionId);
+      const host = snapshot.room.members.find((member) => member.id === snapshot.room.hostId);
+      const onlineMemberCount = snapshot.room.members.filter(
+        (member) => member.presenceState === "online" && !!member.peerId
+      ).length;
+
+      return {
+        room: {
+          id: snapshot.room.id,
+          // Directory consumers only need a join target and display metadata.
+          // Do not expose user ids, live peer ids, or playback asset ids here.
+          hostId: "",
+          joinCode: snapshot.room.joinCode,
+          name: snapshot.room.name,
+          description: snapshot.room.description,
+          hasPassword: snapshot.room.hasPassword,
+          visibility: snapshot.room.visibility,
+          members: [],
+          directoryHostNickname: host?.nickname ?? "",
+          directoryMemberCount: record.room.members.length,
+          directoryOnlineMemberCount: onlineMemberCount,
+          directoryIsMember: isMember,
+          presenceRevision: 0,
+          roomRevision: 0,
+          playback: {
+            ...snapshot.room.playback,
+            currentTrackId: null,
+            currentQueueItemId: null,
+            playbackAssetId: null,
+            startAt: null,
+            sourceSessionId: null,
+            sourcePeerId: null,
+            sourceTrackId: null,
+            positionMs: 0,
+            startedAt: null,
+            shuffleBagTrackIds: [],
+            nextQueueItemId: null,
+            gaplessNext: null
+          }
+        },
+        tracks: [],
+        queue: [],
+        playlists: []
+      };
+    }));
+  }
+
   async getRecentRoomSnapshotForSession(sessionId: string): Promise<RoomSnapshot | null> {
     const roomId = await this.redis.getString(this.roomRecordRepository.sessionRecentRoomKey(sessionId));
 
@@ -317,6 +386,9 @@ export class RoomService {
     let membershipChanged = false;
 
     if (!existingMember) {
+      if (record.room.members.length >= maxRoomMembers) {
+        throw new BadRequestException("房间成员数量已达到上限。");
+      }
       const savedPermissions = record.memberPermissionProfiles?.[session.id];
       const permissions = savedPermissions
         ? { ...savedPermissions }
@@ -559,6 +631,7 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
     this.assertPermission(record, sessionId, "library");
+    this.assertTrackLimits(input);
 
     const track: TrackMeta = {
       ...input,
@@ -611,6 +684,9 @@ export class RoomService {
     if (existingIndex >= 0) {
       record.tracks[existingIndex] = track;
     } else {
+      if (record.tracks.length >= maxRoomTracks) {
+        throw new BadRequestException("房间曲目数量已达到上限。");
+      }
       record.tracks.unshift(track);
     }
 
@@ -654,6 +730,10 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
     this.assertPermission(record, sessionId, "queue");
+
+    if (record.queue.length >= maxRoomQueueItems) {
+      throw new BadRequestException("房间播放队列已达到上限。");
+    }
 
     if (!record.tracks.some((track) => track.id === trackId)) {
       throw new Error(`Track not found in room: ${trackId}`);
@@ -702,6 +782,10 @@ export class RoomService {
 
     if (validTrackIds.length === 0) {
       throw new Error("No tracks from this playlist are available in the current room.");
+    }
+
+    if (record.queue.length + validTrackIds.length > maxRoomQueueItems) {
+      throw new BadRequestException("导入后房间播放队列将超过上限。");
     }
 
     const nextItems = validTrackIds.map(
@@ -1029,6 +1113,26 @@ export class RoomService {
 
   private incrementPresenceRevision(room: Room) {
     room.presenceRevision += 1;
+  }
+
+  private assertTrackLimits(input: Omit<TrackMeta, "id"> & { id?: string }) {
+    if (input.durationMs > maxTrackDurationMs) {
+      throw new BadRequestException("曲目时长超过允许的最大值。");
+    }
+    if (input.sizeBytes !== null && input.sizeBytes !== undefined && input.sizeBytes > maxTrackSizeBytes) {
+      throw new BadRequestException("曲目文件超过允许的最大大小。");
+    }
+
+    const manifests = [input.originalAsset, input.playbackAsset].filter(Boolean);
+    if (manifests.some((manifest) => manifest && manifest.unitCount > maxAssetUnits)) {
+      throw new BadRequestException("音频资源分片数量超过允许的最大值。");
+    }
+    if (input.playbackAsset && input.playbackAsset.durationMs > maxTrackDurationMs) {
+      throw new BadRequestException("播放资源时长超过允许的最大值。");
+    }
+    if (input.originalAsset && input.originalAsset.sizeBytes > maxTrackSizeBytes) {
+      throw new BadRequestException("原始音频资源超过允许的最大大小。");
+    }
   }
 
   private async refreshPresenceLease(roomId: string, sessionId: string, peerId: string) {

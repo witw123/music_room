@@ -255,7 +255,7 @@ export function HomeRoomSection() {
                       {recentRoom.room.joinCode}
                     </span>
                     <span className="text-sm text-white/[0.55]">
-                      {getOnlineMemberCount(recentRoom.room.members)} 人在线
+                       {recentRoom.room.directoryOnlineMemberCount ?? getOnlineMemberCount(recentRoom.room.members)} 人在线
                     </span>
                   </div>
                 </button>
@@ -277,7 +277,7 @@ export function HomeRoomSection() {
                       >
                         <span className="font-mono text-sm font-semibold text-white">{room.room.joinCode}</span>
                         <span className="text-xs text-white/[0.45]">
-                          {getOnlineMemberCount(room.room.members)} 人在线
+                          {room.room.directoryOnlineMemberCount ?? getOnlineMemberCount(room.room.members)} 人在线
                         </span>
                       </button>
                     ))}

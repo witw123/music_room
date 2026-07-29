@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { BadRequestException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Playlist } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
@@ -17,6 +18,9 @@ type PersistedPlaylistRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+const maxPlaylistsPerUser = 100;
+const maxPlaylistTracks = 500;
 
 @Injectable()
 export class PlaylistService {
@@ -70,6 +74,17 @@ export class PlaylistService {
     coverUrl?: string | null;
     isCollaborative?: boolean;
   }) {
+    if (!input.title.trim()) {
+      throw new BadRequestException("播放列表标题不能为空。");
+    }
+    if ((input.trackIds?.length ?? 0) > maxPlaylistTracks) {
+      throw new BadRequestException("播放列表曲目数量已达到上限。");
+    }
+    const ownedPlaylists = await this.listPlaylists(input.ownerId);
+    if (ownedPlaylists.length >= maxPlaylistsPerUser) {
+      throw new BadRequestException("播放列表数量已达到上限。");
+    }
+
     const playlist: Playlist = {
       id: `playlist_${randomUUID()}`,
       ownerId: input.ownerId,
@@ -150,6 +165,10 @@ export class PlaylistService {
 
     if (current.ownerId !== input.ownerId) {
       throw new Error("Only the playlist owner can update this playlist.");
+    }
+
+    if (input.trackIds && input.trackIds.length > maxPlaylistTracks) {
+      throw new BadRequestException("播放列表曲目数量已达到上限。");
     }
 
     const updated: Playlist = {

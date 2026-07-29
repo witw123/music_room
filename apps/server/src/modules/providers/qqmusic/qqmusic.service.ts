@@ -32,6 +32,8 @@ import {
   type QqMusicSearchSuggestQuery
 } from "./qqmusic.schemas";
 
+const maxProviderPlaylistTracks = 2_000;
+
 type QrAttempt = { userId: string; qrsig: string; ptqrtoken: string };
 type SearchTermCache = { expiresAt: number; items: ProviderSearchSuggestion[] };
 const qrTtlSeconds = 180;
@@ -318,7 +320,8 @@ export class QqMusicService {
     if (!summary) throw this.unavailableError();
     const tracks = readTrackArray(playlist)
       .map((item) => this.toTrackCandidate(item))
-      .filter((item): item is QqMusicTrackCandidate => !!item);
+      .filter((item): item is QqMusicTrackCandidate => !!item)
+      .slice(0, maxProviderPlaylistTracks);
     return { ...summary, tracks };
   }
 

@@ -53,8 +53,8 @@ async function request<T>(path: string, init: RequestInit = {}) {
 }
 
 export const adminApi = {
-  login: async (username: string, password: string) => {
-    const session = await request<AdminSession>("/v1/admin/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
+  login: async (username: string, password: string, turnstileToken?: string) => {
+    const session = await request<AdminSession>("/v1/admin/auth/login", { method: "POST", body: JSON.stringify({ username, password, turnstileToken }) });
     if (typeof window !== "undefined") window.sessionStorage.setItem(csrfStorageKey, session.csrfToken);
     return session;
   },

@@ -30,23 +30,26 @@ REDIS_SENTINEL_MASTER_NAME=mymaster
 REDIS_USERNAME=
 REDIS_PASSWORD=replace-with-a-real-redis-password
 REDIS_SENTINEL_USERNAME=
-REDIS_SENTINEL_PASSWORD=
+REDIS_SENTINEL_PASSWORD=replace-with-a-separate-sentinel-password
 REDIS_DB=0
 ```
 
 ## 启动 Sentinel 样例
 
 ```bash
-docker compose -f deploy/linux/docker-compose.redis-sentinel.yml up -d
+docker compose --env-file deploy/linux/.env.production \
+  -f deploy/linux/docker-compose.redis-sentinel.yml \
+  -f deploy/linux/docker-compose.prod.yml up -d
 ```
 
 然后把服务端环境切到：
 
 ```env
 REDIS_MODE=sentinel
-REDIS_SENTINELS=127.0.0.1:26379
+REDIS_SENTINELS=redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
 REDIS_SENTINEL_MASTER_NAME=mymaster
 REDIS_PASSWORD=replace-with-a-real-redis-password
+REDIS_SENTINEL_PASSWORD=replace-with-a-separate-sentinel-password
 ```
 
 ## 与主服务编排组合
@@ -58,10 +61,12 @@ REDIS_PASSWORD=replace-with-a-real-redis-password
 3. `web` 不直接连接 Redis
 4. `server` readiness 中检查 Redis 连接模式和可用性
 
-当前服务端 readiness 响应会带上 `redisMode`，便于确认当前 Redis 连接模式。
+服务端会在内部按当前 Redis 连接模式建立 Sentinel 连接；外部 readiness 响应只返回状态，不暴露依赖拓扑。
 
 ## 建议
 
 - 短期：先把 Sentinel 跑起来，验证 failover 后服务端仍能恢复连接
 - 中期：补 Sentinel 断连恢复测试和告警
 - 长期：再考虑更完整的 Redis 托管或 Cluster 方案
+
+Sentinel 端口只应在应用内网可见。样例 compose 不再发布 `26379` 到宿主机，外部防火墙也不应放行 Redis 的 `6379` 或 Sentinel 的 `26379`。

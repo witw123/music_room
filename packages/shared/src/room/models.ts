@@ -40,6 +40,12 @@ export const roomSchema = z.object({
   // Optional so snapshots persisted before room-level defaults remain valid.
   newMemberPermissions: roomMemberPermissionsSchema.optional(),
   members: z.array(roomMemberSchema),
+  // Directory responses intentionally omit member details and carry only
+  // aggregate values needed by the lobby UI.
+  directoryHostNickname: z.string().max(80).optional(),
+  directoryMemberCount: z.number().int().nonnegative().optional(),
+  directoryOnlineMemberCount: z.number().int().nonnegative().optional(),
+  directoryIsMember: z.boolean().optional(),
   playback: playbackSnapshotSchema,
   presenceRevision: z.number().int().nonnegative().default(0),
   roomRevision: z.number().int().nonnegative().default(0).optional()
@@ -73,6 +79,7 @@ export const roomSyncResponseSchema = z.object({
 export type RoomMember = z.infer<typeof roomMemberSchema>;
 export type Room = z.infer<typeof roomSchema>;
 export type RoomSnapshot = z.infer<typeof roomSnapshotSchema>;
+export type RoomDirectoryItem = RoomSnapshot;
 export type RoomTrackDeletion = z.infer<typeof roomTrackDeletionSchema>;
 export type RoomSyncResponse = z.infer<typeof roomSyncResponseSchema>;
 

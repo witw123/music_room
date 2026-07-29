@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
@@ -38,10 +38,11 @@ type FallbackAuthStore = {
   >;
 };
 
-const sessionTtlMs = 1000 * 60 * 60 * 24 * 30;
+const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
+const sessionCleanupIntervalMs = 60 * 60 * 1000;
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuthService.name);
   private readonly usersById = new Map<string, StoredUser>();
   private readonly userIdByUsername = new Map<string, string>();
@@ -53,8 +54,22 @@ export class AuthService {
     process.env.AUTH_FAKE_PERSIST_PATH ?? ".tmp/auth-fallback-store.json"
   );
   private fallbackLoaded = false;
+  private sessionCleanupTimer?: NodeJS.Timeout;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit() {
+    this.sessionCleanupTimer = setInterval(() => {
+      void this.cleanupExpiredSessions();
+    }, sessionCleanupIntervalMs);
+    void this.cleanupExpiredSessions();
+  }
+
+  onModuleDestroy() {
+    if (this.sessionCleanupTimer) {
+      clearInterval(this.sessionCleanupTimer);
+    }
+  }
 
   async register(input: {
     username: string;
@@ -558,6 +573,32 @@ export class AuthService {
 
     await mkdir(dirname(this.fallbackStorePath), { recursive: true });
     await writeFile(this.fallbackStorePath, JSON.stringify(payload, null, 2), "utf8");
+  }
+
+  private async cleanupExpiredSessions() {
+    await this.ensureFallbackStoreLoaded();
+    const now = Date.now();
+    let fallbackChanged = false;
+
+    for (const session of [...this.sessionsByTokenHash.values()]) {
+      if (new Date(session.expiresAt).getTime() > now) continue;
+      this.sessionsByTokenHash.delete(session.tokenHash);
+      if (session.token) {
+        this.sessionsByToken.delete(session.token);
+      }
+      if (session.persistence === "fallback") {
+        fallbackChanged = true;
+      }
+    }
+
+    if (fallbackChanged) {
+      await this.persistFallbackStore().catch(() => undefined);
+    }
+    if (await this.prisma.ensureAvailable()) {
+      await this.prisma.userSession.deleteMany({
+        where: { expiresAt: { lte: new Date(now) } }
+      }).catch(() => undefined);
+    }
   }
 }
 

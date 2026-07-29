@@ -7,9 +7,9 @@ services:
       - --appendonly
       - "yes"
       - --requirepass
-      - ${REDIS_PASSWORD}
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - --masterauth
-      - ${REDIS_PASSWORD}
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redis_master_data:/data
 
@@ -26,9 +26,9 @@ services:
       - redis-master
       - "6379"
       - --requirepass
-      - ${REDIS_PASSWORD}
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - --masterauth
-      - ${REDIS_PASSWORD}
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redis_replica_1_data:/data
 
@@ -45,9 +45,9 @@ services:
       - redis-master
       - "6379"
       - --requirepass
-      - ${REDIS_PASSWORD}
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - --masterauth
-      - ${REDIS_PASSWORD}
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redis_replica_2_data:/data
 
@@ -58,18 +58,24 @@ services:
       - redis-master
       - redis-replica-1
       - redis-replica-2
-    command: >
-      sh -c "cat <<EOF >/etc/redis/sentinel.conf
-      port 26379
-      sentinel monitor ${REDIS_SENTINEL_MASTER_NAME} redis-master 6379 2
-      sentinel auth-pass ${REDIS_SENTINEL_MASTER_NAME} ${REDIS_PASSWORD}
-      sentinel down-after-milliseconds ${REDIS_SENTINEL_MASTER_NAME} 5000
-      sentinel failover-timeout ${REDIS_SENTINEL_MASTER_NAME} 10000
-      sentinel parallel-syncs ${REDIS_SENTINEL_MASTER_NAME} 1
-      EOF
-      && redis-sentinel /etc/redis/sentinel.conf"
-    ports:
-      - "26379:26379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      REDIS_SENTINEL_PASSWORD: ${REDIS_SENTINEL_PASSWORD:?REDIS_SENTINEL_PASSWORD must be set}
+      REDIS_SENTINEL_MASTER_NAME: ${REDIS_SENTINEL_MASTER_NAME:?REDIS_SENTINEL_MASTER_NAME must be set}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        {
+          printf '%s\n' 'port 26379'
+          printf 'requirepass %s\n' "$$REDIS_SENTINEL_PASSWORD"
+          printf 'sentinel monitor %s redis-master 6379 2\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel auth-pass %s %s\n' "$$REDIS_SENTINEL_MASTER_NAME" "$$REDIS_PASSWORD"
+          printf 'sentinel down-after-milliseconds %s 5000\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel failover-timeout %s 10000\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel parallel-syncs %s 1\n' "$$REDIS_SENTINEL_MASTER_NAME"
+        } > /etc/redis/sentinel.conf
+        exec redis-server /etc/redis/sentinel.conf --sentinel
 
   redis-sentinel-2:
     image: redis:7-alpine
@@ -78,16 +84,24 @@ services:
       - redis-master
       - redis-replica-1
       - redis-replica-2
-    command: >
-      sh -c "cat <<EOF >/etc/redis/sentinel.conf
-      port 26379
-      sentinel monitor ${REDIS_SENTINEL_MASTER_NAME} redis-master 6379 2
-      sentinel auth-pass ${REDIS_SENTINEL_MASTER_NAME} ${REDIS_PASSWORD}
-      sentinel down-after-milliseconds ${REDIS_SENTINEL_MASTER_NAME} 5000
-      sentinel failover-timeout ${REDIS_SENTINEL_MASTER_NAME} 10000
-      sentinel parallel-syncs ${REDIS_SENTINEL_MASTER_NAME} 1
-      EOF
-      && redis-sentinel /etc/redis/sentinel.conf"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      REDIS_SENTINEL_PASSWORD: ${REDIS_SENTINEL_PASSWORD:?REDIS_SENTINEL_PASSWORD must be set}
+      REDIS_SENTINEL_MASTER_NAME: ${REDIS_SENTINEL_MASTER_NAME:?REDIS_SENTINEL_MASTER_NAME must be set}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        {
+          printf '%s\n' 'port 26379'
+          printf 'requirepass %s\n' "$$REDIS_SENTINEL_PASSWORD"
+          printf 'sentinel monitor %s redis-master 6379 2\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel auth-pass %s %s\n' "$$REDIS_SENTINEL_MASTER_NAME" "$$REDIS_PASSWORD"
+          printf 'sentinel down-after-milliseconds %s 5000\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel failover-timeout %s 10000\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel parallel-syncs %s 1\n' "$$REDIS_SENTINEL_MASTER_NAME"
+        } > /etc/redis/sentinel.conf
+        exec redis-server /etc/redis/sentinel.conf --sentinel
 
   redis-sentinel-3:
     image: redis:7-alpine
@@ -96,16 +110,24 @@ services:
       - redis-master
       - redis-replica-1
       - redis-replica-2
-    command: >
-      sh -c "cat <<EOF >/etc/redis/sentinel.conf
-      port 26379
-      sentinel monitor ${REDIS_SENTINEL_MASTER_NAME} redis-master 6379 2
-      sentinel auth-pass ${REDIS_SENTINEL_MASTER_NAME} ${REDIS_PASSWORD}
-      sentinel down-after-milliseconds ${REDIS_SENTINEL_MASTER_NAME} 5000
-      sentinel failover-timeout ${REDIS_SENTINEL_MASTER_NAME} 10000
-      sentinel parallel-syncs ${REDIS_SENTINEL_MASTER_NAME} 1
-      EOF
-      && redis-sentinel /etc/redis/sentinel.conf"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      REDIS_SENTINEL_PASSWORD: ${REDIS_SENTINEL_PASSWORD:?REDIS_SENTINEL_PASSWORD must be set}
+      REDIS_SENTINEL_MASTER_NAME: ${REDIS_SENTINEL_MASTER_NAME:?REDIS_SENTINEL_MASTER_NAME must be set}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        {
+          printf '%s\n' 'port 26379'
+          printf 'requirepass %s\n' "$$REDIS_SENTINEL_PASSWORD"
+          printf 'sentinel monitor %s redis-master 6379 2\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel auth-pass %s %s\n' "$$REDIS_SENTINEL_MASTER_NAME" "$$REDIS_PASSWORD"
+          printf 'sentinel down-after-milliseconds %s 5000\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel failover-timeout %s 10000\n' "$$REDIS_SENTINEL_MASTER_NAME"
+          printf 'sentinel parallel-syncs %s 1\n' "$$REDIS_SENTINEL_MASTER_NAME"
+        } > /etc/redis/sentinel.conf
+        exec redis-server /etc/redis/sentinel.conf --sentinel
 
 volumes:
   redis_master_data:

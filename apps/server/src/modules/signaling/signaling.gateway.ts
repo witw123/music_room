@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   ConnectedSocket,
   OnGatewayDisconnect,
+  OnGatewayConnection,
   MessageBody,
   OnGatewayInit,
   SubscribeMessage,
@@ -50,6 +51,7 @@ import {
 import { diagnosticsReportPayloadSchema } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
+import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { getCorsOrigins } from "../../common/cors/get-cors-origins";
 import { AuthService } from "../auth/auth.service";
@@ -106,7 +108,7 @@ function hasForeignRedisEnvelope(
   path: "/ws/socket.io",
   cors: { origin: getCorsOrigins(), credentials: true }
 })
-export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
+export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private readonly disconnectGracePeriodMs = 25_000;
   private readonly pendingPeerSignalTtlMs = 10_000;
   private readonly pendingPeerSignalLimit = 32;
@@ -116,6 +118,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private sequence = 0;
   private recoveryGenerationSequence = 0;
   private readonly pendingDisconnectCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly unauthenticatedConnectionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly socketIdsByIp = new Map<string, Set<string>>();
+  private readonly maxSocketsPerIp = 20;
+  private readonly unauthenticatedConnectionTimeoutMs = 15_000;
   private readonly peerSocketsByRoom = new Map<string, Map<string, Set<string>>>();
   private readonly activeSessionsByRoom = new Map<
     string,
@@ -144,7 +150,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
     private readonly authService: AuthService,
-    private readonly metrics: MetricsService
+    private readonly metrics: MetricsService,
+    private readonly abuseProtection: AbuseProtectionService
   ) {}
 
   @WebSocketServer()
@@ -510,6 +517,50 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   }
 
+  async handleConnection(client: Socket) {
+    const connectionIp = this.getSocketIp(client);
+    const socketIds = this.socketIdsByIp.get(connectionIp) ?? new Set<string>();
+    if (socketIds.size >= this.maxSocketsPerIp) {
+      client.disconnect(true);
+      return;
+    }
+    socketIds.add(client.id);
+    this.socketIdsByIp.set(connectionIp, socketIds);
+    client.data.connectionIp = connectionIp;
+
+    try {
+      await this.abuseProtection.enforce(
+        "ws:connect",
+        [{ name: "ip", value: connectionIp }],
+        { limit: 60, windowMs: 60 * 1000 }
+      );
+    } catch {
+      this.releaseSocketIp(client);
+      client.disconnect(true);
+      return;
+    }
+
+    const sessionToken = this.getSocketSessionToken(client);
+    if (sessionToken) {
+      try {
+        const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+        client.data.handshakeSessionId = session.userId;
+        client.data.handshakeAuthenticated = true;
+        return;
+      } catch {
+        this.releaseSocketIp(client);
+        client.disconnect(true);
+        return;
+      }
+    }
+
+    const timer = setTimeout(() => {
+      this.unauthenticatedConnectionTimers.delete(client.id);
+      client.disconnect(true);
+    }, this.unauthenticatedConnectionTimeoutMs);
+    this.unauthenticatedConnectionTimers.set(client.id, timer);
+  }
+
   onModuleDestroy() {
     for (const unsubscribe of this.redisUnsubscribers.splice(0)) {
       void unsubscribe();
@@ -518,6 +569,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       clearTimeout(timer);
     }
     this.pendingDisconnectCleanupTimers.clear();
+    for (const timer of this.unauthenticatedConnectionTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.unauthenticatedConnectionTimers.clear();
+    this.socketIdsByIp.clear();
     this.peerSocketsByRoom.clear();
     this.activeSessionsByRoom.clear();
     this.pendingPeerSignalsByRoomPeer.clear();
@@ -794,6 +850,17 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         errorCodes.unauthorized
       );
     }
+    if (
+      client.data.handshakeAuthenticated &&
+      client.data.handshakeSessionId !== message.sessionId
+    ) {
+      throw createWsApiException("Realtime identity mismatch.", errorCodes.unauthorized);
+    }
+    const pendingAuthenticationTimer = this.unauthenticatedConnectionTimers.get(client.id);
+    if (pendingAuthenticationTimer) {
+      clearTimeout(pendingAuthenticationTimer);
+      this.unauthenticatedConnectionTimers.delete(client.id);
+    }
 
     const previousRoomId = client.data.roomId as string | undefined;
     const previousSessionId = client.data.sessionId as string | undefined;
@@ -1008,6 +1075,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   async handleDisconnect(client: Socket) {
     this.realtimeRateLimits.delete(client.id);
+    const pendingAuthenticationTimer = this.unauthenticatedConnectionTimers.get(client.id);
+    if (pendingAuthenticationTimer) {
+      clearTimeout(pendingAuthenticationTimer);
+      this.unauthenticatedConnectionTimers.delete(client.id);
+    }
+    this.releaseSocketIp(client);
     const roomId = client.data.roomId as string | undefined;
     const sessionId = client.data.sessionId as string | undefined;
     const peerId = client.data.peerId as string | undefined;
@@ -1088,6 +1161,25 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
 
     return readUserSessionCookie(client.handshake.headers.cookie);
+  }
+
+  private getSocketIp(client: Socket) {
+    const realIp = client.handshake.headers["x-real-ip"];
+    if (typeof realIp === "string" && realIp.trim()) {
+      return realIp.trim();
+    }
+    return client.handshake.address || client.conn.remoteAddress || "unknown";
+  }
+
+  private releaseSocketIp(client: Socket) {
+    const ip = client.data.connectionIp as string | undefined;
+    if (!ip) return;
+    const socketIds = this.socketIdsByIp.get(ip);
+    socketIds?.delete(client.id);
+    if (socketIds?.size === 0) {
+      this.socketIdsByIp.delete(ip);
+    }
+    client.data.connectionIp = undefined;
   }
 
   private assertRealtimeClient(client: Socket, roomId: string) {

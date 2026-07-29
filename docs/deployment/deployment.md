@@ -67,6 +67,8 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 pnpm deploy:check
 ```
 
+生产 API 只通过 Nginx 暴露，`TRUST_PROXY` 应保持为 `1`，不要把 server 容器端口映射到公网；如果在 Nginx 前再放置 Cloudflare 或负载均衡，应确认该代理正确覆盖并传递真实客户端 IP。
+
 ## 管理台写操作
 
 生产模板默认启用 `ADMIN_MUTATIONS_ENABLED=true`，管理员登录后可以结束房间、禁用或启用普通账号，以及撤销普通用户会话。发生故障需要立即冻结管理写操作时，将该变量改为 `false` 并重启 `server`；只读目录和观测接口不会受影响。

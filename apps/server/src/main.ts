@@ -70,5 +70,5 @@ function resolveTrustProxy() {
     return Number.isInteger(numeric) && numeric >= 0 ? numeric : configured;
   }
 
-  return process.env.NODE_ENV === "production" ? "loopback" : false;
+  return process.env.NODE_ENV === "production" ? 1 : false;
 }

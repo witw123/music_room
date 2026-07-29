@@ -1,4 +1,4 @@
-import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, Optional, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema } from "@music-room/shared";
@@ -6,6 +6,7 @@ import type { RoomMember } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
+import { TurnstileService } from "../auth/turnstile.service";
 import { RoomService } from "../room/room.service";
 import { RoomPresenceService } from "../room/services/room-presence.service";
 import { PlaylistService } from "../playlist/playlist.service";
@@ -23,6 +24,7 @@ type AdminPrincipal = { userId: string; username: string; nickname: string; role
 export class AdminService implements OnModuleInit, OnModuleDestroy {
   private heartbeatTimer?: NodeJS.Timeout;
   private tombstoneTimer?: NodeJS.Timeout;
+  private sessionCleanupTimer?: NodeJS.Timeout;
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -30,16 +32,36 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly roomService: RoomService,
     private readonly roomPresence: RoomPresenceService,
     private readonly playlistService: PlaylistService,
-    private readonly roomPublisher: RoomRealtimePublisher
+    private readonly roomPublisher: RoomRealtimePublisher,
+    @Optional()
+    private readonly turnstile?: TurnstileService
   ) {}
 
   onModuleInit() {
     this.heartbeatTimer = setInterval(() => { void this.writeInstanceHeartbeat(); }, 10_000);
     this.tombstoneTimer = setInterval(() => { void this.retryPendingTombstones(); }, 10_000);
+    this.sessionCleanupTimer = setInterval(() => { void this.cleanupExpiredSessions(); }, 60 * 60 * 1000);
     void this.writeInstanceHeartbeat();
+    void this.cleanupExpiredSessions();
   }
 
-  onModuleDestroy() { if (this.heartbeatTimer) clearInterval(this.heartbeatTimer); if (this.tombstoneTimer) clearInterval(this.tombstoneTimer); }
+  onModuleDestroy() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.tombstoneTimer) clearInterval(this.tombstoneTimer);
+    if (this.sessionCleanupTimer) clearInterval(this.sessionCleanupTimer);
+  }
+
+  private async cleanupExpiredSessions() {
+    if (!(await this.prisma.ensureAvailable())) return;
+    await this.prisma.adminSession.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lte: new Date() } },
+          { revokedAt: { not: null } }
+        ]
+      }
+    }).catch(() => undefined);
+  }
 
   private async writeInstanceHeartbeat() {
     if (!this.redis.isAvailable()) return;
@@ -70,6 +92,14 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const payload = adminLoginRequestSchema.parse(input);
     if (process.env.NODE_ENV === "production" && !process.env.AUDIT_HASH_SECRET?.trim()) {
       throw new UnauthorizedException("管理员审计密钥未配置。");
+    }
+    if (this.turnstile) {
+      await this.turnstile.verify(
+        payload.turnstileToken,
+        request.ip || request.socket.remoteAddress || "unknown"
+      );
+    } else if (process.env.NODE_ENV === "production") {
+      throw new UnauthorizedException("管理员人机验证服务未配置。");
     }
     await this.assertLoginAllowed(payload.username, request);
     let user: Awaited<ReturnType<AuthService["authenticateCredentials"]>>;

@@ -4,6 +4,8 @@ import {
   Delete,
   Get,
   Headers,
+  Ip,
+  Optional,
   Patch,
   Param,
   Post,
@@ -15,6 +17,7 @@ import {
   setNextQueueItemRequestSchema
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
+import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
@@ -24,7 +27,9 @@ export class QueueController {
   constructor(
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    @Optional()
+    private readonly abuseProtection?: AbuseProtectionService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -49,9 +54,11 @@ export class QueueController {
   async addQueueItem(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { trackId: string }
+    @Body() body: { trackId: string },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitQueueWrites(userId, ipAddress);
     const payload = parseRequestBody(addQueueItemRequestSchema, body);
     await this.roomService.addQueueItem(roomId, userId, payload.trackId);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
@@ -65,9 +72,11 @@ export class QueueController {
   async removeQueueItem(
     @Param("roomId") roomId: string,
     @Param("queueItemId") queueItemId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitQueueWrites(userId, ipAddress);
     await this.roomService.removeQueueItem(roomId, queueItemId, userId);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
@@ -80,9 +89,11 @@ export class QueueController {
   async reorderQueue(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { queueItemIds: string[] }
+    @Body() body: { queueItemIds: string[] },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitQueueWrites(userId, ipAddress);
     const payload = parseRequestBody(reorderQueueRequestSchema, body);
     await this.roomService.reorderQueue(roomId, userId, payload.queueItemIds);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
@@ -96,9 +107,11 @@ export class QueueController {
   async setNextQueueItem(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { queueItemId: string }
+    @Body() body: { queueItemId: string },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitQueueWrites(userId, ipAddress);
     const payload = parseRequestBody(setNextQueueItemRequestSchema, body);
     await this.roomService.setNextQueueItem(roomId, userId, payload.queueItemId);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
@@ -106,5 +119,12 @@ export class QueueController {
       queue: snapshot.queue,
       playback: snapshot.room.playback
     };
+  }
+
+  private async limitQueueWrites(userId: string, ipAddress?: string) {
+    await this.abuseProtection?.enforce("room:queue-write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 180, windowMs: 10 * 60 * 1000 });
   }
 }

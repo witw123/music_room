@@ -1,7 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import Script from "next/script";
 import { adminApi } from "@/lib/admin-api";
+import { musicRoomApi } from "@/lib/music-room-api";
 import styles from "../admin.module.css";
 
 export default function AdminLoginPage() {
@@ -9,16 +11,33 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [turnstileEnabled, setTurnstileEnabled] = useState(false);
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+
+  useEffect(() => {
+    void musicRoomApi.getAuthConfig().then((config) => {
+      setTurnstileEnabled(config.enabled && !!config.siteKey);
+      setTurnstileSiteKey(config.siteKey);
+    }).catch(() => undefined);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (turnstileEnabled && !turnstileToken) {
+      setError("请完成人机验证后再继续。");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await adminApi.login(username, password);
+      await adminApi.login(username, password, turnstileToken ?? undefined);
       window.location.assign("/admin");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "管理员登录失败。");
+      setTurnstileToken(null);
+      setTurnstileResetKey((value) => value + 1);
     } finally {
       setBusy(false);
     }
@@ -40,6 +59,14 @@ export default function AdminLoginPage() {
             <input className={styles.loginInput} value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
           </label>
         </div>
+        {turnstileEnabled ? (
+          <TurnstileWidget
+            key={turnstileResetKey}
+            siteKey={turnstileSiteKey}
+            onToken={setTurnstileToken}
+            onError={() => setTurnstileToken(null)}
+          />
+        ) : null}
         {error ? <p className={styles.loginError}>{error}</p> : null}
         <button className={styles.loginSubmit} type="submit" disabled={busy}>
           {busy ? "登录中..." : "进入管理控制台"}
@@ -48,4 +75,49 @@ export default function AdminLoginPage() {
       </form>
     </section>
   </main>;
+}
+
+function TurnstileWidget({
+  siteKey,
+  onToken,
+  onError
+}: {
+  siteKey: string;
+  onToken: (token: string | null) => void;
+  onError: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const [scriptReady, setScriptReady] = useState(false);
+
+  useEffect(() => {
+    if (!scriptReady || !containerRef.current || !window.turnstile) return;
+    try {
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        action: "auth",
+        theme: "dark",
+        callback: onToken,
+        "expired-callback": () => onToken(null),
+        "error-callback": onError
+      });
+    } catch {
+      onError();
+    }
+    return () => {
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+    };
+  }, [onError, onToken, scriptReady, siteKey]);
+
+  return <div className="min-h-[65px] overflow-hidden" data-testid="admin-turnstile">
+    <Script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      strategy="afterInteractive"
+      onReady={() => setScriptReady(true)}
+    />
+    <div ref={containerRef} />
+  </div>;
 }

@@ -18,6 +18,7 @@ import { NeteaseModule } from "./modules/providers/netease/netease.module";
 import { QqMusicModule } from "./modules/providers/qqmusic/qqmusic.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
+import { SecurityModule } from "./common/security/security.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { FavoritesModule } from "./modules/favorites/favorites.module";
     ConfigFactoryModule,
     PrismaModule,
     RedisModule,
+    SecurityModule,
     MetricsModule,
     AuthModule,
     HealthModule,

@@ -63,16 +63,16 @@ export const customLayoutItemLabels: Record<CustomLayoutItemId, string> = {
 export const customLayoutWorkspaceItemIds: CustomLayoutItemId[] = [
   "sidebar",
   "content",
-  "player",
-  "mobile-navigation"
+  "mobile-navigation",
+  "player"
 ];
 
 export const customLayoutRoomItemIds: CustomLayoutItemId[] = [
   "sidebar",
   "room-stage",
   "room-panel",
-  "player",
-  "mobile-navigation"
+  "mobile-navigation",
+  "player"
 ];
 
 export const customLayoutItemMinimumSizes: Record<CustomLayoutItemId, { width: number; height: number }> = {
@@ -278,7 +278,12 @@ export function normalizeCustomLayoutSettings(value: unknown): CustomLayoutSetti
       const page = Object.fromEntries(
         (Object.keys(defaultPage) as CustomLayoutItemId[]).map((itemId) => [
           itemId,
-          normalizeCustomLayoutItem(pageInput[itemId], defaultPage[itemId], itemId)
+          migrateLegacyDefaultLayoutItem(
+            normalizeCustomLayoutItem(pageInput[itemId], defaultPage[itemId], itemId),
+            pageInput[itemId],
+            pageId,
+            itemId
+          )
         ])
       ) as CustomLayoutPage;
       return [pageId, page];
@@ -321,7 +326,7 @@ function createDefaultCustomLayoutPage(pageId: CustomLayoutPageId): CustomLayout
   return {
     sidebar: { x: 0, y: 0, width: 64, height: isRoom ? roomContentHeight : 840, visible: true, locked: false },
     content: { x: 64, y: 0, width: 1376, height: 840, visible: !isRoom, locked: false },
-    player: { x: 64, y: isRoom ? roomContentHeight : 840, width: 1376, height: isRoom ? 72 : 60, visible: true, locked: false },
+    player: { x: 0, y: isRoom ? roomContentHeight : 840, width: customLayoutCanvas.width, height: isRoom ? 72 : 60, visible: true, locked: false },
     "mobile-navigation": { x: 0, y: 840, width: 1440, height: 60, visible: true, locked: true },
     "room-stage": { x: 64, y: 0, width: 792, height: roomContentHeight, visible: isRoom, locked: false },
     "room-panel": { x: 856, y: 0, width: 584, height: roomContentHeight, visible: isRoom, locked: false }
@@ -341,6 +346,24 @@ function normalizeCustomLayoutItem(value: unknown, fallback: CustomLayoutItem, i
     visible: input.visible !== false,
     locked: input.locked === true
   };
+}
+
+function migrateLegacyDefaultLayoutItem(
+  item: CustomLayoutItem,
+  rawValue: unknown,
+  pageId: CustomLayoutPageId,
+  itemId: CustomLayoutItemId
+) {
+  if (itemId !== "player" || !isRecord(rawValue)) return item;
+  const legacyHeight = pageId === "room" ? 72 : 60;
+  const legacyY = pageId === "room" ? customLayoutCanvas.height - legacyHeight : 840;
+  const isLegacyDefault = rawValue.x === 64
+    && rawValue.y === legacyY
+    && rawValue.width === 1376
+    && rawValue.height === legacyHeight;
+  return isLegacyDefault
+    ? { ...item, x: 0, width: customLayoutCanvas.width }
+    : item;
 }
 
 function normalizeLayoutNumber(value: unknown, fallback: number, minimum: number, maximum: number) {

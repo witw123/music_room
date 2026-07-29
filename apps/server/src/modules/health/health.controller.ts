@@ -11,10 +11,7 @@ export class HealthController {
 
   @Get()
   check() {
-    return {
-      status: "ok",
-      service: "music-room-server"
-    };
+    return { status: "ok" };
   }
 
   @Get("readiness")
@@ -23,16 +20,6 @@ export class HealthController {
     const redisReady = this.redis.isPubSubAvailable();
     const isReady = prismaReady && redisReady;
 
-    return {
-      status: isReady ? "ready" : "degraded",
-      service: "music-room-server",
-      checks: {
-        prisma: prismaReady ? "up" : "down",
-        redis: redisReady ? "up" : "down"
-      },
-      metadata: {
-        redisMode: this.redis.getMode()
-      }
-    };
+    return { status: isReady ? "ready" : "degraded" };
   }
 }

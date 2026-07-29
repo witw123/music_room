@@ -4,6 +4,8 @@ import {
   Delete,
   Get,
   Headers,
+  Ip,
+  Optional,
   Param,
   Patch,
   Post,
@@ -16,6 +18,7 @@ import {
   updatePlaylistRequestSchema
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
+import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
@@ -27,7 +30,9 @@ export class PlaylistController {
     private readonly playlistService: PlaylistService,
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    @Optional()
+    private readonly abuseProtection?: AbuseProtectionService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -40,8 +45,15 @@ export class PlaylistController {
   }
 
   @Get()
-  async listPlaylists(@Headers("x-session-token") sessionToken: string | undefined) {
+  async listPlaylists(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Ip() ipAddress?: string
+  ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("playlist:list", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 60, windowMs: 60 * 1000 });
     return this.playlistService.listPlaylists(userId);
   }
 
@@ -56,9 +68,11 @@ export class PlaylistController {
       tags?: string[];
       coverUrl?: string | null;
       isCollaborative?: boolean;
-    }
+    },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitPlaylistWrite(userId, ipAddress);
     const payload = parseRequestBody(createPlaylistRequestSchema, body);
     return this.playlistService.createPlaylist({
       ...payload,
@@ -77,9 +91,11 @@ export class PlaylistController {
       tags?: string[];
       coverUrl?: string | null;
       trackIds?: string[];
-    }
+    },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitPlaylistWrite(userId, ipAddress);
     const payload = parseRequestBody(updatePlaylistRequestSchema, body);
     return this.playlistService.updatePlaylist(playlistId, {
       ...payload,
@@ -90,9 +106,11 @@ export class PlaylistController {
   @Delete(":playlistId")
   async deletePlaylist(
     @Param("playlistId") playlistId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitPlaylistWrite(userId, ipAddress);
     return this.playlistService.deletePlaylist(playlistId, userId);
   }
 
@@ -103,9 +121,11 @@ export class PlaylistController {
     @Body()
     body: {
       roomId: string;
-    }
+    },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitPlaylistWrite(userId, ipAddress);
     const payload = parseRequestBody(importPlaylistToRoomRequestSchema, body);
     const playlist = await this.playlistService.getPlaylistForOwner(playlistId, userId);
     await this.roomService.importPlaylistToQueue(payload.roomId, userId, playlist.trackIds);
@@ -127,9 +147,11 @@ export class PlaylistController {
       roomId: string;
       title: string;
       description?: string | null;
-    }
+    },
+    @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.limitPlaylistWrite(userId, ipAddress);
     const payload = parseRequestBody(createPlaylistFromRoomRequestSchema, body);
     await this.roomService.assertRoomMember(payload.roomId, userId);
     const playlist = await this.playlistService.createPlaylistFromRoom({
@@ -141,5 +163,12 @@ export class PlaylistController {
       await this.playlistService.listPlaylistsForRoom(payload.roomId)
     );
     return playlist;
+  }
+
+  private async limitPlaylistWrite(userId: string, ipAddress?: string) {
+    await this.abuseProtection?.enforce("playlist:write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
   }
 }

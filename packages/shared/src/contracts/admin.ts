@@ -7,7 +7,8 @@ export const incidentStatusSchema = z.enum(["OPEN", "RECOVERED"]);
 
 export const adminLoginRequestSchema = z.object({
   username: z.string().trim().min(1).max(160),
-  password: z.string().min(1).max(512)
+  password: z.string().min(1).max(512),
+  turnstileToken: z.string().trim().min(1).max(2048).optional()
 }).strict();
 
 export const adminReasonSchema = z.string().trim().min(8).max(500);

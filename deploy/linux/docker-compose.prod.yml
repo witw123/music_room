@@ -58,7 +58,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${PORT}
-      TRUST_PROXY: ${TRUST_PROXY:-loopback}
+      # The API is behind this Nginx container. Trust exactly one proxy hop;
+      # never expose port 3001 directly to the Internet.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       APP_DOMAIN: ${APP_DOMAIN}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_MODE: ${REDIS_MODE}

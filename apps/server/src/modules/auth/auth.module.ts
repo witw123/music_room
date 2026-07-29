@@ -6,6 +6,6 @@ import { TurnstileService } from "./turnstile.service";
 @Module({
   controllers: [AuthController],
   providers: [AuthService, TurnstileService],
-  exports: [AuthService]
+  exports: [AuthService, TurnstileService]
 })
 export class AuthModule {}

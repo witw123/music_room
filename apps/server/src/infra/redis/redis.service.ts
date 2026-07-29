@@ -176,6 +176,34 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.set(key, value);
   }
 
+  async setStringIfAbsent(key: string, value: string, ttlMs: number) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.set(
+      key,
+      value,
+      "PX",
+      String(Math.max(1, Math.floor(ttlMs))),
+      "NX"
+    );
+    return result === "OK";
+  }
+
+  async deleteStringIfValue(key: string, expectedValue: string) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `if redis.call("GET", KEYS[1]) == ARGV[1] then
+         return redis.call("DEL", KEYS[1])
+       end
+       return 0`,
+      1,
+      key,
+      expectedValue
+    );
+    return Number(result) === 1;
+  }
+
   async getString(key: string) {
     this.assertReady(this.client, "publisher");
 

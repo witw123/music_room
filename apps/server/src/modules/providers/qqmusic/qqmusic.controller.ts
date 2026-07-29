@@ -11,12 +11,14 @@ import {
   Query,
   Req,
   Res,
+  Optional,
   UnauthorizedException
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { Transform } from "node:stream";
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import { AuthService } from "../../auth/auth.service";
+import { AbuseProtectionService } from "../../../common/security/abuse-protection.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   qqMusicAlbumIdSchema,
@@ -35,7 +37,9 @@ import { QqMusicService } from "./qqmusic.service";
 export class QqMusicController {
   constructor(
     private readonly service: QqMusicService,
-    private readonly auth: AuthService
+    private readonly auth: AuthService,
+    @Optional()
+    private readonly abuseProtection?: AbuseProtectionService
   ) {}
 
   @Get("account")
@@ -152,9 +156,15 @@ export class QqMusicController {
   @Get("artwork")
   async artwork(
     @Query("url") rawUrl: string | undefined,
+    @Headers("x-session-token") token: string | undefined,
     @Req() request: Request,
     @Res() response: Response
   ) {
+    const userId = await this.user(token);
+    await this.abuseProtection?.enforce("qqmusic:artwork", [
+      { name: "ip", value: request.ip },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
     if (!rawUrl?.trim()) {
       throw new HttpException(
         createApiErrorResponse(errorCodes.validationFailed, "QQ Music artwork URL is required."),

@@ -115,14 +115,27 @@ describe("app settings store", () => {
       "sidebar",
       "room-stage",
       "room-panel",
-      "player",
-      "mobile-navigation"
+      "mobile-navigation",
+      "player"
     ]);
     expect(room.sidebar).toMatchObject({ x: 0, y: 0, width: 64, height: 828 });
     expect(room["room-stage"]).toMatchObject({ x: 64, y: 0, width: 792, height: 828, visible: true });
     expect(room["room-panel"]).toMatchObject({ x: 856, y: 0, width: 584, height: 828, visible: true });
-    expect(room.player).toMatchObject({ x: 64, y: 828, width: 1376, height: 72 });
+    expect(room.player).toMatchObject({ x: 0, y: 828, width: 1440, height: 72 });
     expect(defaults.pages.home["room-stage"].visible).toBe(false);
+
+    const migrated = normalizeSettings({
+      layout: {
+        customLayout: {
+          pages: {
+            home: { player: { x: 64, y: 840, width: 1376, height: 60 } },
+            room: { player: { x: 64, y: 828, width: 1376, height: 72 } }
+          }
+        }
+      }
+    }).layout.customLayout.pages;
+    expect(migrated.home.player).toMatchObject({ x: 0, width: 1440 });
+    expect(migrated.room.player).toMatchObject({ x: 0, width: 1440 });
   });
 
   it("maps room routes to the room custom layout page", () => {

@@ -56,6 +56,19 @@ describe("validateRuntimeConfig", () => {
     ).toThrow("TURNSTILE_ENABLED must be true in production startup.");
   });
 
+  it("rejects non-numeric proxy trust modes in production", () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: "production",
+        ...validTurnstileConfig,
+        TRUST_PROXY: "all",
+        JWT_SECRET: "super-secret-jwt",
+        TURN_ENABLED: "false",
+        NEXT_PUBLIC_TURN_URL: "turn:static.example.com:3478?transport=udp"
+      })
+    ).toThrow("Production TRUST_PROXY must be false or a non-negative proxy hop count.");
+  });
+
   it("requires an explicit TURN host or app domain in production when TURN is enabled", () => {
     expect(() =>
       validateRuntimeConfig({

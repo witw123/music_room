@@ -265,7 +265,10 @@ export function RoomsHomePage({
   }
 
   const visibleRooms = useMemo(
-    () => [...availableRooms].sort((left, right) => getOnlineMemberCount(right.room.members) - getOnlineMemberCount(left.room.members)),
+    () => [...availableRooms].sort((left, right) =>
+      (right.room.directoryOnlineMemberCount ?? getOnlineMemberCount(right.room.members)) -
+      (left.room.directoryOnlineMemberCount ?? getOnlineMemberCount(left.room.members))
+    ),
     [availableRooms]
   );
 
@@ -553,10 +556,10 @@ export function RoomsHomePage({
         >
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3 rounded-xl border border-surface-border bg-background/50 p-3 text-sm">
-              <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{selectedRoom.room.members.find((member) => member.role === "host")?.nickname ?? "未知"}</span></div>
+              <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryHostNickname ?? selectedRoom.room.members.find((member) => member.role === "host")?.nickname ?? "未知"}</span></div>
               <div><span className="block text-xs text-foreground-muted">房间码</span><span className="mt-1 block font-mono text-foreground">{selectedRoom.room.joinCode}</span></div>
               <div><span className="block text-xs text-foreground-muted">状态</span><span className="mt-1 block text-foreground">{selectedRoom.room.visibility === "private" ? "私密" : "公开"}</span></div>
-              <div><span className="block text-xs text-foreground-muted">在线成员</span><span className="mt-1 block text-foreground">{getOnlineMemberCount(selectedRoom.room.members)} 人</span></div>
+              <div><span className="block text-xs text-foreground-muted">在线成员</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryOnlineMemberCount ?? getOnlineMemberCount(selectedRoom.room.members)} 人</span></div>
             </div>
             {selectedRoom.room.hasPassword ? (
               <label className="flex flex-col gap-2 text-sm text-foreground">
@@ -594,7 +597,7 @@ function RoomDirectoryCard({
   isAway: boolean;
   onOpen: () => void;
 }) {
-  const host = room.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
+  const host = room.room.directoryHostNickname ?? room.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
 
   return (
     <article
@@ -625,7 +628,7 @@ function RoomDirectoryCard({
           ) : null}
         </div>
         <span className="shrink-0 rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
-          {getOnlineMemberCount(room.room.members)} 人在线
+          {room.room.directoryOnlineMemberCount ?? getOnlineMemberCount(room.room.members)} 人在线
         </span>
       </div>
       <div className="mt-0.5">

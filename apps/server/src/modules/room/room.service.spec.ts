@@ -1767,6 +1767,42 @@ describe("RoomService", () => {
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
   });
 
+  it("returns a bounded directory without live room identity or playback details", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const visitor = await authService.createGuestSession("Visitor");
+    const snapshot = await roomService.createRoom(host.id, "public");
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+
+    const [directoryItem] = await roomService.listRoomDirectoryForSession(visitor.id);
+
+    expect(directoryItem).toMatchObject({
+      room: {
+        id: snapshot.room.id,
+        hostId: "",
+        joinCode: snapshot.room.joinCode,
+        members: [],
+        directoryHostNickname: "Host",
+        directoryMemberCount: 1,
+        directoryIsMember: false,
+        playback: {
+          currentTrackId: null,
+          sourceSessionId: null,
+          sourcePeerId: null,
+          sourceTrackId: null,
+          gaplessNext: null
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    });
+  });
+
   it("rejects joining a room with a duplicate nickname", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

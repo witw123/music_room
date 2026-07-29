@@ -302,7 +302,7 @@ function setUserSessionCookie(response: Response | undefined, token: string) {
     httpOnly: true,
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 30 * 24 * 60 * 60 * 1000,
+    maxAge: 14 * 24 * 60 * 60 * 1000,
     path: "/"
   });
 }
