@@ -32,7 +32,7 @@ describe("OpusSegmentEncoder", () => {
     const encodePromise = encoder.encode({
       sampleRate: 48_000,
       channels: [new Float32Array(960)],
-      bitrateKbps: 96
+      bitrateKbps: 128
     });
     const rejection = expect(encodePromise).rejects.toThrow("timed out after 25ms");
 
@@ -46,7 +46,7 @@ describe("OpusSegmentEncoder", () => {
     const encodePromise = encoder.encode({
       sampleRate: 48_000,
       channels: [new Float32Array(960)],
-      bitrateKbps: 96
+      bitrateKbps: 128
     });
 
     FakeWorker.latest?.onmessageerror?.({} as MessageEvent);

@@ -47,7 +47,7 @@ export class OpusSegmentEncoder {
   encode(input: {
     sampleRate: number;
     channels: Float32Array[];
-    bitrateKbps: 96 | 192;
+    bitrateKbps: 128 | 256;
   }) {
     if (this.disposed) {
       return Promise.reject(new Error("Opus encoder has been disposed."));

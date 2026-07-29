@@ -17,6 +17,17 @@ describe("resolveAdaptiveAudioBitrateKbps", () => {
     })).toBe(192);
   });
 
+  it("keeps a healthy 256 kbps stereo link at the requested quality", () => {
+    expect(resolveAdaptiveAudioBitrateKbps({
+      requestedKbps: 256,
+      currentKbps: 256,
+      availableOutgoingBitrateKbps: 1_200,
+      packetLossRate: 0,
+      jitterMs: 4,
+      roundTripTimeMs: 45
+    })).toBe(256);
+  });
+
   it("backs off when low capacity is accompanied by network degradation", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       requestedKbps: 192,

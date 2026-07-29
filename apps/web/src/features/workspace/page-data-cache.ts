@@ -26,6 +26,10 @@ export type LocalStoragePageData = {
   state: LocalAudioStorageState;
   cachedTrackCount: number;
   cacheBytes: number;
+  savedTrackCount?: number;
+  savedBytes?: number;
+  otherFileCount?: number;
+  otherBytes?: number;
 };
 
 const roomsByUser = new Map<string, RoomSnapshot[]>();

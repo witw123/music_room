@@ -159,6 +159,11 @@ type DirectoryHandleWithValues = FileSystemDirectoryHandle & {
   values?: () => AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>;
 };
 
+export type LocalRepositoryFileEntry = {
+  relativePath: string;
+  sizeBytes: number;
+};
+
 export class LocalRepository {
   private constructor(
     public readonly root: FileSystemDirectoryHandle,
@@ -199,6 +204,10 @@ export class LocalRepository {
   async touch() {
     this.manifest.updatedAt = new Date().toISOString();
     await writeJsonFile(this.dataDirectory, repositoryManifestFileName, this.manifest);
+  }
+
+  async listFiles() {
+    return listFilesFromDirectory(this.dataDirectory, localRepositoryDirectoryName);
   }
 
   async writeManagedSource(input: {
@@ -1027,6 +1036,34 @@ async function listJsonFilesFromDirectory<T>(directory: FileSystemDirectoryHandl
     }
   }
   return records;
+}
+
+async function listFilesFromDirectory(
+  directory: FileSystemDirectoryHandle,
+  relativeDirectory: string
+): Promise<LocalRepositoryFileEntry[]> {
+  const iterable = directory as DirectoryHandleWithValues;
+  if (!iterable.values) return [];
+
+  const files: LocalRepositoryFileEntry[] = [];
+  for await (const entry of iterable.values()) {
+    const relativePath = `${relativeDirectory}/${entry.name}`;
+    if (entry.kind === "file") {
+      try {
+        files.push({
+          relativePath,
+          sizeBytes: (await entry.getFile()).size
+        });
+      } catch {
+        // Ignore files that disappear while the directory is being inspected.
+      }
+      continue;
+    }
+    if (entry.kind === "directory") {
+      files.push(...await listFilesFromDirectory(entry, relativePath));
+    }
+  }
+  return files;
 }
 
 function splitSafePath(path: string) {

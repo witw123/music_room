@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { withAlpha } from "@/components/bottom-player/artwork-colors";
 import { resolveCanvasFrameDelayMs } from "@/features/playback/render-scheduler";
+
+const neutralPlayerColor = "rgb(161 161 170)";
 
 type PlayerAmbientAuraProps = {
   samples: number[];
@@ -122,9 +125,9 @@ export function PlayerAmbientAura({
       const blob1Y = height * 0.5 + Math.cos(phaseOffset * 1.1) * 5;
 
       const grad1 = context.createRadialGradient(blob1X, blob1Y, 0, blob1X, blob1Y, blob1Radius);
-      grad1.addColorStop(0, `rgba(56, 189, 248, ${0.4 + smoothedPeak * 0.3})`); // Cyan/Blue
-      grad1.addColorStop(0.5, `rgba(59, 130, 246, ${0.15 + smoothedPeak * 0.15})`);
-      grad1.addColorStop(1, "rgba(59, 130, 246, 0)");
+      grad1.addColorStop(0, withAlpha(neutralPlayerColor, 0.4 + smoothedPeak * 0.3));
+      grad1.addColorStop(0.5, withAlpha(neutralPlayerColor, 0.15 + smoothedPeak * 0.15));
+      grad1.addColorStop(1, withAlpha(neutralPlayerColor, 0));
       
       context.fillStyle = grad1;
       context.fillRect(0, 0, width, height);
@@ -137,9 +140,9 @@ export function PlayerAmbientAura({
       const blob2Y = height * 0.5 + Math.sin(phaseOffset * 0.9) * 10;
 
       const grad2 = context.createRadialGradient(blob2X, blob2Y, 0, blob2X, blob2Y, blob2Radius);
-      grad2.addColorStop(0, `rgba(168, 85, 247, ${0.3 + smoothedAverage * 0.3})`); // Purple
-      grad2.addColorStop(0.5, `rgba(139, 92, 246, ${0.1 + smoothedAverage * 0.15})`);
-      grad2.addColorStop(1, "rgba(139, 92, 246, 0)");
+      grad2.addColorStop(0, withAlpha(neutralPlayerColor, 0.3 + smoothedAverage * 0.3));
+      grad2.addColorStop(0.5, withAlpha(neutralPlayerColor, 0.1 + smoothedAverage * 0.15));
+      grad2.addColorStop(1, withAlpha(neutralPlayerColor, 0));
 
       context.fillStyle = grad2;
       context.fillRect(0, 0, width, height);
@@ -151,8 +154,8 @@ export function PlayerAmbientAura({
       const blob3Y = height * 0.5;
 
       const grad3 = context.createRadialGradient(blob3X, blob3Y, 0, blob3X, blob3Y, blob3Radius);
-      grad3.addColorStop(0, `rgba(96, 165, 250, ${0.25 + smoothedPeak * 0.2})`); // Soft Blue
-      grad3.addColorStop(1, "rgba(96, 165, 250, 0)");
+      grad3.addColorStop(0, withAlpha(neutralPlayerColor, 0.25 + smoothedPeak * 0.2));
+      grad3.addColorStop(1, withAlpha(neutralPlayerColor, 0));
 
       context.fillStyle = grad3;
       context.fillRect(0, 0, width, height);

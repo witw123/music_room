@@ -4,8 +4,8 @@ export const sha256HexSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const assetKindSchema = z.enum(["original", "playback"]);
 
-export const playbackProfileId = "opus-music-v3" as const;
-export const playbackEncoderVersion = "3.3.0" as const;
+export const playbackProfileId = "opus-music-v4" as const;
+export const playbackEncoderVersion = "3.4.0" as const;
 
 const assetManifestBaseSchema = z.object({
   assetId: sha256HexSchema,
@@ -29,7 +29,7 @@ const playbackAssetManifestShapeSchema = assetManifestBaseSchema.extend({
   container: z.literal("audio/ogg"),
   sampleRate: z.literal(48_000),
   channels: z.union([z.literal(1), z.literal(2)]),
-  bitrate: z.union([z.literal(96_000), z.literal(192_000)]),
+  bitrate: z.union([z.literal(128_000), z.literal(256_000)]),
   durationMs: z.number().int().positive().max(3 * 60 * 60 * 1000),
   segmentDurationMs: z.literal(2_000),
   seekPrerollMs: z.literal(80),
@@ -40,7 +40,7 @@ const playbackAssetManifestShapeSchema = assetManifestBaseSchema.extend({
 });
 
 export const playbackAssetManifestSchema = playbackAssetManifestShapeSchema.superRefine((manifest, context) => {
-  const expectedBitrate = manifest.channels === 1 ? 96_000 : 192_000;
+  const expectedBitrate = manifest.channels === 1 ? 128_000 : 256_000;
   if (manifest.bitrate !== expectedBitrate) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

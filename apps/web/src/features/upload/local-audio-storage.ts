@@ -25,6 +25,7 @@ import {
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
+  deleteLocalAudioFileRecord,
   saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
   saveLocalAudioFileRecord
@@ -62,6 +63,19 @@ export type LocalAudioCacheStats = {
   fileCount: number;
   bytes: number;
 };
+
+export type LocalAudioStorageStats = {
+  cache: LocalAudioCacheStats;
+  saved: LocalAudioCacheStats;
+  other: LocalAudioCacheStats;
+};
+
+const localOtherFilePrefixes = [
+  ".music-room/library/artwork/",
+  ".music-room/library/lyrics/",
+  ".music-room/cache/artwork/",
+  ".music-room/cache/previews/"
+];
 
 export type SelectedLocalAudioFile = {
   file: File;
@@ -792,6 +806,114 @@ export async function clearLocalAudioCache() {
     deletedEntryCount: hashes.size - failedLocalFiles.size,
     failedEntryCount: failedLocalFiles.size
   };
+}
+
+export async function getLocalAudioStorageStats(): Promise<LocalAudioStorageStats> {
+  const [cache, savedFiles, repository] = await Promise.all([
+    getLocalAudioCacheStats(),
+    listLocalAudioFiles("saved"),
+    getConfiguredLocalRepository()
+  ]);
+  const tracks = repository ? await repository.listTracks() : [];
+  const tracksByHash = new Map(tracks.map((track) => [track.fileHash, track] as const));
+  const savedSizes = await Promise.all(savedFiles.map(async (file) => {
+    const track = tracksByHash.get(file.fileHash);
+    if (track?.source.kind === "managed") return track.sizeBytes;
+    const localFile = await getLocalAudioFile(file.fileHash).catch(() => null);
+    return localFile?.size ?? track?.sizeBytes ?? 0;
+  }));
+  const otherFiles = repository
+    ? (await repository.listFiles()).filter(({ relativePath }) => isLocalOtherFile(relativePath))
+    : [];
+
+  return {
+    cache,
+    saved: {
+      fileCount: savedFiles.length,
+      bytes: savedSizes.reduce((total, size) => total + size, 0)
+    },
+    other: {
+      fileCount: otherFiles.length,
+      bytes: otherFiles.reduce((total, file) => total + file.sizeBytes, 0)
+    }
+  };
+}
+
+export async function clearSavedLocalAudio() {
+  const savedFiles = await listLocalAudioFiles("saved");
+  const repository = await getConfiguredLocalRepository();
+  if (!repository) {
+    return {
+      deletedEntryCount: 0,
+      failedEntryCount: savedFiles.length,
+      skippedExternalCount: 0
+    };
+  }
+
+  let deletedEntryCount = 0;
+  let failedEntryCount = 0;
+  let skippedExternalCount = 0;
+  for (const file of savedFiles) {
+    const track = await repository.readTrack(file.fileHash);
+    const isExternalSource = file.source === "directory-scan" || !!file.sourceDirectoryId || track?.source.kind === "external";
+    if (isExternalSource) {
+      skippedExternalCount += 1;
+      continue;
+    }
+
+    try {
+      if (file.relativePath) {
+        await repository.removePath(file.relativePath);
+      }
+      await repository.deleteTrack(file.fileHash);
+      await deleteLocalAudioFileRecord(file.fileHash, "saved");
+      deletedEntryCount += 1;
+    } catch {
+      failedEntryCount += 1;
+    }
+  }
+
+  return { deletedEntryCount, failedEntryCount, skippedExternalCount };
+}
+
+export async function clearLocalOtherFiles() {
+  const repository = await getConfiguredLocalRepository();
+  if (!repository) {
+    return { deletedEntryCount: 0, failedEntryCount: 0 };
+  }
+
+  const files = (await repository.listFiles()).filter(({ relativePath }) => isLocalOtherFile(relativePath));
+  const tracks = await repository.listTracks();
+  let deletedEntryCount = 0;
+  let failedEntryCount = 0;
+  for (const file of files) {
+    try {
+      await repository.removePath(file.relativePath);
+      deletedEntryCount += 1;
+    } catch {
+      failedEntryCount += 1;
+    }
+  }
+
+  for (const track of tracks) {
+    const nextTrack = {
+      ...track,
+      artworkPath: track.artworkPath && isLocalOtherFile(track.artworkPath) ? null : track.artworkPath,
+      lyricsPath: track.lyricsPath && isLocalOtherFile(track.lyricsPath) ? null : track.lyricsPath
+    };
+    if (nextTrack.artworkPath !== track.artworkPath || nextTrack.lyricsPath !== track.lyricsPath) {
+      await repository.writeTrack(nextTrack, { updateCatalog: false });
+    }
+  }
+  if (files.length > 0) {
+    await repository.touch();
+  }
+
+  return { deletedEntryCount, failedEntryCount };
+}
+
+function isLocalOtherFile(relativePath: string) {
+  return localOtherFilePrefixes.some((prefix) => relativePath.startsWith(prefix));
 }
 
 export function downloadAudioFile(file: Blob, fileName: string) {

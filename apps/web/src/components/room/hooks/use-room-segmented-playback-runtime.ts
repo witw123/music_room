@@ -10,7 +10,6 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import { maximumAudioBitrateKbps } from "@/features/p2p/audio-bitrate-policy";
 import {
   useSegmentedOpusPlayback,
   type PlaybackAudioPath,
@@ -974,7 +973,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
       const sourcePeerId = resolveCurrentSourcePeerId(runtime.roomSnapshot, roomPlayback);
       const bitrateKbps = runtime.currentTrack?.playbackAsset
-        ? maximumAudioBitrateKbps
+        ? runtime.currentTrack.playbackAsset.bitrate / 1000
         : null;
       const audio = audioRef.current;
 
@@ -1250,7 +1249,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             sourceBroadcastStream,
             activeMediaSourcePeerId,
             activeRuntime.currentTrack?.playbackAsset
-              ? maximumAudioBitrateKbps
+              ? activeRuntime.currentTrack.playbackAsset.bitrate / 1000
               : null
           );
 

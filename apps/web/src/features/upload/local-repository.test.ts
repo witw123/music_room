@@ -187,18 +187,18 @@ describe("LocalRepository", () => {
       assetId,
       kind: "playback" as const,
       sourceFileHash,
-      profileId: "opus-music-v3" as const,
+      profileId: "opus-music-v4" as const,
       codec: "opus" as const,
       container: "audio/ogg" as const,
       sampleRate: 48_000 as const,
       channels: 1 as const,
-      bitrate: 96_000 as const,
+      bitrate: 128_000 as const,
       durationMs: 2_000,
       segmentDurationMs: 2_000 as const,
       seekPrerollMs: 80 as const,
       unitCount: 1,
       merkleRoot: "d".repeat(64),
-      encoder: { name: "@audio/opus-encode" as const, version: "3.3.0" as const }
+      encoder: { name: "@audio/opus-encode" as const, version: "3.4.0" as const }
     };
     const descriptor = {
       assetId,

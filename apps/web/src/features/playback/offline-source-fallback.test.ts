@@ -31,8 +31,8 @@ vi.mock("@/lib/music-room-api", () => apiMocks);
 vi.mock("@/features/upload/local-audio-storage", () => storageMocks);
 vi.mock("@/features/upload/cache-library", () => cacheLibraryMocks);
 vi.mock("@/features/upload/audio-asset-builder", () => ({
-  playbackEncoderVersion: "3.3.0",
-  playbackProfileId: "opus-music-v3"
+  playbackEncoderVersion: "3.4.0",
+  playbackProfileId: "opus-music-v4"
 }));
 
 import type { PlaybackAssetManifest, RoomSnapshot, TrackMeta } from "@music-room/shared";
@@ -100,12 +100,12 @@ function buildManifest(): PlaybackAssetManifest {
     assetId: "a".repeat(64),
     kind: "playback",
     sourceFileHash: "b".repeat(64),
-    profileId: "opus-music-v3",
+    profileId: "opus-music-v4",
     codec: "opus",
     container: "audio/ogg",
     sampleRate: 48_000,
     channels: 2,
-    bitrate: 192_000,
+    bitrate: 256_000,
     durationMs: 2_000,
     segmentDurationMs: 2_000,
     seekPrerollMs: 80,
@@ -113,7 +113,7 @@ function buildManifest(): PlaybackAssetManifest {
     merkleRoot: "c".repeat(64),
     encoder: {
       name: "@audio/opus-encode",
-      version: "3.3.0"
+      version: "3.4.0"
     }
   };
 }

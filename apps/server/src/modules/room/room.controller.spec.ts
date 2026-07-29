@@ -65,18 +65,18 @@ async function buildTrackRegistration() {
   const playbackManifest = {
     kind: "playback" as const,
     sourceFileHash: fileHash,
-    profileId: "opus-music-v3" as const,
+    profileId: "opus-music-v4" as const,
     codec: "opus" as const,
     container: "audio/ogg" as const,
     sampleRate: 48_000 as const,
     channels: 2 as const,
-    bitrate: 192_000 as const,
+    bitrate: 256_000 as const,
     durationMs: 2_000,
     segmentDurationMs: 2_000 as const,
     seekPrerollMs: 80 as const,
     unitCount: 1,
     merkleRoot: "3".repeat(64),
-    encoder: { name: "@audio/opus-encode" as const, version: "3.3.0" as const }
+    encoder: { name: "@audio/opus-encode" as const, version: "3.4.0" as const }
   };
   return {
     title: "Song",

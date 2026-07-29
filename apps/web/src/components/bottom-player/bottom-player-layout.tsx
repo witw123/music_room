@@ -9,7 +9,7 @@ import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
-import { getArtworkSourceUrl } from "./artwork-colors";
+import { getArtworkSourceUrl, withAlpha } from "./artwork-colors";
 import type { PlayerStyle } from "@/features/settings/settings-store";
 
 type LayoutProps = {
@@ -61,8 +61,8 @@ type LayoutProps = {
 export function VinylBadge({
   isPlaying,
   compact = false,
-  accentColor = "rgb(0 112 243)",
-  accentSoft = "rgba(0, 112, 243, 0.16)",
+  accentColor = "rgb(161 161 170)",
+  accentSoft = "rgba(161, 161, 170, 0.16)",
   artworkUrl = null,
   playerStyle = "vinyl"
 }: {
@@ -87,7 +87,12 @@ export function VinylBadge({
         style={{ animationPlayState: isPlaying ? "running" : "paused" }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
-        <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: `conic-gradient(from 0deg at 50% 50%, ${withAlpha(accentColor, 0.1)} 0deg, transparent 90deg, ${withAlpha(accentColor, 0.1)} 180deg, transparent 270deg, ${withAlpha(accentColor, 0.1)} 360deg)`
+          }}
+        />
         {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={index}
@@ -657,14 +662,8 @@ export function DesktopBottomPlayerLayout({
         ) : null}
       </div>
 
-      <div className="flex items-center justify-center gap-3">
-        {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
-        <PlaybackModeButton
-          mode={playbackMode}
-          onCycle={onCyclePlaybackMode}
-          disabled={!canControlPlayback}
-          accentColor={artworkAccent}
-        />
+      <div className="relative flex items-center justify-center">
+        <div className="flex shrink-0 items-center justify-center gap-3">
         <Button
           data-testid="player-prev-button"
           variant="ghost"
@@ -716,6 +715,17 @@ export function DesktopBottomPlayerLayout({
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
           </svg>
         </Button>
+        </div>
+
+        <div className="absolute right-full mr-3 flex shrink-0 items-center gap-3">
+          {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
+          <PlaybackModeButton
+            mode={playbackMode}
+            onCycle={onCyclePlaybackMode}
+            disabled={!canControlPlayback}
+            accentColor={artworkAccent}
+          />
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-2.5">

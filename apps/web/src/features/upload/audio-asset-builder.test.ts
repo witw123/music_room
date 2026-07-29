@@ -29,8 +29,8 @@ describe("audio asset preparation", () => {
   });
 
   it("publishes the server-compatible playback profile", () => {
-    expect(playbackProfileId).toBe("opus-music-v3");
-    expect(playbackEncoderVersion).toBe("3.3.0");
+    expect(playbackProfileId).toBe("opus-music-v4");
+    expect(playbackEncoderVersion).toBe("3.4.0");
   });
 
   it("keeps streaming resampling in the encoder worker and batches draft writes", () => {

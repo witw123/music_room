@@ -108,11 +108,11 @@ describe("BottomPlayer source", () => {
     expect(miniPlayerSource).toContain('data-testid="mini-player-cover"');
     expect(miniPlayerSource).not.toContain("<MiniPlayButton");
     expect(miniPlayerSource).toContain("useArtworkPalette");
-    expect(miniPlayerSource).toContain("backgroundColor: miniPlayerColors.surface");
-    expect(miniPlayerSource).toContain("borderColor: miniPlayerColors.border");
-    expect(miniPlayerSource).toContain("accentColor={miniPlayerColors.accent}");
-    expect(miniPlayerSource).toContain('background: "rgb(0 112 243)"');
-    expect(miniPlayerSource).toContain("const coverBackdrop = artworkSource ? palette.accent : miniPlayerColors.background");
+    expect(miniPlayerSource).toContain("backgroundColor: palette.surface");
+    expect(miniPlayerSource).toContain("borderColor: palette.border");
+    expect(miniPlayerSource).toContain("accentColor={palette.accent}");
+    expect(miniPlayerSource).toContain("const coverBackdrop = artworkSource ? palette.accent : palette.background");
+    expect(miniPlayerSource).not.toContain("miniPlayerColors");
     expect(miniPlayerSource).toContain("backgroundColor: coverBackdrop");
     expect(miniPlayerSource).toContain("left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] -translate-x-1/2");
     expect(miniPlayerSource).toContain("setPosition(null)");

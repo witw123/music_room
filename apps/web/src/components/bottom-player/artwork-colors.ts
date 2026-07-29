@@ -36,12 +36,12 @@ export function withAlpha(color: string, alpha: number) {
 
 const baseColor: Rgb = { r: 5, g: 8, b: 13 };
 const fallbackPalette: ArtworkPalette = {
-  background: "rgb(5 8 13)",
-  surface: "rgba(11, 18, 29, 0.94)",
-  border: "rgba(0, 112, 243, 0.24)",
-  accent: "rgb(0 148 255)",
-  accentSoft: "rgba(0, 148, 255, 0.16)",
-  accentGlow: "rgba(0, 148, 255, 0.55)"
+  background: "var(--background)",
+  surface: "var(--background-secondary)",
+  border: "var(--surface-border)",
+  accent: "rgb(161 161 170)",
+  accentSoft: "rgba(161, 161, 170, 0.16)",
+  accentGlow: "rgba(161, 161, 170, 0.28)"
 };
 
 export function useArtworkPalette(artworkUrl: string | null | undefined) {

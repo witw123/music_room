@@ -252,7 +252,7 @@ export function SettingsPage() {
                 ))}
               </select>
             </SettingRow>
-            <SettingRow label="播放器自动取色" description="根据专辑封面提取播放器颜色；关闭后统一使用项目蓝色主题。">
+            <SettingRow label="播放器自动取色" description="根据专辑封面提取播放器颜色；关闭后统一使用中性默认控件颜色。">
               <Toggle
                 checked={!settings.playback.disableArtworkColor}
                 label="播放器自动取色"

@@ -6,7 +6,7 @@ type EncodeRequest = {
   id: number;
   sampleRate: number;
   channels: Float32Array[];
-  bitrateKbps: 96 | 192;
+  bitrateKbps: 128 | 256;
 };
 
 type EncodeResponse =

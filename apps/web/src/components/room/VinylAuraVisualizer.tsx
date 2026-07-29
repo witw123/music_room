@@ -14,7 +14,7 @@ type VinylAuraVisualizerProps = {
 
 export function VinylAuraVisualizer({
   isPlaying,
-  accentColor = "rgb(0 112 243)",
+  accentColor = "rgb(161 161 170)",
   reducedMotion = false,
   maxDevicePixelRatio = 1.5
 }: VinylAuraVisualizerProps) {

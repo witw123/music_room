@@ -52,13 +52,6 @@ type FloatingPosition = {
 };
 
 const floatingInset = 12;
-const miniPlayerColors = {
-  background: "rgb(0 112 243)",
-  surface: "rgb(24 25 28 / 0.98)",
-  border: "rgb(255 255 255 / 0.16)",
-  accent: "rgb(255 255 255)",
-  accentSoft: "rgb(255 122 0 / 0.32)"
-};
 
 export function MiniPlayerOverlay({
   isOpen,
@@ -168,7 +161,7 @@ export function MiniPlayerOverlay({
 
   const panelPositionStyle = position ? { left: position.left, top: position.top } : undefined;
   const artworkSource = artworkUrl ? getArtworkSourceUrl(artworkUrl) : null;
-  const coverBackdrop = artworkSource ? palette.accent : miniPlayerColors.background;
+  const coverBackdrop = artworkSource ? palette.accent : palette.background;
 
   const player = (
     <section
@@ -181,21 +174,21 @@ export function MiniPlayerOverlay({
       role="dialog"
       style={{
         ...panelPositionStyle,
-        backgroundColor: miniPlayerColors.surface,
-        borderColor: miniPlayerColors.border
+        backgroundColor: palette.surface,
+        borderColor: palette.border
       }}
     >
       {!pipWindow ? (
         <div
           data-player-header="true"
           className="flex h-14 cursor-grab touch-none items-center gap-3 border-b border-white/10 px-4 active:cursor-grabbing sm:h-[76px] sm:px-6"
-          style={{ borderColor: miniPlayerColors.border }}
+          style={{ borderColor: palette.border }}
           onPointerCancel={stopDragging}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={stopDragging}
         >
-          <span style={{ color: miniPlayerColors.accent }}>
+          <span style={{ color: palette.accent }}>
             <DragHandleIcon />
           </span>
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-white sm:text-[21px]">迷你播放器</span>
@@ -203,7 +196,7 @@ export function MiniPlayerOverlay({
             aria-label="打开沉浸式播放"
             className="light-overlay-control inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             onClick={onOpenImmersive}
-            style={{ color: miniPlayerColors.accent }}
+            style={{ color: palette.accent }}
             title="打开沉浸式播放"
             type="button"
           >
@@ -213,7 +206,7 @@ export function MiniPlayerOverlay({
             aria-label="关闭迷你播放器"
             className="light-overlay-control inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             onClick={onClose}
-            style={{ color: miniPlayerColors.accent }}
+            style={{ color: palette.accent }}
             title="关闭迷你播放器"
             type="button"
           >
@@ -241,11 +234,11 @@ export function MiniPlayerOverlay({
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 bg-black/45 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
             style={{
-              background: `linear-gradient(180deg, rgba(0,0,0,0.18), ${miniPlayerColors.accentSoft} 48%, rgba(0,0,0,0.8) 100%)`
+              background: `linear-gradient(180deg, rgba(0,0,0,0.18), ${palette.accentSoft} 48%, rgba(0,0,0,0.8) 100%)`
             }}
           />
           <div className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-8 opacity-100 transition-opacity duration-200 sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100 sm:gap-12">
-            <div className="flex items-center justify-center gap-3 text-white sm:gap-6" style={{ color: miniPlayerColors.accent }}>
+            <div className="flex items-center justify-center gap-3 text-white sm:gap-6" style={{ color: palette.accent }}>
               <MiniTransportButton ariaLabel="上一首" disabled={!canControlPlayback || !playbackTrackId} onClick={onPrev}>
                 <PreviousIcon />
               </MiniTransportButton>
@@ -264,7 +257,7 @@ export function MiniPlayerOverlay({
                 data-testid="mini-player-seek-slider"
                 value={positionMs}
                 max={durationMs || 1}
-                accentColor={miniPlayerColors.accent}
+                accentColor={palette.accent}
                 className="[&_.bg-white\/10]:bg-white/35"
                 disabled={!durationMs || !canSeekPlayback}
                 onChange={(event) => setSeekDraft(Number(event.target.value))}

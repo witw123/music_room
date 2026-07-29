@@ -262,6 +262,7 @@ export async function getReusableAudioAssets(input: {
     playbackAsset.kind !== "playback" ||
     originalAsset.fileHash !== input.fileHash ||
     playbackAsset.sourceFileHash !== input.fileHash ||
+    playbackAsset.profileId !== playbackProfileId ||
     playbackAsset.encoder.version !== playbackEncoderVersion ||
     (input.sizeBytes !== undefined && input.sizeBytes > 0 && originalAsset.sizeBytes !== input.sizeBytes)
   ) {
@@ -452,7 +453,7 @@ async function prepareStreamingPlaybackAsset(input: {
         payload = await encoders[encoderIndex]!.encode({
           sampleRate: inputUnit.sampleRate,
           channels: inputUnit.channels,
-          bitrateKbps: channelCount === 1 ? 96 : 192
+          bitrateKbps: channelCount === 1 ? 128 : 256
         });
       } catch (error) {
         encodingError ??= error;
@@ -604,7 +605,7 @@ async function prepareStreamingPlaybackAsset(input: {
       container: "audio/ogg" as const,
       sampleRate: opusSampleRate as 48000,
       channels: channelCount,
-      bitrate: channelCount === 1 ? 96_000 as const : 192_000 as const,
+      bitrate: channelCount === 1 ? 128_000 as const : 256_000 as const,
       durationMs,
       segmentDurationMs: segmentDurationMs as 2000,
       seekPrerollMs: seekPrerollMs as 80,
@@ -1069,7 +1070,7 @@ async function encodePlaybackAsset(
 
   const channels = audioBuffer.numberOfChannels as 1 | 2;
   const loudness = analyzeAudioBuffer(audioBuffer);
-  const bitrate = channels === 1 ? 96_000 as const : 192_000 as const;
+  const bitrate = channels === 1 ? 128_000 as const : 256_000 as const;
   const durationMs = Math.max(1, Math.round(audioBuffer.duration * 1000));
   const sourceSampleRate = audioBuffer.sampleRate;
   const unitCount = Math.ceil(durationMs / segmentDurationMs);
@@ -1094,7 +1095,7 @@ async function encodePlaybackAsset(
         const payload = await encoder.encode({
           sampleRate: sourceSampleRate,
           channels: encodedSegment.channels,
-          bitrateKbps: channels === 1 ? 96 : 192
+          bitrateKbps: channels === 1 ? 128 : 256
         });
         const contentHash = await hashAssetUnit(unitIndex, payload);
         leafHashes[unitIndex] = contentHash;

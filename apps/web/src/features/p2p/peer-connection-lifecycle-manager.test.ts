@@ -261,7 +261,7 @@ describe("PeerConnectionLifecycleManager", () => {
       getAudioTracks: () => [track]
     } as unknown as MediaStream;
 
-    manager.setLocalAudioStream(stream, "peer_a", 192);
+    manager.setLocalAudioStream(stream, "peer_a", 256);
     await manager.syncPeers(["peer_b", "peer_c", "peer_d"]);
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(6);
