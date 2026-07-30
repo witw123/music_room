@@ -631,7 +631,7 @@ export function DesktopBottomPlayerLayout({
   const hasLyricsControl = Boolean(onToggleLyrics);
 
   return (
-    <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`} data-player-layout="desktop">
+    <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`} data-player-layout="desktop">
       <div className="flex min-w-0 items-center gap-3">
         <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
         <VinylBadge
