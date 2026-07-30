@@ -19,6 +19,7 @@ import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipbo
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
+import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
 import type { Route } from "next";
 import type { RoomPlaybackReadinessInputPayload } from "@music-room/shared";
 import {
@@ -150,12 +151,13 @@ export function MusicRoomApp({
     setStatusMessage("已返回房间。");
   }, [backgroundOnly, initialRoomId, setStatusMessage]);
 
-  const canControlPlayback =
-    !!activeSession &&
-    !!roomSnapshot &&
-    roomSnapshot.room.members.some((member) => member.id === activeSession.userId);
-  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
-  const canReorderQueue = canControlPlayback;
+  const currentRoomPermissions = getCurrentRoomMemberPermissions(
+    roomSnapshot,
+    activeSession?.userId
+  );
+  const canControlPlayback = currentRoomPermissions?.player === true;
+  const canDeleteRoom = isRoomHost(roomSnapshot, activeSession?.userId);
+  const canReorderQueue = currentRoomPermissions?.queue === true;
   const pageDerived = useRoomPageDerived({
     activeSessionId: activeSession?.userId,
     peerId,

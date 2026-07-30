@@ -76,6 +76,7 @@ type LocalStorageTabPanelProps = {
   tracks: TrackMeta[];
   playlists: Playlist[];
   activeSession: AuthSession | null;
+  canManageLibrary: boolean;
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
   onRefreshLocalStorage: () => Promise<void>;
@@ -93,6 +94,7 @@ function LocalStorageTabPanelBase({
   tracks,
   playlists,
   activeSession,
+  canManageLibrary,
   localStorageSummary,
   onImportCachedTrack,
   onSavePlaylistFromQueue,
@@ -107,7 +109,7 @@ function LocalStorageTabPanelBase({
   const [playlistTab, setPlaylistTab] = useState<"local" | "network" | "favorites">("local");
 
   const handleImportCachedTrack = async (track: CachedLibraryTrack) => {
-    if (pendingCachedImport) return;
+    if (pendingCachedImport || !canManageLibrary) return;
     setPendingCachedImport(track.fileHash);
     try {
       await onImportCachedTrack(track);
@@ -148,7 +150,8 @@ function LocalStorageTabPanelBase({
         </button>
       </div>
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
-        <LocalPlaylistPanel
+      <LocalPlaylistPanel
+          canManageLibrary={canManageLibrary}
           localPlaylists={localStorageSummary.localPlaylists}
           localTracks={localStorageSummary.localPlaylistTracks}
           roomTracks={tracks}
@@ -160,11 +163,13 @@ function LocalStorageTabPanelBase({
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
         <NetworkPlaylistSearch
           roomTracks={tracks}
+          canManageLibrary={canManageLibrary}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
         />
         <PlaylistPanel
           activeSession={activeSession}
+          canManageLibrary={canManageLibrary}
           canCreatePlaylist={!!activeSession}
           onDeletePlaylist={onDeletePlaylist}
           onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
@@ -180,6 +185,7 @@ function LocalStorageTabPanelBase({
       {playlistTab === "favorites" ? <section className="flex flex-col gap-3" data-testid="favorite-albums-section">
         <FavoriteAlbumsPanel
           activeSession={activeSession}
+          canManageLibrary={canManageLibrary}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
           roomTracks={tracks}
@@ -193,10 +199,12 @@ type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
 function NetworkPlaylistSearch({
   roomTracks,
+  canManageLibrary,
   onImportNeteaseTrack,
   onImportQqMusicTrack
 }: {
   roomTracks: TrackMeta[];
+  canManageLibrary: boolean;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
 }) {
@@ -344,7 +352,7 @@ function NetworkPlaylistSearch({
   };
 
   const importTrack = async (candidate: ProviderTrack) => {
-    if (pending) return;
+    if (pending || !canManageLibrary) return;
     setPending(`import:${candidate.providerTrackId}`);
     setErrorMessage(null);
     setMessage(null);
@@ -461,7 +469,7 @@ function NetworkPlaylistSearch({
                     </div>
                     <button
                       type="button"
-                      disabled={pending !== null || isInLibrary}
+                      disabled={!canManageLibrary || pending !== null || isInLibrary}
                       onClick={() => void importTrack(track)}
                       className="shrink-0 border border-accent/35 bg-accent/10 px-2.5 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
                     >

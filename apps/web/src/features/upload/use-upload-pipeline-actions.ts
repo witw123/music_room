@@ -44,6 +44,7 @@ import {
 } from "./local-audio-storage";
 import { resolveLocalArtworkUrl } from "./audio-metadata";
 import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
+import { hasRoomPermission } from "@/features/room/room-permissions";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -154,6 +155,10 @@ export function useUploadPipelineActions({
       metadataByFileHash?: ReadonlyMap<string, CachedLibraryTrack>
     ) => {
       if (!files || !activeSession || !roomSnapshot) {
+        return;
+      }
+      if (!hasRoomPermission(roomSnapshot, activeSession.userId, "library")) {
+        setStatusMessage("你没有修改房间曲库的权限。请联系房主。");
         return;
       }
 
@@ -373,6 +378,9 @@ async function importProviderTrack(input: {
   } = input;
   if (!activeSession || !roomSnapshot) {
     throw new Error(`请先进入一个房间后再导入${sourceTypeLabel(sourceType)}歌曲。`);
+  }
+  if (!hasRoomPermission(roomSnapshot, activeSession.userId, "library")) {
+    throw new Error("你没有修改房间曲库的权限。请联系房主。");
   }
 
   const importKey = `${activeSession.userId}:${sourceType}:${candidate.providerTrackId}`;

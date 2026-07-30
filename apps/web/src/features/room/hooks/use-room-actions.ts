@@ -16,6 +16,7 @@ import { toUserFacingError } from "@/lib/music-room-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
+import { hasRoomPermission } from "@/features/room/room-permissions";
 
 type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
@@ -429,7 +430,7 @@ export function useRoomActions({
 
   const addToQueue = useCallback(
     async (trackId: string): Promise<QueueItem | null> => {
-      if (!activeSession || !roomSnapshot) {
+      if (!activeSession || !roomSnapshot || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue")) {
         return null;
       }
 
@@ -463,7 +464,7 @@ export function useRoomActions({
 
   const deleteTrack = useCallback(
     async (trackId: string) => {
-      if (!activeSession || !roomSnapshot) {
+      if (!activeSession || !roomSnapshot || !hasRoomPermission(roomSnapshot, activeSession.userId, "library")) {
         return;
       }
 
@@ -497,7 +498,7 @@ export function useRoomActions({
 
   const playTrack = useCallback(
     async (trackId?: string) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
         return;
       }
 
@@ -524,7 +525,7 @@ export function useRoomActions({
 
   const playQueueItem = useCallback(
     async (queueItemId: string, trackId?: string) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
         return;
       }
 
@@ -551,7 +552,7 @@ export function useRoomActions({
 
   const pauseTrack = useCallback(
     async (positionMs = getCurrentPlaybackPositionMs()) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
         return;
       }
 
@@ -583,7 +584,7 @@ export function useRoomActions({
   );
 
   const prevTrack = useCallback(async () => {
-    if (!roomSnapshot || !activeSession || !roomSnapshot.room.playback.currentTrackId) {
+    if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player") || !roomSnapshot.room.playback.currentTrackId) {
       return;
     }
 
@@ -601,7 +602,7 @@ export function useRoomActions({
   }, [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]);
 
   const nextTrack = useCallback(async () => {
-    if (!roomSnapshot || !activeSession) {
+    if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
       return;
     }
 
@@ -692,7 +693,7 @@ export function useRoomActions({
 
   const loadPlaylistIntoRoom = useCallback(
     async (playlistId: string) => {
-      if (!activeSession || !roomSnapshot) {
+      if (!activeSession || !roomSnapshot || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue")) {
         return;
       }
 
@@ -711,7 +712,7 @@ export function useRoomActions({
 
   const removeQueueItem = useCallback(
     async (queueItemId: string) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue")) {
         return;
       }
 
@@ -744,7 +745,7 @@ export function useRoomActions({
 
   const reorderQueue = useCallback(
     async (queueItemIds: string[]) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "queue")) {
         return;
       }
 
@@ -763,7 +764,7 @@ export function useRoomActions({
 
   const setNextQueueItem = useCallback(
     async (queueItemId: string) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
         return;
       }
 
@@ -794,7 +795,7 @@ export function useRoomActions({
 
   const setPlaybackMode = useCallback(
     async (playbackMode: PlaybackMode) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
         return;
       }
 
@@ -821,7 +822,7 @@ export function useRoomActions({
 
   const seekTrack = useCallback(
     async (positionMs: number) => {
-      if (!roomSnapshot || !activeSession) {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "player")) {
         return null;
       }
 

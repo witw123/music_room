@@ -25,6 +25,13 @@ describe("TrackListSection helpers", () => {
         activeSessionUserId: "member_2",
       })
     ).toBe(false);
+    expect(
+      canDeleteLibraryTrack({
+        track,
+        activeSessionUserId: "owner_1",
+        hasLibraryPermission: false
+      })
+    ).toBe(false);
   });
 
   it("filters tracks by the active uploader", () => {

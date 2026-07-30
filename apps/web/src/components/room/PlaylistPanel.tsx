@@ -30,6 +30,7 @@ type PlaylistPanelProps = {
   playlists: Playlist[];
   tracks: TrackMeta[];
   activeSession: AuthSession | null;
+  canManageLibrary: boolean;
   canCreatePlaylist: boolean;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
@@ -44,6 +45,7 @@ export function PlaylistPanel({
   playlists,
   tracks,
   activeSession,
+  canManageLibrary,
   canCreatePlaylist,
   onSavePlaylistFromQueue,
   onImportNeteaseTrack,
@@ -252,6 +254,7 @@ export function PlaylistPanel({
         }}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
+        canManageLibrary={canManageLibrary}
         playlist={selectedPlaylist}
         remoteError={remoteError}
         remoteLoading={remoteLoading}
@@ -366,6 +369,7 @@ function PlaylistDetail({
   onBack,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  canManageLibrary,
   tracks,
   remoteLoading,
   remoteError
@@ -374,6 +378,7 @@ function PlaylistDetail({
   onBack: () => void;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  canManageLibrary: boolean;
   tracks: Array<PlaylistTrackInfo | null>;
   remoteLoading: boolean;
   remoteError: string | null;
@@ -403,6 +408,7 @@ function PlaylistDetail({
 
   const importTrack = async (track: PlaylistTrackInfo) => {
     if (
+      !canManageLibrary ||
       !track.providerTrack ||
       track.isInRoom ||
       pendingTrackIdsRef.current.has(track.id)
@@ -429,7 +435,7 @@ function PlaylistDetail({
   };
 
   const importSelectedTracks = async () => {
-    if (isImportBusy || selectedTracks.length === 0) return;
+    if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
     setIsImportingSelected(true);
     let nextIndex = 0;
     const worker = async () => {
@@ -476,7 +482,7 @@ function PlaylistDetail({
                 <input
                   type="checkbox"
                   checked={allSelectableSelected}
-                  disabled={selectableTracks.length === 0 || isImportBusy}
+                  disabled={!canManageLibrary || selectableTracks.length === 0 || isImportBusy}
                   onChange={toggleSelectAll}
                   className="h-4 w-4 accent-accent"
                 />
@@ -486,7 +492,7 @@ function PlaylistDetail({
                 <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
                 <button
                   type="button"
-                  disabled={selectedTracks.length === 0 || isImportBusy}
+                   disabled={!canManageLibrary || selectedTracks.length === 0 || isImportBusy}
                   onClick={() => void importSelectedTracks()}
                   className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -504,7 +510,7 @@ function PlaylistDetail({
                       <input
                         type="checkbox"
                         checked={!!track?.providerTrack && selectedTrackIds.includes(track.id)}
-                        disabled={!track?.providerTrack || track.isInRoom || isImportBusy}
+                        disabled={!canManageLibrary || !track?.providerTrack || track.isInRoom || isImportBusy}
                         onChange={() => toggleTrackSelection(trackId)}
                         className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
                         aria-label={`选择《${track?.title ?? playlist.trackIds[index]}》`}
@@ -520,7 +526,7 @@ function PlaylistDetail({
                     </div>
                     <button
                       type="button"
-                      disabled={!track?.providerTrack || track.isInRoom || isImportBusy}
+                      disabled={!canManageLibrary || !track?.providerTrack || track.isInRoom || isImportBusy}
                       onClick={() => {
                         if (track) void importTrack(track);
                       }}

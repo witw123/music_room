@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, type CSSProperties, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
-import { defaultRoomMemberPermissions } from "@music-room/shared";
+import { getNewMemberPermissions } from "@music-room/shared";
 import type {
   RoomMediaConnectionState,
   RoomMember,
@@ -49,6 +49,16 @@ type RoomStageProps = {
   socket: RoomSocket | null;
 };
 
+function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
+  return {
+    visibility: roomSnapshot.room.visibility,
+    name: roomSnapshot.room.name ?? "",
+    description: roomSnapshot.room.description ?? "",
+    password: "",
+    newMemberPermissions: getNewMemberPermissions(roomSnapshot.room)
+  };
+}
+
 
 
 export function getSourceModeLabel(
@@ -95,16 +105,16 @@ function RoomStageBase({
   const [showEditRoom, setShowEditRoom] = useState(false);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
   const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
-  const [editRoomForm, setEditRoomForm] = useState<UpdateRoomRequest>({
-    visibility: roomSnapshot.room.visibility,
-    name: roomSnapshot.room.name ?? "",
-    description: roomSnapshot.room.description ?? "",
-    password: "",
-    newMemberPermissions: {
-      ...defaultRoomMemberPermissions,
-      ...roomSnapshot.room.newMemberPermissions
+  const [editRoomForm, setEditRoomForm] = useState<UpdateRoomRequest>(() =>
+    buildRoomEditForm(roomSnapshot)
+  );
+
+  useEffect(() => {
+    if (showEditRoom) {
+      return;
     }
-  });
+    setEditRoomForm(buildRoomEditForm(roomSnapshot));
+  }, [roomSnapshot, showEditRoom]);
 
   useEffect(() => {
     const syncPreferences = () => setLyricPreferences(getAppSettings().playback);
@@ -171,16 +181,7 @@ function RoomStageBase({
   };
 
   const openEditRoom = () => {
-    setEditRoomForm({
-      visibility: roomSnapshot.room.visibility,
-      name: roomSnapshot.room.name ?? "",
-      description: roomSnapshot.room.description ?? "",
-      password: "",
-      newMemberPermissions: {
-        ...defaultRoomMemberPermissions,
-        ...roomSnapshot.room.newMemberPermissions
-      }
-    });
+    setEditRoomForm(buildRoomEditForm(roomSnapshot));
     setShowSettings(false);
     setShowEditRoom(true);
   };
@@ -695,11 +696,11 @@ function RoomEditDialog({
               onChange={(permission, checked) => onChange((current) => ({
                 ...current,
                 newMemberPermissions: {
-                  ...(current.newMemberPermissions ?? defaultRoomMemberPermissions),
+                  ...getNewMemberPermissions(current),
                   [permission]: checked
                 }
               }))}
-              permissions={{ ...defaultRoomMemberPermissions, ...form.newMemberPermissions }}
+              permissions={getNewMemberPermissions({ newMemberPermissions: form.newMemberPermissions })}
               disabled={pending}
             />
           </div>

@@ -14,6 +14,7 @@ type LocalPlaylistPanelProps = {
   localTracks: LocalPlaylistTrackRecord[];
   roomTracks: TrackMeta[];
   localFolderName: string | null;
+  canManageLibrary: boolean;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 };
@@ -23,6 +24,7 @@ export function LocalPlaylistPanel({
   localTracks,
   roomTracks,
   localFolderName,
+  canManageLibrary,
   onImportCachedTrack,
   pendingCachedImport
 }: LocalPlaylistPanelProps) {
@@ -40,6 +42,7 @@ export function LocalPlaylistPanel({
     return (
       <LocalPlaylistDetail
         localFolderName={localFolderName}
+        canManageLibrary={canManageLibrary}
         onBack={() => setSelectedPlaylistId(null)}
         onImportCachedTrack={onImportCachedTrack}
         pendingCachedImport={pendingCachedImport}
@@ -115,6 +118,7 @@ function LocalPlaylistDetail({
   tracks,
   roomTracks,
   localFolderName,
+  canManageLibrary,
   onBack,
   onImportCachedTrack,
   pendingCachedImport
@@ -123,6 +127,7 @@ function LocalPlaylistDetail({
   tracks: LocalPlaylistTrackRecord[];
   roomTracks: TrackMeta[];
   localFolderName: string | null;
+  canManageLibrary: boolean;
   onBack: () => void;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
@@ -150,13 +155,13 @@ function LocalPlaylistDetail({
 
   const importTrack = async (track: LocalPlaylistTrackRecord) => {
     const cachedTrack = toCachedLibraryTrack(track);
-    if (!cachedTrack || !track.fileHash || roomFileHashes.has(track.fileHash)) return;
+    if (!canManageLibrary || !cachedTrack || !track.fileHash || roomFileHashes.has(track.fileHash)) return;
     await onImportCachedTrack(cachedTrack);
     setSelectedTrackIds((current) => current.filter((trackId) => trackId !== track.id));
   };
 
   const importSelectedTracks = async () => {
-    if (isImportBusy || selectedTracks.length === 0) return;
+    if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
     setIsImportingSelected(true);
     try {
       for (const track of selectedTracks) {
@@ -208,7 +213,7 @@ function LocalPlaylistDetail({
               <input
                 type="checkbox"
                 checked={allSelectableSelected}
-                disabled={selectableTracks.length === 0 || isImportBusy}
+                disabled={!canManageLibrary || selectableTracks.length === 0 || isImportBusy}
                 onChange={toggleSelectAll}
                 className="h-4 w-4 accent-accent"
               />
@@ -218,7 +223,7 @@ function LocalPlaylistDetail({
               <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
               <button
                 type="button"
-                disabled={selectedTracks.length === 0 || isImportBusy}
+                disabled={!canManageLibrary || selectedTracks.length === 0 || isImportBusy}
                 onClick={() => void importSelectedTracks()}
                 className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -238,7 +243,7 @@ function LocalPlaylistDetail({
                     <input
                       type="checkbox"
                       checked={canImport && selectedTrackIds.includes(track.id)}
-                      disabled={!canImport || isImportBusy}
+                      disabled={!canManageLibrary || !canImport || isImportBusy}
                       onChange={() => toggleTrackSelection(track.id)}
                       className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
                       aria-label={`选择《${track.title}》`}
@@ -253,7 +258,7 @@ function LocalPlaylistDetail({
                   </div>
                   <button
                     type="button"
-                    disabled={!canImport || isPending || isImportBusy}
+                    disabled={!canManageLibrary || !canImport || isPending || isImportBusy}
                     onClick={() => {
                       if (cachedTrack) void importTrack(track);
                     }}

@@ -11,7 +11,9 @@ type LibraryTabPanelProps = {
   localFolderName: string | null;
   localSavedFileHashes: string[];
   canControlPlayback: boolean;
+  canManageLibrary: boolean;
   canManageAllTracks?: boolean;
+  canAddToQueue: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
@@ -26,7 +28,9 @@ function LibraryTabPanelBase({
   localFolderName,
   localSavedFileHashes,
   canControlPlayback,
+  canManageLibrary,
   canManageAllTracks,
+  canAddToQueue,
   activeSession,
   onFilesSelected,
   onAddToQueue,
@@ -42,7 +46,9 @@ function LibraryTabPanelBase({
         localFolderName={localFolderName}
         localSavedFileHashes={localSavedFileHashes}
         canControlPlayback={canControlPlayback}
+        canManageLibrary={canManageLibrary}
         canManageAllTracks={canManageAllTracks}
+        canAddToQueue={canAddToQueue}
         activeSession={activeSession}
         onFilesSelected={onFilesSelected}
         onAddToQueue={onAddToQueue}

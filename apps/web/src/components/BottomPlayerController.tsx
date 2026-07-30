@@ -7,6 +7,7 @@ import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-v
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
+import { hasRoomPermission } from "@/features/room/room-permissions";
 
 type BottomPlayerControllerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -64,10 +65,11 @@ function BottomPlayerControllerBase({
   mobileVariant = "full"
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
-  const canControlPlayback =
-    !!activeSession &&
-    !!roomSnapshot &&
-    roomSnapshot.room.members.some((member) => member.id === activeSession.userId);
+  const canControlPlayback = hasRoomPermission(
+    roomSnapshot,
+    activeSession?.userId,
+    "player"
+  );
   const {
     progressTrack,
     progressMs,

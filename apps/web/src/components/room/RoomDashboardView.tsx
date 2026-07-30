@@ -23,6 +23,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
+import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
 
 type TabId = "library" | "local" | "members";
 
@@ -173,6 +174,13 @@ function RoomDashboardViewBase({
   const [activeTab, setActiveTab] = useState<TabId>("library");
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const currentSourcePeerId = resolveCurrentSourcePeerId(roomSnapshot, roomSnapshot.room.playback);
+  const currentRoomPermissions = getCurrentRoomMemberPermissions(
+    roomSnapshot,
+    activeSession?.userId
+  );
+  const canManageLibrary = currentRoomPermissions?.library === true;
+  const canAddToQueue = currentRoomPermissions?.queue === true;
+  const isHost = isRoomHost(roomSnapshot, activeSession?.userId);
 
   useEffect(() => {
     const updateMembershipNow = () => setMembershipNow(Date.now());
@@ -289,7 +297,9 @@ function RoomDashboardViewBase({
               localSavedFileHashes={localStorageSummary.localSavedFileHashes}
               onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}
-              canManageAllTracks={activeSession?.userId === roomSnapshot.room.hostId}
+              canManageLibrary={canManageLibrary}
+              canManageAllTracks={isHost}
+              canAddToQueue={canAddToQueue}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}
               onAddToQueue={onAddToQueue}
@@ -303,6 +313,7 @@ function RoomDashboardViewBase({
               tracks={roomSnapshot.tracks}
               playlists={playlists}
               activeSession={activeSession}
+              canManageLibrary={canManageLibrary}
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
               onRefreshLocalStorage={onRefreshLocalStorage}
@@ -330,7 +341,7 @@ function RoomDashboardViewBase({
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
               activeSessionId={activeSession?.userId ?? null}
-              isHost={activeSession?.userId === roomSnapshot.room.hostId}
+              isHost={isHost}
               onUpdateMemberPermissions={onUpdateMemberPermissions}
               onRemoveMember={onRemoveMember}
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}

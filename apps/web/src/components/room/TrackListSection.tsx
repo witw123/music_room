@@ -13,7 +13,9 @@ type TrackListSectionProps = {
   localFolderName: string | null;
   localSavedFileHashes: string[];
   canControlPlayback: boolean;
+  canManageLibrary: boolean;
   canManageAllTracks?: boolean;
+  canAddToQueue: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
@@ -44,7 +46,9 @@ function TrackListSectionBase({
   localFolderName,
   localSavedFileHashes,
   canControlPlayback,
+  canManageLibrary,
   canManageAllTracks,
+  canAddToQueue,
   activeSession,
   onFilesSelected,
   onAddToQueue,
@@ -115,7 +119,7 @@ function TrackListSectionBase({
           accept=".flac,.wav,.mp3,audio/flac,audio/wav,audio/x-wav,audio/mpeg,audio/mp3"
           multiple
           className="hidden"
-          disabled={pendingAction !== null}
+          disabled={!canManageLibrary || pendingAction !== null}
           onChange={(event) => void runAction("upload", () => onFilesSelected(event.target.files))}
         />
       </label>
@@ -163,7 +167,8 @@ function TrackListSectionBase({
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
                 activeSessionUserId: activeSession?.userId,
-                isHost: canManageAllTracks
+                isHost: canManageAllTracks,
+                hasLibraryPermission: canManageLibrary
               });
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
@@ -217,7 +222,7 @@ function TrackListSectionBase({
                         data-track-id={track.id}
                         variant="ghost"
                         className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:h-8 sm:w-8"
-                        disabled={pendingAction !== null}
+                        disabled={!canManageLibrary || pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
                         }
@@ -260,7 +265,7 @@ function TrackListSectionBase({
                       data-track-id={track.id}
                       variant="ghost"
                       className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:h-8 sm:w-8"
-                      disabled={pendingAction !== null}
+                      disabled={!canAddToQueue || pendingAction !== null}
                       onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       aria-label={`将《${track.title}》加入队列`}
                       title="加入队列"
@@ -337,9 +342,11 @@ export function canDeleteLibraryTrack(input: {
   track: Pick<TrackMeta, "ownerSessionId">;
   activeSessionUserId: string | null | undefined;
   isHost?: boolean;
+  hasLibraryPermission?: boolean;
 }) {
   return !!(
     input.activeSessionUserId &&
+    input.hasLibraryPermission !== false &&
     (input.isHost || input.track.ownerSessionId === input.activeSessionUserId)
   );
 }
