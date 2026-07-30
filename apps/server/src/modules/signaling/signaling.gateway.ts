@@ -702,9 +702,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     };
     readinessBySession.set(message.sessionId, canonicalBase);
 
-    // Only online members that explicitly enabled fully-cached playback join
-    // this barrier. Streaming members retain the normal source/receiver path
-    // and must never delay, pause, or silence the room.
+    // Only online members that explicitly enabled fully-cached playback decide
+    // when this barrier opens. The resulting hold/resume clock is broadcast
+    // room-wide so streaming members do not run their progress through silence.
     const cacheParticipants = activeMembers
       .map((member) => readinessBySession.get(member.id))
       .filter((entry): entry is RoomPlaybackReadinessPayload =>
@@ -713,11 +713,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
         entry.mediaEpoch === mediaEpoch &&
         entry.cacheEnabled
       );
-    // A single cache-enabled member has nobody to synchronize with. Keep its
-    // established local/streaming source active instead of waiting for its
-    // own Socket.IO round trip.
     const allReady = playback.status !== "playing" ||
-      cacheParticipants.length < 2 ||
       cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
@@ -1656,8 +1652,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
         entry.mediaEpoch === mediaEpoch &&
         entry.cacheEnabled
       );
-    const allReady = cacheParticipants.length < 2 ||
-      cacheParticipants.every((entry) => entry.state !== "waiting");
+    const allReady = cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const previous = this.playbackBarrierByRoom.get(roomId);
     const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({

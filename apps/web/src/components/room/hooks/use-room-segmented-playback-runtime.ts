@@ -398,14 +398,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       playback: input.roomSnapshot?.room.playback ?? null,
       activeMembers: input.roomSnapshot?.room.members ?? [],
       readiness: playbackReadiness,
-      cacheEnabled: cacheBarrierEnabled,
       nowMs: barrierClockMs
     }),
     [
       input.roomSnapshot?.room.members,
       input.roomSnapshot?.room.playback,
       playbackReadiness,
-      cacheBarrierEnabled,
       barrierClockMs
     ]
   );
@@ -639,9 +637,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return;
     }
 
-    // Normal playback is fully independent from the cache barrier. Send one
-    // leave notification when the setting is turned off, then stop all
-    // readiness traffic and leave the established audio route untouched.
+    // Normal playback does not participate in the cache readiness barrier.
+    // Send one leave notification when the setting is turned off, then stop
+    // readiness traffic; room-wide hold/resume events remain observable.
     if (!cacheEnabled) {
       if (cacheBarrierParticipationRef.current) {
         publishReadiness({
@@ -2060,11 +2058,10 @@ export function resolvePlaybackBarrierState(input: {
   playback: PlaybackSnapshot | null;
   activeMembers: RoomSnapshot["room"]["members"];
   readiness: RoomPlaybackReadinessPayload[];
-  cacheEnabled: boolean;
   nowMs: number;
 }) {
   const playback = input.playback;
-  if (!input.cacheEnabled || !playback?.currentTrackId || playback.status !== "playing") {
+  if (!playback?.currentTrackId || playback.status !== "playing") {
     return {
       blocked: false,
       resumeAtMs: null as number | null,
@@ -2084,20 +2081,12 @@ export function resolvePlaybackBarrierState(input: {
   const activeMembers = input.activeMembers.filter(
     (member) => member.presenceState === "online" && !!member.peerId
   );
-  // A room's normal stream must not be held by members who did not opt into
-  // fully-cached playback. Only online cache participants share this gate.
+  // Only online cache participants decide whether the room barrier is open.
+  // Once it is waiting, however, the hold is room-wide: a streaming member
+  // must follow the same clock or its progress bar will run through silence.
   const relevant = activeMembers
     .map((member) => latestBySession.get(member.id) ?? null)
     .filter((item): item is RoomPlaybackReadinessPayload => !!item?.cacheEnabled);
-  // There is no synchronization problem with one cache participant. Do not
-  // pause a solo room while waiting for the readiness event to round-trip.
-  if (relevant.length < 2) {
-    return {
-      blocked: false,
-      resumeAtMs: null as number | null,
-      holdPositionMs: null as number | null
-    } satisfies RoomPlaybackBarrierClock;
-  }
   const holdPositionMs = relevant.reduce<number | null>((hold, item) => {
     if (hold !== null) return hold;
     return typeof item.holdPositionMs === "number" && Number.isFinite(item.holdPositionMs)

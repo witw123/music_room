@@ -187,7 +187,6 @@ describe("room playback cache barrier", () => {
       playback,
       activeMembers: [member("one"), member("two")] as never,
       readiness: [readiness("one", "ready", "open"), readiness("two", "waiting", "waiting")],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:03.000Z")
     }).blocked).toBe(true);
   });
@@ -200,7 +199,6 @@ describe("room playback cache barrier", () => {
         readiness("one", "ready", "waiting", null, 12_500),
         readiness("two", "waiting", "waiting", null, 12_500)
       ],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:20.000Z")
     })).toMatchObject({
       blocked: true,
@@ -217,7 +215,6 @@ describe("room playback cache barrier", () => {
         readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500),
         readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)
       ],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:04.000Z")
     })).toMatchObject({ blocked: true, holdPositionMs: 12_500 });
   });
@@ -230,19 +227,17 @@ describe("room playback cache barrier", () => {
         readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500),
         readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)
       ],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:06.000Z")
     })).toMatchObject({ blocked: false, holdPositionMs: 12_500 });
   });
 
-  it("keeps a solo cache participant on the established audio route", () => {
+  it("waits for a solo cache participant while its cache is loading", () => {
     expect(resolvePlaybackBarrierState({
       playback,
       activeMembers: [member("one")] as never,
       readiness: [readiness("one", "waiting", "waiting")],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    }).blocked).toBe(false);
+    }).blocked).toBe(true);
   });
 
   it("does not create a barrier when every cache participant already has the track", () => {
@@ -253,7 +248,6 @@ describe("room playback cache barrier", () => {
         readiness("one", "ready", "open"),
         readiness("two", "ready", "open")
       ],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:04.000Z")
     }).blocked).toBe(false);
   });
@@ -270,9 +264,20 @@ describe("room playback cache barrier", () => {
         readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
         streamingMember
       ],
-      cacheEnabled: true,
       nowMs: Date.parse("2026-07-27T00:00:06.000Z")
     }).blocked).toBe(false);
+  });
+
+  it("applies a cache barrier to streaming members without making them blockers", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one"), member("two"), member("three")] as never,
+      readiness: [
+        readiness("one", "waiting", "waiting", null, 12_500),
+        readiness("two", "waiting", "waiting", null, 12_500)
+      ],
+      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
+    }).blocked).toBe(true);
   });
 });
 
