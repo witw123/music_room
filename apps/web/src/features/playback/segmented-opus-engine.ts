@@ -15,6 +15,13 @@ type ScheduledSource = {
   endAt: number;
 };
 
+type AheadScheduleQueue = {
+  nextUnitIndex: number;
+  units: Map<number, AudioAssetUnitRecord>;
+  decoded: Map<number, Promise<AudioBuffer>>;
+  running: boolean;
+};
+
 type SyncInput = {
   manifest: PlaybackAssetManifest;
   playback: PlaybackSnapshot;
@@ -55,6 +62,9 @@ export class SegmentedOpusEngine {
   private readonly completed = new Set<string>();
   private readonly decoded = new Map<string, Promise<AudioBuffer>>();
   private readonly unitRecords = new Map<string, AudioAssetUnitRecord>();
+  private readonly unitLoads = new Map<string, Promise<AudioAssetUnitRecord | null>>();
+  private readonly aheadQueues = new Map<string, AheadScheduleQueue>();
+  private readonly gaplessScheduleTasks = new Map<string, Promise<void>>();
   private wasmDecoder: import("ogg-opus-decoder").OggOpusDecoder | null = null;
   private mixBus: GainNode | null = null;
   private playbackGate: GainNode | null = null;
@@ -90,6 +100,7 @@ export class SegmentedOpusEngine {
   private limiterOutputMaxSampleDelta = 0;
   private underrunCount = 0;
   private lastUnderrunAt: string | null = null;
+  private underrunActive = false;
   private lastDecodeError: string | null = null;
   private syncInFlight: Promise<SyncResult> | null = null;
   private syncAbortController: AbortController | null = null;
@@ -231,31 +242,37 @@ export class SegmentedOpusEngine {
       },
       (_, offset) => currentIndex + offset
     );
-    // IndexedDB reads are considerably more expensive than the in-memory
-    // scheduler tick. Re-reading the same twelve units every 100ms can starve
-    // decoding on slower devices and make the source stream go silent even
-    // though the audio is already cached locally.
-    const units = await Promise.all(unitIndexes.map(async (unitIndex) => {
-      const cached = this.unitRecords.get(unitKey(input.manifest.assetId, unitIndex));
-      if (cached) {
-        return cached;
+    const startupCount = resolveStartupUnitIndexes({
+      manifest: input.manifest,
+      positionMs: roomPositionMs,
+      startupBufferMs
+    }).length;
+    const requiredUnits = this.timelineStarted ? 1 : startupCount;
+    // Start the whole read window immediately, but wait only for the prefix
+    // needed to start or continue playback. Waiting for a slow future unit
+    // here stalls the scheduler before it can even queue the current unit.
+    const unitPromises = unitIndexes.map((unitIndex) =>
+      this.loadUnit(input, unitIndex, signal)
+    );
+    const units: Array<AudioAssetUnitRecord | null> = [];
+    for (let index = 0; index < Math.min(requiredUnits, unitPromises.length); index += 1) {
+      try {
+        const loaded = await unitPromises[index]!;
+        units.push(loaded);
+        if (!loaded) break;
+      } catch (error) {
+        if (isAbortError(error) || signal.aborted) {
+          return { state: "idle" as const, bufferedUnits: 0 };
+        }
+        units.push(null);
+        break;
       }
-      const loaded = await withTimeout(
-        input.getUnit(unitIndex, signal),
-        assetOperationTimeoutMs,
-        "Audio asset read timed out.",
-        signal
-      );
-      if (loaded) {
-        this.unitRecords.set(unitKey(input.manifest.assetId, unitIndex), loaded);
-      }
-      return loaded;
-    })).catch((error) => {
-      if (isAbortError(error) || signal.aborted) {
-        return [] as Array<AudioAssetUnitRecord | null>;
-      }
-      throw error;
-    });
+    }
+    // Include any future units that have already completed in the cache. The
+    // remaining reads stay in unitLoads and are picked up by the next tick.
+    for (let index = units.length; index < unitIndexes.length; index += 1) {
+      units.push(this.unitRecords.get(unitKey(input.manifest.assetId, unitIndexes[index]!)) ?? null);
+    }
     if (signal.aborted) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
@@ -268,12 +285,6 @@ export class SegmentedOpusEngine {
       if (!unit) break;
       contiguousUnits.push(unit);
     }
-    const startupCount = resolveStartupUnitIndexes({
-      manifest: input.manifest,
-      positionMs: roomPositionMs,
-      startupBufferMs
-    }).length;
-    const requiredUnits = this.timelineStarted ? 1 : startupCount;
     const timelineWasStarted = this.timelineStarted;
     const currentTimelineUnitKey = timelineUnitKey(
       input.manifest.assetId,
@@ -354,30 +365,25 @@ export class SegmentedOpusEngine {
           unit.unitIndex
         ))
     );
-    const decodeResults = await Promise.allSettled(
-      decodeTargets.map((unit) => this.getDecodedUnitWithRetry(context, unit, signal))
-    );
-    if (this.destroyed || signal.aborted || this.timelineKey !== timelineKey || generation !== this.timelineGeneration) {
-      return { state: "idle" as const, bufferedUnits: 0 };
-    }
-
-    for (const [index, unit] of decodeTargets.entries()) {
-      if (decodeResults[index]?.status === "rejected") {
-        continue;
-      }
-      const decoded = await this.decoded.get(unitKey(input.manifest.assetId, unit.unitIndex))!;
-      if (signal.aborted) {
-        return { state: "idle" as const, bufferedUnits: 0 };
-      }
-      this.scheduleUnit({
-        context,
-        assetId: input.manifest.assetId,
-        timelineId,
-        decoded,
-        unit,
-        roomPositionMs,
-        currentIndex
-      });
+    const scheduleAheadTask = this.scheduleDecodedAhead({
+      context,
+      assetId: input.manifest.assetId,
+      timelineId,
+      timelineKey,
+      generation,
+      roomPositionMs,
+      currentIndex,
+      units: decodeTargets
+    });
+    if (scheduleAheadTask) {
+      // Let already-cached/fast-decoded units drain before returning, while
+      // yielding immediately when a real decoder is slow. This preserves the
+      // cheap synchronous path without making a slow future segment block the
+      // current one.
+      await Promise.race([
+        scheduleAheadTask,
+        new Promise<void>((resolve) => setTimeout(resolve, 0))
+      ]);
     }
 
     const bufferedUnits = this.countContiguousScheduledUnits(
@@ -387,7 +393,17 @@ export class SegmentedOpusEngine {
     );
     if (input.gaplessNext) {
       try {
-        await this.scheduleGaplessNext(context, input.serverNowMs, input.gaplessNext, signal);
+        const gaplessTask = this.scheduleGaplessNext(
+          context,
+          input.serverNowMs,
+          input.gaplessNext,
+          signal,
+          generation
+        );
+        await Promise.race([
+          gaplessTask,
+          new Promise<void>((resolve) => setTimeout(resolve, 0))
+        ]);
       } catch (error) {
         if (isAbortError(error) || signal.aborted) {
           return { state: "idle" as const, bufferedUnits: 0 };
@@ -573,11 +589,142 @@ export class SegmentedOpusEngine {
     });
   }
 
+  private loadUnit(
+    input: SyncInput,
+    unitIndex: number,
+    signal: AbortSignal
+  ) {
+    const key = unitKey(input.manifest.assetId, unitIndex);
+    const cached = this.unitRecords.get(key);
+    if (cached) {
+      return Promise.resolve<AudioAssetUnitRecord | null>(cached);
+    }
+    const existing = this.unitLoads.get(key);
+    if (existing) {
+      return existing;
+    }
+    const loading = withTimeout(
+      input.getUnit(unitIndex, signal),
+      assetOperationTimeoutMs,
+      "Audio asset read timed out.",
+      signal
+    ).then((loaded) => {
+      if (loaded) {
+        this.unitRecords.set(key, loaded);
+      }
+      return loaded;
+    }).catch(() => {
+      // A missing or temporarily unreadable future unit is a buffering event,
+      // not an engine-fatal error. The next scheduler tick retries it.
+      return null;
+    }).finally(() => {
+      if (this.unitLoads.get(key) === loading) {
+        this.unitLoads.delete(key);
+      }
+    });
+    this.unitLoads.set(key, loading);
+    return loading;
+  }
+
+  private scheduleDecodedAhead(input: {
+    context: AudioContext;
+    assetId: string;
+    timelineId: string;
+    timelineKey: string;
+    generation: number;
+    roomPositionMs: number;
+    currentIndex: number;
+    units: readonly AudioAssetUnitRecord[];
+  }) {
+    if (input.units.length === 0) return;
+    const timelineKey = input.timelineKey;
+    let queue = this.aheadQueues.get(timelineKey);
+    if (!queue) {
+      queue = {
+        nextUnitIndex: input.units[0]!.unitIndex,
+        units: new Map(),
+        decoded: new Map(),
+        running: false
+      };
+      this.aheadQueues.set(timelineKey, queue);
+    }
+    for (const unit of input.units) {
+      if (unit.unitIndex < queue.nextUnitIndex) continue;
+      queue.units.set(unit.unitIndex, unit);
+      if (!queue.decoded.has(unit.unitIndex)) {
+        queue.decoded.set(
+          unit.unitIndex,
+          this.getDecodedUnitWithRetry(input.context, unit)
+        );
+      }
+    }
+    if (queue.running) return;
+    queue.running = true;
+    const task = (async () => {
+      while (
+        !this.destroyed &&
+        this.timelineKey === input.timelineKey &&
+        this.timelineGeneration === input.generation
+      ) {
+        const unit = queue!.units.get(queue!.nextUnitIndex);
+        const decodedPromise = queue!.decoded.get(queue!.nextUnitIndex);
+        if (!unit || !decodedPromise) break;
+        queue!.units.delete(queue!.nextUnitIndex);
+        queue!.decoded.delete(queue!.nextUnitIndex);
+        try {
+          const decoded = await decodedPromise;
+          if (
+            this.destroyed ||
+            this.timelineKey !== input.timelineKey ||
+            this.timelineGeneration !== input.generation
+          ) {
+            break;
+          }
+          try {
+            this.scheduleUnit({
+              context: input.context,
+              assetId: input.assetId,
+              timelineId: input.timelineId,
+              decoded,
+              unit,
+              roomPositionMs: input.roomPositionMs,
+              currentIndex: input.currentIndex
+            });
+          } catch (error) {
+            if (this.timelineKey === input.timelineKey && !isAbortError(error)) {
+              this.lastDecodeError = formatDecodeError(error);
+            }
+          }
+        } catch (error) {
+          if (this.timelineKey === input.timelineKey && !isAbortError(error)) {
+            this.lastDecodeError = formatDecodeError(error);
+          }
+        }
+        queue!.nextUnitIndex += 1;
+      }
+    })();
+    return task.catch((error) => {
+      if (this.timelineKey === input.timelineKey && !isAbortError(error)) {
+        this.lastDecodeError = formatDecodeError(error);
+      }
+    }).finally(() => {
+      queue!.running = false;
+      if (
+        this.aheadQueues.get(timelineKey) === queue &&
+        queue!.units.size === 0 &&
+        queue!.decoded.size === 0
+      ) {
+        this.aheadQueues.delete(timelineKey);
+      }
+    });
+  }
+
   private async scheduleGaplessNext(
     context: AudioContext,
     serverNowMs: number,
     input: NonNullable<SyncInput["gaplessNext"]>,
-    signal: AbortSignal
+    signal: AbortSignal,
+    generation: number
   ) {
     const transitionContextTime = context.currentTime +
       (Date.parse(input.transition.transitionAt) - serverNowMs) / 1000;
@@ -588,59 +735,122 @@ export class SegmentedOpusEngine {
     };
     if (transitionContextTime < context.currentTime - 0.05) return;
 
+    const taskKey = `${input.manifest.assetId}:${input.transition.transitionAt}`;
+    const existing = this.gaplessScheduleTasks.get(taskKey);
+    if (existing) {
+      return existing;
+    }
+
+    const task = this.runGaplessSchedule({
+      context,
+      transitionContextTime,
+      input,
+      signal,
+      generation
+    });
+    const settled = task.finally(() => {
+      if (this.gaplessScheduleTasks.get(taskKey) === settled) {
+        this.gaplessScheduleTasks.delete(taskKey);
+      }
+    });
+    this.gaplessScheduleTasks.set(taskKey, settled);
+    return settled;
+  }
+
+  private async runGaplessSchedule(input: {
+    context: AudioContext;
+    transitionContextTime: number;
+    input: NonNullable<SyncInput["gaplessNext"]>;
+    signal: AbortSignal;
+    generation: number;
+  }) {
+    const { context, transitionContextTime, input: next, signal, generation } = input;
+    const isCurrent = () => !this.destroyed &&
+      this.timelineGeneration === generation &&
+      this.pendingTransition?.transitionAt === next.transition.transitionAt;
+    if (!isCurrent()) return;
+
     const unitCount = Math.min(
-      Math.max(1, Math.ceil(scheduleAheadMs / input.manifest.segmentDurationMs)),
-      input.manifest.unitCount
+      Math.max(1, Math.ceil(scheduleAheadMs / next.manifest.segmentDurationMs)),
+      next.manifest.unitCount
     );
-    const units: AudioAssetUnitRecord[] = [];
-    for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
-      if (signal.aborted) {
-        throw createAbortError();
-      }
-      const key = unitKey(input.manifest.assetId, unitIndex);
+    const decodedPromises = Array.from({ length: unitCount }, (_, unitIndex) => {
+      const key = unitKey(next.manifest.assetId, unitIndex);
       const cached = this.unitRecords.get(key);
-      const loaded = cached ?? await withTimeout(
-        input.getUnit(unitIndex, signal),
-        assetOperationTimeoutMs,
-        "Gapless next-track audio asset read timed out.",
-        signal
-      );
-      if (!loaded) break;
-      this.unitRecords.set(key, loaded);
-      units.push(loaded);
-    }
-    const decoded = await Promise.allSettled(
-      units.map((unit) => this.getDecodedUnitWithRetry(context, unit, signal))
-    );
-    if (signal.aborted) {
-      throw createAbortError();
-    }
-    const boundaryFadeStart = Math.max(
-      context.currentTime,
-      transitionContextTime - fadeDurationSeconds
-    );
-    for (const scheduled of this.scheduled.values()) {
-      if (Math.abs(scheduled.endAt - transitionContextTime) > 0.1) {
-        continue;
-      }
-      setAudioParamValueAt(scheduled.gain.gain, 1, boundaryFadeStart);
-      rampAudioParamTo(scheduled.gain.gain, 0, transitionContextTime);
-    }
-    for (const [index, unit] of units.entries()) {
-      const result = decoded[index];
-      if (result?.status !== "fulfilled") continue;
-      this.scheduleUnit({
-        context,
-        assetId: input.manifest.assetId,
-        timelineId: input.transition.transitionAt,
-        decoded: result.value,
-        unit,
-        roomPositionMs: 0,
-        currentIndex: 0,
-        anchorTime: transitionContextTime,
-        anchorPositionMs: 0,
-        fadeIn: unit.unitIndex === 0
+      const loaded = cached
+        ? Promise.resolve<AudioAssetUnitRecord | null>(cached)
+        : withTimeout(
+            next.getUnit(unitIndex, signal),
+            assetOperationTimeoutMs,
+            "Gapless next-track audio asset read timed out.",
+            signal
+          ).then((record) => {
+            if (record) {
+              this.unitRecords.set(key, record);
+            }
+            return record;
+          });
+      return loaded.then(async (unit) => {
+        if (!unit) return null;
+        try {
+          return {
+            unit,
+            decoded: await this.getDecodedUnitWithRetry(context, unit, signal)
+          };
+        } catch (error) {
+          if (!isAbortError(error) && !signal.aborted) {
+            this.lastDecodeError = formatDecodeError(error);
+          }
+          return null;
+        }
+      }).catch((error) => {
+        if (!isAbortError(error) && !signal.aborted) {
+          this.lastDecodeError = formatDecodeError(error);
+        }
+        return null;
       });
+    });
+    let boundaryFaded = false;
+    for (const decodedPromise of decodedPromises) {
+      const ready = await decodedPromise;
+      if (!isCurrent() || signal.aborted) {
+        return;
+      }
+      // Only a contiguous prefix can be scheduled on the next timeline. The
+      // remaining reads/decodes continue in parallel, but never delay the
+      // first ready units or make a slow tail reach the track boundary.
+      if (!ready) break;
+      if (!boundaryFaded) {
+        const boundaryFadeStart = Math.max(
+          context.currentTime,
+          transitionContextTime - fadeDurationSeconds
+        );
+        for (const scheduled of this.scheduled.values()) {
+          if (Math.abs(scheduled.endAt - transitionContextTime) > 0.1) {
+            continue;
+          }
+          setAudioParamValueAt(scheduled.gain.gain, 1, boundaryFadeStart);
+          rampAudioParamTo(scheduled.gain.gain, 0, transitionContextTime);
+        }
+        boundaryFaded = true;
+      }
+      try {
+        this.scheduleUnit({
+          context,
+          assetId: next.manifest.assetId,
+          timelineId: next.transition.transitionAt,
+          decoded: ready.decoded,
+          unit: ready.unit,
+          roomPositionMs: 0,
+          currentIndex: 0,
+          anchorTime: transitionContextTime,
+          anchorPositionMs: 0,
+          fadeIn: ready.unit.unitIndex === 0
+        });
+      } catch (error) {
+        this.lastDecodeError = formatDecodeError(error);
+        break;
+      }
     }
   }
 
@@ -894,6 +1104,12 @@ export class SegmentedOpusEngine {
     );
   }
 
+  private hasScheduledAudio(context: AudioContext) {
+    return [...this.scheduled.values()].some((scheduled) =>
+      scheduled.endAt > context.currentTime
+    );
+  }
+
   private updateSourceHealth() {
     const trackState = this.broadcastEnabled
       ? roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState
@@ -902,6 +1118,9 @@ export class SegmentedOpusEngine {
     // or silent part of a song. Energy is useful telemetry, but it cannot
     // distinguish valid silence from a broken media path.
     this.sourceHealth = trackState === "live" ? "source-ready" : "source-silent";
+    if (trackState === "live") {
+      this.underrunActive = false;
+    }
   }
 
   private pruneDecodedCache(assetId: string, currentIndex: number, segmentDurationMs: number) {
@@ -930,7 +1149,11 @@ export class SegmentedOpusEngine {
       const isCurrentWindow = assetId === currentAssetId &&
         unitIndex >= currentIndex &&
         unitIndex <= lastRetainedIndex;
-      if (!isCurrentWindow && !this.isScheduledForAnyTimeline(assetId, unitIndex)) {
+      if (
+        !isCurrentWindow &&
+        !this.isPendingTransitionAsset(assetId) &&
+        !this.isScheduledForAnyTimeline(assetId, unitIndex)
+      ) {
         cache.delete(key);
       }
     }
@@ -942,10 +1165,26 @@ export class SegmentedOpusEngine {
     );
   }
 
+  private isPendingTransitionAsset(assetId: string) {
+    return this.pendingTransition?.assetId === assetId;
+  }
+
   private enterUnderrun() {
-    this.underrunCount += 1;
-    this.lastUnderrunAt = new Date().toISOString();
+    if (!this.underrunActive) {
+      this.underrunCount += 1;
+      this.lastUnderrunAt = new Date().toISOString();
+    }
+    this.underrunActive = true;
+    const context = this.masterGainContext;
+    // Keep already scheduled audio alive while a future read/decode is
+    // catching up. Stopping the queue here turns a short storage or decoder
+    // hiccup into a full audible gap and throws away useful prefetched audio.
+    if (this.timelineStarted && context && this.hasScheduledAudio(context)) {
+      this.sourceHealth = "source-underrun";
+      return;
+    }
     this.stopScheduledSources();
+    this.aheadQueues.clear();
     this.completed.clear();
     this.contextAnchorTime = null;
     this.pendingTransition = null;
@@ -1010,6 +1249,9 @@ export class SegmentedOpusEngine {
 
   private resetTimeline(options: { preserveCache?: boolean } = {}) {
     this.stopScheduledSources();
+    this.aheadQueues.clear();
+    this.gaplessScheduleTasks.clear();
+    this.pendingTransition = null;
     this.completed.clear();
     this.timelineKey = null;
     this.contextAnchorTime = null;
@@ -1031,6 +1273,7 @@ export class SegmentedOpusEngine {
     this.limiterOutputRms = 0;
     this.limiterOutputMaxSampleDelta = 0;
     this.lastDecodeError = null;
+    this.underrunActive = false;
     this.fadePlaybackGateTo(0);
   }
 

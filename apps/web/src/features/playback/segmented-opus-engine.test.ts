@@ -202,8 +202,33 @@ describe("SegmentedOpusEngine", () => {
     await vi.waitFor(() => expect(sources).toHaveLength(1));
 
     releaseDecodeAhead();
+    await vi.waitFor(() => expect(sources).toHaveLength(5));
     await syncing;
     expect(sources).toHaveLength(5);
+    engine.destroy();
+  });
+
+  it("starts the current window before a future unit read completes", async () => {
+    const { context, sources } = createContext();
+    let releaseFutureReads!: (value: AudioAssetUnitRecord | null) => void;
+    const blockedFutureRead = new Promise<AudioAssetUnitRecord | null>((resolve) => {
+      releaseFutureReads = resolve;
+    });
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    const result = await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : blockedFutureRead
+    });
+
+    expect(result.state).toBe("buffering");
+    expect(sources).toHaveLength(2);
+    releaseFutureReads(null);
     engine.destroy();
   });
 
@@ -283,6 +308,52 @@ describe("SegmentedOpusEngine", () => {
     expect(sources).toHaveLength(2);
     expect(result).toEqual({ state: "live", bufferedUnits: 1 });
     expect(engine.getSourceHealth().state).toBe("source-ready");
+    engine.destroy();
+  });
+
+  it("does not stop scheduled audio during a short boundary read gap", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    vi.spyOn(roomAudioOutput, "getBroadcastStream").mockReturnValue({
+      getAudioTracks: () => [{ readyState: "live" }]
+    } as unknown as MediaStream);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
+    });
+
+    Object.defineProperty(context, "currentTime", {
+      configurable: true,
+      value: 14.2
+    });
+    const buffering = await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 5_000,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
+    });
+
+    expect(buffering.state).toBe("buffering");
+    expect(sources[1]?.stopped).toBe(false);
+    expect(engine.getSourceHealth().underrunCount).toBe(1);
+
+    const recovered = await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 5_000,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unitIndex < 3 ? unit(unitIndex) : null
+    });
+
+    expect(recovered.state).toBe("live");
+    expect(sources).toHaveLength(3);
     engine.destroy();
   });
 
@@ -479,6 +550,143 @@ describe("SegmentedOpusEngine", () => {
     const nextFirstGain = gains[gains.length - manifest.unitCount];
     expect(previousFinalGain?.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, 21);
     expect(nextFirstGain?.gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 21.02);
+    engine.destroy();
+  });
+
+  it("schedules the ready prefix of a next track without waiting for a slow tail unit", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    const nextManifest = {
+      ...manifest,
+      assetId: "e".repeat(64)
+    } as PlaybackAssetManifest;
+    const transitionAt = new Date(serverNowMs + 11_000).toISOString();
+    let releaseTail!: (value: AudioAssetUnitRecord | null) => void;
+    const blockedTail = new Promise<AudioAssetUnitRecord | null>((resolve) => {
+      releaseTail = resolve;
+    });
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex),
+      gaplessNext: {
+        transition: {
+          trackId: "track_2",
+          queueItemId: "queue_2",
+          playbackAssetId: nextManifest.assetId,
+          durationMs: nextManifest.durationMs,
+          transitionAt,
+          sourceSessionId: "user_a",
+          sourcePeerId: "peer_a"
+        },
+        manifest: nextManifest,
+        getUnit: async (unitIndex) => unitIndex === 4
+          ? blockedTail
+          : { ...unit(unitIndex), assetId: nextManifest.assetId, unitId: `${nextManifest.assetId}:${unitIndex}` }
+      }
+    });
+
+    await vi.waitFor(() => expect(sources).toHaveLength(manifest.unitCount + 4));
+    releaseTail(null);
+    engine.destroy();
+  });
+
+  it("retains gapless-prefetched units across scheduler ticks", async () => {
+    const { context } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    const nextManifest = {
+      ...manifest,
+      assetId: "f".repeat(64)
+    } as PlaybackAssetManifest;
+    const nextGetUnit = vi.fn(async (unitIndex: number) => ({
+      ...unit(unitIndex),
+      assetId: nextManifest.assetId,
+      unitId: `${nextManifest.assetId}:${unitIndex}`
+    }));
+    const transitionAt = new Date(serverNowMs + 11_000).toISOString();
+    const roomPlayback = playback(serverNowMs);
+    const gaplessNext = {
+      transition: {
+        trackId: "track_2",
+        queueItemId: "queue_2",
+        playbackAssetId: nextManifest.assetId,
+        durationMs: nextManifest.durationMs,
+        transitionAt,
+        sourceSessionId: "user_a",
+        sourcePeerId: "peer_a"
+      },
+      manifest: nextManifest,
+      getUnit: nextGetUnit
+    };
+
+    await engine.sync({
+      manifest,
+      playback: roomPlayback,
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex),
+      gaplessNext
+    });
+    await engine.sync({
+      manifest,
+      playback: roomPlayback,
+      serverNowMs: serverNowMs + 100,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex),
+      gaplessNext
+    });
+
+    expect(nextGetUnit).toHaveBeenCalledTimes(nextManifest.unitCount);
+    engine.destroy();
+  });
+
+  it("clears a pending gapless transition when the timeline is reset", async () => {
+    const { context } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    const transitionAt = new Date(serverNowMs + 11_000).toISOString();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex),
+      gaplessNext: {
+        transition: {
+          trackId: "track_2",
+          queueItemId: "queue_2",
+          playbackAssetId: manifest.assetId,
+          durationMs: manifest.durationMs,
+          transitionAt,
+          sourceSessionId: "user_a",
+          sourcePeerId: "peer_a"
+        },
+        manifest,
+        getUnit: async (unitIndex) => unit(unitIndex)
+      }
+    });
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        status: "paused",
+        startAt: null
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async () => null
+    });
+
+    expect((engine as unknown as { pendingTransition: unknown }).pendingTransition).toBeNull();
     engine.destroy();
   });
 

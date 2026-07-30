@@ -8,6 +8,8 @@ import type { PeerLinkKind } from "./signaling-transport";
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
 
 const remoteTrackMuteGraceMs = 3_000;
+const receiverPlayoutDelaySeconds = 0.3;
+const receiverJitterBufferTargetMs = 300;
 
 export function shouldInitiatePeerConnection(localPeerId: string, peerId: string) {
   return localPeerId.localeCompare(peerId) < 0;
@@ -260,14 +262,14 @@ export function bindPeerConnectionEvents(input: {
         // Keep a little more audio in the browser jitter buffer on WAN/relay
         // paths. This absorbs short loss bursts without rebuilding the
         // MediaStream, which would be audible as a larger dropout.
-        receiver.playoutDelayHint = 0.3;
+        receiver.playoutDelayHint = receiverPlayoutDelaySeconds;
       } catch {
         // Older browsers expose the property but reject runtime updates.
       }
     }
     if (receiver && "jitterBufferTarget" in receiver) {
       try {
-        receiver.jitterBufferTarget = 0.3;
+        receiver.jitterBufferTarget = receiverJitterBufferTargetMs;
       } catch {
         // Experimental in Chromium; ignore unsupported implementations.
       }

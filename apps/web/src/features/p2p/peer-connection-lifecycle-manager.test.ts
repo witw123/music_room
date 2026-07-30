@@ -207,6 +207,33 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
   });
 
+  it("negotiates Opus in-band FEC when the browser exposes codec fmtp preferences", async () => {
+    vi.stubGlobal("RTCRtpReceiver", {
+      getCapabilities: () => ({
+        codecs: [{
+          mimeType: "audio/opus",
+          sdpFmtpLine: "minptime=10;useinbandfec=0"
+        }]
+      })
+    });
+    const { manager } = createManager();
+    const track = { id: "fec-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaTransceiver)!;
+    expect(mediaPeer.mediaTransceiver?.setCodecPreferences).toHaveBeenCalledWith([
+      expect.objectContaining({
+        mimeType: "audio/opus",
+        sdpFmtpLine: "minptime=10;useinbandfec=1"
+      })
+    ]);
+  });
+
   it("keeps only the current source media peer on a listener", async () => {
     const { manager } = createManager();
 
@@ -1157,6 +1184,45 @@ describe("PeerConnectionLifecycleManager", () => {
         .map(([payload]) => payload as PeerSignalMessage)
         .filter((payload) => payload.linkKind === "media" && payload.type === "offer")
     ).toHaveLength(1);
+  });
+
+  it("expands the receiver jitter buffer during loss and restores it after healthy windows", async () => {
+    const { manager } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const receiver = {
+      playoutDelayHint: 0.3,
+      jitterBufferTarget: 300
+    } as unknown as RTCRtpReceiver & {
+      playoutDelayHint: number;
+      jitterBufferTarget: number;
+    };
+    mediaEntry.audioReceiver = receiver;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: 192,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 6,
+      jitterMs: 24
+    } as PeerConnectionStatsSample);
+    expect(receiver.playoutDelayHint).toBe(0.5);
+    expect(receiver.jitterBufferTarget).toBe(500);
+
+    observeMediaHealth("peer_b", {
+      mediaReceiveBitrateKbps: 192,
+      mediaSendBitrateKbps: null,
+      packetLossRate: 0,
+      jitterMs: 4
+    } as PeerConnectionStatsSample);
+    expect(receiver.playoutDelayHint).toBe(0.3);
+    expect(receiver.jitterBufferTarget).toBe(300);
   });
 
   it("does not reoffer a connected listener when its live receiver has a transient packet gap", async () => {

@@ -320,6 +320,58 @@ describe("peer connection lifecycle helpers", () => {
     expect(entry.receiverRtpActive).toBe(true);
   });
 
+  it("uses the correct units for receiver jitter buffering", () => {
+    const connection = new FakePeerConnection();
+    const entry = createPeerEntry({
+      connection: connection as unknown as RTCPeerConnection,
+      initiatorPeerId: null,
+      nowMs: 100,
+      linkKind: "media"
+    });
+    const track = {
+      kind: "audio",
+      id: "remote-track",
+      readyState: "live",
+      muted: false,
+      onended: null,
+      onmute: null,
+      onunmute: null
+    } as unknown as MediaStreamTrack;
+    const receiver = {
+      track,
+      playoutDelayHint: 0,
+      jitterBufferTarget: 0
+    } as unknown as RTCRtpReceiver & {
+      playoutDelayHint: number;
+      jitterBufferTarget: number;
+    };
+
+    bindPeerConnectionEvents({
+      peerId: "peer_b",
+      entry,
+      localPeerId: "peer_a",
+      connection: connection as unknown as RTCPeerConnection,
+      linkKind: "media",
+      autoReconnect: false,
+      isCurrentEntry: () => true,
+      isExpectedPeer: () => true,
+      sendCandidate: vi.fn(),
+      schedulePeerReconnect: vi.fn(),
+      schedulePeerWatchdog: vi.fn(),
+      releasePeer: vi.fn(),
+      bindChannel: vi.fn()
+    });
+
+    connection.ontrack?.({
+      track,
+      receiver,
+      streams: []
+    } as unknown as RTCTrackEvent);
+
+    expect(receiver.playoutDelayHint).toBe(0.3);
+    expect(receiver.jitterBufferTarget).toBe(300);
+  });
+
   it("keeps a live receiver track usable while a mute recovery is pending", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePeerConnection);
     const signaling = new SignalingTransport({

@@ -116,6 +116,12 @@ const mediaRecoveryHealthyJitterThreshold = 20;
 const mediaPositiveRtpFreshMs = 4_000;
 const incomingMediaAdmissionGraceMs = 8_000;
 const mediaIceRestartAttemptsBeforeRecreate = 2;
+const receiverPlayoutDelaySeconds = 0.3;
+const receiverJitterBufferTargetMs = 300;
+const receiverElevatedPlayoutDelaySeconds = 0.5;
+const receiverElevatedJitterBufferTargetMs = 500;
+const receiverHealthyLossThreshold = 1;
+const receiverHealthyJitterThreshold = 10;
 // ICE can report `disconnected` while its connectivity checks are still
 // repairing the selected candidate pair. Re-offering during that window
 // replaces a usable RTP path and is much more disruptive than the outage.
@@ -159,6 +165,7 @@ export class PeerConnectionLifecycleManager {
   private readonly onMediaRecovery?: PeerConnectionLifecycleManagerInput["onMediaRecovery"];
   private readonly mediaRecovery = new Map<string, MediaRecoveryState>();
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
+  private readonly elevatedReceiverBufferEntries = new WeakSet<PeerEntry>();
   private readonly mediaRecoveryOperations = new Map<string, Promise<PeerEntry | null>>();
   private readonly provisionalIncomingMediaTimers = new WeakMap<
     PeerEntry,
@@ -1359,6 +1366,58 @@ export class PeerConnectionLifecycleManager {
     entry.mediaSyncRetryAttempts = 0;
   }
 
+  private applyReceiverJitterPolicy(entry: PeerEntry, sample: PeerConnectionStatsSample) {
+    const receiver = entry.audioReceiver as (RTCRtpReceiver & {
+      playoutDelayHint?: number;
+      jitterBufferTarget?: number | null;
+    }) | null;
+    if (!receiver) {
+      return;
+    }
+
+    const loss = sample.packetLossRate;
+    const jitter = sample.jitterMs;
+    const elevated =
+      (typeof loss === "number" && loss >= mediaRecoveryHealthyLossThreshold) ||
+      (typeof jitter === "number" && jitter >= mediaRecoveryHealthyJitterThreshold);
+    const healthy =
+      (typeof loss !== "number" || loss < receiverHealthyLossThreshold) &&
+      (typeof jitter !== "number" || jitter < receiverHealthyJitterThreshold);
+    const wasElevated = this.elevatedReceiverBufferEntries.has(entry);
+    const shouldElevate = elevated || (wasElevated && !healthy);
+    if (shouldElevate === wasElevated) {
+      return;
+    }
+
+    const playoutDelaySeconds = shouldElevate
+      ? receiverElevatedPlayoutDelaySeconds
+      : receiverPlayoutDelaySeconds;
+    const jitterBufferTargetMs = shouldElevate
+      ? receiverElevatedJitterBufferTargetMs
+      : receiverJitterBufferTargetMs;
+    try {
+      if (
+        "playoutDelayHint" in receiver &&
+        receiver.playoutDelayHint !== playoutDelaySeconds
+      ) {
+        receiver.playoutDelayHint = playoutDelaySeconds;
+      }
+      if (
+        "jitterBufferTarget" in receiver &&
+        receiver.jitterBufferTarget !== jitterBufferTargetMs
+      ) {
+        receiver.jitterBufferTarget = jitterBufferTargetMs;
+      }
+      if (shouldElevate) {
+        this.elevatedReceiverBufferEntries.add(entry);
+      } else {
+        this.elevatedReceiverBufferEntries.delete(entry);
+      }
+    } catch {
+      // Browser-specific receiver implementations may reject runtime updates.
+    }
+  }
+
   private async applyAudioSenderParameters(
     sender: RTCRtpSender,
     effectiveMaxBitrateKbps: number | null = this.localAudioMaxBitrateKbps
@@ -1455,7 +1514,17 @@ export class PeerConnectionLifecycleManager {
       const capabilities = RTCRtpReceiver.getCapabilities?.("audio")?.codecs ?? [];
       const opus = capabilities.filter((codec) => /opus/i.test(codec.mimeType));
       if (opus.length > 0) {
-        transceiver.setCodecPreferences?.(opus);
+        const lossResilientOpus = opus.map((codec) => ({
+          ...codec,
+          sdpFmtpLine: ensureOpusPacketLossRecovery(codec.sdpFmtpLine)
+        }));
+        try {
+          transceiver.setCodecPreferences?.(lossResilientOpus);
+        } catch {
+          // Some browsers allow codec ordering but reject modified fmtp lines.
+          // Keep the normal Opus preference as a compatible fallback.
+          transceiver.setCodecPreferences?.(opus);
+        }
       }
     } catch {
       // Codec preference APIs are optional; normal SDP negotiation still works.
@@ -1477,6 +1546,7 @@ export class PeerConnectionLifecycleManager {
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
     const loss = sample.packetLossRate ?? 0;
     const jitter = sample.jitterMs ?? 0;
+    this.applyReceiverJitterPolicy(entry, sample);
     // A null bitrate means that the browser did not provide a comparable
     // stats sample yet. Treating it as zero creates false recovery cycles,
     // especially for a source that joined as the non-initiating peer.
@@ -1952,4 +2022,17 @@ export class PeerConnectionLifecycleManager {
 
 function normalizeAudioBitrateKbps(value: number | null) {
   return resolveFixedAudioBitrateKbps({ requestedKbps: value });
+}
+
+function ensureOpusPacketLossRecovery(sdpFmtpLine: string | undefined) {
+  const params = (sdpFmtpLine ?? "")
+    .split(";")
+    .map((param) => param.trim())
+    .filter(Boolean)
+    .filter((param) => !/^useinbandfec=/i.test(param));
+  if (!params.some((param) => /^minptime=/i.test(param))) {
+    params.push("minptime=10");
+  }
+  params.push("useinbandfec=1");
+  return params.join(";");
 }
