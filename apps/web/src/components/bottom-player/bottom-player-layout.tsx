@@ -748,7 +748,7 @@ export function DesktopBottomPlayerLayout({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2.5">
+      <div className="flex items-center justify-end gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
             {formatDuration(boundedProgressMs)}
