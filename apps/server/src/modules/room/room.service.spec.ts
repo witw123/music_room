@@ -99,9 +99,17 @@ describe("RoomService", () => {
       "Only room members"
     );
     await expect(roomService.getRecoverableRoomSnapshot(snapshot.room.id, member.id)).resolves.toBeNull();
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    const rejoined = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(rejoined.room.members.find((item) => item.id === member.id)?.permissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
+    });
   });
 
-  it("restores a member's permissions after leaving and rejoining the same room", async () => {
+  it("restores host-assigned permissions after a member leaves and rejoins", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -120,15 +128,15 @@ describe("RoomService", () => {
     await roomService.leaveRoom(snapshot.room.id, member.id);
     await roomService.joinRoom(snapshot.room.id, member.id);
 
-    const restored = await roomService.getRoomSnapshot(snapshot.room.id, []);
-    expect(restored.room.members.find((item) => item.id === member.id)?.permissions).toEqual({
+    const rejoined = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(rejoined.room.members.find((item) => item.id === member.id)?.permissions).toEqual({
       library: false,
       queue: true,
       player: false
     });
   });
 
-  it("uses room defaults for new members without replacing existing permission profiles", async () => {
+  it("uses room defaults only when a member joins for the first time", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);

@@ -20,7 +20,7 @@ export type RoomRecord = {
   passwordHash?: string | null;
   tracks: TrackMeta[];
   queue: QueueItem[];
-  /** Permission profiles survive member leave/rejoin while the room exists. */
+  /** Host-assigned member permissions survive leave/rejoin while the room exists. */
   memberPermissionProfiles?: Record<string, RoomMemberPermissions>;
 };
 
