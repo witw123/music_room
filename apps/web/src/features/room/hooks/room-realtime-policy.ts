@@ -40,9 +40,17 @@ export function createRoomRealtimeEventGate(initialSnapshot?: RoomSnapshot | nul
     acceptPresenceRevision(
       incomingRevision: number,
       currentSnapshot?: RoomSnapshot | null,
-      allowEqual = false
+      allowEqual = false,
+      incomingRoomRevision?: number | null
     ) {
       syncCurrentSnapshot(currentSnapshot);
+      if (
+        incomingRoomRevision !== null &&
+        incomingRoomRevision !== undefined &&
+        incomingRoomRevision < latestRoomRevision
+      ) {
+        return false;
+      }
       const accepted = allowEqual
         ? incomingRevision >= latestPresenceRevision
         : incomingRevision > latestPresenceRevision;

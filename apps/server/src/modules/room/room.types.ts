@@ -166,7 +166,18 @@ export function normalizeRoomRecord(value: unknown): RoomRecord | null {
   }
   const trackIds = new Set(tracks.map((track) => track.id));
   const queue = normalizeQueue(value.queue, trackIds);
-  const members = normalizeRoomMembers(roomResult.data.members);
+  const normalizedMembers = normalizeRoomMembers(roomResult.data.members);
+  const memberPermissionProfiles = normalizeMemberPermissionProfiles(
+    value.memberPermissionProfiles,
+    normalizedMembers
+  );
+  const members = normalizedMembers.map((member) => ({
+    ...member,
+    permissions: memberPermissionProfiles[member.id] ?? {
+      ...defaultRoomMemberPermissions,
+      ...member.permissions
+    }
+  }));
   const candidate = {
     room: {
       ...roomResult.data,
@@ -177,10 +188,7 @@ export function normalizeRoomRecord(value: unknown): RoomRecord | null {
       : {}),
     tracks,
     queue,
-    memberPermissionProfiles: normalizeMemberPermissionProfiles(
-      value.memberPermissionProfiles,
-      members
-    )
+    memberPermissionProfiles
   };
   const recordResult = roomRecordSchema.safeParse(candidate);
   return recordResult.success ? recordResult.data : null;

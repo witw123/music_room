@@ -1,5 +1,6 @@
 import {
   deserializeRoomRecord,
+  normalizeRoomRecord,
   serializePlaybackForPersistence,
   type PersistedRoomRecord
 } from "./room.types";
@@ -99,6 +100,62 @@ describe("room.types persistence helpers", () => {
     });
     expect(record.memberPermissionProfiles).toEqual({
       member_1: { library: true, queue: false, player: true }
+    });
+  });
+
+  it("uses permission profiles when a cached member array is stale", () => {
+    const record = normalizeRoomRecord({
+      room: {
+        id: "room_cached_permissions",
+        hostId: "host_1",
+        joinCode: "ABC123",
+        visibility: "public",
+        members: [
+          {
+            id: "host_1",
+            nickname: "Host",
+            role: "host",
+            joinedAt: "2026-01-01T00:00:00.000Z",
+            peerId: null,
+            presenceState: "offline"
+          },
+          {
+            id: "member_1",
+            nickname: "Member",
+            role: "member",
+            joinedAt: "2026-01-01T00:01:00.000Z",
+            peerId: null,
+            presenceState: "offline",
+            permissions: { library: true, queue: true, player: true }
+          }
+        ],
+        presenceRevision: 4,
+        roomRevision: 9,
+        playback: {
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host_1",
+          sourcePeerId: null,
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 1,
+          mediaEpoch: 0
+        }
+      },
+      tracks: [],
+      queue: [],
+      memberPermissionProfiles: {
+        member_1: { library: false, queue: true, player: false }
+      }
+    });
+
+    expect(record?.room.members.find((member) => member.id === "member_1")?.permissions).toEqual({
+      library: false,
+      queue: true,
+      player: false
     });
   });
 

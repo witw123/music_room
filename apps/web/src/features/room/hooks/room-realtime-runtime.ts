@@ -381,7 +381,8 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     realtimeEventGate.acceptPresenceRevision(
       snapshot.room.presenceRevision,
       currentSnapshot,
-      true
+      true,
+      snapshot.room.roomRevision
     );
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     // A full snapshot is authoritative for both room state and the live peer
@@ -460,26 +461,30 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     const currentSnapshot = input.currentRoomRef.current;
-    input.dispatchRoomStateEvent({
-      type: "server-presence-patch",
-      roomId: input.roomId,
-      members,
-      playback,
-      presenceRevision,
-      roomRevision
-    });
     if (!currentSnapshot) {
       void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
       return;
     }
     const presenceAccepted = realtimeEventGate.acceptPresenceRevision(
       presenceRevision,
-      currentSnapshot
+      currentSnapshot,
+      false,
+      roomRevision
     );
     const playbackAcceptance = realtimeEventGate.acceptPlayback(playback, currentSnapshot);
     if (!presenceAccepted && !playbackAcceptance.accepted) {
       return;
     }
+    input.dispatchRoomStateEvent({
+      type: "server-presence-patch",
+      roomId: input.roomId,
+      members: presenceAccepted ? members : currentSnapshot.room.members,
+      playback,
+      presenceRevision: presenceAccepted
+        ? presenceRevision
+        : currentSnapshot.room.presenceRevision,
+      roomRevision
+    });
     realtimeEventGate.acceptRoomRevision(roomRevision, currentSnapshot);
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);

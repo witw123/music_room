@@ -207,12 +207,14 @@ export function mergeRoomSnapshot(
     return incoming;
   }
 
-  const acceptPresence = shouldAcceptPresenceSnapshot(
-    current.room.members,
-    getPresenceRevision(current.room),
-    incoming.room.members,
-    getPresenceRevision(incoming.room)
-  );
+  const acceptPresence =
+    (incoming.room.roomRevision ?? 0) >= (current.room.roomRevision ?? 0) &&
+    shouldAcceptPresenceSnapshot(
+      current.room.members,
+      getPresenceRevision(current.room),
+      incoming.room.members,
+      getPresenceRevision(incoming.room)
+    );
   const acceptPlayback = shouldAcceptPlaybackSnapshot(
     current.room.playback,
     incoming.room.playback

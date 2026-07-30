@@ -81,6 +81,7 @@ describe("room realtime event gate", () => {
     expect(gate.acceptRoomRevision(2, currentSnapshot)).toBe(false);
     expect(gate.acceptPresenceRevision(3, currentSnapshot)).toBe(true);
     expect(gate.acceptPresenceRevision(2, currentSnapshot)).toBe(false);
+    expect(gate.acceptPresenceRevision(10, currentSnapshot, false, 0)).toBe(false);
     expect(gate.acceptPlayback(newerPlayback, currentSnapshot).accepted).toBe(true);
     expect(gate.acceptPlayback(stalePlayback, currentSnapshot).accepted).toBe(false);
   });

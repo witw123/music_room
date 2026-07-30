@@ -182,12 +182,14 @@ function normalizeSnapshot(
       )
     ? incomingSnapshot.room.playback
     : currentSnapshot.room.playback;
-  const shouldApplyPresence = shouldAcceptPresenceSnapshot(
-    currentSnapshot.room.members,
-    currentSnapshot.room.presenceRevision,
-    incomingSnapshot.room.members,
-    incomingSnapshot.room.presenceRevision
-  );
+  const shouldApplyPresence =
+    getRoomRevision(incomingSnapshot) >= getRoomRevision(currentSnapshot) &&
+    shouldAcceptPresenceSnapshot(
+      currentSnapshot.room.members,
+      currentSnapshot.room.presenceRevision,
+      incomingSnapshot.room.members,
+      incomingSnapshot.room.presenceRevision
+    );
 
   return {
     ...incomingSnapshot,
@@ -242,7 +244,8 @@ export function roomStateReducer(
 
       const currentRoomRevision = getRoomRevision(snapshot);
       const currentPresenceRevision = snapshot.room.presenceRevision ?? 0;
-      const shouldApplyPresence = shouldAcceptPresenceSnapshot(
+      const shouldApplyTopology = event.roomRevision >= currentRoomRevision;
+      const shouldApplyPresence = shouldApplyTopology && shouldAcceptPresenceSnapshot(
         snapshot.room.members,
         currentPresenceRevision,
         event.members,
@@ -298,7 +301,9 @@ export function roomStateReducer(
       }
 
       const currentPresenceRevision = snapshot.room.presenceRevision ?? 0;
-      const shouldApplyPresence = shouldAcceptPresenceSnapshot(
+      const currentRoomRevision = getRoomRevision(snapshot);
+      const shouldApplyTopology = (event.roomRevision ?? currentRoomRevision) >= currentRoomRevision;
+      const shouldApplyPresence = shouldApplyTopology && shouldAcceptPresenceSnapshot(
         snapshot.room.members,
         currentPresenceRevision,
         event.members,
@@ -324,7 +329,7 @@ export function roomStateReducer(
             presenceRevision: shouldApplyPresence
               ? event.presenceRevision
               : currentPresenceRevision,
-            roomRevision: Math.max(getRoomRevision(snapshot), event.roomRevision ?? 0),
+            roomRevision: Math.max(currentRoomRevision, event.roomRevision ?? 0),
             playback: nextPlayback
           }
         }

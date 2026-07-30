@@ -473,6 +473,73 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.presenceRevision).toBe(12);
   });
 
+  it("does not let a stale topology patch restore old member permissions", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 11,
+            presenceRevision: 12,
+            members: [
+              {
+                id: "host",
+                nickname: "Host",
+                role: "host",
+                joinedAt: "2026-04-04T00:00:00.000Z",
+                peerId: "peer-host",
+                presenceState: "online"
+              },
+              {
+                id: "member",
+                nickname: "Member",
+                role: "member",
+                joinedAt: "2026-04-04T00:01:00.000Z",
+                peerId: "peer-member",
+                presenceState: "online",
+                permissions: { library: false, queue: false, player: false }
+              }
+            ]
+          }
+        })
+      },
+      {
+        type: "server-presence-patch",
+        roomId: "room_1",
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host",
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online"
+          },
+          {
+            id: "member",
+            nickname: "Member",
+            role: "member",
+            joinedAt: "2026-04-04T00:01:00.000Z",
+            peerId: "peer-member",
+            presenceState: "online",
+            permissions: { library: true, queue: true, player: true }
+          }
+        ],
+        playback: createPlaybackSnapshot(),
+        presenceRevision: 13,
+        roomRevision: 10
+      }
+    );
+
+    expect(state.snapshot?.room.members.find((member) => member.id === "member")?.permissions).toEqual({
+      library: false,
+      queue: false,
+      player: false
+    });
+    expect(state.snapshot?.room.presenceRevision).toBe(12);
+    expect(state.snapshot?.room.roomRevision).toBe(11);
+  });
+
   it("keeps playback patches carried by presence events even when presence revision is unchanged", () => {
     const state = applyEvents(
       {
