@@ -133,6 +133,17 @@ function ensurePlaybackTrackMetadata(
   return nextTracks;
 }
 
+function mergeRoomMembersPreservingPermissions(
+  currentMembers: RoomMember[],
+  incomingMembers: RoomMember[]
+) {
+  const currentById = new Map(currentMembers.map((member) => [member.id, member]));
+  return normalizeRoomMembers(incomingMembers).map((member) => ({
+    ...member,
+    permissions: member.permissions ?? currentById.get(member.id)?.permissions
+  }));
+}
+
 function shouldUseTopologyPlaybackReset(input: {
   currentSnapshot: RoomSnapshot;
   incomingPlayback: PlaybackSnapshot;
@@ -203,7 +214,10 @@ function normalizeSnapshot(
       ...incomingSnapshot.room,
       roomRevision: getRoomRevision(incomingSnapshot),
       members: shouldApplyPresence
-        ? normalizeRoomMembers(incomingSnapshot.room.members)
+        ? mergeRoomMembersPreservingPermissions(
+            currentSnapshot.room.members,
+            incomingSnapshot.room.members
+          )
         : currentSnapshot.room.members,
       presenceRevision: shouldApplyPresence
         ? incomingSnapshot.room.presenceRevision
@@ -254,6 +268,9 @@ export function roomStateReducer(
       const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
         ? event.playback
         : snapshot.room.playback;
+      const nextMembers = shouldApplyPresence
+        ? mergeRoomMembersPreservingPermissions(snapshot.room.members, event.members)
+        : snapshot.room.members;
 
       if (
         !shouldApplyPresence &&
@@ -269,9 +286,7 @@ export function roomStateReducer(
           ...snapshot,
           room: {
             ...snapshot.room,
-            members: shouldApplyPresence
-              ? normalizeRoomMembers(event.members)
-              : snapshot.room.members,
+            members: nextMembers,
             presenceRevision: shouldApplyPresence
               ? Math.max(currentPresenceRevision, event.presenceRevision)
               : currentPresenceRevision,
@@ -312,6 +327,9 @@ export function roomStateReducer(
       const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
         ? event.playback
         : snapshot.room.playback;
+      const nextMembers = shouldApplyPresence
+        ? mergeRoomMembersPreservingPermissions(snapshot.room.members, event.members)
+        : snapshot.room.members;
 
       if (!shouldApplyPresence && nextPlayback === snapshot.room.playback) {
         return current;
@@ -323,9 +341,7 @@ export function roomStateReducer(
           ...snapshot,
           room: {
             ...snapshot.room,
-            members: shouldApplyPresence
-              ? normalizeRoomMembers(event.members)
-              : snapshot.room.members,
+            members: nextMembers,
             presenceRevision: shouldApplyPresence
               ? event.presenceRevision
               : currentPresenceRevision,

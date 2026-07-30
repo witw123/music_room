@@ -120,7 +120,8 @@ describe("roomStateReducer", () => {
             role: "member",
             joinedAt: "2026-04-04T00:01:00.000Z",
             peerId: null,
-            presenceState: "offline"
+            presenceState: "offline",
+            permissions: { library: false, queue: false, player: false }
           }
         ]
       }
@@ -172,6 +173,11 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.playback.status).toBe("playing");
     expect(state.snapshot?.room.playback.positionMs).toBe(32_000);
     expect(state.snapshot?.room.members[1]?.peerId).toBe("peer-member");
+    expect(state.snapshot?.room.members[1]?.permissions).toEqual({
+      library: false,
+      queue: false,
+      player: false
+    });
     expect(state.snapshot?.room.presenceRevision).toBe(4);
     expect(state.snapshot?.room.roomRevision).toBe(4);
   });
