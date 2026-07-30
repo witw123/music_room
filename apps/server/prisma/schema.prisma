@@ -45,6 +45,7 @@ model User {
   favoriteAlbums UserFavoriteAlbum[]
   favoriteTracks UserFavoriteTrack[]
   playbackHistory UserPlaybackDaily[]
+  roomActivity   UserRoomActivity[]
   adminSessions  AdminSession[]
   userSessions   UserSession[]
   auditLogs      AdminAuditLog[]
@@ -200,6 +201,25 @@ model UserPlaybackDaily {
   @@unique([userId, day, provider, providerTrackId])
   @@index([userId, day])
   @@index([userId, lastPlayedAt])
+}
+
+model UserRoomActivity {
+  id              String    @id
+  userId          String
+  roomId          String
+  roomName        String
+  joinCode        String
+  totalDurationMs BigInt    @default(0)
+  activeStartedAt DateTime?
+  lastPresenceAt  DateTime?
+  lastJoinedAt    DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId])
+  @@index([userId, lastJoinedAt])
 }
 
 model OperationalIncident {

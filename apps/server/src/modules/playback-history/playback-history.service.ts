@@ -60,14 +60,58 @@ export class PlaybackHistoryService {
       select: {
         provider: true,
         providerTrackId: true,
-        listenedMs: true
+        title: true,
+        artist: true,
+        album: true,
+        durationMs: true,
+        listenedMs: true,
+        lastPlayedAt: true
       }
     });
 
     const tracks = new Set(records.map((record) => `${record.provider}:${record.providerTrackId}`));
+    const trackTotals = new Map<string, {
+      provider: string;
+      providerTrackId: string;
+      title: string;
+      artist: string;
+      album: string | null;
+      durationMs: number;
+      listenedMs: number;
+      lastPlayedAt: Date;
+    }>();
+    for (const record of records) {
+      const key = `${record.provider}:${record.providerTrackId}`;
+      const current = trackTotals.get(key);
+      const metadata = !current || record.lastPlayedAt > current.lastPlayedAt
+        ? {
+            provider: record.provider,
+            providerTrackId: record.providerTrackId,
+            title: record.title,
+            artist: record.artist,
+            album: record.album,
+            durationMs: record.durationMs,
+            lastPlayedAt: record.lastPlayedAt
+          }
+        : current;
+      trackTotals.set(key, {
+        ...metadata,
+        listenedMs: (current?.listenedMs ?? 0) + record.listenedMs
+      });
+    }
+
+    const topTracks = [...trackTotals.values()]
+      .sort((left, right) =>
+        right.listenedMs - left.listenedMs ||
+        right.lastPlayedAt.getTime() - left.lastPlayedAt.getTime()
+      )
+      .slice(0, 5)
+      .map(({ lastPlayedAt: _lastPlayedAt, ...track }) => track);
+
     return {
       listenedMs: records.reduce((total, record) => total + record.listenedMs, 0),
       trackCount: tracks.size,
+      topTracks,
       rangeDays: playbackHistoryDays
     };
   }

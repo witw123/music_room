@@ -111,6 +111,12 @@ export class RoomController {
     return this.roomService.listRecentRoomSnapshotsForSession(userId);
   }
 
+  @Get("activity")
+  async listRoomActivity(@Headers("x-session-token") sessionToken: string | undefined) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.listRoomActivitiesForSession(userId);
+  }
+
   @Get(":roomId/recover")
   async recoverRoom(
     @Param("roomId") roomId: string,

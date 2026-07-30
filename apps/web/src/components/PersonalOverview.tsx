@@ -1,24 +1,26 @@
 "use client";
 
-import type { AuthSession, RoomSnapshot } from "@music-room/shared";
+import type { AuthSession } from "@music-room/shared";
 import { useEffect, useState } from "react";
-import { getMemberDurationMs } from "@/components/room/member-data";
-import { musicRoomApi, type PlaybackHistoryStats } from "@/lib/music-room-api";
+import {
+  musicRoomApi,
+  type PlaybackHistoryStats,
+  type RoomActivitySummary
+} from "@/lib/music-room-api";
 
 const activityRefreshIntervalMs = 60_000;
 
 export function PersonalOverview({ activeSession }: { activeSession: AuthSession }) {
-  const [recentRooms, setRecentRooms] = useState<RoomSnapshot[]>([]);
+  const [recentRooms, setRecentRooms] = useState<RoomActivitySummary[]>([]);
   const [playbackStats, setPlaybackStats] = useState<PlaybackHistoryStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [now, setNow] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadActivity() {
       const [rooms, stats] = await Promise.all([
-        musicRoomApi.getRecentRooms().catch(() => []),
+        musicRoomApi.getRoomActivity().catch(() => []),
         musicRoomApi.getPlaybackHistoryStats().catch(() => null)
       ]);
 
@@ -29,7 +31,6 @@ export function PersonalOverview({ activeSession }: { activeSession: AuthSession
       setRecentRooms(rooms);
       setPlaybackStats(stats);
       setIsLoading(false);
-      setNow(Date.now());
     }
 
     void loadActivity();
@@ -42,11 +43,6 @@ export function PersonalOverview({ activeSession }: { activeSession: AuthSession
       window.clearInterval(refreshId);
     };
   }, [activeSession.userId]);
-
-  useEffect(() => {
-    const clockId = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(clockId);
-  }, []);
 
   return (
     <section aria-labelledby="personal-overview-title" className="border-b border-surface-border pb-9">
@@ -71,30 +67,30 @@ export function PersonalOverview({ activeSession }: { activeSession: AuthSession
           <div className="flex items-end justify-between gap-4">
             <div>
               <h2 className="text-sm font-semibold text-foreground">最近加入的房间</h2>
-              <p className="mt-1 text-xs text-foreground-muted">每次重新加入都会重新开始计时</p>
+              <p className="mt-1 text-xs text-foreground-muted">只统计实际在房间内的累计时长</p>
             </div>
             {isLoading ? <span className="text-xs text-foreground-muted">加载中</span> : null}
           </div>
 
           <div className="mt-4 divide-y divide-surface-border border-y border-surface-border">
             {recentRooms.slice(0, 3).map((room) => {
-              const member = room.room.members.find((item) => item.id === activeSession.userId);
-              const durationMs = member ? getMemberDurationMs(member, now) : 0;
               return (
-                <div className="flex min-w-0 items-center justify-between gap-4 py-3" key={room.room.id}>
+                <div className="flex min-w-0 items-center justify-between gap-4 py-3" key={room.roomId}>
                   <div className="min-w-0">
                     <strong className="block truncate text-sm font-medium text-foreground">
-                      {room.room.name || "未命名房间"}
+                      {room.roomName || "未命名房间"}
                     </strong>
                     <span className="mt-1 block truncate text-xs text-foreground-muted">
-                      房间码 {room.room.joinCode}
+                      房间码 {room.joinCode}
                     </span>
                   </div>
                   <div className="shrink-0 text-right">
                     <strong className="block text-sm font-medium tabular-nums text-foreground">
-                      {formatActivityDuration(durationMs)}
+                      {formatActivityDuration(room.durationMs)}
                     </strong>
-                    <span className="mt-1 block text-xs text-foreground-muted">加入时长</span>
+                    <span className="mt-1 block text-xs text-foreground-muted">
+                      {room.isActive ? "当前加入时长" : "累计加入时长"}
+                    </span>
                   </div>
                 </div>
               );
@@ -109,31 +105,35 @@ export function PersonalOverview({ activeSession }: { activeSession: AuthSession
           <div className="flex items-end justify-between gap-4">
             <div>
               <h2 className="text-sm font-semibold text-foreground">最近听歌</h2>
-              <p className="mt-1 text-xs text-foreground-muted">近 {playbackStats?.rangeDays ?? 30} 天</p>
+              <p className="mt-1 text-xs text-foreground-muted">近 {playbackStats?.rangeDays ?? 30} 天 · 按听歌时长排序</p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 border-y border-surface-border">
-            <ActivityStat
-              label="听歌时长"
-              value={playbackStats ? formatActivityDuration(playbackStats.listenedMs) : isLoading ? "加载中" : "—"}
-            />
-            <ActivityStat
-              label="听过歌曲"
-              value={playbackStats ? `${playbackStats.trackCount} 首` : isLoading ? "加载中" : "—"}
-            />
+          <div className="mt-4 border-y border-surface-border">
+            {playbackStats?.topTracks.map((track, index) => (
+              <div
+                className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-surface-border py-3 last:border-b-0"
+                key={`${track.provider}:${track.providerTrackId}`}
+              >
+                <span className="text-center text-sm font-semibold tabular-nums text-accent">{index + 1}</span>
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm font-medium text-foreground">{track.title}</strong>
+                  <span className="mt-1 block truncate text-xs text-foreground-muted">
+                    {track.artist}{track.album ? ` · ${track.album}` : ""}
+                  </span>
+                </div>
+                <span className="text-right text-xs font-medium tabular-nums text-foreground-muted">
+                  {formatActivityDuration(track.listenedMs)}
+                </span>
+              </div>
+            ))}
+            {isLoading ? <p className="py-5 text-sm text-foreground-muted">加载中</p> : null}
+            {!isLoading && (!playbackStats || playbackStats.topTracks.length === 0) ? (
+              <p className="py-5 text-sm text-foreground-muted">最近还没有听歌记录</p>
+            ) : null}
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function ActivityStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 px-0 py-4 first:pr-4 last:border-l last:border-surface-border last:pl-4">
-      <strong className="block truncate text-lg font-semibold tabular-nums text-foreground sm:text-xl">{value}</strong>
-      <span className="mt-1 block truncate text-xs text-foreground-muted">{label}</span>
-    </div>
   );
 }
 

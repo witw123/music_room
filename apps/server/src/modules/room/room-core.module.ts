@@ -8,6 +8,7 @@ import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomPresenceService } from "./services/room-presence.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
+import { RoomActivityService } from "./services/room-activity.service";
 import { RoomService } from "./room.service";
 import { RoomRealtimeBroadcaster } from "../signaling/room-realtime.broadcaster";
 
@@ -57,6 +58,7 @@ type RoomPresenceStore = Map<
       inject: [RoomPresenceService],
       useFactory: (presence: RoomPresenceService) => new RoomPlaybackService(presence)
     },
+    RoomActivityService,
     {
       provide: RoomSnapshotService,
       inject: [RoomPresenceService, RoomPlaybackService],

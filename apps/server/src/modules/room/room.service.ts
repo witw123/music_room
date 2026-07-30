@@ -27,6 +27,7 @@ import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPresenceService } from "./services/room-presence.service";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
+import { RoomActivityService } from "./services/room-activity.service";
 
 const maxRoomMembers = 100;
 const maxRoomTracks = 500;
@@ -61,6 +62,7 @@ export class RoomService {
   private readonly roomPresenceService: RoomPresenceService;
   private readonly roomPlaybackService: RoomPlaybackService;
   private readonly roomSnapshotService: RoomSnapshotService;
+  private readonly roomActivityService: RoomActivityService;
   /**
    * Presence writes share one persisted room revision. Serialize all presence
    * transitions per room so concurrent members cannot conflict in storage and
@@ -79,7 +81,9 @@ export class RoomService {
     @Optional()
     roomPlaybackService?: RoomPlaybackService,
     @Optional()
-    roomSnapshotService?: RoomSnapshotService
+    roomSnapshotService?: RoomSnapshotService,
+    @Optional()
+    roomActivityService?: RoomActivityService
   ) {
     this.roomRecordRepository =
       roomRecordRepository ??
@@ -99,6 +103,7 @@ export class RoomService {
     this.roomSnapshotService =
       roomSnapshotService ??
       new RoomSnapshotService(this.roomPresenceService, this.roomPlaybackService);
+    this.roomActivityService = roomActivityService ?? new RoomActivityService(prisma);
   }
 
   async createRoom(
@@ -262,6 +267,10 @@ export class RoomService {
       const rightJoinedAt = right.room.members.find((member) => member.id === sessionId)?.joinedAt ?? "";
       return new Date(rightJoinedAt).getTime() - new Date(leftJoinedAt).getTime();
     });
+  }
+
+  async listRoomActivitiesForSession(sessionId: string) {
+    return this.roomActivityService.listRecent(sessionId);
   }
 
   async listPublicRooms(): Promise<RoomSnapshot[]> {
@@ -496,6 +505,7 @@ export class RoomService {
       }
 
       await this.roomPresenceService.clear(roomId, memberId);
+      await this.roomActivityService.stop(memberId, roomId, record.room);
       record.room.members = record.room.members.filter((candidate) => candidate.id !== memberId);
       await this.roomPlaybackService.handleSourceDeparture(record, memberId);
       this.incrementPresenceRevision(record.room);
@@ -509,6 +519,12 @@ export class RoomService {
   async deleteRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     await this.assertCanDeleteRoomRecord(record, sessionId);
+
+    await Promise.all(
+      record.room.members.map((member) =>
+        this.roomActivityService.stop(member.id, roomId, record.room)
+      )
+    );
 
     await this.roomRecordRepository.markRoomTerminated(record, "房主解散房间");
     await this.roomRecordRepository.deleteRecord(record);
@@ -526,6 +542,11 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     // AdminService creates the tombstone with the audit reason before this
     // method runs. Preserve that reason during retries.
+    await Promise.all(
+      record.room.members.map((member) =>
+        this.roomActivityService.stop(member.id, roomId, record.room)
+      )
+    );
     await this.roomRecordRepository.markRoomTerminated(record);
     await this.roomRecordRepository.deleteRecord(record);
     await Promise.all(record.room.members.map((member) => this.roomRecordRepository.clearRecentRoomForSessionIfMatching(member.id, roomId)));
@@ -574,7 +595,11 @@ export class RoomService {
         currentPresence.peerId === peerId &&
         currentPresence.presenceState === "online"
       ) {
-      await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+        await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+        await this.roomActivityService.startOrTouch(
+          sessionId,
+          record.room
+        );
         return {
           room: record.room,
           changed: false
@@ -601,6 +626,7 @@ export class RoomService {
       this.assertMember(record, sessionId);
       const leavingHost = record.room.hostId === sessionId;
       await this.roomPresenceService.clear(roomId, sessionId);
+      await this.roomActivityService.stop(sessionId, roomId, record.room);
 
       if (!leavingHost) {
         record.room.members = record.room.members.filter((member) => member.id !== sessionId);
@@ -1184,10 +1210,15 @@ export class RoomService {
     ) {
       if (presenceState === "online" && peerId) {
         await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+        await this.roomActivityService.startOrTouch(
+          sessionId,
+          record.room
+        );
       } else if (presenceState === "reconnecting") {
         await this.roomPresenceService.setReconnecting(roomId, sessionId);
       } else {
         await this.roomPresenceService.clear(roomId, sessionId);
+        await this.roomActivityService.stop(sessionId, roomId, record.room);
       }
       return record.room;
     }
@@ -1195,6 +1226,10 @@ export class RoomService {
     if (presenceState === "online" && peerId) {
       await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
       this.roomPlaybackService.handleSourcePeerOnline(record, sessionId, peerId);
+      await this.roomActivityService.startOrTouch(
+        sessionId,
+        record.room
+      );
     } else if (presenceState === "reconnecting") {
       await this.roomPresenceService.setReconnecting(roomId, sessionId);
     } else {
@@ -1203,6 +1238,7 @@ export class RoomService {
 
     if (presenceState === "offline") {
       await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
+      await this.roomActivityService.stop(sessionId, roomId, record.room);
     }
 
     this.incrementPresenceRevision(record.room);

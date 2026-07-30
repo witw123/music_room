@@ -70,7 +70,25 @@ export type PlaybackHistoryRecord = {
 export type PlaybackHistoryStats = {
   listenedMs: number;
   trackCount: number;
+  topTracks: Array<{
+    provider: PlaybackHistoryProvider;
+    providerTrackId: string;
+    title: string;
+    artist: string;
+    album: string | null;
+    durationMs: number;
+    listenedMs: number;
+  }>;
   rangeDays: number;
+};
+
+export type RoomActivitySummary = {
+  roomId: string;
+  roomName: string;
+  joinCode: string;
+  durationMs: number;
+  lastJoinedAt: string;
+  isActive: boolean;
 };
 
 export type AuthConfig = {
@@ -286,6 +304,7 @@ export const musicRoomApi = {
     }),
   getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
   getRecentRooms: () => request<RoomSnapshot[]>("/v1/rooms/recent"),
+  getRoomActivity: () => request<RoomActivitySummary[]>("/v1/rooms/activity"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
   listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
