@@ -628,8 +628,6 @@ export function DesktopBottomPlayerLayout({
   favoriteTrackIsPending = false,
   onToggleFavoriteTrack
 }: LayoutProps) {
-  const hasLyricsControl = Boolean(onToggleLyrics);
-
   return (
     <div className={`mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 ${mobileVariant === "compact" ? "md:grid" : "lg:grid"}`} data-player-layout="desktop">
       <div className="flex min-w-0 items-center gap-3">
@@ -661,15 +659,20 @@ export function DesktopBottomPlayerLayout({
             track={favoriteTrack}
           />
         ) : null}
+        {onToggleLyrics ? (
+          <LyricsToggleButton
+            accentColor={artworkAccent}
+            accentSoft={artworkAccentSoft}
+            disabled={!playbackTrackId}
+            isOpen={isLyricsOpen}
+            onToggle={onToggleLyrics}
+          />
+        ) : null}
       </div>
 
       <div className="relative flex items-center justify-center">
-        <div className={`grid h-10 ${hasLyricsControl ? "w-[19rem]" : "w-[13.5rem]"} grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1`}>
-        <div className={hasLyricsControl
-          ? "flex min-w-0 items-center justify-end gap-0.5 sm:gap-1"
-          : "flex shrink-0 items-center gap-0.5 sm:gap-1"}
-        >
-          {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
+        <div className="grid h-10 w-[13.5rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <PlaybackModeButton
             mode={playbackMode}
             onCycle={onCyclePlaybackMode}
