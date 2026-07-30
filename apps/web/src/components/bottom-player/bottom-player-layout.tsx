@@ -662,68 +662,71 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="relative flex items-center justify-center">
-        <div className="flex min-w-0 shrink-0 items-center justify-center gap-1.5 sm:gap-2">
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-          {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
-          <PlaybackModeButton
-            mode={playbackMode}
-            onCycle={onCyclePlaybackMode}
+        <div className="grid h-10 w-[19rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
+          <div className="flex min-w-0 items-center justify-end gap-0.5 sm:gap-1">
+            {onToggleLyrics ? <LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /> : null}
+            <PlaybackModeButton
+              mode={playbackMode}
+              onCycle={onCyclePlaybackMode}
+              disabled={!canControlPlayback}
+              accentColor={artworkAccent}
+            />
+            <Button
+              data-testid="player-prev-button"
+              variant="ghost"
+              size="icon"
+              disabled={!canControlPlayback || !playbackTrackId}
+              onClick={onPrev}
+              title="上一首"
+              className="shrink-0"
+              style={{ color: artworkAccent }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+              </svg>
+            </Button>
+          </div>
+
+          <button
+            data-testid="player-toggle-button"
+            className={`inline-grid h-10 w-10 shrink-0 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+              canControlPlayback
+                ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
+                : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
+            }`}
+            style={canControlPlayback ? { backgroundColor: artworkAccent, color: "#fff", boxShadow: `0 0 18px ${artworkAccentSoft}` } : undefined}
             disabled={!canControlPlayback}
-            accentColor={artworkAccent}
-          />
-        </div>
+            onClick={onTogglePlay}
+            title={isPlaying ? "暂停" : "播放"}
+            type="button"
+          >
+            {isPlaying ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19h4V5H6zm8-14v14h4V5z" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
 
-        <Button
-          data-testid="player-prev-button"
-          variant="ghost"
-          size="icon"
-          disabled={!canControlPlayback || !playbackTrackId}
-          onClick={onPrev}
-          title="上一首"
-          style={{ color: artworkAccent }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-          </svg>
-        </Button>
-
-        <button
-          data-testid="player-toggle-button"
-          className={`inline-grid h-10 w-10 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-            canControlPlayback
-              ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
-              : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
-          }`}
-          style={canControlPlayback ? { backgroundColor: artworkAccent, color: "#fff", boxShadow: `0 0 18px ${artworkAccentSoft}` } : undefined}
-          disabled={!canControlPlayback}
-          onClick={onTogglePlay}
-          title={isPlaying ? "暂停" : "播放"}
-          type="button"
-        >
-          {isPlaying ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 19h4V5H6zm8-14v14h4V5z" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
-
-        <Button
-          data-testid="player-next-button"
-          variant="ghost"
-          size="icon"
-          disabled={!canControlPlayback || !playbackTrackId}
-          onClick={onNext}
-          title="下一首"
-          style={{ color: artworkAccent }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
-          </svg>
-        </Button>
+          <div className="flex min-w-0 items-center justify-start">
+            <Button
+              data-testid="player-next-button"
+              variant="ghost"
+              size="icon"
+              disabled={!canControlPlayback || !playbackTrackId}
+              onClick={onNext}
+              title="下一首"
+              className="shrink-0"
+              style={{ color: artworkAccent }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
+              </svg>
+            </Button>
+          </div>
         </div>
       </div>
 

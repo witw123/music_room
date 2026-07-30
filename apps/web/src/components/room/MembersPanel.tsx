@@ -384,7 +384,6 @@ function MembersPanelBase({
   const [removeTarget, setRemoveTarget] = useState<RoomMember | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const normalizedMembers = dedupeRoomMembers(members);
-  const onlineCount = normalizedMembers.filter((member) => member.presenceState === "online").length;
 
   const handlePermissionChange = async (
     member: RoomMember,
@@ -416,18 +415,6 @@ function MembersPanelBase({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="members-panel">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold text-foreground">房间成员</h2>
-          <p className="mt-1 text-[10px] text-foreground-muted">
-            {onlineCount} 人在线 · 共 {normalizedMembers.length} 人
-          </p>
-        </div>
-        <span className="rounded-full border border-surface-border bg-background/40 px-2.5 py-1 text-[10px] font-mono text-foreground-muted">
-          {normalizedMembers.length}
-        </span>
-      </header>
-
       {normalizedMembers.length > 0 ? (
         <div className="divide-y divide-surface-border border-y border-surface-border">
           {normalizedMembers.map((member) => {

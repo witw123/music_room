@@ -54,21 +54,6 @@ export function LocalPlaylistPanel({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="local-playlist-panel">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-foreground">本地歌单</p>
-          <p className="mt-1 truncate text-[10px] text-foreground-muted">
-            {localFolderName ? `项目根目录：${localFolderName}` : "尚未选择项目根目录"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center justify-end gap-2">
-          <span className="font-mono text-[10px] text-foreground-muted">{localPlaylists.length} 个歌单</span>
-          <Link className="text-[10px] font-semibold text-accent hover:text-accent/80" href="/app/profile/playlists">
-            创建歌单
-          </Link>
-        </div>
-      </div>
-
       {localPlaylists.length > 0 ? (
         <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
           {localPlaylists.map((playlist) => {
