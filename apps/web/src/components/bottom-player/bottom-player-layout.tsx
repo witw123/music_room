@@ -664,10 +664,7 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       <div className="relative flex items-center justify-center">
-        <div className={hasLyricsControl
-          ? "grid h-10 w-[19rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1"
-          : "flex min-w-0 shrink-0 items-center justify-center gap-1.5 sm:gap-2"}
-        >
+        <div className={`grid h-10 ${hasLyricsControl ? "w-[19rem]" : "w-[13.5rem]"} grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1`}>
         <div className={hasLyricsControl
           ? "flex min-w-0 items-center justify-end gap-0.5 sm:gap-1"
           : "flex shrink-0 items-center gap-0.5 sm:gap-1"}
@@ -718,7 +715,7 @@ export function DesktopBottomPlayerLayout({
           )}
         </button>
 
-        <div className={hasLyricsControl ? "flex min-w-0 items-center justify-start" : "flex items-center"}>
+        <div className="flex min-w-0 items-center justify-start gap-1">
           <Button
             data-testid="player-next-button"
             variant="ghost"
@@ -732,12 +729,6 @@ export function DesktopBottomPlayerLayout({
               <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
             </svg>
           </Button>
-        </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
           <PlayerQueueDrawer
             queue={queue}
             tracks={tracks}
@@ -753,6 +744,12 @@ export function DesktopBottomPlayerLayout({
             onRemoveQueueItem={onRemoveQueueItem}
             onReorderQueue={onReorderQueue}
           />
+        </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
           <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
             {formatDuration(boundedProgressMs)}
           </span>
