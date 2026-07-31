@@ -927,9 +927,12 @@ export class SegmentedOpusEngine {
         signal
       );
       validateDecodedAudioBuffer(decoded, unit);
-      if (unit.payload.byteLength > 128 && !hasDecodedSignal(decoded)) {
-        throw new Error("Audio asset decoder returned silent PCM.");
-      }
+      // A 2s Opus segment can legitimately decode to digital silence during a
+      // quiet passage. Treating that as a decoder failure forced a redundant
+      // WASM re-decode on every such segment (audible stutter on quiet songs)
+      // without ever distinguishing valid silence from a broken path, because
+      // the WASM fallback result was only structurally validated. Let the
+      // structure checks above stand as the decode-failure signal.
     } catch (error) {
       if (isAbortError(error) || signal?.aborted) {
         throw error;
@@ -1110,6 +1113,18 @@ export class SegmentedOpusEngine {
     );
   }
 
+  private hasInFlightUnitWork() {
+    if (this.unitLoads.size > 0) {
+      return true;
+    }
+    for (const queue of this.aheadQueues.values()) {
+      if (queue.running && (queue.units.size > 0 || queue.decoded.size > 0)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private updateSourceHealth() {
     const trackState = this.broadcastEnabled
       ? roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState
@@ -1180,6 +1195,17 @@ export class SegmentedOpusEngine {
     // catching up. Stopping the queue here turns a short storage or decoder
     // hiccup into a full audible gap and throws away useful prefetched audio.
     if (this.timelineStarted && context && this.hasScheduledAudio(context)) {
+      this.sourceHealth = "source-underrun";
+      return;
+    }
+    // Even when the scheduled cushion is exhausted, a unit read or decode
+    // that is already in flight can refill the buffer on the next tick.
+    // Hard-stopping here turns a slow IndexedDB/repository read (up to the
+    // 5s asset timeout) into a full 4s startup re-buffer for every listener.
+    // Only hard-stop when there is genuinely no in-flight work left to wait
+    // on, so a transient stall recovers on the next tick instead of forcing
+    // every listener through a full rebuffer.
+    if (this.timelineStarted && this.hasInFlightUnitWork()) {
       this.sourceHealth = "source-underrun";
       return;
     }
@@ -1375,19 +1401,6 @@ function validateDecodedAudioBuffer(
       }
     }
   }
-}
-
-function hasDecodedSignal(decoded: AudioBuffer) {
-  const sampleStride = Math.max(1, Math.floor(decoded.length / 2_048));
-  for (let channelIndex = 0; channelIndex < decoded.numberOfChannels; channelIndex += 1) {
-    const channel = decoded.getChannelData(channelIndex);
-    for (let index = 0; index < channel.length; index += sampleStride) {
-      if (Math.abs(channel[index] ?? 0) > 1e-7) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 function createAbortError() {

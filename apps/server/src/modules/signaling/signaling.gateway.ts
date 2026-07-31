@@ -16,6 +16,7 @@ import type {
   PeerSignalMessage,
   RoomSubscribeAckPayload,
   RoomChatInputPayload,
+  RoomClockInputPayload,
   RoomLibraryPatchPayload,
   RoomMemberRemovedPayload,
   RoomPlaybackPatchPayload,
@@ -33,6 +34,7 @@ import {
   errorCodes,
   peerSignalMessageSchema,
   roomChatInputPayloadSchema,
+  roomClockInputPayloadSchema,
   roomDeletedPayloadSchema,
   roomLibraryPatchPayloadSchema,
   roomMemberRemovedPayloadSchema,
@@ -801,6 +803,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
 
     client.to(parsed.data.roomId).emit("room.chat", nextPayload);
     return nextPayload;
+  }
+
+  @SubscribeMessage("room.clock")
+  async handleRoomClock(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: RoomClockInputPayload
+  ) {
+    this.assertRealtimeRateLimit(client, "room.clock", 60);
+    const parsed = roomClockInputPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid room clock payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+
+    this.assertRealtimeClient(client, parsed.data.roomId);
+    await this.assertSessionLease(client);
+    return { serverNow: new Date().toISOString() };
   }
 
   @SubscribeMessage("room.subscribe")

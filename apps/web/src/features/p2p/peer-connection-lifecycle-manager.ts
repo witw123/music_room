@@ -33,6 +33,7 @@ import {
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
+  resolveAdaptiveAudioBitrateKbps,
   resolveFixedAudioBitrateKbps
 } from "./audio-bitrate-policy";
 
@@ -1292,12 +1293,13 @@ export class PeerConnectionLifecycleManager {
       }
     }
 
+    const expectedConfiguredBitrateKbps = entry.adaptiveAudioMaxBitrateKbps ?? this.localAudioMaxBitrateKbps;
     if (
       entry.audioSender &&
-      entry.configuredAudioMaxBitrateKbps !== this.localAudioMaxBitrateKbps
+      entry.configuredAudioMaxBitrateKbps !== expectedConfiguredBitrateKbps
     ) {
-      await this.applyAudioSenderParameters(entry.audioSender);
-      if (this.localAudioMaxBitrateKbps === null) {
+      await this.applyAudioSenderParameters(entry.audioSender, expectedConfiguredBitrateKbps);
+      if (expectedConfiguredBitrateKbps === null) {
         entry.configuredAudioMaxBitrateKbps = null;
       }
     }
@@ -1425,7 +1427,7 @@ export class PeerConnectionLifecycleManager {
     if (effectiveMaxBitrateKbps === null || typeof sender.getParameters !== "function") {
       for (const [, entry] of this.peerConnections.allEntries()) {
         if (entry.audioSender === sender) {
-          entry.configuredAudioMaxBitrateKbps = this.localAudioMaxBitrateKbps;
+          entry.configuredAudioMaxBitrateKbps = effectiveMaxBitrateKbps;
           entry.appliedAudioBitrateKbps = null;
           break;
         }
@@ -1463,7 +1465,7 @@ export class PeerConnectionLifecycleManager {
       }
       for (const [, entry] of this.peerConnections.allEntries()) {
         if (entry.audioSender === sender) {
-          entry.configuredAudioMaxBitrateKbps = this.localAudioMaxBitrateKbps;
+          entry.configuredAudioMaxBitrateKbps = effectiveMaxBitrateKbps;
           entry.appliedAudioBitrateKbps = targetBitrateKbps;
           break;
         }
@@ -1667,6 +1669,29 @@ export class PeerConnectionLifecycleManager {
       // audio window or a stats gap; refresh the sender binding without
       // tearing down the ICE/DTLS connection that is still carrying media.
       void this.enqueueMediaOperation(peerId, entry);
+    }
+    // Per-peer adaptive RTP bitrate. Weak links get a lower Opus target so the
+    // browser's congestion control keeps headroom for FEC instead of
+    // over-filling a degrading pipe with high-rate audio that then drops.
+    // RTCRtpSender.setParameters needs no renegotiation, so this can react to
+    // each stats window without disturbing the ICE/DTLS path.
+    if (localSourceIsActive && entry.audioSender) {
+      const adaptiveBitrateKbps = resolveAdaptiveAudioBitrateKbps({
+        lossRate: loss,
+        jitterMs: jitter,
+        availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps ?? null
+      });
+      if (
+        adaptiveBitrateKbps !== entry.adaptiveAudioMaxBitrateKbps &&
+        adaptiveBitrateKbps !== entry.appliedAudioBitrateKbps
+      ) {
+        entry.adaptiveAudioMaxBitrateKbps = adaptiveBitrateKbps;
+        void this.applyAudioSenderParameters(entry.audioSender, adaptiveBitrateKbps);
+      }
+    } else if (entry.adaptiveAudioMaxBitrateKbps !== null) {
+      // The local source is no longer sending to this peer; drop the override
+      // so the next reconcile returns to the configured project maximum.
+      entry.adaptiveAudioMaxBitrateKbps = null;
     }
     const reason = (
       (receivePacketOutage && state.noPacketWindows >= mediaNoReceiveRecoveryWindows) ||

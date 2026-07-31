@@ -357,6 +357,82 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("keeps the timeline soft when an underrun has an in-flight unit read", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    vi.spyOn(roomAudioOutput, "getBroadcastStream").mockReturnValue({
+      getAudioTracks: () => [{ readyState: "live" }]
+    } as unknown as MediaStream);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    let holdUnit4 = false;
+    let unit4Held = false;
+    let releaseUnit4: () => void = () => undefined;
+    let unit3Available = false;
+    const getUnit = vi.fn(async (unitIndex: number): Promise<AudioAssetUnitRecord | null> => {
+      if (unitIndex === 3 && unit3Available) {
+        return unit(3);
+      }
+      if (unitIndex === 4 && holdUnit4 && !unit4Held) {
+        unit4Held = true;
+        await new Promise<void>((resolve) => {
+          releaseUnit4 = () => resolve();
+        });
+        unit4Held = false;
+      }
+      return unitIndex < 2 ? unit(unitIndex) : null;
+    });
+
+    // Start the timeline with the first two units.
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit
+    });
+
+    // Let every scheduled source finish, advance the room clock to unit 3,
+    // and make the next required unit (3) fail while unit 4 is still loading.
+    Object.defineProperty(context, "currentTime", {
+      configurable: true,
+      value: 16
+    });
+    holdUnit4 = true;
+    const underrun = await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 7_000,
+      volume: 0.7,
+      getUnit
+    });
+
+    expect(underrun.state).toBe("buffering");
+    expect(engine.getSourceHealth().underrunCount).toBe(1);
+    // The in-flight unit 4 read keeps the engine in the soft underrun path:
+    // already-created sources are not torn down and the timeline survives.
+    expect(sources[0]?.stopped).toBe(false);
+    expect(sources[1]?.stopped).toBe(false);
+
+    // Unit 4 resolves and unit 3 becomes readable. Because the timeline was
+    // not hard-reset, a single unit is enough to recover to live immediately.
+    releaseUnit4();
+    await Promise.resolve();
+    holdUnit4 = false;
+    unit3Available = true;
+    const recovered = await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 7_000,
+      volume: 0.7,
+      getUnit
+    });
+
+    expect(recovered.state).toBe("live");
+    engine.destroy();
+  });
+
   it("keeps a live media track healthy when the song segment is silent", async () => {
     const { context } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

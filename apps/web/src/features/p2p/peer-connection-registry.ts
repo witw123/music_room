@@ -30,6 +30,8 @@ export type PeerEntry = {
   senderTrackState: PeerMediaTrackState;
   configuredAudioMaxBitrateKbps: number | null;
   appliedAudioBitrateKbps: number | null;
+  /** Runtime bitrate override from per-peer network health (see observeMediaHealth). */
+  adaptiveAudioMaxBitrateKbps: number | null;
   receiverTrackState: PeerMediaTrackState;
   receiverRtpActive: boolean;
   receiverMuteTimerId: ReturnType<typeof setTimeout> | null;
@@ -76,6 +78,7 @@ export function createPeerEntry(input: {
     senderTrackState: "none",
     configuredAudioMaxBitrateKbps: null,
     appliedAudioBitrateKbps: null,
+    adaptiveAudioMaxBitrateKbps: null,
     receiverTrackState: "none",
     receiverRtpActive: false,
     receiverMuteTimerId: null,

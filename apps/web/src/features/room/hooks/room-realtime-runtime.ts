@@ -6,6 +6,7 @@ import type {
   PeerDiagnosticsSnapshot,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
+  RoomClockAckPayload,
   RoomPlaybackReadinessPayload,
   RoomTrackDeletedPayload,
   RoomSnapshotMissingPayload,
@@ -34,6 +35,12 @@ import {
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
 const socketDisconnectGraceMs = 6_000;
+// The room playback clock is a one-shot offset calibrated only at subscribe
+// time. Client clocks drift and the offset is never re-converged, which makes
+// a member's shared position estimate diverge from the audible audio (progress
+// bar runs ahead of / behind sound). Recalibrate on an interval so the offset
+// tracks the server clock instead of drifting until the next resubscribe.
+const roomClockCalibrationIntervalMs = 60_000;
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -251,6 +258,41 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
   let subscribeRequestSequence = 0;
+  let clockCalibrationIntervalId: number | null = null;
+
+  const stopClockCalibrationInterval = () => {
+    if (clockCalibrationIntervalId !== null) {
+      window.clearInterval(clockCalibrationIntervalId);
+      clockCalibrationIntervalId = null;
+    }
+  };
+
+  const startClockCalibrationInterval = () => {
+    if (clockCalibrationIntervalId !== null) {
+      return;
+    }
+    clockCalibrationIntervalId = window.setInterval(() => {
+      const currentSocket = input.socketRef.current;
+      if (!currentSocket?.connected) {
+        return;
+      }
+      const requestStartedAtMs = Date.now();
+      currentSocket.emit(
+        "room.clock",
+        { roomId: input.roomId },
+        (ack?: RoomClockAckPayload) => {
+          if (!ack?.serverNow) {
+            return;
+          }
+          calibrateRoomPlaybackClock({
+            serverNow: ack.serverNow,
+            requestStartedAtMs,
+            responseReceivedAtMs: Date.now()
+          });
+        }
+      );
+    }, roomClockCalibrationIntervalMs);
+  };
 
   const clearSubscribeTimers = () => {
     if (subscribeRetryId !== null) {
@@ -335,6 +377,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           // ids after a join/reconnect. Sync immediately so media negotiation
           // does not depend on a later room snapshot or presence patch.
           input.resyncRealtimePeers(ack.bootstrap?.members ?? []);
+          startClockCalibrationInterval();
         }
       }
     );
@@ -667,6 +710,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
 
   return () => {
     clearSubscribeTimers();
+    stopClockCalibrationInterval();
     input.stopPresenceHeartbeat();
     input.setPlaybackReadiness([]);
     input.resubscribeRoomRef.current = null;
