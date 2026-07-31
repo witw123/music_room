@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
-  isSegmentedPlaybackAudible,
   recordReceiverAudioProgress,
-  resolveRoomAudioPath,
-  resolveRemoteAudioTimelineKey,
   resolveReceiverPlaybackState,
-  shouldRecoverStalledReceiverAudio,
-  resolvePlaybackBarrierState,
+  shouldRecoverStalledReceiverAudio
+} from "@/features/room/playback/receiver-audio-health";
+import {
+  isSegmentedPlaybackAudible,
+  resolvePlaybackBarrierState
+} from "@/features/room/playback/playback-barrier";
+import {
   resolveCacheReadinessState,
+  resolveRoomAudioPath,
   resolveRoomAudioPositionMs,
+  resolveRemoteAudioTimelineKey,
   shouldDisableSourcePlayback,
   shouldWaitForLocalAudioContext
-} from "./use-room-segmented-playback-runtime";
+} from "@/features/room/playback/room-audio-path";
 
 describe("receiver audio progress", () => {
   it("does not refresh progress for a playing event without clock movement", () => {
@@ -242,6 +246,28 @@ describe("room playback cache barrier", () => {
       holdPositionMs: 0,
       resumeAtMs: null
     });
+  });
+
+  it("excludes a cache participant that waited past the barrier timeout", () => {
+    const stalled = readiness("one", "waiting", "waiting");
+    const ready = readiness("two", "ready", "open");
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one"), member("two")] as never,
+      readiness: [stalled, ready],
+      nowMs: Date.parse("2026-07-27T00:00:04.000Z"),
+      staleWaitingSessionIds: new Set(["one"])
+    }).blocked).toBe(false);
+  });
+
+  it("releases the hold when the only cache participant times out", () => {
+    expect(resolvePlaybackBarrierState({
+      playback,
+      activeMembers: [member("one")] as never,
+      readiness: [readiness("one", "waiting", "waiting")],
+      nowMs: Date.parse("2026-07-27T00:00:04.000Z"),
+      staleWaitingSessionIds: new Set(["one"])
+    }).blocked).toBe(false);
   });
 
   it("does not create a barrier when every cache participant already has the track", () => {

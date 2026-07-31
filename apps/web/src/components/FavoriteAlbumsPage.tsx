@@ -33,7 +33,7 @@ import {
   ensureLocalAudioDirectoryWriteAccess,
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory
-} from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
 

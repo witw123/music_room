@@ -5,7 +5,7 @@ import type {
 import type {
   CachedLibraryTrack,
   CachedLibraryTrackFile
-} from "@/features/upload/audio-utils";
+} from "@/features/library/audio-utils";
 import type { TrackMeta } from "@music-room/shared";
 
 export function createInFlightCachedLibraryTrackFileLoader(

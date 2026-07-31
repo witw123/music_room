@@ -12,7 +12,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
-import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
+import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";

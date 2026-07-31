@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { UploadedTrack } from "@/features/library/audio-utils";
 import { TrackListSection } from "./TrackListSection";
 
 type LibraryTabPanelProps = {

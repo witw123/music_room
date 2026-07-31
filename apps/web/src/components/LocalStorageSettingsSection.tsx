@@ -10,7 +10,7 @@ import {
   getLocalAudioStorageStats,
   getLocalAudioStorageState,
   type LocalAudioStorageState
-} from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import {
   getCachedLocalStorageData,
   setCachedLocalStorageData

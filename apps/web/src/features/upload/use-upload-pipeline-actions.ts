@@ -22,12 +22,12 @@ import {
   musicRoomApi,
   resolveDownloadedAudioMimeType
 } from "@/lib/music-room-api";
-import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "./audio-utils";
+import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/library/audio-utils";
 import {
   getReusableAudioAssets,
   playbackProfileId,
   prepareAudioAssets
-} from "./audio-asset-builder";
+} from "@/features/library/audio-asset-builder";
 import {
   applySelectedTrackFilesResult,
   buildRegisterTrackPayload,
@@ -36,14 +36,14 @@ import {
 import {
   buildCachedLibraryTrackUpsertRecord,
   toCachedLibraryFile
-} from "./cache-library";
-import { resolveProviderTrackSource } from "./provider-track-identity";
+} from "@/features/library/cache-library";
+import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import {
   getConfiguredLocalRepository,
   saveAudioFileToLocalDirectory
-} from "./local-audio-storage";
-import { resolveLocalArtworkUrl } from "./audio-metadata";
-import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
+} from "@/features/library/local-audio-storage";
+import { resolveLocalArtworkUrl } from "@/features/library/audio-metadata";
+import { persistRoomSnapshotToLocalRepository } from "@/features/library/local-room-storage";
 import { hasRoomPermission } from "@/features/room/room-permissions";
 
 type UploadPipelineActionsInput = {

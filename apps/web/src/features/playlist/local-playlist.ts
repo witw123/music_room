@@ -18,13 +18,13 @@ import {
   chooseLocalAudioSourceDirectory,
   listLocalAudioFilesInDirectory,
   listSelectedLocalAudioFiles
-} from "@/features/upload/local-audio-storage";
-import { readEmbeddedAudioMetadata } from "@/features/upload/audio-metadata";
-import { getConfiguredLocalRepository } from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
+import { readEmbeddedAudioMetadata } from "@/features/library/audio-metadata";
+import { getConfiguredLocalRepository } from "@/features/library/local-audio-storage";
 import {
   createRepositoryTrackRecord,
   type LocalRepositoryPlaylistRecord
-} from "@/features/upload/local-repository";
+} from "@/features/library/local-repository";
 
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 

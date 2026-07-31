@@ -8,7 +8,7 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
 import { initialRoomStateStore, roomStateReducer } from "@/features/room/room-state-reducer";
-import { useRoomPageDerived } from "@/components/room/hooks/use-room-page-derived";
+import { useRoomPageDerived } from "@/features/room/hooks/use-room-page-derived";
 import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playback-effects";
 import { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import { isSegmentedAudioOutputReady } from "@/components/room/hooks/use-room-playback-actions";
@@ -18,7 +18,7 @@ import { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-work
 import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
-import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
+import { useRoomSegmentedPlaybackRuntime } from "@/features/room/hooks/use-room-segmented-playback-runtime";
 import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
 import type { Route } from "next";
 import type { RoomPlaybackReadinessInputPayload } from "@music-room/shared";
@@ -31,7 +31,7 @@ import {
   shouldCommitAwayRoomResume,
   storeAwayRoomId
 } from "@/lib/away-room";
-export * from "@/components/room/hooks/use-room-page-derived";
+export * from "@/features/room/hooks/use-room-page-derived";
 export * from "@/components/room/hooks/use-room-playback-actions";
 
 const lastRoomStorageKey = "music-room-last-room";

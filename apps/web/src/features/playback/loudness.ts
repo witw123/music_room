@@ -1,5 +1,5 @@
 import type { TrackLoudness } from "@music-room/shared";
-import { analyzeAudioBuffer } from "@/features/upload/loudness-analysis";
+import { analyzeAudioBuffer } from "@/features/library/loudness-analysis";
 
 type LoudnessTrack = {
   loudness?: {

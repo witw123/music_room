@@ -2,8 +2,8 @@ import { hashAudioBlob, localPlaylistTrackId, toProviderTrackRecord, type Provid
 import {
   normalizeLocalAudioMimeType,
   saveCachedAudioFileToLocalDirectory
-} from "@/features/upload/local-audio-storage";
-import { resolveLocalArtworkUrl } from "@/features/upload/audio-metadata";
+} from "@/features/library/local-audio-storage";
+import { resolveLocalArtworkUrl } from "@/features/library/audio-metadata";
 import {
   deleteCachedLibraryTrack,
   deleteCachedLibraryTrackFile,

@@ -34,7 +34,7 @@ import {
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory,
   getLocalAudioStorageState
-} from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
 import {

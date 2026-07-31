@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TrackMeta } from "@music-room/shared";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { UploadedTrack } from "@/features/library/audio-utils";
 import {
   applySelectedTrackFilesResult,
   buildRegisterTrackPayload,

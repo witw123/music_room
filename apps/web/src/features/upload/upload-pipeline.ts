@@ -1,5 +1,5 @@
 import type { TrackMeta } from "@music-room/shared";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { UploadedTrack } from "@/features/library/audio-utils";
 
 type TrackRegistrationDraft = Omit<TrackMeta, "id"> & {
   id?: string;

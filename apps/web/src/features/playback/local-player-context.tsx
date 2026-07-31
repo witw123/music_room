@@ -29,9 +29,9 @@ import {
 import {
   getLocalAudioCacheFile,
   getLocalAudioFile
-} from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import { synchronizeShuffleBagTrackIds } from "@music-room/shared";
-import { readEmbeddedAudioMetadata } from "@/features/upload/audio-metadata";
+import { readEmbeddedAudioMetadata } from "@/features/library/audio-metadata";
 import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {

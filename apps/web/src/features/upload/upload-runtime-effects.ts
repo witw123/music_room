@@ -4,8 +4,8 @@ import {
   getCachedLibraryTrack,
   getCachedLibraryTrackSummary
 } from "@/lib/indexeddb";
-import { getLocalAudioCacheFile, getLocalAudioFile } from "./local-audio-storage";
-import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
+import { getLocalAudioCacheFile, getLocalAudioFile } from "@/features/library/local-audio-storage";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import {
   applyOwnedUploadRehydrationResult,
   rehydrateOwnedUploadedTracksFromCache
@@ -15,7 +15,7 @@ import {
   cleanupUploadRuntimeRefs,
   syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
-import { persistRoomSnapshotToLocalRepository } from "./local-room-storage";
+import { persistRoomSnapshotToLocalRepository } from "@/features/library/local-room-storage";
 
 type UploadRuntimeEffectsInput = {
   activeSession: GuestSession | null;

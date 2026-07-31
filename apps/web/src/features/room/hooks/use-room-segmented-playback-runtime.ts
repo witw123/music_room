@@ -2,287 +2,68 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import type {
-  PlaybackSnapshot,
   RoomPlaybackReadinessInputPayload,
   RoomPlaybackReadinessPayload,
   RoomSnapshot,
-  TrackLoudness,
   TrackMeta
 } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { preferredAudioRtpBitrateKbps } from "@/features/p2p/audio-bitrate-policy";
 import {
   useSegmentedOpusPlayback,
-  type PlaybackAudioPath,
   type SegmentedPlaybackSnapshot
 } from "@/features/playback/use-segmented-opus-playback";
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import {
-  getRoomPlaybackClockNowMs,
-  resolveRoomPlaybackPositionMs,
-  type RoomPlaybackBarrierClock
-} from "@/features/playback/room-playback-clock";
+import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
 import {
   ensureOfflineProviderPlaybackAsset,
   resolveOfflineProviderSource
 } from "@/features/playback/offline-source-fallback";
-import { getRoomLocalAudioFile } from "@/features/upload/local-audio-storage";
-import { resolveProviderTrackSource } from "@/features/upload/provider-track-identity";
+import { getRoomLocalAudioFile } from "@/features/library/local-audio-storage";
+import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import {
   appSettingsChangeEvent,
   getAppSettings
 } from "@/features/settings/settings-store";
 import { analyzeAudioBlobLoudness, resolveLoudnessGainDb } from "@/features/playback/loudness";
-import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
+import {
+  cacheBarrierWaitingTimeoutMs,
+  idlePlaybackSnapshot,
+  isSegmentedPlaybackAudible,
+  resolvePlaybackBarrierState,
+  toDiagnosticPlaybackState,
+  toDiagnosticSourceStartState
+} from "@/features/room/playback/playback-barrier";
+import {
+  receiverBufferingGraceMs,
+  receiverRecoveryRetryMs,
+  receiverRtpInactiveRecoveryMs,
+  recordReceiverAudioProgress,
+  resolveReceiverPlaybackState,
+  shouldRecoverStalledReceiverAudio
+} from "@/features/room/playback/receiver-audio-health";
+import {
+  isAudioPlaybackBlockedError,
+  isProviderTrack,
+  isRecoverableLocalAudioError,
+  localAudioSeekToleranceSeconds,
+  resolveCacheReadinessState,
+  resolveLocalAudioTimelineKey,
+  resolveLocalAudioTrackKey,
+  resolveRemoteAudioTimelineKey,
+  resolveRoomAudioPath,
+  resolveRoomAudioPositionMs,
+  shouldDisableSourcePlayback,
+  shouldWaitForLocalAudioContext,
+  waitForLocalAudioMetadata,
+  type LocalAudioObjectUrl,
+  type LocalAudioResolution,
+  type LocalAudioResolutionStatus
+} from "@/features/room/playback/room-audio-path";
+import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
 
-const receiverBufferingGraceMs = 3_000;
-const receiverStartupGraceMs = 2_500;
-const receiverProgressRecoveryMs = 5_000;
-const receiverRecoveryRetryMs = 10_000;
-const localAudioSeekToleranceSeconds = 0.35;
-const localAudioMetadataTimeoutMs = 8_000;
 const mediaPlaybackCommitIntervalMs = 500;
-
-type LocalAudioResolutionStatus = "idle" | "checking" | "available" | "missing";
-
-type LocalAudioResolution = {
-  key: string | null;
-  status: LocalAudioResolutionStatus;
-  file: Blob | null;
-  loudness?: TrackLoudness;
-  error: string | null;
-};
-
-type LocalAudioObjectUrl = {
-  key: string;
-  url: string;
-};
-
-export type ReceiverAudioHealth = {
-  lastProgressAtMs: number;
-  lastCurrentTime: number | null;
-  hasStarted: boolean;
-  waitingSinceMs: number | null;
-  lastRecoveryAtMs?: number;
-  recoveryCount?: number;
-};
-
-export function recordReceiverAudioProgress(input: {
-  health: ReceiverAudioHealth;
-  event: "playing" | "progress";
-  currentTime: number | null;
-  nowMs: number;
-}) {
-  const currentTime = input.currentTime !== null && Number.isFinite(input.currentTime)
-    ? input.currentTime
-    : null;
-  const previousTime = input.health.lastCurrentTime;
-  const advanced = currentTime !== null && (
-    previousTime !== null
-      ? currentTime > previousTime + 0.01
-      : currentTime > 0.01
-  );
-
-  if (input.event === "playing") {
-    input.health.hasStarted = true;
-  }
-  if (advanced) {
-    input.health.lastProgressAtMs = input.nowMs;
-    input.health.hasStarted = true;
-    input.health.waitingSinceMs = null;
-  }
-  input.health.lastCurrentTime = currentTime;
-  return advanced;
-}
-
-export function shouldRecoverStalledReceiverAudio(input: {
-  boundAtMs: number;
-  hasStarted: boolean;
-  lastProgressAtMs: number;
-  nowMs: number;
-  receiverRtpActive?: boolean;
-  audioPaused?: boolean;
-  startupGraceMs?: number;
-  recoveryAfterMs?: number;
-}) {
-  if (!input.hasStarted || input.audioPaused === true) {
-    return false;
-  }
-  const startupStalled = input.receiverRtpActive === false &&
-    input.nowMs - input.boundAtMs >= (input.startupGraceMs ?? receiverStartupGraceMs);
-  const progressStalled = input.nowMs - input.boundAtMs >=
-    (input.startupGraceMs ?? receiverStartupGraceMs) &&
-    input.nowMs - input.lastProgressAtMs >= (input.recoveryAfterMs ?? receiverProgressRecoveryMs);
-  return startupStalled || progressStalled;
-}
-
-export function resolveRoomAudioPositionMs(
-  playback: Pick<PlaybackSnapshot, "status" | "positionMs" | "startedAt" | "startAt">,
-  nowMs = getRoomPlaybackClockNowMs(),
-  barrier?: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null
-) {
-  return resolveRoomPlaybackPositionMs(playback, 0, nowMs, barrier);
-}
-
-function resolveLocalAudioTrackKey(
-  track: TrackMeta | null | undefined,
-  forceProviderCache: boolean
-) {
-  if (!track) {
-    return null;
-  }
-
-  const providerSource = resolveProviderTrackSource(track);
-  return [
-    track.id,
-    track.fileHash,
-    forceProviderCache ? "provider-cache" : "room-cache",
-    providerSource?.provider ?? "local",
-    providerSource?.trackId ?? "none"
-  ].join(":");
-}
-
-function isProviderTrack(track: TrackMeta | null | undefined) {
-  return !!resolveProviderTrackSource(track);
-}
-
-function resolveLocalAudioTimelineKey(
-  playback: PlaybackSnapshot,
-  barrier?: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null
-) {
-  return [
-    playback.currentTrackId ?? "none",
-    playback.mediaEpoch,
-    playback.status,
-    playback.startedAt ?? playback.startAt ?? "none",
-    playback.status === "playing" ? "playing" : playback.positionMs,
-    barrier?.holdPositionMs ?? "no-hold",
-    barrier?.resumeAtMs ?? "no-resume"
-  ].join(":");
-}
-
-export function resolveRemoteAudioTimelineKey(playback: Pick<
-  PlaybackSnapshot,
-  | "currentTrackId"
-  | "mediaEpoch"
-  | "status"
-  | "startAt"
-  | "startedAt"
-  | "playbackRevision"
-  | "positionMs"
->) {
-  return [
-    playback.currentTrackId ?? "none",
-    playback.mediaEpoch,
-    playback.status,
-    playback.startAt ?? playback.startedAt ?? "none",
-    playback.status === "playing" ? playback.playbackRevision : playback.positionMs
-  ].join(":");
-}
-
-export function resolveRoomAudioPath(input: {
-  isCurrentSource: boolean;
-  nativeLocalAudio: boolean;
-  localFallback: boolean;
-}): PlaybackAudioPath {
-  if (input.nativeLocalAudio) {
-    return "local-file";
-  }
-  if (input.localFallback) {
-    return "local-segmented";
-  }
-  return input.isCurrentSource ? "broadcast-segmented" : "remote-stream";
-}
-
-/**
- * A cache preference changes the preferred source, but it must not stop the
- * room source while that cache is being checked or downloaded. The segmented
- * source remains the continuity path until a playable local file exists.
- */
-export function shouldDisableSourcePlayback(input: {
-  isCurrentSource: boolean;
-  localAudioStatus: LocalAudioResolutionStatus;
-}) {
-  return input.isCurrentSource && input.localAudioStatus === "available";
-}
-
-/**
- * A listener's cached file is played directly by the media element. Only a
- * source needs a running AudioContext because its local element is connected
- * to the room broadcast destination.
- */
-export function shouldWaitForLocalAudioContext(input: {
-  isCurrentSource: boolean;
-  audioUnlocked: boolean;
-  audioContextState: AudioContextState | null;
-}) {
-  return input.isCurrentSource && (
-    !input.audioUnlocked || input.audioContextState !== "running"
-  );
-}
-
-export function resolveCacheReadinessState(input: {
-  cacheEnabled: boolean;
-  localReady: boolean;
-  isPreparingProviderCache: boolean;
-  localAudioStatus: LocalAudioResolutionStatus;
-}): RoomPlaybackReadinessInputPayload["state"] {
-  if (!input.cacheEnabled || input.localReady) {
-    return "ready";
-  }
-  // IndexedDB lookup is intentionally not a barrier. A song that is already
-  // cached should retain the normal audio path while its local record is read.
-  if (input.isPreparingProviderCache) {
-    return "waiting";
-  }
-  return input.localAudioStatus === "missing" ? "failed" : "ready";
-}
-
-function isAudioPlaybackBlockedError(error: string | null) {
-  return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
-}
-
-function isRecoverableLocalAudioError(error: string | null) {
-  return !!error && /abort|interrupted|cancelled|canceled|pause\(\)|playing request/i.test(error);
-}
-
-function waitForLocalAudioMetadata(audio: HTMLAudioElement) {
-  if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const cleanup = () => {
-      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-      audio.removeEventListener("error", onError);
-      window.clearTimeout(timeout);
-    };
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    };
-    const onLoadedMetadata = () => finish();
-    const onError = () => finish(new Error("本地音频文件无法解码。"));
-    const timeout = window.setTimeout(
-      () => finish(new Error("本地音频文件读取超时。")),
-      localAudioMetadataTimeoutMs
-    );
-    audio.addEventListener("loadedmetadata", onLoadedMetadata, { once: true });
-    audio.addEventListener("error", onError, { once: true });
-
-    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
-      finish();
-    }
-  });
-}
 
 export function useRoomSegmentedPlaybackRuntime(input: {
   roomSnapshot: RoomSnapshot | null;
@@ -393,20 +174,38 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     error: null
   });
   const [barrierClockMs, setBarrierClockMs] = useState(() => getRoomPlaybackClockNowMs());
-  const playbackBarrier = useMemo(
-    () => resolvePlaybackBarrierState({
+  const readinessWaitingSinceRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const now = getRoomPlaybackClockNowMs();
+    const previous = readinessWaitingSinceRef.current;
+    const next = new Map<string, number>();
+    for (const item of playbackReadiness) {
+      if (item.state === "waiting") {
+        next.set(item.sessionId, previous.get(item.sessionId) ?? now);
+      }
+    }
+    readinessWaitingSinceRef.current = next;
+  }, [playbackReadiness]);
+  const playbackBarrier = useMemo(() => {
+    const staleWaitingSessionIds = new Set<string>();
+    for (const [sessionId, waitingSinceMs] of readinessWaitingSinceRef.current) {
+      if (barrierClockMs - waitingSinceMs >= cacheBarrierWaitingTimeoutMs) {
+        staleWaitingSessionIds.add(sessionId);
+      }
+    }
+    return resolvePlaybackBarrierState({
       playback: input.roomSnapshot?.room.playback ?? null,
       activeMembers: input.roomSnapshot?.room.members ?? [],
       readiness: playbackReadiness,
-      nowMs: barrierClockMs
-    }),
-    [
-      input.roomSnapshot?.room.members,
-      input.roomSnapshot?.room.playback,
-      playbackReadiness,
-      barrierClockMs
-    ]
-  );
+      nowMs: barrierClockMs,
+      staleWaitingSessionIds
+    });
+  }, [
+    input.roomSnapshot?.room.members,
+    input.roomSnapshot?.room.playback,
+    playbackReadiness,
+    barrierClockMs
+  ]);
   const readinessRoomId = input.roomSnapshot?.room.id;
   const readinessTrackId = input.roomSnapshot?.room.playback.currentTrackId ?? null;
   const readinessMediaEpoch = input.roomSnapshot?.room.playback.mediaEpoch ?? 0;
@@ -1613,6 +1412,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         const waitingTooLong = health.waitingSinceMs !== null &&
           now - health.waitingSinceMs >= 1_500 &&
           mediaElementStalled;
+        const rtpInactiveStalled = missingMediaSinceRef.current !== null &&
+          now - missingMediaSinceRef.current >= receiverRtpInactiveRecoveryMs;
         const progressStalled = shouldRecoverStalledReceiverAudio({
           boundAtMs: health.boundAtMs,
           hasStarted: health.hasStarted,
@@ -1621,15 +1422,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           receiverRtpActive: remote.receiverRtpActive,
           audioPaused: audio.paused
         });
-        const shouldNudge = timelineChanged || waitingTooLong || progressStalled;
-        if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
+        const shouldNudge = timelineChanged || waitingTooLong || progressStalled || rtpInactiveStalled;
+        if (shouldNudge && now - health.lastRecoveryAtMs >= receiverRecoveryRetryMs) {
           health.lastRecoveryAtMs = now;
           health.waitingSinceMs = null;
           health.recoveryCount += 1;
           // Keep the same MediaStream binding. Replacing srcObject here
           // destroys the browser jitter buffer and is a common source of
           // repeated silence during short packet-loss bursts.
-          if (progressStalled && sourcePeerId && roomPlayback?.currentTrackId) {
+          if ((progressStalled || rtpInactiveStalled) && sourcePeerId && roomPlayback?.currentTrackId) {
             ensureListenerMediaConnection({
               runtime,
               sourcePeerId,
@@ -1995,148 +1796,3 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   );
 }
 
-function idlePlaybackSnapshot(): SegmentedPlaybackSnapshot {
-  return {
-    state: "idle",
-    bufferedMs: 0,
-    ownedUnitCount: 0,
-    totalUnitCount: 0,
-    audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
-    lastError: null
-  };
-}
-
-export function resolveReceiverPlaybackState(input: {
-  receiverRtpActive?: boolean;
-  hasStarted: boolean;
-  lastProgressAtMs?: number;
-  missingMediaSinceMs: number | null;
-  nowMs: number;
-  graceMs?: number;
-}): "buffering" | "live" {
-  const hasRecentProgress = typeof input.lastProgressAtMs === "number" &&
-    input.nowMs - input.lastProgressAtMs < 1_500;
-  if (!input.hasStarted) {
-    return "buffering";
-  }
-  if (input.receiverRtpActive === true && hasRecentProgress) {
-    return "live";
-  }
-  // When progress telemetry is available, a live RTP track without a moving
-  // media clock is not audible. Keep a short grace window for jitter, then
-  // expose buffering so the UI does not claim that the member is speaking.
-  if (typeof input.lastProgressAtMs === "number" && !hasRecentProgress) {
-    const staleSince = input.missingMediaSinceMs ?? input.lastProgressAtMs;
-    if (input.nowMs - staleSince >= (input.graceMs ?? receiverBufferingGraceMs)) {
-      return "buffering";
-    }
-    return "live";
-  }
-  if (input.missingMediaSinceMs === null) {
-    return "live";
-  }
-  return input.nowMs - input.missingMediaSinceMs >=
-    (input.graceMs ?? receiverBufferingGraceMs)
-    ? "buffering"
-    : "live";
-}
-
-export function isSegmentedPlaybackAudible(input: {
-  state: SegmentedPlaybackSnapshot["state"];
-  isCurrentSource: boolean;
-  sourceHealth?: SegmentedPlaybackSnapshot["sourceHealth"];
-  nativeLocalAudio?: boolean;
-}) {
-  return input.state === "live" && (
-    input.nativeLocalAudio === true ||
-    !input.isCurrentSource ||
-    input.sourceHealth === "source-ready"
-  );
-}
-
-export function resolvePlaybackBarrierState(input: {
-  playback: PlaybackSnapshot | null;
-  activeMembers: RoomSnapshot["room"]["members"];
-  readiness: RoomPlaybackReadinessPayload[];
-  nowMs: number;
-}) {
-  const playback = input.playback;
-  if (!playback?.currentTrackId || playback.status !== "playing") {
-    return {
-      blocked: false,
-      resumeAtMs: null as number | null,
-      holdPositionMs: null as number | null
-    } satisfies RoomPlaybackBarrierClock;
-  }
-  const current = input.readiness.filter((item) =>
-    item.trackId === playback.currentTrackId && item.mediaEpoch === playback.mediaEpoch
-  );
-  const latestBySession = new Map<string, RoomPlaybackReadinessPayload>();
-  for (const item of current) {
-    const previous = latestBySession.get(item.sessionId);
-    if (!previous || item.updatedAt > previous.updatedAt) {
-      latestBySession.set(item.sessionId, item);
-    }
-  }
-  const activeMembers = input.activeMembers.filter(
-    (member) => member.presenceState === "online" && !!member.peerId
-  );
-  // Only online cache participants decide whether the room barrier is open.
-  // Once it is waiting, however, the hold is room-wide: a streaming member
-  // must follow the same clock or its progress bar will run through silence.
-  const relevant = activeMembers
-    .map((member) => latestBySession.get(member.id) ?? null)
-    .filter((item): item is RoomPlaybackReadinessPayload => !!item?.cacheEnabled);
-  const holdPositionMs = relevant.reduce<number | null>((hold, item) => {
-    if (hold !== null) return hold;
-    return typeof item.holdPositionMs === "number" && Number.isFinite(item.holdPositionMs)
-      ? item.holdPositionMs
-      : null;
-  }, null);
-  const allReady = relevant.every(
-    (item) => item.state !== "waiting" && item.barrier === "open"
-  );
-  if (allReady) {
-    const resumeAtMs = relevant.reduce<number | null>((latestResume, item) => {
-      const parsed = item?.resumeAt ? Date.parse(item.resumeAt) : null;
-      if (parsed === null || !Number.isFinite(parsed)) return latestResume;
-      return latestResume === null ? parsed : Math.max(latestResume, parsed);
-    }, null);
-    return {
-      blocked: resumeAtMs !== null && input.nowMs < resumeAtMs,
-      resumeAtMs: Number.isFinite(resumeAtMs) ? resumeAtMs : null,
-      holdPositionMs
-    };
-  }
-  return {
-    blocked: true,
-    resumeAtMs: null,
-    holdPositionMs: holdPositionMs ?? 0
-  };
-}
-
-function toDiagnosticPlaybackState(state: SegmentedPlaybackSnapshot["state"]) {
-  if (state === "unavailable") {
-    return "failed" as const;
-  }
-  if (state === "ended") {
-    return "paused" as const;
-  }
-  return state;
-}
-
-function toDiagnosticSourceStartState(state: SegmentedPlaybackSnapshot["state"]) {
-  if (state === "awaiting-unlock") {
-    return "awaiting-unlock" as const;
-  }
-  if (state === "buffering") {
-    return "starting" as const;
-  }
-  if (state === "unavailable") {
-    return "failed" as const;
-  }
-  if (state === "live" || state === "ended") {
-    return "live" as const;
-  }
-  return "idle" as const;
-}

@@ -28,9 +28,9 @@ const cacheLibraryMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/indexeddb", () => indexedDbMocks);
 vi.mock("@/lib/music-room-api", () => apiMocks);
-vi.mock("@/features/upload/local-audio-storage", () => storageMocks);
-vi.mock("@/features/upload/cache-library", () => cacheLibraryMocks);
-vi.mock("@/features/upload/audio-asset-builder", () => ({
+vi.mock("@/features/library/local-audio-storage", () => storageMocks);
+vi.mock("@/features/library/cache-library", () => cacheLibraryMocks);
+vi.mock("@/features/library/audio-asset-builder", () => ({
   playbackEncoderVersion: "3.4.0",
   playbackProfileId: "opus-music-v4"
 }));

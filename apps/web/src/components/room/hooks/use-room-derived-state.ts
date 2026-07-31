@@ -14,7 +14,7 @@ import {
   dedupeRoomMembers,
   hasRecentLocalMediaSample
 } from "../member-data";
-import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
+import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
 export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   connectedPeers: string[];

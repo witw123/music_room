@@ -17,7 +17,7 @@ import type {
 import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
-import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MobileAppNavigation } from "@/components/MobileAppNavigation";

@@ -4,7 +4,7 @@ import { memo, useEffect, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { UploadedTrack } from "@/features/library/audio-utils";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 
 type TrackListSectionProps = {

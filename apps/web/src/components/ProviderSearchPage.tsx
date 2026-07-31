@@ -34,7 +34,7 @@ import {
   getLocalAudioStorageState,
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory
-} from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import {
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord

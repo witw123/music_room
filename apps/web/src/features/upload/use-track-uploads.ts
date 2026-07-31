@@ -14,7 +14,7 @@ import {
   getCachedLibraryTrack,
   listCachedLibraryTrackSummaries,
 } from "@/lib/indexeddb";
-import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import {
   buildCachedLibraryFileName,
   cacheLibraryChangedEventName,
@@ -23,8 +23,8 @@ import {
   hasUsableCachedLibraryFileForRoomTrack,
   loadCacheLibrarySnapshot,
   toCachedLibraryFile
-} from "./cache-library";
-import { resolveProviderTrackSource } from "./provider-track-identity";
+} from "@/features/library/cache-library";
+import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import {
   buildLocalAudioFileName,
   chooseLocalAudioDirectory,
@@ -36,13 +36,13 @@ import {
   getOriginalAssetFile,
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory
-} from "./local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
 import {
   deleteRoomSnapshotFromLocalRepository,
   persistRoomSnapshotToLocalRepository
-} from "./local-room-storage";
+} from "@/features/library/local-room-storage";
 import {
   playlistsChangedEventName,
   playlistsChangedStorageKey,
@@ -83,7 +83,7 @@ export {
   toCachedLibraryFileFromBlob,
   toCachedLibraryTrack,
   toCachedLibraryTrackFile
-} from "./cache-library";
+} from "@/features/library/cache-library";
 
 export function useTrackUploads(options: {
   activeSession: GuestSession | null;

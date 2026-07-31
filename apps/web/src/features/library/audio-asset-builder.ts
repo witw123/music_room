@@ -27,7 +27,7 @@ import {
 } from "@/lib/indexeddb";
 import { opusPreSkipSamples } from "@audio/opus-encode";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
-import { parseWavHeader, type WavHeader } from "@/features/playback/codecs/wav-parser";
+import { parseWavHeader, type WavHeader } from "@/features/audio-codecs/wav-parser";
 import { analyzeAudioBuffer, LoudnessAnalyzer } from "./loudness-analysis";
 
 const originalUnitSize = 1024 * 1024;

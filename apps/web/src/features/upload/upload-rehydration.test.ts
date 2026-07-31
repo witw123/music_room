@@ -3,7 +3,7 @@ import {
   applyOwnedUploadRehydrationResult,
   rehydrateOwnedUploadedTracksFromCache
 } from "./upload-rehydration";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { UploadedTrack } from "@/features/library/audio-utils";
 
 describe("rehydrateOwnedUploadedTracksFromCache", () => {
   const roomTrack = {

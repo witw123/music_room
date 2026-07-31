@@ -16,16 +16,16 @@ import {
   musicRoomApi,
   resolveDownloadedAudioMimeType
 } from "@/lib/music-room-api";
-import { saveCachedAudioFileToLocalDirectory } from "@/features/upload/local-audio-storage";
+import { saveCachedAudioFileToLocalDirectory } from "@/features/library/local-audio-storage";
 import {
   buildCachedLibraryTrackUpsertRecord,
   notifyCacheLibraryChanged
-} from "@/features/upload/cache-library";
+} from "@/features/library/cache-library";
 import {
   playbackEncoderVersion,
   playbackProfileId
-} from "@/features/upload/audio-asset-builder";
-import { resolveProviderTrackSource } from "@/features/upload/provider-track-identity";
+} from "@/features/library/audio-asset-builder";
+import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import { analyzeAudioBlobLoudness } from "./loudness";
 
 export type OfflineProviderSource = {

@@ -10,7 +10,7 @@ import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats"
 import type { PeerConnectionSupervisorState } from "@/features/p2p/connection-supervisor";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { RoomSocket } from "@/lib/ws-client";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { UploadedTrack } from "@/features/library/audio-utils";
 
 export type DataMeshBridge = {
   syncPeers(

@@ -6,9 +6,9 @@ import type { TrackMeta } from "@music-room/shared";
 import type {
   CachedLibraryTrack,
   UploadedTrack
-} from "@/features/upload/audio-utils";
-import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
-import { toCachedLibraryFile } from "./cache-library";
+} from "@/features/library/audio-utils";
+import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/library/cached-library-track-policy";
+import { toCachedLibraryFile } from "@/features/library/cache-library";
 
 type UploadedTracksState = Record<string, UploadedTrack>;
 type UploadedTracksStateSetter = (updater: (current: UploadedTracksState) => UploadedTracksState) => void;

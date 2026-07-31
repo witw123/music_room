@@ -47,7 +47,7 @@ import {
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory,
   ensureLocalAudioDirectoryWriteAccess
-} from "@/features/upload/local-audio-storage";
+} from "@/features/library/local-audio-storage";
 import {
   appSettingsChangeEvent,
   getAppSettings,
