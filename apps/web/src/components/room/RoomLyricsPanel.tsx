@@ -8,6 +8,7 @@ type RoomLyricsPanelProps = {
   status: "idle" | "loading" | "ready" | "error";
   positionMs: number;
   isPlaying: boolean;
+  frozen?: boolean;
   className?: string;
   visibleLines?: number;
   fontScale?: "small" | "medium" | "large";
@@ -20,6 +21,7 @@ export function RoomLyricsPanel({
   status,
   positionMs,
   isPlaying,
+  frozen = false,
   className,
   visibleLines = 3,
   fontScale = "medium",
@@ -52,14 +54,14 @@ export function RoomLyricsPanel({
     const targetTop = activeLine.offsetTop - (scrollContainer.clientHeight - activeLine.offsetHeight) / 2;
     scrollContainer.scrollTo({
       top: Math.max(0, targetTop),
-      behavior: isPlaying ? "smooth" : "auto"
+      behavior: isPlaying && !frozen ? "smooth" : "auto"
     });
-  }, [activeIndex, isPlaying, lines.length, visibleLines]);
+  }, [activeIndex, frozen, isPlaying, lines.length, visibleLines]);
 
   return (
     <section
       aria-label="歌词"
-      className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive ? "flex-1" : "flex-none"} flex-col overflow-hidden px-3 animate-fade-in sm:px-6 ${panelHeightClass} ${className ?? ""}`}
+      className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive ? "flex-1" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
@@ -77,7 +79,7 @@ export function RoomLyricsPanel({
                   aria-current={isActive ? "true" : undefined}
                   data-testid="room-lyrics-line"
                   style={{ fontSize: `${getLyricFontSize({ isActive, visibleLines, fontScale })}rem` }}
-                  className={`${lineAlignmentClass} flex w-full ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 max-w-[30rem] items-center break-words leading-[1.35] transition-[color,opacity] duration-300 ${
+                  className={`${lineAlignmentClass} flex w-full ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 max-w-[30rem] items-center break-words leading-[1.35] ${frozen ? "" : "transition-[color,opacity] duration-300"} ${
                     isActive
                       ? `font-bold text-white ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
                       : `font-medium text-white/35 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`

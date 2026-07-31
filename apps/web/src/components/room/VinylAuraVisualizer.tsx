@@ -7,6 +7,7 @@ import { withAlpha } from "@/components/bottom-player/artwork-colors";
 
 type VinylAuraVisualizerProps = {
   isPlaying: boolean;
+  frozen?: boolean;
   accentColor?: string;
   reducedMotion?: boolean;
   maxDevicePixelRatio?: number;
@@ -14,6 +15,7 @@ type VinylAuraVisualizerProps = {
 
 export function VinylAuraVisualizer({
   isPlaying,
+  frozen = false,
   accentColor = "rgb(161 161 170)",
   reducedMotion = false,
   maxDevicePixelRatio = 1.5
@@ -39,6 +41,12 @@ export function VinylAuraVisualizer({
 
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) return;
+
+    if (frozen) {
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
     const frameDelayMs = resolveCanvasFrameDelayMs({
       isPageVisible,
@@ -190,7 +198,7 @@ export function VinylAuraVisualizer({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [accentColor, isPageVisible, isPlaying, reducedMotion, maxDevicePixelRatio]);
+  }, [accentColor, frozen, isPageVisible, isPlaying, reducedMotion, maxDevicePixelRatio]);
 
   return (
     <canvas

@@ -69,7 +69,7 @@ describe("getPlaybackEffectivePositionMs", () => {
     )).toBe(19_000);
   });
 
-  it("hard-freezes the progress display while a barrier is blocked without an anchor", () => {
+  it("resets the progress display to the track start while a barrier is blocked without an anchor", () => {
     const playback = {
       status: "playing" as const,
       currentTrackId: "track_1",
@@ -85,7 +85,7 @@ describe("getPlaybackEffectivePositionMs", () => {
       barrier: { blocked: true, holdPositionMs: null, resumeAtMs: null },
       previousProgressMs: 18_000,
       previousSessionKey: "track_1|2|2026-07-10T00:00:01.000Z|playing"
-    })).toBe(18_000);
+    })).toBe(0);
   });
 });
 

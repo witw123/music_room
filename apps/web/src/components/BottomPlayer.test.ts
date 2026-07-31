@@ -85,9 +85,8 @@ describe("BottomPlayer source", () => {
     expect(shellSource).toContain("canSeekPlayback={true}");
     expect(shellSource).not.toContain("activePlaybackSource");
     expect(controllerSource).toContain("canSeekPlayback={canSeekPlayback}");
-    expect(controllerSource).toContain(
-      "roomSnapshot.room.members.some((member) => member.id === activeSession.userId)"
-    );
+    expect(controllerSource).toContain("hasRoomPermission(");
+    expect(controllerSource).toContain('"player"');
     expect(playerSource).toContain("canSeekPlayback && canControlPlayback");
     expect(layoutSource).toContain("disabled={!currentTrackDuration || !canSeekPlayback}");
   });

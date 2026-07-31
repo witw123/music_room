@@ -2,14 +2,15 @@
 
 type VinylTonearmProps = {
   isPlaying: boolean;
+  frozen?: boolean;
   accentColor?: string;
 };
 
-export function VinylTonearm({ isPlaying, accentColor }: VinylTonearmProps) {
+export function VinylTonearm({ isPlaying, frozen = false, accentColor }: VinylTonearmProps) {
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none absolute z-30 flex flex-col items-center transition-transform duration-500 ease-out ${isPlaying ? "rotate-[20deg]" : "-rotate-[15deg]"}`}
+      className={`pointer-events-none absolute z-30 flex flex-col items-center ${frozen ? "transition-none" : "transition-transform duration-500 ease-out"} ${isPlaying ? "rotate-[20deg]" : "-rotate-[15deg]"}`}
       style={{
         right: "-8%",
         top: "3%",

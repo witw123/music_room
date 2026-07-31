@@ -84,11 +84,7 @@ export function resolveDisplayRoomPositionMs(input: {
   if (input.barrier?.blocked === true &&
     (typeof input.barrier.holdPositionMs !== "number" ||
       !Number.isFinite(input.barrier.holdPositionMs))) {
-    const sessionKey = getPlaybackClockSessionKey(input.playback);
-    if (sessionKey === input.previousSessionKey) {
-      return clampProgressMs(input.previousProgressMs, input.durationMs);
-    }
-    return clampProgressMs(input.playback.positionMs, input.durationMs);
+    return 0;
   }
   return getPlaybackEffectivePositionMs(
     input.playback,
@@ -466,7 +462,12 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
     tick();
 
-    if (acceptedPlayback.status === "playing" && seekDraft === null && isPageVisible) {
+    if (
+      acceptedPlayback.status === "playing" &&
+      seekDraft === null &&
+      isPageVisible &&
+      !isPlaybackBarrierHolding(playbackBarrier, getRoomPlaybackClockNowMs())
+    ) {
       progressPollTimerRef.current = window.setTimeout(
         pollProgress,
         getPlaybackProgressPollIntervalMs({

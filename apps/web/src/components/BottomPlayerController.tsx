@@ -89,10 +89,13 @@ function BottomPlayerControllerBase({
     getLocalPlaybackPositionMs: undefined,
     playbackBarrier
   });
+  const isPlaybackBarrierBlocked = playbackBarrier?.blocked === true;
   const visualizer = usePlayerAudioVisualizer({
     audioRef,
     outputStream: isSourceOwner ? roomAudioOutput.getBroadcastStream() : null,
-    playbackStatus: playback?.status,
+    playbackStatus: isPlaybackBarrierBlocked && playback?.status === "playing"
+      ? "paused"
+      : playback?.status,
     currentTrackId: playback?.currentTrackId,
     mediaEpoch: playback?.mediaEpoch ?? null,
     sourcePeerId: playback?.sourcePeerId ?? null,
@@ -100,8 +103,8 @@ function BottomPlayerControllerBase({
   });
 
   useEffect(() => {
-    onPlaybackPositionChange(progressMs);
-  }, [progressMs, onPlaybackPositionChange]);
+    onPlaybackPositionChange(isPlaybackBarrierBlocked ? 0 : progressMs);
+  }, [isPlaybackBarrierBlocked, progressMs, onPlaybackPositionChange]);
 
   useEffect(() => {
     onVolumeChange(volume);
@@ -128,7 +131,7 @@ function BottomPlayerControllerBase({
       playbackBarrier={playbackBarrier}
       canControlPlayback={canControlPlayback}
       canSeekPlayback={canSeekPlayback}
-      progressMs={progressMs}
+      progressMs={isPlaybackBarrierBlocked ? 0 : progressMs}
       seekDraft={seekDraft}
       setSeekDraft={setSeekDraft}
       audioDurationMs={audioDurationMs || progressTrack?.durationMs || currentTrack?.durationMs || 0}

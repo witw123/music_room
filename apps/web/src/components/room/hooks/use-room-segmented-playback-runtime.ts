@@ -2111,7 +2111,7 @@ export function resolvePlaybackBarrierState(input: {
   return {
     blocked: true,
     resumeAtMs: null,
-    holdPositionMs
+    holdPositionMs: holdPositionMs ?? 0
   };
 }
 

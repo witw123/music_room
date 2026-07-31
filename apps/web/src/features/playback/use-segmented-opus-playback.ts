@@ -305,6 +305,13 @@ export function useSegmentedOpusPlayback(input: {
     };
 
     void tick();
+    if (playbackBarrierBlocked) {
+      return () => {
+        cancelled = true;
+        releaseEngine();
+        setSnapshot({ ...idleSnapshot, playbackIdentity: null });
+      };
+    }
     const interval = window.setInterval(() => void tick(), 100);
     return () => {
       cancelled = true;

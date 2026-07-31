@@ -147,7 +147,7 @@ function RoomWorkspaceBase({
   useCustomLayoutRuntime("/room/current");
   const playback = roomSnapshot?.room.playback;
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
-  const isPlaying = playback?.status === "playing";
+  const isPlaying = playback?.status === "playing" && playbackBarrier?.blocked !== true;
   const currentTrackDuration = currentTrack?.durationMs ?? 0;
   const currentSourceOwnerNickname =
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);

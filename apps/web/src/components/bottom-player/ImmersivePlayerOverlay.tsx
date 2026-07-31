@@ -20,6 +20,7 @@ import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;
   isPlaying: boolean;
+  playbackBarrierBlocked?: boolean;
   positionMs: number;
   currentTrack: TrackMeta | null;
   artworkUrl: string | null;
@@ -56,6 +57,7 @@ type ImmersivePlayerOverlayProps = {
 export function ImmersivePlayerOverlay({
   isOpen,
   isPlaying,
+  playbackBarrierBlocked = false,
   positionMs,
   currentTrack,
   artworkUrl,
@@ -156,6 +158,7 @@ export function ImmersivePlayerOverlay({
       <MobileImmersivePlayer
         artworkPalette={artworkPalette}
         artworkUrl={artworkUrl}
+        playbackBarrierBlocked={playbackBarrierBlocked}
         canControlPlayback={canControlPlayback}
         canRemoveQueue={canRemoveQueue}
         canReorderQueue={canReorderQueue}
@@ -211,6 +214,7 @@ export function ImmersivePlayerOverlay({
           <DesktopImmersivePlayer
             artworkPalette={artworkPalette}
             artworkUrl={artworkUrl}
+            playbackBarrierBlocked={playbackBarrierBlocked}
             canControlPlayback={canControlPlayback}
             canSeekPlayback={canSeekPlayback}
             currentTrack={currentTrack}
@@ -245,7 +249,7 @@ export function ImmersivePlayerOverlay({
           />
         </div>
         <section className="flex h-[min(78vh,52rem)] min-h-0 w-full max-w-[36rem] min-w-0 flex-col justify-center justify-self-center overflow-hidden" aria-label="歌曲信息与歌词">
-          <ImmersiveLyrics desktop isOpen={isOpen} isPlaying={isPlaying} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+          <ImmersiveLyrics desktop frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
         </section>
       </main>
     </div>
@@ -279,6 +283,7 @@ function MobileImmersivePlayer({
   favoriteTrackIsPending,
   isOpen,
   isPlaying,
+  playbackBarrierBlocked = false,
   mobileView,
   onClose,
   onCyclePlaybackMode,
@@ -318,7 +323,7 @@ function MobileImmersivePlayer({
           {mobileView === "artwork" ? (
             <div className="mobile-player-panel flex flex-col items-center justify-start" key="artwork">
               <button aria-label="显示歌词" className="mt-[clamp(1.25rem,6vh,4rem)] rounded-[1.35rem] outline-none transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button">
-                <ImmersiveVinyl artworkUrl={artworkUrl} isPlaying={isPlaying} mobile palette={artworkPalette} playerStyle={playerStyle} />
+                <ImmersiveVinyl artworkUrl={artworkUrl} frozen={playbackBarrierBlocked} isPlaying={isPlaying} mobile palette={artworkPalette} playerStyle={playerStyle} />
               </button>
               <div className="mt-[clamp(1.5rem,4vh,3rem)] flex w-full items-start gap-3">
                 <div className="min-w-0 flex-1"><TrackDetails currentTrack={currentTrack} mobile /></div>
@@ -342,7 +347,7 @@ function MobileImmersivePlayer({
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{currentTrack?.title ?? "等待选择歌曲"}</span><span className="mt-0.5 block truncate text-xs text-white/55">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span></span>
               </button>
               <div className="flex min-h-0 flex-1 items-center">
-                <ImmersiveLyrics isOpen={isOpen} isPlaying={isPlaying} mobile positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+                <ImmersiveLyrics frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} mobile positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
               </div>
             </div>
           )}
@@ -410,6 +415,7 @@ function MobileImmersivePlayer({
 type DesktopImmersivePlayerProps = {
   artworkPalette: ArtworkPalette;
   artworkUrl: string | null;
+  playbackBarrierBlocked: boolean;
   canControlPlayback: boolean;
   canSeekPlayback: boolean;
   currentTrack: TrackMeta | null;
@@ -446,6 +452,7 @@ type DesktopImmersivePlayerProps = {
 function DesktopImmersivePlayer({
   artworkPalette,
   artworkUrl,
+  playbackBarrierBlocked,
   canControlPlayback,
   canSeekPlayback,
   currentTrack,
@@ -482,7 +489,7 @@ function DesktopImmersivePlayer({
 
   return (
     <section className="flex min-h-0 w-[min(58vh,34rem)] max-w-full flex-col justify-center justify-self-center">
-      <ImmersiveVinyl artworkUrl={artworkUrl} desktop isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
+      <ImmersiveVinyl artworkUrl={artworkUrl} desktop frozen={playbackBarrierBlocked} isPlaying={isPlaying} palette={artworkPalette} playerStyle={playerStyle} />
 
       <div className="mt-5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
@@ -607,13 +614,13 @@ function SpeakerGlyph({ volume }: { volume: number }) {
   return <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M11 5 6 9H3v6h3l5 4V5Z" />{volume <= 0.01 ? <path d="m19 9-5 6m0-6 5 6" /> : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}</svg>;
 }
 
-function ImmersiveVinyl({ artworkUrl, desktop = false, isPlaying, mobile = false, palette, playerStyle }: { artworkUrl: string | null; desktop?: boolean; isPlaying: boolean; mobile?: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
+function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying, mobile = false, palette, playerStyle }: { artworkUrl: string | null; desktop?: boolean; frozen?: boolean; isPlaying: boolean; mobile?: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
   return (
     <div className={`relative flex aspect-square max-w-full items-center justify-center ${mobile ? "w-[min(68vw,31dvh,34rem)]" : desktop ? "h-[min(58vh,34rem)] w-auto" : "h-[min(68dvh,34rem)] w-auto"}`}>
       <div className={`relative flex aspect-square items-center justify-center overflow-visible ${desktop || playerStyle === "square-cover" ? "w-full" : "w-[86%]"}`}>
         {playerStyle === "square-cover" ? <SquareAlbumCover artworkUrl={artworkUrl} className={`${desktop ? "rounded-[0.75rem]" : "rounded-[1.25rem]"} h-full w-full shadow-[0_26px_90px_rgba(0,0,0,0.35)]`} /> : (
           <>
-            <VinylAuraVisualizer accentColor={palette.accent} isPlaying={isPlaying} />
+            <VinylAuraVisualizer accentColor={palette.accent} frozen={frozen} isPlaying={isPlaying} />
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] animate-spin-slow" style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
               <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
               <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)` }} />
@@ -623,13 +630,13 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, isPlaying, mobile = false
             </div>
           </>
         )}
-        {playerStyle === "vinyl" ? <VinylTonearm isPlaying={isPlaying} accentColor={palette.accent} /> : null}
+        {playerStyle === "vinyl" ? <VinylTonearm frozen={frozen} isPlaying={isPlaying} accentColor={palette.accent} /> : null}
       </div>
     </div>
   );
 }
 
-function ImmersiveLyrics({ desktop = false, isOpen, isPlaying, mobile = false, positionMs, roomLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; positionMs: number; roomLyrics: string | null; sourceProvider: "netease" | "qqmusic" | undefined; sourceTrackId: string | undefined }) {
+function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, mobile = false, positionMs, roomLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; frozen?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; positionMs: number; roomLyrics: string | null; sourceProvider: "netease" | "qqmusic" | undefined; sourceTrackId: string | undefined }) {
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
@@ -681,7 +688,7 @@ function ImmersiveLyrics({ desktop = false, isOpen, isPlaying, mobile = false, p
   }, [isOpen, roomLyrics, sourceProvider, sourceTrackId]);
 
   if (!isOpen) return null;
-  return <div className={desktop ? "min-h-0 w-full flex-1" : mobile ? "min-h-0 w-full" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} immersive={desktop} visibleLines={desktop || mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} positionMs={positionMs} status={lyricsStatus} /></div>;
+  return <div className={desktop ? "min-h-0 w-full flex-1" : mobile ? "min-h-0 w-full" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} frozen={frozen} immersive={desktop} visibleLines={desktop || mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} positionMs={positionMs} status={lyricsStatus} /></div>;
 }
 
 function getSourceLabel(sourceType: TrackMeta["sourceType"]) {

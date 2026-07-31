@@ -717,7 +717,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
       cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
-      snapshot,
       key,
       previousBarrier,
       barrierState
@@ -1656,7 +1655,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
     const previous = this.playbackBarrierByRoom.get(roomId);
     const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
-      snapshot,
       key,
       previousBarrier: previous,
       barrierState
@@ -1692,7 +1690,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
   }
 
   private resolvePlaybackBarrierHoldPosition(input: {
-    snapshot: RoomSnapshot;
     key: string;
     previousBarrier: {
       key: string;
@@ -1703,42 +1700,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     barrierState: "waiting" | "open";
   }) {
     const previous = input.previousBarrier;
+    if (input.barrierState === "waiting") {
+      // Cache playback is a prepare barrier, not a seek-and-continue point.
+      // Every waiting cycle restarts the track from its beginning once all
+      // participating clients are ready.
+      return 0;
+    }
+
     if (
       previous?.key === input.key &&
-      previous.state === "waiting" &&
-      previous.holdPositionMs !== null
+      (previous.state === "waiting" || previous.state === "open")
     ) {
       return previous.holdPositionMs;
     }
-    if (input.barrierState !== "waiting") {
-      return previous?.key === input.key && previous?.state === "waiting"
-        ? previous.holdPositionMs
-        : null;
-    }
-
-    // A member that newly becomes unready must freeze at the position that is
-    // current when this waiting transition is observed, not at the old hold
-    // point from a prior barrier cycle.
-    return this.resolveCurrentPlaybackPosition(input.snapshot);
-  }
-
-  private resolveCurrentPlaybackPosition(snapshot: RoomSnapshot) {
-    const playback = snapshot.room.playback;
-    if (playback.status !== "playing" || !playback.currentTrackId) {
-      return null;
-    }
-    const anchorAt = playback.startedAt ?? playback.startAt ?? null;
-    const anchorMs = anchorAt ? Date.parse(anchorAt) : Number.NaN;
-    const elapsedMs = Number.isFinite(anchorMs)
-      ? Math.max(0, Date.now() - anchorMs)
-      : 0;
-    const rawPositionMs = Math.max(0, playback.positionMs + elapsedMs);
-    const durationMs = snapshot.tracks.find(
-      (track) => track.id === playback.currentTrackId
-    )?.durationMs ?? 0;
-    return durationMs > 0
-      ? Math.min(rawPositionMs, durationMs)
-      : rawPositionMs;
+    return null;
   }
 
   private async releaseSessionLease(client: Socket) {

@@ -237,7 +237,11 @@ describe("room playback cache barrier", () => {
       activeMembers: [member("one")] as never,
       readiness: [readiness("one", "waiting", "waiting")],
       nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    }).blocked).toBe(true);
+    })).toMatchObject({
+      blocked: true,
+      holdPositionMs: 0,
+      resumeAtMs: null
+    });
   });
 
   it("does not create a barrier when every cache participant already has the track", () => {

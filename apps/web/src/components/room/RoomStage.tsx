@@ -482,45 +482,53 @@ function RoomStageBase({
                       <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-[1rem] shadow-2xl" />
                     ) : (
                       <>
-                  <VinylAuraVisualizer accentColor={artworkPalette.accent} isPlaying={isPlaying} />
-                  <div
-                    className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out animate-spin-slow"
-                    style={{ animationPlayState: isPlaying ? "running" : "paused" }}
-                  >
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
-                    <div
-                      className="absolute inset-0 rounded-full"
-                      style={{
-                        background: `conic-gradient(from 0deg at 50% 50%, ${artworkPalette.accentSoft} 0deg, transparent 90deg, ${artworkPalette.accentSoft} 180deg, transparent 270deg, ${artworkPalette.accentSoft} 360deg)`
-                      }}
-                    />
-                    {Array.from({ length: 6 }).map((_, index) => (
-                      <div
-                        key={index}
-                        className="absolute rounded-full border border-white/[0.02]"
-                        style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
-                      />
-                    ))}
-                    {artworkUrl ? (
-                      <div
-                        aria-hidden="true"
-                        className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
-                        style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
-                      />
-                    ) : null}
-                    <div
-                      className="absolute z-20 flex aspect-square items-center justify-center rounded-full border shadow-inner"
-                      style={{
-                        width: "26%",
-                        height: "26%",
-                        borderColor: artworkPalette.border,
-                        backgroundColor: artworkPalette.accentSoft
-                      }}
-                    >
-                      <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
-                    </div>
-                  </div>
-                  <VinylTonearm accentColor={artworkPalette.accent} isPlaying={isPlaying} />
+                        <VinylAuraVisualizer
+                          accentColor={artworkPalette.accent}
+                          frozen={playbackBarrier?.blocked === true}
+                          isPlaying={isPlaying}
+                        />
+                        <div
+                          className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-[box-shadow,opacity,transform] duration-700 ease-out animate-spin-slow"
+                          style={{ animationPlayState: isPlaying ? "running" : "paused" }}
+                        >
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+                          <div
+                            className="absolute inset-0 rounded-full"
+                            style={{
+                              background: `conic-gradient(from 0deg at 50% 50%, ${artworkPalette.accentSoft} 0deg, transparent 90deg, ${artworkPalette.accentSoft} 180deg, transparent 270deg, ${artworkPalette.accentSoft} 360deg)`
+                            }}
+                          />
+                          {Array.from({ length: 6 }).map((_, index) => (
+                            <div
+                              key={index}
+                              className="absolute rounded-full border border-white/[0.02]"
+                              style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
+                            />
+                          ))}
+                          {artworkUrl ? (
+                            <div
+                              aria-hidden="true"
+                              className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+                              style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
+                            />
+                          ) : null}
+                          <div
+                            className="absolute z-20 flex aspect-square items-center justify-center rounded-full border shadow-inner"
+                            style={{
+                              width: "26%",
+                              height: "26%",
+                              borderColor: artworkPalette.border,
+                              backgroundColor: artworkPalette.accentSoft
+                            }}
+                          >
+                            <div className="rounded-full border border-white/5 bg-black shadow-inner" style={{ width: "32%", height: "32%" }} />
+                          </div>
+                        </div>
+                        <VinylTonearm
+                          accentColor={artworkPalette.accent}
+                          frozen={playbackBarrier?.blocked === true}
+                          isPlaying={isPlaying}
+                        />
                       </>
                     )}
                   </div>
@@ -544,7 +552,7 @@ function RoomStageBase({
                             : "border border-white/10 bg-white/10 text-white/[0.55]"
                         }`}
                       >
-                        {isPlaying ? "正在播放" : "准备就绪"}
+                        {playbackBarrier?.blocked ? "缓存中" : isPlaying ? "正在播放" : "准备就绪"}
                       </span>
                       {currentSourceOwnerNickname ? (
                         <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
@@ -591,6 +599,7 @@ function RoomStageBase({
 
             <RoomLyricsPanel
               className={isLyricsOpen ? "max-w-[42rem]" : "max-w-[36rem]"}
+              frozen={playbackBarrier?.blocked === true}
               visibleLines={isLyricsOpen ? lyricPreferences.lyricLines : 3}
               fontScale={lyricPreferences.lyricFontScale}
               isPlaying={isPlaying}

@@ -185,10 +185,13 @@ function BottomPlayerBase({
       miniPlayerWindowRef.current?.close();
     };
   }, []);
-  const isPlaying = playback?.status === "playing";
   const isPlaybackBarrierBlocked = playbackBarrier?.blocked === true;
+  const isPlaying = playback?.status === "playing" && !isPlaybackBarrierBlocked;
+  const playerControlsEnabled = canControlPlayback && !isPlaybackBarrierBlocked;
   const currentTrackDuration = audioDurationMs;
-  const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
+  const effectiveProgressMs = isPlaybackBarrierBlocked
+    ? 0
+    : Math.max(0, seekDraft ?? renderedProgressMs);
   const boundedProgressMs =
     currentTrackDuration > 0
       ? Math.min(effectiveProgressMs, currentTrackDuration)
@@ -248,6 +251,14 @@ function BottomPlayerBase({
 
   useEffect(() => {
     if (seekDraft === null) {
+      if (isPlaybackBarrierBlocked) {
+        progressAnchorRef.current = {
+          progressMs: 0,
+          receivedAtMs: Date.now()
+        };
+        setRenderedProgressMs(0);
+        return;
+      }
       const barrierProgressMs = resolveBarrierProgressMs(playbackBarrier, currentTrackDuration);
       const nextProgressMs = barrierProgressMs ?? progressMs;
       progressAnchorRef.current = {
@@ -256,7 +267,7 @@ function BottomPlayerBase({
       };
       setRenderedProgressMs(nextProgressMs);
     }
-  }, [currentTrackDuration, isPlaying, playbackBarrier, progressMs, seekDraft]);
+  }, [currentTrackDuration, isPlaybackBarrierBlocked, isPlaying, playbackBarrier, progressMs, seekDraft]);
 
   useEffect(() => {
     const hasBarrierClock = resolveBarrierProgressMs(playbackBarrier, currentTrackDuration) !== null;
@@ -425,7 +436,7 @@ function BottomPlayerBase({
       {!isCompactMobile ? (
         <div className="absolute left-0 right-0 top-0 h-[2px] z-10 bg-white/5" aria-hidden="true">
           <div
-            className="h-full transition-[width,background-color,box-shadow] duration-150 ease-linear"
+            className={`h-full ${isPlaybackBarrierBlocked ? "" : "transition-[width,background-color,box-shadow] duration-150 ease-linear"}`}
             style={{
               width: `${progressRatio * 100}%`,
               backgroundColor: artworkPalette.accent,
@@ -441,8 +452,8 @@ function BottomPlayerBase({
       >
       <MobileBottomPlayerLayout
         isPlaying={isPlaying}
-        canControlPlayback={canControlPlayback}
-        canSeekPlayback={canSeekPlayback && canControlPlayback}
+        canControlPlayback={playerControlsEnabled}
+        canSeekPlayback={canSeekPlayback && playerControlsEnabled}
         playbackTrackId={playback?.currentTrackId}
         title={title}
         artist={artist}
@@ -482,8 +493,8 @@ function BottomPlayerBase({
       />
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
-        canControlPlayback={canControlPlayback}
-        canSeekPlayback={canSeekPlayback && canControlPlayback}
+        canControlPlayback={playerControlsEnabled}
+        canSeekPlayback={canSeekPlayback && playerControlsEnabled}
         playbackTrackId={playback?.currentTrackId}
         title={title}
         artist={artist}
@@ -542,8 +553,8 @@ function BottomPlayerBase({
       />
 
       {isPending ? (
-        <div className="animate-fade-in absolute -top-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-3 py-1 text-xs text-foreground-muted shadow-lg backdrop-blur-md">
-          <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
+        <div className={`${isPlaybackBarrierBlocked ? "" : "animate-fade-in"} absolute -top-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-3 py-1 text-xs text-foreground-muted shadow-lg backdrop-blur-md`}>
+          <div className={`h-2 w-2 rounded-full bg-accent ${isPlaybackBarrierBlocked ? "" : "animate-ping"}`} />
           同步中...
         </div>
       ) : null}
@@ -551,11 +562,12 @@ function BottomPlayerBase({
     <ImmersivePlayerOverlay
       isOpen={isImmersiveOpen}
       isPlaying={isPlaying}
+      playbackBarrierBlocked={isPlaybackBarrierBlocked}
       positionMs={boundedProgressMs}
       currentTrack={currentTrack}
       artworkUrl={artworkUrl}
-      canControlPlayback={canControlPlayback}
-      canSeekPlayback={canSeekPlayback && canControlPlayback}
+      canControlPlayback={playerControlsEnabled}
+      canSeekPlayback={canSeekPlayback && playerControlsEnabled}
       playbackTrackId={playback?.currentTrackId}
       durationMs={currentTrackDuration}
       volume={volume}
