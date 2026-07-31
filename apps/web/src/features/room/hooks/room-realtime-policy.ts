@@ -1,7 +1,7 @@
 "use client";
 
 import type { PeerSignalMessage, PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
-import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
+import { shouldReplacePlaybackSnapshot } from "@/lib/domain/music-room-ui";
 
 export function createRoomRealtimeEventGate(initialSnapshot?: RoomSnapshot | null) {
   let latestRoomRevision = initialSnapshot?.room.roomRevision ?? 0;

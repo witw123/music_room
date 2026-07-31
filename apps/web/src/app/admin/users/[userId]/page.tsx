@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON, type AdminUserDetail } from "@/lib/admin-api";
+import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON, type AdminUserDetail } from "@/lib/network/admin-api";
 import styles from "../../admin.module.css";
 
 export default function AdminUserDetailPage() {

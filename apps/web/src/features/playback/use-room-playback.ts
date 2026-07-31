@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
-import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
+import { shouldReplacePlaybackSnapshot } from "@/lib/domain/music-room-ui";
 import {
   getRoomPlaybackClockNowMs,
   resolveRoomPlaybackPositionMs,

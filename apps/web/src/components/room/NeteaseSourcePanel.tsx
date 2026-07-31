@@ -7,11 +7,11 @@ import type {
   NeteaseAccountStatus,
   NeteaseTrackCandidate
 } from "@music-room/shared";
-import { formatDuration } from "@/lib/music-room-ui";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import {
   MusicRoomApiError,
   musicRoomApi
-} from "@/lib/music-room-api";
+} from "@/lib/network/music-room-api";
 import { Button } from "@/components/ui/button";
 import {
   getCachedProviderAccount,

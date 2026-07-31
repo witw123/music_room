@@ -6,7 +6,7 @@ import {
   musicRoomApi,
   type PlaybackHistoryRecord,
   type PlaybackHistoryProvider
-} from "@/lib/music-room-api";
+} from "@/lib/network/music-room-api";
 
 const heartbeatIntervalMs = 15_000;
 const maxProgressDeltaMs = 60_000;

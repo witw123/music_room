@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import type { AuthSession, RoomSnapshot } from "@music-room/shared";
 import type { P2PMesh } from "@/features/p2p";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import type { RoomSocket } from "@/lib/ws-client";
+import type { RoomSocket } from "@/lib/network/ws-client";
 import type { RoomRecoveryState } from "./room-runtime-types";
 
 export function useRoomRuntimeMutableState(input: {

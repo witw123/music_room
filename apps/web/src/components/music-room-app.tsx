@@ -30,7 +30,7 @@ import {
   requestAwayRoomResume,
   shouldCommitAwayRoomResume,
   storeAwayRoomId
-} from "@/lib/away-room";
+} from "@/lib/domain/away-room";
 export * from "@/features/room/hooks/use-room-page-derived";
 export * from "@/components/room/hooks/use-room-playback-actions";
 

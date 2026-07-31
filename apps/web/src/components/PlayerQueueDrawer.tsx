@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import type { QueueItem, TrackMeta } from "@music-room/shared";
-import { formatDuration } from "@/lib/music-room-ui";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 

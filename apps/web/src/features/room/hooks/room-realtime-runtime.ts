@@ -12,7 +12,7 @@ import type {
   RoomSnapshotMissingPayload,
   RoomSnapshot
 } from "@music-room/shared";
-import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
+import { createRoomSocket, type RoomSocket } from "@/lib/network/ws-client";
 import { getWebRTCIceServers, P2PMesh } from "@/features/p2p";
 import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";

@@ -12,7 +12,7 @@ import {
   upsertCachedLibraryTrackSummary,
   type CachedLibraryTrackSummaryRecord,
   type TranscodeJobRecord
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import { LocalRepository, type LocalRepositoryTrackRecord } from "./local-repository";
 import { resolveProviderTrackSource } from "./provider-track-identity";
 import { blobToDataUrl } from "./audio-metadata";

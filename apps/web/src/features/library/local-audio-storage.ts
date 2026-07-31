@@ -29,12 +29,19 @@ import {
   saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
   saveLocalAudioFileRecord
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import { createRepositoryTrackRecord, LocalRepository } from "./local-repository";
+
+// Surface cached-library lookups used by view code (e.g. artwork) without
+// exposing the low-level IndexedDB storage module directly.
+export {
+  getCachedLibraryTrackByProviderTrack,
+  getCachedLibraryTrackSummary
+} from "@/lib/storage/indexeddb";
 import { hydrateLocalRepository } from "./local-repository-hydration";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 import { resolveLocalArtworkUrl } from "./audio-metadata";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {

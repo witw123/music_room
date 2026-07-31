@@ -1,7 +1,7 @@
 import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import type {
   CachedLibraryTrack,
   CachedLibraryTrackFile

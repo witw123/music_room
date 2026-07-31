@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 
 type FavoriteTracksSnapshot = {
   tracks: ProviderTrackFavorite[];

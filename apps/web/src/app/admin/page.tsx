@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { AdminIncident, AdminOverview, AdminRoomSummary, AdminSession, AdminUserSummary } from "@music-room/shared";
-import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON } from "@/lib/admin-api";
+import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON } from "@/lib/network/admin-api";
 import styles from "./admin.module.css";
 
 type Tab = "overview" | "rooms" | "users" | "incidents" | "audit" | "system";

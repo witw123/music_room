@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { MusicRoomApp } from "@/components/music-room-app";
-import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/away-room";
+import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/domain/away-room";
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();

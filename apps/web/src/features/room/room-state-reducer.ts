@@ -5,7 +5,7 @@ import {
   normalizeRoomMembers,
   shouldAcceptPresenceSnapshot,
   shouldReplacePlaybackSnapshot
-} from "@/lib/music-room-ui";
+} from "@/lib/domain/music-room-ui";
 
 type RoomStateSource = "bootstrap" | "authoritative";
 

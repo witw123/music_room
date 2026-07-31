@@ -9,9 +9,9 @@ import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
 import { MobileAppNavigation } from "@/components/MobileAppNavigation";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId, requestAwayRoomResume } from "@/lib/away-room";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId, requestAwayRoomResume } from "@/lib/domain/away-room";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
 
 export function AppRouteShell({ children }: { children: ReactNode }) {

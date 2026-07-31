@@ -6,7 +6,7 @@ import {
   musicRoomApi,
   type PlaybackHistoryStats,
   type RoomActivitySummary
-} from "@/lib/music-room-api";
+} from "@/lib/network/music-room-api";
 
 const activityRefreshIntervalMs = 60_000;
 

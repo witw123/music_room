@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import type { RoomSocket } from "@/lib/ws-client";
+import type { RoomSocket } from "@/lib/network/ws-client";
 import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { RoomsHomePage } from "@/components/RoomsHomePage";

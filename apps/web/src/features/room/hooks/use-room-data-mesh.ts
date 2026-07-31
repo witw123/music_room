@@ -10,7 +10,7 @@ import {
   resolvePreferredIceTransportPolicy
 } from "@/features/p2p";
 import { createPeerTelemetryReport, sumFiniteRates } from "@/features/p2p/peer-telemetry";
-import { playbackBandwidthMonitor } from "@/lib/import-bandwidth-governor";
+import { playbackBandwidthMonitor } from "@/lib/network/import-bandwidth-governor";
 import type {
   DataMeshBridge,
   PlaybackRecoveryRecommendation,

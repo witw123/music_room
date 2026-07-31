@@ -4,10 +4,10 @@ import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Playlist } from "@music-room/shared";
 import type { Route } from "next";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { clearAwayRoomId } from "@/lib/away-room";
+import { clearAwayRoomId } from "@/lib/domain/away-room";
 
 type RoomRouter = {
   push: (href: Route) => void;

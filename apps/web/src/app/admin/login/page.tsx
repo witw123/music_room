@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { adminApi } from "@/lib/admin-api";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { adminApi } from "@/lib/network/admin-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import styles from "../admin.module.css";
 
 export default function AdminLoginPage() {

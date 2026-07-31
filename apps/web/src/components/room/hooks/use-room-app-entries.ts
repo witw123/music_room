@@ -1,6 +1,6 @@
 "use client";
 
-import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 
 type UseRoomAppEntriesInput = {
   initialRoomId: string | null;

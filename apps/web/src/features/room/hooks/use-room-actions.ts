@@ -11,8 +11,8 @@ import {
   type RoomSnapshot,
   type UpdateRoomRequest
 } from "@music-room/shared";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";

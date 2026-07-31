@@ -1,7 +1,7 @@
 "use client";
 
 import type { RoomSnapshot } from "@music-room/shared";
-import { getLocalAudioDirectory } from "@/lib/indexeddb";
+import { getLocalAudioDirectory } from "@/lib/storage/indexeddb";
 import { LocalRepository } from "./local-repository";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 

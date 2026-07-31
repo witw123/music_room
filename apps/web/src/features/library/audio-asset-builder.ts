@@ -24,7 +24,7 @@ import {
   putPlaybackAssetDraftUnits,
   putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import { opusPreSkipSamples } from "@audio/opus-encode";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
 import { parseWavHeader, type WavHeader } from "@/features/audio-codecs/wav-parser";

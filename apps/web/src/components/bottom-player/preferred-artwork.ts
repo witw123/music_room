@@ -5,7 +5,7 @@ import type { TrackMeta } from "@music-room/shared";
 import {
   getCachedLibraryTrackByProviderTrack,
   getCachedLibraryTrackSummary
-} from "@/lib/indexeddb";
+} from "@/features/library/local-audio-storage";
 
 type ArtworkTrack = Pick<TrackMeta, "id" | "fileHash" | "artworkUrl" | "sourceRef"> | null;
 

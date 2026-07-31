@@ -14,8 +14,8 @@ import type {
   QqMusicTrackCandidate
 } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { ProviderSearchPage } from "@/components/ProviderSearchPage";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
@@ -36,13 +36,11 @@ import {
   hashAudioBlob,
   listMergedLocalPlaylistTracks,
   localPlaylistTrackId,
-  toProviderTrackRecord
-} from "@/features/playlist/local-playlist";
-import { isLocalPlaylistMirror } from "@/lib/local-playlist-database";
-import {
+  toProviderTrackRecord,
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
-} from "@/lib/indexeddb";
+} from "@/features/playlist/local-playlist";
+import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import {
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory,

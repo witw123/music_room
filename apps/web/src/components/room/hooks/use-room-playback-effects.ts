@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type Dispatch } from "react";
-import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
+import { consumeRoomSnapshotHandoff } from "@/lib/domain/room-snapshot-handoff";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 
 type UseRoomPlaybackEffectsInput = {

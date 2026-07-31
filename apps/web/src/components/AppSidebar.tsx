@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Route } from "next";
 import type { AuthSession } from "@music-room/shared";
-import { storeAwayRoomId } from "@/lib/away-room";
+import { storeAwayRoomId } from "@/lib/domain/away-room";
 import {
   applyAppTheme,
   appSettingsChangeEvent,

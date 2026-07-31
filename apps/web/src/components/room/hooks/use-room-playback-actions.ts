@@ -9,7 +9,7 @@ import {
   type SetStateAction
 } from "react";
 import type { QueueItem, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import {
   createPlaybackStartRequest,
   type PlaybackStartRequest

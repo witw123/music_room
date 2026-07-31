@@ -19,7 +19,7 @@ import type {
 import { RoomStage } from "./RoomStage";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
-import type { RoomSocket } from "@/lib/ws-client";
+import type { RoomSocket } from "@/lib/network/ws-client";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";

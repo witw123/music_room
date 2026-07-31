@@ -13,7 +13,7 @@ import {
   deleteLocalTrackDataForTracks,
   getCachedLibraryTrack,
   listCachedLibraryTrackSummaries,
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import {
   buildCachedLibraryFileName,
@@ -47,7 +47,7 @@ import {
   playlistsChangedEventName,
   playlistsChangedStorageKey,
   musicRoomApi
-} from "@/lib/music-room-api";
+} from "@/lib/network/music-room-api";
 import {
   ensureDefaultLocalPlaylist,
   getDefaultLocalPlaylistTrackIds,
@@ -56,7 +56,7 @@ import {
   syncSelectedLocalDirectoryTracks
 } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
-import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import type { LocalPlaylistTrackRecord } from "@/lib/storage/indexeddb";
 
 export type LocalStorageSummary = {
   cacheBytes: number;

@@ -10,8 +10,8 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { formatDuration } from "@/lib/music-room-ui";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { formatDuration } from "@/lib/domain/music-room-ui";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   getCachedFavorites,
   setCachedFavorites

@@ -16,12 +16,12 @@ import {
   linkTrackAssets,
   getCachedLibraryTrackByProviderTrack,
   upsertCachedLibraryTrack
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import {
   MusicRoomApiError,
   musicRoomApi,
   resolveDownloadedAudioMimeType
-} from "@/lib/music-room-api";
+} from "@/lib/network/music-room-api";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/library/audio-utils";
 import {
   getReusableAudioAssets,

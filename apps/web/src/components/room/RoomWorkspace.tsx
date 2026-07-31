@@ -14,7 +14,7 @@ import type {
   TrackMeta,
   UpdateRoomRequest
 } from "@music-room/shared";
-import type { RoomSocket } from "@/lib/ws-client";
+import type { RoomSocket } from "@/lib/network/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";

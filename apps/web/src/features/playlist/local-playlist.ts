@@ -13,7 +13,7 @@ import {
   upsertLocalPlaylistTrack,
   type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import {
   chooseLocalAudioSourceDirectory,
   listLocalAudioFilesInDirectory,
@@ -25,6 +25,10 @@ import {
   createRepositoryTrackRecord,
   type LocalRepositoryPlaylistRecord
 } from "@/features/library/local-repository";
+
+// Surface the raw local-playlist track persistence for view code without
+// exposing the low-level IndexedDB storage module directly.
+export { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/storage/indexeddb";
 
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 

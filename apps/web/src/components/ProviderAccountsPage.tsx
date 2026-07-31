@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { LocalPlaylistsOverview } from "@/components/LocalPlaylistsOverview";
 import { PersonalOverview } from "@/components/PersonalOverview";
 

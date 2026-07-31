@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
-import { formatDuration } from "@/lib/music-room-ui";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { formatDuration } from "@/lib/domain/music-room-ui";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { parseRoomLyrics } from "@/components/room/room-lyrics";

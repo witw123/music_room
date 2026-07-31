@@ -14,12 +14,12 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 import {
   isLocalPlaylistMirror
-} from "@/lib/local-playlist-database";
-import { formatDuration } from "@/lib/music-room-ui";
+} from "@/features/playlist/local-playlist-database";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import {
   ensureDefaultLocalPlaylist,
   getDefaultLocalPlaylistTrackIds,
@@ -27,7 +27,9 @@ import {
   localPlaylistTrackId,
   listMergedLocalPlaylistTracks,
   restoreLocalPlaylistsFromRepository,
-  toProviderTrackRecord
+  toProviderTrackRecord,
+  upsertLocalPlaylistTrack,
+  type LocalPlaylistTrackRecord
 } from "@/features/playlist/local-playlist";
 import {
   ensureLocalAudioDirectoryWriteAccess,
@@ -35,10 +37,6 @@ import {
   normalizeLocalAudioMimeType,
   saveAudioFileToLocalDirectory
 } from "@/features/library/local-audio-storage";
-import {
-  upsertLocalPlaylistTrack,
-  type LocalPlaylistTrackRecord
-} from "@/lib/indexeddb";
 import { cacheProviderTrackForPlayback } from "@/features/playback/provider-track-cache";
 import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import { useRouter } from "next/navigation";

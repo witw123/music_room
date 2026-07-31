@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
 import type { AuthSession } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 
 type SessionSnapshot = {
   activeSession: AuthSession | null;

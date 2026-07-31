@@ -7,16 +7,16 @@ import type { Route } from "next";
 import type { RoomSnapshot } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   buildAppEntryHref,
   buildWorkspaceAuthHref
-} from "@/lib/client-shell";
-import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
+} from "@/lib/domain/client-shell";
+import { getOnlineMemberCount, toUserFacingError } from "@/lib/domain/music-room-ui";
 import {
   buildRoomJoinBootstrapSnapshot,
   storeRoomSnapshotHandoff
-} from "@/lib/room-snapshot-handoff";
+} from "@/lib/domain/room-snapshot-handoff";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";

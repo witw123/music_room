@@ -11,11 +11,11 @@ import {
   getAssetUnit,
   getTrackAssetLink,
   upsertCachedLibraryTrack
-} from "@/lib/indexeddb";
+} from "@/lib/storage/indexeddb";
 import {
   musicRoomApi,
   resolveDownloadedAudioMimeType
-} from "@/lib/music-room-api";
+} from "@/lib/network/music-room-api";
 import { saveCachedAudioFileToLocalDirectory } from "@/features/library/local-audio-storage";
 import {
   buildCachedLibraryTrackUpsertRecord,

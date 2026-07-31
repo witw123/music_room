@@ -4,7 +4,7 @@ import {
   type PeerLinkProfile,
   type PeerLinkProfileInput
 } from "@/features/p2p/peer-link-profile";
-import { formatTransferRateMBps } from "@/lib/music-room-ui";
+import { formatTransferRateMBps } from "@/lib/domain/music-room-ui";
 
 export type WanLinkTone = "neutral" | "success" | "warning" | "danger" | "accent";
 

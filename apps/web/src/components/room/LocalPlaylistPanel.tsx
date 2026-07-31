@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import type { TrackMeta } from "@music-room/shared";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { formatDuration } from "@/lib/music-room-ui";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
-import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 
 type LocalPlaylistPanelProps = {
   localPlaylists: LocalPlaylistRecord[];

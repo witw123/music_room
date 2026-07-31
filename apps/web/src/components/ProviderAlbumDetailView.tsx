@@ -10,7 +10,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
-import { formatDuration } from "@/lib/music-room-ui";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 

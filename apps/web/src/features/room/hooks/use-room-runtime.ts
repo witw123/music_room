@@ -15,13 +15,13 @@ import type {
   RoomPlaybackReadinessPayload
 } from "@music-room/shared";
 import type { Route } from "next";
-import type { RoomSocket } from "@/lib/ws-client";
+import type { RoomSocket } from "@/lib/network/ws-client";
 import type { P2PMesh } from "@/features/p2p";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
-import { musicRoomApi } from "@/lib/music-room-api";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useRoomRuntimeObservability } from "./use-room-runtime-observability";
 import {

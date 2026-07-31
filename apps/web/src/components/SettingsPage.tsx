@@ -11,8 +11,8 @@ import { LocalStorageManagementCard } from "@/components/LocalStorageSettingsSec
 import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
 import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   appSettingsChangeEvent,
   getDefaultAppSettings,

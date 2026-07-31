@@ -6,9 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildAppEntryHref } from "@/lib/client-shell";
-import { musicRoomApi } from "@/lib/music-room-api";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { buildAppEntryHref } from "@/lib/domain/client-shell";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
 
 declare global {
   interface Window {

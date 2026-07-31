@@ -1,5 +1,5 @@
 import { errorCodes, type Playlist } from "@music-room/shared";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 
 export const localPlaylistMirrorTagPrefix = "local-playlist:";

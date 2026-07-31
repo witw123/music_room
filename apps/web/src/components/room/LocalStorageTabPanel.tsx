@@ -11,10 +11,10 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
-import { formatDuration } from "@/lib/music-room-ui";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { LocalPlaylistPanel } from "./LocalPlaylistPanel";

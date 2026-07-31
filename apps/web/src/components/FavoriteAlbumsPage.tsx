@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { ProviderAlbumDetailView, ProviderAlbumTrackTable, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
-import { isLocalPlaylistMirror } from "@/lib/local-playlist-database";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import {
   getCachedFavorites,
   setCachedFavorites
@@ -26,9 +26,10 @@ import {
   hashAudioBlob,
   listMergedLocalPlaylistTracks,
   localPlaylistTrackId,
-  toProviderTrackRecord
+  toProviderTrackRecord,
+  upsertLocalPlaylistTrack,
+  type LocalPlaylistTrackRecord
 } from "@/features/playlist/local-playlist";
-import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
 import {
   ensureLocalAudioDirectoryWriteAccess,
   normalizeLocalAudioMimeType,

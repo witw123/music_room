@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { AuthSession, RoomChatInputPayload, RoomChatPayload } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { RoomSocket } from "@/lib/ws-client";
+import { RoomSocket } from "@/lib/network/ws-client";
 
 interface ChatMessage extends RoomChatPayload {
   id: string;

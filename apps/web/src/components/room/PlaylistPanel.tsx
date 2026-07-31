@@ -8,15 +8,15 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
-import { formatDuration, normalizePlaylistTitle } from "@/lib/music-room-ui";
+import { formatDuration, normalizePlaylistTitle } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   listRoomPlaylistTrackIndex,
   providerTrackKey,
   toCachedProviderTrack
 } from "@/features/playlist/local-playlist";
-import type { LocalPlaylistTrackRecord } from "@/lib/indexeddb";
+import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;

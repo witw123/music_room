@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
-import { getOnlineMemberCount } from "@/lib/music-room-ui";
+import { getOnlineMemberCount } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 
 type LobbyViewProps = {

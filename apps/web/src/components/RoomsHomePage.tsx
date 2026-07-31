@@ -7,13 +7,13 @@ import Link from "next/link";
 import type { Route } from "next";
 import { defaultRoomMemberPermissions, type RoomMemberPermissions, type RoomSnapshot } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { musicRoomApi } from "@/lib/music-room-api";
-import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
+import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+import { getOnlineMemberCount, toUserFacingError } from "@/lib/domain/music-room-ui";
 import {
   buildRoomJoinBootstrapSnapshot,
   storeRoomSnapshotHandoff
-} from "@/lib/room-snapshot-handoff";
+} from "@/lib/domain/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
@@ -25,7 +25,7 @@ import {
   clearAwayRoomId,
   readAwayRoomId,
   requestAwayRoomResume
-} from "@/lib/away-room";
+} from "@/lib/domain/away-room";
 
 const lastRoomStorageKey = "music-room-last-room";
 

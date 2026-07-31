@@ -19,8 +19,8 @@ import {
   musicRoomApi,
   playlistsChangedEventName,
   playlistsChangedStorageKey
-} from "@/lib/music-room-api";
-import { isLocalPlaylistMirror } from "@/lib/local-playlist-database";
+} from "@/lib/network/music-room-api";
+import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";

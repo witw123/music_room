@@ -1,7 +1,7 @@
 "use client";
 
 import { errorCodes, getRoomMemberPermissions, type PlaybackSnapshot, type RoomMember, type RoomSnapshot } from "@music-room/shared";
-import { MusicRoomApiError } from "./music-room-api";
+import { MusicRoomApiError } from "../network/music-room-api";
 
 export function formatDuration(durationMs: number) {
   if (!durationMs) {

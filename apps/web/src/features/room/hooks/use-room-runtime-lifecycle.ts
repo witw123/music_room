@@ -9,8 +9,8 @@ import {
 } from "react";
 import type { AuthSession, IceConfigResponse, RoomSnapshot } from "@music-room/shared";
 import type { Route } from "next";
-import { toUserFacingError } from "@/lib/music-room-ui";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";

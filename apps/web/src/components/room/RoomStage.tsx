@@ -9,9 +9,9 @@ import type {
   UpdateRoomRequest
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
-import type { RoomSocket } from "@/lib/ws-client";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { formatDuration, getOnlineMemberCount } from "@/lib/domain/music-room-ui";
+import type { RoomSocket } from "@/lib/network/ws-client";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";

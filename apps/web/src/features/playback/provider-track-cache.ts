@@ -17,8 +17,8 @@ import {
   upsertCachedLibraryTrack,
   type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
-} from "@/lib/indexeddb";
-import { musicRoomApi } from "@/lib/music-room-api";
+} from "@/lib/storage/indexeddb";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import { analyzeAudioBlobLoudness } from "./loudness";
 
 export const providerPlaybackCacheChangedEvent = "music-room-provider-playback-cache-changed";

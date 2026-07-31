@@ -6,7 +6,7 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import {
   createLocalPlaylist,
   defaultLocalPlaylistId,
@@ -27,7 +27,9 @@ import {
   toCachedProviderTrack,
   toProviderTrackRecord,
   updateLocalPlaylist,
-  type LocalPlaylistRecord
+  upsertLocalPlaylistTrack,
+  type LocalPlaylistRecord,
+  type LocalPlaylistTrackRecord
 } from "@/features/playlist/local-playlist";
 import {
   ensureLocalAudioDirectoryWriteAccess,
@@ -35,14 +37,13 @@ import {
   saveAudioFileToLocalDirectory,
   getLocalAudioStorageState
 } from "@/features/library/local-audio-storage";
-import { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/lib/indexeddb";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   isLocalPlaylistMirror,
   localPlaylistIdFromMirror,
   syncLocalPlaylistToDatabase
-} from "@/lib/local-playlist-database";
-import { formatDuration } from "@/lib/music-room-ui";
+} from "@/features/playlist/local-playlist-database";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
