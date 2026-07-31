@@ -1,41 +1,32 @@
-import { BadRequestException, Injectable, Optional } from "@nestjs/common";
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { Injectable, Optional } from "@nestjs/common";
 import type {
   PlaybackSnapshot,
   Playlist,
-  QueueItem,
-  Room,
   RoomDirectoryItem,
-  RoomMemberPermissions,
   RoomMember,
   RoomSnapshot,
-  RoomSyncResponse,
-  RoomTrackDeletion,
-  TrackMeta,
-  UserProfile
-} from "@music-room/shared";
-import {
-  defaultRoomMemberPermissions,
-  getNewMemberPermissions,
-  getRoomMemberPermissions
+  RoomSyncResponse
 } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
 import { type RoomRecord } from "./room.types";
+import { assertMember, assertPermission, incrementRoomRevision } from "./room-mutation";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPresenceService } from "./services/room-presence.service";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
+import { RoomPresenceOrchestratorService } from "./services/room-presence-orchestrator.service";
+import { RoomContentService } from "./services/room-content.service";
+import { RoomLifecycleService } from "./services/room-lifecycle.service";
 
-const maxRoomMembers = 100;
-const maxRoomTracks = 500;
-const maxRoomQueueItems = 500;
-const maxTrackDurationMs = 3 * 60 * 60 * 1000;
-const maxTrackSizeBytes = 1024 * 1024 * 1024;
-const maxAssetUnits = 10_000;
-
+/**
+ * Room domain facade: room queries, snapshot building and playback
+ * orchestration stay here; lifecycle/membership, library content and presence
+ * transitions are delegated to focused services so the room module keeps one
+ * entry point for its REST/signaling consumers.
+ */
 @Injectable()
 export class RoomService {
   private readonly rooms = new Map<string, RoomRecord>();
@@ -63,12 +54,9 @@ export class RoomService {
   private readonly roomPlaybackService: RoomPlaybackService;
   private readonly roomSnapshotService: RoomSnapshotService;
   private readonly roomActivityService: RoomActivityService;
-  /**
-   * Presence writes share one persisted room revision. Serialize all presence
-   * transitions per room so concurrent members cannot conflict in storage and
-   * an older disconnect cannot finish after a newer online update.
-   */
-  private readonly presenceUpdateChains = new Map<string, Promise<void>>();
+  private readonly presenceOrchestrator: RoomPresenceOrchestratorService;
+  private readonly contentService: RoomContentService;
+  private readonly lifecycleService: RoomLifecycleService;
 
   constructor(
     private readonly authService: AuthService,
@@ -83,7 +71,13 @@ export class RoomService {
     @Optional()
     roomSnapshotService?: RoomSnapshotService,
     @Optional()
-    roomActivityService?: RoomActivityService
+    roomActivityService?: RoomActivityService,
+    @Optional()
+    presenceOrchestrator?: RoomPresenceOrchestratorService,
+    @Optional()
+    contentService?: RoomContentService,
+    @Optional()
+    lifecycleService?: RoomLifecycleService
   ) {
     this.roomRecordRepository =
       roomRecordRepository ??
@@ -104,68 +98,28 @@ export class RoomService {
       roomSnapshotService ??
       new RoomSnapshotService(this.roomPresenceService, this.roomPlaybackService);
     this.roomActivityService = roomActivityService ?? new RoomActivityService(prisma);
-  }
-
-  async createRoom(
-    hostSessionId: string,
-    visibility: Room["visibility"] = "public",
-    metadata?: {
-      name?: string;
-      description?: string | null;
-      password?: string;
-      newMemberPermissions?: RoomMemberPermissions;
-    }
-  ) {
-    const hostSession = await this.authService.getUserOrThrow(hostSessionId);
-    const name = metadata?.name?.trim() || "未命名房间";
-    const description = metadata?.description?.trim() || null;
-    const password = metadata?.password?.trim() || null;
-    const room: Room = {
-      id: `room_${randomUUID()}`,
-      hostId: hostSession.id,
-      joinCode: this.buildJoinCode(),
-      name,
-      description,
-      hasPassword: !!password,
-      visibility,
-      newMemberPermissions: metadata?.newMemberPermissions
-        ? { ...metadata.newMemberPermissions }
-        : { ...defaultRoomMemberPermissions },
-      members: [this.buildMember(hostSession, "host")],
-      presenceRevision: 0,
-      roomRevision: 0,
-      playback: {
-        status: "paused",
-        currentTrackId: null,
-        currentQueueItemId: null,
-        playbackAssetId: null,
-        startAt: null,
-        sourceSessionId: hostSession.id,
-        sourcePeerId: null,
-        sourceTrackId: null,
-        positionMs: 0,
-        startedAt: null,
-        queueVersion: 1,
-        playbackRevision: 1,
-        mediaEpoch: 0,
-        playbackMode: "sequence",
-        shuffleBagTrackIds: [],
-        nextQueueItemId: null
-      }
-    };
-
-    const record: RoomRecord = {
-      room,
-      passwordHash: password ? hashRoomPassword(password) : null,
-      tracks: [],
-      queue: [],
-      memberPermissionProfiles: {}
-    };
-
-    await this.roomRecordRepository.persistRecord(record);
-    await this.roomRecordRepository.setRecentRoomForSession(hostSession.id, room.id);
-
-    return this.getRoomSnapshot(room.id, []);
+    this.presenceOrchestrator =
+      presenceOrchestrator ??
+      new RoomPresenceOrchestratorService(
+        this.roomRecordRepository,
+        this.roomPresenceService,
+        this.roomPlaybackService,
+        this.roomActivityService
+      );
+    this.contentService =
+      contentService ??
+      new RoomContentService(this.authService, this.roomRecordRepository, this.roomPlaybackService);
+    this.lifecycleService =
+      lifecycleService ??
+      new RoomLifecycleService(
+        this.authService,
+        this.roomRecordRepository,
+        this.roomPresenceService,
+        this.roomPlaybackService,
+        this.roomActivityService,
+        this.roomSnapshotService,
+        this.presenceOrchestrator
+      );
   }
 
   async findRoomByJoinCode(joinCode: string) {
@@ -380,547 +334,52 @@ export class RoomService {
     return this.roomSnapshotService.buildSnapshot(record, []);
   }
 
-  async joinRoom(roomId: string, sessionId: string, password?: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    const session = await this.authService.getUserOrThrow(sessionId);
-    if (record.passwordHash && !verifyRoomPassword(password ?? "", record.passwordHash)) {
-      throw new BadRequestException(password ? "房间密码错误。" : "请输入房间密码。");
-    }
-    this.assertUniqueNickname(record, session.id, session.nickname);
-
-    const existingMember = record.room.members.find((member) => member.id === session.id);
-    const currentPresence = existingMember
-      ? (await this.roomPresenceService.getPresenceSnapshot(record.room.id, record.room.members)).get(session.id)
-      : undefined;
-    let membershipChanged = false;
-
-    if (!existingMember) {
-      if (record.room.members.length >= maxRoomMembers) {
-        throw new BadRequestException("房间成员数量已达到上限。");
-      }
-      const savedPermissions = record.memberPermissionProfiles?.[session.id];
-      const permissions = savedPermissions
-        ? { ...savedPermissions }
-        : getNewMemberPermissions(record.room);
-      record.room.members.push({
-        ...this.buildMember(session, "member"),
-        permissions
-      });
-      record.memberPermissionProfiles = {
-        ...(record.memberPermissionProfiles ?? {}),
-        [session.id]: { ...permissions }
-      };
-      this.incrementPresenceRevision(record.room);
-      this.incrementRoomRevision(record.room);
-      membershipChanged = true;
-    } else if (currentPresence?.presenceState !== "online") {
-      // Hosts stay in the room record while away so room ownership survives.
-      // Starting a new online session must therefore start a new membership timer.
-      existingMember.joinedAt = new Date().toISOString();
-      this.incrementPresenceRevision(record.room);
-      this.incrementRoomRevision(record.room);
-      membershipChanged = true;
-    }
-
-    if (membershipChanged) {
-      await this.roomRecordRepository.persistRecord(record);
-    }
-
-    await this.roomRecordRepository.setRecentRoomForSession(session.id, roomId);
-
-    return record.room;
-  }
-
-  async updateRoom(
-    roomId: string,
-    sessionId: string,
-    input: {
-      visibility: Room["visibility"];
-      name: string;
-      description?: string | null;
-      password?: string;
-      newMemberPermissions?: RoomMemberPermissions;
-    }
-  ) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    if (record.room.hostId !== sessionId) {
-      throw new Error("Only the host can update this room.");
-    }
-
-    const password = input.password?.trim();
-    record.room.visibility = input.visibility;
-    record.room.name = input.name.trim();
-    record.room.description = input.description?.trim() || null;
-    if (input.newMemberPermissions !== undefined) {
-      record.room.newMemberPermissions = { ...input.newMemberPermissions };
-    }
-    if (input.password !== undefined) {
-      record.passwordHash = password ? hashRoomPassword(password) : null;
-      record.room.hasPassword = Boolean(password);
-    }
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return record.room;
-  }
-
-  async updateMemberPermissions(
-    roomId: string,
-    actorSessionId: string,
-    memberId: string,
-    permissions: RoomMemberPermissions
-  ) {
-    return this.enqueuePresenceUpdate(roomId, actorSessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      this.assertHost(record, actorSessionId);
-      const member = record.room.members.find((candidate) => candidate.id === memberId);
-      if (!member) {
-        throw new Error("Room member not found.");
-      }
-      if (member.role === "host") {
-        throw new Error("Only the host can manage another room member.");
-      }
-
-      member.permissions = { ...permissions };
-      record.memberPermissionProfiles = {
-        ...(record.memberPermissionProfiles ?? {}),
-        [memberId]: { ...permissions }
-      };
-      this.incrementPresenceRevision(record.room);
-      this.incrementRoomRevision(record.room);
-      await this.roomRecordRepository.persistRecord(record);
-      return record.room;
-    });
-  }
-
-  async removeMember(roomId: string, actorSessionId: string, memberId: string) {
-    return this.enqueuePresenceUpdate(roomId, actorSessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      this.assertHost(record, actorSessionId);
-      const member = record.room.members.find((candidate) => candidate.id === memberId);
-      if (!member) {
-        throw new Error("Room member not found.");
-      }
-      if (member.role === "host") {
-        throw new Error("Only the host can remove another room member.");
-      }
-
-      await this.roomPresenceService.clear(roomId, memberId);
-      await this.roomActivityService.stop(memberId, roomId, record.room);
-      record.room.members = record.room.members.filter((candidate) => candidate.id !== memberId);
-      await this.roomPlaybackService.handleSourceDeparture(record, memberId);
-      this.incrementPresenceRevision(record.room);
-      this.incrementRoomRevision(record.room);
-      await this.roomRecordRepository.persistRecord(record);
-      await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(memberId, roomId);
-      return { memberId, room: record.room };
-    });
-  }
-
-  async deleteRoom(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
-    await this.assertCanDeleteRoomRecord(record, sessionId);
-
-    await Promise.all(
-      record.room.members.map((member) =>
-        this.roomActivityService.stop(member.id, roomId, record.room)
-      )
-    );
-
-    await this.roomRecordRepository.markRoomTerminated(record, "房主解散房间");
-    await this.roomRecordRepository.deleteRecord(record);
-    await Promise.all(
-      record.room.members.map((member) =>
-        this.roomRecordRepository.clearRecentRoomForSessionIfMatching(member.id, roomId)
-      )
-    );
-    await this.roomRecordRepository.completeRoomTermination(roomId);
-
-    return { ok: true };
-  }
-
-  async deleteRoomByAdmin(roomId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
-    // AdminService creates the tombstone with the audit reason before this
-    // method runs. Preserve that reason during retries.
-    await Promise.all(
-      record.room.members.map((member) =>
-        this.roomActivityService.stop(member.id, roomId, record.room)
-      )
-    );
-    await this.roomRecordRepository.markRoomTerminated(record);
-    await this.roomRecordRepository.deleteRecord(record);
-    await Promise.all(record.room.members.map((member) => this.roomRecordRepository.clearRecentRoomForSessionIfMatching(member.id, roomId)));
-    await this.roomRecordRepository.completeRoomTermination(roomId);
-    return { ok: true };
-  }
-
-  async assertCanDeleteRoom(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
-    await this.assertCanDeleteRoomRecord(record, sessionId);
-  }
-
-  private async assertCanDeleteRoomRecord(record: RoomRecord, sessionId: string) {
-    if (record.room.hostId !== sessionId) {
-      throw new Error("Only the host can delete this room.");
-    }
-  }
-
-  async updatePeerPresence(
-    roomId: string,
-    sessionId: string,
-    peerId: string | null,
-    presenceState: RoomMember["presenceState"] = peerId ? "online" : "offline"
-  ) {
-    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      this.assertMember(record, sessionId);
-      return this.applyPeerPresenceUpdate(record, roomId, sessionId, peerId, presenceState);
-    });
-  }
-
-  async refreshRealtimePresence(roomId: string, sessionId: string, peerId: string) {
-    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      this.assertMember(record, sessionId);
-      const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
-        roomId,
-        record.room.members
-      );
-      const currentPresence = presenceSnapshot.get(sessionId) ?? {
-        peerId: null,
-        presenceState: "offline" as const
-      };
-
-      if (
-        currentPresence.peerId === peerId &&
-        currentPresence.presenceState === "online"
-      ) {
-        await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
-        await this.roomActivityService.startOrTouch(
-          sessionId,
-          record.room
-        );
-        return {
-          room: record.room,
-          changed: false
-        };
-      }
-
-      return {
-        room: await this.applyPeerPresenceUpdate(
-          record,
-          roomId,
-          sessionId,
-          peerId,
-          "online",
-          currentPresence
-        ),
-        changed: true
-      };
-    });
-  }
-
-  async leaveRoom(roomId: string, sessionId: string) {
-    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      this.assertMember(record, sessionId);
-      const leavingHost = record.room.hostId === sessionId;
-      await this.roomPresenceService.clear(roomId, sessionId);
-      await this.roomActivityService.stop(sessionId, roomId, record.room);
-
-      if (!leavingHost) {
-        record.room.members = record.room.members.filter((member) => member.id !== sessionId);
-      }
-
-      await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
-      this.incrementPresenceRevision(record.room);
-      this.incrementRoomRevision(record.room);
-
-      await this.roomRecordRepository.persistRecord(record);
-      await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);
-      return record.room;
-    });
-  }
-
   async rememberRecentRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
+    assertMember(record, sessionId);
     await this.roomRecordRepository.setRecentRoomForSession(sessionId, roomId);
-  }
-
-  async registerTrack(
-    roomId: string,
-    sessionId: string,
-    input: Omit<TrackMeta, "id"> & { id?: string }
-  ) {
-    await this.authService.getUserOrThrow(sessionId);
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    this.assertPermission(record, sessionId, "library");
-    this.assertTrackLimits(input);
-
-    const track: TrackMeta = {
-      ...input,
-      ownerSessionId: sessionId,
-      ownerNickname: (await this.authService.getUserOrThrow(sessionId)).nickname,
-      id: input.id ?? `track_${randomUUID()}`
-    };
-
-    const duplicateByFileHashIndex = record.tracks.findIndex(
-      (item) =>
-        item.fileHash === track.fileHash &&
-        item.ownerSessionId === track.ownerSessionId
-    );
-    const sourceRef = track.sourceType !== "local_upload" ? track.sourceRef : null;
-    const duplicateBySourceIndex = sourceRef
-      ? record.tracks.findIndex(
-          (item) =>
-            item.ownerSessionId === track.ownerSessionId &&
-            item.sourceType !== "local_upload" &&
-            item.sourceRef?.provider === sourceRef.provider &&
-            item.sourceRef?.trackId === sourceRef.trackId
-        )
-      : -1;
-    const existingIndex = record.tracks.findIndex((item) => item.id === track.id);
-
-    if (duplicateByFileHashIndex >= 0) {
-      const existingTrack = record.tracks[duplicateByFileHashIndex];
-      record.tracks[duplicateByFileHashIndex] = {
-        ...existingTrack,
-        ...track,
-        id: existingTrack.id
-      };
-      this.incrementRoomRevision(record.room);
-      await this.roomRecordRepository.persistRecord(record);
-      return record.tracks[duplicateByFileHashIndex];
-    }
-
-    if (duplicateBySourceIndex >= 0) {
-      const existingTrack = record.tracks[duplicateBySourceIndex];
-      record.tracks[duplicateBySourceIndex] = {
-        ...existingTrack,
-        ...track,
-        id: existingTrack.id
-      };
-      this.incrementRoomRevision(record.room);
-      await this.roomRecordRepository.persistRecord(record);
-      return record.tracks[duplicateBySourceIndex];
-    }
-
-    if (existingIndex >= 0) {
-      record.tracks[existingIndex] = track;
-    } else {
-      if (record.tracks.length >= maxRoomTracks) {
-        throw new BadRequestException("房间曲目数量已达到上限。");
-      }
-      record.tracks.unshift(track);
-    }
-
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return track;
-  }
-
-  async removeTrack(roomId: string, sessionId: string, trackId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    this.assertPermission(record, sessionId, "library");
-
-    const track = record.tracks.find((item) => item.id === trackId);
-    if (!track) {
-      throw new Error(`Track not found in room: ${trackId}`);
-    }
-
-    if (track.ownerSessionId !== sessionId && record.room.hostId !== sessionId) {
-      throw new Error("Only the original uploader can delete this track.");
-    }
-
-    this.removeTracksById(record, new Set([trackId]));
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    const deletion: RoomTrackDeletion = {
-      roomId,
-      trackId,
-      fileHash: track.fileHash,
-      originalAssetId: track.originalAsset?.assetId ?? null,
-      playbackAssetId: track.playbackAsset?.assetId ?? null,
-      roomRevision: record.room.roomRevision ?? 0,
-      deletedAt: new Date().toISOString()
-    };
-    await this.roomRecordRepository.recordTrackDeletion(deletion).catch(() => undefined);
-    return { ok: true };
-  }
-
-  async addQueueItem(roomId: string, sessionId: string, trackId: string) {
-    const session = await this.authService.getUserOrThrow(sessionId);
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    this.assertPermission(record, sessionId, "queue");
-
-    if (record.queue.length >= maxRoomQueueItems) {
-      throw new BadRequestException("房间播放队列已达到上限。");
-    }
-
-    if (!record.tracks.some((track) => track.id === trackId)) {
-      throw new Error(`Track not found in room: ${trackId}`);
-    }
-
-    const queueItem: QueueItem = {
-      id: `queue_${randomUUID()}`,
-      trackId,
-      requestedBy: session.nickname,
-      requestedById: session.id,
-      position: record.queue.length,
-      createdAt: new Date().toISOString()
-    };
-
-    record.queue.push(queueItem);
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
-    this.incrementQueueVersion(record.room.playback);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-
-    return queueItem;
   }
 
   async handleDuplicateSessionReplacement(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
+    assertMember(record, sessionId);
 
     if (!this.roomPlaybackService.pausePlaybackForSessionReplacement(record, sessionId)) {
       return record.room.playback;
     }
 
-    this.incrementRoomRevision(record.room);
+    incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.room.playback;
   }
 
-  async importPlaylistToQueue(roomId: string, sessionId: string, trackIds: string[]) {
-    const session = await this.authService.getUserOrThrow(sessionId);
+  isRealtimeAvailable() {
+    const redis = this.redis as RedisService & {
+      isPubSubAvailable?: () => boolean;
+    };
+    if (typeof redis.isPubSubAvailable === "function") {
+      return redis.isPubSubAvailable();
+    }
+    return typeof redis.isAvailable === "function" ? redis.isAvailable() : true;
+  }
+
+  async getTracks(roomId: string) {
+    return (await this.roomRecordRepository.getRoomRecord(roomId)).tracks;
+  }
+
+  async getQueue(roomId: string) {
+    return (await this.roomRecordRepository.getRoomRecord(roomId)).queue;
+  }
+
+  async getAccessibleQueue(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    this.assertPermission(record, sessionId, "queue");
-
-    const validTrackIds = trackIds.filter((trackId) =>
-      record.tracks.some((track) => track.id === trackId)
-    );
-
-    if (validTrackIds.length === 0) {
-      throw new Error("No tracks from this playlist are available in the current room.");
-    }
-
-    if (record.queue.length + validTrackIds.length > maxRoomQueueItems) {
-      throw new BadRequestException("导入后房间播放队列将超过上限。");
-    }
-
-    const nextItems = validTrackIds.map(
-      (trackId, offset): QueueItem => ({
-        id: `queue_${randomUUID()}`,
-        trackId,
-        requestedBy: session.nickname,
-        requestedById: session.id,
-        position: record.queue.length + offset,
-        createdAt: new Date().toISOString()
-      })
-    );
-
-    record.queue.push(...nextItems);
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
-    this.incrementQueueVersion(record.room.playback);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
+    assertMember(record, sessionId);
     return record.queue;
   }
 
-  async removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
+  async assertRoomMember(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, actorSessionId);
-    this.assertPermission(record, actorSessionId, "queue");
-    const removed = record.queue.find((item) => item.id === queueItemId);
-
-    if (!removed) {
-      return record.queue;
-    }
-
-    const nextQueue = record.queue
-      .filter((item) => item.id !== queueItemId)
-      .map((item, index) => ({ ...item, position: index }));
-
-    const playback = record.room.playback;
-    const removesCurrentQueueItem = playback.currentQueueItemId === removed.id;
-    const removesNextQueueItem = playback.nextQueueItemId === removed.id;
-    const removesDirectlyPlayingTrack =
-      playback.currentQueueItemId === null && playback.currentTrackId === removed.trackId;
-
-    if (removesCurrentQueueItem || removesDirectlyPlayingTrack) {
-      record.queue = nextQueue;
-      this.roomPlaybackService.clearPlayback(playback);
-      this.roomPlaybackService.syncShuffleBagWithQueue(record);
-      this.incrementQueueVersion(playback);
-      this.incrementRoomRevision(record.room);
-      await this.roomRecordRepository.persistRecord(record);
-      return record.queue;
-    }
-
-    record.queue = nextQueue;
-    if (removesNextQueueItem) {
-      playback.nextQueueItemId = null;
-    }
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
-    this.incrementQueueVersion(record.room.playback);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return record.queue;
-  }
-
-  async setNextQueueItem(roomId: string, actorSessionId: string, queueItemId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, actorSessionId);
-    this.assertPermission(record, actorSessionId, "player");
-
-    const queueItem = record.queue.find((item) => item.id === queueItemId);
-    if (!queueItem) {
-      throw new Error("Queue item not found in this room.");
-    }
-    if (record.room.playback.currentQueueItemId === queueItemId) {
-      throw new Error("The current queue item is already playing.");
-    }
-
-    record.room.playback.nextQueueItemId = queueItemId;
-    this.incrementPlaybackRevision(record.room.playback);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return record.room.playback;
-  }
-
-  async reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, actorSessionId);
-    this.assertPermission(record, actorSessionId, "queue");
-
-    const existingIds = record.queue.map((item) => item.id);
-    if (
-      queueItemIds.length !== existingIds.length ||
-      queueItemIds.some((id) => !existingIds.includes(id))
-    ) {
-      throw new Error("Queue reorder payload does not match the current room queue.");
-    }
-
-    const nextQueue = queueItemIds
-      .map((queueItemId) => record.queue.find((item) => item.id === queueItemId))
-      .filter((item): item is QueueItem => !!item)
-      .map((item, index) => ({
-        ...item,
-        position: index
-      }));
-
-    record.queue = nextQueue;
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
-    this.incrementQueueVersion(record.room.playback);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return record.queue;
+    assertMember(record, sessionId);
   }
 
   async updatePlayback(
@@ -944,10 +403,10 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
 
     if (input.actorSessionId) {
-      this.assertMember(record, input.actorSessionId);
-      this.assertPermission(record, input.actorSessionId, "player");
+      assertMember(record, input.actorSessionId);
+      assertPermission(record, input.actorSessionId, "player");
       if (input.actorPeerId) {
-        await this.refreshPresenceLease(
+        await this.presenceOrchestrator.refreshPresenceLease(
           roomId,
           input.actorSessionId,
           input.actorPeerId
@@ -959,60 +418,9 @@ export class RoomService {
       throw new Error("Playback state version conflict.");
     }
     const playback = await this.roomPlaybackService.updatePlayback(record, input);
-    this.incrementRoomRevision(record.room);
+    incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return playback;
-  }
-
-  isRealtimeAvailable() {
-    const redis = this.redis as RedisService & {
-      isPubSubAvailable?: () => boolean;
-    };
-    if (typeof redis.isPubSubAvailable === "function") {
-      return redis.isPubSubAvailable();
-    }
-    return typeof redis.isAvailable === "function" ? redis.isAvailable() : true;
-  }
-
-  async getTracks(roomId: string) {
-    return (await this.roomRecordRepository.getRoomRecord(roomId)).tracks;
-  }
-
-  async getQueue(roomId: string) {
-    return (await this.roomRecordRepository.getRoomRecord(roomId)).queue;
-  }
-
-  async getAccessibleQueue(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-    return record.queue;
-  }
-
-  async assertRoomMember(roomId: string, sessionId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    this.assertMember(record, sessionId);
-  }
-
-  private buildJoinCode() {
-    let joinCode = "";
-
-    while (joinCode.length < 6) {
-      joinCode += randomBytes(6).toString("base64url").replace(/[^A-Z0-9]/gi, "");
-    }
-
-    return joinCode.slice(0, 6).toUpperCase();
-  }
-
-  private buildMember(session: UserProfile, role: RoomMember["role"]): RoomMember {
-    return {
-      id: session.id,
-      nickname: session.nickname,
-      role,
-      joinedAt: new Date().toISOString(),
-      peerId: null,
-      presenceState: "offline",
-      permissions: { ...defaultRoomMemberPermissions }
-    };
   }
 
   /**
@@ -1045,7 +453,7 @@ export class RoomService {
         if (!didAdvance) {
           continue;
         }
-        this.incrementRoomRevision(record.room);
+        incrementRoomRevision(record.room);
         await this.roomRecordRepository.persistRecord(record);
         const playback = await this.roomPlaybackService.buildPlaybackForSnapshot(record);
         advanced.push({ roomId: record.room.id, playback });
@@ -1058,214 +466,114 @@ export class RoomService {
     return advanced;
   }
 
-  private assertMember(record: RoomRecord, sessionId: string) {
-    if (!record.room.members.some((member) => member.id === sessionId)) {
-      throw new Error("Only room members can perform this action.");
-    }
-  }
+  // ── Lifecycle facade ───────────────────────────────────────────────────────
 
-  private assertHost(record: RoomRecord, sessionId: string) {
-    if (record.room.hostId !== sessionId) {
-      throw new Error("Only the host can manage room members.");
+  createRoom(
+    hostSessionId: string,
+    visibility: import("@music-room/shared").Room["visibility"] = "public",
+    metadata?: {
+      name?: string;
+      description?: string | null;
+      password?: string;
+      newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
     }
-  }
-
-  private assertPermission(
-    record: RoomRecord,
-    sessionId: string,
-    permission: keyof RoomMemberPermissions
   ) {
-    const member = record.room.members.find((candidate) => candidate.id === sessionId);
-    if (!member) {
-      throw new Error("Only room members can perform this action.");
-    }
-    if (!getRoomMemberPermissions(member)[permission]) {
-      throw new Error(`Member does not have the ${permission} permission.`);
-    }
+    return this.lifecycleService.createRoom(hostSessionId, visibility, metadata);
   }
 
-  private assertUniqueNickname(record: RoomRecord, sessionId: string, nickname: string) {
-    const normalizedNickname = nickname.trim().toLowerCase();
-
-    if (
-      record.room.members.some(
-        (member) =>
-          member.id !== sessionId && member.nickname.trim().toLowerCase() === normalizedNickname
-      )
-    ) {
-      throw new Error("Nickname already exists in this room.");
-    }
+  joinRoom(roomId: string, sessionId: string, password?: string) {
+    return this.lifecycleService.joinRoom(roomId, sessionId, password);
   }
 
-  private incrementQueueVersion(playback: PlaybackSnapshot) {
-    playback.queueVersion += 1;
-  }
-
-  private incrementPlaybackRevision(playback: PlaybackSnapshot) {
-    playback.playbackRevision += 1;
-  }
-
-  private removeTracksById(record: RoomRecord, trackIds: Set<string>) {
-    if (trackIds.size === 0) {
-      return;
-    }
-
-    const previousQueueLength = record.queue.length;
-    record.tracks = record.tracks.filter((item) => !trackIds.has(item.id));
-    record.queue = record.queue
-      .filter((item) => !trackIds.has(item.trackId))
-      .map((item, index) => ({ ...item, position: index }));
-    if (record.room.playback.nextQueueItemId) {
-      const nextQueueItem = record.queue.find(
-        (item) => item.id === record.room.playback.nextQueueItemId
-      );
-      if (!nextQueueItem) {
-        record.room.playback.nextQueueItemId = null;
-      }
-    }
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
-
-    if (
-      record.room.playback.currentTrackId &&
-      trackIds.has(record.room.playback.currentTrackId)
-    ) {
-      this.roomPlaybackService.clearPlayback(record.room.playback);
-    }
-
-    if (record.queue.length !== previousQueueLength) {
-      this.incrementQueueVersion(record.room.playback);
-    }
-  }
-
-  private incrementPresenceRevision(room: Room) {
-    room.presenceRevision += 1;
-  }
-
-  private assertTrackLimits(input: Omit<TrackMeta, "id"> & { id?: string }) {
-    if (input.durationMs > maxTrackDurationMs) {
-      throw new BadRequestException("曲目时长超过允许的最大值。");
-    }
-    if (input.sizeBytes !== null && input.sizeBytes !== undefined && input.sizeBytes > maxTrackSizeBytes) {
-      throw new BadRequestException("曲目文件超过允许的最大大小。");
-    }
-
-    const manifests = [input.originalAsset, input.playbackAsset].filter(Boolean);
-    if (manifests.some((manifest) => manifest && manifest.unitCount > maxAssetUnits)) {
-      throw new BadRequestException("音频资源分片数量超过允许的最大值。");
-    }
-    if (input.playbackAsset && input.playbackAsset.durationMs > maxTrackDurationMs) {
-      throw new BadRequestException("播放资源时长超过允许的最大值。");
-    }
-    if (input.originalAsset && input.originalAsset.sizeBytes > maxTrackSizeBytes) {
-      throw new BadRequestException("原始音频资源超过允许的最大大小。");
-    }
-  }
-
-  private async refreshPresenceLease(roomId: string, sessionId: string, peerId: string) {
-    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      this.assertMember(record, sessionId);
-      await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
-    });
-  }
-
-  private enqueuePresenceUpdate<T>(
+  updateRoom(
     roomId: string,
     sessionId: string,
-    operation: () => Promise<T>
+    input: {
+      visibility: import("@music-room/shared").Room["visibility"];
+      name: string;
+      description?: string | null;
+      password?: string;
+      newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
+    }
   ) {
-    const key = roomId;
-    const previous = this.presenceUpdateChains.get(key) ?? Promise.resolve();
-    const result = previous.catch(() => undefined).then(operation);
-    const settled = result.then(
-      () => undefined,
-      () => undefined
-    );
-    this.presenceUpdateChains.set(key, settled);
-    void settled.finally(() => {
-      if (this.presenceUpdateChains.get(key) === settled) {
-        this.presenceUpdateChains.delete(key);
-      }
-    });
-    return result;
+    return this.lifecycleService.updateRoom(roomId, sessionId, input);
   }
 
-  private async applyPeerPresenceUpdate(
-    record: RoomRecord,
+  updateMemberPermissions(
+    roomId: string,
+    actorSessionId: string,
+    memberId: string,
+    permissions: import("@music-room/shared").RoomMemberPermissions
+  ) {
+    return this.lifecycleService.updateMemberPermissions(roomId, actorSessionId, memberId, permissions);
+  }
+
+  removeMember(roomId: string, actorSessionId: string, memberId: string) {
+    return this.lifecycleService.removeMember(roomId, actorSessionId, memberId);
+  }
+
+  deleteRoom(roomId: string, sessionId: string) {
+    return this.lifecycleService.deleteRoom(roomId, sessionId);
+  }
+
+  deleteRoomByAdmin(roomId: string) {
+    return this.lifecycleService.deleteRoomByAdmin(roomId);
+  }
+
+  assertCanDeleteRoom(roomId: string, sessionId: string) {
+    return this.lifecycleService.assertCanDeleteRoom(roomId, sessionId);
+  }
+
+  leaveRoom(roomId: string, sessionId: string) {
+    return this.lifecycleService.leaveRoom(roomId, sessionId);
+  }
+
+  // ── Content facade ─────────────────────────────────────────────────────────
+
+  registerTrack(
+    roomId: string,
+    sessionId: string,
+    input: Omit<import("@music-room/shared").TrackMeta, "id"> & { id?: string }
+  ) {
+    return this.contentService.registerTrack(roomId, sessionId, input);
+  }
+
+  removeTrack(roomId: string, sessionId: string, trackId: string) {
+    return this.contentService.removeTrack(roomId, sessionId, trackId);
+  }
+
+  addQueueItem(roomId: string, sessionId: string, trackId: string) {
+    return this.contentService.addQueueItem(roomId, sessionId, trackId);
+  }
+
+  importPlaylistToQueue(roomId: string, sessionId: string, trackIds: string[]) {
+    return this.contentService.importPlaylistToQueue(roomId, sessionId, trackIds);
+  }
+
+  removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
+    return this.contentService.removeQueueItem(roomId, queueItemId, actorSessionId);
+  }
+
+  setNextQueueItem(roomId: string, actorSessionId: string, queueItemId: string) {
+    return this.contentService.setNextQueueItem(roomId, actorSessionId, queueItemId);
+  }
+
+  reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
+    return this.contentService.reorderQueue(roomId, actorSessionId, queueItemIds);
+  }
+
+  // ── Presence facade ────────────────────────────────────────────────────────
+
+  updatePeerPresence(
     roomId: string,
     sessionId: string,
     peerId: string | null,
-    presenceState: RoomMember["presenceState"],
-    knownPresence?: { peerId: string | null; presenceState: RoomMember["presenceState"] }
+    presenceState: RoomMember["presenceState"] = peerId ? "online" : "offline"
   ) {
-    const currentPresence = knownPresence ??
-      (await this.roomPresenceService.getPresenceSnapshot(roomId, record.room.members)).get(sessionId) ?? {
-        peerId: null,
-        presenceState: "offline" as const
-      };
-
-    if (
-      currentPresence.peerId === peerId &&
-      currentPresence.presenceState === presenceState
-    ) {
-      if (presenceState === "online" && peerId) {
-        await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
-        await this.roomActivityService.startOrTouch(
-          sessionId,
-          record.room
-        );
-      } else if (presenceState === "reconnecting") {
-        await this.roomPresenceService.setReconnecting(roomId, sessionId);
-      } else {
-        await this.roomPresenceService.clear(roomId, sessionId);
-        await this.roomActivityService.stop(sessionId, roomId, record.room);
-      }
-      return record.room;
-    }
-
-    if (presenceState === "online" && peerId) {
-      await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
-      this.roomPlaybackService.handleSourcePeerOnline(record, sessionId, peerId);
-      await this.roomActivityService.startOrTouch(
-        sessionId,
-        record.room
-      );
-    } else if (presenceState === "reconnecting") {
-      await this.roomPresenceService.setReconnecting(roomId, sessionId);
-    } else {
-      await this.roomPresenceService.clear(roomId, sessionId);
-    }
-
-    if (presenceState === "offline") {
-      await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
-      await this.roomActivityService.stop(sessionId, roomId, record.room);
-    }
-
-    this.incrementPresenceRevision(record.room);
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return record.room;
+    return this.presenceOrchestrator.updatePeerPresence(roomId, sessionId, peerId, presenceState);
   }
 
-  private incrementRoomRevision(room: Room) {
-    room.roomRevision = (room.roomRevision ?? 0) + 1;
-  }
-}
-
-function hashRoomPassword(password: string) {
-  const salt = randomBytes(16);
-  const derived = scryptSync(password, salt, 64);
-  return `v1:${salt.toString("base64url")}:${derived.toString("base64url")}`;
-}
-
-function verifyRoomPassword(password: string, encoded: string) {
-  const [version, saltValue, hashValue] = encoded.split(":");
-  if (version !== "v1" || !saltValue || !hashValue) return false;
-  try {
-    const expected = Buffer.from(hashValue, "base64url");
-    const actual = scryptSync(password, Buffer.from(saltValue, "base64url"), expected.length);
-    return expected.length === actual.length && timingSafeEqual(expected, actual);
-  } catch {
-    return false;
+  refreshRealtimePresence(roomId: string, sessionId: string, peerId: string) {
+    return this.presenceOrchestrator.refreshRealtimePresence(roomId, sessionId, peerId);
   }
 }

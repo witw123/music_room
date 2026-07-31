@@ -10,6 +10,9 @@ import { RoomPresenceService } from "./services/room-presence.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
+import { RoomContentService } from "./services/room-content.service";
+import { RoomLifecycleService } from "./services/room-lifecycle.service";
+import { RoomPresenceOrchestratorService } from "./services/room-presence-orchestrator.service";
 import { RoomService } from "./room.service";
 
 const ROOM_RECORDS = Symbol("ROOM_RECORDS");
@@ -66,6 +69,9 @@ type RoomPresenceStore = Map<
         new RoomSnapshotService(presence, playback)
     },
     RoomService,
+    RoomPresenceOrchestratorService,
+    RoomContentService,
+    RoomLifecycleService,
     RoomRealtimePublisher
   ],
   exports: [
