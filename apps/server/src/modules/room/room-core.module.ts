@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import type { RoomRecord } from "./room.types";
 import { AuthModule } from "../auth/auth.module";
+import { RealtimeModule } from "../realtime/realtime.module";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
@@ -10,7 +11,6 @@ import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
 import { RoomService } from "./room.service";
-import { RoomRealtimeBroadcaster } from "../signaling/room-realtime.broadcaster";
 
 const ROOM_RECORDS = Symbol("ROOM_RECORDS");
 const ROOM_PRESENCE = Symbol("ROOM_PRESENCE");
@@ -28,7 +28,7 @@ type RoomPresenceStore = Map<
 >;
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, RealtimeModule],
   providers: [
     {
       provide: ROOM_RECORDS,
@@ -65,15 +65,13 @@ type RoomPresenceStore = Map<
       useFactory: (presence: RoomPresenceService, playback: RoomPlaybackService) =>
         new RoomSnapshotService(presence, playback)
     },
-    RoomRealtimeBroadcaster,
     RoomService,
     RoomRealtimePublisher
   ],
   exports: [
     RoomService,
     RoomPresenceService,
-    RoomRealtimePublisher,
-    RoomRealtimeBroadcaster
+    RoomRealtimePublisher
   ]
 })
 export class RoomCoreModule {}
