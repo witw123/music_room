@@ -7,7 +7,7 @@ import type {
 } from "@music-room/shared";
 import type { LocalAudioStorageState } from "@/features/library/local-audio-storage";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
-import type { LocalPlaylistTrackRecord } from "@/lib/storage/indexeddb";
+import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 
 type Provider = "netease" | "qqmusic";
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;

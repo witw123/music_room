@@ -13,7 +13,7 @@ import {
   deleteLocalTrackDataForTracks,
   getCachedLibraryTrack,
   listCachedLibraryTrackSummaries,
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import {
   buildCachedLibraryFileName,
@@ -56,7 +56,7 @@ import {
   syncSelectedLocalDirectoryTracks
 } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
-import type { LocalPlaylistTrackRecord } from "@/lib/storage/indexeddb";
+import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 
 export type LocalStorageSummary = {
   cacheBytes: number;

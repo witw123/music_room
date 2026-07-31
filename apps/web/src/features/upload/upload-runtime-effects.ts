@@ -3,7 +3,7 @@ import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import {
   getCachedLibraryTrack,
   getCachedLibraryTrackSummary
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import { getLocalAudioCacheFile, getLocalAudioFile } from "@/features/library/local-audio-storage";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import {

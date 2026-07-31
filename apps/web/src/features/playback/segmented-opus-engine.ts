@@ -1,6 +1,6 @@
 "use client";
 
-import type { AudioAssetUnitRecord } from "@/lib/storage/indexeddb";
+import type { AudioAssetUnitRecord } from "@/features/library/indexeddb";
 import type { GaplessTransition, PlaybackAssetManifest, PlaybackSnapshot } from "@music-room/shared";
 import { roomAudioOutput } from "./room-audio-output";
 import {

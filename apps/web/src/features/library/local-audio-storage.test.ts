@@ -24,7 +24,7 @@ const indexedDbMocks = vi.hoisted(() => ({
   saveLocalAudioFileRecord: vi.fn()
 }));
 
-vi.mock("@/lib/storage/indexeddb", () => indexedDbMocks);
+vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 
 import {
   ensureLocalAudioDirectoryWriteAccess,

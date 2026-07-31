@@ -9,7 +9,7 @@ import {
   type AudioAssetManifest,
   type TrackLoudness
 } from "@music-room/shared";
-import { LocalRepository } from "@/features/library/local-repository";
+import { LocalRepository } from "./local-repository";
 
 export type CachedLibraryTrackRecord = {
   fileHash: string;

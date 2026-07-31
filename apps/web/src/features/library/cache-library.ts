@@ -2,7 +2,7 @@ import type { TrackMeta } from "@music-room/shared";
 import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import type {
   CachedLibraryTrack,
   CachedLibraryTrackFile

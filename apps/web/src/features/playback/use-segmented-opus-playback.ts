@@ -10,7 +10,7 @@ import {
 import {
   getAssetUnit,
   putAssetManifest
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import {
   getRoomPlaybackClockNowMs,
   type RoomPlaybackBarrierClock

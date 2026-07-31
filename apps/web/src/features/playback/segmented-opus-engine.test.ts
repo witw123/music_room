@@ -3,7 +3,7 @@ import type {
   PlaybackAssetManifest,
   PlaybackSnapshot
 } from "@music-room/shared";
-import type { AudioAssetUnitRecord } from "@/lib/storage/indexeddb";
+import type { AudioAssetUnitRecord } from "@/features/library/indexeddb";
 import { roomAudioOutput } from "./room-audio-output";
 import { SegmentedOpusEngine } from "./segmented-opus-engine";
 

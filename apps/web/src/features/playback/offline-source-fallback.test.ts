@@ -26,7 +26,7 @@ const cacheLibraryMocks = vi.hoisted(() => ({
   notifyCacheLibraryChanged: vi.fn()
 }));
 
-vi.mock("@/lib/storage/indexeddb", () => indexedDbMocks);
+vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 vi.mock("@/lib/network/music-room-api", () => apiMocks);
 vi.mock("@/features/library/local-audio-storage", () => storageMocks);
 vi.mock("@/features/library/cache-library", () => cacheLibraryMocks);

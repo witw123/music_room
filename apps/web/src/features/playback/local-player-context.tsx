@@ -22,7 +22,7 @@ import {
   getCachedLibraryTrack,
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import {
   releaseProviderTrackPlaybackCache
 } from "@/features/playback/provider-track-cache";

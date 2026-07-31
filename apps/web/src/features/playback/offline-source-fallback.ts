@@ -11,7 +11,7 @@ import {
   getAssetUnit,
   getTrackAssetLink,
   upsertCachedLibraryTrack
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import {
   musicRoomApi,
   resolveDownloadedAudioMimeType

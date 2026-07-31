@@ -17,7 +17,7 @@ import {
   upsertCachedLibraryTrack,
   type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { analyzeAudioBlobLoudness } from "./loudness";
 

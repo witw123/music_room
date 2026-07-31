@@ -16,7 +16,7 @@ import {
   linkTrackAssets,
   getCachedLibraryTrackByProviderTrack,
   upsertCachedLibraryTrack
-} from "@/lib/storage/indexeddb";
+} from "@/features/library/indexeddb";
 import {
   MusicRoomApiError,
   musicRoomApi,

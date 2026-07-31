@@ -59,7 +59,7 @@ const apiMocks = vi.hoisted(() => ({
   }
 }));
 
-vi.mock("@/lib/storage/indexeddb", () => indexedDbMocks);
+vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 vi.mock("@/features/library/local-audio-storage", () => storageMocks);
 vi.mock("@/features/playlist/local-playlist", () => playlistMocks);
 vi.mock("@/lib/network/music-room-api", () => apiMocks);

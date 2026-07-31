@@ -29,7 +29,7 @@ import {
   saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
   saveLocalAudioFileRecord
-} from "@/lib/storage/indexeddb";
+} from "./indexeddb";
 import { createRepositoryTrackRecord, LocalRepository } from "./local-repository";
 
 // Surface cached-library lookups used by view code (e.g. artwork) without
@@ -37,7 +37,7 @@ import { createRepositoryTrackRecord, LocalRepository } from "./local-repository
 export {
   getCachedLibraryTrackByProviderTrack,
   getCachedLibraryTrackSummary
-} from "@/lib/storage/indexeddb";
+} from "./indexeddb";
 import { hydrateLocalRepository } from "./local-repository-hydration";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 import { resolveLocalArtworkUrl } from "./audio-metadata";
