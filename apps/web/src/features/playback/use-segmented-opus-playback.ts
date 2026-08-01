@@ -15,6 +15,7 @@ import {
   getRoomPlaybackClockNowMs,
   type RoomPlaybackBarrierClock
 } from "./room-playback-clock";
+import { resolveRoomTrackPlaybackAsset } from "./room-playback-asset";
 import { SegmentedOpusEngine } from "./segmented-opus-engine";
 import { roomAudioOutput } from "./room-audio-output";
 
@@ -67,6 +68,7 @@ const playbackSnapshotCommitIntervalMs = 250;
 export function useSegmentedOpusPlayback(input: {
   roomSnapshot: RoomSnapshot | null;
   currentTrack: TrackMeta | null;
+  playbackAsset: TrackMeta["playbackAsset"] | null;
   localFallbackAsset?: TrackMeta["playbackAsset"] | null;
   peerId: string;
   isCurrentSource: boolean;
@@ -111,7 +113,12 @@ export function useSegmentedOpusPlayback(input: {
   const disableSourcePlayback = isCurrentSource && input.disableSourcePlayback === true;
   const activePlaybackAsset = isLocalFallback
     ? localFallbackAsset
-    : input.currentTrack?.playbackAsset;
+    : input.playbackAsset;
+  const sourcePlaybackAssetUnavailable = isCurrentSource &&
+    !disableSourcePlayback &&
+    roomSnapshot?.room.playback.status === "playing" &&
+    roomSnapshot.room.playback.currentTrackId === input.currentTrack?.id &&
+    !isSupportedPlaybackAsset(activePlaybackAsset);
   const hasActivePlayback = hasActiveSegmentedPlayback({
     isCurrentSource,
     currentTrackId: roomSnapshot?.room.playback.currentTrackId,
@@ -153,7 +160,7 @@ export function useSegmentedOpusPlayback(input: {
       try {
         const runtime = runtimeRef.current;
         const currentPlaybackAsset = runtime.isCurrentSource
-          ? runtime.currentTrack?.playbackAsset
+          ? runtime.playbackAsset
           : runtime.localFallbackAsset;
         const currentLocalFallback = !runtime.isCurrentSource && !!runtime.localFallbackAsset;
         const currentRoomPlayback = runtime.roomSnapshot?.room.playback;
@@ -162,8 +169,12 @@ export function useSegmentedOpusPlayback(input: {
           runtime.playbackBarrier
         );
         const nextTransition = currentPlayback?.gaplessNext ?? null;
-        const nextTrack = nextTransition
-          ? runtime.roomSnapshot?.tracks.find((track) => track.id === nextTransition.trackId)
+        const nextPlaybackAsset = nextTransition
+          ? resolveRoomTrackPlaybackAsset(
+            runtime.roomSnapshot,
+            nextTransition.trackId,
+            nextTransition.playbackAssetId
+          )
           : null;
         const currentPlaybackIdentity = resolveSegmentedPlaybackIdentity({
           playback: currentRoomPlayback,
@@ -241,12 +252,12 @@ export function useSegmentedOpusPlayback(input: {
             signal
           ),
           gaplessNext:
-            !currentLocalFallback && nextTransition && nextTrack?.playbackAsset
+            !currentLocalFallback && nextTransition && nextPlaybackAsset
               ? {
                   transition: nextTransition,
-                  manifest: nextTrack.playbackAsset,
+                  manifest: nextPlaybackAsset,
                   getUnit: (unitIndex, signal) => getPlayableAssetUnit(
-                    nextTrack.playbackAsset!.assetId,
+                    nextPlaybackAsset.assetId,
                     unitIndex,
                     signal
                   )
@@ -281,13 +292,13 @@ export function useSegmentedOpusPlayback(input: {
         failedEngine?.destroy();
         const runtime = runtimeRef.current;
         const totalUnitCount = (runtime.isCurrentSource
-          ? runtime.currentTrack?.playbackAsset
+          ? runtime.playbackAsset
           : runtime.localFallbackAsset)?.unitCount ?? 0;
         const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
         const failedPlaybackIdentity = resolveSegmentedPlaybackIdentity({
           playback: runtime.roomSnapshot?.room.playback,
           playbackAssetId: (runtime.isCurrentSource
-            ? runtime.currentTrack?.playbackAsset
+            ? runtime.playbackAsset
             : runtime.localFallbackAsset)?.assetId
         });
         if (!cancelled && generation === playbackGenerationRef.current) {
@@ -343,13 +354,32 @@ export function useSegmentedOpusPlayback(input: {
   useEffect(() => () => engineRef.current?.destroy(), []);
 
   if (snapshot.playbackIdentity === playbackIdentity) {
+    if (sourcePlaybackAssetUnavailable) {
+      return {
+        ...idleSnapshot,
+        state: "unavailable" as const,
+        playbackIdentity,
+        audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+        lastError: resolveSourcePlaybackAssetError(activePlaybackAsset)
+      };
+    }
     return snapshot;
+  }
+
+  if (sourcePlaybackAssetUnavailable) {
+    return {
+      ...idleSnapshot,
+      state: "unavailable" as const,
+      playbackIdentity,
+      audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+      lastError: resolveSourcePlaybackAssetError(activePlaybackAsset)
+    };
   }
 
   return {
     ...idleSnapshot,
     playbackIdentity,
-    totalUnitCount: input.currentTrack?.playbackAsset?.unitCount ?? 0,
+    totalUnitCount: input.playbackAsset?.unitCount ?? 0,
     audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null
   };
 }
@@ -444,6 +474,12 @@ function isSupportedPlaybackAsset(asset: TrackMeta["playbackAsset"] | null | und
       asset.profileId === playbackProfileId &&
       asset.encoder.version === playbackEncoderVersion
   );
+}
+
+function resolveSourcePlaybackAssetError(asset: TrackMeta["playbackAsset"] | null | undefined) {
+  return asset
+    ? "当前歌曲的曲库播放资产不受当前播放器支持，无法进行流式播放。"
+    : "当前歌曲缺少匹配的曲库播放资产，无法进行流式播放。";
 }
 
 function formatSegmentedPlaybackError(error: unknown) {

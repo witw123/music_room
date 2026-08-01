@@ -351,6 +351,9 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "media"))).toHaveLength(9);
     expect(remotePeerIds.filter((peerId) => manager.getPeerEntry(peerId, "media")?.audioSender?.track === track))
       .toHaveLength(9);
+    expect(remotePeerIds.map((peerId) =>
+      manager.getPeerEntry(peerId, "media")?.configuredAudioMaxBitrateKbps
+    )).toEqual(Array.from({ length: 9 }, () => 320));
   });
 
   it("keeps source media fanout peers while the broadcast track is not live yet", async () => {

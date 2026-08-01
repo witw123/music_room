@@ -33,7 +33,7 @@ import {
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
-  resolveAdaptiveAudioBitrateKbps,
+  resolveFanoutAudioBitrateKbps,
   resolveFixedAudioBitrateKbps
 } from "./audio-bitrate-policy";
 
@@ -117,6 +117,9 @@ const mediaRecoveryHealthyJitterThreshold = 20;
 const mediaPositiveRtpFreshMs = 4_000;
 const incomingMediaAdmissionGraceMs = 8_000;
 const mediaIceRestartAttemptsBeforeRecreate = 2;
+// A source creates one media PC per listener. Give ICE/DTLS a short head start
+// between new PCs so a ten-member join does not produce one signaling burst.
+const mediaTopologyStaggerMs = 75;
 const receiverPlayoutDelaySeconds = 0.3;
 const receiverJitterBufferTargetMs = 300;
 const receiverElevatedPlayoutDelaySeconds = 0.5;
@@ -445,8 +448,23 @@ export class PeerConnectionLifecycleManager {
       }
     }
 
+    let lastCreatedMediaPeerAtMs: number | null = null;
     for (const peerId of expectedMedia) {
+      const isNewMediaPeer = !this.peerConnections.get(peerId, "media");
+      if (isNewMediaPeer && lastCreatedMediaPeerAtMs !== null) {
+        const elapsedMs = Date.now() - lastCreatedMediaPeerAtMs;
+        const remainingMs = mediaTopologyStaggerMs - elapsedMs;
+        if (remainingMs > 0 && typeof window !== "undefined") {
+          await new Promise((resolve) => setTimeout(resolve, remainingMs));
+        }
+      }
+      if (this.destroyed || !this.expectedMediaPeerIds().has(peerId)) {
+        continue;
+      }
       const entry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      if (isNewMediaPeer) {
+        lastCreatedMediaPeerAtMs = Date.now();
+      }
       this.scheduleMediaWatchdog(peerId, entry);
       await this.enqueueMediaOperation(peerId, entry).catch(() => undefined);
       this.syncMediaStatsSampling(peerId, entry);
@@ -1170,6 +1188,23 @@ export class PeerConnectionLifecycleManager {
       : "recvonly";
   }
 
+  private resolveLocalAudioBitrateKbps() {
+    if (
+      this.localAudioSourcePeerId !== this.localPeerId ||
+      !this.hasLiveLocalAudioTrack()
+    ) {
+      return null;
+    }
+    return resolveFanoutAudioBitrateKbps({
+      fanout: this.expectedRemotePeerIds.size,
+      requestedKbps: this.localAudioMaxBitrateKbps
+    });
+  }
+
+  private resolveAudioSenderBitrateKbps() {
+    return this.resolveLocalAudioBitrateKbps();
+  }
+
   private syncMediaTransceiverDirection(entry: PeerEntry) {
     const transceiver = entry.audioTransceiver;
     if (!transceiver || transceiver.direction === this.resolveLocalMediaDirection()) {
@@ -1218,7 +1253,10 @@ export class PeerConnectionLifecycleManager {
       entry.senderStreamId = this.localAudioStream?.id ?? null;
       entry.senderTrackState = "live";
       entry.mediaNegotiationPending = true;
-      await this.applyAudioSenderParameters(entry.audioSender);
+      await this.applyAudioSenderParameters(
+        entry.audioSender,
+        this.resolveAudioSenderBitrateKbps()
+      );
       this.onMediaStateChange?.({
         peerId,
         entry,
@@ -1274,7 +1312,10 @@ export class PeerConnectionLifecycleManager {
         // and fires ontrack. replaceTrack alone can leave a connected but
         // permanently silent receiver when the first offer had no track.
         entry.mediaNegotiationPending = true;
-        await this.applyAudioSenderParameters(entry.audioSender);
+        await this.applyAudioSenderParameters(
+          entry.audioSender,
+          this.resolveAudioSenderBitrateKbps()
+        );
         this.onMediaStateChange?.({
           peerId,
           entry,
@@ -1293,7 +1334,7 @@ export class PeerConnectionLifecycleManager {
       }
     }
 
-    const expectedConfiguredBitrateKbps = entry.adaptiveAudioMaxBitrateKbps ?? this.localAudioMaxBitrateKbps;
+    const expectedConfiguredBitrateKbps = this.resolveAudioSenderBitrateKbps();
     if (
       entry.audioSender &&
       entry.configuredAudioMaxBitrateKbps !== expectedConfiguredBitrateKbps
@@ -1670,27 +1711,18 @@ export class PeerConnectionLifecycleManager {
       // tearing down the ICE/DTLS connection that is still carrying media.
       void this.enqueueMediaOperation(peerId, entry);
     }
-    // Per-peer adaptive RTP bitrate. Weak links get a lower Opus target so the
-    // browser's congestion control keeps headroom for FEC instead of
-    // over-filling a degrading pipe with high-rate audio that then drops.
-    // RTCRtpSender.setParameters needs no renegotiation, so this can react to
-    // each stats window without disturbing the ICE/DTLS path.
+    // Keep the configured RTP target stable. Transport statistics are emitted
+    // for diagnostics and recovery, but must not make a playing room silently
+    // change its audio quality from one stats window to the next.
     if (localSourceIsActive && entry.audioSender) {
-      const adaptiveBitrateKbps = resolveAdaptiveAudioBitrateKbps({
-        lossRate: loss,
-        jitterMs: jitter,
-        availableOutgoingBitrateKbps: sample.availableOutgoingBitrateKbps ?? null
-      });
-      if (
-        adaptiveBitrateKbps !== entry.adaptiveAudioMaxBitrateKbps &&
-        adaptiveBitrateKbps !== entry.appliedAudioBitrateKbps
-      ) {
-        entry.adaptiveAudioMaxBitrateKbps = adaptiveBitrateKbps;
-        void this.applyAudioSenderParameters(entry.audioSender, adaptiveBitrateKbps);
+      entry.adaptiveAudioMaxBitrateKbps = null;
+      const stableBitrateKbps = this.resolveLocalAudioBitrateKbps();
+      if (entry.appliedAudioBitrateKbps !== stableBitrateKbps) {
+        void this.applyAudioSenderParameters(entry.audioSender, stableBitrateKbps);
       }
     } else if (entry.adaptiveAudioMaxBitrateKbps !== null) {
       // The local source is no longer sending to this peer; drop the override
-      // so the next reconcile returns to the configured project maximum.
+      // so the next reconcile returns to the stable room target.
       entry.adaptiveAudioMaxBitrateKbps = null;
     }
     const reason = (

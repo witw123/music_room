@@ -10,7 +10,7 @@
 - `TURN_EXTERNAL_IP`：填写 coturn 对外出口的真实公网 IP；云主机/NAT 场景不能填容器 IP 或 VPC 内网 IP
 - `TURN_PROTOCOLS=udp,tcp,tls`：优先 UDP，TCP/TLS 作为媒体恢复候选
 - `TURN_TLS_PORT=5349`：启用 TLS 候选时需与 coturn 监听端口一致
-- `TURN_MIN_PORT` / `TURN_MAX_PORT`：relay 端口段必须和 coturn、防火墙、安全组一致
+- `TURN_MIN_PORT` / `TURN_MAX_PORT`：relay 端口段必须和 coturn、防火墙、安全组一致；当前 10 人房间至少保留 256 个端口（示例 `49160-49415`）
 
 ## 端口开放
 

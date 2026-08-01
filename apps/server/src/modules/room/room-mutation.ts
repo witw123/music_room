@@ -9,7 +9,10 @@ import type {
 import { defaultRoomMemberPermissions, getRoomMemberPermissions } from "@music-room/shared";
 import type { RoomRecord } from "./room.types";
 
-export const maxRoomMembers = 100;
+// The current browser topology is a peer mesh for control plus one media
+// sender per listener. Keep the product boundary aligned with the capacity we
+// can make stable without a server-side media relay.
+export const maxRoomMembers = 10;
 export const maxRoomTracks = 500;
 export const maxRoomQueueItems = 500;
 export const maxTrackDurationMs = 3 * 60 * 60 * 1000;

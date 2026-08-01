@@ -30,7 +30,7 @@ export type PeerEntry = {
   senderTrackState: PeerMediaTrackState;
   configuredAudioMaxBitrateKbps: number | null;
   appliedAudioBitrateKbps: number | null;
-  /** Runtime bitrate override from per-peer network health (see observeMediaHealth). */
+  /** Legacy per-peer override slot; stable room playback keeps this null. */
   adaptiveAudioMaxBitrateKbps: number | null;
   receiverTrackState: PeerMediaTrackState;
   receiverRtpActive: boolean;

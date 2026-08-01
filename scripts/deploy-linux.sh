@@ -25,6 +25,8 @@ POSTGRES_PASSWORD_VALUE="$(grep '^POSTGRES_PASSWORD=' "$ENV_FILE" | cut -d '=' -
 REDIS_PASSWORD_VALUE="$(grep '^REDIS_PASSWORD=' "$ENV_FILE" | cut -d '=' -f2-)"
 TURN_SHARED_SECRET_VALUE="$(grep '^TURN_SHARED_SECRET=' "$ENV_FILE" | cut -d '=' -f2-)"
 TURN_EXTERNAL_IP_VALUE="$(grep '^TURN_EXTERNAL_IP=' "$ENV_FILE" | cut -d '=' -f2-)"
+TURN_MIN_PORT_VALUE="$(grep '^TURN_MIN_PORT=' "$ENV_FILE" | cut -d '=' -f2-)"
+TURN_MAX_PORT_VALUE="$(grep '^TURN_MAX_PORT=' "$ENV_FILE" | cut -d '=' -f2-)"
 TURNSTILE_ENABLED_VALUE="$(grep '^TURNSTILE_ENABLED=' "$ENV_FILE" | cut -d '=' -f2-)"
 TURNSTILE_SITE_KEY_VALUE="$(grep '^TURNSTILE_SITE_KEY=' "$ENV_FILE" | cut -d '=' -f2-)"
 TURNSTILE_SECRET_KEY_VALUE="$(grep '^TURNSTILE_SECRET_KEY=' "$ENV_FILE" | cut -d '=' -f2-)"
@@ -61,6 +63,22 @@ require_secret POSTGRES_PASSWORD "$POSTGRES_PASSWORD_VALUE"
 require_secret REDIS_PASSWORD "$REDIS_PASSWORD_VALUE"
 require_secret TURN_SHARED_SECRET "$TURN_SHARED_SECRET_VALUE"
 require_secret TURN_EXTERNAL_IP "$TURN_EXTERNAL_IP_VALUE"
+
+if ! printf '%s' "$TURN_MIN_PORT_VALUE" | grep -Eq '^[0-9]+$' ||
+  ! printf '%s' "$TURN_MAX_PORT_VALUE" | grep -Eq '^[0-9]+$'; then
+  echo "TURN_MIN_PORT and TURN_MAX_PORT must be numeric in $ENV_FILE."
+  exit 1
+fi
+
+TURN_RELAY_PORT_COUNT=$((TURN_MAX_PORT_VALUE - TURN_MIN_PORT_VALUE + 1))
+if [ "$TURN_MIN_PORT_VALUE" -lt 1 ] ||
+  [ "$TURN_MAX_PORT_VALUE" -gt 65535 ] ||
+  [ "$TURN_MIN_PORT_VALUE" -gt "$TURN_MAX_PORT_VALUE" ] ||
+  [ "$TURN_RELAY_PORT_COUNT" -lt 256 ]; then
+  echo "TURN relay port range must contain at least 256 valid ports for ten-member rooms."
+  exit 1
+fi
+
 if [ "$TURNSTILE_ENABLED_VALUE" != "true" ]; then
   echo "TURNSTILE_ENABLED must be true for production deployments."
   exit 1

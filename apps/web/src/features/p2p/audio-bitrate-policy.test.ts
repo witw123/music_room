@@ -1,33 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
-  degradedAudioBitrateKbps,
   maximumAudioBitrateKbps,
-  minimumAudioBitrateKbps,
   preferredAudioRtpBitrateKbps,
   resolveAdaptiveAudioBitrateKbps,
+  resolveFanoutAudioBitrateKbps,
   resolveFixedAudioBitrateKbps
 } from "./audio-bitrate-policy";
 
 describe("fixed RTP audio bitrate policy", () => {
-  it("uses the project maximum as the preferred RTP target", () => {
-    expect(preferredAudioRtpBitrateKbps).toBe(maximumAudioBitrateKbps);
+  it("keeps the preferred target below the codec maximum", () => {
+    expect(preferredAudioRtpBitrateKbps).toBe(320);
+    expect(preferredAudioRtpBitrateKbps).toBeLessThan(maximumAudioBitrateKbps);
     expect(maximumAudioBitrateKbps).toBe(510);
   });
 
-  it("uses the same maximum for every valid request", () => {
-    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 64 })).toBe(510);
-    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 192 })).toBe(510);
-    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 320 })).toBe(510);
+  it("clamps valid requests to the policy range", () => {
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 64 })).toBe(64);
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 192 })).toBe(192);
+    expect(resolveFixedAudioBitrateKbps({ requestedKbps: 320 })).toBe(320);
     expect(resolveFixedAudioBitrateKbps({ requestedKbps: 1_000 })).toBe(510);
   });
 
-  it("does not change with network statistics because adaptation is disabled", () => {
+  it("does not change a requested target without network degradation", () => {
     const requests = [64, 192, 320, 510];
     const results = requests.map((requestedKbps) =>
       resolveFixedAudioBitrateKbps({ requestedKbps })
     );
 
-    expect(results).toEqual([510, 510, 510, 510]);
+    expect(results).toEqual(requests);
   });
 
   it("keeps invalid requests disabled", () => {
@@ -40,55 +40,69 @@ describe("fixed RTP audio bitrate policy", () => {
 });
 
 describe("adaptive RTP audio bitrate policy", () => {
-  it("keeps the maximum when the link is healthy", () => {
+  it("keeps the configured target when the link is healthy", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 0,
       jitterMs: 5,
       availableOutgoingBitrateKbps: 800
-    })).toBe(maximumAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
   });
 
-  it("steps down to the degraded tier on moderate loss or jitter", () => {
+  it("keeps the configured target on moderate loss or jitter", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 3,
       jitterMs: 5,
       availableOutgoingBitrateKbps: 800
-    })).toBe(degradedAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 0,
       jitterMs: 20,
       availableOutgoingBitrateKbps: 800
-    })).toBe(degradedAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 1,
       jitterMs: 10,
       availableOutgoingBitrateKbps: 350
-    })).toBe(degradedAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
   });
 
-  it("steps down to the minimum tier on severe loss, jitter, or tight bandwidth", () => {
+  it("keeps the configured target on severe loss, jitter, or tight bandwidth", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 8,
       jitterMs: 5,
       availableOutgoingBitrateKbps: 800
-    })).toBe(minimumAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 0,
       jitterMs: 40,
       availableOutgoingBitrateKbps: 800
-    })).toBe(minimumAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 0,
       jitterMs: 5,
       availableOutgoingBitrateKbps: 180
-    })).toBe(minimumAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
   });
 
-  it("ignores a missing bandwidth estimate", () => {
+  it("ignores network estimates entirely", () => {
     expect(resolveAdaptiveAudioBitrateKbps({
       lossRate: 1,
       jitterMs: 10,
       availableOutgoingBitrateKbps: null
-    })).toBe(maximumAudioBitrateKbps);
+    })).toBe(preferredAudioRtpBitrateKbps);
+  });
+});
+
+describe("fan-out RTP audio bitrate policy", () => {
+  it("keeps a stable target across a ten-member fan-out", () => {
+    expect(resolveFanoutAudioBitrateKbps({ fanout: 1, requestedKbps: 510 })).toBe(320);
+    expect(resolveFanoutAudioBitrateKbps({ fanout: 2, requestedKbps: 510 })).toBe(320);
+    expect(resolveFanoutAudioBitrateKbps({ fanout: 5, requestedKbps: 510 })).toBe(320);
+    expect(resolveFanoutAudioBitrateKbps({ fanout: 9, requestedKbps: 510 })).toBe(320);
+  });
+
+  it("does not create a sender target without listeners", () => {
+    expect(resolveFanoutAudioBitrateKbps({ fanout: 0, requestedKbps: 320 })).toBeNull();
+    expect(resolveFanoutAudioBitrateKbps({ fanout: 1, requestedKbps: null })).toBeNull();
   });
 });

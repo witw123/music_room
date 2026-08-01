@@ -21,6 +21,12 @@ const insecureTurnstileValues = new Set([
   "your-turnstile-secret-key"
 ]);
 
+// A ten-member room can use 90 data-side and 18 media-side TURN allocations
+// when every endpoint needs relay, plus probes and short-lived recovery
+// overlap. Keep enough relay ports for that peak instead of failing halfway
+// through a room join.
+const minimumTurnRelayPortCount = 256;
+
 export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   if (env.NODE_ENV !== "production") {
     return;
@@ -119,6 +125,7 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     if (insecureTurnSecrets.has(turnSecret.toLowerCase())) {
       throw new Error("Invalid TURN_SHARED_SECRET for production startup.");
     }
+    validateTurnRelayPortRange(env);
     return;
   }
 
@@ -131,6 +138,36 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   }
 
   throw new Error("TURN requires TURN_SHARED_SECRET in production startup.");
+}
+
+function validateTurnRelayPortRange(env: NodeJS.ProcessEnv) {
+  const rawMinPort = env.TURN_MIN_PORT?.trim() ?? "";
+  const rawMaxPort = env.TURN_MAX_PORT?.trim() ?? "";
+  if (!rawMinPort && !rawMaxPort) {
+    // External TURN deployments may manage their relay range outside this
+    // application. The bundled production compose file supplies both values.
+    return;
+  }
+
+  const minPort = Number.parseInt(rawMinPort, 10);
+  const maxPort = Number.parseInt(rawMaxPort, 10);
+  if (
+    !/^\d+$/.test(rawMinPort) ||
+    !/^\d+$/.test(rawMaxPort) ||
+    !Number.isInteger(minPort) ||
+    !Number.isInteger(maxPort) ||
+    minPort < 1 ||
+    maxPort > 65_535 ||
+    minPort > maxPort
+  ) {
+    throw new Error("TURN_MIN_PORT and TURN_MAX_PORT must define a valid relay port range.");
+  }
+
+  if (maxPort - minPort + 1 < minimumTurnRelayPortCount) {
+    throw new Error(
+      `TURN relay port range must contain at least ${minimumTurnRelayPortCount} ports for ten-member rooms.`
+    );
+  }
 }
 
 function hasStaticTurnIceConfig(env: NodeJS.ProcessEnv) {

@@ -59,6 +59,14 @@ type RealtimeRateLimitBucket = {
   count: number;
 };
 
+// ICE trickle produces many small messages during a room join. Keep that
+// burst separate from SDP so candidates cannot consume the quota needed for
+// the offer/answer that actually establishes the connection.
+const peerSignalRateLimits = {
+  candidate: 1_200,
+  description: 180
+} as const;
+
 @WebSocketGateway({
   path: "/ws/socket.io",
   cors: { origin: getCorsOrigins(), credentials: true }
@@ -157,7 +165,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
 
   @SubscribeMessage("peer.signal")
   async handleSignal(@ConnectedSocket() client: Socket, @MessageBody() payload: PeerSignalMessage) {
-    this.assertRealtimeRateLimit(client, "peer.signal", 300);
     const parsed = peerSignalMessageSchema.safeParse(payload);
     if (!parsed.success) {
       throw createWsApiException(
@@ -167,6 +174,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
       );
     }
     const message = parsed.data;
+    this.assertRealtimeRateLimit(
+      client,
+      message.type === "candidate" ? "peer.signal.candidate" : "peer.signal.description",
+      message.type === "candidate"
+        ? peerSignalRateLimits.candidate
+        : peerSignalRateLimits.description
+    );
 
     this.assertRealtimeClient(client, message.roomId);
     await this.sessionLease.assert(client);

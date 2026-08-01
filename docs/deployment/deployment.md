@@ -185,7 +185,7 @@ curl http://127.0.0.1:3001/health
 - `TURN_SHARED_SECRET=<replace-me>`
 - `TURN_REALM=turn.example.com`
 - `TURN_MIN_PORT=49160`
-- `TURN_MAX_PORT=49200`
+- `TURN_MAX_PORT=49415`（至少 256 个 relay 端口，覆盖 10 人房间的 data/media 中继与重连余量）
 - `TURN_TTL_SECONDS=3600`
 - `TURN_PROTOCOLS=udp,tcp,tls`
 

@@ -47,7 +47,7 @@ services:
       - --static-auth-secret=${TURN_SHARED_SECRET:?TURN_SHARED_SECRET must be set}
       - --realm=${TURN_REALM:-localhost}
       - --min-port=${TURN_MIN_PORT:-49160}
-      - --max-port=${TURN_MAX_PORT:-49200}
+      - --max-port=${TURN_MAX_PORT:-49415}
       - --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
       - --no-cli
       - --no-multicast-peers
@@ -91,7 +91,7 @@ services:
       TURN_PORT: ${TURN_PORT:-3478}
       TURN_TLS_PORT: ${TURN_TLS_PORT:-5349}
       TURN_MIN_PORT: ${TURN_MIN_PORT:-49160}
-      TURN_MAX_PORT: ${TURN_MAX_PORT:-49200}
+      TURN_MAX_PORT: ${TURN_MAX_PORT:-49415}
       TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:?TURN_SHARED_SECRET must be set}
       TURN_REALM: ${TURN_REALM:-localhost}
       TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp,tls}

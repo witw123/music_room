@@ -201,6 +201,8 @@ export function normalizeSettings(value: unknown): AppSettings {
   const lyricFontScale = playback.lyricFontScale === "small" || playback.lyricFontScale === "large"
     ? playback.lyricFontScale
     : "medium";
+  const streamingOnlyPlayback = playback.streamingOnlyPlayback === true;
+  const fullyCachedPlayback = !streamingOnlyPlayback && playback.fullyCachedPlayback === true;
 
   return {
     version: 1,
@@ -221,8 +223,8 @@ export function normalizeSettings(value: unknown): AppSettings {
       localPlaybackMode: playbackMode,
       showLyricsByDefault: playback.showLyricsByDefault === true,
       preventOfflineAutoLoad: playback.preventOfflineAutoLoad === true,
-      streamingOnlyPlayback: playback.streamingOnlyPlayback === true,
-      fullyCachedPlayback: playback.fullyCachedPlayback === true,
+      streamingOnlyPlayback,
+      fullyCachedPlayback,
       lyricFontScale,
       lyricLines
     }

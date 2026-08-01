@@ -52,6 +52,18 @@ describe("app settings store", () => {
     expect(normalizeSettings({ playback: { playerStyle: "unknown" } }).playback.playerStyle).toBe("vinyl");
   });
 
+  it("keeps streaming-only and fully cached playback mutually exclusive", () => {
+    expect(normalizeSettings({
+      playback: {
+        streamingOnlyPlayback: true,
+        fullyCachedPlayback: true
+      }
+    }).playback).toMatchObject({
+      streamingOnlyPlayback: true,
+      fullyCachedPlayback: false
+    });
+  });
+
   it("normalizes the discovery provider preference", () => {
     expect(normalizeSettings({ discover: { provider: "qqmusic" } }).discover.provider).toBe("qqmusic");
     expect(normalizeSettings({ discover: { provider: "unknown" } }).discover.provider).toBe("netease");
