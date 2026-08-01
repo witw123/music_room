@@ -167,13 +167,15 @@ export class P2PMesh {
     stream: MediaStream | null,
     sourcePeerId: string | null,
     maxBitrateKbps: number | null = null,
-    mediaTrafficExpected = true
+    mediaTrafficExpected = true,
+    mediaEpoch: number | null = null
   ) {
     this.peerLifecycle.setLocalAudioStream(
       stream,
       sourcePeerId,
       maxBitrateKbps,
-      mediaTrafficExpected
+      mediaTrafficExpected,
+      mediaEpoch
     );
   }
 

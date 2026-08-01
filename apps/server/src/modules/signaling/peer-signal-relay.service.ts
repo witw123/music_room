@@ -26,6 +26,7 @@ export class PeerSignalRelayService {
   private readonly recoveryGenerationByRoomSession = new Map<string, number>();
   private readonly recoveryGenerationByRoomPeer = new Map<string, Map<string, number>>();
   private readonly pendingPeerSignalsByRoomPeer = new Map<string, PendingPeerSignal[]>();
+  private readonly peerDeliveryOperations = new Map<string, Promise<void>>();
 
   constructor(private readonly sessionLease: RoomSessionLeaseService) {}
 
@@ -43,10 +44,43 @@ export class PeerSignalRelayService {
     peerId: string,
     payload: PeerSignalMessage
   ) {
+    await this.enqueuePeerDelivery(roomId, peerId, async () => {
+      // Signals queued during a disconnect must stay ahead of a new live
+      // description. Otherwise a fresh answer can overtake the offer that
+      // created it and get ignored while the peer is still in `stable`.
+      const flushed = await this.flushPendingPeerSignalsNow(roomId, peerId);
+      if (!flushed || !(await this.deliverToLivePeer(roomId, peerId, payload))) {
+        this.queuePeerSignal(roomId, peerId, payload);
+      }
+    });
+  }
+
+  private enqueuePeerDelivery(
+    roomId: string,
+    peerId: string,
+    task: () => Promise<void>
+  ) {
+    const key = this.roomPeerKey(roomId, peerId);
+    const previous = this.peerDeliveryOperations.get(key) ?? Promise.resolve();
+    const operation = previous.catch(() => undefined).then(task);
+    this.peerDeliveryOperations.set(key, operation);
+    const clear = () => {
+      if (this.peerDeliveryOperations.get(key) === operation) {
+        this.peerDeliveryOperations.delete(key);
+      }
+    };
+    void operation.then(clear, clear);
+    return operation;
+  }
+
+  private async deliverToLivePeer(
+    roomId: string,
+    peerId: string,
+    payload: PeerSignalMessage
+  ) {
     const socketIds = this.peerSocketsByRoom.get(roomId)?.get(peerId);
-    if (!socketIds?.size) {
-      this.queuePeerSignal(roomId, peerId, payload);
-      return;
+    if (!this.server || !socketIds?.size) {
+      return false;
     }
 
     const recoveryGeneration = this.resolvePeerRecoveryGeneration(roomId, peerId);
@@ -57,16 +91,39 @@ export class PeerSignalRelayService {
             recoveryGeneration
           }
         : payload;
-    for (const socketId of socketIds) {
-      const socket = this.server!.sockets.sockets.get(socketId);
-      if (socket && !(await this.sessionLease.socketOwnsLease(socket))) {
+    let delivered = false;
+    for (const socketId of [...socketIds]) {
+      const socket = this.server.sockets.sockets.get(socketId);
+      if (!socket || socket.connected === false) {
+        this.unregisterPeerSocket(roomId, peerId, socketId);
         continue;
       }
-      this.server!.to(socketId).emit("peer.signal", nextPayload);
+
+      let ownsLease = false;
+      try {
+        ownsLease = await this.sessionLease.socketOwnsLease(socket);
+      } catch {
+        // Keep the registration during a transient lease-store outage, but do
+        // not claim delivery. The signal remains queued for the next attempt.
+        continue;
+      }
+      if (!ownsLease) {
+        this.unregisterPeerSocket(roomId, peerId, socketId);
+        continue;
+      }
+
+      this.server.to(socketId).emit("peer.signal", nextPayload);
+      delivered = true;
     }
+    return delivered;
   }
 
-  private queuePeerSignal(roomId: string, peerId: string, payload: PeerSignalMessage) {
+  private queuePeerSignal(
+    roomId: string,
+    peerId: string,
+    payload: PeerSignalMessage,
+    expiresAtMs?: number
+  ) {
     // A target can receive independent data/media negotiations from every
     // member while its Socket.IO session is still registering. Sharing one
     // short queue across all senders drops the tail of a ten-member fan-out,
@@ -85,7 +142,7 @@ export class PeerSignalRelayService {
     );
     queued.push({
       payload,
-      expiresAtMs: now + this.pendingPeerSignalTtlMs
+      expiresAtMs: expiresAtMs ?? now + this.pendingPeerSignalTtlMs
     });
     if (queued.length > this.pendingPeerSignalLimit) {
       queued.splice(0, queued.length - this.pendingPeerSignalLimit);
@@ -102,12 +159,18 @@ export class PeerSignalRelayService {
   }
 
   async flushPendingPeerSignals(roomId: string, peerId: string) {
+    await this.enqueuePeerDelivery(roomId, peerId, () =>
+      this.flushPendingPeerSignalsNow(roomId, peerId).then(() => undefined)
+    );
+  }
+
+  private async flushPendingPeerSignalsNow(roomId: string, peerId: string) {
     const prefix = `${this.roomPeerKey(roomId, peerId)}:`;
     const queued = [...this.pendingPeerSignalsByRoomPeer.entries()]
       .filter(([key]) => key.startsWith(prefix))
       .flatMap(([, entries]) => entries);
     if (queued.length === 0) {
-      return;
+      return true;
     }
 
     const now = Date.now();
@@ -120,13 +183,24 @@ export class PeerSignalRelayService {
       (left.payload.sequence ?? Number.MAX_SAFE_INTEGER) -
       (right.payload.sequence ?? Number.MAX_SAFE_INTEGER)
     );
-    for (const entry of queued) {
+    for (let index = 0; index < queued.length; index += 1) {
+      const entry = queued[index]!;
       if (entry.expiresAtMs <= now) {
         continue;
       }
 
-      await this.emitToPeer(roomId, peerId, entry.payload);
+      if (await this.deliverToLivePeer(roomId, peerId, entry.payload)) {
+        continue;
+      }
+
+      for (const pending of queued.slice(index)) {
+        if (pending.expiresAtMs > now) {
+          this.queuePeerSignal(roomId, peerId, pending.payload, pending.expiresAtMs);
+        }
+      }
+      return false;
     }
+    return true;
   }
 
   clearPendingPeerSignals(roomId?: string, peerId?: string) {
@@ -153,6 +227,11 @@ export class PeerSignalRelayService {
     this.clearPendingPeerSignals(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.recoveryGenerationByRoomPeer.delete(roomId);
+    for (const key of [...this.peerDeliveryOperations.keys()]) {
+      if (key.startsWith(`${roomId}:`)) {
+        this.peerDeliveryOperations.delete(key);
+      }
+    }
     for (const key of [...this.recoveryGenerationByRoomSession.keys()]) {
       if (key.startsWith(`${roomId}:`)) {
         this.recoveryGenerationByRoomSession.delete(key);
@@ -163,6 +242,7 @@ export class PeerSignalRelayService {
   dispose() {
     this.peerSocketsByRoom.clear();
     this.pendingPeerSignalsByRoomPeer.clear();
+    this.peerDeliveryOperations.clear();
     this.recoveryGenerationByRoomSession.clear();
     this.recoveryGenerationByRoomPeer.clear();
   }

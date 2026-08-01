@@ -107,6 +107,7 @@ export function isPeerStalled(input: {
   entry: PeerEntry;
   nowMs: number;
   dataOpenTimeoutMs: number;
+  passiveNegotiationTimeoutMs?: number;
   dataConnectingTimeoutMs: number;
   connectionProgressTimeoutMs: number;
 }) {
@@ -136,6 +137,20 @@ export function isPeerStalled(input: {
     transportDisconnected &&
     input.nowMs - entry.lastSignalProgressAtMs >= input.connectionProgressTimeoutMs
   ) {
+    return true;
+  }
+
+  if (
+    entry.initiatorPeerId === null &&
+    channelState === null &&
+    entry.connection.localDescription === null &&
+    entry.connection.remoteDescription === null &&
+    input.nowMs - entry.createdAtMs >=
+      (input.passiveNegotiationTimeoutMs ?? input.dataOpenTimeoutMs)
+  ) {
+    // The deterministic offerer may not have learned this member yet. Let the
+    // passive side take over after a short grace period instead of recreating
+    // another passive connection forever.
     return true;
   }
 

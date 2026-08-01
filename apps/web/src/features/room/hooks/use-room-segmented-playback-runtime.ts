@@ -657,11 +657,27 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       summary: `监听端媒体连接或接收轨道缺失，确保媒体连接（${input.trackId}）`,
       level: "warning"
     });
+    const attemptStartedAtMs = now;
     void input.runtime.restartMediaPeer(input.sourcePeerId, {
       // Never force-recreate from the poll path. Force recreate is reserved for
       // explicit source-side wedged-sender recovery and races empty media offers.
       forceRecreate: input.forceRecreate === true
-    }).catch((error) => {
+    }).then((result) => {
+      if (result != null || mediaEnsureKeyRef.current !== recoveryKey) {
+        return;
+      }
+      window.setTimeout(() => {
+        if (
+          mediaEnsureKeyRef.current === recoveryKey &&
+          lastMediaEnsureAtRef.current === attemptStartedAtMs
+        ) {
+          // A stale source-generation recovery can resolve without creating a
+          // peer. Re-open the one-shot latch after a short topology-settle
+          // window instead of requiring the member to leave and rejoin.
+          lastMediaEnsureAtRef.current = 0;
+        }
+      }, 1_000);
+    }, (error) => {
       if (mediaEnsureKeyRef.current === recoveryKey) {
         // A rejected request is safe to retry on a later poll. A successful
         // request intentionally remains one-shot until a live track arrives.

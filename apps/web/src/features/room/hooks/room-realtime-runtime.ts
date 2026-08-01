@@ -641,6 +641,21 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       });
       return;
     }
+    if (
+      payload.type === "offer" &&
+      !input.currentRoomRef.current?.room.members.some(
+        (member) => member.peerId === payload.fromPeerId
+      )
+    ) {
+      // The joining member may already have the authoritative subscribe
+      // bootstrap while this browser missed its presence patch. Repair the
+      // member list immediately; the mesh grants this offer only a short
+      // provisional admission until the snapshot confirms it.
+      void input.requestRoomSnapshotResyncRef.current(
+        "realtime-room-event",
+        input.roomId
+      );
+    }
 
     input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,

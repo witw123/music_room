@@ -10,6 +10,7 @@ type MeshHealthMonitorInput = {
   autoReconnect: boolean;
   reconnectBackoffMs: readonly number[];
   dataOpenTimeoutMs: number;
+  passiveNegotiationTimeoutMs?: number;
   dataConnectingTimeoutMs: number;
   connectionProgressTimeoutMs: number;
   isExpectedPeer: (peerId: string) => boolean;
@@ -26,6 +27,7 @@ export class MeshHealthMonitor {
   private readonly autoReconnect: boolean;
   private readonly reconnectBackoffMs: readonly number[];
   private readonly dataOpenTimeoutMs: number;
+  private readonly passiveNegotiationTimeoutMs: number;
   private readonly dataConnectingTimeoutMs: number;
   private readonly connectionProgressTimeoutMs: number;
   private readonly isExpectedPeer: (peerId: string) => boolean;
@@ -38,6 +40,8 @@ export class MeshHealthMonitor {
     this.autoReconnect = input.autoReconnect;
     this.reconnectBackoffMs = input.reconnectBackoffMs;
     this.dataOpenTimeoutMs = input.dataOpenTimeoutMs;
+    this.passiveNegotiationTimeoutMs =
+      input.passiveNegotiationTimeoutMs ?? input.dataOpenTimeoutMs;
     this.dataConnectingTimeoutMs = input.dataConnectingTimeoutMs;
     this.connectionProgressTimeoutMs = input.connectionProgressTimeoutMs;
     this.isExpectedPeer = input.isExpectedPeer;
@@ -109,6 +113,7 @@ export class MeshHealthMonitor {
       entry,
       nowMs,
       dataOpenTimeoutMs: this.dataOpenTimeoutMs,
+      passiveNegotiationTimeoutMs: this.passiveNegotiationTimeoutMs,
       dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
       connectionProgressTimeoutMs: this.connectionProgressTimeoutMs
     });

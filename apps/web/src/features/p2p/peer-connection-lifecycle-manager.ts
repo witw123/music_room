@@ -116,6 +116,7 @@ type PendingTopologySync = {
 };
 
 const mediaTrackWatchdogGraceMs = 3_000;
+const mediaOfferAnswerTimeoutMs = 5_000;
 // A media recovery is an SDP/ICE operation and can briefly replace the
 // receiver's playout path. Persistent network failure must not turn this into
 // a tight offer loop while the browser is still retrying ICE in place.
@@ -125,7 +126,8 @@ const mediaNoSendRecoveryWindows = 4;
 const mediaRecoveryHealthyLossThreshold = 3;
 const mediaRecoveryHealthyJitterThreshold = 20;
 const mediaPositiveRtpFreshMs = 4_000;
-const incomingMediaAdmissionGraceMs = 8_000;
+const incomingPeerAdmissionGraceMs = 8_000;
+const dataPassiveNegotiationTakeoverMs = 4_000;
 const mediaIceRestartAttemptsBeforeRecreate = 2;
 // A source creates one media PC per listener. Give ICE/DTLS a short head start
 // between new PCs so a ten-member join does not produce one signaling burst.
@@ -186,19 +188,24 @@ export class PeerConnectionLifecycleManager {
   private readonly mediaRecovery = new Map<string, MediaRecoveryState>();
   private readonly latestMediaSamples = new Map<string, PeerConnectionStatsSample>();
   private readonly elevatedReceiverBufferEntries = new WeakSet<PeerEntry>();
-  private readonly mediaRecoveryOperations = new Map<string, Promise<PeerEntry | null>>();
-  private readonly provisionalIncomingMediaTimers = new WeakMap<
+  private readonly mediaRecoveryOperations = new Map<string, {
+    intentGeneration: number;
+    operation: Promise<PeerEntry | null>;
+  }>();
+  private readonly provisionalIncomingAdmissionTimers = new WeakMap<
     PeerEntry,
     ReturnType<typeof setTimeout>
   >();
-  private readonly pendingIncomingMediaAdmissionPeerIds = new Set<string>();
+  private readonly pendingIncomingAdmissionKeys = new Set<string>();
   private connectionGenerationSequence = 0;
   private localAudioStream: MediaStream | null = null;
   private localAudioSourcePeerId: string | null = null;
   private localAudioMaxBitrateKbps: number | null = null;
+  private localPlaybackMediaEpoch: number | null = null;
   // RTP recovery must follow playback intent. A live MediaStream can carry
   // deliberate silence while a room is paused, which is not a broken link.
   private localMediaTrafficExpected = true;
+  private mediaIntentGeneration = 0;
   // Data links remain room-wide, but a listener playing a local cache must
   // not keep an RTP receiver for the source alive in the background.
   private mediaPlaybackEnabled = true;
@@ -268,6 +275,7 @@ export class PeerConnectionLifecycleManager {
       autoReconnect: input.autoReconnect,
       reconnectBackoffMs: [1_000, 2_000, 4_000, 8_000],
       dataOpenTimeoutMs: 8_000,
+      passiveNegotiationTimeoutMs: dataPassiveNegotiationTakeoverMs,
       dataConnectingTimeoutMs: 12_000,
       connectionProgressTimeoutMs: 15_000,
       isExpectedPeer: (peerId) => this.peerConnections.expects(peerId),
@@ -275,7 +283,7 @@ export class PeerConnectionLifecycleManager {
       onPeerStalled: input.onPeerStalled,
       releasePeer: (peerId, entry) => this.releasePeer(peerId, entry),
       recreatePeer: (peerId, entry) => this.enqueueTopologyOperation(() =>
-        this.recreatePeerNow(peerId, entry)
+        this.recreatePeerNow(peerId, entry, { forceInitiate: true })
       )
     });
   }
@@ -381,11 +389,12 @@ export class PeerConnectionLifecycleManager {
             return;
           }
           let existing = this.peerConnections.get(peerId, "data");
-          if (
-            existing &&
-            (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing))
-          ) {
-            await this.recreatePeerNow(peerId, existing);
+          const reconnectDegraded = existing &&
+            (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing));
+          if (existing && reconnectDegraded) {
+            await this.recreatePeerNow(peerId, existing, {
+              forceInitiate: true
+            });
             existing = this.peerConnections.get(peerId, "data");
           }
 
@@ -414,15 +423,15 @@ export class PeerConnectionLifecycleManager {
       const expected = entry.linkKind === "data"
         ? nextPeers.has(peerId)
         : this.expectedMediaPeerIds().has(peerId);
-      if (entry.linkKind === "media" && expected) {
-        this.clearProvisionalIncomingMediaAdmission(entry);
+      if (expected) {
+        this.clearProvisionalIncomingAdmission(entry);
       }
       if (
         !expected &&
-        !(entry.linkKind === "media" && (
-          this.hasProvisionalIncomingMediaAdmission(entry) ||
-          this.pendingIncomingMediaAdmissionPeerIds.has(peerId)
-        ))
+        !this.hasProvisionalIncomingAdmission(entry) &&
+        !this.pendingIncomingAdmissionKeys.has(
+          this.incomingAdmissionKey(peerId, entry.linkKind)
+        )
       ) {
         this.releasePeer(peerId, entry);
       }
@@ -521,10 +530,17 @@ export class PeerConnectionLifecycleManager {
       return true;
     }
     if (!this.expectedRemotePeerIds.has(peerId)) {
+      if (linkKind === "data") {
+        // A member-presence patch can be missed while a joining peer already
+        // knows the full room from its subscribe acknowledgement. Admit only
+        // the negotiation-start signals long enough for the room snapshot
+        // repair to verify membership; stale answers remain rejected.
+        return signalType === "offer" || signalType === "candidate";
+      }
       // On a late join, the source offer can arrive before either the
       // playback snapshot or the member presence patch. Keep this exception
       // limited to media negotiation signals and only while no source is
-      // known; data peers and stale answers remain strictly topology-bound.
+      // known; stale answers remain strictly topology-bound.
       return linkKind === "media" &&
         this.localAudioSourcePeerId === null &&
         (signalType === "offer" || signalType === "candidate");
@@ -544,31 +560,41 @@ export class PeerConnectionLifecycleManager {
     return !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
   }
 
-  private provisionallyAdmitIncomingMedia(peerId: string, entry: PeerEntry) {
-    this.clearProvisionalIncomingMediaAdmission(entry);
+  private incomingAdmissionKey(peerId: string, linkKind: PeerLinkKind) {
+    return `${peerId}:${linkKind}`;
+  }
+
+  private isExpectedPeerLink(peerId: string, linkKind: PeerLinkKind) {
+    return linkKind === "data"
+      ? this.expectedRemotePeerIds.has(peerId)
+      : this.expectedMediaPeerIds().has(peerId);
+  }
+
+  private provisionallyAdmitIncomingPeer(peerId: string, entry: PeerEntry) {
+    this.clearProvisionalIncomingAdmission(entry);
     const timer = setTimeout(() => {
-      this.provisionalIncomingMediaTimers.delete(entry);
+      this.provisionalIncomingAdmissionTimers.delete(entry);
       if (
         entry.releasing ||
-        this.peerConnections.get(peerId, "media") !== entry ||
-        this.activeMediaPeerIds().has(peerId)
+        this.peerConnections.get(peerId, entry.linkKind) !== entry ||
+        this.isExpectedPeerLink(peerId, entry.linkKind)
       ) {
         return;
       }
       this.releasePeer(peerId, entry);
-    }, incomingMediaAdmissionGraceMs);
-    this.provisionalIncomingMediaTimers.set(entry, timer);
+    }, incomingPeerAdmissionGraceMs);
+    this.provisionalIncomingAdmissionTimers.set(entry, timer);
   }
 
-  private hasProvisionalIncomingMediaAdmission(entry: PeerEntry) {
-    return this.provisionalIncomingMediaTimers.has(entry);
+  private hasProvisionalIncomingAdmission(entry: PeerEntry) {
+    return this.provisionalIncomingAdmissionTimers.has(entry);
   }
 
-  private clearProvisionalIncomingMediaAdmission(entry: PeerEntry) {
-    const timer = this.provisionalIncomingMediaTimers.get(entry);
+  private clearProvisionalIncomingAdmission(entry: PeerEntry) {
+    const timer = this.provisionalIncomingAdmissionTimers.get(entry);
     if (timer !== undefined) {
       clearTimeout(timer);
-      this.provisionalIncomingMediaTimers.delete(entry);
+      this.provisionalIncomingAdmissionTimers.delete(entry);
     }
   }
 
@@ -579,10 +605,12 @@ export class PeerConnectionLifecycleManager {
     const expectedMedia = this.expectedMediaPeerIds();
     for (const [peerId, entry] of this.peerConnections.entries("media")) {
       if (expectedMedia.has(peerId)) {
-        this.clearProvisionalIncomingMediaAdmission(entry);
+        this.clearProvisionalIncomingAdmission(entry);
       } else if (
-        !this.hasProvisionalIncomingMediaAdmission(entry) &&
-        !this.pendingIncomingMediaAdmissionPeerIds.has(peerId)
+        !this.hasProvisionalIncomingAdmission(entry) &&
+        !this.pendingIncomingAdmissionKeys.has(
+          this.incomingAdmissionKey(peerId, "media")
+        )
       ) {
         this.releasePeer(peerId, entry);
       }
@@ -707,7 +735,8 @@ export class PeerConnectionLifecycleManager {
     stream: MediaStream | null,
     sourcePeerId: string | null,
     maxBitrateKbps: number | null = null,
-    mediaTrafficExpected = true
+    mediaTrafficExpected = true,
+    mediaEpoch: number | null = null
   ) {
     if (this.destroyed) {
       return;
@@ -715,11 +744,15 @@ export class PeerConnectionLifecycleManager {
     const normalizedBitrateKbps = normalizeAudioBitrateKbps(maxBitrateKbps);
     const previousTrack = this.localAudioStream?.getAudioTracks()[0] ?? null;
     const nextTrack = stream?.getAudioTracks()[0] ?? null;
+    const playbackIntentChanged =
+      this.localAudioSourcePeerId !== sourcePeerId ||
+      this.localPlaybackMediaEpoch !== mediaEpoch;
     if (
       this.localAudioStream === stream &&
       this.localAudioSourcePeerId === sourcePeerId &&
       this.localAudioMaxBitrateKbps === normalizedBitrateKbps &&
       this.localMediaTrafficExpected === mediaTrafficExpected &&
+      this.localPlaybackMediaEpoch === mediaEpoch &&
       previousTrack === nextTrack &&
       (nextTrack === null || nextTrack.readyState === "live")
     ) {
@@ -729,6 +762,11 @@ export class PeerConnectionLifecycleManager {
     this.localAudioSourcePeerId = sourcePeerId;
     this.localAudioMaxBitrateKbps = normalizedBitrateKbps;
     this.localMediaTrafficExpected = mediaTrafficExpected;
+    this.localPlaybackMediaEpoch = mediaEpoch;
+    this.mediaIntentGeneration += 1;
+    if (playbackIntentChanged) {
+      this.resetMediaRecoveryForIntentChange();
+    }
     const requestVersion = this.topologySyncRequestVersion;
     void this.enqueueTopologyOperation(() => this.reconcileMediaTopology(requestVersion)).catch(() => undefined);
   }
@@ -739,8 +777,25 @@ export class PeerConnectionLifecycleManager {
     }
 
     this.mediaPlaybackEnabled = enabled;
+    this.mediaIntentGeneration += 1;
+    this.resetMediaRecoveryForIntentChange();
     const requestVersion = this.topologySyncRequestVersion;
     return this.enqueueTopologyOperation(() => this.reconcileMediaTopology(requestVersion)).catch(() => undefined);
+  }
+
+  private resetMediaRecoveryForIntentChange() {
+    for (const state of this.mediaRecovery.values()) {
+      if (state.disconnectedTimerId !== null) {
+        clearTimeout(state.disconnectedTimerId);
+      }
+    }
+    this.mediaRecovery.clear();
+    this.latestMediaSamples.clear();
+    for (const [, entry] of this.peerConnections.entries("media")) {
+      entry.mediaMissingTrackRecoveryAttempted = false;
+      this.clearMediaWatchdog(entry);
+      this.clearMediaSyncRetry(entry);
+    }
   }
 
   async getOrCreatePeerEntry(peerId: string, linkKind: PeerLinkKind = "data") {
@@ -762,23 +817,23 @@ export class PeerConnectionLifecycleManager {
       return existing;
     }
 
-    const shouldProvisionallyAdmit = linkKind === "media" &&
-      !this.expectedMediaPeerIds().has(peerId);
+    const shouldProvisionallyAdmit = !this.isExpectedPeerLink(peerId, linkKind);
+    const admissionKey = this.incomingAdmissionKey(peerId, linkKind);
     if (shouldProvisionallyAdmit) {
       // ensurePeer is async and yields even when it only allocates the local
       // RTCPeerConnection. Mark the peer before that yield so a concurrent
       // topology reconcile cannot release the entry before its timer exists.
-      this.pendingIncomingMediaAdmissionPeerIds.add(peerId);
+      this.pendingIncomingAdmissionKeys.add(admissionKey);
     }
     try {
       const entry = await this.ensurePeer(peerId, false, linkKind);
       if (shouldProvisionallyAdmit && !entry.releasing) {
-        this.provisionallyAdmitIncomingMedia(peerId, entry);
+        this.provisionallyAdmitIncomingPeer(peerId, entry);
       }
       return entry;
     } finally {
       if (shouldProvisionallyAdmit) {
-        this.pendingIncomingMediaAdmissionPeerIds.delete(peerId);
+        this.pendingIncomingAdmissionKeys.delete(admissionKey);
       }
     }
   }
@@ -805,10 +860,10 @@ export class PeerConnectionLifecycleManager {
       if (!this.peerConnections.expects(peerId)) {
         return null;
       }
-      return this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "data");
+      return this.ensurePeer(peerId, true, "data");
     }
 
-    return this.recreatePeerNow(peerId, entry);
+    return this.recreatePeerNow(peerId, entry, { forceInitiate: true });
   }
 
   async restartIce(peerId: string) {
@@ -837,28 +892,37 @@ export class PeerConnectionLifecycleManager {
   }
 
   async restartMediaPeer(peerId: string, options?: { forceRecreate?: boolean }) {
+    const intentGeneration = this.mediaIntentGeneration;
     const inFlight = this.mediaRecoveryOperations.get(peerId);
-    if (inFlight) {
-      return inFlight;
+    if (inFlight?.intentGeneration === intentGeneration) {
+      return inFlight.operation;
     }
 
     // Topology reconciliation and media recovery both replace entries. Keep
     // them on one queue so a recovery cannot recreate a peer that a concurrent
     // source/topology update is about to release.
     const operation = this.enqueueTopologyOperation(() =>
-      this.restartMediaPeerNow(peerId, options)
+      this.restartMediaPeerNow(peerId, options, intentGeneration)
     );
-    this.mediaRecoveryOperations.set(peerId, operation);
+    const recoveryOperation = { intentGeneration, operation };
+    this.mediaRecoveryOperations.set(peerId, recoveryOperation);
     try {
       return await operation;
     } finally {
-      if (this.mediaRecoveryOperations.get(peerId) === operation) {
+      if (this.mediaRecoveryOperations.get(peerId) === recoveryOperation) {
         this.mediaRecoveryOperations.delete(peerId);
       }
     }
   }
 
-  private async restartMediaPeerNow(peerId: string, options?: { forceRecreate?: boolean }) {
+  private async restartMediaPeerNow(
+    peerId: string,
+    options: { forceRecreate?: boolean } | undefined,
+    intentGeneration: number
+  ) {
+    if (this.destroyed || intentGeneration !== this.mediaIntentGeneration) {
+      return null;
+    }
     const entry = this.peerConnections.get(peerId, "media");
     if (!this.expectedMediaPeerIds().has(peerId)) {
       if (entry) {
@@ -878,7 +942,8 @@ export class PeerConnectionLifecycleManager {
     }
 
     const now = Date.now();
-    const staleSignal = now - entry.lastSignalProgressAtMs >= 8_000;
+    const staleSignal =
+      now - entry.lastSignalProgressAtMs >= mediaOfferAnswerTimeoutMs;
     const waitingForExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live";
     const hasMediaDescription = entry.connection.remoteDescription !== null ||
@@ -933,7 +998,7 @@ export class PeerConnectionLifecycleManager {
     if (
       waitingForExpectedTrack &&
       entry.mediaMissingTrackRecoveryAttempted &&
-      Date.now() - entry.lastSignalProgressAtMs < 8_000
+      Date.now() - entry.lastSignalProgressAtMs < mediaOfferAnswerTimeoutMs
     ) {
       // Give the source time to answer the recovery offer before retrying.
       // A permanent one-shot latch leaves a listener waiting forever when one
@@ -980,8 +1045,8 @@ export class PeerConnectionLifecycleManager {
         if (waitingForExpectedTrack) {
           entry.mediaMissingTrackRecoveryAttempted = true;
         }
+        this.noteMediaOfferSent(peerId, entry);
       }
-      entry.lastSignalProgressAtMs = Date.now();
       this.scheduleMediaWatchdog(peerId, entry);
       return entry;
     });
@@ -1004,7 +1069,7 @@ export class PeerConnectionLifecycleManager {
 
       if (entry.connection.signalingState !== "stable") {
         const staleOffer = entry.connection.signalingState === "have-local-offer" &&
-          Date.now() - entry.lastSignalProgressAtMs >= mediaRecoveryCooldownMs;
+          Date.now() - entry.lastSignalProgressAtMs >= mediaOfferAnswerTimeoutMs;
         if (!staleOffer) {
           this.scheduleMediaWatchdog(peerId, entry);
           return entry;
@@ -1041,9 +1106,8 @@ export class PeerConnectionLifecycleManager {
         return entry;
       }
       entry.mediaNegotiationPending = false;
-      entry.lastSignalProgressAtMs = Date.now();
+      this.noteMediaOfferSent(peerId, entry);
       this.clearMediaSyncRetry(entry);
-      this.scheduleMediaWatchdog(peerId, entry);
       return entry;
     };
 
@@ -1067,10 +1131,11 @@ export class PeerConnectionLifecycleManager {
     this.mediaPlaybackEnabled = false;
     this.peerConnections.clearExpected();
     this.expectedRemotePeerIds.clear();
-    this.pendingIncomingMediaAdmissionPeerIds.clear();
+    this.pendingIncomingAdmissionKeys.clear();
     this.localAudioStream = null;
     this.localAudioSourcePeerId = null;
     this.localAudioMaxBitrateKbps = null;
+    this.localPlaybackMediaEpoch = null;
     this.localMediaTrafficExpected = false;
     for (const [peerId, entry] of this.peerConnections.allEntries()) {
       this.releasePeer(peerId, entry);
@@ -1144,9 +1209,10 @@ export class PeerConnectionLifecycleManager {
       isCurrentEntry: (currentPeerId, currentEntry) =>
         this.peerConnections.get(currentPeerId, linkKind) === currentEntry,
       isExpectedPeer: (currentPeerId) => linkKind === "data"
-        ? this.peerConnections.expects(currentPeerId)
+        ? this.peerConnections.expects(currentPeerId) ||
+          this.hasProvisionalIncomingAdmission(entry)
         : this.expectedMediaPeerIds().has(currentPeerId) ||
-          this.hasProvisionalIncomingMediaAdmission(entry),
+          this.hasProvisionalIncomingAdmission(entry),
       sendCandidate: (candidatePeerId, payload) =>
         this.signaling.send(
           candidatePeerId,
@@ -1294,7 +1360,7 @@ export class PeerConnectionLifecycleManager {
               entry.connectionGeneration
             );
             entry.mediaNegotiationPending = false;
-            entry.lastSignalProgressAtMs = Date.now();
+            this.noteMediaOfferSent(peerId, entry);
             this.clearMediaSyncRetry(entry);
           } catch {
             this.scheduleMediaSyncRetry(peerId, entry);
@@ -1312,6 +1378,7 @@ export class PeerConnectionLifecycleManager {
   }
 
   private releasePeer(peerId: string, entry: PeerEntry) {
+    this.clearProvisionalIncomingAdmission(entry);
     if (entry.linkKind === "media") {
       // Closing a media PC does not reliably deliver a useful connection-state
       // event because the entry is removed before the browser emits its final
@@ -1325,7 +1392,6 @@ export class PeerConnectionLifecycleManager {
           state: "none"
         });
       }
-      this.clearProvisionalIncomingMediaAdmission(entry);
       this.latestMediaSamples.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
       // Keep recovery history while an expected media peer is being replaced.
@@ -1445,7 +1511,7 @@ export class PeerConnectionLifecycleManager {
           "media",
           entry.connectionGeneration
         );
-        entry.lastSignalProgressAtMs = Date.now();
+        this.noteMediaOfferSent(peerId, entry);
         entry.mediaNegotiationPending = false;
       }
       return;
@@ -1532,7 +1598,7 @@ export class PeerConnectionLifecycleManager {
           "media",
           entry.connectionGeneration
         );
-        entry.lastSignalProgressAtMs = Date.now();
+        this.noteMediaOfferSent(peerId, entry);
         entry.mediaNegotiationPending = false;
         this.clearMediaSyncRetry(entry);
       } catch {
@@ -1690,7 +1756,11 @@ export class PeerConnectionLifecycleManager {
     }
   }
 
-  private async recreatePeerNow(peerId: string, entry: PeerEntry): Promise<PeerEntry | null> {
+  private async recreatePeerNow(
+    peerId: string,
+    entry: PeerEntry,
+    options?: { forceInitiate?: boolean }
+  ): Promise<PeerEntry | null> {
     if (
       entry.linkKind !== "data" ||
       !this.expectedRemotePeerIds.has(peerId) ||
@@ -1700,7 +1770,10 @@ export class PeerConnectionLifecycleManager {
     }
     const reconnectAttempts = entry.reconnectAttempts;
     this.releasePeer(peerId, entry);
-    const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
+    const nextEntry = await this.ensurePeer(
+      peerId,
+      options?.forceInitiate === true || this.shouldInitiatePeer(peerId)
+    );
     nextEntry.reconnectAttempts = reconnectAttempts;
     return nextEntry;
   }
@@ -1957,15 +2030,25 @@ export class PeerConnectionLifecycleManager {
     this.mediaRecovery.set(peerId, state);
   }
 
+  private noteMediaOfferSent(peerId: string, entry: PeerEntry) {
+    entry.lastSignalProgressAtMs = Date.now();
+    // A connected ICE/DTLS transport can still be waiting for a source-change
+    // SDP answer. Restart the timer from the offer itself so that state cannot
+    // be mistaken for a healthy media link indefinitely.
+    this.clearMediaWatchdog(entry);
+    this.scheduleMediaWatchdog(peerId, entry);
+  }
+
   private scheduleMediaWatchdog(peerId: string, entry: PeerEntry) {
     if (entry.linkKind !== "media" || entry.releasing || entry.mediaWatchdogTimerId !== null) {
       return;
     }
 
-    const watchdogDelayMs =
-      entry.connection.connectionState === "connected" &&
-      this.hasExpectedRemoteAudioTrack(peerId) &&
-      (entry.connection.remoteDescription !== null || entry.connection.localDescription !== null)
+    const watchdogDelayMs = entry.connection.signalingState === "have-local-offer"
+      ? mediaOfferAnswerTimeoutMs
+      : entry.connection.connectionState === "connected" &&
+          this.hasExpectedRemoteAudioTrack(peerId) &&
+          (entry.connection.remoteDescription !== null || entry.connection.localDescription !== null)
         ? mediaTrackWatchdogGraceMs
         : 8_000;
     entry.mediaWatchdogTimerId = setTimeout(() => {
@@ -1995,7 +2078,7 @@ export class PeerConnectionLifecycleManager {
         const waitingForMs = Date.now() - entry.lastSignalProgressAtMs;
         if (
           entry.mediaMissingTrackRecoveryAttempted &&
-          waitingForMs < 8_000
+          waitingForMs < mediaOfferAnswerTimeoutMs
         ) {
           this.scheduleMediaWatchdog(peerId, entry);
           return;
@@ -2006,7 +2089,7 @@ export class PeerConnectionLifecycleManager {
         }
         if (
           entry.connection.signalingState !== "stable" &&
-          waitingForMs < 8_000
+          waitingForMs < mediaOfferAnswerTimeoutMs
         ) {
           // Let an in-flight answer finish before declaring negotiation lost.
           // The timer must be kept alive; otherwise have-local-offer can leave
@@ -2022,7 +2105,10 @@ export class PeerConnectionLifecycleManager {
         return;
       }
 
-      if (entry.connection.connectionState === "connected") {
+      if (
+        entry.connection.connectionState === "connected" &&
+        entry.connection.signalingState === "stable"
+      ) {
         return;
       }
 
@@ -2040,7 +2126,7 @@ export class PeerConnectionLifecycleManager {
       const now = Date.now();
       const staleForMs = now - entry.lastSignalProgressAtMs;
       const ageMs = now - entry.createdAtMs;
-      if (staleForMs < 8_000 && ageMs < 15_000) {
+      if (staleForMs < mediaOfferAnswerTimeoutMs && ageMs < 15_000) {
         this.scheduleMediaWatchdog(peerId, entry);
         return;
       }
@@ -2089,10 +2175,12 @@ export class PeerConnectionLifecycleManager {
     const hasRecentPositiveRtp = state.lastPositiveMediaAtMs !== null &&
       now - state.lastPositiveMediaAtMs < mediaPositiveRtpFreshMs;
     const liveMediaDuringIceRecovery = mediaTransportDisconnected &&
+      entry.connection.signalingState === "stable" &&
       (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
       reason !== "no-packets" &&
       hasRecentPositiveRtp;
     const connectedLiveMedia = entry.connection.connectionState === "connected" &&
+      entry.connection.signalingState === "stable" &&
       !mediaTransportDisconnected &&
       !mediaTransportFailed &&
       (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
@@ -2120,7 +2208,7 @@ export class PeerConnectionLifecycleManager {
     }
     if (
       entry.connection.signalingState !== "stable" &&
-      Date.now() - entry.lastSignalProgressAtMs < 8_000
+      Date.now() - entry.lastSignalProgressAtMs < mediaOfferAnswerTimeoutMs
     ) {
       this.mediaRecovery.set(peerId, state);
       this.scheduleMediaWatchdog(peerId, entry);

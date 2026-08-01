@@ -309,6 +309,21 @@ export function useRoomRuntime({
           type: "recover-snapshot",
           snapshot
         });
+        const remotePeerIds = snapshot.room.members
+          .map((member) => member.peerId)
+          .filter((memberPeerId): memberPeerId is string =>
+            !!memberPeerId && memberPeerId !== peerId
+          );
+        void meshRef.current?.syncPeers(remotePeerIds).catch((error) => {
+          recordPeerDiagnosticRef.current({
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: "snapshot-mesh-resync-failed",
+            summary: `Failed to reconcile peers from recovered snapshot: ${String(error)}`,
+            level: "error"
+          });
+        });
       },
       onError: (_roomId, _reason, error) => {
         const rawMessage = error instanceof Error ? error.message.toLowerCase() : "";
@@ -648,9 +663,10 @@ export function useRoomRuntime({
       stream,
       sourcePeerId,
       maxBitrateKbps,
-      mediaTrafficExpected
+      mediaTrafficExpected,
+      currentRoomRef.current?.room.playback.mediaEpoch ?? null
     ),
-    [meshRef]
+    [currentRoomRef, meshRef]
   );
   const getPeerMediaState = useCallback(
     (remotePeerId: string) => meshRef.current?.getPeerMediaState(remotePeerId) ?? null,
