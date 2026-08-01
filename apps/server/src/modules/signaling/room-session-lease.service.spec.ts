@@ -44,6 +44,25 @@ describe("RoomSessionLeaseService", () => {
     );
   });
 
+  it("coordinates lease claims with the room state lock when Redis is available", async () => {
+    const redis = createRedis() as ReturnType<typeof createRedis> & {
+      acquireLock: jest.Mock;
+      releaseLock: jest.Mock;
+      isAvailable: jest.Mock;
+    };
+    redis.isAvailable = jest.fn(() => true);
+    redis.acquireLock = jest.fn().mockResolvedValue("lock-token");
+    redis.releaseLock = jest.fn().mockResolvedValue(true);
+    redis.claimJsonLease.mockResolvedValue(null);
+    const lease = new RoomSessionLeaseService(redis as never, createBroadcaster() as never);
+
+    await expect(lease.claim("room-1", "session-1", "peer-1", "socket-1", "fence-1"))
+      .resolves.toBeNull();
+
+    expect(redis.acquireLock).toHaveBeenCalledWith("music-room:lock:room:room-1", 30_000);
+    expect(redis.releaseLock).toHaveBeenCalledWith("music-room:lock:room:room-1", "lock-token");
+  });
+
   it("returns null when Redis is unavailable during claim", async () => {
     const redis = createRedis();
     redis.claimJsonLease.mockRejectedValue(new Error("down"));

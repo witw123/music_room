@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { RoomMember } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { assertMember, incrementPresenceRevision, incrementRoomRevision } from "../room-mutation";
@@ -6,6 +6,7 @@ import { RoomActivityService } from "./room-activity.service";
 import { RoomPlaybackService } from "./room-playback.service";
 import { RoomPresenceService } from "./room-presence.service";
 import { RoomRecordRepository } from "../repositories/room-record.repository";
+import { RedisService } from "../../../infra/redis/redis.service";
 
 /**
  * Serializes room-wide presence transitions. Presence writes share one
@@ -15,13 +16,18 @@ import { RoomRecordRepository } from "../repositories/room-record.repository";
  */
 @Injectable()
 export class RoomPresenceOrchestratorService {
+  private readonly logger = new Logger(RoomPresenceOrchestratorService.name);
+  private readonly roomLockTtlMs = 30_000;
+  private readonly roomLockWaitMs = 3_000;
+  private readonly presenceOperationAttempts = 3;
   private readonly presenceUpdateChains = new Map<string, Promise<void>>();
 
   constructor(
     private readonly roomRecordRepository: RoomRecordRepository,
     private readonly roomPresenceService: RoomPresenceService,
     private readonly roomPlaybackService: RoomPlaybackService,
-    private readonly roomActivityService: RoomActivityService
+    private readonly roomActivityService: RoomActivityService,
+    private readonly redis: RedisService
   ) {}
 
   updatePeerPresence(
@@ -94,7 +100,9 @@ export class RoomPresenceOrchestratorService {
   ) {
     const key = roomId;
     const previous = this.presenceUpdateChains.get(key) ?? Promise.resolve();
-    const result = previous.catch(() => undefined).then(operation);
+    const result = previous
+      .catch(() => undefined)
+      .then(() => this.withRoomLock(roomId, () => this.runWithRetry(roomId, operation)));
     const settled = result.then(
       () => undefined,
       () => undefined
@@ -106,6 +114,70 @@ export class RoomPresenceOrchestratorService {
       }
     });
     return result;
+  }
+
+  private async runWithRetry<T>(roomId: string, operation: () => Promise<T>) {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= this.presenceOperationAttempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (!isRevisionConflict(error) || attempt === this.presenceOperationAttempts) {
+          throw error;
+        }
+        this.logger.warn(
+          `Retrying presence mutation for room ${roomId} after revision conflict (attempt ${attempt}).`
+        );
+        await delay(25 * attempt);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Presence mutation failed.");
+  }
+
+  private async withRoomLock<T>(roomId: string, operation: () => Promise<T>) {
+    const redis = this.redis as RedisService & {
+      acquireLock?: (key: string, ttlMs: number) => Promise<string | null>;
+      releaseLock?: (key: string, token: string) => Promise<boolean>;
+      isAvailable?: () => boolean;
+    };
+    if (
+      typeof redis.acquireLock !== "function" ||
+      typeof redis.releaseLock !== "function" ||
+      typeof redis.isAvailable !== "function"
+    ) {
+      if (isStrictRealtimeCoordination()) {
+        throw new Error("Realtime coordination is unavailable.");
+      }
+      return operation();
+    }
+    if (!redis.isAvailable()) {
+      if (isStrictRealtimeCoordination()) {
+        throw new Error("Realtime coordination is unavailable.");
+      }
+      return operation();
+    }
+
+    const lockKey = `music-room:lock:room:${roomId}`;
+    const deadline = Date.now() + this.roomLockWaitMs;
+    let token: string | null = null;
+    while (!token && Date.now() < deadline) {
+      token = await redis.acquireLock(lockKey, this.roomLockTtlMs);
+      if (!token) {
+        await delay(20);
+      }
+    }
+    if (!token) {
+      throw new Error("Room state is busy; retry presence update.");
+    }
+
+    try {
+      return await operation();
+    } finally {
+      await redis.releaseLock(lockKey, token).catch((error) => {
+        this.logger.warn(`Unable to release room presence lock ${roomId}: ${String(error)}`);
+      });
+    }
   }
 
   private async applyPeerPresenceUpdate(
@@ -164,4 +236,16 @@ export class RoomPresenceOrchestratorService {
     await this.roomRecordRepository.persistRecord(record);
     return record.room;
   }
+}
+
+function isRevisionConflict(error: unknown) {
+  return error instanceof Error && error.message === "Room state revision conflict.";
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function isStrictRealtimeCoordination() {
+  return process.env.NODE_ENV === "production";
 }

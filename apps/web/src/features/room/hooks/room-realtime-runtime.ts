@@ -35,6 +35,16 @@ import {
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
 const socketDisconnectGraceMs = 6_000;
+
+function compareReadinessUpdates(left: string, right: string) {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (Number.isFinite(leftMs) && Number.isFinite(rightMs)) {
+    return leftMs - rightMs;
+  }
+  return left.localeCompare(right);
+}
+
 // The room playback clock is a one-shot offset calibrated only at subscribe
 // time. Client clocks drift and the offset is never re-converged, which makes
 // a member's shared position estimate diverge from the audible audio (progress
@@ -581,10 +591,16 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     ) {
       return;
     }
-    input.setPlaybackReadiness((current) => [
-      ...current.filter((item) => item.sessionId !== payload.sessionId),
-      payload
-    ]);
+    input.setPlaybackReadiness((current) => {
+      const previous = current.find((item) => item.sessionId === payload.sessionId);
+      if (previous && compareReadinessUpdates(payload.updatedAt, previous.updatedAt) <= 0) {
+        return current;
+      }
+      return [
+        ...current.filter((item) => item.sessionId !== payload.sessionId),
+        payload
+      ];
+    });
   });
 
   socket.on("room.track.deleted", (payload: RoomTrackDeletedPayload) => {

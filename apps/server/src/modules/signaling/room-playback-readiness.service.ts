@@ -1,34 +1,51 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import type {
   RoomPlaybackReadinessInputPayload,
   RoomPlaybackReadinessPayload,
   RoomSnapshot
 } from "@music-room/shared";
 import type { Server } from "socket.io";
+import { RedisService } from "../../infra/redis/redis.service";
 import { RoomRealtimeBroadcaster } from "../realtime/room-realtime.broadcaster";
 import { RoomService } from "../room/room.service";
 
+type PlaybackBarrier = {
+  key: string;
+  state: "waiting" | "open";
+  resumeAt: string | null;
+  holdPositionMs: number | null;
+  updatedAt: string;
+};
+
+type PersistedReadinessState = {
+  key: string;
+  entries: RoomPlaybackReadinessPayload[];
+  waitingSinceBySession: Record<string, string>;
+  barrier: PlaybackBarrier;
+  updatedAt: string;
+};
+
+const readinessStateTtlSeconds = 120;
+const waitingTimeoutMs = 30_000;
+
 /**
- * Room-wide cache playback barrier. The barrier keeps every online cache
- * participant on the same media clock while a provider track is downloaded
- * locally; the shared hold/resume anchor is then broadcast room-wide so
- * streaming members do not run their progress through silence.
+ * Room-wide cache playback barrier. Redis stores the reports and the computed
+ * barrier so every signaling instance evaluates the same participant set. The
+ * process-local maps remain only as a fast delivery cache for newly subscribed
+ * sockets.
  */
 @Injectable()
 export class RoomPlaybackReadinessService {
+  private readonly logger = new Logger(RoomPlaybackReadinessService.name);
   private readonly playbackReadinessByRoom = new Map<string, Map<string, RoomPlaybackReadinessPayload>>();
-  private readonly playbackBarrierByRoom = new Map<string, {
-    key: string;
-    state: "waiting" | "open";
-    resumeAt: string | null;
-    holdPositionMs: number | null;
-    updatedAt: string;
-  }>();
+  private readonly playbackBarrierByRoom = new Map<string, PlaybackBarrier>();
+  private readonly readinessUpdateChains = new Map<string, Promise<void>>();
   private server: Server | null = null;
 
   constructor(
     private readonly roomService: RoomService,
-    private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster
+    private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
+    @Optional() private readonly redis?: RedisService
   ) {}
 
   setServer(server: Server) {
@@ -36,149 +53,140 @@ export class RoomPlaybackReadinessService {
   }
 
   async handleReadiness(message: RoomPlaybackReadinessInputPayload) {
-    const snapshot = await this.roomService.getAccessibleRoomSnapshot(
-      message.roomId,
-      [],
-      message.sessionId
-    );
-    const playback = snapshot.room.playback;
-    const trackId = playback.currentTrackId;
-    const mediaEpoch = playback.mediaEpoch;
-    const key = `${trackId ?? "none"}:${mediaEpoch}`;
-    const readinessBySession = this.playbackReadinessByRoom.get(message.roomId) ?? new Map();
-    this.playbackReadinessByRoom.set(message.roomId, readinessBySession);
-    const normalizedState = message.cacheEnabled && message.state === "waiting"
-      ? "waiting"
-      : "ready";
-    const activeMembers = snapshot.room.members.filter(
-      (member) => member.presenceState === "online" && !!member.peerId
-    );
-    const previousBarrier = this.playbackBarrierByRoom.get(message.roomId);
-    const canonicalBase: RoomPlaybackReadinessPayload = {
-      roomId: message.roomId,
-      sessionId: message.sessionId,
-      peerId: message.peerId,
-      trackId,
-      mediaEpoch,
-      cacheEnabled: message.cacheEnabled,
-      state: normalizedState,
-      barrier: "waiting",
-      resumeAt: null,
-      holdPositionMs: null,
-      updatedAt: new Date().toISOString()
-    };
-    readinessBySession.set(message.sessionId, canonicalBase);
-
-    // Only online members that explicitly enabled fully-cached playback decide
-    // when this barrier opens. The resulting hold/resume clock is broadcast
-    // room-wide so streaming members do not run their progress through silence.
-    const cacheParticipants = activeMembers
-      .map((member) => readinessBySession.get(member.id))
-      .filter((entry): entry is RoomPlaybackReadinessPayload =>
-        !!entry &&
-        entry.trackId === trackId &&
-        entry.mediaEpoch === mediaEpoch &&
-        entry.cacheEnabled
+    return this.enqueueRoomOperation(message.roomId, async () => {
+      const snapshot = await this.roomService.getAccessibleRoomSnapshot(
+        message.roomId,
+        [],
+        message.sessionId
       );
-    const allReady = playback.status !== "playing" ||
-      cacheParticipants.every((entry) => entry.state !== "waiting");
-    const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
-    const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
-      key,
-      previousBarrier,
-      barrierState
-    });
-    // Ready caches follow the normal path immediately. A shared start time
-    // is only needed when this exact track was actually held for at least one
-    // member to finish caching.
-    const resumeAt = barrierState === "open"
-      ? previousBarrier?.key === key && previousBarrier.state === "waiting"
-        ? new Date(Date.now() + 650).toISOString()
-        : previousBarrier?.key === key && previousBarrier.state === "open"
-          ? previousBarrier.resumeAt
-          : null
-      : null;
-    const canonical: RoomPlaybackReadinessPayload = {
-      ...canonicalBase,
-      barrier: barrierState,
-      resumeAt,
-      holdPositionMs,
-      updatedAt: new Date().toISOString()
-    };
-    this.playbackBarrierByRoom.set(message.roomId, {
-      key,
-      state: barrierState,
-      resumeAt,
-      holdPositionMs,
-      updatedAt: canonical.updatedAt
-    });
-    readinessBySession.set(message.sessionId, canonical);
-    this.ensureServer();
-    // A barrier transition is room-wide. Refresh every matching readiness
-    // entry so clients do not wait for an unrelated heartbeat before they can
-    // observe the shared hold/resume anchor.
-    for (const entry of readinessBySession.values()) {
-      if (entry.trackId !== trackId || entry.mediaEpoch !== mediaEpoch) continue;
-      const nextEntry = entry.sessionId === message.sessionId
-        ? canonical
-        : {
-            ...entry,
-            barrier: barrierState,
-            resumeAt,
-            holdPositionMs,
-            updatedAt: new Date().toISOString()
-          } satisfies RoomPlaybackReadinessPayload;
-      readinessBySession.set(entry.sessionId, nextEntry);
-      this.roomRealtimeBroadcaster.emitPlaybackReadiness(message.roomId, nextEntry);
-    }
-    return canonical;
-  }
+      const key = this.timelineKey(snapshot.room.playback.currentTrackId, snapshot.room.playback.mediaEpoch);
+      const state = await this.loadState(message.roomId, key);
+      const now = new Date();
+      const normalizedState: RoomPlaybackReadinessPayload["state"] = message.cacheEnabled
+        ? message.state
+        : "ready";
+      const previous = state.entries.find((entry) => entry.sessionId === message.sessionId);
+      const entry: RoomPlaybackReadinessPayload = {
+        roomId: message.roomId,
+        sessionId: message.sessionId,
+        peerId: message.peerId,
+        trackId: snapshot.room.playback.currentTrackId,
+        mediaEpoch: snapshot.room.playback.mediaEpoch,
+        cacheEnabled: message.cacheEnabled,
+        state: normalizedState,
+        barrier: "waiting",
+        resumeAt: null,
+        holdPositionMs: null,
+        updatedAt: now.toISOString()
+      };
+      const entries = [
+        ...state.entries.filter((current) => current.sessionId !== message.sessionId),
+        entry
+      ];
+      const waitingSinceBySession = { ...state.waitingSinceBySession };
+      if (normalizedState === "waiting" && message.cacheEnabled) {
+        waitingSinceBySession[message.sessionId] = previous?.state === "waiting"
+          ? state.waitingSinceBySession[message.sessionId] ?? now.toISOString()
+          : now.toISOString();
+      } else {
+        delete waitingSinceBySession[message.sessionId];
+      }
 
-  handleRedisReadiness(roomId: string, data: RoomPlaybackReadinessPayload) {
-    // Keep a local copy as well. Readiness is a room-wide barrier, so a
-    // reconnect or cleanup on this instance must include reports received
-    // through Redis from other signaling instances.
-    const readinessBySession = this.playbackReadinessByRoom.get(roomId) ?? new Map();
-    readinessBySession.set(data.sessionId, data);
-    this.playbackReadinessByRoom.set(roomId, readinessBySession);
-    const currentBarrier = this.playbackBarrierByRoom.get(roomId);
-    if (!currentBarrier || data.updatedAt >= currentBarrier.updatedAt) {
-      this.playbackBarrierByRoom.set(roomId, {
-        key: `${data.trackId ?? "none"}:${data.mediaEpoch}`,
-        state: data.barrier,
-        resumeAt: data.resumeAt,
-        holdPositionMs: data.holdPositionMs,
-        updatedAt: data.updatedAt
+      const nextState = this.computeState({
+        roomId: message.roomId,
+        key,
+        snapshot,
+        entries,
+        waitingSinceBySession,
+        previousBarrier: state.barrier,
+        now
       });
-    }
-    this.server!.to(roomId).emit("room.playback.readiness", data);
+      await this.saveState(message.roomId, nextState);
+      this.applyLocalState(message.roomId, nextState);
+      this.broadcastState(message.roomId, nextState);
+      return nextState.entries.find((current) => current.sessionId === message.sessionId) ?? entry;
+    });
   }
 
-  clearForSession(roomId?: string, sessionId?: string) {
-    if (!roomId) return;
+  /**
+   * Redis readiness events are notifications, not authority. Apply the payload
+   * immediately for low-latency delivery, then hydrate the complete persisted
+   * state so an out-of-order event cannot overwrite a newer barrier locally.
+   */
+  handleRedisReadiness(roomId: string, data: RoomPlaybackReadinessPayload) {
+    if (!this.upsertLocalEntry(roomId, data)) {
+      return;
+    }
+    this.server?.to(roomId).emit("room.playback.readiness", data);
+    void this.hydrateFromRedis(roomId, data);
+  }
+
+  clearForSession(roomId?: string, sessionId?: string, peerId?: string) {
+    if (!roomId || !sessionId) return;
     const readiness = this.playbackReadinessByRoom.get(roomId);
-    if (readiness && sessionId) readiness.delete(sessionId);
+    const localEntry = readiness?.get(sessionId);
+    const localBarrier = this.playbackBarrierByRoom.get(roomId);
+    const clearBefore = [
+      new Date().toISOString(),
+      localEntry?.updatedAt,
+      localBarrier?.updatedAt
+    ].filter((value): value is string => !!value).sort().at(-1)!;
+    const shouldRemove = (entry: RoomPlaybackReadinessPayload) =>
+      entry.sessionId === sessionId &&
+      (!peerId || entry.peerId === peerId) &&
+      compareReadinessUpdates(entry.updatedAt, clearBefore) <= 0;
+    if (localEntry && shouldRemove(localEntry)) {
+      readiness?.delete(sessionId);
+    }
     if (readiness?.size === 0) this.playbackReadinessByRoom.delete(roomId);
-    // A departed member may have been the last blocker. Re-evaluate promptly
-    // instead of waiting for another member's heartbeat.
-    void this.recomputePlaybackBarrier(roomId);
+    void this.enqueueRoomOperation(roomId, async () => {
+      const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+      const key = this.timelineKey(
+        snapshot.room.playback.currentTrackId,
+        snapshot.room.playback.mediaEpoch
+      );
+      const state = await this.loadState(roomId, key);
+      const entries = state.entries.filter((entry) => !shouldRemove(entry));
+      const waitingSinceBySession = { ...state.waitingSinceBySession };
+      if (!entries.some((entry) => entry.sessionId === sessionId)) {
+        delete waitingSinceBySession[sessionId];
+      }
+      const nextState = this.computeState({
+        roomId,
+        key,
+        snapshot,
+        entries,
+        waitingSinceBySession,
+        previousBarrier: state.barrier,
+        now: new Date()
+      });
+      await this.saveState(roomId, nextState);
+      this.applyLocalState(roomId, nextState);
+      this.broadcastState(roomId, nextState);
+    }).catch((error) => {
+      this.logger.warn(`Unable to clear playback readiness for ${roomId}/${sessionId}: ${String(error)}`);
+    });
   }
 
   clearRoomState(roomId: string) {
     this.playbackReadinessByRoom.delete(roomId);
     this.playbackBarrierByRoom.delete(roomId);
+    if (this.isRedisAvailable()) {
+      void this.redis!.delete(this.stateKey(roomId)).catch(() => undefined);
+    }
   }
 
   dispose() {
     this.playbackReadinessByRoom.clear();
     this.playbackBarrierByRoom.clear();
+    this.readinessUpdateChains.clear();
   }
 
   getReadinessForTimeline(roomId: string, key: string) {
     const readiness = this.playbackReadinessByRoom.get(roomId);
     const result: RoomPlaybackReadinessPayload[] = [];
     for (const item of readiness?.values() ?? []) {
-      if (`${item.trackId ?? "none"}:${item.mediaEpoch}` === key) {
+      if (this.timelineKey(item.trackId, item.mediaEpoch) === key) {
         result.push(item);
       }
     }
@@ -186,102 +194,302 @@ export class RoomPlaybackReadinessService {
   }
 
   async recomputePlaybackBarrier(roomId: string) {
-    let snapshot: RoomSnapshot;
-    try {
-      snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    } catch {
-      return;
-    }
-
-    const playback = snapshot.room.playback;
-    const trackId = playback.currentTrackId;
-    const mediaEpoch = playback.mediaEpoch;
-    const key = `${trackId ?? "none"}:${mediaEpoch}`;
-    const readinessBySession = this.playbackReadinessByRoom.get(roomId);
-    if (!readinessBySession || !trackId || playback.status !== "playing") {
-      this.playbackBarrierByRoom.delete(roomId);
-      return;
-    }
-
-    const activeMembers = snapshot.room.members.filter(
-      (member) => member.presenceState === "online" && !!member.peerId
-    );
-    const cacheParticipants = activeMembers
-      .map((member) => readinessBySession.get(member.id))
-      .filter((entry): entry is RoomPlaybackReadinessPayload =>
-        !!entry &&
-        entry.trackId === trackId &&
-        entry.mediaEpoch === mediaEpoch &&
-        entry.cacheEnabled
+    return this.enqueueRoomOperation(roomId, async () => {
+      const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+      const key = this.timelineKey(
+        snapshot.room.playback.currentTrackId,
+        snapshot.room.playback.mediaEpoch
       );
-    const allReady = cacheParticipants.every((entry) => entry.state !== "waiting");
-    const barrierState: "waiting" | "open" = allReady ? "open" : "waiting";
-    const previous = this.playbackBarrierByRoom.get(roomId);
-    const holdPositionMs = this.resolvePlaybackBarrierHoldPosition({
-      key,
-      previousBarrier: previous,
-      barrierState
+      const state = await this.loadState(roomId, key);
+      if (!state || !snapshot.room.playback.currentTrackId || snapshot.room.playback.status !== "playing") {
+        this.playbackBarrierByRoom.delete(roomId);
+        return;
+      }
+      const nextState = this.computeState({
+        roomId,
+        key,
+        snapshot,
+        entries: state.entries,
+        waitingSinceBySession: state.waitingSinceBySession,
+        previousBarrier: state.barrier,
+        now: new Date()
+      });
+      await this.saveState(roomId, nextState);
+      this.applyLocalState(roomId, nextState);
+      this.broadcastState(roomId, nextState);
     });
+  }
+
+  private async hydrateFromRedis(roomId: string, fallback: RoomPlaybackReadinessPayload) {
+    try {
+      const state = await this.loadState(roomId);
+      this.applyLocalState(roomId, state);
+      const current = state.entries.find((entry) => entry.sessionId === fallback.sessionId);
+      if (current && compareReadinessUpdates(current.updatedAt, fallback.updatedAt) > 0) {
+        this.server?.to(roomId).emit("room.playback.readiness", current);
+      }
+    } catch (error) {
+      this.logger.warn(`Unable to hydrate playback readiness for ${roomId}: ${String(error)}`);
+    }
+  }
+
+  private enqueueRoomOperation<T>(roomId: string, operation: () => Promise<T>) {
+    const previous = this.readinessUpdateChains.get(roomId) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(() => this.withRoomLock(roomId, operation));
+    const settled = result.then(() => undefined, () => undefined);
+    this.readinessUpdateChains.set(roomId, settled);
+    void settled.finally(() => {
+      if (this.readinessUpdateChains.get(roomId) === settled) {
+        this.readinessUpdateChains.delete(roomId);
+      }
+    });
+    return result;
+  }
+
+  private async withRoomLock<T>(roomId: string, operation: () => Promise<T>) {
+    const redis = this.redis as (RedisService & {
+      acquireLock?: (key: string, ttlMs: number) => Promise<string | null>;
+      releaseLock?: (key: string, token: string) => Promise<boolean>;
+      isAvailable?: () => boolean;
+    }) | undefined;
+    if (!redis || typeof redis.acquireLock !== "function" || typeof redis.releaseLock !== "function" || typeof redis.isAvailable !== "function") {
+      if (isStrictRealtimeCoordination()) {
+        throw new Error("Realtime coordination is unavailable.");
+      }
+      return operation();
+    }
+    if (!redis.isAvailable()) {
+      if (isStrictRealtimeCoordination()) {
+        throw new Error("Realtime coordination is unavailable.");
+      }
+      return operation();
+    }
+
+    const deadline = Date.now() + 3_000;
+    let token: string | null = null;
+    while (!token && Date.now() < deadline) {
+      token = await redis.acquireLock(`music-room:lock:room:${roomId}`, 30_000);
+      if (!token) await delay(20);
+    }
+    if (!token) throw new Error("Room playback readiness is busy.");
+    try {
+      return await operation();
+    } finally {
+      await redis.releaseLock(`music-room:lock:room:${roomId}`, token).catch((error) => {
+        this.logger.warn(`Unable to release playback readiness lock ${roomId}: ${String(error)}`);
+      });
+    }
+  }
+
+  private async loadState(roomId: string, expectedKey?: string): Promise<PersistedReadinessState> {
+    if (!this.isRedisAvailable()) {
+      if (isStrictRealtimeCoordination()) {
+        throw new Error("Realtime coordination is unavailable.");
+      }
+    } else {
+      let persisted: PersistedReadinessState | null = null;
+      try {
+        persisted = await this.redis!.getJson<PersistedReadinessState>(this.stateKey(roomId));
+      } catch (error) {
+        if (isStrictRealtimeCoordination()) {
+          throw error;
+        }
+        this.logger.warn(`Unable to read playback readiness for ${roomId}: ${String(error)}`);
+      }
+      if (persisted && (!expectedKey || persisted.key === expectedKey)) {
+        return this.normalizeState(persisted);
+      }
+    }
+    const localEntries = [...(this.playbackReadinessByRoom.get(roomId)?.values() ?? [])];
+    const localBarrier = this.playbackBarrierByRoom.get(roomId);
+    const key = expectedKey ?? localBarrier?.key ?? (localEntries[0] ? this.timelineKey(localEntries[0].trackId, localEntries[0].mediaEpoch) : "none:0");
+    const compatibleLocalBarrier = localBarrier?.key === key ? localBarrier : undefined;
+    return {
+      key,
+      entries: localEntries.filter((entry) => this.timelineKey(entry.trackId, entry.mediaEpoch) === key),
+      waitingSinceBySession: {},
+      barrier: compatibleLocalBarrier ?? { key, state: "open", resumeAt: null, holdPositionMs: null, updatedAt: new Date(0).toISOString() },
+      updatedAt: new Date(0).toISOString()
+    };
+  }
+
+  private async saveState(roomId: string, state: PersistedReadinessState) {
+    if (!this.isRedisAvailable()) {
+      if (isStrictRealtimeCoordination()) {
+        throw new Error("Realtime coordination is unavailable.");
+      }
+      return;
+    }
+    try {
+      await this.redis!.setJson(this.stateKey(roomId), state, readinessStateTtlSeconds);
+    } catch (error) {
+      if (isStrictRealtimeCoordination()) {
+        throw error;
+      }
+      this.logger.warn(`Unable to persist playback readiness for ${roomId}: ${String(error)}`);
+    }
+  }
+
+  private computeState(input: {
+    roomId: string;
+    key: string;
+    snapshot: RoomSnapshot;
+    entries: RoomPlaybackReadinessPayload[];
+    waitingSinceBySession: Record<string, string>;
+    previousBarrier: PlaybackBarrier;
+    now: Date;
+  }): PersistedReadinessState {
+    const previousUpdatedAt = Date.parse(input.previousBarrier.updatedAt);
+    const nowMs = Number.isFinite(previousUpdatedAt)
+      ? Math.max(input.now.getTime(), previousUpdatedAt + 1)
+      : input.now.getTime();
+    const nowIso = new Date(nowMs).toISOString();
+    const activeMemberIds = new Set(
+      input.snapshot.room.members
+        .filter((member) => member.presenceState === "online" && !!member.peerId)
+        .map((member) => member.id)
+    );
+    const waitingSinceBySession = { ...input.waitingSinceBySession };
+    const entries = input.entries
+      .filter((entry) =>
+        activeMemberIds.has(entry.sessionId) &&
+        this.timelineKey(entry.trackId, entry.mediaEpoch) === input.key
+      )
+      .map((entry) => {
+        const waitingSince = waitingSinceBySession[entry.sessionId];
+        if (
+          entry.state === "waiting" &&
+          waitingSince &&
+          input.now.getTime() - Date.parse(waitingSince) >= waitingTimeoutMs
+        ) {
+          delete waitingSinceBySession[entry.sessionId];
+          return { ...entry, state: "failed" as const };
+        }
+        return entry;
+      });
+    const cacheParticipants = entries.filter((entry) => entry.cacheEnabled);
+    const allReady = input.snapshot.room.playback.status !== "playing" ||
+      cacheParticipants.every((entry) => entry.state !== "waiting");
+    const barrierState: PlaybackBarrier["state"] = allReady ? "open" : "waiting";
+    const holdPositionMs = barrierState === "waiting"
+      ? 0
+      : input.previousBarrier.key === input.key
+        ? input.previousBarrier.holdPositionMs
+        : null;
     const resumeAt = barrierState === "open"
-      ? previous?.key === key && previous.state === "waiting"
-        ? new Date(Date.now() + 650).toISOString()
-        : previous?.key === key && previous.state === "open"
-          ? previous.resumeAt
+      ? input.previousBarrier.key === input.key && input.previousBarrier.state === "waiting"
+        ? new Date(nowMs + 650).toISOString()
+        : input.previousBarrier.key === input.key && input.previousBarrier.state === "open"
+          ? input.previousBarrier.resumeAt
           : null
       : null;
-    this.playbackBarrierByRoom.set(roomId, {
-      key,
+    const barrier: PlaybackBarrier = {
+      key: input.key,
       state: barrierState,
       resumeAt,
       holdPositionMs,
-      updatedAt: new Date().toISOString()
-    });
-
-    this.ensureServer();
-    for (const entry of readinessBySession.values()) {
-      if (entry.trackId !== trackId || entry.mediaEpoch !== mediaEpoch) continue;
-      const nextEntry: RoomPlaybackReadinessPayload = {
+      updatedAt: nowIso
+    };
+    return {
+      key: input.key,
+      entries: entries.map((entry) => ({
         ...entry,
         barrier: barrierState,
         resumeAt,
         holdPositionMs,
-        updatedAt: new Date().toISOString()
-      };
-      readinessBySession.set(entry.sessionId, nextEntry);
-      this.roomRealtimeBroadcaster.emitPlaybackReadiness(roomId, nextEntry);
-    }
+        updatedAt: nowIso
+      })),
+      waitingSinceBySession,
+      barrier,
+      updatedAt: nowIso
+    };
   }
 
-  private resolvePlaybackBarrierHoldPosition(input: {
-    key: string;
-    previousBarrier: {
-      key: string;
-      state: "waiting" | "open";
-      resumeAt: string | null;
-      holdPositionMs: number | null;
-    } | undefined;
-    barrierState: "waiting" | "open";
-  }) {
-    const previous = input.previousBarrier;
-    if (input.barrierState === "waiting") {
-      // Cache playback is a prepare barrier, not a seek-and-continue point.
-      // Every waiting cycle restarts the track from its beginning once all
-      // participating clients are ready.
-      return 0;
-    }
+  private normalizeState(state: PersistedReadinessState): PersistedReadinessState {
+    const key = typeof state.key === "string" ? state.key : "none:0";
+    return {
+      key,
+      entries: Array.isArray(state.entries) ? state.entries : [],
+      waitingSinceBySession: state.waitingSinceBySession ?? {},
+      barrier: state.barrier ?? {
+        key,
+        state: "open",
+        resumeAt: null,
+        holdPositionMs: null,
+        updatedAt: new Date(0).toISOString()
+      },
+      updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : new Date(0).toISOString()
+    };
+  }
 
+  private isRedisAvailable() {
+    const redis = this.redis as (RedisService & { isAvailable?: () => boolean }) | undefined;
+    return typeof redis?.isAvailable === "function" && redis.isAvailable();
+  }
+
+  private applyLocalState(roomId: string, state: PersistedReadinessState) {
+    const currentBarrier = this.playbackBarrierByRoom.get(roomId);
     if (
-      previous?.key === input.key &&
-      (previous.state === "waiting" || previous.state === "open")
+      currentBarrier &&
+      currentBarrier.key === state.key &&
+      compareReadinessUpdates(state.updatedAt, currentBarrier.updatedAt) < 0
     ) {
-      return previous.holdPositionMs;
+      return;
     }
-    return null;
+    const readiness = new Map(state.entries.map((entry) => [entry.sessionId, entry]));
+    this.playbackReadinessByRoom.set(roomId, readiness);
+    this.playbackBarrierByRoom.set(roomId, state.barrier);
   }
 
-  private ensureServer() {
-    if (this.server) {
-      this.roomRealtimeBroadcaster.setServer(this.server);
+  private upsertLocalEntry(roomId: string, data: RoomPlaybackReadinessPayload) {
+    const readiness = this.playbackReadinessByRoom.get(roomId) ?? new Map();
+    const current = readiness.get(data.sessionId);
+    if (current && compareReadinessUpdates(data.updatedAt, current.updatedAt) <= 0) {
+      return false;
+    }
+    readiness.set(data.sessionId, data);
+    this.playbackReadinessByRoom.set(roomId, readiness);
+    const currentBarrier = this.playbackBarrierByRoom.get(roomId);
+    if (!currentBarrier || compareReadinessUpdates(data.updatedAt, currentBarrier.updatedAt) >= 0) {
+      this.playbackBarrierByRoom.set(roomId, {
+        key: this.timelineKey(data.trackId, data.mediaEpoch),
+        state: data.barrier,
+        resumeAt: data.resumeAt,
+        holdPositionMs: data.holdPositionMs,
+        updatedAt: data.updatedAt
+      });
+    }
+    return true;
+  }
+
+  private broadcastState(roomId: string, state: PersistedReadinessState) {
+    for (const entry of state.entries) {
+      this.roomRealtimeBroadcaster.emitPlaybackReadiness(roomId, entry);
     }
   }
+
+  private timelineKey(trackId: string | null, mediaEpoch: number) {
+    return `${trackId ?? "none"}:${mediaEpoch}`;
+  }
+
+  private stateKey(roomId: string) {
+    return `music-room:playback-readiness:${roomId}`;
+  }
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function compareReadinessUpdates(left: string, right: string) {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (Number.isFinite(leftMs) && Number.isFinite(rightMs)) {
+    return leftMs - rightMs;
+  }
+  return left.localeCompare(right);
+}
+
+function isStrictRealtimeCoordination() {
+  return process.env.NODE_ENV === "production";
 }

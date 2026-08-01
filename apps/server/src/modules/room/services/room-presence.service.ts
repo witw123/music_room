@@ -14,6 +14,11 @@ type StoredPresenceEntry = {
   presenceState: PresenceState;
 };
 
+// The browser sends presence heartbeats every 10 seconds. A three-minute TTL
+// tolerates background-tab timer coalescing while still removing abandoned
+// sessions without waiting for the lease cleanup timer.
+export const realtimePresenceTtlSeconds = 180;
+
 export class RoomPresenceService {
   constructor(
     private readonly redis: RedisService,

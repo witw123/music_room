@@ -161,6 +161,34 @@ describe("RoomPlaybackReadinessService", () => {
       .toEqual(["one"]);
   });
 
+  it("ignores an out-of-order foreign readiness event", () => {
+    const roomService = createRoomService();
+    const broadcaster = createBroadcaster();
+    const readiness = new RoomPlaybackReadinessService(roomService as never, broadcaster as never);
+    const emit = jest.fn();
+    readiness.setServer({ to: jest.fn(() => ({ emit })) } as never);
+    const payload: RoomPlaybackReadinessPayload = {
+      roomId: "room-1",
+      sessionId: "one",
+      peerId: "peer-one",
+      trackId: "track-1",
+      mediaEpoch: 2,
+      cacheEnabled: true,
+      state: "waiting",
+      barrier: "waiting",
+      resumeAt: null,
+      holdPositionMs: 0,
+      updatedAt: "2026-07-31T00:00:01.000Z"
+    };
+    const newer = { ...payload, state: "ready" as const, barrier: "open" as const, updatedAt: "2026-07-31T00:00:02.000Z" };
+
+    readiness.handleRedisReadiness("room-1", newer);
+    readiness.handleRedisReadiness("room-1", payload);
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(readiness.getReadinessForTimeline("room-1", "track-1:2")[0]).toMatchObject(newer);
+  });
+
   it("reopens the barrier when the last waiting member departs", async () => {
     const roomService = createRoomService();
     const members = [member("one"), member("two")];
@@ -178,6 +206,24 @@ describe("RoomPlaybackReadinessService", () => {
     expect(broadcaster.emitPlaybackReadiness).toHaveBeenLastCalledWith(
       "room-1",
       expect.objectContaining({ barrier: "open" })
+    );
+  });
+
+  it("does not clear a newer readiness report from a reconnected peer", async () => {
+    const roomService = createRoomService();
+    const members = [member("one")];
+    roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({}, members));
+    roomService.getRoomSnapshot.mockResolvedValue(createSnapshot({}, members));
+    const broadcaster = createBroadcaster();
+    const readiness = new RoomPlaybackReadinessService(roomService as never, broadcaster as never);
+
+    await readiness.handleReadiness(readinessInput("one", "peer-one", "ready"));
+    readiness.clearForSession("room-1", "one", "peer-one");
+    await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
+    await settle();
+
+    expect(readiness.getReadinessForTimeline("room-1", "track-1:2")[0]).toEqual(
+      expect.objectContaining({ sessionId: "one", state: "waiting" })
     );
   });
 });

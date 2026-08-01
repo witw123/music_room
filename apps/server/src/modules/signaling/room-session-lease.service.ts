@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { WsException } from "@nestjs/websockets";
 import type { Socket } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -21,6 +21,9 @@ type SessionLease = {
  */
 @Injectable()
 export class RoomSessionLeaseService {
+  private readonly logger = new Logger(RoomSessionLeaseService.name);
+  private readonly roomLockTtlMs = 30_000;
+  private readonly roomLockWaitMs = 3_000;
   readonly sessionLeaseTtlMs = 180_000;
 
   constructor(
@@ -39,27 +42,32 @@ export class RoomSessionLeaseService {
     socketId: string,
     fenceToken: string
   ) {
-    try {
-      const previous = await this.redisService.claimJsonLease(
-        this.key(roomId, sessionId),
-        {
-          instanceId: this.roomRealtimeBroadcaster.instanceId,
-          roomId,
-          sessionId,
-          peerId,
-          socketId,
-          fenceToken
-        },
-        this.sessionLeaseTtlMs
-      );
-      if (!previous || typeof previous !== "object") {
+    return this.withRoomLock(roomId, async () => {
+      try {
+        const previous = await this.redisService.claimJsonLease(
+          this.key(roomId, sessionId),
+          {
+            instanceId: this.roomRealtimeBroadcaster.instanceId,
+            roomId,
+            sessionId,
+            peerId,
+            socketId,
+            fenceToken
+          },
+          this.sessionLeaseTtlMs
+        );
+        if (!previous || typeof previous !== "object") {
+          return null;
+        }
+        return previous as SessionLease;
+      } catch (error) {
+        if (isStrictRealtimeCoordination()) {
+          throw error;
+        }
+        // Local signaling remains available in development when Redis is down.
         return null;
       }
-      return previous as SessionLease;
-    } catch {
-      // Local signaling remains available when Redis is temporarily down.
-      return null;
-    }
+    });
   }
 
   async assert(client: Socket) {
@@ -75,6 +83,9 @@ export class RoomSessionLeaseService {
         socketId?: string;
         fenceToken?: string;
       }>(this.key(roomId, sessionId));
+      if (!lease && isStrictRealtimeCoordination()) {
+        throw new WsException("Realtime session lease is missing.");
+      }
       if (
         lease &&
         (lease.socketId !== client.id || lease.fenceToken !== fenceToken)
@@ -85,7 +96,10 @@ export class RoomSessionLeaseService {
       if (error instanceof WsException) {
         throw error;
       }
-      // Redis failure must not take down an otherwise healthy local socket.
+      if (isStrictRealtimeCoordination()) {
+        throw new WsException("Realtime session coordination is unavailable.");
+      }
+      // Local signaling remains available in development when Redis is down.
     }
   }
 
@@ -108,8 +122,7 @@ export class RoomSessionLeaseService {
         this.sessionLeaseTtlMs
       );
     } catch {
-      // A transient Redis outage should not interrupt local presence.
-      return true;
+      return !isStrictRealtimeCoordination();
     }
   }
 
@@ -145,14 +158,16 @@ export class RoomSessionLeaseService {
         socketId?: string;
         fenceToken?: string;
       }>(this.key(roomId, sessionId));
+      if (!lease) {
+        return !isStrictRealtimeCoordination();
+      }
       return (
-        !lease ||
         ((!expected?.peerId || lease.peerId === expected.peerId) &&
           (!expected?.socketId || lease.socketId === expected.socketId) &&
           (!expected?.fenceToken || lease.fenceToken === expected.fenceToken))
       );
     } catch {
-      return true;
+      return !isStrictRealtimeCoordination();
     }
   }
 
@@ -196,12 +211,67 @@ export class RoomSessionLeaseService {
         socketId?: string;
         fenceToken?: string;
       }>(this.key(roomId, sessionId));
+      if (!lease) {
+        return !isStrictRealtimeCoordination();
+      }
       return (
-        !lease ||
         (lease.socketId === socket.id && lease.fenceToken === fenceToken)
       );
     } catch {
-      return true;
+      return !isStrictRealtimeCoordination();
     }
   }
+
+  private async withRoomLock<T>(roomId: string, operation: () => Promise<T>) {
+    const redis = this.redisService as RedisService & {
+      acquireLock?: (key: string, ttlMs: number) => Promise<string | null>;
+      releaseLock?: (key: string, token: string) => Promise<boolean>;
+      isAvailable?: () => boolean;
+    };
+    if (
+      typeof redis.acquireLock !== "function" ||
+      typeof redis.releaseLock !== "function" ||
+      typeof redis.isAvailable !== "function"
+    ) {
+      if (isStrictRealtimeCoordination()) {
+        throw new WsException("Realtime session coordination is unavailable.");
+      }
+      return operation();
+    }
+    if (!redis.isAvailable()) {
+      if (isStrictRealtimeCoordination()) {
+        throw new WsException("Realtime session coordination is unavailable.");
+      }
+      return operation();
+    }
+
+    const lockKey = `music-room:lock:room:${roomId}`;
+    const deadline = Date.now() + this.roomLockWaitMs;
+    let token: string | null = null;
+    while (!token && Date.now() < deadline) {
+      token = await redis.acquireLock(lockKey, this.roomLockTtlMs);
+      if (!token) {
+        await delay(20);
+      }
+    }
+    if (!token) {
+      throw new WsException("Realtime session coordination is busy.");
+    }
+
+    try {
+      return await operation();
+    } finally {
+      await redis.releaseLock(lockKey, token).catch((error) => {
+        this.logger.warn(`Unable to release session lease lock ${roomId}: ${String(error)}`);
+      });
+    }
+  }
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function isStrictRealtimeCoordination() {
+  return process.env.NODE_ENV === "production";
 }

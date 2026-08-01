@@ -13,7 +13,7 @@ import { AuthService } from "../auth/auth.service";
 import { type RoomRecord } from "./room.types";
 import { assertMember, assertPermission, incrementRoomRevision } from "./room-mutation";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
-import { RoomPresenceService } from "./services/room-presence.service";
+import { realtimePresenceTtlSeconds, RoomPresenceService } from "./services/room-presence.service";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
@@ -36,7 +36,7 @@ export class RoomService {
   // ticks. Keep a few missed ticks from turning a still-connected room member
   // offline; an actual socket disconnect still transitions through the
   // signaling gateway's reconnect/offline cleanup path.
-  private readonly presenceTtlSeconds = 180;
+  private readonly presenceTtlSeconds = realtimePresenceTtlSeconds;
   private readonly roomRegistryKey = "music-room:rooms";
   private readonly inMemoryPresence = new Map<
     string,
@@ -79,6 +79,22 @@ export class RoomService {
     @Optional()
     lifecycleService?: RoomLifecycleService
   ) {
+    const hasProductionDependencies =
+      !!roomRecordRepository &&
+      !!roomPresenceService &&
+      !!roomPlaybackService &&
+      !!roomSnapshotService &&
+      !!roomActivityService &&
+      !!presenceOrchestrator &&
+      !!contentService &&
+      !!lifecycleService;
+    if (!hasProductionDependencies && process.env.NODE_ENV !== "test") {
+      throw new Error("RoomService must be created by RoomCoreModule.");
+    }
+
+    // Direct construction is retained only for unit tests. Production always
+    // receives the complete provider graph from RoomCoreModule, so a missing
+    // provider cannot silently create a second state model.
     this.roomRecordRepository =
       roomRecordRepository ??
       new RoomRecordRepository(
@@ -104,7 +120,8 @@ export class RoomService {
         this.roomRecordRepository,
         this.roomPresenceService,
         this.roomPlaybackService,
-        this.roomActivityService
+        this.roomActivityService,
+        this.redis
       );
     this.contentService =
       contentService ??

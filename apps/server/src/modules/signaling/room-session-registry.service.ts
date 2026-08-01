@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { Server, Socket } from "socket.io";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
@@ -15,6 +15,7 @@ import { RoomSessionLeaseService } from "./room-session-lease.service";
  */
 @Injectable()
 export class RoomSessionRegistryService {
+  private readonly logger = new Logger(RoomSessionRegistryService.name);
   private readonly disconnectGracePeriodMs = 25_000;
   private readonly activeSessionsByRoom = new Map<
     string,
@@ -164,6 +165,7 @@ export class RoomSessionRegistryService {
     if (!ownsLease) {
       return;
     }
+    await this.updatePeerPresence(roomId, sessionId, null, "offline");
     const deleted = await this.sessionLease.delete(roomId, sessionId, {
       peerId,
       socketId,
@@ -173,8 +175,7 @@ export class RoomSessionRegistryService {
       return;
     }
 
-    await this.updatePeerPresence(roomId, sessionId, null, "offline");
-    this.readiness.clearForSession(roomId, sessionId);
+    this.readiness.clearForSession(roomId, sessionId, peerId);
     if (peerId) {
       this.peerSignals.clearPendingPeerSignals(roomId, peerId);
     }
@@ -207,12 +208,17 @@ export class RoomSessionRegistryService {
     sessionId: string,
     peerId: string | null,
     presenceState: "online" | "reconnecting" | "offline"
-  ) {
+  ): Promise<boolean> {
     try {
       await this.roomService.updatePeerPresence(roomId, sessionId, peerId, presenceState);
       await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
-    } catch {
-      noop();
+      return true;
+    } catch (error) {
+      this.metrics.incrementRealtimeFailure();
+      this.logger.warn(
+        `Unable to update realtime presence for ${roomId}/${sessionId} (${presenceState}): ${String(error)}`
+      );
+      return false;
     }
   }
 

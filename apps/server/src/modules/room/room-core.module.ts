@@ -4,9 +4,11 @@ import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
+import { AuthService } from "../auth/auth.service";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomPresenceService } from "./services/room-presence.service";
+import { realtimePresenceTtlSeconds } from "./services/room-presence.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
@@ -54,7 +56,7 @@ type RoomPresenceStore = Map<
       provide: RoomPresenceService,
       inject: [RedisService, ROOM_PRESENCE],
       useFactory: (redis: RedisService, presence: RoomPresenceStore) =>
-        new RoomPresenceService(redis, presence, 60)
+        new RoomPresenceService(redis, presence, realtimePresenceTtlSeconds)
     },
     {
       provide: RoomPlaybackService,
@@ -68,7 +70,47 @@ type RoomPresenceStore = Map<
       useFactory: (presence: RoomPresenceService, playback: RoomPlaybackService) =>
         new RoomSnapshotService(presence, playback)
     },
-    RoomService,
+    {
+      provide: RoomService,
+      inject: [
+        AuthService,
+        PrismaService,
+        RedisService,
+        RoomRecordRepository,
+        RoomPresenceService,
+        RoomPlaybackService,
+        RoomSnapshotService,
+        RoomActivityService,
+        RoomPresenceOrchestratorService,
+        RoomContentService,
+        RoomLifecycleService
+      ],
+      useFactory: (
+        auth: AuthService,
+        prisma: PrismaService,
+        redis: RedisService,
+        roomRecordRepository: RoomRecordRepository,
+        roomPresenceService: RoomPresenceService,
+        roomPlaybackService: RoomPlaybackService,
+        roomSnapshotService: RoomSnapshotService,
+        roomActivityService: RoomActivityService,
+        presenceOrchestrator: RoomPresenceOrchestratorService,
+        contentService: RoomContentService,
+        lifecycleService: RoomLifecycleService
+      ) => new RoomService(
+        auth,
+        prisma,
+        redis,
+        roomRecordRepository,
+        roomPresenceService,
+        roomPlaybackService,
+        roomSnapshotService,
+        roomActivityService,
+        presenceOrchestrator,
+        contentService,
+        lifecycleService
+      )
+    },
     RoomPresenceOrchestratorService,
     RoomContentService,
     RoomLifecycleService,

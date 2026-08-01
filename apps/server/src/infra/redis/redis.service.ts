@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import Redis from "ioredis";
 import { buildRedisClientArgs, getRedisConnectionMode, type RedisConnectionMode } from "./redis.config";
 
@@ -187,6 +188,37 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       "NX"
     );
     return result === "OK";
+  }
+
+  async acquireLock(key: string, ttlMs: number) {
+    this.assertReady(this.client, "publisher");
+
+    const token = randomUUID();
+    const result = await this.client.set(
+      key,
+      token,
+      "PX",
+      String(Math.max(1, Math.floor(ttlMs))),
+      "NX"
+    );
+
+    return result === "OK" ? token : null;
+  }
+
+  async releaseLock(key: string, token: string) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `if redis.call("GET", KEYS[1]) == ARGV[1] then
+         return redis.call("DEL", KEYS[1])
+       end
+       return 0`,
+      1,
+      key,
+      token
+    );
+
+    return Number(result) === 1;
   }
 
   async deleteStringIfValue(key: string, expectedValue: string) {

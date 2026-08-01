@@ -9,6 +9,7 @@ const mockRedisInstances: Array<{
   subscribe: jest.Mock;
   unsubscribe: jest.Mock;
   quit: jest.Mock;
+  set: jest.Mock;
   eval: jest.Mock;
   mget: jest.Mock;
 }> = [];
@@ -25,6 +26,7 @@ jest.mock("ioredis", () => {
       subscribe = jest.fn(async () => undefined);
       unsubscribe = jest.fn(async () => undefined);
       quit = jest.fn(async () => undefined);
+      set = jest.fn(async () => "OK");
       eval = jest.fn(async () => 1);
       mget = jest.fn(async (...keys: string[]) => keys.map((key) => `value:${key}`));
 
@@ -121,6 +123,39 @@ describe("RedisService", () => {
       "music-room:realtime-session:room_1:user_1",
       JSON.stringify({ socketId: "socket_1", fenceToken: "fence_1" }),
       "90000"
+    );
+  });
+
+  it("acquires a tokenized lock with NX and a millisecond TTL", async () => {
+    const service = new RedisService();
+    const publisher = mockRedisInstances[0];
+    publisher.status = "ready";
+
+    const token = await service.acquireLock("music-room:lock:room_1", 5_000);
+
+    expect(token).toEqual(expect.any(String));
+    expect(publisher.set).toHaveBeenCalledWith(
+      "music-room:lock:room_1",
+      token,
+      "PX",
+      "5000",
+      "NX"
+    );
+  });
+
+  it("releases a lock only when Redis still holds the same token", async () => {
+    const service = new RedisService();
+    const publisher = mockRedisInstances[0];
+    publisher.status = "ready";
+    publisher.eval.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+
+    await expect(service.releaseLock("music-room:lock:room_1", "old-token")).resolves.toBe(false);
+    await expect(service.releaseLock("music-room:lock:room_1", "current-token")).resolves.toBe(true);
+    expect(publisher.eval).toHaveBeenLastCalledWith(
+      expect.stringContaining('redis.call("GET", KEYS[1]) == ARGV[1]'),
+      1,
+      "music-room:lock:room_1",
+      "current-token"
     );
   });
 
