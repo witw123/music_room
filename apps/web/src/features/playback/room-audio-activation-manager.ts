@@ -14,6 +14,12 @@ export type RoomAudioElementPlayResult = {
 
 export type RoomAudioElementPlayOptions = {
   force?: boolean;
+  /** Remote MediaStream elements do not depend on the shared Web Audio graph. */
+  resumeAudioContext?: boolean;
+  /** Fail instead of reporting success when this element is routed through Web Audio but its context cannot run. */
+  requireRunningAudioContext?: boolean;
+  /** A muted autoplay retry is not an audible unlock on iPad Safari. */
+  allowMutedFallback?: boolean;
 };
 
 export type PrimeRoomAudioOutputsResult = {
@@ -59,7 +65,16 @@ export class RoomAudioActivationManager {
     }
 
     try {
-      await this.resumeSharedContext();
+      let audioContextReady = true;
+      if (options.resumeAudioContext !== false) {
+        audioContextReady = await this.resumeSharedContext();
+      }
+      if (options.requireRunningAudioContext && !audioContextReady) {
+        return {
+          ok: false,
+          error: "audio-context-suspended"
+        };
+      }
       const sourceKey = this.getElementSourceKey(element);
       // If the same concrete media source is already playing, skip play() to
       // avoid a potential NotAllowedError when the user gesture that started
@@ -90,6 +105,13 @@ export class RoomAudioActivationManager {
         return {
           ok: false,
           error: error instanceof Error ? error.message : "play-rejected"
+        };
+      }
+
+      if (options.allowMutedFallback === false) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : "autoplay-blocked"
         };
       }
 
@@ -196,9 +218,15 @@ export class RoomAudioActivationManager {
 
   private async resumeSharedContext() {
     const context = this.getOrCreateSharedContext();
+    if (!context) {
+      return false;
+    }
     this.installLifecycleListeners(context);
-    if (!context || context.state !== "suspended") {
-      return context !== null;
+    if (context.state === "running") {
+      return true;
+    }
+    if (context.state === "closed") {
+      return false;
     }
 
     if (this.resumeInFlight) {
@@ -314,5 +342,5 @@ export const roomAudioActivationManager = new RoomAudioActivationManager();
 function isAutoplayBlockedError(error: unknown) {
   return error instanceof DOMException
     ? error.name === "NotAllowedError"
-    : error instanceof Error && /notallowed|autoplay|user gesture|blocked/i.test(error.message);
+    : error instanceof Error && /not\s*allowed|autoplay|user gesture|blocked/i.test(error.message);
 }

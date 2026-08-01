@@ -542,6 +542,9 @@ function BottomPlayerBase({
         ref={audioRef}
         className="hidden"
         playsInline
+        // Older iPad Safari versions still consult the prefixed attribute for
+        // WebRTC MediaStream playback even when `playsInline` is present.
+        webkit-playsinline="true"
         onLoadedMetadata={() => {
           syncDurationFromAudio();
           syncProgressFromAudio();
@@ -640,5 +643,4 @@ function toFavoriteTrackCandidate(track: TrackMeta | null): ProviderTrackCandida
 }
 
 export const BottomPlayer = memo(BottomPlayerBase);
-
 

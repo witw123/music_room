@@ -225,6 +225,10 @@ export class RoomAudioOutput {
   }
 
   unbindLocalAudioElement(element?: HTMLAudioElement | null) {
+    // Creating a MediaElementAudioSourceNode permanently routes this element
+    // through Web Audio. Disconnecting the graph is cleanup only; callers
+    // must reconnect a remembered element to an audible graph rather than
+    // assuming its native speaker output can be restored.
     if (!element || this.localAudioElementGraph?.element === element) {
       this.disposeLocalAudioElementGraph();
     }

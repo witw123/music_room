@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomAudioActivationManager } from "./room-audio-activation-manager";
 
 function createAudioElementMock() {
@@ -26,6 +26,10 @@ function createAudioElementMock() {
 }
 
 describe("RoomAudioActivationManager", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("primes empty audio elements with a silent source inside the click gesture", async () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();
@@ -183,6 +187,52 @@ describe("RoomAudioActivationManager", () => {
     expect(audio.muted).toBe(false);
     expect(audio.volume).toBe(0.72);
     expect(manager.isActivated()).toBe(true);
+  });
+
+  it("does not treat muted autoplay as an audible remote-stream unlock", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    audio.srcObject = {} as MediaStream;
+    audio.play = vi.fn(async () => {
+      if (!audio.muted) {
+        throw new DOMException("blocked", "NotAllowedError");
+      }
+    });
+
+    await expect(manager.playElement(audio, {
+      resumeAudioContext: false,
+      allowMutedFallback: false
+    })).resolves.toEqual({
+      ok: false,
+      error: "blocked"
+    });
+
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(audio.muted).toBe(false);
+    expect(manager.isActivated()).toBe(false);
+  });
+
+  it("does not report a graph-routed element as audible while its context is suspended", async () => {
+    class SuspendedAudioContext {
+      state: AudioContextState = "suspended";
+      resume = vi.fn(async () => {
+        throw new DOMException("blocked", "NotAllowedError");
+      });
+      addEventListener = vi.fn();
+    }
+    vi.stubGlobal("AudioContext", SuspendedAudioContext);
+
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+
+    await expect(manager.playElement(audio, {
+      requireRunningAudioContext: true
+    })).resolves.toEqual({
+      ok: false,
+      error: "audio-context-suspended"
+    });
+
+    expect(audio.play).not.toHaveBeenCalled();
   });
 
   it("forces play for a stalled element without changing its source", async () => {

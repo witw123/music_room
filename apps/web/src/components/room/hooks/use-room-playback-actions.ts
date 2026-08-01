@@ -161,6 +161,28 @@ export function useRoomPlaybackActions({
     ]
   );
 
+  const tryUnlockRemoteAudio = useCallback(async () => {
+    const audio = audioRef.current;
+    if (isCurrentSourceOwner || !audio?.srcObject) {
+      return null;
+    }
+
+    // Most listeners use native MediaStream output. If this same element was
+    // previously connected as a source, its output cannot return to native
+    // routing, so reconnect it and resume the graph within this user gesture.
+    const remoteUsesWebAudioGraph = roomAudioOutput.hasLocalAudioElementSource(audio);
+    if (remoteUsesWebAudioGraph) {
+      roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false });
+    }
+    const result = await roomAudioOutput.playElement(audio, {
+      force: true,
+      resumeAudioContext: remoteUsesWebAudioGraph,
+      requireRunningAudioContext: remoteUsesWebAudioGraph,
+      allowMutedFallback: false
+    });
+    return result.ok;
+  }, [audioRef, isCurrentSourceOwner]);
+
   const handlePlaybackPositionChange = useCallback((positionMs: number) => {
     currentPlaybackPositionRef.current = positionMs;
   }, [currentPlaybackPositionRef]);
@@ -363,9 +385,11 @@ export function useRoomPlaybackActions({
       currentPlaybackTrackId
     ) {
       const timer = window.setTimeout(() => {
-        if (!isSegmentedAudioOutputReady()) {
-          setAudioBlockedOverlay(true);
-        }
+        // A listener may use native MediaStream output without a running
+        // AudioContext. The runtime only marks this unlocked after the
+        // concrete element's audible play() succeeds, so do not gate the
+        // overlay on the source-only Web Audio readiness check here.
+        setAudioBlockedOverlay(true);
       }, 1500);
       return () => window.clearTimeout(timer);
     }
@@ -381,6 +405,18 @@ export function useRoomPlaybackActions({
 
   const handleAudioUnlock = useCallback(async () => {
     setAudioBlockedOverlay(false);
+    const remoteUnlocked = await tryUnlockRemoteAudio();
+    if (remoteUnlocked === true) {
+      setAudioUnlocked(true);
+      setStatusMessage("");
+      return;
+    }
+    if (remoteUnlocked === false) {
+      setAudioUnlocked(false);
+      setStatusMessage("浏览器仍未允许远端音频输出，请再次点击播放或检查系统媒体权限。");
+      setAudioBlockedOverlay(true);
+      return;
+    }
     await roomAudioOutput.primeOutputs({ localAudio: audioRef.current });
     const audioReady = isSegmentedAudioOutputReady();
     setAudioUnlocked(audioReady);
@@ -390,7 +426,13 @@ export function useRoomPlaybackActions({
     }
     setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
     setAudioBlockedOverlay(true);
-  }, [audioRef, setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
+  }, [
+    audioRef,
+    setAudioBlockedOverlay,
+    setAudioUnlocked,
+    setStatusMessage,
+    tryUnlockRemoteAudio
+  ]);
 
   return {
     handleAudioUnlock,

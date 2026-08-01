@@ -612,6 +612,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
 
   async handleDisconnect(client: Socket) {
     this.realtimeRateLimits.delete(client.id);
+    this.sessionLease.invalidateSocket(client.id);
     const pendingAuthenticationTimer = this.unauthenticatedConnectionTimers.get(client.id);
     if (pendingAuthenticationTimer) {
       clearTimeout(pendingAuthenticationTimer);

@@ -83,6 +83,53 @@ describe("RoomSessionLeaseService", () => {
     }))).resolves.toBeUndefined();
   });
 
+  it("coalesces and briefly caches repeated ownership checks for one socket", async () => {
+    const redis = createRedis();
+    let resolveLease!: (value: { socketId: string; fenceToken: string }) => void;
+    redis.getJson.mockImplementation(() => new Promise((resolve) => {
+      resolveLease = resolve;
+    }));
+    const lease = new RoomSessionLeaseService(redis as never, createBroadcaster() as never);
+    const socket = createSocket({
+      roomId: "room-1",
+      sessionId: "session-1",
+      sessionFenceToken: "fence-1"
+    });
+
+    const first = lease.assert(socket);
+    const second = lease.socketOwnsLease(socket);
+    expect(redis.getJson).toHaveBeenCalledTimes(1);
+    resolveLease({ socketId: "socket-1", fenceToken: "fence-1" });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, true]);
+    await expect(lease.socketOwnsLease(socket)).resolves.toBe(true);
+    expect(redis.getJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not restore a cached ownership result after the socket is invalidated", async () => {
+    const redis = createRedis();
+    let resolveLease!: (value: { socketId: string; fenceToken: string }) => void;
+    redis.getJson
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveLease = resolve;
+      }))
+      .mockResolvedValueOnce({ socketId: "socket-2", fenceToken: "fence-2" });
+    const lease = new RoomSessionLeaseService(redis as never, createBroadcaster() as never);
+    const socket = createSocket({
+      roomId: "room-1",
+      sessionId: "session-1",
+      sessionFenceToken: "fence-1"
+    });
+
+    const staleCheck = lease.socketOwnsLease(socket);
+    lease.invalidateSocket("socket-1");
+    resolveLease({ socketId: "socket-1", fenceToken: "fence-1" });
+    await expect(staleCheck).resolves.toBe(true);
+
+    await expect(lease.socketOwnsLease(socket)).resolves.toBe(false);
+    expect(redis.getJson).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects a socket whose lease was replaced", async () => {
     const redis = createRedis();
     redis.getJson.mockResolvedValue({ socketId: "socket-2", fenceToken: "fence-2" });

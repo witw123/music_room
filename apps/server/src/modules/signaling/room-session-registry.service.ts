@@ -185,6 +185,7 @@ export class RoomSessionRegistryService {
   invalidateReplacedSocket(socket: Socket, roomId: string) {
     const sessionId = socket.data.sessionId as string | undefined;
     const peerId = socket.data.peerId as string | undefined;
+    this.sessionLease.invalidateSocket(socket.id);
     if (sessionId) {
       this.cancelPendingDisconnectCleanup(roomId, sessionId);
     }

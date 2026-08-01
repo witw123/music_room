@@ -1428,10 +1428,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.hasStarted = false;
           health.waitingSinceMs = null;
         }
-        if (
-          runtime.loudnessGainDb !== 0 ||
-          roomAudioOutput.hasLocalAudioElementSource(audio)
-        ) {
+        // An untouched listener element can use native MediaStream output,
+        // which is the most reliable path on iPad Safari. Once an element
+        // has been used as a MediaElementAudioSourceNode (for example while
+        // this member was the source), its output is permanently routed
+        // through Web Audio and it must stay connected to an audible graph.
+        // Keep loudness normalization on the native volume path for new
+        // remote elements rather than needlessly creating that permanent tie.
+        const remoteUsesWebAudioGraph = roomAudioOutput.hasLocalAudioElementSource(audio);
+        if (remoteUsesWebAudioGraph) {
           roomAudioOutput.bindLocalAudioElement(audio, {
             broadcast: false,
             loudnessGainDb: runtime.loudnessGainDb,
@@ -1491,7 +1496,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           }
         }
         const result = await roomAudioOutput.playElement(audio, {
-          force: shouldNudge
+          force: shouldNudge,
+          // New remote elements render natively. A previously graph-bound
+          // element needs a running context; otherwise play() can advance on
+          // iPad Safari while no audible route exists.
+          resumeAudioContext: remoteUsesWebAudioGraph,
+          requireRunningAudioContext: remoteUsesWebAudioGraph,
+          allowMutedFallback: false
         });
         if (!cancelled && !result.ok) {
           const blocked = isAudioPlaybackBlockedError(result.error);

@@ -7,6 +7,7 @@ describe("BottomPlayer source", () => {
 
     expect(source).toContain("ref={audioRef}");
     expect(source).toContain("playsInline");
+    expect(source).toContain('webkit-playsinline="true"');
     expect(source).not.toContain("autoPlay");
   });
 

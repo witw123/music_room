@@ -167,6 +167,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -193,6 +194,47 @@ describe("PeerConnectionLifecycleManager", () => {
       })
     );
     expect(manager.getConnectedPeerIds()).toEqual([]);
+  });
+
+  it("limits initial data negotiation and lets the newest topology supersede an in-flight sync", async () => {
+    let releaseOffers!: () => void;
+    const offerGate = new Promise<void>((resolve) => {
+      releaseOffers = resolve;
+    });
+    vi.spyOn(FakeRTCPeerConnection.prototype, "createOffer")
+      .mockImplementation(async function (this: FakeRTCPeerConnection) {
+        await offerGate;
+        this.signalingState = "have-local-offer";
+        return {
+          type: "offer" as const,
+          sdp: "gated-offer"
+        };
+      });
+    const { manager } = createManager();
+    const staleSync = manager.syncPeers([
+      "peer_b",
+      "peer_c",
+      "peer_d",
+      "peer_e",
+      "peer_f",
+      "peer_g",
+      "peer_h",
+      "peer_i",
+      "peer_j"
+    ]);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(3);
+
+    const latestSync = manager.syncPeers(["peer_z"]);
+    releaseOffers();
+    await Promise.all([staleSync, latestSync]);
+
+    expect(manager.getPeerEntry("peer_z", "data")).not.toBeNull();
+    for (const peerId of ["peer_b", "peer_c", "peer_d"]) {
+      expect(manager.getPeerEntry(peerId, "data")).toBeNull();
+    }
+    expect(FakeRTCPeerConnection.instances).toHaveLength(4);
   });
 
   it("does not prewarm listener media peers before an active source is known", async () => {

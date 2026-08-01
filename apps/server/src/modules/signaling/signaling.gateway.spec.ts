@@ -25,7 +25,8 @@ describe("SignalingGateway subscription cleanup", () => {
     };
     const sessionLease = {
       belongsTo: jest.fn().mockResolvedValue(true),
-      release: jest.fn().mockResolvedValue(undefined)
+      release: jest.fn().mockResolvedValue(undefined),
+      invalidateSocket: jest.fn()
     };
     const peerSignals = {
       unregisterPeerSocket: jest.fn(),
@@ -93,7 +94,8 @@ describe("SignalingGateway subscription cleanup", () => {
       registry,
       sessionLease: {
         belongsTo: jest.fn().mockResolvedValue(false),
-        release: jest.fn().mockResolvedValue(undefined)
+        release: jest.fn().mockResolvedValue(undefined),
+        invalidateSocket: jest.fn()
       },
       peerSignals: {
         unregisterPeerSocket: jest.fn(),

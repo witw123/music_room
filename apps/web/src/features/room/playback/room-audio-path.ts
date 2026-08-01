@@ -162,7 +162,7 @@ export function resolveCacheReadinessState(input: {
 }
 
 export function isAudioPlaybackBlockedError(error: string | null) {
-  return !!error && /notallowed|autoplay|user gesture|blocked/i.test(error);
+  return !!error && /not\s*allowed|autoplay|user gesture|blocked|audio-context-suspended/i.test(error);
 }
 
 export function isRecoverableLocalAudioError(error: string | null) {

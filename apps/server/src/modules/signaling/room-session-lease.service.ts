@@ -13,6 +13,13 @@ type SessionLease = {
   fenceToken?: string;
 };
 
+type SocketLeaseCheckResult = "owned" | "missing" | "replaced" | "unavailable";
+
+type VerifiedSocketLease = {
+  identity: string;
+  expiresAtMs: number;
+};
+
 /**
  * Single-active-socket ownership of a room session, stored in Redis. The
  * lease lets a reconnecting client reclaim its session from a stale socket
@@ -24,6 +31,13 @@ export class RoomSessionLeaseService {
   private readonly logger = new Logger(RoomSessionLeaseService.name);
   private readonly roomLockTtlMs = 30_000;
   private readonly roomLockWaitMs = 3_000;
+  // ICE candidate bursts can otherwise perform two Redis reads per signal
+  // (sender and receiver). A short positive cache keeps fencing responsive
+  // while collapsing hundreds of repeated checks during a ten-member join.
+  private readonly socketLeaseVerificationTtlMs = 1_000;
+  private readonly maxVerifiedSocketLeases = 2_048;
+  private readonly verifiedSocketLeases = new Map<string, VerifiedSocketLease>();
+  private readonly socketLeaseChecksInFlight = new Map<string, Promise<SocketLeaseCheckResult>>();
   readonly sessionLeaseTtlMs = 180_000;
 
   constructor(
@@ -56,6 +70,15 @@ export class RoomSessionLeaseService {
           },
           this.sessionLeaseTtlMs
         );
+        this.rememberSocketLease(roomId, sessionId, socketId, fenceToken);
+        if (
+          previous &&
+          typeof previous === "object" &&
+          typeof (previous as SessionLease).socketId === "string" &&
+          (previous as SessionLease).socketId !== socketId
+        ) {
+          this.invalidateSocket((previous as SessionLease).socketId);
+        }
         if (!previous || typeof previous !== "object") {
           return null;
         }
@@ -71,35 +94,15 @@ export class RoomSessionLeaseService {
   }
 
   async assert(client: Socket) {
-    const roomId = client.data.roomId as string | undefined;
-    const sessionId = client.data.sessionId as string | undefined;
-    const fenceToken = client.data.sessionFenceToken as string | undefined;
-    if (!roomId || !sessionId || !fenceToken) {
-      return;
+    const result = await this.checkSocketLease(client);
+    if (result === "replaced") {
+      throw new WsException("Realtime session was replaced.");
     }
-
-    try {
-      const lease = await this.redisService.getJson<{
-        socketId?: string;
-        fenceToken?: string;
-      }>(this.key(roomId, sessionId));
-      if (!lease && isStrictRealtimeCoordination()) {
-        throw new WsException("Realtime session lease is missing.");
-      }
-      if (
-        lease &&
-        (lease.socketId !== client.id || lease.fenceToken !== fenceToken)
-      ) {
-        throw new WsException("Realtime session was replaced.");
-      }
-    } catch (error) {
-      if (error instanceof WsException) {
-        throw error;
-      }
-      if (isStrictRealtimeCoordination()) {
-        throw new WsException("Realtime session coordination is unavailable.");
-      }
-      // Local signaling remains available in development when Redis is down.
+    if (result === "missing") {
+      throw new WsException("Realtime session lease is missing.");
+    }
+    if (result === "unavailable") {
+      throw new WsException("Realtime session coordination is unavailable.");
     }
   }
 
@@ -109,7 +112,7 @@ export class RoomSessionLeaseService {
     const peerId = client.data.peerId as string;
     const fenceToken = client.data.sessionFenceToken as string;
     try {
-      return await this.redisService.renewJsonLeaseIfValue(
+      const renewed = await this.redisService.renewJsonLeaseIfValue(
         this.key(roomId, sessionId),
         {
           instanceId: this.roomRealtimeBroadcaster.instanceId,
@@ -121,7 +124,14 @@ export class RoomSessionLeaseService {
         },
         this.sessionLeaseTtlMs
       );
+      if (renewed) {
+        this.rememberSocketLease(roomId, sessionId, client.id, fenceToken);
+      } else {
+        this.invalidateSocket(client.id);
+      }
+      return renewed;
     } catch {
+      this.invalidateSocket(client.id);
       return !isStrictRealtimeCoordination();
     }
   }
@@ -133,6 +143,7 @@ export class RoomSessionLeaseService {
     if (!roomId || !sessionId || !fenceToken) {
       return;
     }
+    this.invalidateSocket(client.id);
     try {
       await this.redisService.deleteJsonIfValue(this.key(roomId, sessionId), {
         instanceId: this.roomRealtimeBroadcaster.instanceId,
@@ -180,6 +191,8 @@ export class RoomSessionLeaseService {
       return false;
     }
 
+    this.invalidateSocket(expected.socketId);
+
     try {
       // The old socket may be racing a replacement. Compare and delete in one
       // Redis operation so a lease claimed after this cleanup starts cannot
@@ -199,27 +212,114 @@ export class RoomSessionLeaseService {
   }
 
   async socketOwnsLease(socket: Socket) {
+    return (await this.checkSocketLease(socket)) === "owned";
+  }
+
+  invalidateSocket(socketId?: string) {
+    if (!socketId) {
+      return;
+    }
+    this.verifiedSocketLeases.delete(socketId);
+    for (const key of this.socketLeaseChecksInFlight.keys()) {
+      if (key.startsWith(`${socketId}:`)) {
+        this.socketLeaseChecksInFlight.delete(key);
+      }
+    }
+  }
+
+  private async checkSocketLease(socket: Socket): Promise<SocketLeaseCheckResult> {
     const roomId = socket.data.roomId as string | undefined;
     const sessionId = socket.data.sessionId as string | undefined;
     const fenceToken = socket.data.sessionFenceToken as string | undefined;
     if (!roomId || !sessionId || !fenceToken) {
-      return true;
+      return "owned";
     }
 
-    try {
-      const lease = await this.redisService.getJson<{
-        socketId?: string;
-        fenceToken?: string;
-      }>(this.key(roomId, sessionId));
-      if (!lease) {
-        return !isStrictRealtimeCoordination();
-      }
-      return (
-        (lease.socketId === socket.id && lease.fenceToken === fenceToken)
-      );
-    } catch {
-      return !isStrictRealtimeCoordination();
+    const identity = this.socketLeaseIdentity(roomId, sessionId, socket.id, fenceToken);
+    const cached = this.verifiedSocketLeases.get(socket.id);
+    if (cached?.identity === identity && cached.expiresAtMs > Date.now()) {
+      return "owned";
     }
+    if (cached) {
+      this.verifiedSocketLeases.delete(socket.id);
+    }
+
+    const inFlightKey = `${socket.id}:${identity}`;
+    const currentCheck = this.socketLeaseChecksInFlight.get(inFlightKey);
+    if (currentCheck) {
+      return currentCheck;
+    }
+
+    const check = (async (): Promise<SocketLeaseCheckResult> => {
+      try {
+        const lease = await this.redisService.getJson<{
+          socketId?: string;
+          fenceToken?: string;
+        }>(this.key(roomId, sessionId));
+        if (!lease) {
+          return isStrictRealtimeCoordination() ? "missing" : "owned";
+        }
+        if (lease.socketId !== socket.id || lease.fenceToken !== fenceToken) {
+          return "replaced";
+        }
+        return "owned";
+      } catch {
+        return isStrictRealtimeCoordination() ? "unavailable" : "owned";
+      }
+    })();
+    this.socketLeaseChecksInFlight.set(inFlightKey, check);
+    try {
+      const result = await check;
+      if (
+        result === "owned" &&
+        this.socketLeaseChecksInFlight.get(inFlightKey) === check &&
+        socket.data.roomId === roomId &&
+        socket.data.sessionId === sessionId &&
+        socket.data.sessionFenceToken === fenceToken
+      ) {
+        this.rememberSocketLease(roomId, sessionId, socket.id, fenceToken);
+      }
+      return result;
+    } finally {
+      if (this.socketLeaseChecksInFlight.get(inFlightKey) === check) {
+        this.socketLeaseChecksInFlight.delete(inFlightKey);
+      }
+    }
+  }
+
+  private rememberSocketLease(
+    roomId: string,
+    sessionId: string,
+    socketId: string,
+    fenceToken: string
+  ) {
+    const now = Date.now();
+    if (this.verifiedSocketLeases.size >= this.maxVerifiedSocketLeases) {
+      for (const [cachedSocketId, cachedLease] of this.verifiedSocketLeases) {
+        if (cachedLease.expiresAtMs <= now) {
+          this.verifiedSocketLeases.delete(cachedSocketId);
+        }
+      }
+      if (this.verifiedSocketLeases.size >= this.maxVerifiedSocketLeases) {
+        const oldestSocketId = this.verifiedSocketLeases.keys().next().value;
+        if (typeof oldestSocketId === "string") {
+          this.verifiedSocketLeases.delete(oldestSocketId);
+        }
+      }
+    }
+    this.verifiedSocketLeases.set(socketId, {
+      identity: this.socketLeaseIdentity(roomId, sessionId, socketId, fenceToken),
+      expiresAtMs: now + this.socketLeaseVerificationTtlMs
+    });
+  }
+
+  private socketLeaseIdentity(
+    roomId: string,
+    sessionId: string,
+    socketId: string,
+    fenceToken: string
+  ) {
+    return `${roomId}:${sessionId}:${socketId}:${fenceToken}`;
   }
 
   private async withRoomLock<T>(roomId: string, operation: () => Promise<T>) {

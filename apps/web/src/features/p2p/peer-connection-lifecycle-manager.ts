@@ -105,6 +105,16 @@ type MediaRecoveryState = {
   disconnectedTimerId: ReturnType<typeof setTimeout> | null;
 };
 
+type PendingTopologySync = {
+  remotePeerIds: string[];
+  options?: { forceReconnectDegraded?: boolean };
+  requestVersion: number;
+  waiters: Array<{
+    resolve: () => void;
+    reject: (error: unknown) => void;
+  }>;
+};
+
 const mediaTrackWatchdogGraceMs = 3_000;
 // A media recovery is an SDP/ICE operation and can briefly replace the
 // receiver's playout path. Persistent network failure must not turn this into
@@ -120,6 +130,12 @@ const mediaIceRestartAttemptsBeforeRecreate = 2;
 // A source creates one media PC per listener. Give ICE/DTLS a short head start
 // between new PCs so a ten-member join does not produce one signaling burst.
 const mediaTopologyStaggerMs = 75;
+// Data links carry room control traffic and should become usable quickly, but
+// creating every RTCPeerConnection at once can flood ICE and signaling. Three
+// concurrent negotiations keeps a ten-member room responsive without causing
+// another candidate burst.
+const dataTopologyConcurrency = 3;
+const topologyRetryDelayMs = 1_500;
 const receiverPlayoutDelaySeconds = 0.3;
 const receiverJitterBufferTargetMs = 300;
 const receiverElevatedPlayoutDelaySeconds = 0.5;
@@ -192,6 +208,11 @@ export class PeerConnectionLifecycleManager {
   // explicitly expected peers may allocate a new RTCPeerConnection.
   private topologyInitialized = false;
   private topologyOperationChain: Promise<void> = Promise.resolve();
+  private pendingTopologySync: PendingTopologySync | null = null;
+  private topologySyncDrainScheduled = false;
+  private topologySyncRequestVersion = 0;
+  private topologyRetryTimerId: ReturnType<typeof setTimeout> | null = null;
+  private topologyRetryRequestVersion: number | null = null;
   private destroyed = false;
 
   constructor(input: PeerConnectionLifecycleManagerInput) {
@@ -266,37 +287,127 @@ export class PeerConnectionLifecycleManager {
     if (this.destroyed) {
       return Promise.resolve();
     }
-    return this.enqueueTopologyOperation(() => this.syncPeersNow(remotePeerIds, options));
+
+    const requestVersion = ++this.topologySyncRequestVersion;
+    const normalizedPeerIds = [...new Set(remotePeerIds.filter(Boolean))];
+    return new Promise<void>((resolve, reject) => {
+      const pending = this.pendingTopologySync;
+      if (pending) {
+        // Presence, snapshot, and subscribe acknowledgements can all describe
+        // the same room transition. Keep only the newest member list and let
+        // every caller waiting on the superseded request complete together.
+        pending.remotePeerIds = normalizedPeerIds;
+        pending.options = {
+          forceReconnectDegraded: Boolean(
+            pending.options?.forceReconnectDegraded || options?.forceReconnectDegraded
+          )
+        };
+        pending.requestVersion = requestVersion;
+        pending.waiters.push({ resolve, reject });
+      } else {
+        this.pendingTopologySync = {
+          remotePeerIds: normalizedPeerIds,
+          options,
+          requestVersion,
+          waiters: [{ resolve, reject }]
+        };
+      }
+      this.scheduleTopologySyncDrain();
+    });
+  }
+
+  private scheduleTopologySyncDrain() {
+    if (this.destroyed || this.topologySyncDrainScheduled) {
+      return;
+    }
+    this.topologySyncDrainScheduled = true;
+    const operation = this.enqueueTopologyOperation(async () => {
+      this.topologySyncDrainScheduled = false;
+      const pending = this.pendingTopologySync;
+      this.pendingTopologySync = null;
+      if (!pending) {
+        return;
+      }
+
+      try {
+        await this.syncPeersNow(
+          pending.remotePeerIds,
+          pending.options,
+          pending.requestVersion
+        );
+        for (const waiter of pending.waiters) {
+          waiter.resolve();
+        }
+      } catch (error) {
+        for (const waiter of pending.waiters) {
+          waiter.reject(error);
+        }
+      } finally {
+        // A newer request may have arrived while the current topology was
+        // negotiating. Schedule it after this operation so stale cleanup
+        // cannot overtake the latest member list.
+        if (this.pendingTopologySync) {
+          this.scheduleTopologySyncDrain();
+        }
+      }
+    });
+    void operation.catch(() => undefined);
   }
 
   private async syncPeersNow(
     remotePeerIds: string[],
-    options?: { forceReconnectDegraded?: boolean }
+    options?: { forceReconnectDegraded?: boolean },
+    requestVersion = this.topologySyncRequestVersion
   ) {
-    if (this.destroyed) {
+    // A newer snapshot can arrive while this operation is waiting behind a
+    // media recovery. Do not briefly publish its obsolete member list before
+    // the latest-only drain gets a chance to run.
+    if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
       return;
     }
     const nextPeers = this.peerConnections.setExpectedRemotePeerIds(remotePeerIds);
     this.expectedRemotePeerIds = nextPeers;
     this.topologyInitialized = true;
 
-    for (const peerId of nextPeers) {
-      const existing = this.peerConnections.get(peerId, "data");
-      if (
-        existing &&
-        (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing))
-      ) {
-        await this.recreatePeerNow(peerId, existing);
+    const dataPeerIds = [...nextPeers];
+    for (let offset = 0; offset < dataPeerIds.length; offset += dataTopologyConcurrency) {
+      if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
+        return;
       }
+      const batch = dataPeerIds.slice(offset, offset + dataTopologyConcurrency);
+      await Promise.all(batch.map(async (peerId) => {
+        try {
+          if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
+            return;
+          }
+          let existing = this.peerConnections.get(peerId, "data");
+          if (
+            existing &&
+            (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing))
+          ) {
+            await this.recreatePeerNow(peerId, existing);
+            existing = this.peerConnections.get(peerId, "data");
+          }
 
-      if (!existing) {
-        await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "data");
-      }
+          if (!existing) {
+            await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "data");
+          }
 
-      const dataEntry = this.peerConnections.get(peerId, "data");
-      if (dataEntry) {
-        this.schedulePeerWatchdog(peerId, dataEntry);
-      }
+          const dataEntry = this.peerConnections.get(peerId, "data");
+          if (dataEntry) {
+            this.schedulePeerWatchdog(peerId, dataEntry);
+          }
+        } catch {
+          // A failed member negotiation must not block the remaining batch;
+          // schedule a room-wide retry because no entry remains for a
+          // watchdog to observe.
+          this.scheduleTopologyRetry(requestVersion);
+        }
+      }));
+    }
+
+    if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
+      return;
     }
 
     for (const [peerId, entry] of this.peerConnections.allEntries()) {
@@ -317,7 +428,10 @@ export class PeerConnectionLifecycleManager {
       }
     }
 
-    await this.reconcileMediaTopology();
+    if (requestVersion !== this.topologySyncRequestVersion) {
+      return;
+    }
+    await this.reconcileMediaTopology(requestVersion);
   }
 
   private enqueueTopologyOperation<T>(task: () => Promise<T>) {
@@ -327,6 +441,32 @@ export class PeerConnectionLifecycleManager {
       () => undefined
     );
     return operation;
+  }
+
+  private scheduleTopologyRetry(requestVersion = this.topologySyncRequestVersion) {
+    if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
+      return;
+    }
+    this.topologyRetryRequestVersion = requestVersion;
+    if (this.topologyRetryTimerId !== null) {
+      return;
+    }
+    this.topologyRetryTimerId = setTimeout(() => {
+      this.topologyRetryTimerId = null;
+      const retryVersion = this.topologyRetryRequestVersion;
+      this.topologyRetryRequestVersion = null;
+      if (
+        this.destroyed ||
+        retryVersion === null ||
+        retryVersion !== this.topologySyncRequestVersion ||
+        this.expectedRemotePeerIds.size === 0
+      ) {
+        return;
+      }
+      void this.syncPeers([...this.expectedRemotePeerIds]).catch(() => {
+        this.scheduleTopologyRetry(this.topologySyncRequestVersion);
+      });
+    }, topologyRetryDelayMs);
   }
 
   private expectedMediaPeerIds() {
@@ -432,8 +572,8 @@ export class PeerConnectionLifecycleManager {
     }
   }
 
-  private async reconcileMediaTopology() {
-    if (this.destroyed) {
+  private async reconcileMediaTopology(requestVersion = this.topologySyncRequestVersion) {
+    if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
       return;
     }
     const expectedMedia = this.expectedMediaPeerIds();
@@ -450,6 +590,9 @@ export class PeerConnectionLifecycleManager {
 
     let lastCreatedMediaPeerAtMs: number | null = null;
     for (const peerId of expectedMedia) {
+      if (this.destroyed || requestVersion !== this.topologySyncRequestVersion) {
+        return;
+      }
       const isNewMediaPeer = !this.peerConnections.get(peerId, "media");
       if (isNewMediaPeer && lastCreatedMediaPeerAtMs !== null) {
         const elapsedMs = Date.now() - lastCreatedMediaPeerAtMs;
@@ -458,15 +601,34 @@ export class PeerConnectionLifecycleManager {
           await new Promise((resolve) => setTimeout(resolve, remainingMs));
         }
       }
-      if (this.destroyed || !this.expectedMediaPeerIds().has(peerId)) {
+      if (
+        this.destroyed ||
+        requestVersion !== this.topologySyncRequestVersion ||
+        !this.expectedMediaPeerIds().has(peerId)
+      ) {
         continue;
       }
-      const entry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      let entry: PeerEntry;
+      try {
+        entry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      } catch {
+        // Media negotiation is independent per listener. Leave the failed
+        // member to the shared topology retry without delaying the rest of
+        // the room topology.
+        this.scheduleTopologyRetry(requestVersion);
+        continue;
+      }
+      if (requestVersion !== this.topologySyncRequestVersion) {
+        return;
+      }
       if (isNewMediaPeer) {
         lastCreatedMediaPeerAtMs = Date.now();
       }
       this.scheduleMediaWatchdog(peerId, entry);
       await this.enqueueMediaOperation(peerId, entry).catch(() => undefined);
+      if (requestVersion !== this.topologySyncRequestVersion) {
+        return;
+      }
       this.syncMediaStatsSampling(peerId, entry);
     }
   }
@@ -567,7 +729,8 @@ export class PeerConnectionLifecycleManager {
     this.localAudioSourcePeerId = sourcePeerId;
     this.localAudioMaxBitrateKbps = normalizedBitrateKbps;
     this.localMediaTrafficExpected = mediaTrafficExpected;
-    void this.enqueueTopologyOperation(() => this.reconcileMediaTopology()).catch(() => undefined);
+    const requestVersion = this.topologySyncRequestVersion;
+    void this.enqueueTopologyOperation(() => this.reconcileMediaTopology(requestVersion)).catch(() => undefined);
   }
 
   setMediaPlaybackEnabled(enabled: boolean) {
@@ -576,7 +739,8 @@ export class PeerConnectionLifecycleManager {
     }
 
     this.mediaPlaybackEnabled = enabled;
-    return this.enqueueTopologyOperation(() => this.reconcileMediaTopology()).catch(() => undefined);
+    const requestVersion = this.topologySyncRequestVersion;
+    return this.enqueueTopologyOperation(() => this.reconcileMediaTopology(requestVersion)).catch(() => undefined);
   }
 
   async getOrCreatePeerEntry(peerId: string, linkKind: PeerLinkKind = "data") {
@@ -890,6 +1054,16 @@ export class PeerConnectionLifecycleManager {
 
   destroy() {
     this.destroyed = true;
+    if (this.topologyRetryTimerId !== null) {
+      clearTimeout(this.topologyRetryTimerId);
+      this.topologyRetryTimerId = null;
+    }
+    this.topologyRetryRequestVersion = null;
+    const pendingTopologySync = this.pendingTopologySync;
+    this.pendingTopologySync = null;
+    for (const waiter of pendingTopologySync?.waiters ?? []) {
+      waiter.resolve();
+    }
     this.mediaPlaybackEnabled = false;
     this.peerConnections.clearExpected();
     this.expectedRemotePeerIds.clear();
