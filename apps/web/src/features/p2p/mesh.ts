@@ -195,7 +195,10 @@ export class P2PMesh {
     return this.peerLifecycle.restartIce(peerId);
   }
 
-  async restartMediaPeer(peerId: string, options?: { forceRecreate?: boolean }) {
+  async restartMediaPeer(
+    peerId: string,
+    options?: { forceRecreate?: boolean; forceIceRestart?: boolean }
+  ) {
     return this.peerLifecycle.restartMediaPeer(peerId, options);
   }
 

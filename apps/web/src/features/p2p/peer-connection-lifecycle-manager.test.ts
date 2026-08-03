@@ -1216,7 +1216,7 @@ describe("PeerConnectionLifecycleManager", () => {
     ).toHaveLength(1);
   });
 
-  it("does not restart a connected live media peer for sustained loss or jitter", async () => {
+  it("restarts a connected live media peer after sustained high loss", async () => {
     const { manager, sendSignal } = createManager();
     const track = { id: "stable-source-track", readyState: "live" } as MediaStreamTrack;
     const stream = {
@@ -1247,11 +1247,12 @@ describe("PeerConnectionLifecycleManager", () => {
 
     expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
     expect(mediaPeer.connectionState).toBe("connected");
+    expect(mediaPeer.restartIce).toHaveBeenCalledTimes(1);
     expect(
       (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
         .map(([payload]) => payload as PeerSignalMessage)
         .filter((payload) => payload.linkKind === "media" && payload.type === "offer")
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it("expands the receiver jitter buffer during loss and restores it after healthy windows", async () => {

@@ -126,6 +126,12 @@ const mediaNoReceiveRecoveryWindows = 4;
 const mediaNoSendRecoveryWindows = 4;
 const mediaRecoveryHealthyLossThreshold = 3;
 const mediaRecoveryHealthyJitterThreshold = 20;
+// A single stats window can contain a burst caused by Wi-Fi contention or a
+// browser scheduling pause. Require several consecutive windows before
+// replacing a still-connected RTP path. At the normal 1-2s sampling cadence
+// this corresponds to roughly 3-6 seconds of sustained impairment.
+const mediaSustainedLossRecoveryWindows = 3;
+const mediaSustainedJitterRecoveryWindows = 3;
 const mediaPositiveRtpFreshMs = 4_000;
 const incomingPeerAdmissionGraceMs = 8_000;
 const dataPassiveNegotiationTakeoverMs = 4_000;
@@ -912,7 +918,10 @@ export class PeerConnectionLifecycleManager {
     });
   }
 
-  async restartMediaPeer(peerId: string, options?: { forceRecreate?: boolean }) {
+  async restartMediaPeer(
+    peerId: string,
+    options?: { forceRecreate?: boolean; forceIceRestart?: boolean }
+  ) {
     const intentGeneration = this.mediaIntentGeneration;
     const inFlight = this.mediaRecoveryOperations.get(peerId);
     if (inFlight?.intentGeneration === intentGeneration) {
@@ -938,7 +947,7 @@ export class PeerConnectionLifecycleManager {
 
   private async restartMediaPeerNow(
     peerId: string,
-    options: { forceRecreate?: boolean } | undefined,
+    options: { forceRecreate?: boolean; forceIceRestart?: boolean } | undefined,
     intentGeneration: number
   ) {
     if (this.destroyed || intentGeneration !== this.mediaIntentGeneration) {
@@ -994,10 +1003,11 @@ export class PeerConnectionLifecycleManager {
       return nextEntry;
     }
 
-    if (mediaTransportFailed) {
-      // A failed ICE transport does not invalidate the negotiated media
-      // section or its sender/receiver track. Restart ICE on this incarnation
-      // first so both peers keep the same RTP identity and jitter buffer.
+    if (mediaTransportFailed || options?.forceIceRestart) {
+      // A failed or persistently lossy ICE transport does not invalidate the
+      // negotiated media section or its sender/receiver track. Restart ICE on
+      // this incarnation first so both peers keep the same RTP identity and
+      // jitter buffer.
       return this.restartMediaIceInPlace(peerId, entry);
     }
 
@@ -1050,7 +1060,7 @@ export class PeerConnectionLifecycleManager {
         entry.connection.connectionState !== "connected" ||
         entry.connection.iceConnectionState === "disconnected" ||
         entry.connection.iceConnectionState === "failed";
-      if (mediaTransportNeedsIceRestart) {
+      if (mediaTransportNeedsIceRestart || options?.forceIceRestart) {
         return this.restartMediaIceInPlace(peerId, entry, { alreadyQueued: true });
       }
       if (isLocalSource) {
@@ -2223,7 +2233,10 @@ export class PeerConnectionLifecycleManager {
       (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
       hasRecentPositiveRtp &&
       reason !== "no-packets";
-    if (connectedLiveMedia || liveMediaDuringIceRecovery) {
+    const sustainedQualityFailure =
+      (reason === "loss" && state.highLossWindows >= mediaSustainedLossRecoveryWindows) ||
+      (reason === "jitter" && state.highJitterWindows >= mediaSustainedJitterRecoveryWindows);
+    if ((connectedLiveMedia || liveMediaDuringIceRecovery) && !sustainedQualityFailure) {
       // A connected PeerConnection with a live negotiated track is still the
       // least disruptive playback path while RTP is still arriving. A live
       // track alone is not enough: browsers can keep it live after the RTP
@@ -2276,12 +2289,20 @@ export class PeerConnectionLifecycleManager {
     const transportStillUnusable = entry.connection.connectionState !== "connected" ||
       entry.connection.iceConnectionState === "disconnected" ||
       entry.connection.iceConnectionState === "failed";
+    const forceQualityRecreate = sustainedQualityFailure &&
+      restartCount > mediaIceRestartAttemptsBeforeRecreate;
     const recoveryOperation = this.restartMediaPeer(peerId, {
       // ICE restart is the normal recovery operation. Recreate the media PC
-      // only when it is already closed or repeated in-place restarts failed;
-      // otherwise each retry discards an otherwise reusable RTP session.
+      // only when it is already closed or repeated in-place recovery failed
+      // (including a persistent lossy candidate pair); otherwise each retry
+      // discards an otherwise reusable RTP session.
       forceRecreate: transportClosed ||
-        (transportStillUnusable && restartCount > mediaIceRestartAttemptsBeforeRecreate)
+        (transportStillUnusable && restartCount > mediaIceRestartAttemptsBeforeRecreate) ||
+        forceQualityRecreate,
+      // A connected PeerConnection can still carry RTP while its selected
+      // candidate pair is persistently lossy. In that case an in-place ICE
+      // restart is the least disruptive way to force a fresh candidate pair.
+      forceIceRestart: sustainedQualityFailure && !forceQualityRecreate
     });
     const continueRecovery = () => {
       if (this.destroyed || !this.expectedMediaPeerIds().has(peerId)) {
