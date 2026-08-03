@@ -192,7 +192,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
       ...message,
       sequence: this.peerSignals.nextSequence(),
       recoveryGeneration:
-        message.recoveryGeneration ?? this.peerSignals.resolvePeerRecoveryGeneration(message.roomId, message.toPeerId)
+        message.recoveryGeneration ?? this.peerSignals.resolvePeerRecoveryGeneration(message.roomId, message.toPeerId),
+      senderRecoveryGeneration:
+        this.peerSignals.resolvePeerRecoveryGeneration(message.roomId, message.fromPeerId)
     } as PeerSignalMessage;
 
     await this.peerSignals.emitToPeer(message.roomId, nextPayload.toPeerId, nextPayload);

@@ -538,6 +538,93 @@ describe("SignalingTransport", () => {
     expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts a reset connection generation after the sender reconnects", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const getOrCreatePeerEntry = vi.fn(async () => buildSignalEntry());
+    const handlers = {
+      getOrCreatePeerEntry,
+      runPeerOperation: async <T>(
+        _entry: ReturnType<typeof buildSignalEntry>,
+        task: () => Promise<T>
+      ) => task(),
+      applyRemoteDescription: vi.fn(),
+      flushPendingCandidates: vi.fn()
+    };
+
+    await transport.handleIncomingSignal(
+      buildSignal({
+        recoveryGeneration: 5,
+        senderRecoveryGeneration: 11,
+        connectionGeneration: 9,
+        sequence: 20
+      }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({
+        recoveryGeneration: 5,
+        senderRecoveryGeneration: 12,
+        connectionGeneration: 1,
+        sequence: 21
+      }),
+      handlers
+    );
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops delayed signals from an older sender recovery generation", async () => {
+    const transport = new SignalingTransport({
+      roomId: "room_1",
+      localPeerId: "peer_a",
+      sendSignal: vi.fn()
+    });
+    const getOrCreatePeerEntry = vi.fn(async () => buildSignalEntry());
+    const handlers = {
+      getOrCreatePeerEntry,
+      runPeerOperation: async <T>(
+        _entry: ReturnType<typeof buildSignalEntry>,
+        task: () => Promise<T>
+      ) => task(),
+      applyRemoteDescription: vi.fn(),
+      flushPendingCandidates: vi.fn()
+    };
+
+    await transport.handleIncomingSignal(
+      buildSignal({
+        recoveryGeneration: 5,
+        senderRecoveryGeneration: 11,
+        connectionGeneration: 9,
+        sequence: 20
+      }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({
+        recoveryGeneration: 5,
+        senderRecoveryGeneration: 12,
+        connectionGeneration: 1,
+        sequence: 21
+      }),
+      handlers
+    );
+    await transport.handleIncomingSignal(
+      buildSignal({
+        recoveryGeneration: 5,
+        senderRecoveryGeneration: 11,
+        connectionGeneration: 10,
+        sequence: 22
+      }),
+      handlers
+    );
+
+    expect(getOrCreatePeerEntry).toHaveBeenCalledTimes(2);
+  });
+
   it("drops an untagged signal after a tagged connection has started", async () => {
     const transport = new SignalingTransport({
       roomId: "room_1",

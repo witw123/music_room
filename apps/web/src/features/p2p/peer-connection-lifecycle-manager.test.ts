@@ -587,6 +587,29 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaOffers).toHaveLength(0);
   });
 
+  it("recovers a persistently disconnected live media peer when RTP stats are unavailable", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaEntry.receiverTrackState = "live";
+    mediaEntry.receiverRtpActive = true;
+    mediaPeer.connectionState = "disconnected";
+    mediaPeer.onconnectionstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(manager.getPeerEntry("peer_b", "media")).toBe(mediaEntry);
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(1);
+  });
+
   it("recovers a disconnected live media peer after positive RTP stops", async () => {
     const { manager, sendSignal } = createManager();
 

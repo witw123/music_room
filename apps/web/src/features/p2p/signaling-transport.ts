@@ -100,6 +100,7 @@ export class SignalingTransport {
   private readonly sendSignal: (payload: PeerSignalMessage) => void;
   private readonly onSignal?: SignalDiagnosticRecorder;
   private readonly incomingSignalOrder = new Map<string, IncomingSignalOrder>();
+  private readonly latestSenderRecoveryGeneration = new Map<string, number>();
 
   constructor(input: {
     roomId: string;
@@ -291,7 +292,14 @@ export class SignalingTransport {
       return false;
     }
 
-    const { key, previous, connectionGeneration, sequence } =
+    const {
+      key,
+      previous,
+      connectionGeneration,
+      sequence,
+      senderRecoveryKey,
+      senderRecoveryGeneration
+    } =
       this.getIncomingSignalOrderState(payload);
 
     const generationChanged = previous !== undefined &&
@@ -310,14 +318,43 @@ export class SignalingTransport {
         connectionGeneration ?? previous?.connectionGeneration ?? null,
       sequenceByType
     });
+    if (senderRecoveryGeneration !== null) {
+      const previousSenderGeneration = this.latestSenderRecoveryGeneration.get(senderRecoveryKey);
+      if (previousSenderGeneration === undefined || senderRecoveryGeneration > previousSenderGeneration) {
+        this.latestSenderRecoveryGeneration.set(senderRecoveryKey, senderRecoveryGeneration);
+        const prefix = `${senderRecoveryKey}:`;
+        for (const existingKey of this.incomingSignalOrder.keys()) {
+          if (existingKey.startsWith(prefix) && existingKey !== key) {
+            this.incomingSignalOrder.delete(existingKey);
+          }
+        }
+      }
+    }
     return true;
   }
 
   private canAcceptIncomingSignalOrder(payload: PeerSignalMessage) {
-    const { previous, connectionGeneration, sequence } =
+    const {
+      previous,
+      connectionGeneration,
+      sequence,
+      senderRecoveryGeneration,
+      senderRecoveryKey
+    } =
       this.getIncomingSignalOrderState(payload);
     if (!previous) {
-      return true;
+      const latestSenderGeneration = this.latestSenderRecoveryGeneration.get(senderRecoveryKey);
+      return senderRecoveryGeneration !== null &&
+        latestSenderGeneration !== undefined
+        ? senderRecoveryGeneration >= latestSenderGeneration
+        : true;
+    }
+
+    const latestSenderGeneration = this.latestSenderRecoveryGeneration.get(senderRecoveryKey);
+    if (latestSenderGeneration !== undefined) {
+      if (senderRecoveryGeneration === null || senderRecoveryGeneration < latestSenderGeneration) {
+        return false;
+      }
     }
 
     // Once a peer has announced a connection incarnation, an untagged signal
@@ -347,13 +384,17 @@ export class SignalingTransport {
 
   private getIncomingSignalOrderState(payload: PeerSignalMessage) {
     const linkKind = payload.linkKind ?? "data";
-    const recoveryGeneration = payload.recoveryGeneration ?? 0;
-    const key = `${payload.fromPeerId}:${linkKind}:${recoveryGeneration}`;
+    const targetRecoveryGeneration = payload.recoveryGeneration ?? 0;
+    const senderRecoveryGeneration = payload.senderRecoveryGeneration ?? null;
+    const senderRecoveryKey = `${payload.fromPeerId}:${linkKind}:${targetRecoveryGeneration}`;
+    const key = `${senderRecoveryKey}:${senderRecoveryGeneration ?? 0}`;
     return {
       key,
+      senderRecoveryKey,
       previous: this.incomingSignalOrder.get(key),
       connectionGeneration: payload.connectionGeneration ?? null,
-      sequence: payload.sequence ?? null
+      sequence: payload.sequence ?? null,
+      senderRecoveryGeneration
     };
   }
 }

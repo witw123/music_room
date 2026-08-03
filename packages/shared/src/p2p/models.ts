@@ -30,7 +30,11 @@ export const peerSignalMessageSchema = z.object({
   // rolling-upgrade window.
   channelKind: z.literal("data"),
   linkKind: z.enum(["data", "media"]).optional(),
+  // The target generation fences signals queued for an older receiver
+  // session. The sender generation gives ordering a new namespace when the
+  // remote browser/runtime reconnects and its local connection ids restart.
   recoveryGeneration: z.number().int().nonnegative().optional(),
+  senderRecoveryGeneration: z.number().int().nonnegative().optional(),
   connectionGeneration: z.number().int().positive().optional(),
   sequence: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),

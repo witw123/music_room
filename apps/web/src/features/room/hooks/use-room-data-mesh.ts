@@ -85,8 +85,7 @@ export function resolveDataPeerRecoveryRecommendation(input: {
   const failedDataChannel = input.dataChannelState === "closed";
   const failedDataConnection =
     input.dataConnectionState === "closed" ||
-    input.dataConnectionState === "failed" ||
-    input.dataConnectionState === "disconnected";
+    input.dataConnectionState === "failed";
   const stalledReason =
     input.reason === "watchdog-timeout" ||
     input.reason === "connection-failed" ||
@@ -274,9 +273,9 @@ export function createRoomDataMeshRuntime(input: {
           peerId,
           state === "connected" && input.meshRef.current?.getConnectedPeerIds().includes(peerId) === true
         );
-        if (["closed", "failed", "disconnected"].includes(state)) {
+        if (state === "closed" || state === "failed") {
           peerBufferedAmountBytes.delete(peerId);
-          queueDataPeerRecovery(peerId, state === "disconnected" ? "data-disconnected" : "data-failed", state);
+          queueDataPeerRecovery(peerId, "data-failed", state);
         }
       },
       onIceConnectionStateChange: ({ peerId, state, linkKind = "data" }) => {

@@ -103,6 +103,7 @@ type MediaRecoveryState = {
   restartTimesMs: number[];
   failureReportedAtMs: number | null;
   disconnectedTimerId: ReturnType<typeof setTimeout> | null;
+  disconnectedSinceMs: number | null;
 };
 
 type PendingTopologySync = {
@@ -148,6 +149,10 @@ const receiverHealthyJitterThreshold = 10;
 // repairing the selected candidate pair. Re-offering during that window
 // replaces a usable RTP path and is much more disruptive than the outage.
 const mediaDisconnectedRecoveryDelayMs = 10_000;
+// Some WebKit builds expose a live receiver track but omit comparable RTP
+// counters. That is useful as a short grace signal, not as permanent proof
+// that a disconnected transport is healthy.
+const mediaDisconnectedWithoutStatsMaxWaitMs = 20_000;
 
 function createMediaRecoveryState(): MediaRecoveryState {
   return {
@@ -162,7 +167,8 @@ function createMediaRecoveryState(): MediaRecoveryState {
     lastPositiveMediaAtMs: null,
     restartTimesMs: [],
     failureReportedAtMs: null,
-    disconnectedTimerId: null
+    disconnectedTimerId: null,
+    disconnectedSinceMs: null
   };
 }
 
@@ -282,9 +288,19 @@ export class PeerConnectionLifecycleManager {
       getPeerEntry: (peerId) => this.peerConnections.get(peerId),
       onPeerStalled: input.onPeerStalled,
       releasePeer: (peerId, entry) => this.releasePeer(peerId, entry),
-      recreatePeer: (peerId, entry) => this.enqueueTopologyOperation(() =>
-        this.recreatePeerNow(peerId, entry, { forceInitiate: true })
-      )
+      recreatePeer: async (peerId, entry) => {
+        try {
+          return await this.enqueueTopologyOperation(() =>
+            this.recreatePeerNow(peerId, entry, { forceInitiate: true })
+          );
+        } catch {
+          // recreatePeerNow releases the failed entry before allocating its
+          // replacement. If allocation or the first offer fails, no watchdog
+          // remains to retry it, so put the peer back through topology repair.
+          this.scheduleTopologyRetry();
+          return null;
+        }
+      }
     });
   }
 
@@ -851,7 +867,12 @@ export class PeerConnectionLifecycleManager {
   }
 
   async restartPeer(peerId: string) {
-    return this.enqueueTopologyOperation(() => this.restartPeerNow(peerId));
+    try {
+      return await this.enqueueTopologyOperation(() => this.restartPeerNow(peerId));
+    } catch {
+      this.scheduleTopologyRetry();
+      return null;
+    }
   }
 
   private async restartPeerNow(peerId: string) {
@@ -1997,8 +2018,12 @@ export class PeerConnectionLifecycleManager {
     if (state.disconnectedTimerId !== null) {
       return;
     }
+    state.disconnectedSinceMs ??= Date.now();
     state.disconnectedTimerId = setTimeout(() => {
       state.disconnectedTimerId = null;
+      if (this.peerConnections.get(peerId, "media") !== entry) {
+        return;
+      }
       if (
         !entry.releasing &&
         (entry.connection.connectionState === "disconnected" ||
@@ -2011,9 +2036,13 @@ export class PeerConnectionLifecycleManager {
         const recoveryState = this.mediaRecovery.get(peerId) ?? state;
         const hasRecentPositiveRtp = recoveryState.lastPositiveMediaAtMs !== null &&
           Date.now() - recoveryState.lastPositiveMediaAtMs < 4_000;
+        const disconnectedForMs = Date.now() -
+          (recoveryState.disconnectedSinceMs ?? Date.now());
+        const awaitingInitialStats = recoveryState.lastPositiveMediaAtMs === null &&
+          disconnectedForMs < mediaDisconnectedWithoutStatsMaxWaitMs;
         if (
           (entry.senderTrackState === "live" || entry.receiverTrackState === "live") &&
-          (hasRecentPositiveRtp || recoveryState.lastPositiveMediaAtMs === null)
+          (hasRecentPositiveRtp || awaitingInitialStats)
         ) {
           this.mediaRecovery.set(peerId, recoveryState);
           this.scheduleMediaDisconnectRecovery(peerId, entry);
@@ -2025,7 +2054,11 @@ export class PeerConnectionLifecycleManager {
             ? "no-packets"
             : "connection-failed"
         );
+        return;
       }
+      const recoveryState = this.mediaRecovery.get(peerId) ?? state;
+      recoveryState.disconnectedSinceMs = null;
+      this.mediaRecovery.set(peerId, recoveryState);
     }, mediaDisconnectedRecoveryDelayMs);
     this.mediaRecovery.set(peerId, state);
   }
@@ -2120,6 +2153,7 @@ export class PeerConnectionLifecycleManager {
         // The disconnected timer and consecutive zero-RTP samples own this
         // recovery path. Do not let the media watchdog issue a second offer
         // against a connection that may still recover in place.
+        this.scheduleMediaDisconnectRecovery(peerId, entry);
         return;
       }
 
@@ -2148,11 +2182,14 @@ export class PeerConnectionLifecycleManager {
 
   private clearMediaDisconnectRecovery(peerId: string) {
     const state = this.mediaRecovery.get(peerId);
-    if (!state || state.disconnectedTimerId === null) {
+    if (!state) {
       return;
     }
-    clearTimeout(state.disconnectedTimerId);
-    state.disconnectedTimerId = null;
+    if (state.disconnectedTimerId !== null) {
+      clearTimeout(state.disconnectedTimerId);
+      state.disconnectedTimerId = null;
+    }
+    state.disconnectedSinceMs = null;
     this.mediaRecovery.set(peerId, state);
   }
 
@@ -2239,12 +2276,35 @@ export class PeerConnectionLifecycleManager {
     const transportStillUnusable = entry.connection.connectionState !== "connected" ||
       entry.connection.iceConnectionState === "disconnected" ||
       entry.connection.iceConnectionState === "failed";
-    void this.restartMediaPeer(peerId, {
+    const recoveryOperation = this.restartMediaPeer(peerId, {
       // ICE restart is the normal recovery operation. Recreate the media PC
       // only when it is already closed or repeated in-place restarts failed;
       // otherwise each retry discards an otherwise reusable RTP session.
       forceRecreate: transportClosed ||
         (transportStillUnusable && restartCount > mediaIceRestartAttemptsBeforeRecreate)
+    });
+    const continueRecovery = () => {
+      if (this.destroyed || !this.expectedMediaPeerIds().has(peerId)) {
+        return;
+      }
+      const currentEntry = this.peerConnections.get(peerId, "media");
+      if (!currentEntry) {
+        // A failed forced recreation leaves no PeerConnection to own a
+        // watchdog. Reconcile from the authoritative member/source topology.
+        this.scheduleTopologyRetry();
+        return;
+      }
+      this.scheduleMediaWatchdog(peerId, currentEntry);
+      if (
+        currentEntry.connection.connectionState === "disconnected" ||
+        currentEntry.connection.iceConnectionState === "disconnected"
+      ) {
+        this.scheduleMediaDisconnectRecovery(peerId, currentEntry);
+      }
+    };
+    void recoveryOperation.then(continueRecovery, () => {
+      this.scheduleTopologyRetry();
+      continueRecovery();
     });
   }
 
