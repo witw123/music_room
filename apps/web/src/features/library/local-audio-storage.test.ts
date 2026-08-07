@@ -27,8 +27,10 @@ const indexedDbMocks = vi.hoisted(() => ({
 vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 
 import {
+  chooseLocalAudioDirectory,
   ensureLocalAudioDirectoryWriteAccess,
   getOriginalAssetFile,
+  getLocalAudioStorageState,
   getRoomLocalAudioFile,
   saveCachedAudioFileToLocalDirectory
 } from "./local-audio-storage";
@@ -75,9 +77,51 @@ describe("local audio cache persistence", () => {
     indexedDbMocks.getCachedLibraryTrackByProviderTrack.mockResolvedValue(null);
     indexedDbMocks.listCachedLibraryTrackHashes.mockResolvedValue([]);
     indexedDbMocks.listCachedLibraryTrackSummaries.mockResolvedValue([]);
+    indexedDbMocks.listLocalAudioFiles.mockResolvedValue([]);
     indexedDbMocks.listLocalAudioCacheFiles.mockResolvedValue([]);
     indexedDbMocks.getTrackAssetLink.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrackSummary.mockResolvedValue(null);
+  });
+
+  it("stores the selected root directory in IndexedDB", async () => {
+    const { handle } = createDirectoryHandle({
+      queryPermission: "granted",
+      requestPermission: "granted"
+    });
+    const picker = vi.fn().mockResolvedValue(handle);
+    vi.stubGlobal("window", { showDirectoryPicker: picker });
+
+    await expect(chooseLocalAudioDirectory()).resolves.toBe("Music Room");
+
+    expect(picker).toHaveBeenCalledWith({ mode: "readwrite" });
+    expect(indexedDbMocks.saveLocalAudioDirectory).toHaveBeenCalledWith({
+      handle,
+      name: "Music Room",
+      repositoryId: expect.any(String),
+      schemaVersion: 1
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("restores the configured root directory from IndexedDB", async () => {
+    const { handle } = createDirectoryHandle({
+      queryPermission: "granted",
+      requestPermission: "granted"
+    });
+    indexedDbMocks.getLocalAudioDirectory.mockResolvedValue({
+      id: "default",
+      handle,
+      name: "Music Room",
+      repositoryId: "repository_1",
+      schemaVersion: 1,
+      updatedAt: "2026-08-07T00:00:00.000Z"
+    });
+
+    await expect(getLocalAudioStorageState()).resolves.toMatchObject({
+      directoryName: "Music Room",
+      permission: "granted"
+    });
   });
 
   it("uses the browser library copy for room-local playback", async () => {

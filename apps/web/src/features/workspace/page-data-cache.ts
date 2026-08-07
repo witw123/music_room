@@ -5,7 +5,6 @@ import type {
   QqMusicAccountStatus,
   RoomSnapshot
 } from "@music-room/shared";
-import type { LocalAudioStorageState } from "@/features/library/local-audio-storage";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 
@@ -22,21 +21,10 @@ export type PlaylistPageData = {
   networkLoaded: boolean;
 };
 
-export type LocalStoragePageData = {
-  state: LocalAudioStorageState;
-  cachedTrackCount: number;
-  cacheBytes: number;
-  savedTrackCount?: number;
-  savedBytes?: number;
-  otherFileCount?: number;
-  otherBytes?: number;
-};
-
 const roomsByUser = new Map<string, RoomSnapshot[]>();
 const playlistsByUser = new Map<string, PlaylistPageData>();
 const favoritesByUser = new Map<string, ProviderAlbumFavorite[]>();
 const providerAccountsByUser = new Map<string, ProviderAccount>();
-let localStorageData: LocalStoragePageData | undefined;
 
 export function getCachedRooms(userId: string) {
   return roomsByUser.get(userId);
@@ -80,12 +68,4 @@ export function getCachedProviderAccount(userId: string, provider: Provider) {
 
 export function setCachedProviderAccount(userId: string, provider: Provider, account: ProviderAccount) {
   providerAccountsByUser.set(`${userId}:${provider}`, account);
-}
-
-export function getCachedLocalStorageData() {
-  return localStorageData;
-}
-
-export function setCachedLocalStorageData(data: LocalStoragePageData) {
-  localStorageData = data;
 }

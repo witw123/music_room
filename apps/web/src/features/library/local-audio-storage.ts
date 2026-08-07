@@ -103,14 +103,21 @@ export async function chooseLocalAudioDirectory() {
   }
 
   const handle = await picker({ mode: "readwrite" });
-  const repository = await LocalRepository.open(handle);
+  // Opening without recovery avoids scanning a large repository before the
+  // selected handle can be persisted and shown in settings.
+  const repository = await LocalRepository.open(handle, { recover: false });
   await saveLocalAudioDirectory({
     handle,
     name: handle.name,
     repositoryId: repository.manifest.repositoryId,
     schemaVersion: repository.manifest.schemaVersion
   });
-  await hydrateLocalRepository(repository);
+  setTimeout(() => {
+    void enqueueLocalRepositoryWrite(async () => {
+      const recoveredRepository = await LocalRepository.open(handle);
+      await hydrateLocalRepository(recoveredRepository);
+    }).catch(() => undefined);
+  }, 0);
   return handle.name;
 }
 

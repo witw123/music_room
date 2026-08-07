@@ -11,20 +11,15 @@ import {
   getLocalAudioStorageState,
   type LocalAudioStorageState
 } from "@/features/library/local-audio-storage";
-import {
-  getCachedLocalStorageData,
-  setCachedLocalStorageData
-} from "@/features/workspace/page-data-cache";
 
 export function LocalStorageManagementCard() {
-  const cachedData = getCachedLocalStorageData();
-  const [state, setState] = useState<LocalAudioStorageState | null>(() => cachedData?.state ?? null);
-  const [cacheBytes, setCacheBytes] = useState(() => cachedData?.cacheBytes ?? 0);
-  const [cachedTrackCount, setCachedTrackCount] = useState(() => cachedData?.cachedTrackCount ?? 0);
-  const [savedBytes, setSavedBytes] = useState(() => cachedData?.savedBytes ?? 0);
-  const [savedTrackCount, setSavedTrackCount] = useState(() => cachedData?.savedTrackCount ?? cachedData?.state.savedFileHashes.length ?? 0);
-  const [otherBytes, setOtherBytes] = useState(() => cachedData?.otherBytes ?? 0);
-  const [otherFileCount, setOtherFileCount] = useState(() => cachedData?.otherFileCount ?? 0);
+  const [state, setState] = useState<LocalAudioStorageState | null>(null);
+  const [cacheBytes, setCacheBytes] = useState(0);
+  const [cachedTrackCount, setCachedTrackCount] = useState(0);
+  const [savedBytes, setSavedBytes] = useState(0);
+  const [savedTrackCount, setSavedTrackCount] = useState(0);
+  const [otherBytes, setOtherBytes] = useState(0);
+  const [otherFileCount, setOtherFileCount] = useState(0);
   const [pendingAction, setPendingAction] = useState<"choose" | "clean-cache" | "clean-saved" | "clean-other" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const pending = pendingAction !== null;
@@ -41,15 +36,6 @@ export function LocalStorageManagementCard() {
     setSavedBytes(stats.saved.bytes);
     setOtherFileCount(stats.other.fileCount);
     setOtherBytes(stats.other.bytes);
-    setCachedLocalStorageData({
-      state: nextState,
-      cachedTrackCount: stats.cache.fileCount,
-      cacheBytes: stats.cache.bytes,
-      savedTrackCount: stats.saved.fileCount,
-      savedBytes: stats.saved.bytes,
-      otherFileCount: stats.other.fileCount,
-      otherBytes: stats.other.bytes
-    });
   };
 
   useEffect(() => {
@@ -62,8 +48,21 @@ export function LocalStorageManagementCard() {
     setMessage(null);
     try {
       const name = await chooseLocalAudioDirectory();
-      await refresh();
+      setState({
+        supported: true,
+        directoryName: name,
+        savedFileHashes: [],
+        cachedFileHashes: [],
+        permission: "granted"
+      });
+      setCacheBytes(0);
+      setCachedTrackCount(0);
+      setSavedBytes(0);
+      setSavedTrackCount(0);
+      setOtherBytes(0);
+      setOtherFileCount(0);
       setMessage(`本地歌曲保存位置已设置为“${name}”。`);
+      void refresh().catch(() => undefined);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
     } finally {
