@@ -65,6 +65,7 @@ type RoomDashboardViewProps = {
   iceConfigSource: string;
   iceConfigStatus: string;
   onCopyJoinCode: () => Promise<void>;
+  onShareRoom: () => Promise<void>;
   onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
@@ -158,6 +159,7 @@ function RoomDashboardViewBase({
   iceConfigSource,
   iceConfigStatus,
   onCopyJoinCode,
+  onShareRoom,
   onAwayRoom,
   onLeaveRoom,
   onDeleteRoom,
@@ -236,6 +238,7 @@ function RoomDashboardViewBase({
             iceConfigSource={iceConfigSource}
             onUpdateRoom={onUpdateRoom}
             onCopyJoinCode={onCopyJoinCode}
+            onShareRoom={onShareRoom}
             onAwayRoom={onAwayRoom}
             onLeaveRoom={onLeaveRoom}
             onDeleteRoom={onDeleteRoom}

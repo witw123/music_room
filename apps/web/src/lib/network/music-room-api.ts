@@ -313,6 +313,11 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify({ joinCode, ...(password ? { password } : {}) })
     }),
+  joinRoom: (roomId: string, password?: string) =>
+    request<RoomSnapshot>(`/v1/rooms/${roomId}/join`, {
+      method: "POST",
+      body: password ? JSON.stringify({ password }) : undefined
+    }),
   getRoom: (roomId: string) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}`),
   syncRoom: (roomId: string, sinceRevision = 0) =>

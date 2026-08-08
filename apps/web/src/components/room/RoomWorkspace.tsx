@@ -70,6 +70,7 @@ type RoomWorkspaceProps = {
   onLogout: () => void;
   onClearIdentity: () => void;
   onCopyJoinCode: () => Promise<void>;
+  onShareRoom: () => Promise<void>;
   onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
@@ -130,6 +131,7 @@ function RoomWorkspaceBase({
   onLogout,
   onClearIdentity,
   onCopyJoinCode,
+  onShareRoom,
   onAwayRoom,
   onLeaveRoom,
   onDeleteRoom,
@@ -229,6 +231,7 @@ function RoomWorkspaceBase({
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
               onCopyJoinCode={onCopyJoinCode}
+              onShareRoom={onShareRoom}
               onAwayRoom={onAwayRoom}
               onLeaveRoom={onLeaveRoom}
               onDeleteRoom={onDeleteRoom}

@@ -40,6 +40,7 @@ type RoomStageProps = {
   mediaConnectedPeersCount: number;
   iceConfigSource: string;
   onCopyJoinCode: () => Promise<void>;
+  onShareRoom: () => Promise<void>;
   onAwayRoom: () => void;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
@@ -95,6 +96,7 @@ function RoomStageBase({
   currentSourceOwnerNickname,
   mediaConnectionState,
   onCopyJoinCode,
+  onShareRoom,
   onAwayRoom,
   onLeaveRoom,
   onDeleteRoom,
@@ -127,6 +129,7 @@ function RoomStageBase({
     };
   }, []);
   const [isCopying, setIsCopying] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [lyricsText, setLyricsText] = useState<string | null>(null);
@@ -167,6 +170,16 @@ function RoomStageBase({
       await onCopyJoinCode();
     } finally {
       window.setTimeout(() => setIsCopying(false), 1200);
+    }
+  };
+
+  const handleShareRoom = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      await onShareRoom();
+    } finally {
+      window.setTimeout(() => setIsSharing(false), 1200);
     }
   };
 
@@ -336,33 +349,56 @@ function RoomStageBase({
         }`}
       >
         <div className="min-w-0 space-y-2">
-          <button
-            data-testid="room-code-button"
-            className="group flex max-w-full items-center gap-2"
-            disabled={isCopying}
-            onClick={() => void handleCopyJoinCode()}
-            type="button"
-          >
-            <div className="light-control-surface flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-white/10 px-3 py-1.5 shadow-sm backdrop-blur-md transition-colors group-hover:bg-white/20">
-              <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(0,112,243,0.8)]" />
-              <span className="truncate font-mono text-[11px] font-bold tracking-[0.28em] text-white">
-                {roomSnapshot.room.joinCode}
-              </span>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="shrink-0 text-white/50 group-hover:text-white"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          <div className="flex max-w-full items-center gap-2">
+            <button
+              data-testid="room-code-button"
+              aria-label="复制房间码"
+              className="group flex min-w-0 max-w-full items-center gap-2"
+              disabled={isCopying}
+              onClick={() => void handleCopyJoinCode()}
+              type="button"
+            >
+              <div className="light-control-surface flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-white/10 px-3 py-1.5 shadow-sm backdrop-blur-md transition-colors group-hover:bg-white/20">
+                <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(0,112,243,0.8)]" />
+                <span className="truncate font-mono text-[11px] font-bold tracking-[0.28em] text-white">
+                  {roomSnapshot.room.joinCode}
+                </span>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="shrink-0 text-white/50 group-hover:text-white"
+                  aria-hidden="true"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              </div>
+              {isCopying ? <span className="text-[10px] text-accent">已复制</span> : null}
+            </button>
+
+            <button
+              data-testid="share-room-button"
+              aria-label="分享房间"
+              className="light-control-surface inline-flex h-8 min-w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-2.5 text-[11px] font-semibold text-white/75 shadow-sm backdrop-blur-md transition-[background-color,color,border-color,transform] duration-150 hover:bg-white/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
+              disabled={isSharing}
+              onClick={() => void handleShareRoom()}
+              title="分享房间"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <path d="m8.6 13.5 6.8 4" />
+                <path d="m15.4 6.5-6.8 4" />
               </svg>
-            </div>
-            {isCopying ? <span className="text-[10px] text-accent">已复制</span> : null}
-          </button>
+              <span>{isSharing ? "已复制" : "分享房间"}</span>
+            </button>
+          </div>
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] tracking-[0.18em] text-white/50">
             <span className="flex items-center gap-1">

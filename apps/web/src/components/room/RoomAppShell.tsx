@@ -142,6 +142,7 @@ export function RoomAppShell({
           onLogout={roomActions.handleLogout}
           onClearIdentity={roomActions.handleClearIdentity}
           onCopyJoinCode={clipboardActions.handleCopyJoinCode}
+          onShareRoom={clipboardActions.handleShareRoom}
           onAwayRoom={onAwayRoom}
           onLeaveRoom={roomActions.handleLeaveRoomAction}
           onDeleteRoom={roomActions.handleDeleteRoomAction}

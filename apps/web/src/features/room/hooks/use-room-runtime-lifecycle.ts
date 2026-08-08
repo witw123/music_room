@@ -360,6 +360,15 @@ export function useRoomRuntimeLifecycle(input: {
 
     void (async () => {
       try {
+        let joinError: unknown = null;
+        try {
+          await musicRoomApi.joinRoom(initialRoomId);
+        } catch (error) {
+          // Existing members and hosts can already access the room even when
+          // the room password prevents a redundant join request.
+          joinError = error;
+        }
+
         const sync = await musicRoomApi.syncRoom(initialRoomId, 0);
         if (sync.roomDeleted) {
           await deleteRoomTrackArtifacts(
@@ -369,6 +378,12 @@ export function useRoomRuntimeLifecycle(input: {
           );
         }
         const snapshot = sync.roomDeleted ? null : sync.snapshot;
+        if (
+          joinError &&
+          (!snapshot || !snapshot.room.members.some((member) => member.id === activeSession.userId))
+        ) {
+          throw joinError;
+        }
         if (!snapshot || cancelled) {
           if (!cancelled) {
             setSuppressRoomRecovery(true);
