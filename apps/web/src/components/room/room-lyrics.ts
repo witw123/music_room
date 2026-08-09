@@ -20,7 +20,7 @@ export function parseRoomLyrics(value: string | null | undefined): RoomLyricLine
   if (!value?.trim()) return [];
 
   const lines: RoomLyricLine[] = [];
-  value.split(/\r?\n/).forEach((rawLine, lineIndex) => {
+  normalizeLyricsSource(value).split(/\r?\n/).forEach((rawLine, lineIndex) => {
     const line = rawLine.trim();
     if (!line || metadataPattern.test(line)) return;
 
@@ -68,6 +68,47 @@ export function parseRoomLyrics(value: string | null | undefined): RoomLyricLine
   });
 }
 
+export function hasWordSyncedRoomLyrics(value: string | null | undefined) {
+  return parseRoomLyrics(value).some((line) => line.words.length > 0);
+}
+
+export function selectRoomLyrics(input: {
+  localLyrics?: string | null;
+  wordSyncedLyric?: string | null;
+  plainLyric?: string | null;
+}) {
+  const localLyrics = input.localLyrics?.trim() || null;
+  if (hasWordSyncedRoomLyrics(localLyrics)) {
+    return localLyrics;
+  }
+
+  const wordSyncedLyric = input.wordSyncedLyric?.trim() || null;
+  if (hasWordSyncedRoomLyrics(wordSyncedLyric)) {
+    return wordSyncedLyric;
+  }
+
+  return localLyrics || wordSyncedLyric || input.plainLyric?.trim() || null;
+}
+
+function normalizeLyricsSource(value: string) {
+  const lyricContent = value.match(/\bLyricContent=(["'])([\s\S]*?)\1/i)?.[2];
+  return decodeXmlEntities(lyricContent ?? value).replace(/\\n/g, "\n");
+}
+
+function decodeXmlEntities(value: string) {
+  return value
+    .replace(/&#(x?[0-9a-f]+);/gi, (_match, code: string) => {
+      const radix = code.toLowerCase().startsWith("x") ? 16 : 10;
+      const parsed = Number.parseInt(radix === 16 ? code.slice(1) : code, radix);
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : "";
+    })
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
+}
+
 function parseTimedWords(value: string): RoomLyricWord[] {
   return [...value.matchAll(wordPattern)]
     .map((match) => ({
@@ -85,6 +126,12 @@ export function getActiveRoomLyricWordIndex(line: RoomLyricLine | undefined, pos
     if ((line.words[index]?.timeMs ?? Number.POSITIVE_INFINITY) <= positionMs) activeIndex = index;
   }
   return activeIndex;
+}
+
+export function getRoomLyricWordProgress(word: RoomLyricWord, positionMs: number) {
+  if (positionMs <= word.timeMs) return 0;
+  if (word.durationMs <= 0 || positionMs >= word.timeMs + word.durationMs) return 1;
+  return (positionMs - word.timeMs) / word.durationMs;
 }
 
 export function getActiveRoomLyricIndex(lines: RoomLyricLine[], positionMs: number) {

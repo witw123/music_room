@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { getActiveRoomLyricIndex, getActiveRoomLyricWordIndex, parseRoomLyrics } from "./room-lyrics";
+import { getActiveRoomLyricIndex, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
 
 type RoomLyricsPanelProps = {
   lyrics: string | null;
@@ -72,7 +72,6 @@ export function RoomLyricsPanel({
           <div className={`mx-auto flex min-h-full w-full flex-col justify-center ${alignmentClass} ${isFiveLineView || isSevenLineView ? "gap-0 py-1 sm:gap-0.5 sm:py-2" : "gap-0.5 py-1 sm:gap-1 sm:py-2"}`}>
             {lines.map((line, index) => {
               const isActive = index === activeIndex;
-              const activeWordIndex = isActive ? getActiveRoomLyricWordIndex(line, positionMs) : -1;
               return (
                 <p
                   key={line.id}
@@ -86,14 +85,24 @@ export function RoomLyricsPanel({
                       : `font-medium text-white/35 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
                   }`}
                 >
-                  {line.words.length > 0 ? line.words.map((word, wordIndex) => (
-                    <span
-                      className={wordIndex <= activeWordIndex ? "text-white" : "text-white/45"}
-                      key={`${line.id}:word:${wordIndex}`}
-                    >
-                      {word.text}
-                    </span>
-                  )) : line.text}
+                  {line.words.length > 0 ? line.words.map((word, wordIndex) => {
+                    const progress = isActive
+                      ? getRoomLyricWordProgress(word, positionMs)
+                      : 0;
+                    return (
+                      <span
+                        className={isActive ? "text-transparent" : undefined}
+                        key={`${line.id}:word:${wordIndex}`}
+                        style={isActive ? {
+                          backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${progress * 100}%, rgb(255 255 255 / 0.45) ${progress * 100}%, rgb(255 255 255 / 0.45) 100%)`,
+                          backgroundClip: "text",
+                          WebkitBackgroundClip: "text"
+                        } : undefined}
+                      >
+                        {word.text}
+                      </span>
+                    );
+                  }) : line.text}
                 </p>
               );
             })}

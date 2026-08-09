@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getActiveRoomLyricIndex, parseRoomLyrics } from "./room-lyrics";
+import {
+  getActiveRoomLyricIndex,
+  getRoomLyricWordProgress,
+  hasWordSyncedRoomLyrics,
+  parseRoomLyrics,
+  selectRoomLyrics
+} from "./room-lyrics";
 
 describe("room lyrics", () => {
   it("parses LRC timestamps and ignores metadata tags", () => {
@@ -23,6 +29,48 @@ describe("room lyrics", () => {
         ]
       }
     ]);
+  });
+
+  it("unwraps QQ QRC XML lyric content", () => {
+    const lyrics = '<Lyric_1 LyricType="1" LyricContent="[0,1000](0,500,0)逐(500,500,0)字&#10;[1000,500](1000,500,0)歌词"/>';
+
+    expect(parseRoomLyrics(lyrics)).toEqual([
+      {
+        id: "0:yrc",
+        text: "逐字",
+        timeMs: 0,
+        words: [
+          { text: "逐", timeMs: 0, durationMs: 500 },
+          { text: "字", timeMs: 500, durationMs: 500 }
+        ]
+      },
+      {
+        id: "1:yrc",
+        text: "歌词",
+        timeMs: 1_000,
+        words: [{ text: "歌词", timeMs: 1_000, durationMs: 500 }]
+      }
+    ]);
+  });
+
+  it("prefers provider word-synced lyrics over stored line-synced lyrics", () => {
+    const lineSynced = "[00:01.00]普通歌词";
+    const wordSynced = "[1000,1000](1000,500,0)逐(1500,500,0)字";
+
+    expect(hasWordSyncedRoomLyrics(lineSynced)).toBe(false);
+    expect(selectRoomLyrics({
+      localLyrics: lineSynced,
+      wordSyncedLyric: wordSynced,
+      plainLyric: lineSynced
+    })).toBe(wordSynced);
+  });
+
+  it("calculates progressive fill within one word", () => {
+    const word = { text: "歌词", timeMs: 1_000, durationMs: 400 };
+
+    expect(getRoomLyricWordProgress(word, 900)).toBe(0);
+    expect(getRoomLyricWordProgress(word, 1_200)).toBe(0.5);
+    expect(getRoomLyricWordProgress(word, 1_500)).toBe(1);
   });
 
   it("finds the last lyric line reached by playback", () => {

@@ -257,6 +257,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     }
 
     const canonical = await this.readiness.handleReadiness(message);
+    if (!canonical) {
+      return;
+    }
     callback?.(canonical);
     return canonical;
   }

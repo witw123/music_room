@@ -59,6 +59,12 @@ export class RoomPlaybackReadinessService {
         [],
         message.sessionId
       );
+      if (
+        message.trackId !== snapshot.room.playback.currentTrackId ||
+        message.mediaEpoch !== snapshot.room.playback.mediaEpoch
+      ) {
+        return undefined;
+      }
       const key = this.timelineKey(snapshot.room.playback.currentTrackId, snapshot.room.playback.mediaEpoch);
       const state = await this.loadState(message.roomId, key);
       const now = new Date();

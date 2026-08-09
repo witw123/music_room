@@ -80,7 +80,10 @@ export function isProviderTrack(track: TrackMeta | null | undefined) {
 }
 
 export function resolveLocalAudioTimelineKey(
-  playback: PlaybackSnapshot,
+  playback: Pick<
+    PlaybackSnapshot,
+    "currentTrackId" | "mediaEpoch" | "status" | "startedAt" | "startAt" | "positionMs"
+  >,
   barrier?: Pick<RoomPlaybackBarrierClock, "holdPositionMs" | "resumeAtMs"> | null
 ) {
   return [

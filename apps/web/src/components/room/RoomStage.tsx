@@ -18,6 +18,7 @@ import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
+import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "./room-lyrics";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { resolvePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
@@ -306,7 +307,7 @@ function RoomStageBase({
       } catch {
         // A provider request below can still supply lyrics when local storage is unavailable.
       }
-      if (localLyrics) {
+      if (localLyrics && (hasWordSyncedRoomLyrics(localLyrics) || !sourceProvider || !sourceTrackId)) {
         if (!cancelled) {
           setLyricsText(localLyrics);
           setLyricsStatus("ready");
@@ -319,12 +320,25 @@ function RoomStageBase({
         return;
       }
 
-      const response = sourceProvider === "netease"
-        ? await musicRoomApi.getNeteaseLyrics(sourceTrackId)
-        : await musicRoomApi.getQqMusicLyrics(sourceTrackId);
-      if (!cancelled) {
-        setLyricsText(response.wordSyncedLyric?.trim() || response.plainLyric?.trim() || null);
-        setLyricsStatus("ready");
+      try {
+        const response = sourceProvider === "netease"
+          ? await musicRoomApi.getNeteaseLyrics(sourceTrackId)
+          : await musicRoomApi.getQqMusicLyrics(sourceTrackId);
+        if (!cancelled) {
+          setLyricsText(selectRoomLyrics({
+            localLyrics,
+            wordSyncedLyric: response.wordSyncedLyric,
+            plainLyric: response.plainLyric
+          }));
+          setLyricsStatus("ready");
+        }
+      } catch (error) {
+        if (localLyrics && !cancelled) {
+          setLyricsText(localLyrics);
+          setLyricsStatus("ready");
+          return;
+        }
+        throw error;
       }
     };
 

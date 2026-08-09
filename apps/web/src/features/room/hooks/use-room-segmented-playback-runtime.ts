@@ -192,22 +192,39 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     localAudioResolution.status === "missing" &&
     !providerCacheFailed;
   const [barrierClockMs, setBarrierClockMs] = useState(() => getRoomPlaybackClockNowMs());
-  const readinessWaitingSinceRef = useRef<Map<string, number>>(new Map());
+  const readinessWaitingSinceRef = useRef<Map<string, {
+    timelineKey: string;
+    waitingSinceMs: number;
+  }>>(new Map());
   useEffect(() => {
     const now = getRoomPlaybackClockNowMs();
     const previous = readinessWaitingSinceRef.current;
-    const next = new Map<string, number>();
+    const next = new Map<string, {
+      timelineKey: string;
+      waitingSinceMs: number;
+    }>();
     for (const item of playbackReadiness) {
       if (item.state === "waiting") {
-        next.set(item.sessionId, previous.get(item.sessionId) ?? now);
+        const timelineKey = `${item.trackId ?? "none"}:${item.mediaEpoch}`;
+        const previousWait = previous.get(item.sessionId);
+        next.set(item.sessionId, {
+          timelineKey,
+          waitingSinceMs: previousWait?.timelineKey === timelineKey
+            ? previousWait.waitingSinceMs
+            : now
+        });
       }
     }
     readinessWaitingSinceRef.current = next;
   }, [playbackReadiness]);
   const playbackBarrier = useMemo(() => {
     const staleWaitingSessionIds = new Set<string>();
-    for (const [sessionId, waitingSinceMs] of readinessWaitingSinceRef.current) {
-      if (barrierClockMs - waitingSinceMs >= cacheBarrierWaitingTimeoutMs) {
+    const currentTimelineKey = `${input.roomSnapshot?.room.playback.currentTrackId ?? "none"}:${input.roomSnapshot?.room.playback.mediaEpoch ?? 0}`;
+    for (const [sessionId, wait] of readinessWaitingSinceRef.current) {
+      if (
+        wait.timelineKey === currentTimelineKey &&
+        barrierClockMs - wait.waitingSinceMs >= cacheBarrierWaitingTimeoutMs
+      ) {
         staleWaitingSessionIds.add(sessionId);
       }
     }
@@ -233,7 +250,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const readinessPeerId = input.peerId;
   const publishReadiness = input.publishPlaybackReadiness;
   useEffect(() => {
-    if (!playbackBarrier.resumeAtMs || playbackBarrier.resumeAtMs <= getRoomPlaybackClockNowMs()) {
+    const waitingForResume = !!playbackBarrier.resumeAtMs &&
+      playbackBarrier.resumeAtMs > getRoomPlaybackClockNowMs();
+    if (!playbackBarrier.blocked && !waitingForResume) {
       return;
     }
     const interval = window.setInterval(
@@ -241,7 +260,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       100
     );
     return () => window.clearInterval(interval);
-  }, [playbackBarrier.resumeAtMs]);
+  }, [playbackBarrier.blocked, playbackBarrier.resumeAtMs]);
   const localAudioLoudness = localAudioResolution.key === localAudioTrackKey
     ? localAudioResolution.loudness
     : undefined;
@@ -796,6 +815,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
 
   useEffect(() => {
+    if (readinessPlaybackStatus === "playing" && !playbackBarrier.blocked) {
+      return;
+    }
+    audioRef.current?.pause();
+  }, [
+    audioRef,
+    readinessPlaybackStatus,
+    playbackBarrier.blocked
+  ]);
+
+  useEffect(() => {
     if (usesNativeLocalAudio) {
       return;
     }
@@ -914,6 +944,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const runSyncMedia = async () => {
       const runtime = runtimeInputRef.current;
       const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
+      const operationTimelineKey = roomPlayback
+        ? resolveLocalAudioTimelineKey(roomPlayback, runtime.playbackBarrier)
+        : null;
       const sourcePeerId = resolveCurrentSourcePeerId(runtime.roomSnapshot, roomPlayback);
       const bitrateKbps = runtime.playbackAsset
         ? preferredAudioRtpBitrateKbps
@@ -1068,11 +1101,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         try {
           const isCurrentLocalAudioRequest = () => {
             const current = runtimeInputRef.current;
+            const currentPlayback = current.roomSnapshot?.room.playback ?? null;
             return !cancelled &&
               current.currentTrack?.id === runtime.currentTrack?.id &&
               current.localAudioResolution.key === localAudioKey &&
               current.usesNativeLocalAudio &&
-              current.localAudioResolution.file === localAudio;
+              current.localAudioResolution.file === localAudio &&
+              currentPlayback !== null &&
+              resolveLocalAudioTimelineKey(
+                currentPlayback,
+                current.playbackBarrier
+              ) === operationTimelineKey;
           };
           if (audio.srcObject) {
             audio.pause();
@@ -1255,7 +1294,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           }
 
           const result = await roomAudioOutput.playElement(audio);
-          if (!isCurrentLocalAudioRequest()) return;
+          if (!isCurrentLocalAudioRequest()) {
+            if (
+              localAudioObjectUrlRef.current?.key === localAudioKey &&
+              audio.src === objectUrl
+            ) {
+              audio.pause();
+            }
+            return;
+          }
           if (!result.ok) {
             if (isAudioPlaybackBlockedError(result.error)) {
               setAudioUnlocked(false);
@@ -1561,6 +1608,25 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           requireRunningAudioContext: remoteUsesWebAudioGraph,
           allowMutedFallback: false
         });
+        const currentRuntime = runtimeInputRef.current;
+        const currentRoomPlayback = currentRuntime.roomSnapshot?.room.playback ?? null;
+        const remoteOperationStillCurrent = !cancelled &&
+          currentRoomPlayback !== null &&
+          resolveLocalAudioTimelineKey(
+            currentRoomPlayback,
+            currentRuntime.playbackBarrier
+          ) === operationTimelineKey &&
+          resolveCurrentSourcePeerId(
+            currentRuntime.roomSnapshot,
+            currentRoomPlayback
+          ) === sourcePeerId &&
+          audio.srcObject === remote.remoteStream;
+        if (!remoteOperationStillCurrent) {
+          if (audio.srcObject === remote.remoteStream) {
+            audio.pause();
+          }
+          return;
+        }
         if (!cancelled && !result.ok) {
           const blocked = isAudioPlaybackBlockedError(result.error);
           if (blocked) {
@@ -1624,8 +1690,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     };
 
     let syncInFlight: Promise<void> | null = null;
+    let syncRequestedWhileInFlight = false;
     const syncMedia = () => {
       if (syncInFlight) {
+        syncRequestedWhileInFlight = true;
         return syncInFlight;
       }
       const operation = runSyncMedia();
@@ -1634,11 +1702,19 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         () => {
           if (syncInFlight === operation) {
             syncInFlight = null;
+            if (syncRequestedWhileInFlight && !cancelled) {
+              syncRequestedWhileInFlight = false;
+              void syncMedia();
+            }
           }
         },
         () => {
           if (syncInFlight === operation) {
             syncInFlight = null;
+            if (syncRequestedWhileInFlight && !cancelled) {
+              syncRequestedWhileInFlight = false;
+              void syncMedia();
+            }
           }
         }
       );

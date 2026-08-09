@@ -6,7 +6,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
-import { parseRoomLyrics } from "@/components/room/room-lyrics";
+import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/components/room/room-lyrics";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
 import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
@@ -659,8 +659,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
       return;
     }
     const fallbackLyrics = roomLyrics?.trim() || null;
-    const hasTimedLyrics = parseRoomLyrics(fallbackLyrics).some((line) => line.timeMs !== null);
-    if (fallbackLyrics && (hasTimedLyrics || !sourceProvider || !sourceTrackId)) {
+    if (fallbackLyrics && (hasWordSyncedRoomLyrics(fallbackLyrics) || !sourceProvider || !sourceTrackId)) {
       setPlainLyric(fallbackLyrics);
       setLyricsStatus("ready");
       return;
@@ -675,7 +674,11 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
     const request = sourceProvider === "netease" ? musicRoomApi.getNeteaseLyrics(sourceTrackId) : musicRoomApi.getQqMusicLyrics(sourceTrackId);
     void request.then((lyrics) => {
       if (!cancelled) {
-        setPlainLyric(lyrics.wordSyncedLyric?.trim() || lyrics.plainLyric?.trim() || fallbackLyrics);
+        setPlainLyric(selectRoomLyrics({
+          localLyrics: fallbackLyrics,
+          wordSyncedLyric: lyrics.wordSyncedLyric,
+          plainLyric: lyrics.plainLyric
+        }));
         setLyricsStatus("ready");
       }
     }).catch(() => {

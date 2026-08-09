@@ -11,6 +11,7 @@ import {
 import {
   resolveCacheReadinessReport,
   hasCurrentLocalAudio,
+  resolveLocalAudioTimelineKey,
   resolveRoomAudioPath,
   resolveRoomAudioPositionMs,
   resolveRemoteAudioTimelineKey,
@@ -567,6 +568,37 @@ describe("remote room audio timeline", () => {
 
     expect(resolveRemoteAudioTimelineKey(initial)).toBe(
       resolveRemoteAudioTimelineKey({ ...initial, positionMs: 1_250 })
+    );
+  });
+});
+
+describe("native local audio timeline", () => {
+  const playback = {
+    currentTrackId: "track-1",
+    mediaEpoch: 2,
+    status: "playing" as const,
+    positionMs: 1_000,
+    playbackRevision: 7,
+    startAt: "2026-07-22T00:00:10.000Z",
+    startedAt: "2026-07-22T00:00:10.000Z"
+  };
+
+  it("invalidates an in-flight cache play when the room is paused", () => {
+    expect(resolveLocalAudioTimelineKey(playback)).not.toBe(
+      resolveLocalAudioTimelineKey({
+        ...playback,
+        status: "paused",
+        positionMs: 4_000
+      })
+    );
+  });
+
+  it("invalidates an in-flight cache play when a barrier starts waiting", () => {
+    expect(resolveLocalAudioTimelineKey(playback)).not.toBe(
+      resolveLocalAudioTimelineKey(playback, {
+        holdPositionMs: 3_250,
+        resumeAtMs: null
+      })
     );
   });
 });
