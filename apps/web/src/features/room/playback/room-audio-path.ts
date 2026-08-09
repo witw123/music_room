@@ -144,22 +144,26 @@ export function shouldWaitForLocalAudioContext(input: {
   );
 }
 
-export function resolveCacheReadinessState(input: {
-  cacheEnabled: boolean;
+export function resolveCacheReadinessReport(input: {
+  cacheRequested: boolean;
   localReady: boolean;
-  isPreparingProviderCache: boolean;
+  cacheAttemptPending: boolean;
   localAudioStatus: LocalAudioResolutionStatus;
-}): RoomPlaybackReadinessInputPayload["state"] {
-  if (!input.cacheEnabled || input.localReady) {
-    return "ready";
+}): Pick<RoomPlaybackReadinessInputPayload, "cacheEnabled" | "state"> {
+  if (!input.cacheRequested) {
+    return { cacheEnabled: false, state: "ready" };
   }
-  // Hold during the local lookup as well as the provider download. Otherwise
-  // a member can report ready, start playing, and only later enter the room
-  // barrier after discovering that the provider file is missing locally.
-  if (input.isPreparingProviderCache || input.localAudioStatus === "checking") {
-    return "waiting";
+  if (input.localReady) {
+    return { cacheEnabled: true, state: "ready" };
   }
-  return input.localAudioStatus === "missing" ? "failed" : "ready";
+  // Keep participating from the first local lookup through the provider
+  // request. This prevents a brief barrier open/close cycle between the two.
+  if (input.cacheAttemptPending || input.localAudioStatus !== "missing") {
+    return { cacheEnabled: true, state: "waiting" };
+  }
+  // This member cannot obtain a playable cache for the current timeline.
+  // Leaving the cache participant set makes RTP streaming its active path.
+  return { cacheEnabled: false, state: "ready" };
 }
 
 export function isAudioPlaybackBlockedError(error: string | null) {

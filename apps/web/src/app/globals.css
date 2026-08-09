@@ -286,7 +286,7 @@
   .app-sidebar__nav-item--active {
     background: var(--sidebar-active);
     color: var(--sidebar-active-foreground);
-    box-shadow: inset 2px 0 0 var(--accent);
+    box-shadow: none;
   }
 
   html[data-custom-layout-editor-open="true"],

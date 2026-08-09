@@ -604,11 +604,7 @@ function RoomDirectoryCard({
 
   return (
     <article
-      className={`group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-xl border border-accent/40 p-5 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent focus-visible:border-accent focus-visible:outline-none ${
-        isAway
-          ? "bg-amber-300/10 shadow-[0_12px_36px_rgba(251,191,36,0.14)] hover:bg-amber-300/15"
-          : "bg-surface/50 shadow-md hover:bg-surface-hover"
-      }`}
+      className="group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent hover:bg-surface-hover focus-visible:border-accent focus-visible:outline-none"
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {

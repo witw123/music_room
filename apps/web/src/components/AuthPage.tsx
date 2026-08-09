@@ -277,7 +277,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">账号</span>
                     <input
                       data-testid="auth-login-username"
-                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       value={loginUsername}
                       onChange={(event) => setLoginUsername(event.target.value)}
                       placeholder="输入账号"
@@ -288,7 +288,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
                       data-testid="auth-login-password"
-                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       type="password"
                       value={loginPassword}
                       onChange={(event) => setLoginPassword(event.target.value)}
@@ -332,7 +332,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">账号</span>
                     <input
                       data-testid="auth-register-username"
-                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       value={registerUsername}
                       onChange={(event) => setRegisterUsername(event.target.value)}
                       placeholder="设置登录账号"
@@ -343,7 +343,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
                       data-testid="auth-register-password"
-                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       type="password"
                       value={registerPassword}
                       onChange={(event) => setRegisterPassword(event.target.value)}
@@ -355,7 +355,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">昵称</span>
                     <input
                       data-testid="auth-register-nickname"
-                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       value={registerNickname}
                       onChange={(event) => setRegisterNickname(event.target.value)}
                       placeholder="房间内显示的名字"

@@ -9,7 +9,7 @@ import {
   resolvePlaybackBarrierState
 } from "@/features/room/playback/playback-barrier";
 import {
-  resolveCacheReadinessState,
+  resolveCacheReadinessReport,
   resolveRoomAudioPath,
   resolveRoomAudioPositionMs,
   resolveRemoteAudioTimelineKey,
@@ -313,21 +313,39 @@ describe("room playback cache barrier", () => {
 
 describe("cache readiness reporting", () => {
   it("holds the room while checking whether the provider file is cached", () => {
-    expect(resolveCacheReadinessState({
-      cacheEnabled: true,
+    expect(resolveCacheReadinessReport({
+      cacheRequested: true,
       localReady: false,
-      isPreparingProviderCache: false,
+      cacheAttemptPending: false,
       localAudioStatus: "checking"
-    })).toBe("waiting");
+    })).toEqual({ cacheEnabled: true, state: "waiting" });
   });
 
   it("only reports waiting during an actual provider-cache download", () => {
-    expect(resolveCacheReadinessState({
-      cacheEnabled: true,
+    expect(resolveCacheReadinessReport({
+      cacheRequested: true,
       localReady: false,
-      isPreparingProviderCache: true,
+      cacheAttemptPending: true,
       localAudioStatus: "missing"
-    })).toBe("waiting");
+    })).toEqual({ cacheEnabled: true, state: "waiting" });
+  });
+
+  it("falls back to streaming when this member cannot cache the track", () => {
+    expect(resolveCacheReadinessReport({
+      cacheRequested: true,
+      localReady: false,
+      cacheAttemptPending: false,
+      localAudioStatus: "missing"
+    })).toEqual({ cacheEnabled: false, state: "ready" });
+  });
+
+  it("keeps a successfully cached member in the cache participant set", () => {
+    expect(resolveCacheReadinessReport({
+      cacheRequested: true,
+      localReady: true,
+      cacheAttemptPending: false,
+      localAudioStatus: "available"
+    })).toEqual({ cacheEnabled: true, state: "ready" });
   });
 });
 

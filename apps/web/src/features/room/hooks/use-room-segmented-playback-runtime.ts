@@ -49,7 +49,7 @@ import {
   isProviderTrack,
   isRecoverableLocalAudioError,
   localAudioSeekToleranceSeconds,
-  resolveCacheReadinessState,
+  resolveCacheReadinessReport,
   resolveLocalAudioTimelineKey,
   resolveLocalAudioTrackKey,
   resolveRemoteAudioTimelineKey,
@@ -174,6 +174,16 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     file: null,
     error: null
   });
+  const providerCacheAttemptKey = forceProviderCache && localAudioTrackKey
+    ? `${input.roomSnapshot?.room.id ?? "none"}:${input.roomSnapshot?.room.playback.currentTrackId ?? "none"}:${input.roomSnapshot?.room.playback.mediaEpoch ?? 0}:${localAudioTrackKey}`
+    : null;
+  const [failedProviderCacheKey, setFailedProviderCacheKey] = useState<string | null>(null);
+  const providerCacheFailed = !!providerCacheAttemptKey &&
+    failedProviderCacheKey === providerCacheAttemptKey;
+  const providerCacheAttemptPending = forceProviderCache &&
+    !!offlineSource &&
+    localAudioResolution.status === "missing" &&
+    !providerCacheFailed;
   const [barrierClockMs, setBarrierClockMs] = useState(() => getRoomPlaybackClockNowMs());
   const readinessWaitingSinceRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
@@ -447,7 +457,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   useEffect(() => {
     const trackId = readinessTrackId;
     const mediaEpoch = readinessMediaEpoch;
-    const cacheEnabled = cacheBarrierEnabled && !!trackId;
+    const cacheRequested = cacheBarrierEnabled && !!trackId;
     if (!readinessRoomId || !readinessActiveSessionId || !readinessPeerId) {
       return;
     }
@@ -455,7 +465,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     // Normal playback does not participate in the cache readiness barrier.
     // Send one leave notification when the setting is turned off, then stop
     // readiness traffic; room-wide hold/resume events remain observable.
-    if (!cacheEnabled) {
+    if (!cacheRequested) {
       if (cacheBarrierParticipationRef.current) {
         publishReadiness({
           roomId: readinessRoomId,
@@ -472,20 +482,20 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return;
     }
 
-    cacheBarrierParticipationRef.current = true;
     const localReady = localAudioResolution.status === "available" || !!offlineFallbackAsset;
-    const state = resolveCacheReadinessState({
-      cacheEnabled,
+    const report = resolveCacheReadinessReport({
+      cacheRequested,
       localReady,
-      isPreparingProviderCache,
+      cacheAttemptPending: providerCacheAttemptPending || isPreparingProviderCache,
       localAudioStatus: localAudioResolution.status
     });
+    cacheBarrierParticipationRef.current = report.cacheEnabled;
     const key = [
       readinessRoomId ?? "none",
       trackId ?? "none",
       mediaEpoch,
-      cacheEnabled,
-      state
+      report.cacheEnabled,
+      report.state
     ].join(":");
     const payload: RoomPlaybackReadinessInputPayload = {
       roomId: readinessRoomId,
@@ -493,8 +503,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       peerId: readinessPeerId,
       trackId,
       mediaEpoch,
-      cacheEnabled,
-      state
+      cacheEnabled: report.cacheEnabled,
+      state: report.state
     };
     if (readinessPublishKeyRef.current !== key) {
       readinessPublishKeyRef.current = key;
@@ -516,7 +526,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     readinessPlaybackStatus,
     localAudioResolution.status,
     offlineFallbackAsset,
-    isPreparingProviderCache
+    isPreparingProviderCache,
+    providerCacheAttemptPending
   ]);
 
   useEffect(() => {
@@ -528,6 +539,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         streamingOnlyPlayback
       )) ||
       localAudioResolution.status !== "missing" ||
+      providerCacheFailed ||
       !fallbackInput.source ||
       !fallbackInput.roomSnapshot ||
       !fallbackInput.track
@@ -539,6 +551,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
     let cancelled = false;
     const abortController = new AbortController();
+    const activeProviderCacheAttemptKey = providerCacheAttemptKey;
     setIsPreparingProviderCache(true);
     setOfflineFallbackAsset(null);
     setStatusMessage(forceProviderCache
@@ -554,6 +567,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     }).then((result) => {
       if (!cancelled) {
         setIsPreparingProviderCache(false);
+        setFailedProviderCacheKey((current) => current === activeProviderCacheAttemptKey
+          ? null
+          : current);
         if (result.file) {
           setOfflineFallbackAsset(null);
           setLocalAudioResolution({
@@ -580,11 +596,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     }).catch((error) => {
       if (cancelled) return;
       setIsPreparingProviderCache(false);
+      setFailedProviderCacheKey(activeProviderCacheAttemptKey);
       const detail = error instanceof Error && error.message.trim()
         ? error.message
         : "平台音频暂时不可用，请稍后重试。";
       setStatusMessage(forceProviderCache
-        ? `无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`
+        ? `无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》，已回退到流式播放：${detail}`
         : `成员不在线，无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`);
     });
 
@@ -614,7 +631,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     fallbackPresenceDependency,
     streamingOnlyPlayback,
     fullyCachedPlayback,
-    forceProviderCache
+    forceProviderCache,
+    providerCacheAttemptKey,
+    providerCacheFailed
   ]);
 
   const ensureListenerMediaConnection = useCallback((input: {
@@ -722,6 +741,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
   const markLocalAudioUnavailable = useCallback((key: string, error: string) => {
     failedLocalAudioKeysRef.current.add(key);
+    if (providerCacheAttemptKey) {
+      setFailedProviderCacheKey(providerCacheAttemptKey);
+    }
     setLocalAudioResolution((current) => current.key === key
       ? {
         key,
@@ -730,7 +752,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         error
       }
       : current);
-  }, []);
+  }, [providerCacheAttemptKey]);
 
   const playback = useSegmentedOpusPlayback({
     roomSnapshot: input.roomSnapshot,
