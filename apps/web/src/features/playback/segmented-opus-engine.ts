@@ -3,10 +3,7 @@
 import type { AudioAssetUnitRecord } from "@/features/library/indexeddb";
 import type { GaplessTransition, PlaybackAssetManifest, PlaybackSnapshot } from "@music-room/shared";
 import { roomAudioOutput } from "./room-audio-output";
-import {
-  playbackUnitIndexAt,
-  resolveStartupUnitIndexes
-} from "./playback-segment-scheduler";
+import { playbackUnitIndexAt } from "./playback-segment-scheduler";
 
 type ScheduledSource = {
   source: AudioBufferSourceNode;
@@ -49,7 +46,6 @@ export type SourceHealthState =
   | "source-ended";
 
 const scheduleLeadSeconds = 0.08;
-const startupBufferMs = 4_000;
 const targetBufferedAheadMs = 12_000;
 const scheduleAheadMs = 20_000;
 const underrunGuardMs = 1_000;
@@ -242,15 +238,10 @@ export class SegmentedOpusEngine {
       },
       (_, offset) => currentIndex + offset
     );
-    const startupCount = resolveStartupUnitIndexes({
-      manifest: input.manifest,
-      positionMs: roomPositionMs,
-      startupBufferMs
-    }).length;
-    const requiredUnits = this.timelineStarted ? 1 : startupCount;
-    // Start the whole read window immediately, but wait only for the prefix
-    // needed to start or continue playback. Waiting for a slow future unit
-    // here stalls the scheduler before it can even queue the current unit.
+    // The room clock is already running. Only the segment containing the
+    // current position may block first sound; all future segments remain
+    // parallel prefetch work and must never become a startup gate.
+    const requiredUnits = 1;
     const unitPromises = unitIndexes.map((unitIndex) =>
       this.loadUnit(input, unitIndex, signal)
     );

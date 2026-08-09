@@ -147,22 +147,28 @@ afterEach(() => {
 });
 
 describe("SegmentedOpusEngine", () => {
-  it("requires the configured startup window before scheduling", async () => {
+  it("starts from the current segment without waiting for the next segment", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
     const engine = new SegmentedOpusEngine();
+    let releaseNextUnit!: (value: AudioAssetUnitRecord | null) => void;
+    const nextUnit = new Promise<AudioAssetUnitRecord | null>((resolve) => {
+      releaseNextUnit = resolve;
+    });
 
     const result = await engine.sync({
       manifest,
       playback: playback(Date.now()),
       serverNowMs: Date.now(),
       volume: 0.7,
-      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
+      getUnit: async (unitIndex) => unitIndex === 0 ? unit(unitIndex) : nextUnit
     });
 
     expect(result.state).toBe("buffering");
     expect(context.createBuffer).not.toHaveBeenCalled();
-    expect(sources).toHaveLength(2);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.starts).toHaveLength(1);
+    releaseNextUnit(null);
     engine.destroy();
   });
 
