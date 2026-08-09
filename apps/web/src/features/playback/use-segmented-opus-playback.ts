@@ -268,6 +268,10 @@ export function useSegmentedOpusPlayback(input: {
         if (cancelled || generation !== playbackGenerationRef.current) {
           return;
         }
+        const activePlaybackError = result.state === "buffering" &&
+          sourceHealth?.state === "source-underrun"
+          ? sourceHealth.lastDecodeError
+          : null;
         setSnapshot({
           state: result.state,
           playbackIdentity: currentPlaybackIdentity,
@@ -275,7 +279,7 @@ export function useSegmentedOpusPlayback(input: {
           ownedUnitCount: result.bufferedUnits,
           totalUnitCount: currentPlaybackAsset.unitCount,
           audioContextState,
-          lastError: sourceHealth?.lastDecodeError ?? null,
+          lastError: activePlaybackError,
           sourceHealth: sourceHealth?.state,
           sourceEnergy: sourceHealth?.energy,
           decodedPeak: sourceHealth?.decodedPeak,
@@ -337,8 +341,6 @@ export function useSegmentedOpusPlayback(input: {
     localFallbackAsset,
     disableSourcePlayback,
     playbackBarrierBlocked,
-    input.playbackBarrier?.holdPositionMs,
-    input.playbackBarrier?.resumeAtMs,
     setSnapshot,
     releaseEngine
   ]);

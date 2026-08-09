@@ -658,7 +658,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.roomSnapshot?.room.id,
     input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.sourceSessionId,
-    input.roomSnapshot?.room.playback.status,
     localAudioTrackKey,
     localAudioResolution.status,
     offlineSource?.label,
@@ -1879,15 +1878,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     if (visiblePlayback.lastError && visiblePlayback.lastError !== lastReportedErrorRef.current) {
       lastReportedErrorRef.current = visiblePlayback.lastError;
       setLastSourceStartError(visiblePlayback.lastError);
-      setStatusMessage(`媒体播放正在自动恢复：${visiblePlayback.lastError}`);
       return;
     }
     if (!visiblePlayback.lastError && lastReportedErrorRef.current && visiblePlayback.state === "live") {
       lastReportedErrorRef.current = null;
       setLastSourceStartError(null);
-      setStatusMessage("分段播放已自动恢复。");
     }
-  }, [setLastSourceStartError, setStatusMessage, visiblePlayback.lastError, visiblePlayback.state]);
+  }, [setLastSourceStartError, visiblePlayback.lastError, visiblePlayback.state]);
 
   useEffect(() => {
     if (!input.isCurrentSource) {

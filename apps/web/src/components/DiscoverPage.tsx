@@ -111,6 +111,7 @@ export function DiscoverPage() {
   const [data, setData] = useState<Partial<Record<Provider, ProviderDiscoveryData>>>({});
   const [discoverProvider, setDiscoverProvider] = useState<Provider>(enabledProviders[0] ?? "netease");
   const discoverProviderRef = useRef(discoverProvider);
+  const loadVersionRef = useRef(0);
   discoverProviderRef.current = discoverProvider;
   const [loading, setLoading] = useState(true);
   const [refreshingCategory, setRefreshingCategory] = useState(false);
@@ -278,12 +279,22 @@ export function DiscoverPage() {
 
     setLoading(true);
     setErrorMessage(null);
-    const result = await loadProviderData(provider);
-    if (discoverProviderRef.current !== provider) return;
-    const nextData: Partial<Record<Provider, ProviderDiscoveryData>> = { [provider]: result.data };
-    setData(nextData);
+    const version = ++loadVersionRef.current;
+    setData({ [provider]: emptyProviderData });
+    const result = await loadProviderData(provider, (partial) => {
+      if (discoverProviderRef.current !== provider || loadVersionRef.current !== version) return;
+      setData((current) => {
+        const nextProviderData = {
+          ...(current[provider] ?? emptyProviderData),
+          ...partial
+        };
+        if (hasProviderDiscoveryContent(nextProviderData)) setLoading(false);
+        return { ...current, [provider]: nextProviderData };
+      });
+    });
+    if (discoverProviderRef.current !== provider || loadVersionRef.current !== version) return;
     setLoading(false);
-    if (result.rejectedCount > 0 && !hasDiscoveryContent(nextData)) {
+    if (result.rejectedCount > 0 && !hasProviderDiscoveryContent(result.data)) {
       setErrorMessage("发现内容暂时不可用，请稍后重试。");
     }
   }, [activeSession, discoverProvider]);
@@ -794,76 +805,77 @@ export function DiscoverPage() {
   );
 }
 
-async function loadProviderData(provider: Provider) {
-  const requests = provider === "netease"
+async function loadProviderData(
+  provider: Provider,
+  onData: (partial: Partial<ProviderDiscoveryData>) => void
+) {
+  const data: ProviderDiscoveryData = { ...emptyProviderData };
+  let relatedStarted = false;
+
+  const loadRelated = (source: ProviderPlaylistSummary) => {
+    if (relatedStarted) return;
+    relatedStarted = true;
+    void (async () => {
+      try {
+        const detail = provider === "netease"
+          ? await musicRoomApi.getNeteasePlaylist(source.providerPlaylistId)
+          : await musicRoomApi.getQqMusicPlaylist(source.providerPlaylistId);
+        const sourceTrack = detail.tracks.find((track) => provider === "netease" || Boolean(track.relatedTrackId));
+        if (!sourceTrack) return;
+        const relatedTrackId = sourceTrack.relatedTrackId ?? sourceTrack.providerTrackId;
+        const related = (provider === "netease"
+          ? await musicRoomApi.listNeteaseRelatedPlaylists(relatedTrackId)
+          : await musicRoomApi.listQqMusicRelatedPlaylists(relatedTrackId)).items;
+        data.related = related;
+        onData({ related });
+      } catch {
+        // Related playlists enrich the page but never gate the primary discovery sections.
+      }
+    })();
+  };
+
+  const section = <K extends Exclude<keyof ProviderDiscoveryData, "related">>(
+    key: K,
+    request: Promise<{ items: ProviderDiscoveryData[K] }>
+  ) => request.then((response) => {
+    data[key] = response.items;
+    onData({ [key]: response.items } as Pick<ProviderDiscoveryData, K>);
+    if (key === "recommended" || key === "playlists") {
+      const source = (response.items as ProviderPlaylistSummary[])[0];
+      if (source) loadRelated(source);
+    }
+  });
+
+  const requests: Promise<void>[] = provider === "netease"
     ? [
-      musicRoomApi.listNeteaseRecommendedPlaylists({ limit: 50 }),
-      musicRoomApi.listNeteaseDiscoveryPlaylists({ category: "全部", order: "hot", limit: 50 }),
-      musicRoomApi.listNeteaseToplists(),
-      musicRoomApi.listNeteaseNewAlbums({ area: "all", limit: 50 }),
-      musicRoomApi.listNeteaseDailyPlaylists(),
-      musicRoomApi.listNeteaseDailyTracks(),
-      musicRoomApi.listNeteasePlaylistCategories()
-    ] as const
+      section("recommended", musicRoomApi.listNeteaseRecommendedPlaylists({ limit: 50 })),
+      section("playlists", musicRoomApi.listNeteaseDiscoveryPlaylists({ category: "全部", order: "hot", limit: 50 })),
+      section("toplists", musicRoomApi.listNeteaseToplists()),
+      section("albums", musicRoomApi.listNeteaseNewAlbums({ area: "all", limit: 50 })),
+      section("dailyPlaylists", musicRoomApi.listNeteaseDailyPlaylists()),
+      section("dailyTracks", musicRoomApi.listNeteaseDailyTracks()),
+      section("categories", musicRoomApi.listNeteasePlaylistCategories())
+    ]
     : [
-      musicRoomApi.listQqMusicDiscoveryPlaylists({ categoryId: 10_000_000, sortId: 5, limit: 50 }),
-      musicRoomApi.listQqMusicDiscoveryPlaylists({ categoryId: 10_000_000, sortId: 5, limit: 50 }),
-      musicRoomApi.listQqMusicToplists(),
-      musicRoomApi.listQqMusicDigitalAlbums({ limit: 50 }),
-      Promise.resolve({ items: [] as ProviderPlaylistSummary[], limit: 1, offset: 0 }),
-      Promise.resolve({ items: [] as Track[], limit: 1, offset: 0 }),
-      musicRoomApi.listQqMusicPlaylistCategories(),
-      musicRoomApi.listQqMusicBanners()
-    ] as const;
+      section("recommended", musicRoomApi.listQqMusicDiscoveryPlaylists({ categoryId: 10_000_000, sortId: 5, limit: 50 })),
+      section("playlists", musicRoomApi.listQqMusicDiscoveryPlaylists({ categoryId: 10_000_000, sortId: 5, limit: 50 })),
+      section("toplists", musicRoomApi.listQqMusicToplists()),
+      section("albums", musicRoomApi.listQqMusicDigitalAlbums({ limit: 50 })),
+      section("categories", musicRoomApi.listQqMusicPlaylistCategories()),
+      section("banners", musicRoomApi.listQqMusicBanners())
+    ];
 
   const settled = await Promise.allSettled(requests);
-  const valueAt = <T,>(index: number, fallback: T) => settled[index]?.status === "fulfilled" ? settled[index].value as T : fallback;
-  const data: ProviderDiscoveryData = provider === "netease"
-    ? {
-      related: [],
-      recommended: valueAt(0, { items: [] }).items,
-      playlists: valueAt(1, { items: [] }).items,
-      toplists: valueAt(2, { items: [] }).items,
-      albums: valueAt(3, { items: [] }).items,
-      dailyPlaylists: valueAt(4, { items: [] }).items,
-      dailyTracks: valueAt(5, { items: [] }).items,
-      categories: valueAt(6, { items: [] }).items,
-      banners: []
-    }
-    : {
-      related: [],
-      recommended: valueAt(0, { items: [] }).items,
-      playlists: valueAt(1, { items: [] }).items,
-      toplists: valueAt(2, { items: [] }).items,
-      albums: valueAt(3, { items: [] }).items,
-      dailyPlaylists: [],
-      dailyTracks: [],
-      categories: valueAt(6, { items: [] }).items,
-      banners: valueAt(7, { items: [] }).items
-    };
-  const relatedSource = data.recommended[0] ?? data.playlists[0];
-  if (relatedSource) {
-    try {
-      const detail = provider === "netease"
-        ? await musicRoomApi.getNeteasePlaylist(relatedSource.providerPlaylistId)
-        : await musicRoomApi.getQqMusicPlaylist(relatedSource.providerPlaylistId);
-      const sourceTrack = detail.tracks.find((track) => provider === "netease" || Boolean(track.relatedTrackId));
-      if (!sourceTrack) throw new Error("No related-playlist seed track.");
-      const relatedTrackId = sourceTrack.relatedTrackId ?? sourceTrack.providerTrackId;
-      data.related = (provider === "netease"
-        ? await musicRoomApi.listNeteaseRelatedPlaylists(relatedTrackId)
-        : await musicRoomApi.listQqMusicRelatedPlaylists(relatedTrackId)).items;
-    } catch {
-      data.related = [];
-    }
-  }
-  return { data, rejectedCount: settled.filter((result) => result.status === "rejected").length };
+  return {
+    data,
+    rejectedCount: settled.filter((result) => result.status === "rejected").length
+  };
 }
 
-function hasDiscoveryContent(data: Partial<Record<Provider, ProviderDiscoveryData>>) {
-  return Object.values(data).some((value) => value && (
-    value.recommended.length || value.playlists.length || value.toplists.length || value.albums.length || value.banners.length
-  ));
+function hasProviderDiscoveryContent(data: ProviderDiscoveryData) {
+  return Boolean(
+    data.recommended.length || data.playlists.length || data.toplists.length || data.albums.length || data.banners.length
+  );
 }
 
 function toFallbackBanner(summary: ProviderPlaylistSummary): ProviderDiscoveryBanner {

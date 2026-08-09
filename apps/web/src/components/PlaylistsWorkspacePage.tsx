@@ -146,59 +146,36 @@ export function PlaylistsWorkspacePage({
 
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
-    await flushLocalPlaylistPersistence();
-    const scannedTrackCount = await syncSelectedLocalDirectoryTracks();
-    const [tracks, restoredLocalPlaylists, storage, roomTracks] = await Promise.all([
-      listMergedLocalPlaylistTracks(),
-      restoreLocalPlaylistsFromRepository(),
-      getLocalAudioStorageState(),
-      listRoomPlaylistTrackIndex()
-    ]);
-    let initialDatabasePlaylists: Playlist[] = [];
-    let databasePlaylistsLoaded = false;
-    try {
-      initialDatabasePlaylists = await musicRoomApi.listMyPlaylists();
-      databasePlaylistsLoaded = true;
-    } catch {
-      // The local repository can still be opened while the server retries its database connection.
-    }
-    const mergedLocalPlaylists = mergeLocalPlaylistsWithDatabase(
-      restoredLocalPlaylists,
-      initialDatabasePlaylists.filter(isLocalPlaylistMirror)
-    );
-    mergeLocalPlaylists(mergedLocalPlaylists);
-    let localPlaylistRecords: LocalPlaylistRecord[];
-    localPlaylistRecords = ensureDefaultLocalPlaylist({
-      trackIds: getDefaultLocalPlaylistTrackIds(
-        tracks,
-        new Set(storage.savedFileHashes)
-      ),
-      sourceDirectoryName: storage.directoryName
-    });
-    if (version !== refreshVersion.current) return scannedTrackCount;
-    setLocalTracks(tracks);
-    setLocalPlaylists(localPlaylistRecords);
-    setRoomTrackIndex(roomTracks);
-    if (activeUserId) {
-      setCachedPlaylistData(activeUserId, {
-        localTracks: tracks,
-        localPlaylists: localPlaylistRecords,
-        roomTrackIndex: roomTracks,
-        localLoaded: true
-      });
-    }
-    if (playlistView === "local") {
-      setPlaylistDataLoaded(true);
-    }
-    setSelectedPlaylist((current) => {
-      if (!current) return null;
-      if (current.kind === "local") {
-        const playlist = localPlaylistRecords.find((item) => item.id === current.playlist.id);
-        return playlist ? { kind: "local", playlist } : null;
+
+    const applyLocalData = (
+      tracks: LocalPlaylistTrackRecord[],
+      playlists: LocalPlaylistRecord[],
+      roomTracks: Map<string, LocalPlaylistTrackRecord>
+    ) => {
+      if (version !== refreshVersion.current) return;
+      setLocalTracks(tracks);
+      setLocalPlaylists(playlists);
+      setRoomTrackIndex(roomTracks);
+      if (activeUserId) {
+        setCachedPlaylistData(activeUserId, {
+          localTracks: tracks,
+          localPlaylists: playlists,
+          roomTrackIndex: roomTracks,
+          localLoaded: true
+        });
       }
-      const playlist = networkPlaylistsRef.current.find((item) => item.id === current.playlist.id);
-      return playlist ? { kind: "network", playlist } : null;
-    });
+      if (playlistView === "local") setPlaylistDataLoaded(true);
+      setSelectedPlaylist((current) => {
+        if (!current) return null;
+        if (current.kind === "local") {
+          const playlist = playlists.find((item) => item.id === current.playlist.id);
+          return playlist ? { kind: "local", playlist } : null;
+        }
+        const playlist = networkPlaylistsRef.current.find((item) => item.id === current.playlist.id);
+        return playlist ? { kind: "network", playlist } : null;
+      });
+    };
+
     const applyDatabasePlaylists = (playlists: Playlist[]) => {
       if (version !== refreshVersion.current) return;
       const nextNetworkPlaylists = playlists.filter((playlist) => !isLocalPlaylistMirror(playlist));
@@ -210,35 +187,85 @@ export function PlaylistsWorkspacePage({
           networkLoaded: true
         });
       }
-      setPlaylistDataLoaded(true);
+      if (playlistView === "network") setPlaylistDataLoaded(true);
       setSelectedPlaylist((current) => {
         if (!current || current.kind !== "network") return current;
-        const playlist = playlists.find((item) => item.id === current.playlist.id);
+        const playlist = nextNetworkPlaylists.find((item) => item.id === current.playlist.id);
         return playlist ? { kind: "network", playlist } : null;
       });
     };
 
-    if (databasePlaylistsLoaded) {
-      applyDatabasePlaylists(initialDatabasePlaylists);
-    }
+    const loadLocalData = async () => {
+      await flushLocalPlaylistPersistence();
+      const readLocalData = async () => {
+        const [tracks, restoredPlaylists, storage, roomTracks] = await Promise.all([
+          listMergedLocalPlaylistTracks(),
+          restoreLocalPlaylistsFromRepository(),
+          getLocalAudioStorageState(),
+          listRoomPlaylistTrackIndex()
+        ]);
+        mergeLocalPlaylists(restoredPlaylists);
+        const playlists = ensureDefaultLocalPlaylist({
+          trackIds: getDefaultLocalPlaylistTrackIds(tracks, new Set(storage.savedFileHashes)),
+          sourceDirectoryName: storage.directoryName
+        });
+        applyLocalData(tracks, playlists, roomTracks);
+        return { tracks, playlists, storage, roomTracks };
+      };
 
-    if (!databasePlaylistsLoaded) {
+      let current = await readLocalData();
+      let scannedTrackCount = 0;
       try {
-        const playlists = await musicRoomApi.listMyPlaylists();
-        applyDatabasePlaylists(playlists);
-        initialDatabasePlaylists = playlists;
-        databasePlaylistsLoaded = true;
+        scannedTrackCount = await syncSelectedLocalDirectoryTracks();
+        current = await readLocalData();
       } catch {
-        if (version === refreshVersion.current && networkPlaylistsRef.current.length === 0) {
-          setMessage("歌单数据库加载失败，请稍后重试；本地音频仍可使用。");
-          setPlaylistDataLoaded(true);
-        }
+        if (version === refreshVersion.current) setMessage("本地目录扫描失败，已显示上次保存的歌单数据。");
+      }
+      return { ...current, scannedTrackCount };
+    };
+
+    const loadNetworkData = async () => {
+      const playlists = await musicRoomApi.listMyPlaylists();
+      applyDatabasePlaylists(playlists);
+      return playlists;
+    };
+
+    const [localResult, networkResult] = await Promise.allSettled([
+      loadLocalData(),
+      loadNetworkData()
+    ]);
+    if (version !== refreshVersion.current) return 0;
+
+    if (localResult.status === "rejected") {
+      if (playlistView === "local") setPlaylistDataLoaded(true);
+      setMessage("本地歌单加载失败，请刷新重试。");
+    }
+    if (networkResult.status === "rejected") {
+      if (playlistView === "network") setPlaylistDataLoaded(true);
+      if (networkPlaylistsRef.current.length === 0) {
+        setMessage("网络歌单加载失败，请稍后重试；本地音频仍可使用。");
       }
     }
 
-    if (databasePlaylistsLoaded) {
+    if (localResult.status === "fulfilled" && networkResult.status === "fulfilled") {
+      const localData = localResult.value;
+      const databasePlaylists = networkResult.value;
+      const mergedLocalPlaylists = mergeLocalPlaylistsWithDatabase(
+        localData.playlists,
+        databasePlaylists.filter(isLocalPlaylistMirror)
+      );
+      mergeLocalPlaylists(mergedLocalPlaylists);
+      const localPlaylistRecords = ensureDefaultLocalPlaylist({
+        trackIds: getDefaultLocalPlaylistTrackIds(
+          localData.tracks,
+          new Set(localData.storage.savedFileHashes)
+        ),
+        sourceDirectoryName: localData.storage.directoryName
+      });
+      applyLocalData(localData.tracks, localPlaylistRecords, localData.roomTracks);
+
       const { ids: localPlaylistDatabaseIds, failed } =
-        await syncLocalPlaylistsToDatabase(localPlaylistRecords, initialDatabasePlaylists);
+        await syncLocalPlaylistsToDatabase(localPlaylistRecords, databasePlaylists);
       if (version === refreshVersion.current) {
         setLocalPlaylistDatabaseIds(localPlaylistDatabaseIds);
         if (activeUserId) {
@@ -259,7 +286,7 @@ export function PlaylistsWorkspacePage({
         }
       }
     }
-    return scannedTrackCount;
+    return localResult.status === "fulfilled" ? localResult.value.scannedTrackCount : 0;
   }, [activeUserId, playlistView]);
 
   useEffect(() => {

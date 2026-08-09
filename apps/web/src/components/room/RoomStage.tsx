@@ -272,14 +272,15 @@ function RoomStageBase({
 
     updatePosition();
     if (
+      !isLyricsOpen ||
       !isPlaying ||
       playback.status !== "playing" ||
       (!playback.startedAt && !playback.startAt && playbackBarrier?.holdPositionMs === null)
     ) return;
 
-    const timer = window.setInterval(updatePosition, 250);
+    const timer = window.setInterval(updatePosition, 50);
     return () => window.clearInterval(timer);
-  }, [currentTrackDuration, isPlaying, playback, playbackBarrier]);
+  }, [currentTrackDuration, isLyricsOpen, isPlaying, playback, playbackBarrier]);
 
   useEffect(() => {
     if (!currentTrack) {

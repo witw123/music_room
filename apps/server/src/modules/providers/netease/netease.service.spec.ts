@@ -187,7 +187,11 @@ describe("NeteaseService", () => {
   it("exposes normalized lyrics, playlists, and albums", async () => {
     process.env.NETEASE_ENABLED = "true";
     const api = {
-      getLyrics: jest.fn().mockResolvedValue({ lrc: { lyric: "plain" }, tlyric: { lyric: "translated" } }),
+      getLyrics: jest.fn().mockResolvedValue({
+        lrc: { lyric: "plain" },
+        yrc: { lyric: "[0,1000](0,500,0)逐(500,500,0)字" },
+        tlyric: { lyric: "translated" }
+      }),
       getUserPlaylists: jest.fn().mockResolvedValue({ playlist: [{ id: 11, name: "Favorites", trackCount: 1 }] }),
       getPlaylist: jest.fn().mockResolvedValue({ playlist: { id: 11, name: "Favorites", tracks: [{ id: 7, name: "Song", ar: [{ name: "Artist" }] }], trackIds: [{ id: 7 }, { id: 8 }] } }),
       getPlaylistTracks: jest.fn().mockResolvedValue({ songs: [{ id: 8, name: "Song 2", ar: [{ name: "Artist" }] }] }),
@@ -203,7 +207,7 @@ describe("NeteaseService", () => {
       provider: "netease",
       providerTrackId: "7",
       plainLyric: "plain",
-      wordSyncedLyric: null,
+      wordSyncedLyric: "[0,1000](0,500,0)逐(500,500,0)字",
       translatedLyric: "translated",
       romanizedLyric: null
     });

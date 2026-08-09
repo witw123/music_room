@@ -110,4 +110,15 @@ describe("segmented playback recovery", () => {
     expect(source).toContain("engineRef.current ??= new SegmentedOpusEngine()");
     expect(source).toContain("storedManifestAssetIdRef.current = null");
   });
+
+  it("does not rebuild the engine effect for barrier clock anchor updates", () => {
+    const source = readFileSync(new URL("./use-segmented-opus-playback.ts", import.meta.url), "utf8");
+    const effectDependencies = source.slice(
+      source.indexOf("    roomId,"),
+      source.indexOf("  ]);", source.indexOf("    roomId,"))
+    );
+
+    expect(effectDependencies).not.toContain("holdPositionMs");
+    expect(effectDependencies).not.toContain("resumeAtMs");
+  });
 });

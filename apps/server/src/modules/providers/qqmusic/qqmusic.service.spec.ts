@@ -39,6 +39,26 @@ describe("QqMusicService", () => {
     });
   });
 
+  it("keeps an already-decoded QQ word-synced lyric intact", async () => {
+    mockedFetchProviderUrl.mockResolvedValue(new Response(JSON.stringify({
+      req_0: {
+        data: {
+          lyric: "[00:00.00]普通歌词",
+          qrc: "[0,1000](0,500,0)逐(500,500,0)字"
+        }
+      }
+    }), { status: 200 }));
+    const client = new QqMusicApiClient();
+
+    await expect(client.getLyrics({
+      trackId: "song-mid",
+      cookie: "uin=o123; qqmusic_key=key"
+    })).resolves.toMatchObject({
+      lyric: "[00:00.00]普通歌词",
+      qrc: "[0,1000](0,500,0)逐(500,500,0)字"
+    });
+  });
+
   it("upgrades QQ Music CDN HTTP links before the HTTPS-only provider fetch", async () => {
     process.env.QQMUSIC_ENABLED = "true";
     const api = {

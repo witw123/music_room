@@ -426,12 +426,36 @@ function readQqUinFromCookie(cookie: string) {
 
 function decodeLyricField(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const decoded = Buffer.from(value, "base64").toString("utf8");
-    return decoded.trim() ? decoded : value;
-  } catch {
-    return value;
+  const normalized = value.trim();
+  const compact = normalized.replace(/\s+/g, "");
+  if (
+    compact.length < 8 ||
+    compact.length % 4 !== 0 ||
+    !/^[a-z0-9+/]+={0,2}$/i.test(compact)
+  ) {
+    return normalized;
   }
+  try {
+    const decoded = Buffer.from(compact, "base64").toString("utf8").trim();
+    if (
+      !decoded ||
+      decoded.includes("\uFFFD") ||
+      hasUnsupportedControlCharacter(decoded)
+    ) {
+      return normalized;
+    }
+    return decoded;
+  } catch {
+    return normalized;
+  }
+}
+
+function hasUnsupportedControlCharacter(value: string) {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) return true;
+  }
+  return false;
 }
 
 function readPlayUrl(value: unknown, trackId: string) {

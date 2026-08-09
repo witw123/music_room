@@ -231,7 +231,10 @@ function BottomPlayerBase({
     backgroundColor: artworkPalette.surface,
     borderColor: artworkPalette.border
   };
-  const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
+  const progressRenderIntervalMs = isImmersiveOpen && isPageVisible
+    ? 50
+    : resolveProgressRenderIntervalMs({ isPageVisible });
+  const progressCommitThresholdMs = isImmersiveOpen ? 30 : 200;
   const isCompactMobile = mobileVariant === "compact";
   const footerClassName = isCompactMobile
     ? "fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[60] box-border flex min-h-[4.25rem] flex-col justify-center overflow-visible rounded-[2rem] bg-background-secondary px-3 py-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.38)] transition-[background-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:min-h-[4.5rem] md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-surface-border md:px-8 md:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] md:pt-3"
@@ -282,7 +285,7 @@ function BottomPlayerBase({
           nowMs: Date.now()
         });
       setRenderedProgressMs((current) =>
-        Math.abs(current - nextProgressMs) >= 200 ? nextProgressMs : current
+        Math.abs(current - nextProgressMs) >= progressCommitThresholdMs ? nextProgressMs : current
       );
     };
 
@@ -291,7 +294,7 @@ function BottomPlayerBase({
     return () => {
       window.clearInterval(timerId);
     };
-  }, [currentTrackDuration, isPlaybackBarrierBlocked, isPlaying, playbackBarrier, progressRenderIntervalMs, seekDraft]);
+  }, [currentTrackDuration, isPlaybackBarrierBlocked, isPlaying, playbackBarrier, progressCommitThresholdMs, progressRenderIntervalMs, seekDraft]);
 
   const clearPendingSeek = useCallback(
     (requestId: number) => {
