@@ -153,6 +153,19 @@ export class QqMusicController {
     return this.service.getBanners(await this.user(token));
   }
 
+  @Get("library")
+  async library(@Headers("x-session-token") token?: string) {
+    return this.service.getLibrarySnapshot(await this.user(token));
+  }
+
+  @Get("tracks/:trackId/related-playlists")
+  async relatedPlaylists(
+    @Param("trackId") trackId: string,
+    @Headers("x-session-token") token?: string
+  ) {
+    return this.service.getRelatedPlaylists(await this.user(token), trackId);
+  }
+
   @Get("artwork")
   async artwork(
     @Query("url") rawUrl: string | undefined,

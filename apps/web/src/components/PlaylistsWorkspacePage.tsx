@@ -1244,7 +1244,7 @@ function PlaylistDetailView({
           ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId!)
           : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId!)
         ).catch(() => null);
-      const lyrics = resolvedTrack.lyrics ?? lyricPayload?.plainLyric ?? null;
+      const lyrics = resolvedTrack.lyrics ?? lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
       const saved = await saveAudioFileToLocalDirectory({
         file: response.blob,
         fileHash,

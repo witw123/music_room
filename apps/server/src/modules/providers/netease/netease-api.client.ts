@@ -1,12 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import {
   album_new,
+  album_sublist,
+  artist_sublist,
   login_qr_check,
   login_qr_create,
   login_qr_key,
   login_status,
   lyric,
+  likelist,
   personalized,
+  related_playlist,
   playlist_catlist,
   playlist_detail,
   playlist_track_all,
@@ -235,6 +239,42 @@ export class NeteaseApiClient {
   async getLyrics(input: { trackId: string; cookie: string }) {
     return this.call(async () => {
       const response = (await lyric(withProviderOptions({ id: input.trackId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getLikedTrackIds(input: { userId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = (await likelist(withProviderOptions({ uid: input.userId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getCollectedAlbums(input: { limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = (await album_sublist(withProviderOptions(input, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getFollowedArtists(input: { limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = (await artist_sublist(withProviderOptions(input, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      const body = parseCatalogBody(response.body);
+      assertSuccessfulCode(readCatalogCode(body));
+      return body;
+    });
+  }
+
+  async getRelatedPlaylists(input: { trackId: string; cookie?: string }) {
+    return this.call(async () => {
+      const response = (await related_playlist(withProviderOptions({ id: input.trackId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
       const body = parseCatalogBody(response.body);
       assertSuccessfulCode(readCatalogCode(body));
       return body;

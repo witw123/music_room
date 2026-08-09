@@ -5,15 +5,18 @@ import {
   getAlbumInfo,
   getAlbumSongs,
   getDigitalAlbumLists,
-  getLyric,
   getMusicPlay,
   getQQLoginQr,
   getRecommendBanner,
+  getRelatedPlaylists,
   getSmartbox,
   getHotKey,
   getSearchByKey,
   getTopLists,
   getUserPlaylists,
+  getUserCollectedAlbums,
+  getUserCollectedSongLists,
+  getUserFollowSingers,
   songListCategories,
   songLists,
   songListDetail
@@ -178,8 +181,109 @@ export class QqMusicApiClient {
 
   async getLyrics(input: { trackId: string; cookie: string }) {
     return this.call(async () => {
-      const response = await getLyric({
-        params: { songmid: input.trackId },
+      const loginUin = readQqUinFromCookie(input.cookie);
+      const response = await fetchProviderUrl(
+        new URL("https://u.y.qq.com/cgi-bin/musicu.fcg"),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: input.cookie,
+            Origin: "https://y.qq.com",
+            Referer: "https://y.qq.com/portal/player.html"
+          },
+          body: JSON.stringify({
+            comm: { uin: loginUin, format: "json", ct: 24, cv: 0 },
+            req_0: {
+              module: "music.musichallSong.PlayLyricInfo",
+              method: "GetPlayLyricInfo",
+              param: {
+                songMID: input.trackId,
+                songID: 0,
+                trans_t: 1,
+                roma_t: 1,
+                qrc_t: 1,
+                crypt: 1,
+                lrc_t: 1,
+                interval: 0
+              }
+            }
+          })
+        },
+        requestTimeoutMs(),
+        isAllowedHost,
+        { allowSyntheticDns: true }
+      );
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new QqMusicApiError(response.status === 401 || response.status === 403 ? "auth-expired" : "unavailable");
+      }
+      const body = asRecord(parseJson(await response.text()));
+      const result = asRecord(asRecord(body?.req_0)?.data ?? asRecord(body?.PlayLyricInfo)?.data);
+      if (!result) throw new QqMusicApiError("invalid-response");
+      throwIfAuthExpired(result);
+      return {
+        ...result,
+        lyric: decodeLyricField(result.lyric),
+        qrc: decodeLyricField(result.qrc ?? result.qrcLyric),
+        trans: decodeLyricField(result.trans ?? result.transLyric),
+        roma: decodeLyricField(result.roma ?? result.romaLyric ?? result.romalrc)
+      };
+    });
+  }
+
+  async getLikedPlaylist(input: { userId: string; cookie: string }) {
+    return this.call(async () => {
+      if (!getUserDetail) throw new QqMusicApiError("unavailable");
+      const response = await getUserDetail({ uin: normalizeQqUserId(input.userId), cookie: input.cookie }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getCollectedPlaylists(input: { userId: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = await getUserCollectedSongLists({
+        uin: normalizeQqUserId(input.userId),
+        page: Math.floor(input.offset / input.limit) + 1,
+        limit: input.limit,
+        cookie: input.cookie
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getCollectedAlbums(input: { userId: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = await getUserCollectedAlbums({
+        uin: normalizeQqUserId(input.userId),
+        page: Math.floor(input.offset / input.limit) + 1,
+        limit: input.limit,
+        cookie: input.cookie
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getFollowedArtists(input: { userId: string; limit: number; offset: number; cookie: string }) {
+    return this.call(async () => {
+      const response = await getUserFollowSingers({
+        uin: normalizeQqUserId(input.userId),
+        page: Math.floor(input.offset / input.limit) + 1,
+        limit: input.limit,
+        cookie: input.cookie
+      }) as ApiResponse;
+      assertProviderStatus(response.status);
+      return readProviderBody(response.body);
+    });
+  }
+
+  async getRelatedPlaylists(input: { trackId: string; cookie: string }) {
+    return this.call(async () => {
+      const response = await getRelatedPlaylists({
+        params: { songid: input.trackId },
         option: { headers: { Cookie: input.cookie } }
       }) as ApiResponse;
       assertProviderStatus(response.status);
@@ -310,6 +414,24 @@ function readString(value: unknown) { return typeof value === "number" && Number
 function normalizeQqUserId(value: string) {
   const normalized = value.trim();
   return /^o\d+$/i.test(normalized) ? normalized.slice(1) : normalized;
+}
+
+function readQqUinFromCookie(cookie: string) {
+  for (const name of ["uin", "qqmusic_uin", "wxuin"]) {
+    const match = new RegExp(`(?:^|;\\s*)${name}=o?(\\d+)`, "i").exec(cookie);
+    if (match?.[1]) return match[1];
+  }
+  return "0";
+}
+
+function decodeLyricField(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const decoded = Buffer.from(value, "base64").toString("utf8");
+    return decoded.trim() ? decoded : value;
+  } catch {
+    return value;
+  }
 }
 
 function readPlayUrl(value: unknown, trackId: string) {

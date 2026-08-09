@@ -8,6 +8,8 @@ import type {
   ProviderAlbumDetail,
   ProviderAlbumListResponse,
   ProviderAlbumSummary,
+  ProviderArtistSummary,
+  ProviderLibrarySnapshot,
   ProviderLyrics,
   ProviderPlaylistCategory,
   ProviderPlaylistCategoryListResponse,
@@ -369,9 +371,66 @@ export class NeteaseService {
       provider: "netease",
       providerTrackId: trackId,
       plainLyric: readLyricText(asRecord(body?.lrc)?.lyric),
+      wordSyncedLyric: readLyricText(asRecord(body?.yrc)?.lyric),
       translatedLyric: readLyricText(asRecord(body?.tlyric)?.lyric),
       romanizedLyric: readLyricText(asRecord(body?.romalrc)?.lyric)
     };
+  }
+
+  async getLibrarySnapshot(userId: string): Promise<ProviderLibrarySnapshot> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const account = await this.accounts.getStatus(userId);
+    if (!account.neteaseUserId) {
+      throw new HttpException(createApiErrorResponse(errorCodes.neteaseAuthExpired, "The NetEase account needs to be bound again."), HttpStatus.CONFLICT);
+    }
+    const results = await Promise.allSettled([
+      this.callProvider(userId, () => this.api.getLikedTrackIds({ userId: account.neteaseUserId!, cookie })),
+      this.callProvider(userId, () => this.api.getUserPlaylists({ userId: account.neteaseUserId!, limit: 500, offset: 0, cookie })),
+      this.callProvider(userId, () => this.api.getCollectedAlbums({ limit: 500, offset: 0, cookie })),
+      this.callProvider(userId, () => this.api.getFollowedArtists({ limit: 500, offset: 0, cookie }))
+    ]);
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (results.every((result) => result.status === "rejected") && firstFailure) throw firstFailure.reason;
+    const likedBody = results[0].status === "fulfilled" ? results[0].value : {};
+    const playlistBody = results[1].status === "fulfilled" ? results[1].value : {};
+    const albumBody = results[2].status === "fulfilled" ? results[2].value : {};
+    const artistBody = results[3].status === "fulfilled" ? results[3].value : {};
+    const likedIds = (Array.isArray(likedBody.ids) ? likedBody.ids : [])
+      .map(readString)
+      .filter((id): id is string => !!id && /^\d+$/.test(id))
+      .slice(0, 2_000);
+    const likedTracks: NeteaseTrackCandidate[] = [];
+    for (let offset = 0; offset < likedIds.length; offset += 500) {
+      try {
+        const body = await this.callProvider(userId, () => this.api.getTracks({ trackIds: likedIds.slice(offset, offset + 500), cookie }));
+        likedTracks.push(...body.songs.map((item) => this.toTrackCandidate(item)).filter((item): item is NeteaseTrackCandidate => !!item));
+      } catch {
+        break;
+      }
+    }
+    const playlists = Array.isArray(playlistBody.playlist) ? playlistBody.playlist : Array.isArray(playlistBody.playlists) ? playlistBody.playlists : [];
+    const albums = findCatalogArray(albumBody, ["data", "albums", "list"]);
+    const artists = findCatalogArray(artistBody, ["data", "artists", "list"]);
+    return {
+      provider: "netease",
+      likedTracks,
+      collectedPlaylists: playlists
+        .filter((item) => asRecord(item)?.subscribed === true)
+        .map((item) => this.toPlaylistSummary(item))
+        .filter((item): item is ProviderPlaylistSummary => !!item),
+      collectedAlbums: albums.map((item) => this.toAlbumSummary(item)).filter((item): item is ProviderAlbumSummary => !!item),
+      followedArtists: artists.map((item) => this.toArtistSummary(item)).filter((item): item is ProviderArtistSummary => !!item)
+    };
+  }
+
+  async getRelatedPlaylists(userId: string, trackId: string): Promise<ProviderPlaylistListResponse> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const body = await this.callProvider(userId, () => this.api.getRelatedPlaylists({ trackId, cookie }));
+    const records = Array.isArray(body.playlists) ? body.playlists : [];
+    const items = records.map((item) => this.toPlaylistSummary(item)).filter((item): item is ProviderPlaylistSummary => !!item);
+    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async listPlaylists(userId: string, query: NeteaseCatalogPageQuery): Promise<ProviderPlaylistListResponse> {
@@ -677,6 +736,20 @@ export class NeteaseService {
     };
   }
 
+  private toArtistSummary(value: unknown): ProviderArtistSummary | null {
+    const artist = asRecord(value);
+    const id = readString(artist?.id);
+    const name = readString(artist?.name);
+    if (!artist || !id || !name) return null;
+    return {
+      provider: "netease",
+      providerArtistId: id,
+      name,
+      artworkUrl: readNeteaseArtworkUrl(artist.picUrl, artist.img1v1Url),
+      description: readString(artist.briefDesc) ?? readString(artist.alias)
+    };
+  }
+
   private async getSearchTrackDetails(userId: string, cookie: string, songs: unknown[]) {
     const trackIds = songs
       .map((song) => readString(asRecord(song)?.id))
@@ -831,6 +904,22 @@ function readNeteaseTrackArray(...values: unknown[]): unknown[] {
     }
   }
   return emptyList;
+}
+
+function findCatalogArray(value: unknown, keys: string[]) {
+  const queue = [value];
+  const visited = new Set<Record<string, unknown>>();
+  while (queue.length > 0) {
+    const record = asRecord(queue.shift());
+    if (!record || visited.has(record)) continue;
+    visited.add(record);
+    for (const key of keys) {
+      if (Array.isArray(record[key])) return record[key];
+      const nested = asRecord(record[key]);
+      if (nested) queue.push(nested);
+    }
+  }
+  return [] as unknown[];
 }
 
 function readNeteaseArtworkUrl(...values: unknown[]) {

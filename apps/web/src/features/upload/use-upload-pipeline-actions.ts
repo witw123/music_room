@@ -346,6 +346,16 @@ type PreparedProviderImport = {
   lyrics: string | null;
 };
 
+type PrefetchedProviderAudio = {
+  cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null;
+  file: File;
+  assets: Awaited<ReturnType<typeof prepareAudioAssets>> | null;
+};
+
+type PrefetchedProviderAudioResult =
+  | { ok: true; audio: PrefetchedProviderAudio }
+  | { ok: false; error: unknown };
+
 async function importProviderTracks(input: {
   activeSession: GuestSession | null;
   candidates: ProviderTrackCandidate[];
@@ -373,68 +383,111 @@ async function importProviderTracks(input: {
     throw new Error("你没有修改房间曲库的权限。请联系房主。");
   }
 
+  const pendingCandidateKeys = new Set<string>();
   const pendingCandidates = candidates.filter((candidate) => {
     const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
-    if (inFlightUploadHashesRef.current.has(key)) return false;
+    if (inFlightUploadHashesRef.current.has(key) || pendingCandidateKeys.has(key)) return false;
     const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
-    return !roomSnapshot.tracks.some((track) =>
+    const shouldImport = !roomSnapshot.tracks.some((track) =>
       track.ownerSessionId === activeSession.userId &&
       track.sourceType === sourceType &&
       track.sourceRef?.provider === sourceRef.provider &&
       track.sourceRef.trackId === sourceRef.trackId
     );
+    if (shouldImport) pendingCandidateKeys.add(key);
+    return shouldImport;
   });
   if (pendingCandidates.length === 0) return;
 
   const prepared: PreparedProviderImport[] = [];
   const failures: unknown[] = [];
-  let nextIndex = 0;
-  const prepareWorker = async () => {
-    while (nextIndex < pendingCandidates.length) {
-      const candidate = pendingCandidates[nextIndex++];
-      const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
-      inFlightUploadHashesRef.current.add(key);
-      let objectUrl: string | null = null;
-      try {
-        input.setStatusMessage(`正在准备歌曲 ${prepared.length + failures.length + 1} / ${pendingCandidates.length}…`);
-        const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
-        const cachedTrack = await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId);
-        let file: File;
-        let assets: Awaited<ReturnType<typeof prepareAudioAssets>> | null = null;
-        if (cachedTrack) {
-          const cachedFile = toCachedLibraryFile({ file: cachedTrack.file, title: candidate.title, mimeType: cachedTrack.mimeType, fileHash: cachedTrack.fileHash });
-          file = new File([cachedFile], cachedFile.name, { type: await resolveCachedAudioMimeType(cachedFile) });
-          assets = await getReusableAudioAssets({ fileHash: cachedTrack.fileHash, sizeBytes: cachedTrack.sizeBytes });
-        } else {
-          const source = sourceType === "netease"
-            ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
-            : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
-          const extension = extensionForImportedMimeType(source.contentType);
-          file = new File([source.blob], `${sanitizeFileName(candidate.title, sourceType)}.${extension}`, { type: source.contentType });
-        }
-        const createdObjectUrl = URL.createObjectURL(file);
-        objectUrl = createdObjectUrl;
-        const artworkResponse = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
-          ? await musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).catch(() => null)
-          : null;
-        const localArtworkUrl = await resolveLocalArtworkUrl(file, candidate.artworkUrl, artworkResponse?.blob);
-        assets ??= await prepareAudioAssets({ file });
-        const draft = await buildTrackMeta(file, createdObjectUrl, activeSession, assets, {
-          type: sourceType, metadata: { ...candidate, artworkUrl: localArtworkUrl }, sourceRef
-        });
-        const lyrics = cachedTrack?.lyrics?.trim() || (await resolveImportedLyrics({
-          title: candidate.title, artist: candidate.artist, sourceType, sourceTrackId: candidate.providerTrackId
-        })) || null;
-        prepared.push({ candidate, file, objectUrl, draft: { ...draft, lyrics, artworkUrl: candidate.artworkUrl ?? null }, localArtworkUrl, lyrics });
-      } catch (error) {
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-        failures.push(error);
-      } finally {
-        inFlightUploadHashesRef.current.delete(key);
-      }
+  for (const key of pendingCandidateKeys) inFlightUploadHashesRef.current.add(key);
+  const prefetchedAudio = new Map<number, Promise<PrefetchedProviderAudioResult>>();
+  let nextPrefetchIndex = 0;
+  const fillPrefetchWindow = (lastIndex: number) => {
+    while (nextPrefetchIndex < pendingCandidates.length && nextPrefetchIndex <= lastIndex) {
+      const index = nextPrefetchIndex++;
+      const candidate = pendingCandidates[index];
+      prefetchedAudio.set(
+        index,
+        prefetchProviderAudio(candidate, sourceType).then(
+          (audio) => ({ ok: true as const, audio }),
+          (error: unknown) => ({ ok: false as const, error })
+        )
+      );
     }
   };
-  await Promise.all(Array.from({ length: Math.min(2, pendingCandidates.length) }, () => prepareWorker()));
+  fillPrefetchWindow(1);
+
+  for (let index = 0; index < pendingCandidates.length; index += 1) {
+    const candidate = pendingCandidates[index];
+    const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
+    let objectUrl: string | null = null;
+    try {
+      input.setStatusMessage(`正在按顺序导入 ${index + 1} / ${pendingCandidates.length}：《${candidate.title}》…`);
+      const prefetchPromise = prefetchedAudio.get(index);
+      if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
+      const prefetchResult = await prefetchPromise;
+      prefetchedAudio.delete(index);
+      fillPrefetchWindow(index + 2);
+      if (!prefetchResult.ok) throw prefetchResult.error;
+      const prefetched = prefetchResult.audio;
+      if (!prefetched) throw new Error(`歌曲预取结果无效：${candidate.title}`);
+
+      const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
+      const lyricsPromise = prefetched.cachedTrack?.lyrics?.trim()
+        ? Promise.resolve(prefetched.cachedTrack.lyrics.trim())
+        : resolveImportedLyrics({
+            title: candidate.title,
+            artist: candidate.artist,
+            sourceType,
+            sourceTrackId: candidate.providerTrackId
+          });
+      const artworkPromise = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
+        ? musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
+        : Promise.resolve(undefined);
+      const createdObjectUrl = URL.createObjectURL(prefetched.file);
+      objectUrl = createdObjectUrl;
+      const localArtworkPromise = artworkPromise.then((artworkBlob) =>
+        resolveLocalArtworkUrl(prefetched.file, candidate.artworkUrl, artworkBlob)
+      );
+      const assets = prefetched.assets ?? await prepareAudioAssets({
+        file: prefetched.file,
+        onProgress: ({ stage, completed, total }) => {
+          const stageLabel = {
+            inspecting: "检查音频",
+            hashing: "校验音频",
+            "persisting-original": "缓存源文件",
+            decoding: "解码音频",
+            encoding: "生成播放分片",
+            "persisting-playback": "缓存播放分片"
+          }[stage];
+          const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+          input.setStatusMessage(`${index + 1} / ${pendingCandidates.length}《${candidate.title}》· ${stageLabel} ${percent}%`);
+        }
+      });
+      const localArtworkUrl = await localArtworkPromise;
+      const draft = await buildTrackMeta(prefetched.file, createdObjectUrl, activeSession, assets, {
+        type: sourceType,
+        metadata: { ...candidate, artworkUrl: localArtworkUrl },
+        sourceRef
+      });
+      const lyrics = (await lyricsPromise)?.trim() || null;
+      prepared.push({
+        candidate,
+        file: prefetched.file,
+        objectUrl: createdObjectUrl,
+        draft: { ...draft, lyrics, artworkUrl: candidate.artworkUrl ?? null },
+        localArtworkUrl,
+        lyrics
+      });
+    } catch (error) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      failures.push(error);
+    } finally {
+      inFlightUploadHashesRef.current.delete(key);
+    }
+  }
   if (prepared.length === 0) {
     throw failures[0] ?? new Error("没有可导入的歌曲。");
   }
@@ -462,6 +515,49 @@ async function importProviderTracks(input: {
   await input.syncRoomSnapshot(roomSnapshot.room.id);
   void input.refreshCacheLibrary().catch(() => undefined);
   input.setStatusMessage(`已导入 ${registered.length} 首歌曲${failures.length ? `，${failures.length} 首失败` : ""}。`);
+}
+
+async function prefetchProviderAudio(
+  candidate: ProviderTrackCandidate,
+  sourceType: Exclude<TrackSourceType, "local_upload">
+): Promise<PrefetchedProviderAudio> {
+  let cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null = (
+    await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId)
+  ) ?? null;
+  if (cachedTrack) {
+    const cachedFile = toCachedLibraryFile({
+      file: cachedTrack.file,
+      title: candidate.title,
+      mimeType: cachedTrack.mimeType,
+      fileHash: cachedTrack.fileHash
+    });
+    try {
+      const file = new File([cachedFile], cachedFile.name, {
+        type: await resolveCachedAudioMimeType(cachedFile)
+      });
+      const assets = await getReusableAudioAssets({
+        fileHash: cachedTrack.fileHash,
+        sizeBytes: cachedTrack.sizeBytes
+      });
+      return { cachedTrack, file, assets };
+    } catch {
+      // Ignore an unreadable cache entry and download a fresh provider copy.
+    }
+  }
+
+  const source = sourceType === "netease"
+    ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
+    : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
+  const extension = extensionForImportedMimeType(source.contentType);
+  return {
+    cachedTrack: null,
+    file: new File(
+      [source.blob],
+      `${sanitizeFileName(candidate.title, sourceType)}.${extension}`,
+      { type: source.contentType }
+    ),
+    assets: null
+  };
 }
 
 type ProviderTrackCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -752,7 +848,7 @@ async function requestProviderLyrics(
     const response = provider === "netease"
       ? await musicRoomApi.getNeteaseLyrics(trackId)
       : await musicRoomApi.getQqMusicLyrics(trackId);
-    const lyrics = response.plainLyric?.trim();
+    const lyrics = (response.wordSyncedLyric ?? response.plainLyric)?.trim();
     return lyrics ? lyrics.slice(0, 100_000) : null;
   } catch {
     return null;

@@ -244,7 +244,7 @@ export function toLocalPlaylistTrackInput(input: {
     mimeType: input.mimeType ?? "audio/mpeg",
     sizeBytes: input.sizeBytes ?? 0,
     artworkUrl: track.artworkUrl,
-    lyrics: lyrics?.plainLyric ?? null,
+    lyrics: lyrics?.wordSyncedLyric ?? lyrics?.plainLyric ?? null,
     provider: track.provider,
     providerTrackId: track.providerTrackId,
     fileHash: input.fileHash ?? null,

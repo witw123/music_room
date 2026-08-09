@@ -57,7 +57,8 @@ export class RoomPlaybackService {
         playback.shuffleBagTrackIds = synchronizeShuffleBagTrackIds(
           previousMode === "shuffle" ? playback.shuffleBagTrackIds ?? [] : [],
           record.queue.map((item) => item.trackId),
-          playback.currentTrackId
+          playback.currentTrackId,
+          previousMode === "shuffle" ? [] : record.queue.map((item) => item.trackId)
         );
       } else {
         playback.shuffleBagTrackIds = [];
@@ -383,7 +384,8 @@ export class RoomPlaybackService {
     const bag = synchronizeShuffleBagTrackIds(
       playback.shuffleBagTrackIds ?? [],
       trackIds,
-      playback.currentTrackId
+      playback.currentTrackId,
+      []
     );
     playback.shuffleBagTrackIds = bag;
 
@@ -420,7 +422,7 @@ export class RoomPlaybackService {
     return true;
   }
 
-  syncShuffleBagWithQueue(record: RoomRecord) {
+  syncShuffleBagWithQueue(record: RoomRecord, addedTrackIds: readonly string[]) {
     const playback = record.room.playback;
     if (playback.playbackMode !== "shuffle") {
       playback.shuffleBagTrackIds = [];
@@ -430,7 +432,8 @@ export class RoomPlaybackService {
     playback.shuffleBagTrackIds = synchronizeShuffleBagTrackIds(
       playback.shuffleBagTrackIds ?? [],
       record.queue.map((item) => item.trackId),
-      playback.currentTrackId
+      playback.currentTrackId,
+      addedTrackIds
     );
   }
 
@@ -439,7 +442,8 @@ export class RoomPlaybackService {
     playback.shuffleBagTrackIds = synchronizeShuffleBagTrackIds(
       playback.shuffleBagTrackIds ?? [],
       record.queue.map((item) => item.trackId),
-      trackId
+      trackId,
+      []
     ).filter((candidateTrackId) => candidateTrackId !== trackId);
   }
 

@@ -675,7 +675,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
     const request = sourceProvider === "netease" ? musicRoomApi.getNeteaseLyrics(sourceTrackId) : musicRoomApi.getQqMusicLyrics(sourceTrackId);
     void request.then((lyrics) => {
       if (!cancelled) {
-        setPlainLyric(lyrics.plainLyric?.trim() || fallbackLyrics);
+        setPlainLyric(lyrics.wordSyncedLyric?.trim() || lyrics.plainLyric?.trim() || fallbackLyrics);
         setLyricsStatus("ready");
       }
     }).catch(() => {

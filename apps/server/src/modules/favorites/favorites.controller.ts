@@ -9,7 +9,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { z } from "zod";
-import { providerAlbumSummarySchema, providerSchema, providerTrackCandidateSchema } from "@music-room/shared";
+import { providerAlbumSummarySchema, providerArtistSummarySchema, providerSchema, providerTrackCandidateSchema } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { FavoritesService } from "./favorites.service";
@@ -23,6 +23,10 @@ const saveFavoriteTrackSchema = providerTrackCandidateSchema;
 const providerTrackParamSchema = z.object({
   provider: providerSchema,
   providerTrackId: z.string().trim().min(1).max(128)
+});
+const providerArtistParamSchema = z.object({
+  provider: providerSchema,
+  providerArtistId: z.string().trim().min(1).max(128)
 });
 
 @Controller("v1/favorites/albums")
@@ -99,6 +103,49 @@ export class FavoriteTracksController {
       await this.getCurrentUserId(sessionToken),
       parsed.provider,
       parsed.providerTrackId
+    );
+  }
+
+  private async getCurrentUserId(sessionToken?: string) {
+    try {
+      return (await this.auth.getAuthSessionByTokenOrThrow(sessionToken)).userId;
+    } catch (error) {
+      throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
+    }
+  }
+}
+
+@Controller("v1/favorites/artists")
+export class FavoriteArtistsController {
+  constructor(
+    private readonly favorites: FavoritesService,
+    private readonly auth: AuthService
+  ) {}
+
+  @Get()
+  async list(@Headers("x-session-token") sessionToken?: string) {
+    return this.favorites.listArtists(await this.getCurrentUserId(sessionToken));
+  }
+
+  @Put()
+  async save(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: unknown
+  ) {
+    const artist = parseRequestBody(providerArtistSummarySchema, body);
+    return this.favorites.saveArtist(await this.getCurrentUserId(sessionToken), artist);
+  }
+
+  @Delete(":provider/:providerArtistId")
+  async remove(
+    @Param() params: Record<string, unknown>,
+    @Headers("x-session-token") sessionToken?: string
+  ) {
+    const parsed = parseRequestBody(providerArtistParamSchema, params);
+    return this.favorites.removeArtist(
+      await this.getCurrentUserId(sessionToken),
+      parsed.provider,
+      parsed.providerArtistId
     );
   }
 

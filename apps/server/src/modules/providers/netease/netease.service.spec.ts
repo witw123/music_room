@@ -203,6 +203,7 @@ describe("NeteaseService", () => {
       provider: "netease",
       providerTrackId: "7",
       plainLyric: "plain",
+      wordSyncedLyric: null,
       translatedLyric: "translated",
       romanizedLyric: null
     });
@@ -261,5 +262,49 @@ describe("NeteaseService", () => {
     expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(1);
     await service.getRecommendedPlaylists("user_1", { limit: 10 });
     expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads third-party library data without importing it", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      getLikedTrackIds: jest.fn().mockResolvedValue({ ids: [7] }),
+      getTracks: jest.fn().mockResolvedValue({ songs: [{ id: 7, name: "Liked", ar: [{ name: "Artist" }] }] }),
+      getUserPlaylists: jest.fn().mockResolvedValue({ playlist: [{ id: 11, name: "Collected", subscribed: true }] }),
+      getCollectedAlbums: jest.fn().mockResolvedValue({ data: [{ id: 22, name: "Album", artist: { name: "Artist" } }] }),
+      getFollowedArtists: jest.fn().mockResolvedValue({ data: [{ id: 33, name: "Singer" }] })
+    };
+    const accounts = {
+      getCookieOrThrow: jest.fn().mockResolvedValue("cookie"),
+      getStatus: jest.fn().mockResolvedValue({ neteaseUserId: "99" })
+    };
+    const service = new NeteaseService(api as never, accounts as never, {} as never);
+
+    await expect(service.getLibrarySnapshot("user_1")).resolves.toMatchObject({
+      provider: "netease",
+      likedTracks: [{ providerTrackId: "7" }],
+      collectedPlaylists: [{ providerPlaylistId: "11" }],
+      collectedAlbums: [{ providerAlbumId: "22" }],
+      followedArtists: [{ providerArtistId: "33", name: "Singer" }]
+    });
+  });
+
+  it("keeps available NetEase library sections when one upstream request fails", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      getLikedTrackIds: jest.fn().mockRejectedValue(new NeteaseApiError("unavailable")),
+      getUserPlaylists: jest.fn().mockResolvedValue({ playlist: [{ id: 11, name: "Collected", subscribed: true }] }),
+      getCollectedAlbums: jest.fn().mockResolvedValue({ data: [] }),
+      getFollowedArtists: jest.fn().mockResolvedValue({ data: [] })
+    };
+    const accounts = {
+      getCookieOrThrow: jest.fn().mockResolvedValue("cookie"),
+      getStatus: jest.fn().mockResolvedValue({ neteaseUserId: "99" })
+    };
+    const service = new NeteaseService(api as never, accounts as never, {} as never);
+
+    await expect(service.getLibrarySnapshot("user_1")).resolves.toMatchObject({
+      likedTracks: [],
+      collectedPlaylists: [{ providerPlaylistId: "11" }]
+    });
   });
 });

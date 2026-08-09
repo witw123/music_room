@@ -323,7 +323,7 @@ function RoomStageBase({
         ? await musicRoomApi.getNeteaseLyrics(sourceTrackId)
         : await musicRoomApi.getQqMusicLyrics(sourceTrackId);
       if (!cancelled) {
-        setLyricsText(response.plainLyric?.trim() || null);
+        setLyricsText(response.wordSyncedLyric?.trim() || response.plainLyric?.trim() || null);
         setLyricsStatus("ready");
       }
     };

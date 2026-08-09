@@ -348,13 +348,16 @@ export function useTrackUploads(options: {
       }
 
       const mimeType = normalizeLocalAudioMimeType(track.mimeType ?? file.type);
-      const lyrics = track.lyrics?.trim()
-        || (track.sourceRef
-          ? (await (track.sourceRef.provider === "netease"
+      const providerLyrics = track.sourceRef
+        ? await (track.sourceRef.provider === "netease"
             ? musicRoomApi.getNeteaseLyrics(track.sourceRef.trackId)
             : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
-          ).catch(() => null))?.plainLyric ?? null
-          : null);
+          ).catch(() => null)
+        : null;
+      const lyrics = track.lyrics?.trim()
+        || providerLyrics?.wordSyncedLyric
+        || providerLyrics?.plainLyric
+        || null;
       await saveAudioFileToLocalDirectory({
         file,
         fileHash: track.fileHash,

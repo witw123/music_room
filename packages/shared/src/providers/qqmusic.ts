@@ -22,6 +22,7 @@ export const qqMusicQrStatusResponseSchema = z.object({
 export const qqMusicTrackCandidateSchema = z.object({
   provider: z.literal("qqmusic"),
   providerTrackId: z.string().trim().min(1).max(128),
+  relatedTrackId: z.string().trim().min(1).max(128).optional(),
   access: z.enum(["free", "vip", "paid", "unknown"]),
   quality: z.enum(["standard", "high", "exhigh", "lossless", "hires"]).nullable(),
   title: z.string(),

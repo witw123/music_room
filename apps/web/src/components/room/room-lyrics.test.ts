@@ -6,8 +6,22 @@ describe("room lyrics", () => {
     const lines = parseRoomLyrics("[ti:Demo]\n[00:01.20]First\n[00:02]Second");
 
     expect(lines).toEqual([
-      { id: "1:0", text: "First", timeMs: 1_200 },
-      { id: "2:0", text: "Second", timeMs: 2_000 }
+      { id: "1:0", text: "First", timeMs: 1_200, words: [] },
+      { id: "2:0", text: "Second", timeMs: 2_000, words: [] }
+    ]);
+  });
+
+  it("parses YRC word timing", () => {
+    expect(parseRoomLyrics("[1000,1200](1000,400,0)你(1400,600,0)好")).toEqual([
+      {
+        id: "0:yrc",
+        text: "你好",
+        timeMs: 1_000,
+        words: [
+          { text: "你", timeMs: 1_000, durationMs: 400 },
+          { text: "好", timeMs: 1_400, durationMs: 600 }
+        ]
+      }
     ]);
   });
 

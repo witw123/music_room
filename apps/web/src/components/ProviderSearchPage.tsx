@@ -341,7 +341,7 @@ export function ProviderSearchPage({
         ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
         : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
       ).catch(() => null);
-      const lyrics = lyricPayload?.plainLyric ?? null;
+      const lyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
       const saved = await saveAudioFileToLocalDirectory({
         file: response.blob,
         fileHash,

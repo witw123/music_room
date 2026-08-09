@@ -4,9 +4,11 @@ import type {
   ProviderAlbumDetail,
   ProviderAlbumListResponse,
   ProviderAlbumSummary,
+  ProviderArtistSummary,
   ProviderDiscoveryBanner,
   ProviderDiscoveryBannerListResponse,
   ProviderLyrics,
+  ProviderLibrarySnapshot,
   ProviderPlaylistCategory,
   ProviderPlaylistCategoryListResponse,
   ProviderPlaylistDetail,
@@ -278,9 +280,66 @@ export class QqMusicService {
       provider: "qqmusic",
       providerTrackId: trackId,
       plainLyric: readLyricText(body.lyric),
-      translatedLyric: readLyricText(body.trans ?? body.transLyric ?? body.tlyric),
-      romanizedLyric: readLyricText(body.roma ?? body.romaLyric ?? body.romalrc)
+      wordSyncedLyric: readLyricText(body.qrc),
+      translatedLyric: readLyricText(body.trans),
+      romanizedLyric: readLyricText(body.roma)
     };
+  }
+
+  async getLibrarySnapshot(userId: string): Promise<ProviderLibrarySnapshot> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const account = await this.accounts.getStatus(userId);
+    if (!account.qqMusicUserId) {
+      throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAuthExpired, "The QQ Music account needs to be bound again."), HttpStatus.CONFLICT);
+    }
+    const providerUserId = account.qqMusicUserId;
+    const results = await Promise.allSettled([
+      this.callProvider(() => this.api.getLikedPlaylist({ userId: providerUserId, cookie })),
+      this.callProvider(() => this.api.getCollectedPlaylists({ userId: providerUserId, limit: 500, offset: 0, cookie })),
+      this.callProvider(() => this.api.getCollectedAlbums({ userId: providerUserId, limit: 500, offset: 0, cookie })),
+      this.callProvider(() => this.api.getFollowedArtists({ userId: providerUserId, limit: 500, offset: 0, cookie }))
+    ]);
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (results.every((result) => result.status === "rejected") && firstFailure) throw firstFailure.reason;
+    const profile = results[0].status === "fulfilled" ? results[0].value : {};
+    const playlistBody = results[1].status === "fulfilled" ? results[1].value : {};
+    const albumBody = results[2].status === "fulfilled" ? results[2].value : {};
+    const artistBody = results[3].status === "fulfilled" ? results[3].value : {};
+    const likedEntry = findFirstArray(profile, ["mymusic", "myMusic", "list"])
+      .map(asRecord)
+      .find((item) => item && (item.type === 1 || readString(item.title)?.includes("喜欢")));
+    const likedPlaylistId = readString(likedEntry?.id ?? likedEntry?.dissid ?? likedEntry?.tid);
+    let likedTracks: QqMusicTrackCandidate[] = [];
+    if (likedPlaylistId) {
+      try {
+        const liked = await this.callProvider(() => this.api.getPlaylist({ playlistId: likedPlaylistId, cookie }));
+        const playlist = readFirstRecord(liked, ["cdlist", "playlist", "playlists", "disslist", "dissList", "list"]);
+        likedTracks = playlist ? readTrackArray(playlist).map((item) => this.toTrackCandidate(item)).filter((item): item is QqMusicTrackCandidate => !!item) : [];
+      } catch {
+        likedTracks = [];
+      }
+    }
+    const collectedPlaylists = findFirstArray(playlistBody, ["cdlist", "disslist", "dissList", "list", "playlists"])
+      .map((item) => this.toPlaylistSummary(item))
+      .filter((item): item is ProviderPlaylistSummary => !!item);
+    const collectedAlbums = findFirstArray(albumBody, ["albumlist", "albumList", "list", "albums"])
+      .map((item) => this.toAlbumSummary(item))
+      .filter((item): item is ProviderAlbumSummary => !!item);
+    const followedArtists = findFirstArray(artistBody, ["singerlist", "singerList", "list", "singers"])
+      .map((item) => this.toArtistSummary(item))
+      .filter((item): item is ProviderArtistSummary => !!item);
+    return { provider: "qqmusic", likedTracks, collectedPlaylists, collectedAlbums, followedArtists };
+  }
+
+  async getRelatedPlaylists(userId: string, trackId: string): Promise<ProviderPlaylistListResponse> {
+    this.assertEnabled();
+    const cookie = await this.getCookie(userId);
+    const body = await this.callProvider(() => this.api.getRelatedPlaylists({ trackId, cookie }));
+    const items = findFirstArray(body, ["vec_sim_diss", "disslist", "dissList", "list", "playlists"])
+      .map((item) => this.toPlaylistSummary(item))
+      .filter((item): item is ProviderPlaylistSummary => !!item);
+    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async listPlaylists(userId: string, query: QqMusicCatalogPageQuery): Promise<ProviderPlaylistListResponse> {
@@ -502,7 +561,8 @@ export class QqMusicService {
       album?.imgUrl,
       album?.imgurl
     ) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
-    return { provider: "qqmusic", providerTrackId: id, access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
+    const relatedTrackId = readString(r.songid ?? r.songId ?? r.id);
+    return { provider: "qqmusic", providerTrackId: id, ...(relatedTrackId ? { relatedTrackId } : {}), access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
   }
   private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
     const playlist = asRecord(value);
@@ -560,6 +620,19 @@ export class QqMusicService {
       ) ?? buildQqAlbumArtwork(id),
       releaseTime: readString(album.pubtime ?? album.pubTime ?? album.publicTime ?? album.publishTime),
       trackCount: readNumber(album.songnum ?? album.songNum ?? album.song_count ?? album.total) ?? 0
+    };
+  }
+  private toArtistSummary(value: unknown): ProviderArtistSummary | null {
+    const artist = asRecord(value);
+    const id = readString(artist?.singermid ?? artist?.singerMid ?? artist?.mid ?? artist?.id);
+    const name = readString(artist?.singername ?? artist?.singerName ?? artist?.name);
+    if (!artist || !id || !name) return null;
+    return {
+      provider: "qqmusic",
+      providerArtistId: id,
+      name,
+      artworkUrl: readHttpUrl(artist.pic, artist.picUrl, artist.singerPic, artist.avatar),
+      description: readString(artist.desc ?? artist.description)
     };
   }
   private toPlaylistCategory(value: unknown, groupName: string | null): ProviderPlaylistCategory | null {

@@ -211,7 +211,7 @@ export class RoomContentService {
     };
 
     record.queue.push(queueItem);
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, [trackId]);
     incrementQueueVersion(record.room.playback);
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -249,7 +249,7 @@ export class RoomContentService {
     );
 
     record.queue.push(...nextItems);
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, validTrackIds);
     incrementQueueVersion(record.room.playback);
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -279,7 +279,7 @@ export class RoomContentService {
     if (removesCurrentQueueItem || removesDirectlyPlayingTrack) {
       record.queue = nextQueue;
       this.roomPlaybackService.clearPlayback(playback);
-      this.roomPlaybackService.syncShuffleBagWithQueue(record);
+      this.roomPlaybackService.syncShuffleBagWithQueue(record, []);
       incrementQueueVersion(playback);
       incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
@@ -290,7 +290,7 @@ export class RoomContentService {
     if (removesNextQueueItem) {
       playback.nextQueueItemId = null;
     }
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, []);
     incrementQueueVersion(record.room.playback);
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -339,7 +339,7 @@ export class RoomContentService {
       }));
 
     record.queue = nextQueue;
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, []);
     incrementQueueVersion(record.room.playback);
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -364,7 +364,7 @@ export class RoomContentService {
         record.room.playback.nextQueueItemId = null;
       }
     }
-    this.roomPlaybackService.syncShuffleBagWithQueue(record);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, []);
 
     if (
       record.room.playback.currentTrackId &&

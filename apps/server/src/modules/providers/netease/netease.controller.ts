@@ -135,6 +135,19 @@ export class NeteaseController {
     return this.service.getDailyPlaylists(await this.getCurrentUserId(sessionToken));
   }
 
+  @Get("library")
+  async library(@Headers("x-session-token") sessionToken: string | undefined) {
+    return this.service.getLibrarySnapshot(await this.getCurrentUserId(sessionToken));
+  }
+
+  @Get("tracks/:trackId/related-playlists")
+  async relatedPlaylists(
+    @Param("trackId") trackId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    return this.service.getRelatedPlaylists(await this.getCurrentUserId(sessionToken), trackId);
+  }
+
   @Get("discover/playlists")
   async categoryPlaylists(
     @Query() query: Record<string, unknown>,

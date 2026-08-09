@@ -13,9 +13,12 @@ import {
   type ProviderAlbumListResponse,
   type ProviderAlbumDetail,
   type ProviderAlbumFavorite,
+  type ProviderArtistFavorite,
+  type ProviderArtistSummary,
   type ProviderAudioResolveResponse,
   type ProviderDiscoveryBannerListResponse,
   type ProviderLyrics,
+  type ProviderLibrarySnapshot,
   type ProviderPlaylistCategoryListResponse,
   type ProviderPlaylistDetail,
   type ProviderPlaylistListResponse,
@@ -433,6 +436,9 @@ export const musicRoomApi = {
     request<NeteaseTrackCandidate>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}`),
   getNeteaseLyrics: (trackId: string) =>
     request<ProviderLyrics>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  getNeteaseLibrary: () => request<ProviderLibrarySnapshot>("/v1/providers/netease/library"),
+  listNeteaseRelatedPlaylists: (trackId: string) =>
+    request<ProviderPlaylistListResponse>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/related-playlists`),
   listNeteasePlaylists: (options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       limit: String(options?.limit ?? 30),
@@ -563,6 +569,9 @@ export const musicRoomApi = {
   getQqMusicTrack: (trackId: string) => request<QqMusicTrackCandidate>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}`),
   getQqMusicLyrics: (trackId: string) =>
     request<ProviderLyrics>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  getQqMusicLibrary: () => request<ProviderLibrarySnapshot>("/v1/providers/qqmusic/library"),
+  listQqMusicRelatedPlaylists: (trackId: string) =>
+    request<ProviderPlaylistListResponse>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/related-playlists`),
   listQqMusicPlaylists: (options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       limit: String(options?.limit ?? 30),
@@ -594,6 +603,17 @@ export const musicRoomApi = {
   deleteFavoriteTrack: (provider: "netease" | "qqmusic", providerTrackId: string) =>
     request<{ ok: boolean }>(
       `/v1/favorites/tracks/${provider}/${encodeURIComponent(providerTrackId)}`,
+      { method: "DELETE" }
+    ),
+  listFavoriteArtists: () => request<ProviderArtistFavorite[]>("/v1/favorites/artists"),
+  saveFavoriteArtist: (artist: ProviderArtistSummary) =>
+    request<ProviderArtistFavorite>("/v1/favorites/artists", {
+      method: "PUT",
+      body: JSON.stringify(artist)
+    }),
+  deleteFavoriteArtist: (provider: "netease" | "qqmusic", providerArtistId: string) =>
+    request<{ ok: boolean }>(
+      `/v1/favorites/artists/${provider}/${encodeURIComponent(providerArtistId)}`,
       { method: "DELETE" }
     ),
   resolveQqMusicAudio: (

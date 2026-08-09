@@ -10,6 +10,7 @@ import { CustomLayoutEditor } from "@/components/CustomLayoutEditor";
 import { LocalStorageManagementCard } from "@/components/LocalStorageSettingsSection";
 import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
 import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
+import { ProviderDataImportSection } from "@/components/ProviderDataImportSection";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -148,6 +149,10 @@ export function SettingsPage() {
                 </div>
               ) : null}
             </div>
+          </SettingsSection>
+
+          <SettingsSection title="导入平台资料">
+            <ProviderDataImportSection />
           </SettingsSection>
 
           <LocalStorageManagementCard />

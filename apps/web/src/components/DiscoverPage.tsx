@@ -68,6 +68,7 @@ const enabledProviders: Provider[] = [
 ];
 
 type ProviderDiscoveryData = {
+  related: ProviderPlaylistSummary[];
   recommended: ProviderPlaylistSummary[];
   playlists: ProviderPlaylistSummary[];
   toplists: ProviderPlaylistSummary[];
@@ -81,6 +82,7 @@ type ProviderDiscoveryData = {
 const discoverSearchHistoryKey = "music-room-discover-search-history-v1";
 
 const emptyProviderData: ProviderDiscoveryData = {
+  related: [],
   recommended: [],
   playlists: [],
   toplists: [],
@@ -466,7 +468,7 @@ export function DiscoverPage() {
       const lyrics = await (resolvedTrack.provider === "netease"
         ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
         : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-      ).then((value) => value.plainLyric ?? null).catch(() => null);
+      ).then((value) => value.wordSyncedLyric ?? value.plainLyric ?? null).catch(() => null);
       const saved = await saveAudioFileToLocalDirectory({
         file: response.blob,
         fileHash,
@@ -662,6 +664,7 @@ export function DiscoverPage() {
   const activeData = data[discoverProvider] ?? emptyProviderData;
   const banners = activeData.banners;
   const recommended = activeData.recommended;
+  const related = activeData.related;
   const playlists = activeData.playlists;
   const toplists = activeData.toplists;
   const albums = activeData.albums;
@@ -745,6 +748,8 @@ export function DiscoverPage() {
           <>
             {heroItems.length > 0 ? <HeroRail items={heroItems} onOpenPlaylist={openPlaylist} loadingKey={detailLoading} /> : null}
 
+            {related.length > 0 ? <DiscoverySection eyebrow="猜你喜欢" title="相关推荐歌单" actionLabel="换一批" onAction={refreshAll}><PlaylistRail expanded={false} items={related} onOpen={openPlaylist} loadingKey={detailLoading} onToggleExpanded={() => undefined} /></DiscoverySection> : null}
+
             {categoryOptions.length > 0 ? (
               <section className="mt-9" aria-label="探索分类">
                 <div className={`gap-2 pb-1 ${categoriesExpanded ? "flex flex-wrap" : "hide-scrollbar flex overflow-x-auto"}`}>
@@ -815,6 +820,7 @@ async function loadProviderData(provider: Provider) {
   const valueAt = <T,>(index: number, fallback: T) => settled[index]?.status === "fulfilled" ? settled[index].value as T : fallback;
   const data: ProviderDiscoveryData = provider === "netease"
     ? {
+      related: [],
       recommended: valueAt(0, { items: [] }).items,
       playlists: valueAt(1, { items: [] }).items,
       toplists: valueAt(2, { items: [] }).items,
@@ -825,6 +831,7 @@ async function loadProviderData(provider: Provider) {
       banners: []
     }
     : {
+      related: [],
       recommended: valueAt(0, { items: [] }).items,
       playlists: valueAt(1, { items: [] }).items,
       toplists: valueAt(2, { items: [] }).items,
@@ -834,6 +841,22 @@ async function loadProviderData(provider: Provider) {
       categories: valueAt(6, { items: [] }).items,
       banners: valueAt(7, { items: [] }).items
     };
+  const relatedSource = data.recommended[0] ?? data.playlists[0];
+  if (relatedSource) {
+    try {
+      const detail = provider === "netease"
+        ? await musicRoomApi.getNeteasePlaylist(relatedSource.providerPlaylistId)
+        : await musicRoomApi.getQqMusicPlaylist(relatedSource.providerPlaylistId);
+      const sourceTrack = detail.tracks.find((track) => provider === "netease" || Boolean(track.relatedTrackId));
+      if (!sourceTrack) throw new Error("No related-playlist seed track.");
+      const relatedTrackId = sourceTrack.relatedTrackId ?? sourceTrack.providerTrackId;
+      data.related = (provider === "netease"
+        ? await musicRoomApi.listNeteaseRelatedPlaylists(relatedTrackId)
+        : await musicRoomApi.listQqMusicRelatedPlaylists(relatedTrackId)).items;
+    } catch {
+      data.related = [];
+    }
+  }
   return { data, rejectedCount: settled.filter((result) => result.status === "rejected").length };
 }
 

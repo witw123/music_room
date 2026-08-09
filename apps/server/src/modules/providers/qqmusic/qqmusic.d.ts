@@ -15,4 +15,8 @@ declare module "@sansenjian/qq-music-api/services" {
   export const songListDetail: (options: any) => Promise<any>;
   export const getAlbumInfo: (options: any) => Promise<any>;
   export const getAlbumSongs: (options: any) => Promise<any>;
+  export const getRelatedPlaylists: (options: any) => Promise<any>;
+  export const getUserCollectedAlbums: (options: any) => Promise<any>;
+  export const getUserCollectedSongLists: (options: any) => Promise<any>;
+  export const getUserFollowSingers: (options: any) => Promise<any>;
 }

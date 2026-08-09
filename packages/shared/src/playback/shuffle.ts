@@ -17,13 +17,15 @@ export function shuffleTrackIds(
 }
 
 /**
- * Keeps unplayed ids in their current order, adds newly queued ids, and starts
- * a fresh cycle only after the previous bag has been consumed.
+ * Keeps the remaining cycle in sync with the queue and inserts only ids that
+ * the caller knows were newly queued. This avoids treating already-played ids
+ * as new every time the next track is selected.
  */
 export function synchronizeShuffleBagTrackIds(
   bag: readonly string[],
   trackIds: readonly string[],
   currentTrackId: string | null,
+  addedTrackIds: readonly string[] = [],
   random: ShuffleRandom = Math.random
 ) {
   const uniqueTrackIds = [...new Set(trackIds)];
@@ -32,13 +34,14 @@ export function synchronizeShuffleBagTrackIds(
     trackIdSet.has(trackId) && trackId !== currentTrackId
   );
   const retainedSet = new Set(retained);
-  const additions = uniqueTrackIds.filter((trackId) =>
-    trackId !== currentTrackId && !retainedSet.has(trackId)
+  const additions = [...new Set(addedTrackIds)].filter((trackId) =>
+    trackIdSet.has(trackId) && trackId !== currentTrackId && !retainedSet.has(trackId)
   );
 
-  if (retained.length > 0 || additions.length > 0) {
-    return [...retained, ...shuffleTrackIds(additions, random)];
+  if (additions.length > 0) {
+    return shuffleTrackIds([...retained, ...additions], random);
   }
+  if (retained.length > 0) return retained;
 
   return shuffleTrackIds(
     uniqueTrackIds.length === 1
@@ -56,7 +59,7 @@ export function takeNextShuffleTrack<T extends { id: string }>(
   random: ShuffleRandom = Math.random
 ) {
   const trackIds = tracks.map((track) => track.id);
-  const nextBag = synchronizeShuffleBagTrackIds(bag, trackIds, currentTrackId, random);
+  const nextBag = synchronizeShuffleBagTrackIds(bag, trackIds, currentTrackId, [], random);
   const trackById = new Map(tracks.map((track) => [track.id, track] as const));
   const nextTrackId = nextBag.find((trackId) => {
     const track = trackById.get(trackId);

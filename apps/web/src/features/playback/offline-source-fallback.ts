@@ -291,7 +291,7 @@ async function resolveProviderLyrics(source: OfflineProviderSource) {
     const response = source.provider === "netease"
       ? await musicRoomApi.getNeteaseLyrics(source.trackId)
       : await musicRoomApi.getQqMusicLyrics(source.trackId);
-    return response.plainLyric?.trim()?.slice(0, 100_000) ?? null;
+    return (response.wordSyncedLyric ?? response.plainLyric)?.trim()?.slice(0, 100_000) ?? null;
   } catch {
     return null;
   }

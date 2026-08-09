@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, QqMusicTrackCandidate } from "@music-room/shared";
+import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, QqMusicTrackCandidate } from "@music-room/shared";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,7 @@ export function FavoriteAlbumsPage() {
     initialStatusMessage: ""
   });
   const player = useLocalPlayer();
-  const [favoriteView, setFavoriteView] = useState<"tracks" | "albums">("tracks");
+  const [favoriteView, setFavoriteView] = useState<"tracks" | "albums" | "artists">("tracks");
   const {
     favoriteTracks,
     isFavorite: isFavoriteTrack,
@@ -59,6 +59,7 @@ export function FavoriteAlbumsPage() {
   const [items, setItems] = useState<ProviderAlbumFavorite[]>(() =>
     activeSession ? getCachedFavorites(activeSession.userId) ?? [] : []
   );
+  const [artists, setArtists] = useState<ProviderArtistFavorite[]>([]);
   const [favoritesLoaded, setFavoritesLoaded] = useState(() =>
     Boolean(activeSession && getCachedFavorites(activeSession.userId))
   );
@@ -102,6 +103,15 @@ export function FavoriteAlbumsPage() {
     return () => {
       cancelled = true;
     };
+  }, [activeSession]);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    let cancelled = false;
+    void musicRoomApi.listFavoriteArtists()
+      .then((records) => { if (!cancelled) setArtists(records); })
+      .catch((error) => { if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "收藏歌手加载失败。"); });
+    return () => { cancelled = true; };
   }, [activeSession]);
 
   useEffect(() => {
@@ -214,7 +224,7 @@ export function FavoriteAlbumsPage() {
           ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
           : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
         ).catch(() => null);
-      const lyrics = existing?.lyrics ?? lyricPayload?.plainLyric ?? null;
+      const lyrics = existing?.lyrics ?? lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
       const saved = await saveAudioFileToLocalDirectory({
         file: response.blob,
         fileHash,
@@ -337,6 +347,19 @@ export function FavoriteAlbumsPage() {
     ? items.find((item) => item.provider === detail.provider && item.providerAlbumId === detail.providerAlbumId) ?? null
     : null;
 
+  async function removeArtist(item: ProviderArtistFavorite) {
+    setPending(`artist:${item.provider}:${item.providerArtistId}`);
+    try {
+      await musicRoomApi.deleteFavoriteArtist(item.provider, item.providerArtistId);
+      setArtists((current) => current.filter((artist) => artist.id !== item.id));
+      setStatusMessage(`已取消收藏 ${item.name}。`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "取消收藏歌手失败。");
+    } finally {
+      setPending(null);
+    }
+  }
+
   return (
     <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
       <div className="workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20">
@@ -348,6 +371,7 @@ export function FavoriteAlbumsPage() {
           <div aria-label="收藏内容类型" className="workspace-segmented" role="tablist">
             <button aria-selected={favoriteView === "tracks"} className="workspace-segmented__item" onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
             <button aria-selected={favoriteView === "albums"} className="workspace-segmented__item" onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
+            <button aria-selected={favoriteView === "artists"} className="workspace-segmented__item" onClick={() => { setFavoriteView("artists"); setDetail(null); }} role="tab" type="button">歌手</button>
           </div>
         </header>
         {favoriteView === "tracks" ? (
@@ -356,6 +380,8 @@ export function FavoriteAlbumsPage() {
             tracks={favoriteTracks.map(favoriteTrackToCandidate)}
             trackActions={favoriteTrackActions()}
           />
+        ) : favoriteView === "artists" ? (
+          <FavoriteArtistsSection artists={artists} pending={pending} onRemove={removeArtist} />
         ) : detail && detailItem ? (
           <ProviderAlbumDetailView
             album={detail}
@@ -434,6 +460,21 @@ export function FavoriteAlbumsPage() {
       ) : null}
     </main>
   );
+}
+
+function FavoriteArtistsSection({
+  artists,
+  pending,
+  onRemove
+}: {
+  artists: ProviderArtistFavorite[];
+  pending: string | null;
+  onRemove: (artist: ProviderArtistFavorite) => Promise<void>;
+}) {
+  if (artists.length === 0) {
+    return <div className="mt-6 flex min-h-64 flex-col items-center justify-center border border-dashed border-surface-border px-6 text-center"><p className="text-sm font-medium text-foreground-muted">还没有收藏歌手</p><p className="mt-2 text-xs text-foreground-muted">可在设置中选择导入平台关注的歌手。</p></div>;
+  }
+  return <section className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">{artists.map((artist) => <article className="group relative min-w-0" key={artist.id}><div className="aspect-square overflow-hidden rounded-full border border-surface-border bg-surface"><AlbumArtwork alt={artist.name} className="h-full w-full" src={artist.artworkUrl} /></div><strong className="mt-3 block truncate text-center text-sm font-semibold text-foreground">{artist.name}</strong><p className="mt-1 text-center text-xs text-foreground-muted">{artist.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p><Button aria-label={`取消收藏 ${artist.name}`} className="absolute right-1 top-1 h-8 w-8 bg-black/60 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void onRemove(artist)} size="icon" title="取消收藏" type="button" variant="ghost"><HeartIcon filled /></Button></article>)}</section>;
 }
 
 function FavoriteTracksSection({

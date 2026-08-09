@@ -1,6 +1,6 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { ProviderAlbumFavorite, ProviderAlbumSummary, ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
+import type { ProviderAlbumFavorite, ProviderAlbumSummary, ProviderArtistFavorite, ProviderArtistSummary, ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 
 @Injectable()
@@ -113,11 +113,76 @@ export class FavoritesService {
     return { ok: true };
   }
 
+  async listArtists(userId: string): Promise<ProviderArtistFavorite[]> {
+    this.assertDatabaseAvailable();
+    const records = await this.prisma.userFavoriteArtist.findMany({
+      where: { userId },
+      orderBy: { updatedAt: "desc" }
+    });
+    return records.map(toFavoriteArtist);
+  }
+
+  async saveArtist(userId: string, artist: ProviderArtistSummary): Promise<ProviderArtistFavorite> {
+    this.assertDatabaseAvailable();
+    const record = await this.prisma.userFavoriteArtist.upsert({
+      where: {
+        userId_provider_providerArtistId: {
+          userId,
+          provider: artist.provider,
+          providerArtistId: artist.providerArtistId
+        }
+      },
+      update: {
+        name: artist.name,
+        artworkUrl: artist.artworkUrl,
+        description: artist.description
+      },
+      create: {
+        id: `favorite_artist_${randomUUID()}`,
+        userId,
+        provider: artist.provider,
+        providerArtistId: artist.providerArtistId,
+        name: artist.name,
+        artworkUrl: artist.artworkUrl,
+        description: artist.description
+      }
+    });
+    return toFavoriteArtist(record);
+  }
+
+  async removeArtist(userId: string, provider: ProviderArtistSummary["provider"], providerArtistId: string) {
+    this.assertDatabaseAvailable();
+    await this.prisma.userFavoriteArtist.deleteMany({ where: { userId, provider, providerArtistId } });
+    return { ok: true };
+  }
+
   private assertDatabaseAvailable() {
     if (!this.prisma.isAvailable()) {
       throw new ServiceUnavailableException("Database is temporarily unavailable.");
     }
   }
+}
+
+function toFavoriteArtist(record: {
+  id: string;
+  provider: string;
+  providerArtistId: string;
+  name: string;
+  artworkUrl: string | null;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): ProviderArtistFavorite {
+  return {
+    id: record.id,
+    provider: record.provider === "qqmusic" ? "qqmusic" : "netease",
+    providerArtistId: record.providerArtistId,
+    name: record.name,
+    artworkUrl: record.artworkUrl,
+    description: record.description,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
+  };
 }
 
 function toFavoriteTrack(record: {

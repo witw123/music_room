@@ -141,7 +141,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     shuffleBagRef.current = synchronizeShuffleBagTrackIds(
       shuffleBagRef.current,
       playbackRecordsRef.current.map((track) => track.id),
-      currentRecordRef.current?.id ?? null
+      currentRecordRef.current?.id ?? null,
+      playbackRecordsRef.current.map((track) => track.id)
     );
   }, [playbackMode]);
 
@@ -444,8 +445,16 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const nextQueue = [...queueRef.current, track];
     queueRef.current = nextQueue;
     setQueueRecords(nextQueue);
+    if (playbackMode === "shuffle") {
+      shuffleBagRef.current = synchronizeShuffleBagTrackIds(
+        shuffleBagRef.current,
+        nextQueue.map((item) => item.id),
+        currentRecordRef.current?.id ?? null,
+        [track.id]
+      );
+    }
     await playRecords(nextQueue, nextQueue.length - 1, "queue");
-  }, [libraryRecords, playRecords]);
+  }, [libraryRecords, playbackMode, playRecords]);
 
   const playTracks = useCallback(async (
     tracksToPlay: LocalPlaylistTrackRecord[],
@@ -460,21 +469,31 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const normalizedStartIndex = Math.min(Math.max(0, startIndex), uniqueTracks.length - 1);
     const nextQueue = [...queueRef.current];
     const queueIds = new Set(nextQueue.map((track) => track.id));
+    const addedTrackIds: string[] = [];
     for (const track of uniqueTracks) {
       if (!queueIds.has(track.id)) {
         nextQueue.push(track);
         queueIds.add(track.id);
+        addedTrackIds.push(track.id);
       }
     }
     queueRef.current = nextQueue;
     setQueueRecords(nextQueue);
+    if (playbackMode === "shuffle") {
+      shuffleBagRef.current = synchronizeShuffleBagTrackIds(
+        shuffleBagRef.current,
+        nextQueue.map((track) => track.id),
+        currentRecordRef.current?.id ?? null,
+        addedTrackIds
+      );
+    }
 
     const selectedTrackId = uniqueTracks[normalizedStartIndex]?.id;
     const queueIndex = nextQueue.findIndex((track) => track.id === selectedTrackId);
     if (queueIndex >= 0) {
       await playRecords(nextQueue, queueIndex, "queue");
     }
-  }, [libraryRecords, playRecords]);
+  }, [libraryRecords, playbackMode, playRecords]);
 
   const addToQueue = useCallback((inputTrack: LocalPlaylistTrackRecord) => {
     const track = mergeLocalTrackRecord(inputTrack, libraryRecords);
@@ -503,7 +522,15 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       ];
       currentIndexRef.current = 0;
     }
-  }, [libraryRecords]);
+    if (playbackMode === "shuffle") {
+      shuffleBagRef.current = synchronizeShuffleBagTrackIds(
+        shuffleBagRef.current,
+        playbackRecordsRef.current.map((item) => item.id),
+        currentRecordRef.current?.id ?? null,
+        [track.id]
+      );
+    }
+  }, [libraryRecords, playbackMode]);
 
   const onPlay = useCallback(async () => {
     const record = currentRecordRef.current;
