@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRoomRequestSchema,
   joinRoomByCodeRequestSchema,
+  loginRequestSchema,
   registerRequestSchema,
   registerTrackRequestSchema,
   updateRoomRequestSchema,
@@ -28,6 +29,13 @@ describe("request contracts", () => {
         password: "secret1",
         nickname: "Alice",
         role: "admin"
+      })
+    ).toThrow();
+
+    expect(() =>
+      loginRequestSchema.parse({
+        username: "invalid account",
+        password: "secret1"
       })
     ).toThrow();
   });

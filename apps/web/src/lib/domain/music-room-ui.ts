@@ -348,10 +348,10 @@ export function toUserFacingError(error: unknown) {
     return "操作过于频繁，请稍后再试。";
   }
   if (lowerMessage.includes("invalid username or password")) {
-    return "用户名或密码错误。";
+    return "账号或密码错误。";
   }
   if (lowerMessage.includes("username already exists")) {
-    return "这个用户名已被使用。";
+    return "这个账号已被使用。";
   }
   if (lowerMessage.includes("nickname already exists in this room")) {
     return "这个昵称已经在房间里被使用了，请换一个再加入。";

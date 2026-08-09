@@ -12,6 +12,7 @@ import { playbackModeSchema } from "../playback/models";
 import { roomMemberPermissionsSchema } from "../room/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
+const accountSchema = trimmedString(64).regex(/^[a-zA-Z0-9_.-]+$/);
 const optionalNullableText = (max: number) =>
   z
     .string()
@@ -25,7 +26,7 @@ const trackIdListSchema = z.array(stringId).max(500);
 
 export const registerRequestSchema = z
   .object({
-    username: trimmedString(64).regex(/^[a-zA-Z0-9_.-]+$/),
+    username: accountSchema,
     password: z.string().min(6).max(256),
     nickname: trimmedString(80),
     turnstileToken: z.string().trim().min(1).max(2048).optional()
@@ -34,7 +35,7 @@ export const registerRequestSchema = z
 
 export const loginRequestSchema = z
   .object({
-    username: trimmedString(64),
+    username: accountSchema,
     password: z.string().min(1).max(256),
     turnstileToken: z.string().trim().min(1).max(2048).optional()
   })

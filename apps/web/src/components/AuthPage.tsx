@@ -4,6 +4,7 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
+import { loginRequestSchema, registerRequestSchema } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref } from "@/lib/domain/client-shell";
@@ -30,6 +31,35 @@ declare global {
 }
 
 type AuthMode = "login" | "register";
+
+function getAuthFormatError(
+  mode: AuthMode,
+  input: { username: string; password: string; nickname?: string }
+) {
+  const result = mode === "login"
+    ? loginRequestSchema.safeParse({ username: input.username, password: input.password })
+    : registerRequestSchema.safeParse({
+        username: input.username,
+        password: input.password,
+        nickname: input.nickname
+      });
+
+  if (result.success) return null;
+
+  const field = result.error.issues[0]?.path[0];
+  if (field === "username") {
+    return "账号格式不对，请输入 1-64 位英文字母、数字、下划线、点或短横线。";
+  }
+  if (field === "password") {
+    return mode === "register"
+      ? "密码格式不对，请输入 6-256 位密码。"
+      : "密码格式不对，请输入不超过 256 位的密码。";
+  }
+  if (field === "nickname") {
+    return "昵称格式不对，请输入 1-80 个字符。";
+  }
+  return "账号信息格式不对，请检查后重试。";
+}
 
 export function AuthPage() {
   const router = useRouter();
@@ -88,7 +118,16 @@ export function AuthPage() {
 
   async function handleLogin() {
     if (!loginUsername.trim() || !loginPassword) {
-      setStatusMessage("请输入用户名和密码。");
+      setStatusMessage("请输入账号和密码。");
+      return;
+    }
+
+    const formatError = getAuthFormatError("login", {
+      username: loginUsername,
+      password: loginPassword
+    });
+    if (formatError) {
+      setStatusMessage(formatError);
       return;
     }
 
@@ -115,7 +154,17 @@ export function AuthPage() {
 
   async function handleRegister() {
     if (!registerUsername.trim() || !registerPassword || !registerNickname.trim()) {
-      setStatusMessage("请完整填写用户名、密码和昵称。");
+      setStatusMessage("请完整填写账号、密码和昵称。");
+      return;
+    }
+
+    const formatError = getAuthFormatError("register", {
+      username: registerUsername,
+      password: registerPassword,
+      nickname: registerNickname
+    });
+    if (formatError) {
+      setStatusMessage(formatError);
       return;
     }
 
@@ -225,13 +274,13 @@ export function AuthPage() {
               {mode === "login" ? (
                 <div className="flex flex-col gap-5">
                   <label className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-white/50">用户名</span>
+                    <span className="text-xs font-medium text-white/50">账号</span>
                     <input
                       data-testid="auth-login-username"
-                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={loginUsername}
                       onChange={(event) => setLoginUsername(event.target.value)}
-                      placeholder="输入用户名"
+                      placeholder="输入账号"
                     />
                   </label>
 
@@ -239,7 +288,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
                       data-testid="auth-login-password"
-                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       type="password"
                       value={loginPassword}
                       onChange={(event) => setLoginPassword(event.target.value)}
@@ -280,13 +329,13 @@ export function AuthPage() {
               ) : (
                 <div className="flex flex-col gap-5">
                   <label className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-white/50">用户名</span>
+                    <span className="text-xs font-medium text-white/50">账号</span>
                     <input
                       data-testid="auth-register-username"
-                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={registerUsername}
                       onChange={(event) => setRegisterUsername(event.target.value)}
-                      placeholder="设置登录用户名"
+                      placeholder="设置登录账号"
                     />
                   </label>
 
@@ -294,7 +343,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
                       data-testid="auth-register-password"
-                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       type="password"
                       value={registerPassword}
                       onChange={(event) => setRegisterPassword(event.target.value)}
@@ -306,7 +355,7 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">昵称</span>
                     <input
                       data-testid="auth-register-nickname"
-                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
+                      className="w-full rounded-lg border border-accent bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={registerNickname}
                       onChange={(event) => setRegisterNickname(event.target.value)}
                       placeholder="房间内显示的名字"
