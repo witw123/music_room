@@ -132,6 +132,12 @@ export const registerTrackRequestSchema = z
     }
   });
 
+export const registerTracksRequestSchema = z
+  .object({
+    tracks: z.array(registerTrackRequestSchema).min(1).max(500)
+  })
+  .strict();
+
 export const addQueueItemRequestSchema = z
   .object({
     trackId: stringId
@@ -213,6 +219,7 @@ export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>;
 export type UpdateRoomRequest = z.infer<typeof updateRoomRequestSchema>;
 export type JoinRoomByCodeRequest = z.infer<typeof joinRoomByCodeRequestSchema>;
 export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
+export type RegisterTracksRequest = z.infer<typeof registerTracksRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;
 export type ReorderQueueRequest = z.infer<typeof reorderQueueRequestSchema>;
 export type SetNextQueueItemRequest = z.infer<typeof setNextQueueItemRequestSchema>;

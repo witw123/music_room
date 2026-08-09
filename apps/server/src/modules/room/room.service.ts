@@ -555,6 +555,14 @@ export class RoomService {
     return this.contentService.registerTrack(roomId, sessionId, input);
   }
 
+  registerTracks(
+    roomId: string,
+    sessionId: string,
+    inputs: Array<Omit<import("@music-room/shared").TrackMeta, "id"> & { id?: string }>
+  ) {
+    return this.contentService.registerTracks(roomId, sessionId, inputs);
+  }
+
   removeTrack(roomId: string, sessionId: string, trackId: string) {
     return this.contentService.removeTrack(roomId, sessionId, trackId);
   }

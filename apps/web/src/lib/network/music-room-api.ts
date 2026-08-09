@@ -355,6 +355,11 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  registerTracks: (roomId: string, payload: { tracks: object[] }) =>
+    request<TrackMeta[]>(`/v1/rooms/${roomId}/tracks/batch`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   deleteTrack: (roomId: string, trackId: string) =>
     request<{ ok: boolean }>(`/v1/rooms/${roomId}/tracks/${trackId}`, {
       method: "DELETE"

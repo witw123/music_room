@@ -119,6 +119,8 @@ export function RoomAppShell({
            onLoadPlaylistIntoRoom={roomActions.loadPlaylistIntoRoom}
            onImportNeteaseTrack={uploads.handleNeteaseTrackImport}
            onImportQqMusicTrack={uploads.handleQqMusicTrackImport}
+           onImportNeteaseTracks={uploads.handleNeteaseTrackImports}
+           onImportQqMusicTracks={uploads.handleQqMusicTrackImports}
            onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
           onUpdatePlaylistTracks={roomActions.updatePlaylistTracks}
           onUpdateRoom={roomActions.updateRoom}

@@ -18,10 +18,12 @@ import {
   createRoomRequestSchema,
   joinRoomByCodeRequestSchema,
   registerTrackRequestSchema,
+  registerTracksRequestSchema,
   updateRoomMemberPermissionsRequestSchema,
   updateRoomRequestSchema,
   type Playlist,
   type RegisterTrackRequest,
+  type RegisterTracksRequest,
   type RoomJoinResponse,
   type RoomMemberPermissions
 } from "@music-room/shared";
@@ -308,6 +310,40 @@ export class RoomController {
       { name: "user", value: userId }
     ], { limit: 120, windowMs: 10 * 60 * 1000 });
     const payload = parseRequestBody(registerTrackRequestSchema, body);
+    await this.validateTrackAssets(payload);
+    const track = await this.roomService.registerTrack(roomId, userId, {
+      ...payload,
+      ownerSessionId: payload.ownerSessionId ?? userId,
+      ownerNickname: payload.ownerNickname ?? ""
+    });
+    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    return track;
+  }
+
+  @Post(":roomId/tracks/batch")
+  async registerTracks(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: RegisterTracksRequest,
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:track-write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    const payload = parseRequestBody(registerTracksRequestSchema, body);
+    await Promise.all(payload.tracks.map((track) => this.validateTrackAssets(track)));
+    const tracks = await this.roomService.registerTracks(roomId, userId, payload.tracks.map((track) => ({
+      ...track,
+      ownerSessionId: track.ownerSessionId ?? userId,
+      ownerNickname: track.ownerNickname ?? ""
+    })));
+    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    return tracks;
+  }
+
+  private async validateTrackAssets(payload: RegisterTrackRequest) {
     if (!payload.originalAsset || !payload.playbackAsset) {
       throw new BadRequestException("P2P v4 tracks require original and playback assets.");
     }
@@ -329,13 +365,6 @@ export class RoomController {
     ) {
       throw new BadRequestException("Track asset ids do not match their canonical manifests.");
     }
-    const track = await this.roomService.registerTrack(roomId, userId, {
-      ...payload,
-      ownerSessionId: payload.ownerSessionId ?? userId,
-      ownerNickname: payload.ownerNickname ?? ""
-    });
-    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
-    return track;
   }
 
   @Delete(":roomId/tracks/:trackId")

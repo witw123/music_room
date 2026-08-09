@@ -36,6 +36,8 @@ type PlaylistPanelProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
@@ -50,6 +52,8 @@ export function PlaylistPanel({
   onSavePlaylistFromQueue,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
   onDeletePlaylist
 }: PlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
@@ -254,6 +258,8 @@ export function PlaylistPanel({
         }}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
+        onImportNeteaseTracks={onImportNeteaseTracks}
+        onImportQqMusicTracks={onImportQqMusicTracks}
         canManageLibrary={canManageLibrary}
         playlist={selectedPlaylist}
         remoteError={remoteError}
@@ -369,6 +375,8 @@ function PlaylistDetail({
   onBack,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
   canManageLibrary,
   tracks,
   remoteLoading,
@@ -378,6 +386,8 @@ function PlaylistDetail({
   onBack: () => void;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   canManageLibrary: boolean;
   tracks: Array<PlaylistTrackInfo | null>;
   remoteLoading: boolean;
@@ -437,18 +447,29 @@ function PlaylistDetail({
   const importSelectedTracks = async () => {
     if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
     setIsImportingSelected(true);
-    let nextIndex = 0;
-    const worker = async () => {
-      while (nextIndex < selectedTracks.length) {
-        const track = selectedTracks[nextIndex++];
-        if (track) await importTrack(track);
-      }
-    };
+    const selectedIds = new Set(selectedTracks.map((track) => track.id));
+    setPendingTrackIds(selectedIds);
+    for (const track of selectedTracks) pendingTrackIdsRef.current.add(track.id);
+    const neteaseTracks = selectedTracks
+      .filter((track) => track.providerTrack?.provider === "netease")
+      .map((track) => track.providerTrack) as NeteaseTrackCandidate[];
+    const qqMusicTracks = selectedTracks
+      .filter((track) => track.providerTrack?.provider === "qqmusic")
+      .map((track) => track.providerTrack) as QqMusicTrackCandidate[];
     try {
-      await Promise.all(
-        Array.from({ length: Math.min(2, selectedTracks.length) }, () => worker())
-      );
+      const results = await Promise.allSettled([
+        neteaseTracks.length > 0
+          ? onImportNeteaseTracks(neteaseTracks)
+          : Promise.resolve(),
+        qqMusicTracks.length > 0
+          ? onImportQqMusicTracks(qqMusicTracks)
+          : Promise.resolve()
+      ]);
+      const failed = results.some((result) => result.status === "rejected");
+      if (!failed) setSelectedTrackIds([]);
     } finally {
+      for (const track of selectedTracks) pendingTrackIdsRef.current.delete(track.id);
+      setPendingTrackIds(new Set());
       setIsImportingSelected(false);
     }
   };

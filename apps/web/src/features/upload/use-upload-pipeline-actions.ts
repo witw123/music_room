@@ -103,6 +103,7 @@ export function useUploadPipelineActions({
       >;
       roomId: string;
       file: File | Blob;
+      refreshCache?: boolean;
       lyrics?: string | null;
     }) => {
       const cachedRecord = buildCachedLibraryTrackUpsertRecord({
@@ -134,7 +135,7 @@ export function useUploadPipelineActions({
             originalAsset: input.track.originalAsset,
             playbackAsset: input.track.playbackAsset
           }
-        }).then(() => refreshCacheLibrary()).catch(() => undefined);
+        }).then(() => input.refreshCache !== false ? refreshCacheLibrary() : undefined).catch(() => undefined);
       }
       if (roomSnapshot?.room.id === input.roomId) {
         const tracks = roomSnapshot.tracks.some((track) => track.id === input.track.id)
@@ -280,19 +281,11 @@ export function useUploadPipelineActions({
   );
 
   const handleNeteaseTrackImport = useCallback(
-    (candidate: NeteaseTrackCandidate) => importProviderTrack({
-      activeSession,
-      candidate,
-      download: () => musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh"),
-      inFlightUploadHashesRef,
-      origin: "netease-import",
-      persistTrackIntoLibrary,
-      roomSnapshot,
-      setStatusMessage,
-      setUploadedTracks,
-      sourceType: "netease",
-      syncRoomSnapshot,
-      refreshCacheLibrary
+    (candidate: NeteaseTrackCandidate) => importProviderTracks({
+      activeSession, candidates: [candidate], inFlightUploadHashesRef,
+      origin: "netease-import", persistTrackIntoLibrary, roomSnapshot,
+      setStatusMessage, setUploadedTracks, sourceType: "netease",
+      syncRoomSnapshot, refreshCacheLibrary
     }),
     [
       activeSession,
@@ -307,19 +300,11 @@ export function useUploadPipelineActions({
   );
 
   const handleQqMusicTrackImport = useCallback(
-    (candidate: QqMusicTrackCandidate) => importProviderTrack({
-      activeSession,
-      candidate,
-      download: () => musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh"),
-      inFlightUploadHashesRef,
-      origin: "qqmusic-import",
-      persistTrackIntoLibrary,
-      roomSnapshot,
-      setStatusMessage,
-      setUploadedTracks,
-      sourceType: candidate.provider,
-      syncRoomSnapshot,
-      refreshCacheLibrary
+    (candidate: QqMusicTrackCandidate) => importProviderTracks({
+      activeSession, candidates: [candidate], inFlightUploadHashesRef,
+      origin: "qqmusic-import", persistTrackIntoLibrary, roomSnapshot,
+      setStatusMessage, setUploadedTracks, sourceType: "qqmusic",
+      syncRoomSnapshot, refreshCacheLibrary
     }),
     [
       activeSession,
@@ -338,13 +323,150 @@ export function useUploadPipelineActions({
     persistTrackIntoLibrary,
     handleFilesSelected,
     handleNeteaseTrackImport,
-    handleQqMusicTrackImport
+    handleQqMusicTrackImport,
+    handleNeteaseTrackImports: (candidates: NeteaseTrackCandidate[]) => importProviderTracks({
+      activeSession, candidates, inFlightUploadHashesRef, origin: "netease-import",
+      persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
+      sourceType: "netease", syncRoomSnapshot, refreshCacheLibrary
+    }),
+    handleQqMusicTrackImports: (candidates: QqMusicTrackCandidate[]) => importProviderTracks({
+      activeSession, candidates, inFlightUploadHashesRef, origin: "qqmusic-import",
+      persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
+      sourceType: "qqmusic", syncRoomSnapshot, refreshCacheLibrary
+    })
   };
+}
+
+type PreparedProviderImport = {
+  candidate: ProviderTrackCandidate;
+  file: File;
+  objectUrl: string;
+  draft: Omit<TrackMeta, "id"> & { id?: string };
+  localArtworkUrl: string | null;
+  lyrics: string | null;
+};
+
+async function importProviderTracks(input: {
+  activeSession: GuestSession | null;
+  candidates: ProviderTrackCandidate[];
+  inFlightUploadHashesRef: MutableRefObject<Set<string>>;
+  origin: UploadedTrack["origin"];
+  persistTrackIntoLibrary: (input: {
+    track: TrackMeta;
+    roomId: string;
+    file: File;
+    lyrics?: string | null;
+    refreshCache?: boolean;
+  }) => Promise<void>;
+  roomSnapshot: RoomSnapshot | null;
+  setStatusMessage: (message: string) => void;
+  setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
+  sourceType: Exclude<TrackSourceType, "local_upload">;
+  syncRoomSnapshot: (roomId: string) => Promise<void>;
+  refreshCacheLibrary: () => Promise<void>;
+}) {
+  const { activeSession, candidates, roomSnapshot, sourceType, inFlightUploadHashesRef } = input;
+  if (!activeSession || !roomSnapshot) {
+    throw new Error(`请先进入一个房间后再导入${sourceTypeLabel(sourceType)}歌曲。`);
+  }
+  if (!hasRoomPermission(roomSnapshot, activeSession.userId, "library")) {
+    throw new Error("你没有修改房间曲库的权限。请联系房主。");
+  }
+
+  const pendingCandidates = candidates.filter((candidate) => {
+    const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
+    if (inFlightUploadHashesRef.current.has(key)) return false;
+    const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
+    return !roomSnapshot.tracks.some((track) =>
+      track.ownerSessionId === activeSession.userId &&
+      track.sourceType === sourceType &&
+      track.sourceRef?.provider === sourceRef.provider &&
+      track.sourceRef.trackId === sourceRef.trackId
+    );
+  });
+  if (pendingCandidates.length === 0) return;
+
+  const prepared: PreparedProviderImport[] = [];
+  const failures: unknown[] = [];
+  let nextIndex = 0;
+  const prepareWorker = async () => {
+    while (nextIndex < pendingCandidates.length) {
+      const candidate = pendingCandidates[nextIndex++];
+      const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
+      inFlightUploadHashesRef.current.add(key);
+      let objectUrl: string | null = null;
+      try {
+        input.setStatusMessage(`正在准备歌曲 ${prepared.length + failures.length + 1} / ${pendingCandidates.length}…`);
+        const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
+        const cachedTrack = await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId);
+        let file: File;
+        let assets: Awaited<ReturnType<typeof prepareAudioAssets>> | null = null;
+        if (cachedTrack) {
+          const cachedFile = toCachedLibraryFile({ file: cachedTrack.file, title: candidate.title, mimeType: cachedTrack.mimeType, fileHash: cachedTrack.fileHash });
+          file = new File([cachedFile], cachedFile.name, { type: await resolveCachedAudioMimeType(cachedFile) });
+          assets = await getReusableAudioAssets({ fileHash: cachedTrack.fileHash, sizeBytes: cachedTrack.sizeBytes });
+        } else {
+          const source = sourceType === "netease"
+            ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
+            : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
+          const extension = extensionForImportedMimeType(source.contentType);
+          file = new File([source.blob], `${sanitizeFileName(candidate.title, sourceType)}.${extension}`, { type: source.contentType });
+        }
+        const createdObjectUrl = URL.createObjectURL(file);
+        objectUrl = createdObjectUrl;
+        const artworkResponse = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
+          ? await musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).catch(() => null)
+          : null;
+        const localArtworkUrl = await resolveLocalArtworkUrl(file, candidate.artworkUrl, artworkResponse?.blob);
+        assets ??= await prepareAudioAssets({ file });
+        const draft = await buildTrackMeta(file, createdObjectUrl, activeSession, assets, {
+          type: sourceType, metadata: { ...candidate, artworkUrl: localArtworkUrl }, sourceRef
+        });
+        const lyrics = cachedTrack?.lyrics?.trim() || (await resolveImportedLyrics({
+          title: candidate.title, artist: candidate.artist, sourceType, sourceTrackId: candidate.providerTrackId
+        })) || null;
+        prepared.push({ candidate, file, objectUrl, draft: { ...draft, lyrics, artworkUrl: candidate.artworkUrl ?? null }, localArtworkUrl, lyrics });
+      } catch (error) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        failures.push(error);
+      } finally {
+        inFlightUploadHashesRef.current.delete(key);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, pendingCandidates.length) }, () => prepareWorker()));
+  if (prepared.length === 0) {
+    throw failures[0] ?? new Error("没有可导入的歌曲。");
+  }
+
+  input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
+  const registered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+    tracks: prepared.map((item) => buildRegisterTrackPayload(item.draft))
+  });
+  const uploadEntries: Record<string, UploadedTrack> = {};
+  try {
+    await Promise.all(registered.map(async (track, index) => {
+      const item = prepared[index];
+    if (!item) return;
+    if (track.originalAsset && track.playbackAsset) {
+      await linkTrackAssets({ trackId: track.id, originalAssetId: track.originalAsset.assetId, playbackAssetId: track.playbackAsset.assetId });
+    }
+    await input.persistTrackIntoLibrary({ track: { ...track, artworkUrl: item.localArtworkUrl }, roomId: roomSnapshot.room.id, file: item.file, lyrics: item.lyrics, refreshCache: false });
+    uploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
+    }));
+  } catch (error) {
+    for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
+    throw error;
+  }
+  input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
+  await input.syncRoomSnapshot(roomSnapshot.room.id);
+  void input.refreshCacheLibrary().catch(() => undefined);
+  input.setStatusMessage(`已导入 ${registered.length} 首歌曲${failures.length ? `，${failures.length} 首失败` : ""}。`);
 }
 
 type ProviderTrackCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
-async function importProviderTrack(input: {
+async function _importProviderTrack(input: {
   activeSession: GuestSession | null;
   candidate: ProviderTrackCandidate;
   download: () => Promise<{ blob: Blob; contentType: string }>;

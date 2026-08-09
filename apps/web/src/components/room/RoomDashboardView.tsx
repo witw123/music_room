@@ -50,6 +50,8 @@ type RoomDashboardViewProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
@@ -144,6 +146,8 @@ function RoomDashboardViewBase({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onUpdateRoom,
@@ -325,6 +329,8 @@ function RoomDashboardViewBase({
               onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
               onImportNeteaseTrack={onImportNeteaseTrack}
               onImportQqMusicTrack={onImportQqMusicTrack}
+              onImportNeteaseTracks={onImportNeteaseTracks}
+              onImportQqMusicTracks={onImportQqMusicTracks}
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
               onDeletePlaylist={onDeletePlaylist}

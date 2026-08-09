@@ -105,6 +105,58 @@ export class RoomContentService {
     return track;
   }
 
+  async registerTracks(
+    roomId: string,
+    sessionId: string,
+    inputs: Array<Omit<TrackMeta, "id"> & { id?: string }>
+  ) {
+    const user = await this.authService.getUserOrThrow(sessionId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    assertPermission(record, sessionId, "library");
+
+    if (inputs.length === 0) {
+      throw new BadRequestException("至少需要导入一首歌曲。");
+    }
+    const registered: TrackMeta[] = [];
+    for (const input of inputs) {
+      this.assertTrackLimits(input);
+      const track: TrackMeta = {
+        ...input,
+        ownerSessionId: sessionId,
+        ownerNickname: user.nickname,
+        id: input.id ?? `track_${randomUUID()}`
+      };
+      const sourceRef = track.sourceType !== "local_upload" ? track.sourceRef : null;
+      const existingIndex = record.tracks.findIndex(
+        (item) =>
+          item.id === track.id ||
+          (item.ownerSessionId === sessionId && item.fileHash === track.fileHash) ||
+          (!!sourceRef &&
+            item.ownerSessionId === sessionId &&
+            item.sourceType !== "local_upload" &&
+            item.sourceRef?.provider === sourceRef.provider &&
+            item.sourceRef?.trackId === sourceRef.trackId)
+      );
+
+      if (existingIndex >= 0) {
+        const existingTrack = record.tracks[existingIndex];
+        record.tracks[existingIndex] = { ...existingTrack, ...track, id: existingTrack.id };
+        registered.push(record.tracks[existingIndex]);
+      } else {
+        if (record.tracks.length >= maxRoomTracks) {
+          throw new BadRequestException("房间曲目数量已达到上限。");
+        }
+        record.tracks.unshift(track);
+        registered.push(track);
+      }
+    }
+
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return registered;
+  }
+
   async removeTrack(roomId: string, sessionId: string, trackId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);

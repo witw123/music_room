@@ -47,6 +47,8 @@ type RoomWorkspaceProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
@@ -108,6 +110,8 @@ function RoomWorkspaceBase({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onUpdateRoom,
@@ -216,6 +220,8 @@ function RoomWorkspaceBase({
               onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
               onImportNeteaseTrack={onImportNeteaseTrack}
               onImportQqMusicTrack={onImportQqMusicTrack}
+              onImportNeteaseTracks={onImportNeteaseTracks}
+              onImportQqMusicTracks={onImportQqMusicTracks}
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
               onUpdateRoom={onUpdateRoom}

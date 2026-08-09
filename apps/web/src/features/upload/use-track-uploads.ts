@@ -184,7 +184,9 @@ export function useTrackUploads(options: {
     syncRoomSnapshot,
     handleFilesSelected,
     handleNeteaseTrackImport,
-    handleQqMusicTrackImport
+    handleQqMusicTrackImport,
+    handleNeteaseTrackImports,
+    handleQqMusicTrackImports
   } = useUploadPipelineActions({
     activeSession,
     dispatchRoomStateEvent,
@@ -445,6 +447,10 @@ export function useTrackUploads(options: {
       handleNeteaseTrackImport(candidate),
     handleQqMusicTrackImport: (candidate: QqMusicTrackCandidate) =>
       handleQqMusicTrackImport(candidate),
+    handleNeteaseTrackImports: (candidates: NeteaseTrackCandidate[]) =>
+      handleNeteaseTrackImports(candidates),
+    handleQqMusicTrackImports: (candidates: QqMusicTrackCandidate[]) =>
+      handleQqMusicTrackImports(candidates),
     syncRoomSnapshot,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
