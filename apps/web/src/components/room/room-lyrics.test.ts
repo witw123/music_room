@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getActiveRoomLyricIndex,
+  getRoomLyricDisplayWords,
   getRoomLyricWordProgress,
   hasWordSyncedRoomLyrics,
   parseRoomLyrics,
@@ -48,8 +49,27 @@ describe("room lyrics", () => {
         id: "1:yrc",
         text: "歌词",
         timeMs: 1_000,
-        words: [{ text: "歌词", timeMs: 1_000, durationMs: 500 }]
+        words: [
+          { text: "歌", timeMs: 1_000, durationMs: 250 },
+          { text: "词", timeMs: 1_250, durationMs: 250 }
+        ]
       }
+    ]);
+  });
+
+  it("normalizes line-relative QRC timing and splits it into characters", () => {
+    expect(parseRoomLyrics("[1000,1000](0,1000,0)逐字")[0]?.words).toEqual([
+      { text: "逐", timeMs: 1_000, durationMs: 500 },
+      { text: "字", timeMs: 1_500, durationMs: 500 }
+    ]);
+  });
+
+  it("builds character-level display timing for line-synced lyrics", () => {
+    const lines = parseRoomLyrics("[00:01.00]歌词\n[00:03.00]下一行");
+
+    expect(getRoomLyricDisplayWords(lines, 0)).toEqual([
+      { text: "歌", timeMs: 1_000, durationMs: 1_000 },
+      { text: "词", timeMs: 2_000, durationMs: 1_000 }
     ]);
   });
 

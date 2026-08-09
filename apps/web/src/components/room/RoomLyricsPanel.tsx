@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { getActiveRoomLyricIndex, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
+import { getActiveRoomLyricIndex, getRoomLyricDisplayWords, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
 
 type RoomLyricsPanelProps = {
   lyrics: string | null;
@@ -29,6 +29,10 @@ export function RoomLyricsPanel({
   immersive = false
 }: RoomLyricsPanelProps) {
   const lines = useMemo(() => parseRoomLyrics(lyrics), [lyrics]);
+  const displayWordsByLine = useMemo(
+    () => lines.map((_line, index) => getRoomLyricDisplayWords(lines, index)),
+    [lines]
+  );
   const activeIndex = getActiveRoomLyricIndex(lines, positionMs);
   const activeLineRef = useRef<HTMLParagraphElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -72,6 +76,7 @@ export function RoomLyricsPanel({
           <div className={`mx-auto flex min-h-full w-full flex-col justify-center ${alignmentClass} ${isFiveLineView || isSevenLineView ? "gap-0 py-1 sm:gap-0.5 sm:py-2" : "gap-0.5 py-1 sm:gap-1 sm:py-2"}`}>
             {lines.map((line, index) => {
               const isActive = index === activeIndex;
+              const displayWords = displayWordsByLine[index] ?? [];
               return (
                 <p
                   key={line.id}
@@ -85,7 +90,7 @@ export function RoomLyricsPanel({
                       : `font-medium text-white/35 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
                   }`}
                 >
-                  {line.words.length > 0 ? line.words.map((word, wordIndex) => {
+                  {displayWords.length > 0 ? displayWords.map((word, wordIndex) => {
                     const progress = isActive
                       ? getRoomLyricWordProgress(word, positionMs)
                       : 0;
