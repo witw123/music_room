@@ -591,6 +591,69 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("does not replay the seek target between the pending and confirmed timelines", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    const previousSources = [...sources];
+
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        positionMs: 4_000,
+        startAt: null,
+        startedAt: null,
+        playbackRevision: 2
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    expect(previousSources.every((source) => source.stopped)).toBe(true);
+    expect(sources).toHaveLength(previousSources.length);
+
+    const confirmedPlayback = {
+      ...playback(serverNowMs),
+      positionMs: 4_000,
+      startAt: new Date(serverNowMs).toISOString(),
+      startedAt: new Date(serverNowMs).toISOString(),
+      playbackRevision: 2
+    };
+    await engine.sync({
+      manifest,
+      playback: confirmedPlayback,
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    const sourceCountAfterConfirmation = sources.length;
+
+    await engine.sync({
+      manifest,
+      playback: confirmedPlayback,
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    expect(sources).toHaveLength(sourceCountAfterConfirmation);
+    expect(sources.slice(previousSources.length).filter((source) =>
+      source.starts.some((start) => start.offset === 0)
+    )).toHaveLength(3);
+    engine.destroy();
+  });
+
   it("keeps scheduled audio when only playback order changes", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

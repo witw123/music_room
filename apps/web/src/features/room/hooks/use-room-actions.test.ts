@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createOptimisticSeekPlayback,
+  createPendingSeekPlayback,
   runBestEffortRoomLeave,
   shouldRetryPlaybackMutationAfterConflict,
   shouldResetPlayerAfterQueueRemoval,
@@ -8,8 +8,8 @@ import {
 } from "./use-room-actions";
 
 describe("optimistic playback seek", () => {
-  it("moves the local playing timeline to the target before the server responds", () => {
-    const nextPlayback = createOptimisticSeekPlayback({
+  it("stops the old timeline at the target until the server confirms the seek", () => {
+    const nextPlayback = createPendingSeekPlayback({
       playback: {
         status: "playing",
         currentTrackId: "track_1",
@@ -27,14 +27,13 @@ describe("optimistic playback seek", () => {
         playbackMode: "sequence"
       },
       positionMs: 45_000,
-      durationMs: 60_000,
-      nowMs: Date.parse("2026-07-22T00:00:01.000Z")
+      durationMs: 60_000
     });
 
     expect(nextPlayback).toMatchObject({
       positionMs: 45_000,
-      startAt: "2026-07-22T00:00:01.000Z",
-      startedAt: "2026-07-22T00:00:01.000Z",
+      startAt: null,
+      startedAt: null,
       playbackRevision: 5
     });
   });

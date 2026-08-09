@@ -633,6 +633,30 @@ describe("music-room-ui helpers", () => {
     ).toBe(true);
   });
 
+  it("accepts the server-confirmed seek timeline over the pending state at the same version", () => {
+    const pending = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host_1",
+      sourcePeerId: "peer_host",
+      sourceTrackId: "track_1",
+      positionMs: 45_000,
+      startAt: null,
+      startedAt: null,
+      queueVersion: 5,
+      playbackRevision: 6,
+      mediaEpoch: 3
+    };
+    const confirmed = {
+      ...pending,
+      startAt: "2026-07-22T00:00:01.000Z",
+      startedAt: "2026-07-22T00:00:01.000Z"
+    };
+
+    expect(shouldReplacePlaybackSnapshot(pending, confirmed)).toBe(true);
+  });
+
   it("prefers playbackRevision over queueVersion when ordering playback snapshots", () => {
     const current = {
       status: "playing" as const,

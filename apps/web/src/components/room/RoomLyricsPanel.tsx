@@ -55,7 +55,12 @@ export function RoomLyricsPanel({
     const activeLine = activeLineRef.current;
     const scrollContainer = scrollContainerRef.current;
     if (!activeLine || !scrollContainer || activeIndex < 0) return;
-    const targetTop = activeLine.offsetTop - (scrollContainer.clientHeight - activeLine.offsetHeight) / 2;
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const activeLineRect = activeLine.getBoundingClientRect();
+    const targetTop = scrollContainer.scrollTop +
+      activeLineRect.top -
+      containerRect.top -
+      (scrollContainer.clientHeight - activeLineRect.height) / 2;
     scrollContainer.scrollTo({
       top: Math.max(0, targetTop),
       behavior: isPlaying && !frozen ? "smooth" : "auto"

@@ -272,7 +272,6 @@ function RoomStageBase({
 
     updatePosition();
     if (
-      !isLyricsOpen ||
       !isPlaying ||
       playback.status !== "playing" ||
       (!playback.startedAt && !playback.startAt && playbackBarrier?.holdPositionMs === null)
@@ -280,7 +279,7 @@ function RoomStageBase({
 
     const timer = window.setInterval(updatePosition, 50);
     return () => window.clearInterval(timer);
-  }, [currentTrackDuration, isLyricsOpen, isPlaying, playback, playbackBarrier]);
+  }, [currentTrackDuration, isPlaying, playback, playbackBarrier]);
 
   useEffect(() => {
     if (!currentTrack) {

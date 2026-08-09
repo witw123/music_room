@@ -15,7 +15,6 @@ import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
 import { hasRoomPermission } from "@/features/room/room-permissions";
 
 type UseRoomActionsOptions = {
@@ -101,25 +100,22 @@ export function shouldRetryPlaybackMutationAfterConflict(
   );
 }
 
-export function createOptimisticSeekPlayback(input: {
+export function createPendingSeekPlayback(input: {
   playback: PlaybackSnapshot;
   positionMs: number;
   durationMs?: number | null;
-  nowMs?: number;
 }) {
   const durationMs = input.durationMs ?? 0;
   const positionMs = durationMs > 0
     ? Math.min(Math.max(0, input.positionMs), durationMs)
     : Math.max(0, input.positionMs);
-  const timelineStart = input.playback.status === "playing"
-    ? new Date(input.nowMs ?? getRoomPlaybackClockNowMs()).toISOString()
-    : null;
-
   return {
     ...input.playback,
     positionMs,
-    startAt: timelineStart,
-    startedAt: timelineStart,
+    // Stop the old segmented timeline immediately, but do not create a
+    // client-clock timeline that will be replaced by the server clock.
+    startAt: null,
+    startedAt: null,
     playbackRevision: input.playback.playbackRevision + 1
   } satisfies PlaybackSnapshot;
 }
@@ -833,7 +829,7 @@ export function useRoomActions({
       const currentTrack = roomSnapshot.tracks.find(
         (track) => track.id === currentPlayback.currentTrackId
       );
-      const optimisticPlayback = createOptimisticSeekPlayback({
+      const optimisticPlayback = createPendingSeekPlayback({
         playback: currentPlayback,
         positionMs,
         durationMs: currentTrack?.durationMs
