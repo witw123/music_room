@@ -92,6 +92,20 @@ describe("BottomPlayer source", () => {
     expect(layoutSource).toContain("disabled={!currentTrackDuration || !canSeekPlayback}");
   });
 
+  it("keeps transport controls available while cache playback is waiting", () => {
+    const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+    const controllerSource = readFileSync(
+      new URL("./BottomPlayerController.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(playerSource).toContain('const isPlaying = playback?.status === "playing";');
+    expect(playerSource).toContain("const playerControlsEnabled = canControlPlayback;");
+    expect(playerSource).not.toContain("canControlPlayback && !isPlaybackBarrierBlocked");
+    expect(controllerSource).toContain("playbackBarrier?.holdPositionMs");
+    expect(controllerSource).not.toContain("isPlaybackBarrierBlocked ? 0 : progressMs");
+  });
+
   it("commits range seeking for pointer and keyboard interaction", () => {
     const layoutSource = readFileSync(
       new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),

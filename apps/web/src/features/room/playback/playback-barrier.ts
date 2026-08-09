@@ -86,16 +86,34 @@ export function resolvePlaybackBarrierState(input: {
     .filter((item): item is RoomPlaybackReadinessPayload =>
       item?.cacheEnabled === true &&
       !(input.staleWaitingSessionIds?.has(item.sessionId) ?? false));
-  const holdPositionMs = relevant.reduce<number | null>((hold, item) => {
+  const latestReadinessUpdatedAtMs = relevant.reduce<number | null>((latest, item) => {
+    const updatedAtMs = Date.parse(item.updatedAt);
+    if (!Number.isFinite(updatedAtMs)) return latest;
+    return latest === null ? updatedAtMs : Math.max(latest, updatedAtMs);
+  }, null);
+  const playbackStartedAtMs = Date.parse(playback.startedAt ?? playback.startAt ?? "");
+  const readinessPredatesTimeline = Number.isFinite(playbackStartedAtMs) &&
+    (latestReadinessUpdatedAtMs === null || latestReadinessUpdatedAtMs < playbackStartedAtMs);
+  const reportedHoldPositionMs = relevant.reduce<number | null>((hold, item) => {
     if (hold !== null) return hold;
     return typeof item.holdPositionMs === "number" && Number.isFinite(item.holdPositionMs)
       ? item.holdPositionMs
       : null;
   }, null);
+  const holdPositionMs = readinessPredatesTimeline
+    ? playback.positionMs
+    : reportedHoldPositionMs;
   const allReady = relevant.every(
     (item) => item.state !== "waiting" && item.barrier === "open"
   );
   if (allReady) {
+    if (readinessPredatesTimeline) {
+      return {
+        blocked: false,
+        resumeAtMs: null,
+        holdPositionMs: null
+      } satisfies RoomPlaybackBarrierClock;
+    }
     const resumeAtMs = relevant.reduce<number | null>((latestResume, item) => {
       const parsed = item?.resumeAt ? Date.parse(item.resumeAt) : null;
       if (parsed === null || !Number.isFinite(parsed)) return latestResume;

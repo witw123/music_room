@@ -103,8 +103,13 @@ function BottomPlayerControllerBase({
   });
 
   useEffect(() => {
-    onPlaybackPositionChange(isPlaybackBarrierBlocked ? 0 : progressMs);
-  }, [isPlaybackBarrierBlocked, progressMs, onPlaybackPositionChange]);
+    const barrierPositionMs = playbackBarrier?.holdPositionMs;
+    onPlaybackPositionChange(
+      isPlaybackBarrierBlocked && typeof barrierPositionMs === "number"
+        ? barrierPositionMs
+        : progressMs
+    );
+  }, [isPlaybackBarrierBlocked, playbackBarrier?.holdPositionMs, progressMs, onPlaybackPositionChange]);
 
   useEffect(() => {
     onVolumeChange(volume);
@@ -131,7 +136,7 @@ function BottomPlayerControllerBase({
       playbackBarrier={playbackBarrier}
       canControlPlayback={canControlPlayback}
       canSeekPlayback={canSeekPlayback}
-      progressMs={isPlaybackBarrierBlocked ? 0 : progressMs}
+      progressMs={progressMs}
       seekDraft={seekDraft}
       setSeekDraft={setSeekDraft}
       audioDurationMs={audioDurationMs || progressTrack?.durationMs || currentTrack?.durationMs || 0}

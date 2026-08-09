@@ -10,6 +10,7 @@ import {
 } from "@/features/room/playback/playback-barrier";
 import {
   resolveCacheReadinessReport,
+  hasCurrentLocalAudio,
   resolveRoomAudioPath,
   resolveRoomAudioPositionMs,
   resolveRemoteAudioTimelineKey,
@@ -235,6 +236,26 @@ describe("room playback cache barrier", () => {
     })).toMatchObject({ blocked: false, holdPositionMs: 12_500 });
   });
 
+  it("ignores an open barrier from an older playback timeline", () => {
+    expect(resolvePlaybackBarrierState({
+      playback: {
+        currentTrackId: "track-1",
+        mediaEpoch: 4,
+        status: "playing",
+        positionMs: 24_000,
+        startAt: "2026-07-27T00:00:10.000Z",
+        startedAt: "2026-07-27T00:00:10.000Z"
+      } as never,
+      activeMembers: [member("one")] as never,
+      readiness: [readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)],
+      nowMs: Date.parse("2026-07-27T00:00:11.000Z")
+    })).toEqual({
+      blocked: false,
+      holdPositionMs: null,
+      resumeAtMs: null
+    });
+  });
+
   it("waits for a solo cache participant while its cache is loading", () => {
     expect(resolvePlaybackBarrierState({
       playback,
@@ -391,6 +412,21 @@ describe("room audio path", () => {
 });
 
 describe("provider cache source transition", () => {
+  it("does not reuse a resolved file from the previous track", () => {
+    expect(hasCurrentLocalAudio({
+      key: "track-old",
+      status: "available",
+      file: new Blob(["audio"]),
+      error: null
+    }, "track-new")).toBe(false);
+    expect(hasCurrentLocalAudio({
+      key: "track-new",
+      status: "available",
+      file: new Blob(["audio"]),
+      error: null
+    }, "track-new")).toBe(true);
+  });
+
   it("keeps segmented source playback during cache lookup and download", () => {
     expect(shouldDisableSourcePlayback({
       isCurrentSource: true,

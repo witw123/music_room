@@ -34,6 +34,16 @@ export type LocalAudioResolution = {
   error: string | null;
 };
 
+export function hasCurrentLocalAudio(
+  resolution: LocalAudioResolution,
+  requestedKey: string | null
+) {
+  return requestedKey !== null &&
+    resolution.key === requestedKey &&
+    resolution.status === "available" &&
+    resolution.file !== null;
+}
+
 export type LocalAudioObjectUrl = {
   key: string;
   url: string;

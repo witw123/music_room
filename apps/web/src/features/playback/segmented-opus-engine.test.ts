@@ -172,6 +172,36 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("re-reads the room clock after the current segment finishes loading", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        startAt: new Date(serverNowMs).toISOString(),
+        startedAt: new Date(serverNowMs).toISOString()
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => {
+        if (unitIndex === 0) {
+          Object.defineProperty(context, "currentTime", {
+            configurable: true,
+            value: 11.25
+          });
+        }
+        return unit(unitIndex);
+      }
+    });
+
+    expect(sources[0]?.starts[0]?.offset).toBeCloseTo(1.25, 5);
+    engine.destroy();
+  });
+
   it("schedules the current segment before decode-ahead work finishes", async () => {
     const { context, sources } = createContext();
     let releaseDecodeAhead!: () => void;

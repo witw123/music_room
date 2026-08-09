@@ -109,6 +109,36 @@ describe("RoomPlaybackReadinessService", () => {
     expect(canonical.holdPositionMs).toBe(12_500);
   });
 
+  it("re-anchors a waiting barrier when seek creates a newer playback timeline", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-07-31T00:00:01.000Z"));
+    try {
+      const roomService = createRoomService();
+      roomService.getAccessibleRoomSnapshot
+        .mockResolvedValueOnce(createSnapshot({
+          startAt: null,
+          startedAt: null,
+          positionMs: 12_500
+        }, [member("one")]))
+        .mockResolvedValueOnce(createSnapshot({
+          startAt: "2026-07-31T00:00:10.000Z",
+          startedAt: "2026-07-31T00:00:10.000Z",
+          positionMs: 42_000,
+          playbackRevision: 2
+        }, [member("one")]));
+      const broadcaster = createBroadcaster();
+      const readiness = new RoomPlaybackReadinessService(roomService as never, broadcaster as never);
+
+      const first = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
+      expect(first.holdPositionMs).toBe(12_500);
+
+      jest.setSystemTime(new Date("2026-07-31T00:00:10.000Z"));
+      const seeked = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
+      expect(seeked.holdPositionMs).toBe(42_000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("opens the barrier once every cache participant is ready", async () => {
     const roomService = createRoomService();
     roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({}, [member("one")]));

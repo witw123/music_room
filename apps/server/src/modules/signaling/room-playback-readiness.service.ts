@@ -371,17 +371,25 @@ export class RoomPlaybackReadinessService {
     const allReady = input.snapshot.room.playback.status !== "playing" ||
       cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: PlaybackBarrier["state"] = allReady ? "open" : "waiting";
+    const playbackStartedAtMs = Date.parse(
+      input.snapshot.room.playback.startedAt ?? input.snapshot.room.playback.startAt ?? ""
+    );
+    const previousBarrierUpdatedAtMs = Date.parse(input.previousBarrier.updatedAt);
+    const previousBarrierMatchesTimeline = input.previousBarrier.key === input.key && (
+      !Number.isFinite(playbackStartedAtMs) ||
+      (Number.isFinite(previousBarrierUpdatedAtMs) && previousBarrierUpdatedAtMs >= playbackStartedAtMs)
+    );
     const holdPositionMs = barrierState === "waiting"
-      ? input.previousBarrier.key === input.key && input.previousBarrier.state === "waiting"
+      ? previousBarrierMatchesTimeline && input.previousBarrier.state === "waiting"
         ? input.previousBarrier.holdPositionMs
         : this.resolvePlaybackPositionMs(input.snapshot, input.now.getTime())
-      : input.previousBarrier.key === input.key
+      : previousBarrierMatchesTimeline
         ? input.previousBarrier.holdPositionMs
         : null;
     const resumeAt = barrierState === "open"
-      ? input.previousBarrier.key === input.key && input.previousBarrier.state === "waiting"
+      ? previousBarrierMatchesTimeline && input.previousBarrier.state === "waiting"
         ? new Date(nowMs + 650).toISOString()
-        : input.previousBarrier.key === input.key && input.previousBarrier.state === "open"
+        : previousBarrierMatchesTimeline && input.previousBarrier.state === "open"
           ? input.previousBarrier.resumeAt
           : null
       : null;

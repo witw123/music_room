@@ -186,12 +186,10 @@ function BottomPlayerBase({
     };
   }, []);
   const isPlaybackBarrierBlocked = playbackBarrier?.blocked === true;
-  const isPlaying = playback?.status === "playing" && !isPlaybackBarrierBlocked;
-  const playerControlsEnabled = canControlPlayback && !isPlaybackBarrierBlocked;
+  const isPlaying = playback?.status === "playing";
+  const playerControlsEnabled = canControlPlayback;
   const currentTrackDuration = audioDurationMs;
-  const effectiveProgressMs = isPlaybackBarrierBlocked
-    ? 0
-    : Math.max(0, seekDraft ?? renderedProgressMs);
+  const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
   const boundedProgressMs =
     currentTrackDuration > 0
       ? Math.min(effectiveProgressMs, currentTrackDuration)
@@ -643,4 +641,3 @@ function toFavoriteTrackCandidate(track: TrackMeta | null): ProviderTrackCandida
 }
 
 export const BottomPlayer = memo(BottomPlayerBase);
-

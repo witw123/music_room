@@ -206,12 +206,24 @@ export class SegmentedOpusEngine {
     this.ensureMasterGain(context, input.volume, input.loudnessGainDb ?? 0);
 
     const startAtMs = Date.parse(timelineId);
-    const elapsedMs = Math.max(0, input.serverNowMs - startAtMs);
-    const roomPositionMs = Math.min(
-      input.manifest.durationMs,
-      input.playback.positionMs + elapsedMs
-    );
-    const currentIndex = playbackUnitIndexAt(input.manifest, roomPositionMs);
+    const syncContextTime = context.currentTime;
+    const resolveCurrentRoomClock = () => {
+      const elapsedDuringPreparationMs = Math.max(
+        0,
+        (context.currentTime - syncContextTime) * 1_000
+      );
+      const serverNowMs = input.serverNowMs + elapsedDuringPreparationMs;
+      return {
+        serverNowMs,
+        positionMs: Math.min(
+          input.manifest.durationMs,
+          input.playback.positionMs + Math.max(0, serverNowMs - startAtMs)
+        )
+      };
+    };
+    let currentRoomClock = resolveCurrentRoomClock();
+    let roomPositionMs = currentRoomClock.positionMs;
+    let currentIndex = playbackUnitIndexAt(input.manifest, roomPositionMs);
     this.pruneDecodedCache(input.manifest.assetId, currentIndex, input.manifest.segmentDurationMs);
     if (
       roomPositionMs >= input.manifest.durationMs &&
@@ -324,11 +336,27 @@ export class SegmentedOpusEngine {
       if (this.destroyed || this.timelineKey !== timelineKey || generation !== this.timelineGeneration) {
         return { state: "idle" as const, bufferedUnits: 0 };
       }
+      currentRoomClock = resolveCurrentRoomClock();
+      const preparedCurrentIndex = playbackUnitIndexAt(
+        input.manifest,
+        currentRoomClock.positionMs
+      );
+      if (preparedCurrentIndex !== currentIndex) {
+        if (!this.queuedSyncInput) {
+          this.queuedSyncInput = {
+            ...input,
+            serverNowMs: currentRoomClock.serverNowMs
+          };
+        }
+        return { state: "buffering" as const, bufferedUnits: 0 };
+      }
+      roomPositionMs = currentRoomClock.positionMs;
+      currentIndex = preparedCurrentIndex;
       this.establishTimelineAnchor({
         context,
         manifest: input.manifest,
         playback: input.playback,
-        serverNowMs: input.serverNowMs,
+        serverNowMs: currentRoomClock.serverNowMs,
         startAtMs,
         roomPositionMs,
         currentUnit
