@@ -434,7 +434,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       title: track.title,
       mimeType: track.mimeType ?? "audio/mpeg",
       originalAssetId: track.originalAsset?.assetId ?? null,
-      allowOriginalAsset: !forceProviderCache,
       provider: providerSource?.provider,
       providerTrackId: providerSource?.trackId ?? null
     }).then((file) => {
@@ -620,13 +619,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
               setLocalAudioResolution((current) => current.key === localAudioTrackKey
                 ? { ...current, loudness }
                 : current);
-            });
-          }
-        } else {
-          if (result.playbackAsset && activeProviderCacheAttemptKey) {
-            setOfflineFallback({
-              key: activeProviderCacheAttemptKey,
-              asset: result.playbackAsset
             });
           }
         }
@@ -989,6 +981,35 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         return;
       }
 
+      // A seek is first published as a pending timeline with no clock anchor.
+      // Do not start either the original local element or the remote stream
+      // against that optimistic state. Waiting for the authoritative anchor
+      // prevents the old segment and the seek target from both being audible.
+      const awaitingAuthoritativeTimeline = roomPlayback?.status === "playing" &&
+        roomPlayback.currentTrackId === runtime.currentTrack?.id &&
+        roomPlayback.startAt === null &&
+        roomPlayback.startedAt === null;
+      if (awaitingAuthoritativeTimeline) {
+        audio?.pause();
+        runtime.setLocalAudioStream(
+          runtime.isCurrentSource ? roomAudioOutput.getBroadcastStream() : null,
+          runtime.isCurrentSource ? runtime.peerId : sourcePeerId,
+          runtime.isCurrentSource ? bitrateKbps : null,
+          false
+        );
+        if (!cancelled) {
+          setMediaPlayback({
+            state: "buffering",
+            bufferedMs: 0,
+            ownedUnitCount: 0,
+            totalUnitCount: runtime.playbackAsset?.unitCount ?? 0,
+            audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
+            lastError: "正在等待进度调整同步确认。"
+          });
+        }
+        return;
+      }
+
       if (runtime.isCurrentSource && !runtime.usesNativeLocalAudio) {
         const hasActiveRoomTrack = roomPlayback?.status === "playing" &&
           roomPlayback.currentTrackId === runtime.currentTrack?.id;
@@ -1185,6 +1206,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             !Number.isFinite(audio.currentTime) ||
             Math.abs(audio.currentTime - targetSeconds) >= localAudioSeekToleranceSeconds
           ) {
+            if (shouldForceSync) {
+              audio.pause();
+            }
             audio.currentTime = Math.max(0, targetSeconds);
           }
           localAudioTimelineKeyRef.current = timelineKey;

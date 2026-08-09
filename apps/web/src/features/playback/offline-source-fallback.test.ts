@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const indexedDbMocks = vi.hoisted(() => ({
-  getAssetManifest: vi.fn(),
-  getAssetUnit: vi.fn(),
-  getTrackAssetLink: vi.fn(),
   upsertCachedLibraryTrack: vi.fn()
 }));
 
@@ -30,12 +27,7 @@ vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 vi.mock("@/lib/network/music-room-api", () => apiMocks);
 vi.mock("@/features/library/local-audio-storage", () => storageMocks);
 vi.mock("@/features/library/cache-library", () => cacheLibraryMocks);
-vi.mock("@/features/library/audio-asset-builder", () => ({
-  playbackEncoderVersion: "3.4.0",
-  playbackProfileId: "opus-music-v4"
-}));
-
-import type { PlaybackAssetManifest, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { ensureOfflineProviderPlaybackAsset } from "./offline-source-fallback";
 
 function buildTrack(overrides: Partial<TrackMeta> = {}) {
@@ -95,29 +87,6 @@ function buildSource() {
   };
 }
 
-function buildManifest(): PlaybackAssetManifest {
-  return {
-    assetId: "a".repeat(64),
-    kind: "playback",
-    sourceFileHash: "b".repeat(64),
-    profileId: "opus-music-v4",
-    codec: "opus",
-    container: "audio/ogg",
-    sampleRate: 48_000,
-    channels: 2,
-    bitrate: 256_000,
-    durationMs: 2_000,
-    segmentDurationMs: 2_000,
-    seekPrerollMs: 80,
-    unitCount: 1,
-    merkleRoot: "c".repeat(64),
-    encoder: {
-      name: "@audio/opus-encode",
-      version: "3.4.0"
-    }
-  };
-}
-
 function buildInput(overrides: Partial<Parameters<typeof ensureOfflineProviderPlaybackAsset>[0]> = {}) {
   return {
     roomSnapshot: buildRoomSnapshot(),
@@ -130,54 +99,13 @@ function buildInput(overrides: Partial<Parameters<typeof ensureOfflineProviderPl
 describe("offline provider fallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    indexedDbMocks.getTrackAssetLink.mockResolvedValue(null);
-    indexedDbMocks.getAssetManifest.mockResolvedValue(null);
-    indexedDbMocks.getAssetUnit.mockResolvedValue(null);
     apiMocks.musicRoomApi.getNeteaseLyrics.mockResolvedValue({ plainLyric: null });
     apiMocks.resolveDownloadedAudioMimeType.mockResolvedValue("audio/mpeg");
     storageMocks.saveCachedAudioFileToLocalDirectory.mockResolvedValue(null);
     cacheLibraryMocks.buildCachedLibraryTrackUpsertRecord.mockReturnValue({});
   });
 
-  it("returns a complete local playback asset without downloading", async () => {
-    const manifest = buildManifest();
-    indexedDbMocks.getTrackAssetLink.mockResolvedValue({
-      originalAssetId: "d".repeat(64),
-      playbackAssetId: manifest.assetId
-    });
-    indexedDbMocks.getAssetManifest.mockResolvedValue({
-      complete: true,
-      manifest
-    });
-    indexedDbMocks.getAssetUnit.mockResolvedValue({
-      unitIndex: 0,
-      payloadBytes: 1,
-      payload: new Uint8Array([1]).buffer
-    });
-
-    await expect(ensureOfflineProviderPlaybackAsset(buildInput())).resolves.toEqual({
-      playbackAsset: manifest,
-      fileHash: manifest.sourceFileHash,
-      file: null
-    });
-    expect(apiMocks.musicRoomApi.downloadNeteaseTrack).not.toHaveBeenCalled();
-  });
-
-  it("falls back to an existing segmented asset when forced provider caching fails", async () => {
-    const manifest = buildManifest();
-    indexedDbMocks.getTrackAssetLink.mockResolvedValue({
-      originalAssetId: "d".repeat(64),
-      playbackAssetId: manifest.assetId
-    });
-    indexedDbMocks.getAssetManifest.mockResolvedValue({
-      complete: true,
-      manifest
-    });
-    indexedDbMocks.getAssetUnit.mockResolvedValue({
-      unitIndex: 0,
-      payloadBytes: 1,
-      payload: new Uint8Array([1]).buffer
-    });
+  it("falls back to streaming when provider caching fails", async () => {
     apiMocks.musicRoomApi.downloadNeteaseTrack.mockRejectedValue(
       new Error("NetEase account is not available.")
     );
@@ -186,8 +114,7 @@ describe("offline provider fallback", () => {
       ...buildInput(),
       forceDownload: true
     })).resolves.toEqual({
-      playbackAsset: manifest,
-      fileHash: manifest.sourceFileHash,
+      fileHash: "b".repeat(64),
       file: null
     });
   });

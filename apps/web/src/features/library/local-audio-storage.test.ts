@@ -136,7 +136,7 @@ describe("local audio cache persistence", () => {
     })).resolves.toBe(file);
   });
 
-  it("does not fall back to a room original asset when requested", async () => {
+  it("uses a room original asset for local playback", async () => {
     indexedDbMocks.getTrackAssetLink.mockResolvedValue({
       originalAssetId: "asset_1"
     });
@@ -145,11 +145,10 @@ describe("local audio cache persistence", () => {
       trackId: "track_1",
       fileHash: "hash_1",
       title: "Song",
-      mimeType: "audio/mpeg",
-      allowOriginalAsset: false
-    })).resolves.toBeNull();
+      mimeType: "audio/mpeg"
+    })).resolves.toEqual(expect.any(File));
 
-    expect(indexedDbMocks.getAssetManifest).not.toHaveBeenCalled();
+    expect(indexedDbMocks.getAssetManifest).toHaveBeenCalledWith("asset_1");
   });
 
   it("matches a member's provider cache even when the room hash differs", async () => {
@@ -162,8 +161,7 @@ describe("local audio cache persistence", () => {
       title: "Song",
       mimeType: "audio/mpeg",
       provider: "netease",
-      providerTrackId: "provider_track",
-      allowOriginalAsset: false
+      providerTrackId: "provider_track"
     })).resolves.toBe(file);
   });
 

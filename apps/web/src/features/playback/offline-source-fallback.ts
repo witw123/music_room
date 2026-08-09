@@ -1,15 +1,11 @@
 "use client";
 
 import type {
-  PlaybackAssetManifest,
   RoomSnapshot,
   TrackLoudness,
   TrackMeta
 } from "@music-room/shared";
 import {
-  getAssetManifest,
-  getAssetUnit,
-  getTrackAssetLink,
   upsertCachedLibraryTrack
 } from "@/features/library/indexeddb";
 import {
@@ -21,10 +17,6 @@ import {
   buildCachedLibraryTrackUpsertRecord,
   notifyCacheLibraryChanged
 } from "@/features/library/cache-library";
-import {
-  playbackEncoderVersion,
-  playbackProfileId
-} from "@/features/library/audio-asset-builder";
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import { analyzeAudioBlobLoudness } from "./loudness";
 
@@ -35,7 +27,6 @@ export type OfflineProviderSource = {
 };
 
 type OfflineFallbackResult = {
-  playbackAsset: PlaybackAssetManifest | null;
   fileHash: string;
   file: File | null;
   loudness?: TrackLoudness;
@@ -92,26 +83,6 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
   onStatus?: (message: string) => void;
   signal?: AbortSignal;
 }) {
-  // Always discover a complete local segmented asset so a forced provider
-  // cache attempt still has a streamable fallback when the account is missing
-  // or lacks permission. `forceDownload` only controls whether we prefer a
-  // fresh provider file; it must not discard an already usable room asset.
-  const localPlaybackAsset = await findUsableLocalPlaybackAsset(
-    input.track.id,
-    input.track
-  );
-
-  // A complete local playback asset is already a valid room source. Returning
-  // it immediately avoids making a listener wait for a provider request when
-  // the browser cache is cold but the segmented asset is ready.
-  if (localPlaybackAsset && !input.forceDownload) {
-    return {
-      playbackAsset: localPlaybackAsset,
-      fileHash: localPlaybackAsset.sourceFileHash,
-      file: null
-    } satisfies OfflineFallbackResult;
-  }
-
   const importKey = `${input.roomSnapshot.room.id}:${input.track.id}:${input.source.provider}:${input.source.trackId}`;
   const existing = inFlightFallbackImports.get(importKey);
   if (existing) {
@@ -124,7 +95,6 @@ export async function ensureOfflineProviderPlaybackAsset(input: {
   // visit. The caller's cancelled flag still prevents stale state updates.
   const operation = importOfflineProviderTrack({
     ...input,
-    fallbackPlaybackAsset: localPlaybackAsset,
     onStatus: undefined,
     signal: undefined
   });
@@ -142,7 +112,6 @@ async function importOfflineProviderTrack(input: {
   roomSnapshot: RoomSnapshot;
   track: TrackMeta;
   source: OfflineProviderSource;
-  fallbackPlaybackAsset: PlaybackAssetManifest | null;
   forceDownload?: boolean;
   onStatus?: (message: string) => void;
   signal?: AbortSignal;
@@ -151,7 +120,6 @@ async function importOfflineProviderTrack(input: {
     roomSnapshot,
     track,
     source,
-    fallbackPlaybackAsset,
     onStatus,
     signal
   } = input;
@@ -205,7 +173,6 @@ async function importOfflineProviderTrack(input: {
       title: track.title,
       mimeType,
       provider: source.provider,
-      playbackAsset: fallbackPlaybackAsset ?? undefined,
       // A provider fallback is a fresh source for the room track. Reusing an
       // older cache entry here could leave the local path pointing at a
       // truncated or stale download while the returned File plays correctly.
@@ -217,73 +184,22 @@ async function importOfflineProviderTrack(input: {
       ? `已从${source.label}缓存《${track.title}》，正在使用缓存音频播放。`
       : `成员不在线，已从${source.label}缓存《${track.title}》，正在使用缓存音频播放。`);
     return {
-      playbackAsset: fallbackPlaybackAsset,
       fileHash: track.fileHash,
       file,
       ...(loudness ? { loudness } : {})
     };
   } catch (error) {
-    if (signal?.aborted || !fallbackPlaybackAsset) {
+    if (signal?.aborted) {
       throw error;
     }
 
-    onStatus?.(`成员不在线，${source.label}下载失败，使用已有播放资产继续播放。`);
+    onStatus?.(`成员不在线，${source.label}下载失败，已回退到流式播放。`);
     return {
-      playbackAsset: fallbackPlaybackAsset,
-      fileHash: fallbackPlaybackAsset.sourceFileHash,
+      fileHash: track.fileHash,
       file: null,
       ...(track.loudness ? { loudness: track.loudness } : {})
     };
   }
-}
-
-async function findUsableLocalPlaybackAsset(
-  trackId: string,
-  track: TrackMeta
-) {
-  const link = await getTrackAssetLink(trackId).catch(() => null);
-  const assetIds = [
-    link?.playbackAssetId,
-    track.playbackAsset?.assetId
-  ].filter((assetId): assetId is string => !!assetId);
-
-  for (const assetId of [...new Set(assetIds)]) {
-    const record = await getAssetManifest(assetId).catch(() => null);
-    if (!record || !record.complete || record.manifest.kind !== "playback") continue;
-    if (
-      record.manifest.profileId !== playbackProfileId ||
-      record.manifest.encoder.version !== playbackEncoderVersion ||
-      record.manifest.sourceFileHash !== track.fileHash ||
-      record.manifest.unitCount <= 0
-    ) {
-      continue;
-    }
-    const firstUnit = await getAssetUnit(assetId, 0).catch(() => null);
-    if (!isUsablePlaybackUnit(firstUnit, 0)) {
-      continue;
-    }
-    // A complete manifest is expected to contain every unit. Check the tail
-    // as well so a truncated local repository cannot be selected as fallback.
-    const lastUnitIndex = record.manifest.unitCount - 1;
-    const lastUnit = lastUnitIndex === 0
-      ? firstUnit
-      : await getAssetUnit(assetId, lastUnitIndex).catch(() => null);
-    if (isUsablePlaybackUnit(lastUnit, lastUnitIndex)) {
-      return record.manifest;
-    }
-  }
-
-  return null;
-}
-
-function isUsablePlaybackUnit(
-  unit: Awaited<ReturnType<typeof getAssetUnit>>,
-  unitIndex: number
-) {
-  return !!unit &&
-    unit.unitIndex === unitIndex &&
-    unit.payloadBytes > 0 &&
-    unit.payload.byteLength === unit.payloadBytes;
 }
 
 async function resolveProviderLyrics(source: OfflineProviderSource) {

@@ -327,7 +327,6 @@ export async function getRoomLocalAudioFile(input: {
   title: string;
   mimeType: string;
   originalAssetId?: string | null;
-  allowOriginalAsset?: boolean;
   provider?: "netease" | "qqmusic";
   providerTrackId?: string | null;
 }) {
@@ -340,6 +339,18 @@ export async function getRoomLocalAudioFile(input: {
 
   const browserCache = await getCachedLibraryTrack(input.fileHash).catch(() => null);
   if (browserCache?.file) return browserCache.file;
+
+  const linkedAssets = await getTrackAssetLink(input.trackId).catch(() => null);
+  const originalAssetId = input.originalAssetId ?? linkedAssets?.originalAssetId ?? null;
+  if (originalAssetId) {
+    const originalFile = await getOriginalAssetFile({
+      assetId: originalAssetId,
+      fileHash: input.fileHash,
+      title: input.title,
+      mimeType: input.mimeType
+    });
+    if (originalFile) return originalFile;
+  }
 
   // Provider playback caches are content-addressed, while a room track may
   // have been registered from a different provider download and carry another
@@ -369,18 +380,7 @@ export async function getRoomLocalAudioFile(input: {
     }
   }
 
-  if (input.allowOriginalAsset === false) return null;
-
-  const linkedAssets = await getTrackAssetLink(input.trackId).catch(() => null);
-  const originalAssetId = input.originalAssetId ?? linkedAssets?.originalAssetId ?? null;
-  if (!originalAssetId) return null;
-
-  return getOriginalAssetFile({
-    assetId: originalAssetId,
-    fileHash: input.fileHash,
-    title: input.title,
-    mimeType: input.mimeType
-  });
+  return null;
 }
 
 export async function getLocalAudioCacheFile(fileHash: string) {
