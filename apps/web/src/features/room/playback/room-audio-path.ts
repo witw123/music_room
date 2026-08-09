@@ -153,9 +153,10 @@ export function resolveCacheReadinessState(input: {
   if (!input.cacheEnabled || input.localReady) {
     return "ready";
   }
-  // IndexedDB lookup is intentionally not a barrier. A song that is already
-  // cached should retain the normal audio path while its local record is read.
-  if (input.isPreparingProviderCache) {
+  // Hold during the local lookup as well as the provider download. Otherwise
+  // a member can report ready, start playing, and only later enter the room
+  // barrier after discovering that the provider file is missing locally.
+  if (input.isPreparingProviderCache || input.localAudioStatus === "checking") {
     return "waiting";
   }
   return input.localAudioStatus === "missing" ? "failed" : "ready";

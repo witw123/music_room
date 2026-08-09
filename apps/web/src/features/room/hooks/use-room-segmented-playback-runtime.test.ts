@@ -312,13 +312,13 @@ describe("room playback cache barrier", () => {
 });
 
 describe("cache readiness reporting", () => {
-  it("does not block the room while checking an already-cached local file", () => {
+  it("holds the room while checking whether the provider file is cached", () => {
     expect(resolveCacheReadinessState({
       cacheEnabled: true,
       localReady: false,
       isPreparingProviderCache: false,
       localAudioStatus: "checking"
-    })).toBe("ready");
+    })).toBe("waiting");
   });
 
   it("only reports waiting during an actual provider-cache download", () => {

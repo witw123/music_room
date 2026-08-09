@@ -372,7 +372,9 @@ export class RoomPlaybackReadinessService {
       cacheParticipants.every((entry) => entry.state !== "waiting");
     const barrierState: PlaybackBarrier["state"] = allReady ? "open" : "waiting";
     const holdPositionMs = barrierState === "waiting"
-      ? 0
+      ? input.previousBarrier.key === input.key && input.previousBarrier.state === "waiting"
+        ? input.previousBarrier.holdPositionMs
+        : this.resolvePlaybackPositionMs(input.snapshot, input.now.getTime())
       : input.previousBarrier.key === input.key
         ? input.previousBarrier.holdPositionMs
         : null;
@@ -420,6 +422,19 @@ export class RoomPlaybackReadinessService {
       },
       updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : new Date(0).toISOString()
     };
+  }
+
+  private resolvePlaybackPositionMs(snapshot: RoomSnapshot, nowMs: number) {
+    const playback = snapshot.room.playback;
+    if (playback.status !== "playing") {
+      return playback.positionMs;
+    }
+    const anchorAt = playback.startedAt ?? playback.startAt ?? null;
+    const anchorMs = anchorAt ? Date.parse(anchorAt) : Number.NaN;
+    const elapsedMs = Number.isFinite(anchorMs) ? Math.max(0, nowMs - anchorMs) : 0;
+    const durationMs = snapshot.tracks.find((track) => track.id === playback.currentTrackId)?.durationMs ?? 0;
+    const positionMs = playback.positionMs + elapsedMs;
+    return durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs;
   }
 
   private isRedisAvailable() {

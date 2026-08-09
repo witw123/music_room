@@ -87,11 +87,26 @@ describe("RoomPlaybackReadinessService", () => {
     const canonical = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
 
     expect(canonical.barrier).toBe("waiting");
-    expect(canonical.holdPositionMs).toBe(0);
+    expect(canonical.holdPositionMs).toBeGreaterThan(0);
     expect(broadcaster.emitPlaybackReadiness).toHaveBeenCalledWith(
       "room-1",
       expect.objectContaining({ barrier: "waiting" })
     );
+  });
+
+  it("anchors a mid-song barrier at the current room playback position", async () => {
+    const roomService = createRoomService();
+    roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({
+      startAt: null,
+      startedAt: null,
+      positionMs: 12_500
+    }, [member("one")]));
+    const broadcaster = createBroadcaster();
+    const readiness = new RoomPlaybackReadinessService(roomService as never, broadcaster as never);
+
+    const canonical = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
+
+    expect(canonical.holdPositionMs).toBe(12_500);
   });
 
   it("opens the barrier once every cache participant is ready", async () => {
