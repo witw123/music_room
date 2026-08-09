@@ -47,7 +47,7 @@ export function toHttpApiError(exception: unknown): {
       rawMessage,
       code
     );
-    const details = process.env.NODE_ENV === "production" && code === errorCodes.internal
+    const details = code === errorCodes.internal
       ? undefined
       : typeof response === "object" && response !== null && "details" in response
       ? (response as { details?: unknown }).details
@@ -69,7 +69,7 @@ export function toHttpApiError(exception: unknown): {
 }
 
 function publicErrorMessage(message: string, code: ErrorCode) {
-  return process.env.NODE_ENV === "production" && code === errorCodes.internal
+  return code === errorCodes.internal
     ? "Internal server error."
     : message || "Internal server error.";
 }

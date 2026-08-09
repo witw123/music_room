@@ -3,6 +3,16 @@ import { errorCodes } from "@music-room/shared";
 import { toHttpApiError } from "./api-exception.filter";
 
 describe("toHttpApiError", () => {
+  it("never exposes internal exception details to clients", () => {
+    expect(toHttpApiError(new Error("Invalid prisma invocation at /app/server.js"))).toEqual({
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      body: {
+        code: errorCodes.internal,
+        message: "Internal server error."
+      }
+    });
+  });
+
   it("maps plain business errors to their HTTP status instead of 500", () => {
     expect(toHttpApiError(new Error("Only room members can perform this action."))).toEqual({
       status: HttpStatus.FORBIDDEN,

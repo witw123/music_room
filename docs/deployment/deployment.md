@@ -51,6 +51,10 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml up -d
 ```
 
+Server 容器会在 API 进程启动前执行 `prisma db push --skip-generate`，将镜像内的
+`schema.prisma` 同步到目标 PostgreSQL。同步失败时 Server 不会启动，因此发布后不应出现
+代码已经查询新模型、数据库却缺少对应表的半更新状态。
+
 ## 发布前检查
 
 ```bash

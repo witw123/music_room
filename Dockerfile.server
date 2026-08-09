@@ -42,4 +42,4 @@ COPY --from=prod-deps --chown=app:app /app/packages/shared/node_modules ./packag
 COPY --from=builder --chown=app:app /app/package.json ./package.json
 USER app
 EXPOSE 3001
-CMD ["sh", "-c", "./apps/server/node_modules/.bin/prisma migrate deploy --schema apps/server/prisma/schema.prisma && node apps/server/dist/main.js"]
+CMD ["sh", "-c", "./apps/server/node_modules/.bin/prisma db push --skip-generate --schema apps/server/prisma/schema.prisma && node apps/server/dist/main.js"]
