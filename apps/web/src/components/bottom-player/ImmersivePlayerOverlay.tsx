@@ -319,7 +319,7 @@ function MobileImmersivePlayer({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-none overflow-visible">
+        <div className={mobileView === "lyrics" ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "min-h-0 flex-none overflow-visible"}>
           {mobileView === "artwork" ? (
             <div className="mobile-player-panel flex flex-col items-center justify-start" key="artwork">
               <button aria-label="显示歌词" className="mt-[clamp(1.25rem,6vh,4rem)] rounded-[1.35rem] outline-none transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("lyrics")} title="显示歌词" type="button">
@@ -638,6 +638,8 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying
 
 function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, mobile = false, positionMs, roomLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; frozen?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; positionMs: number; roomLyrics: string | null; sourceProvider: "netease" | "qqmusic" | undefined; sourceTrackId: string | undefined }) {
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
+  const [translatedLyric, setTranslatedLyric] = useState<string | null>(null);
+  const [romanizedLyric, setRomanizedLyric] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
 
@@ -655,6 +657,8 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
   useEffect(() => {
     if (!isOpen) {
       setPlainLyric(null);
+      setTranslatedLyric(null);
+      setRomanizedLyric(null);
       setLyricsStatus("idle");
       return;
     }
@@ -662,7 +666,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
     if (fallbackLyrics && (hasWordSyncedRoomLyrics(fallbackLyrics) || !sourceProvider || !sourceTrackId)) {
       setPlainLyric(fallbackLyrics);
       setLyricsStatus("ready");
-      return;
+      if (!sourceProvider || !sourceTrackId) return;
     }
     if (!sourceProvider || !sourceTrackId) {
       setPlainLyric(fallbackLyrics);
@@ -679,6 +683,8 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
           wordSyncedLyric: lyrics.wordSyncedLyric,
           plainLyric: lyrics.plainLyric
         }));
+        setTranslatedLyric(lyrics.translatedLyric?.trim() || null);
+        setRomanizedLyric(lyrics.romanizedLyric?.trim() || null);
         setLyricsStatus("ready");
       }
     }).catch(() => {
@@ -691,7 +697,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
   }, [isOpen, roomLyrics, sourceProvider, sourceTrackId]);
 
   if (!isOpen) return null;
-  return <div className={desktop ? "min-h-0 w-full flex-1" : mobile ? "min-h-0 w-full" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} frozen={frozen} immersive={desktop} visibleLines={desktop || mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} positionMs={positionMs} status={lyricsStatus} /></div>;
+  return <div className={desktop || mobile ? "min-h-0 w-full flex-1" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} frozen={frozen} immersive={desktop} mobile={mobile} visibleLines={desktop || mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} translatedLyrics={translatedLyric} romanizedLyrics={romanizedLyric} positionMs={positionMs} status={lyricsStatus} /></div>;
 }
 
 function getSourceLabel(sourceType: TrackMeta["sourceType"]) {

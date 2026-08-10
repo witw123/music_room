@@ -416,6 +416,14 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     audio.pause();
     audio.src = objectUrl;
     audio.load();
+    // Automatic track changes can happen while the tab is backgrounded, when
+    // React effects are throttled. Apply the next track's gain before calling
+    // play() so normalization never waits for the page to become visible.
+    roomAudioOutput.applyVolume({
+      localAudio: audio,
+      volume,
+      loudnessGainDb: resolveLoudnessGainDb(record, loudnessNormalization)
+    });
     const playResult = await roomAudioOutput.playElement(audio, { force: true });
     if (playResult.ok) {
       if (requestId !== playRequestRef.current) return;
@@ -432,7 +440,14 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       // retry after a browser autoplay policy rejection.
       setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: 0 }));
     }
-  }, [createPlaybackSnapshot, enrichTrackMetadata, loadAudioFile, playbackMode]);
+  }, [
+    createPlaybackSnapshot,
+    enrichTrackMetadata,
+    loadAudioFile,
+    loudnessNormalization,
+    playbackMode,
+    volume
+  ]);
 
   const playTrack = useCallback(async (inputTrack: LocalPlaylistTrackRecord) => {
     const track = mergeLocalTrackRecord(inputTrack, libraryRecords);

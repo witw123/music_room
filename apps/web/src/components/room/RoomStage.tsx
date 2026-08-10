@@ -134,6 +134,8 @@ function RoomStageBase({
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [lyricsText, setLyricsText] = useState<string | null>(null);
+  const [translatedLyricsText, setTranslatedLyricsText] = useState<string | null>(null);
+  const [romanizedLyricsText, setRomanizedLyricsText] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [cachedArtworkUrl, setCachedArtworkUrl] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState<{ height: number; width: number } | null>(null);
@@ -284,6 +286,8 @@ function RoomStageBase({
   useEffect(() => {
     if (!currentTrack) {
       setLyricsText(null);
+      setTranslatedLyricsText(null);
+      setRomanizedLyricsText(null);
       setLyricsStatus("idle");
       return;
     }
@@ -291,6 +295,8 @@ function RoomStageBase({
     let cancelled = false;
     setLyricsStatus("loading");
     setLyricsText(null);
+    setTranslatedLyricsText(null);
+    setRomanizedLyricsText(null);
 
     const loadLyrics = async () => {
       let localLyrics: string | null = currentTrack.lyrics?.trim() || null;
@@ -312,7 +318,7 @@ function RoomStageBase({
           setLyricsText(localLyrics);
           setLyricsStatus("ready");
         }
-        return;
+        if (!sourceProvider || !sourceTrackId) return;
       }
 
       if (!sourceProvider || !sourceTrackId) {
@@ -330,6 +336,8 @@ function RoomStageBase({
             wordSyncedLyric: response.wordSyncedLyric,
             plainLyric: response.plainLyric
           }));
+          setTranslatedLyricsText(response.translatedLyric?.trim() || null);
+          setRomanizedLyricsText(response.romanizedLyric?.trim() || null);
           setLyricsStatus("ready");
         }
       } catch (error) {
@@ -654,6 +662,8 @@ function RoomStageBase({
               fontScale={lyricPreferences.lyricFontScale}
               isPlaying={isPlaying}
               lyrics={lyricsText}
+              translatedLyrics={translatedLyricsText}
+              romanizedLyrics={romanizedLyricsText}
               positionMs={lyricsPositionMs}
               status={lyricsStatus}
             />
