@@ -40,7 +40,7 @@ export class RoomAudioActivationManager {
     localAudio?: HTMLAudioElement | null;
   }): Promise<PrimeRoomAudioOutputsResult> {
     const [contextReady, local] = await Promise.all([
-      this.resumeSharedContext().catch(() => false),
+      this.resumeSharedAudioContext().catch(() => false),
       this.primeAudioElement({ element: input.localAudio })
     ]);
     this.activated = contextReady || local.ok;
@@ -67,7 +67,7 @@ export class RoomAudioActivationManager {
     try {
       let audioContextReady = true;
       if (options.resumeAudioContext !== false) {
-        audioContextReady = await this.resumeSharedContext();
+        audioContextReady = await this.resumeSharedAudioContext();
       }
       if (options.requireRunningAudioContext && !audioContextReady) {
         return {
@@ -216,7 +216,7 @@ export class RoomAudioActivationManager {
     }
   }
 
-  private async resumeSharedContext() {
+  async resumeSharedAudioContext() {
     const context = this.getOrCreateSharedContext();
     if (!context) {
       return false;
@@ -258,8 +258,12 @@ export class RoomAudioActivationManager {
 
     this.lifecycleListenersInstalled = true;
     const resume = () => {
-      if (this.activated && context.state === "suspended") {
-        void this.resumeSharedContext();
+      if (
+        this.activated &&
+        context.state === "suspended" &&
+        (typeof document === "undefined" || !document.hidden)
+      ) {
+        void this.resumeSharedAudioContext();
       }
     };
     window.addEventListener("pageshow", resume);

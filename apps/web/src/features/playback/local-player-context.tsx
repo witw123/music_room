@@ -787,6 +787,26 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, [currentRecord, handleAudioEnded, loudnessGainDb, volume]);
 
+  useEffect(() => {
+    const restoreAudioOutput = () => {
+      if (document.hidden) return;
+      void roomAudioOutput.restoreAfterBackground({
+        localAudio: audioRef.current,
+        volume,
+        loudnessGainDb
+      });
+    };
+
+    document.addEventListener("visibilitychange", restoreAudioOutput);
+    window.addEventListener("pageshow", restoreAudioOutput);
+    window.addEventListener("focus", restoreAudioOutput);
+    return () => {
+      document.removeEventListener("visibilitychange", restoreAudioOutput);
+      window.removeEventListener("pageshow", restoreAudioOutput);
+      window.removeEventListener("focus", restoreAudioOutput);
+    };
+  }, [loudnessGainDb, volume]);
+
   const syncProgressFromAudio = useCallback(() => {
     const audio = audioRef.current;
     if (audio && Number.isFinite(audio.currentTime)) {

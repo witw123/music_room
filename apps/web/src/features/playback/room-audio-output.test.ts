@@ -12,7 +12,8 @@ function createAudioContextMock() {
     gain: {
       value: 0.72,
       cancelScheduledValues: vi.fn(),
-      setTargetAtTime: vi.fn()
+      setTargetAtTime: vi.fn(),
+      setValueAtTime: vi.fn()
     }
   };
   const track = {
@@ -62,7 +63,7 @@ describe("room audio output", () => {
 
     roomAudioOutput.applyVolume({ localAudio: audio, volume: 0.2 });
 
-    expect(gain.gain.setTargetAtTime).toHaveBeenCalledWith(0.2, 12, 0.02);
+    expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.2, 12);
     expect(audio.volume).toBe(1);
   });
 
@@ -78,8 +79,8 @@ describe("room audio output", () => {
     });
     roomAudioOutput.applyVolume({ localAudio: audio, volume: 0.4 });
 
-    expect(gain.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
-    expect(gain.gain.setTargetAtTime).toHaveBeenCalledWith(0.4, 12, 0.02);
+    expect(gain.gain.setValueAtTime).toHaveBeenCalledTimes(1);
+    expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.4, 12);
   });
 
   it("keeps normalization for native elements when the graph is unavailable", () => {

@@ -39,7 +39,6 @@ export class RoomAudioOutput {
     HTMLAudioElement,
     { context: AudioContext; source: MediaElementAudioSourceNode }
   >();
-  private readonly volumeAnimationFrames = new WeakMap<HTMLAudioElement, number>();
   private readonly elementVolumes = new WeakMap<HTMLAudioElement, number>();
   private readonly elementLoudnessGains = new WeakMap<HTMLAudioElement, number>();
 
@@ -52,6 +51,18 @@ export class RoomAudioOutput {
     options?: RoomAudioElementPlayOptions
   ): Promise<RoomAudioElementPlayResult> {
     return roomAudioActivationManager.playElement(element, options);
+  }
+
+  async restoreAfterBackground(input: ApplyRoomAudioVolumeInput) {
+    const element = input.localAudio;
+    if (!element || !this.hasLocalAudioElementSource(element)) {
+      this.applyVolume(input);
+      return true;
+    }
+
+    const resumed = await roomAudioActivationManager.resumeSharedAudioContext();
+    this.applyVolume(input);
+    return resumed;
   }
 
   applyVolume(input: ApplyRoomAudioVolumeInput) {
@@ -75,19 +86,9 @@ export class RoomAudioOutput {
       const localGraph = this.localAudioElementGraph?.element === element
         ? this.localAudioElementGraph
         : null;
-      const previousFrame = this.volumeAnimationFrames.get(element);
-      if (previousFrame !== undefined && typeof window !== "undefined") {
-        window.cancelAnimationFrame(previousFrame);
-      }
       if (localGraph) {
         if (volumeChanged) {
-          try {
-            const now = localGraph.context.currentTime;
-            localGraph.localGain.gain.cancelScheduledValues(now);
-            localGraph.localGain.gain.setTargetAtTime(safeVolume, now, 0.02);
-          } catch {
-            localGraph.localGain.gain.value = safeVolume;
-          }
+          this.setGraphVolume(localGraph, safeVolume);
         }
         if (loudnessChanged) {
           this.setGraphLoudnessGain(localGraph, loudnessGain);
@@ -95,36 +96,7 @@ export class RoomAudioOutput {
         element.volume = 1;
         return;
       }
-      if (
-        typeof window === "undefined" ||
-        typeof window.requestAnimationFrame !== "function"
-      ) {
-        element.volume = normalizeOutputVolume(
-          safeVolume * loudnessGain
-        );
-        return;
-      }
-      const startVolume = element.volume;
-      const targetVolume = normalizeOutputVolume(
-        safeVolume * loudnessGain
-      );
-      if (!volumeChanged && !loudnessChanged &&
-        Math.abs(element.volume - targetVolume) < 0.001
-      ) {
-        return;
-      }
-      const startedAt = performance.now();
-      const durationMs = 20;
-      const animate = (now: number) => {
-        const progress = Math.min(1, Math.max(0, (now - startedAt) / durationMs));
-        element.volume = startVolume + (targetVolume - startVolume) * progress;
-        if (progress < 1) {
-          this.volumeAnimationFrames.set(element, window.requestAnimationFrame(animate));
-        } else {
-          this.volumeAnimationFrames.delete(element);
-        }
-      };
-      this.volumeAnimationFrames.set(element, window.requestAnimationFrame(animate));
+      element.volume = normalizeOutputVolume(safeVolume * loudnessGain);
     }
   }
 
@@ -306,7 +278,7 @@ export class RoomAudioOutput {
     try {
       const now = graph.context.currentTime;
       graph.normalizationGain.gain.cancelScheduledValues(now);
-      graph.normalizationGain.gain.setTargetAtTime(gain, now, 0.02);
+      graph.normalizationGain.gain.setValueAtTime(gain, now);
     } catch {
       graph.normalizationGain.gain.value = gain;
     }
@@ -316,7 +288,7 @@ export class RoomAudioOutput {
     try {
       const now = graph.context.currentTime;
       graph.localGain.gain.cancelScheduledValues(now);
-      graph.localGain.gain.setTargetAtTime(volume, now, 0.02);
+      graph.localGain.gain.setValueAtTime(volume, now);
     } catch {
       graph.localGain.gain.value = volume;
     }

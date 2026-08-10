@@ -1846,6 +1846,26 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     streamingOnlyPlayback
   ]);
 
+  useEffect(() => {
+    const restoreAudioOutput = () => {
+      if (document.hidden) return;
+      void roomAudioOutput.restoreAfterBackground({
+        localAudio: audioRef.current,
+        volume: input.volume,
+        loudnessGainDb
+      });
+    };
+
+    document.addEventListener("visibilitychange", restoreAudioOutput);
+    window.addEventListener("pageshow", restoreAudioOutput);
+    window.addEventListener("focus", restoreAudioOutput);
+    return () => {
+      document.removeEventListener("visibilitychange", restoreAudioOutput);
+      window.removeEventListener("pageshow", restoreAudioOutput);
+      window.removeEventListener("focus", restoreAudioOutput);
+    };
+  }, [audioRef, input.volume, loudnessGainDb]);
+
   const lastReportedErrorRef = useRef<string | null>(null);
   const completedTimelineRef = useRef<string | null>(null);
 
