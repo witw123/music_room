@@ -84,6 +84,7 @@ type RoomWorkspaceProps = {
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
+  onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;
   playerSlot: ReactNode;
 };
@@ -147,6 +148,7 @@ function RoomWorkspaceBase({
   onDiagnosticsVisibilityChange,
   isLyricsOpen,
   onToggleLyrics,
+  onSeek,
   socket,
   playerSlot
 }: RoomWorkspaceProps) {
@@ -250,6 +252,7 @@ function RoomWorkspaceBase({
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
               isLyricsOpen={isLyricsOpen}
               onToggleLyrics={onToggleLyrics}
+              onSeek={onSeek}
             />
           ) : showRoomTransitionState ? (
             <RoomTransitionState

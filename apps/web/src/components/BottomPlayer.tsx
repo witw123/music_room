@@ -598,6 +598,7 @@ function BottomPlayerBase({
       favoriteTrackIsPending={favoriteTrackIsPending}
       onToggleFavoriteTrack={toggleCurrentFavorite}
       onClose={() => setIsImmersiveOpen(false)}
+      onSeekToPosition={(positionMs) => void onSeek(positionMs)}
     />
     <MiniPlayerOverlay
       isOpen={isMiniOpen}

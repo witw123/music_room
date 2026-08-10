@@ -17,6 +17,7 @@ type RoomLyricsPanelProps = {
   align?: "center" | "left";
   immersive?: boolean;
   mobile?: boolean;
+  onSeek?: (positionMs: number) => void;
 };
 
 export function RoomLyricsPanel({
@@ -32,9 +33,11 @@ export function RoomLyricsPanel({
   fontScale = "medium",
   align = "center",
   immersive = false,
-  mobile = false
+  mobile = false,
+  onSeek
 }: RoomLyricsPanelProps) {
   const isChineseLyrics = hasChineseLyrics(lyrics);
+  const [showTranslation, setShowTranslation] = useState(true);
   const [showRomanized, setShowRomanized] = useState(false);
   const activeLyrics = lyrics?.trim() || translatedLyrics?.trim() || null;
   const lines = useMemo(() => parseRoomLyrics(activeLyrics), [activeLyrics]);
@@ -69,6 +72,7 @@ export function RoomLyricsPanel({
           : "h-[clamp(8rem,18vh,10rem)] max-h-[10rem] min-h-[8rem]";
 
   useEffect(() => {
+    setShowTranslation(true);
     setShowRomanized(false);
   }, [lyrics, romanizedLyrics]);
 
@@ -94,22 +98,40 @@ export function RoomLyricsPanel({
       className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive ? "flex-1" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
-      {!isChineseLyrics && romanizedLines.length > 0 ? (
-        <div className="mb-2 flex shrink-0 justify-center">
-          <button
-            aria-pressed={showRomanized}
-            className={`h-7 px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
-              showRomanized ? "border-b border-white text-white" : "text-white/45 hover:text-white/75"
-            }`}
-            onClick={() => setShowRomanized((current) => !current)}
-            type="button"
-          >
-            罗马音
-          </button>
+      {!isChineseLyrics && (translatedLines.length > 0 || romanizedLines.length > 0) ? (
+        <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2 sm:right-2">
+          {translatedLines.length > 0 ? (
+            <button
+              aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
+              aria-pressed={showTranslation}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                showTranslation ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
+              }`}
+              onClick={() => setShowTranslation((current) => !current)}
+              title={showTranslation ? "关闭翻译" : "开启翻译"}
+              type="button"
+            >
+              译
+            </button>
+          ) : null}
+          {romanizedLines.length > 0 ? (
+            <button
+              aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
+              aria-pressed={showRomanized}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                showRomanized ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
+              }`}
+              onClick={() => setShowRomanized((current) => !current)}
+              title={showRomanized ? "关闭罗马音" : "开启罗马音"}
+              type="button"
+            >
+              音
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
-        <div ref={scrollContainerRef} className="hide-scrollbar h-full overflow-y-auto px-1 py-3 sm:px-2 sm:py-4">
+        <div ref={scrollContainerRef} className="hide-scrollbar h-full overflow-y-auto px-1 py-3 pr-12 sm:px-2 sm:py-4 sm:pr-14">
         {status === "loading" ? (
           <p className="flex h-full items-center justify-center text-sm text-white/45">正在获取歌词…</p>
         ) : lines.length > 0 ? (
@@ -124,9 +146,18 @@ export function RoomLyricsPanel({
                   key={line.id}
                   ref={isActive ? activeLineRef : undefined}
                   aria-current={isActive ? "true" : undefined}
+                  onClick={line.timeMs !== null && onSeek ? () => onSeek(line.timeMs!) : undefined}
+                  onKeyDown={line.timeMs !== null && onSeek ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSeek(line.timeMs!);
+                    }
+                  } : undefined}
+                  role={line.timeMs !== null && onSeek ? "button" : undefined}
+                  tabIndex={line.timeMs !== null && onSeek ? 0 : undefined}
                   data-testid="room-lyrics-line"
                   style={{ fontSize: `${getLyricFontSize({ isActive, visibleLines, fontScale })}rem` }}
-                  className={`${lineAlignmentClass} flex w-full ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[color,opacity] duration-300"} ${
+                  className={`${lineAlignmentClass} flex w-full ${line.timeMs !== null && onSeek ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[color,opacity] duration-300"} ${
                     isActive
                       ? `font-bold text-white ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
                       : `font-medium text-white/35 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
@@ -151,7 +182,7 @@ export function RoomLyricsPanel({
                         </span>
                       );
                     }) : line.text}
-                    {!isChineseLyrics && translatedLine && translatedLine !== line.text ? (
+                    {!isChineseLyrics && showTranslation && translatedLine && translatedLine !== line.text ? (
                       <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "text-white/72" : "text-white/30"}`}>
                         {translatedLine}
                       </span>

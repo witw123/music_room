@@ -80,6 +80,7 @@ type RoomDashboardViewProps = {
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
+  onSeek: (positionMs: number) => void;
 };
 
 const tabLabels: Record<TabId, string> = {
@@ -175,7 +176,8 @@ function RoomDashboardViewBase({
   onTabChange,
   onDiagnosticsVisibilityChange,
   isLyricsOpen,
-  onToggleLyrics
+  onToggleLyrics,
+  onSeek
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("library");
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
@@ -248,6 +250,7 @@ function RoomDashboardViewBase({
             onDeleteRoom={onDeleteRoom}
             isLyricsOpen={isLyricsOpen}
             onToggleLyrics={onToggleLyrics}
+            onSeek={onSeek}
             socket={socket}
           />
         </div>

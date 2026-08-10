@@ -48,6 +48,7 @@ type RoomStageProps = {
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
+  onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;
 };
 
@@ -102,7 +103,8 @@ function RoomStageBase({
   onLeaveRoom,
   onDeleteRoom,
   onUpdateRoom,
-  isLyricsOpen
+  isLyricsOpen,
+  onSeek
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -666,6 +668,7 @@ function RoomStageBase({
               romanizedLyrics={romanizedLyricsText}
               positionMs={lyricsPositionMs}
               status={lyricsStatus}
+              onSeek={onSeek}
             />
           </div>
         </div>

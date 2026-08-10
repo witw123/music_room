@@ -156,6 +156,7 @@ export function RoomAppShell({
           onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
           isLyricsOpen={isLyricsOpen}
           onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
+          onSeek={roomActions.seekTrack}
           socket={socket}
           playerSlot={null}
             />
