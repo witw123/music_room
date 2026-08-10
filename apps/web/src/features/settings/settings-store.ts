@@ -107,6 +107,8 @@ export type AppSettings = {
     fullyCachedPlayback: boolean;
     lyricFontScale: "small" | "medium" | "large";
     lyricLines: number;
+    showLyricTranslation: boolean;
+    showLyricRomanized: boolean;
   };
 };
 
@@ -132,7 +134,9 @@ const defaultSettings: AppSettings = {
     streamingOnlyPlayback: false,
     fullyCachedPlayback: false,
     lyricFontScale: "medium",
-    lyricLines: 5
+    lyricLines: 5,
+    showLyricTranslation: true,
+    showLyricRomanized: false
   }
 };
 
@@ -226,7 +230,9 @@ export function normalizeSettings(value: unknown): AppSettings {
       streamingOnlyPlayback,
       fullyCachedPlayback,
       lyricFontScale,
-      lyricLines
+      lyricLines,
+      showLyricTranslation: playback.showLyricTranslation !== false,
+      showLyricRomanized: playback.showLyricRomanized === true
     }
   };
 }

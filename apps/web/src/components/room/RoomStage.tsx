@@ -666,6 +666,9 @@ function RoomStageBase({
               lyrics={lyricsText}
               translatedLyrics={translatedLyricsText}
               romanizedLyrics={romanizedLyricsText}
+              showControls={false}
+              showTranslation={lyricPreferences.showLyricTranslation}
+              showRomanized={lyricPreferences.showLyricRomanized}
               positionMs={lyricsPositionMs}
               status={lyricsStatus}
               onSeek={onSeek}

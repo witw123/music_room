@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { getActiveRoomLyricIndex, getRoomLyricDisplayWords, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
 
 type RoomLyricsPanelProps = {
@@ -17,6 +17,11 @@ type RoomLyricsPanelProps = {
   align?: "center" | "left";
   immersive?: boolean;
   mobile?: boolean;
+  showControls: boolean;
+  showTranslation: boolean;
+  showRomanized: boolean;
+  onToggleTranslation?: () => void;
+  onToggleRomanized?: () => void;
   onSeek?: (positionMs: number) => void;
 };
 
@@ -34,11 +39,14 @@ export function RoomLyricsPanel({
   align = "center",
   immersive = false,
   mobile = false,
+  showControls,
+  showTranslation,
+  showRomanized,
+  onToggleTranslation,
+  onToggleRomanized,
   onSeek
 }: RoomLyricsPanelProps) {
   const isChineseLyrics = hasChineseLyrics(lyrics);
-  const [showTranslation, setShowTranslation] = useState(true);
-  const [showRomanized, setShowRomanized] = useState(false);
   const activeLyrics = lyrics?.trim() || translatedLyrics?.trim() || null;
   const lines = useMemo(() => parseRoomLyrics(activeLyrics), [activeLyrics]);
   const translatedLines = useMemo(
@@ -72,11 +80,6 @@ export function RoomLyricsPanel({
           : "h-[clamp(8rem,18vh,10rem)] max-h-[10rem] min-h-[8rem]";
 
   useEffect(() => {
-    setShowTranslation(true);
-    setShowRomanized(false);
-  }, [lyrics, romanizedLyrics]);
-
-  useEffect(() => {
     const activeLine = activeLineRef.current;
     const scrollContainer = scrollContainerRef.current;
     if (!activeLine || !scrollContainer || activeIndex < 0) return;
@@ -98,7 +101,7 @@ export function RoomLyricsPanel({
       className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive ? "flex-1" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
-      {!isChineseLyrics && (translatedLines.length > 0 || romanizedLines.length > 0) ? (
+      {showControls && !isChineseLyrics && (translatedLines.length > 0 || romanizedLines.length > 0) ? (
         <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2 sm:right-2">
           {translatedLines.length > 0 ? (
             <button
@@ -107,7 +110,7 @@ export function RoomLyricsPanel({
               className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                 showTranslation ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
               }`}
-              onClick={() => setShowTranslation((current) => !current)}
+              onClick={onToggleTranslation}
               title={showTranslation ? "关闭翻译" : "开启翻译"}
               type="button"
             >
@@ -121,7 +124,7 @@ export function RoomLyricsPanel({
               className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                 showRomanized ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
               }`}
-              onClick={() => setShowRomanized((current) => !current)}
+              onClick={onToggleRomanized}
               title={showRomanized ? "关闭罗马音" : "开启罗马音"}
               type="button"
             >
