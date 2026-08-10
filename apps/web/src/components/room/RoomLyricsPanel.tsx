@@ -134,7 +134,7 @@ export function RoomLyricsPanel({
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
-        <div ref={scrollContainerRef} className="hide-scrollbar h-full overflow-y-auto px-1 py-3 pr-12 sm:px-2 sm:py-4 sm:pr-14">
+        <div ref={scrollContainerRef} className={`hide-scrollbar h-full overflow-y-auto px-1 py-3 sm:px-2 sm:py-4 ${showControls ? "pr-12 sm:pr-14" : ""}`}>
         {status === "loading" ? (
           <p className="flex h-full items-center justify-center text-sm text-white/45">正在获取歌词…</p>
         ) : lines.length > 0 ? (
