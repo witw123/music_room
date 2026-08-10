@@ -18,6 +18,8 @@ export type CachedLibraryTrackRecord = {
   album?: string | null;
   artworkUrl?: string | null;
   lyrics?: string | null;
+  translatedLyrics?: string | null;
+  romanizedLyrics?: string | null;
   provider?: "netease" | "qqmusic" | "local_upload";
   providerTrackId?: string | null;
   mimeType: string;
@@ -159,6 +161,8 @@ export type LocalPlaylistTrackRecord = {
   sizeBytes: number;
   artworkUrl: string | null;
   lyrics: string | null;
+  translatedLyrics?: string | null;
+  romanizedLyrics?: string | null;
   loudness?: TrackLoudness;
   provider: "netease" | "qqmusic" | "local_upload";
   providerTrackId: string | null;

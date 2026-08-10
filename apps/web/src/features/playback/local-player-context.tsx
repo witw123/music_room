@@ -1023,6 +1023,8 @@ function mergeLocalTrackRecord(
       ? libraryTrack.artworkUrl
       : track.artworkUrl ?? libraryTrack.artworkUrl,
     lyrics: track.lyrics ?? libraryTrack.lyrics,
+    translatedLyrics: track.translatedLyrics ?? libraryTrack.translatedLyrics,
+    romanizedLyrics: track.romanizedLyrics ?? libraryTrack.romanizedLyrics,
     loudness: track.loudness ?? libraryTrack.loudness,
     fileHash: track.fileHash ?? libraryTrack.fileHash,
     fileName: track.fileName ?? libraryTrack.fileName,
@@ -1059,6 +1061,8 @@ function toTrackMeta(track: LocalPlaylistTrackRecord): TrackMeta {
     codec: null,
     mimeType: track.mimeType,
     lyrics: track.lyrics,
+    translatedLyrics: track.translatedLyrics ?? null,
+    romanizedLyrics: track.romanizedLyrics ?? null,
     fileHash: track.fileHash ?? track.id,
     artworkUrl: track.artworkUrl,
     ownerSessionId: localQueueOwnerId,

@@ -142,7 +142,8 @@ async function importOfflineProviderTrack(input: {
       { type: mimeType }
     );
 
-    const lyrics = track.lyrics?.trim() || await resolveProviderLyrics(source);
+    const providerLyrics = await resolveProviderLyrics(source);
+    const lyrics = track.lyrics?.trim() || providerLyrics?.wordSyncedLyric || providerLyrics?.plainLyric || null;
     const loudness = track.loudness ?? await analyzeAudioBlobLoudness(file);
     // The room track already owns its content hash. Avoid decoding or creating
     // playback segments here: the downloaded provider file is the local source.
@@ -156,6 +157,8 @@ async function importOfflineProviderTrack(input: {
           sizeBytes: file.size,
           mimeType,
           lyrics: lyrics || null,
+          translatedLyrics: providerLyrics?.translatedLyric ?? null,
+          romanizedLyrics: providerLyrics?.romanizedLyric ?? null,
           ...(loudness ? { loudness } : {})
         }
       })
@@ -207,7 +210,7 @@ async function resolveProviderLyrics(source: OfflineProviderSource) {
     const response = source.provider === "netease"
       ? await musicRoomApi.getNeteaseLyrics(source.trackId)
       : await musicRoomApi.getQqMusicLyrics(source.trackId);
-    return (response.wordSyncedLyric ?? response.plainLyric)?.trim()?.slice(0, 100_000) ?? null;
+    return response;
   } catch {
     return null;
   }

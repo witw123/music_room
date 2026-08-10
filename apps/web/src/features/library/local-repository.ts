@@ -55,6 +55,8 @@ export type LocalRepositoryTrackRecord = {
   album?: string | null;
   artworkUrl?: string | null;
   lyrics?: string | null;
+  translatedLyrics?: string | null;
+  romanizedLyrics?: string | null;
   durationMs: number;
   mimeType: string;
   sizeBytes: number;
@@ -869,6 +871,8 @@ export function createRepositoryTrackRecord(input: {
   album?: string | null;
   artworkUrl?: string | null;
   lyrics?: string | null;
+  translatedLyrics?: string | null;
+  romanizedLyrics?: string | null;
   provider?: "netease" | "qqmusic" | "local_upload";
   providerTrackId?: string | null;
   mimeType: string;
@@ -894,6 +898,8 @@ export function createRepositoryTrackRecord(input: {
     ...(input.album !== undefined ? { album: input.album } : {}),
     ...(input.artworkUrl !== undefined ? { artworkUrl: input.artworkUrl } : {}),
     ...(input.lyrics !== undefined ? { lyrics: input.lyrics } : {}),
+    ...(input.translatedLyrics !== undefined ? { translatedLyrics: input.translatedLyrics } : {}),
+    ...(input.romanizedLyrics !== undefined ? { romanizedLyrics: input.romanizedLyrics } : {}),
     durationMs: input.durationMs,
     mimeType: input.mimeType,
     sizeBytes: input.sizeBytes,

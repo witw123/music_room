@@ -295,8 +295,8 @@ function RoomStageBase({
     let cancelled = false;
     setLyricsStatus("loading");
     setLyricsText(null);
-    setTranslatedLyricsText(null);
-    setRomanizedLyricsText(null);
+    setTranslatedLyricsText(currentTrack.translatedLyrics?.trim() || null);
+    setRomanizedLyricsText(currentTrack.romanizedLyrics?.trim() || null);
 
     const loadLyrics = async () => {
       let localLyrics: string | null = currentTrack.lyrics?.trim() || null;

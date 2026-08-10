@@ -417,6 +417,8 @@ export async function saveAudioFileToLocalDirectory(input: {
     album?: string | null;
     artworkUrl?: string | null;
     lyrics?: string | null;
+    translatedLyrics?: string | null;
+    romanizedLyrics?: string | null;
     provider?: "netease" | "qqmusic" | "local_upload";
     providerTrackId?: string | null;
     durationMs: number;
@@ -519,6 +521,8 @@ export async function saveAudioFileToLocalDirectory(input: {
       album: input.track.album,
       artworkUrl,
       lyrics: input.track.lyrics,
+      translatedLyrics: input.track.translatedLyrics,
+      romanizedLyrics: input.track.romanizedLyrics,
       provider: input.track.provider,
       providerTrackId: input.track.providerTrackId,
       mimeType: input.mimeType,
@@ -652,6 +656,8 @@ async function persistCachedTrackRecord(
     ...(summary.album !== undefined ? { album: summary.album } : {}),
     ...(summary.artworkUrl !== undefined ? { artworkUrl: summary.artworkUrl } : {}),
     ...(summary.lyrics !== undefined ? { lyrics: summary.lyrics } : {}),
+    ...(summary.translatedLyrics !== undefined ? { translatedLyrics: summary.translatedLyrics } : {}),
+    ...(summary.romanizedLyrics !== undefined ? { romanizedLyrics: summary.romanizedLyrics } : {}),
     durationMs: summary.durationMs,
     mimeType: summary.mimeType,
     sizeBytes: summary.sizeBytes,

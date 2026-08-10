@@ -56,6 +56,8 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     album: resolvedTrack.album,
     artworkUrl,
     lyrics,
+    translatedLyrics: lyricPayload?.translatedLyric ?? null,
+    romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
     provider: resolvedTrack.provider,
     providerTrackId: resolvedTrack.providerTrackId,
     mimeType,
@@ -86,6 +88,8 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     sizeBytes: response.blob.size,
     mimeType,
     lyrics,
+    translatedLyrics: lyricPayload?.translatedLyric ?? null,
+    romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
     ...(loudness ? { loudness } : {}),
     availableOffline: false,
     updatedAt: new Date().toISOString()

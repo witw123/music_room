@@ -235,6 +235,8 @@ export function FavoriteAlbumsPage() {
           album: resolvedTrack.album,
           artworkUrl: resolvedTrack.artworkUrl,
           lyrics,
+          translatedLyrics: lyricPayload?.translatedLyric ?? null,
+          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
           provider: resolvedTrack.provider,
           providerTrackId: resolvedTrack.providerTrackId,
           durationMs: resolvedTrack.durationMs,
@@ -249,6 +251,8 @@ export function FavoriteAlbumsPage() {
         sizeBytes: response.blob.size,
         mimeType,
         lyrics,
+        translatedLyrics: lyricPayload?.translatedLyric ?? null,
+        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
         ...(loudness ? { loudness } : {}),
         availableOffline: true,
         updatedAt: new Date().toISOString()

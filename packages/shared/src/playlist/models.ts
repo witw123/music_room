@@ -40,6 +40,8 @@ export const trackMetaSchema = z.object({
   artist: z.string(),
   album: z.string().nullable(),
   lyrics: z.string().max(100_000).nullable().optional(),
+  translatedLyrics: z.string().max(100_000).nullable().optional(),
+  romanizedLyrics: z.string().max(100_000).nullable().optional(),
   durationMs: z.number().int().nonnegative(),
   bitrate: z.number().int().positive().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable().optional(),

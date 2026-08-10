@@ -46,6 +46,8 @@ type CacheLibraryTrackUpsertInput = {
     | "ownerNickname"
   > & Partial<Pick<TrackMeta, "album" | "artworkUrl" | "sourceType" | "sourceRef" | "loudness">> & {
     lyrics?: string | null;
+    translatedLyrics?: string | null;
+    romanizedLyrics?: string | null;
   };
   roomId: string;
   file: File | Blob;
@@ -58,6 +60,8 @@ export type CacheLibraryTrackUpsertRecord = {
   album?: string | null;
   artworkUrl?: string | null;
   lyrics?: string | null;
+  translatedLyrics?: string | null;
+  romanizedLyrics?: string | null;
   provider?: "netease" | "qqmusic" | "local_upload";
   providerTrackId?: string | null;
   mimeType: string;
@@ -132,6 +136,8 @@ export function buildCachedLibraryTrackUpsertRecord(
       : {}),
     ...(input.track.loudness ? { loudness: input.track.loudness } : {}),
     ...(input.track.lyrics !== undefined ? { lyrics: input.track.lyrics } : {}),
+    ...(input.track.translatedLyrics !== undefined ? { translatedLyrics: input.track.translatedLyrics } : {}),
+    ...(input.track.romanizedLyrics !== undefined ? { romanizedLyrics: input.track.romanizedLyrics } : {}),
     mimeType: input.track.mimeType || file.type || "audio/mpeg",
     durationMs: input.track.durationMs,
     sizeBytes: input.track.sizeBytes ?? file.size,

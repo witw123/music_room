@@ -476,10 +476,11 @@ export function DiscoverPage() {
       const fileHash = await hashAudioBlob(response.blob);
       const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
       const loudness = await analyzeAudioBlobLoudness(response.blob);
-      const lyrics = await (resolvedTrack.provider === "netease"
+      const lyricPayload = await (resolvedTrack.provider === "netease"
         ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
         : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-      ).then((value) => value.wordSyncedLyric ?? value.plainLyric ?? null).catch(() => null);
+      ).catch(() => null);
+      const lyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
       const saved = await saveAudioFileToLocalDirectory({
         file: response.blob,
         fileHash,
@@ -490,6 +491,8 @@ export function DiscoverPage() {
           album: resolvedTrack.album,
           artworkUrl: resolvedTrack.artworkUrl,
           lyrics,
+          translatedLyrics: lyricPayload?.translatedLyric ?? null,
+          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
           provider: resolvedTrack.provider,
           providerTrackId: resolvedTrack.providerTrackId,
           durationMs: resolvedTrack.durationMs,
@@ -504,6 +507,8 @@ export function DiscoverPage() {
         sizeBytes: response.blob.size,
         mimeType,
         lyrics,
+        translatedLyrics: lyricPayload?.translatedLyric ?? null,
+        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
         ...(loudness ? { loudness } : {}),
         availableOffline: true,
         updatedAt: new Date().toISOString()

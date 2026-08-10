@@ -369,6 +369,8 @@ export function useTrackUploads(options: {
           album: track.album,
           artworkUrl: track.artworkUrl,
           lyrics,
+          translatedLyrics: providerLyrics?.translatedLyric ?? null,
+          romanizedLyrics: providerLyrics?.romanizedLyric ?? null,
           provider: resolveProviderTrackSource(track)?.provider ?? "local_upload",
           providerTrackId: resolveProviderTrackSource(track)?.trackId ?? null,
           loudness: track.loudness,
