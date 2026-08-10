@@ -71,6 +71,40 @@ export function parseRoomLyrics(value: string | null | undefined): RoomLyricLine
   });
 }
 
+/** Match translated or romanized lines to primary lyrics by timestamp. */
+export function alignRoomLyricLines(
+  primaryLines: readonly RoomLyricLine[],
+  auxiliaryLines: readonly RoomLyricLine[]
+) {
+  const used = new Set<number>();
+  return primaryLines.map((primary) => {
+    let matchIndex = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < auxiliaryLines.length; index += 1) {
+      if (used.has(index)) continue;
+      const auxiliary = auxiliaryLines[index];
+      if (!auxiliary) continue;
+      if (primary.timeMs === null || auxiliary.timeMs === null) {
+        if (primary.timeMs === null && auxiliary.timeMs === null && matchIndex < 0) {
+          matchIndex = index;
+        }
+        continue;
+      }
+      const distance = Math.abs(primary.timeMs - auxiliary.timeMs);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        matchIndex = index;
+      }
+    }
+
+    if (matchIndex < 0 || (primary.timeMs !== null && bestDistance > 250)) {
+      return null;
+    }
+    used.add(matchIndex);
+    return auxiliaryLines[matchIndex] ?? null;
+  });
+}
+
 export function hasWordSyncedRoomLyrics(value: string | null | undefined) {
   return parseRoomLyrics(value).some((line) => line.words.length > 0);
 }

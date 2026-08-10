@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alignRoomLyricLines,
   getActiveRoomLyricIndex,
   getRoomLyricDisplayWords,
   getRoomLyricWordProgress,
@@ -9,6 +10,16 @@ import {
 } from "./room-lyrics";
 
 describe("room lyrics", () => {
+  it("aligns auxiliary lyrics by timestamp instead of array index", () => {
+    const primary = parseRoomLyrics("[00:01]Original one\n[00:03]Original two");
+    const auxiliary = parseRoomLyrics("[00:03]Translation two\n[00:01]Translation one");
+
+    expect(alignRoomLyricLines(primary, auxiliary).map((line) => line?.text)).toEqual([
+      "Translation one",
+      "Translation two"
+    ]);
+  });
+
   it("parses LRC timestamps and ignores metadata tags", () => {
     const lines = parseRoomLyrics("[ti:Demo]\n[00:01.20]First\n[00:02]Second");
 

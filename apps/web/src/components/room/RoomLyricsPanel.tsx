@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { getActiveRoomLyricIndex, getRoomLyricDisplayWords, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
+import { alignRoomLyricLines, getActiveRoomLyricIndex, getRoomLyricDisplayWords, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
 
 type RoomLyricsPanelProps = {
   lyrics: string | null;
@@ -56,6 +56,14 @@ export function RoomLyricsPanel({
   const romanizedLines = useMemo(
     () => isChineseLyrics ? [] : parseRoomLyrics(romanizedLyrics),
     [isChineseLyrics, romanizedLyrics]
+  );
+  const translatedLinesByPrimary = useMemo(
+    () => alignRoomLyricLines(lines, translatedLines),
+    [lines, translatedLines]
+  );
+  const romanizedLinesByPrimary = useMemo(
+    () => alignRoomLyricLines(lines, romanizedLines),
+    [lines, romanizedLines]
   );
   const displayWordsByLine = useMemo(
     () => lines.map((_line, index) => getRoomLyricDisplayWords(lines, index)),
@@ -142,8 +150,8 @@ export function RoomLyricsPanel({
             {lines.map((line, index) => {
               const isActive = index === activeIndex;
               const displayWords = displayWordsByLine[index] ?? [];
-              const translatedLine = translatedLines[index]?.text ?? null;
-              const romanizedLine = romanizedLines[index]?.text ?? null;
+              const translatedLine = translatedLinesByPrimary[index]?.text ?? null;
+              const romanizedLine = romanizedLinesByPrimary[index]?.text ?? null;
               return (
                 <p
                   key={line.id}
