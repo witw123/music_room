@@ -39,7 +39,6 @@ import {
 import {
   receiverBufferingGraceMs,
   receiverRecoveryRetryMs,
-  receiverRtpInactiveRecoveryMs,
   recordReceiverAudioProgress,
   resolveReceiverPlaybackState,
   shouldRecoverStalledReceiverAudio
@@ -742,30 +741,15 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       summary: `监听端媒体连接或接收轨道缺失，确保媒体连接（${input.trackId}）`,
       level: "warning"
     });
-    const attemptStartedAtMs = now;
     void input.runtime.restartMediaPeer(input.sourcePeerId, {
       // Never force-recreate from the poll path. Force recreate is reserved for
       // explicit source-side wedged-sender recovery and races empty media offers.
       forceRecreate: input.forceRecreate === true
-    }).then((result) => {
-      if (result != null || mediaEnsureKeyRef.current !== recoveryKey) {
-        return;
-      }
-      window.setTimeout(() => {
-        if (
-          mediaEnsureKeyRef.current === recoveryKey &&
-          lastMediaEnsureAtRef.current === attemptStartedAtMs
-        ) {
-          // A stale source-generation recovery can resolve without creating a
-          // peer. Re-open the one-shot latch after a short topology-settle
-          // window instead of requiring the member to leave and rejoin.
-          lastMediaEnsureAtRef.current = 0;
-        }
-      }, 1_000);
-    }, (error) => {
+    }).catch((error) => {
       if (mediaEnsureKeyRef.current === recoveryKey) {
-        // A rejected request is safe to retry on a later poll. A successful
-        // request intentionally remains one-shot until a live track arrives.
+        // A rejected request did not reach the lifecycle manager, so a later
+        // poll may try again. A completed request stays latched until a live
+        // receiver arrives or the room switches to a new media timeline.
         lastMediaEnsureAtRef.current = 0;
       }
       input.runtime.recordPeerDiagnostic({
@@ -1574,6 +1558,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           health.lastCurrentTime = null;
           health.hasStarted = false;
           health.waitingSinceMs = null;
+          // A user-initiated seek resumes the same MediaStream after the room
+          // clock has moved. Do not mistake the short RTP/jitter-buffer gap
+          // for a failed peer and restart it again while that transition is
+          // still settling.
+          health.lastRecoveryAtMs = now;
           missingMediaSinceRef.current = null;
         }
         // Some browsers keep firing `playing` while the MediaStream clock is
@@ -1585,8 +1574,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           currentTime: audio.currentTime,
           nowMs: now
         });
-        health.hasStarted = health.hasStarted || !audio.paused;
-        const mediaClockStalled = remote.receiverRtpActive !== true && health.hasStarted &&
+        const hasObservedMediaProgress = health.lastCurrentTime !== null &&
+          health.lastProgressAtMs > health.boundAtMs;
+        const mediaClockStalled = remote.receiverRtpActive !== true && hasObservedMediaProgress &&
           now - health.lastProgressAtMs >= receiverBufferingGraceMs;
         // Only clear the one-shot recovery latch after the media clock is
         // moving again. A live track with a frozen clock must remain eligible
@@ -1598,7 +1588,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         const mediaElementStalled = audio.paused ||
           audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
           mediaClockStalled;
-        if (roomPlayback?.status === "playing" && !remote.receiverRtpActive && mediaElementStalled) {
+        if (
+          roomPlayback?.status === "playing" &&
+          !remote.receiverRtpActive &&
+          mediaElementStalled &&
+          (hasObservedMediaProgress || health.waitingSinceMs !== null)
+        ) {
           missingMediaSinceRef.current ??= now;
         } else if (!mediaClockStalled) {
           missingMediaSinceRef.current = null;
@@ -1639,9 +1634,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         const waitingTooLong = health.waitingSinceMs !== null &&
           now - health.waitingSinceMs >= 1_500 &&
           mediaElementStalled;
-        const rtpInactiveStalled = missingMediaSinceRef.current !== null &&
-          now - missingMediaSinceRef.current >= receiverRtpInactiveRecoveryMs;
-        const progressStalled = shouldRecoverStalledReceiverAudio({
+        const progressStalled = hasObservedMediaProgress && shouldRecoverStalledReceiverAudio({
           boundAtMs: health.boundAtMs,
           hasStarted: health.hasStarted,
           lastProgressAtMs: health.lastProgressAtMs,
@@ -1649,7 +1642,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           receiverRtpActive: remote.receiverRtpActive,
           audioPaused: audio.paused
         });
-        const shouldNudge = timelineChanged || waitingTooLong || progressStalled || rtpInactiveStalled;
+        const shouldNudge = timelineChanged || waitingTooLong || progressStalled;
         if (shouldNudge && now - health.lastRecoveryAtMs >= receiverRecoveryRetryMs) {
           health.lastRecoveryAtMs = now;
           health.waitingSinceMs = null;
@@ -1657,7 +1650,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           // Keep the same MediaStream binding. Replacing srcObject here
           // destroys the browser jitter buffer and is a common source of
           // repeated silence during short packet-loss bursts.
-          if ((progressStalled || rtpInactiveStalled) && sourcePeerId && roomPlayback?.currentTrackId) {
+          if (progressStalled && sourcePeerId && roomPlayback?.currentTrackId) {
             ensureListenerMediaConnection({
               runtime,
               sourcePeerId,
@@ -1668,7 +1661,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           }
         }
         const result = await roomAudioOutput.playElement(audio, {
-          force: shouldNudge,
+          // Recovery must not keep replaying an already-playing MediaStream.
+          // Force is only needed for an authoritative timeline replacement.
+          force: timelineChanged,
           // New remote elements render natively. A previously graph-bound
           // element needs a running context; otherwise play() can advance on
           // iPad Safari while no audible route exists.

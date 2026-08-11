@@ -10,11 +10,6 @@ export const receiverBufferingGraceMs = 2_000;
 export const receiverStartupGraceMs = 1_500;
 export const receiverProgressRecoveryMs = 2_500;
 export const receiverRecoveryRetryMs = 5_000;
-// A listener whose RTP stream has gone silent should recover without waiting
-// for the full media-clock stall grace: a live-but-silent receiver track is
-// the dominant "member dropped audio" failure mode, and restarting the media
-// peer early avoids multi-second silent windows during packet-loss bursts.
-export const receiverRtpInactiveRecoveryMs = 1_500;
 
 export type ReceiverAudioHealth = {
   lastProgressAtMs: number;

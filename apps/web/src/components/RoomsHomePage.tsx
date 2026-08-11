@@ -280,7 +280,7 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="workspace-page home-workspace-page relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-28 md:pl-60">
+    <main className="workspace-page home-workspace-page relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60">
 
       {showSidebar ? (
         <AppSidebar
@@ -294,7 +294,7 @@ export function RoomsHomePage({
       {effectiveAwayRoomId && showSidebar ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
 
 
-      <section className="workspace-page__inner home-centered-workspace relative flex w-full flex-col gap-6 pt-[calc(1rem+env(safe-area-inset-top))] md:gap-6">
+      <section className="workspace-page__inner home-centered-workspace relative flex w-full shrink-0 flex-col gap-6 pt-[calc(1rem+env(safe-area-inset-top))] md:gap-6">
         <header className="workspace-page__header flex items-center justify-between md:hidden">
           <div>
             <p className="workspace-page__eyebrow">一起听见此刻</p>
