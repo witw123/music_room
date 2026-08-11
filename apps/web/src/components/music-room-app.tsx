@@ -131,7 +131,7 @@ export function MusicRoomApp({
     clearIdentity,
     refreshSession
   } = useSessionIdentity({
-    initialStatusMessage: "登录后即可进入你的音乐房。",
+    initialStatusMessage: "",
     sessionStorageKey: "music-room-session"
   });
 

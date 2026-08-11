@@ -120,6 +120,26 @@ export function createPendingSeekPlayback(input: {
   } satisfies PlaybackSnapshot;
 }
 
+export function createPendingPausePlayback(input: {
+  playback: PlaybackSnapshot;
+  positionMs: number;
+  durationMs?: number | null;
+}) {
+  const durationMs = input.durationMs ?? 0;
+  const positionMs = durationMs > 0
+    ? Math.min(Math.max(0, input.positionMs), durationMs)
+    : Math.max(0, input.positionMs);
+
+  return {
+    ...input.playback,
+    status: "paused",
+    positionMs,
+    startedAt: null,
+    startAt: null,
+    playbackRevision: input.playback.playbackRevision + 1
+  } satisfies PlaybackSnapshot;
+}
+
 export function useRoomActions({
   activeSession,
   roomSnapshot,
@@ -552,22 +572,35 @@ export function useRoomActions({
         return;
       }
 
+      const currentPlayback = roomSnapshot.room.playback;
+      const currentTrack = roomSnapshot.tracks.find(
+        (track) => track.id === currentPlayback.currentTrackId
+      );
+      const optimisticPlayback = createPendingPausePlayback({
+        playback: currentPlayback,
+        positionMs,
+        durationMs: currentTrack?.durationMs
+      });
+      dispatchRoomStateEvent({
+        type: "server-playback-patch",
+        roomId: roomSnapshot.room.id,
+        playback: optimisticPlayback
+      });
+
       await runPlaybackMutation(
         roomSnapshot.room.id,
-        roomSnapshot.room.playback.playbackRevision,
+        currentPlayback.playbackRevision,
         (expectedVersion) => {
-          const playbackAssetId = roomSnapshot.tracks.find(
-            (track) => track.id === roomSnapshot.room.playback.currentTrackId
-          )?.playbackAsset?.assetId;
+          const playbackAssetId = currentTrack?.playbackAsset?.assetId;
           return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "pause",
-            positionMs,
+            positionMs: optimisticPlayback.positionMs,
             ...(playbackAssetId ? { playbackAssetId } : {}),
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
           });
         },
-        roomSnapshot.room.playback
+        currentPlayback
       );
     },
     [

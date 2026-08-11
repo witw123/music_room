@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createPendingPausePlayback,
   createPendingSeekPlayback,
   runBestEffortRoomLeave,
   shouldRetryPlaybackMutationAfterConflict,
@@ -32,6 +33,39 @@ describe("optimistic playback seek", () => {
 
     expect(nextPlayback).toMatchObject({
       positionMs: 45_000,
+      startAt: null,
+      startedAt: null,
+      playbackRevision: 5
+    });
+  });
+});
+
+describe("optimistic playback pause", () => {
+  it("stops the local timeline immediately while the room pause request is in flight", () => {
+    const nextPlayback = createPendingPausePlayback({
+      playback: {
+        status: "playing",
+        currentTrackId: "track_1",
+        currentQueueItemId: "queue_1",
+        playbackAssetId: "asset_1",
+        startAt: "2026-08-11T00:00:00.000Z",
+        sourceSessionId: "session_1",
+        sourcePeerId: "peer_1",
+        sourceTrackId: "track_1",
+        positionMs: 10_000,
+        startedAt: "2026-08-11T00:00:00.000Z",
+        queueVersion: 1,
+        playbackRevision: 4,
+        mediaEpoch: 1,
+        playbackMode: "sequence"
+      },
+      positionMs: 75_000,
+      durationMs: 60_000
+    });
+
+    expect(nextPlayback).toMatchObject({
+      status: "paused",
+      positionMs: 60_000,
       startAt: null,
       startedAt: null,
       playbackRevision: 5

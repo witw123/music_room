@@ -77,6 +77,13 @@ export function RoomLyricsPanel({
   const isSevenLineView = visibleLines === 7;
   const alignmentClass = align === "left" ? "text-left" : "text-center";
   const lineAlignmentClass = align === "left" ? "ml-0 mr-auto justify-start text-left" : "mx-auto justify-center text-center";
+  const canToggleTranslation = translatedLines.length > 0 && Boolean(onToggleTranslation);
+  const canToggleRomanized = romanizedLines.length > 0 && Boolean(onToggleRomanized);
+  const lyricScrollPaddingClass = showControls
+    ? mobile
+      ? "px-12"
+      : "px-1 pr-12 sm:px-2 sm:pr-14"
+    : "px-1 sm:px-2";
   const panelHeightClass = immersive || mobile
     ? "h-full min-h-0 max-h-none"
     : isSevenLineView
@@ -109,40 +116,38 @@ export function RoomLyricsPanel({
       className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive || mobile ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive || mobile ? "flex-1 self-stretch" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
-      {showControls && !isChineseLyrics && (translatedLines.length > 0 || romanizedLines.length > 0) ? (
+      {showControls && !isChineseLyrics ? (
         <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2 sm:right-2">
-          {translatedLines.length > 0 ? (
-            <button
-              aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
-              aria-pressed={showTranslation}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
-                showTranslation ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
-              }`}
-              onClick={onToggleTranslation}
-              title={showTranslation ? "关闭翻译" : "开启翻译"}
-              type="button"
-            >
-              译
-            </button>
-          ) : null}
-          {romanizedLines.length > 0 ? (
-            <button
-              aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
-              aria-pressed={showRomanized}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
-                showRomanized ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
-              }`}
-              onClick={onToggleRomanized}
-              title={showRomanized ? "关闭罗马音" : "开启罗马音"}
-              type="button"
-            >
-              音
-            </button>
-          ) : null}
+          <button
+            aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
+            aria-pressed={showTranslation}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-30 ${
+              showTranslation ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
+            }`}
+            disabled={!canToggleTranslation}
+            onClick={onToggleTranslation}
+            title={canToggleTranslation ? (showTranslation ? "关闭翻译" : "开启翻译") : "暂无翻译"}
+            type="button"
+          >
+            译
+          </button>
+          <button
+            aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
+            aria-pressed={showRomanized}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-30 ${
+              showRomanized ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
+            }`}
+            disabled={!canToggleRomanized}
+            onClick={onToggleRomanized}
+            title={canToggleRomanized ? (showRomanized ? "关闭罗马音" : "开启罗马音") : "暂无罗马音"}
+            type="button"
+          >
+            音
+          </button>
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
-        <div ref={scrollContainerRef} className={`hide-scrollbar h-full overflow-y-auto px-1 py-3 sm:px-2 sm:py-4 ${showControls ? "pr-12 sm:pr-14" : ""}`}>
+        <div ref={scrollContainerRef} className={`hide-scrollbar h-full overflow-y-auto py-3 sm:py-4 ${lyricScrollPaddingClass}`}>
         {status === "loading" ? (
           <p className="flex h-full items-center justify-center text-sm text-white/45">正在获取歌词…</p>
         ) : lines.length > 0 ? (
