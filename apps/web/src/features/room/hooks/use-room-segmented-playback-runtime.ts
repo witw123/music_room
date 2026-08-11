@@ -299,6 +299,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const effectiveOfflineFallbackAsset = streamingOnlyPlayback
     ? null
     : offlineFallbackAsset;
+  // A resolved original local file is the only local playback source. Never
+  // run the segmented fallback alongside it, otherwise both decoders output
+  // the same room timeline at once.
+  const activeLocalFallbackAsset = usesNativeLocalAudio
+    ? null
+    : effectiveOfflineFallbackAsset;
   const runtimeInputRef = useRef({
     ...input,
     playbackAsset: null as TrackMeta["playbackAsset"] | null,
@@ -319,7 +325,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   runtimeInputRef.current = {
     ...input,
     playbackAsset: currentPlaybackAsset,
-    localFallbackAsset: effectiveOfflineFallbackAsset,
+    localFallbackAsset: activeLocalFallbackAsset,
     streamingOnlyPlayback,
     usesNativeLocalAudio,
     localAudioResolution,
@@ -824,7 +830,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     roomSnapshot: input.roomSnapshot,
     currentTrack: input.currentTrack,
     playbackAsset: currentPlaybackAsset,
-    localFallbackAsset: effectiveOfflineFallbackAsset,
+    localFallbackAsset: activeLocalFallbackAsset,
     peerId: input.peerId,
     isCurrentSource: input.isCurrentSource,
     disableSourcePlayback: shouldDisableSourcePlayback({
@@ -836,8 +842,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     loudnessGainDb,
     audioUnlocked: input.audioUnlocked,
   });
-  const usesOfflineFallback = !input.isCurrentSource &&
-    !!effectiveOfflineFallbackAsset && !usesNativeLocalAudio;
+  const usesOfflineFallback = !input.isCurrentSource && !!activeLocalFallbackAsset;
   const usesSegmentedPlayback = (input.isCurrentSource && !usesNativeLocalAudio) ||
     usesOfflineFallback;
   const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
@@ -971,7 +976,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.roomSnapshot?.room.id,
     input.recordPeerDiagnostic,
     localAudioResolution.status,
-    effectiveOfflineFallbackAsset?.assetId,
+    activeLocalFallbackAsset?.assetId,
     mediaPlayback.audioContextState,
     mediaPlayback.bufferedMs,
     mediaPlayback.lastError,
@@ -2134,7 +2139,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   ]);
 
   useEffect(() => {
-    if (playback.state !== "ended" || (!isCurrentSource && !effectiveOfflineFallbackAsset)) return;
+    if (playback.state !== "ended" || (!isCurrentSource && !activeLocalFallbackAsset)) return;
     const room = roomSnapshot?.room;
     const activePlayback = room?.playback;
     if (!room || !activePlayback?.currentTrackId) return;
@@ -2150,7 +2155,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [
     isCurrentSource,
     localPeerId,
-    effectiveOfflineFallbackAsset,
+    activeLocalFallbackAsset,
     onPlaybackEnded,
     playback.state,
     roomSnapshot,
@@ -2160,7 +2165,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const audioPath = resolveRoomAudioPath({
     isCurrentSource: input.isCurrentSource,
     nativeLocalAudio: usesNativeLocalAudio,
-    localFallback: !!effectiveOfflineFallbackAsset
+    localFallback: !!activeLocalFallbackAsset
   });
   const effectivePlayback = visiblePlayback;
   return useMemo(
