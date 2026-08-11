@@ -142,6 +142,20 @@ export function shouldDisableSourcePlayback(input: {
   return input.isCurrentSource && input.localAudioStatus === "available";
 }
 
+export function shouldSkipUnavailableStreamingTrack(input: {
+  isCurrentSource: boolean;
+  streamingOnlyPlayback: boolean;
+  playback: Pick<PlaybackSnapshot, "status" | "currentTrackId"> | null | undefined;
+  currentTrackId: string | null | undefined;
+  playbackAsset: TrackMeta["playbackAsset"] | null | undefined;
+}) {
+  return input.isCurrentSource &&
+    input.streamingOnlyPlayback &&
+    input.playback?.status === "playing" &&
+    input.playback.currentTrackId === input.currentTrackId &&
+    !input.playbackAsset;
+}
+
 /**
  * A listener's cached file is played directly by the media element. Only a
  * source needs a running AudioContext because its local element is connected

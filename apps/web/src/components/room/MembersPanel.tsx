@@ -424,76 +424,63 @@ function MembersPanelBase({
 
             return (
               <div key={member.id} className="group">
-                <article className="flex min-w-0 items-center gap-3 px-3 py-3.5 transition-colors duration-200 hover:bg-white/[0.03] sm:px-4">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-semibold text-foreground">
-                    {member.nickname.slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <strong className="truncate text-sm font-semibold text-foreground">{member.nickname}</strong>
-                      {member.id === activeSessionId ? <span className="shrink-0 text-[10px] text-foreground-muted">本机</span> : null}
-                    </div>
-                    <span className="mt-0.5 block text-[11px] text-foreground-muted">
-                      {member.role === "host" ? "房主" : "成员"}
+                <article>
+                  <button
+                    aria-controls={`member-permissions-${member.id}`}
+                    aria-expanded={isSettingsOpen}
+                    className="flex w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent sm:px-4"
+                    data-testid={`member-settings-${member.id}`}
+                    onClick={() => setOpenSettingsMemberId(isSettingsOpen ? null : member.id)}
+                    type="button"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-xs font-semibold text-foreground">
+                      {member.nickname.slice(0, 1).toUpperCase()}
                     </span>
-                    <span
-                      className="mt-1 block text-[10px] tabular-nums text-foreground-muted"
-                      data-testid={`member-duration-${member.id}`}
-                    >
-                      已在房间 {formatMemberDuration(getMemberDurationMs(member, now))}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <strong className="truncate text-sm font-semibold text-foreground">{member.nickname}</strong>
+                        {member.id === activeSessionId ? <span className="shrink-0 text-[10px] text-foreground-muted">本机</span> : null}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-foreground-muted">
+                        {member.role === "host" ? "房主" : "成员"}
+                      </span>
                     </span>
-                  </div>
-                  <span className={`flex shrink-0 items-center gap-1.5 text-xs ${presence.text}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />
-                    {presence.label}
-                  </span>
-                  {canManageMember ? (
-                    <div className="flex shrink-0 items-center gap-0.5 border-l border-surface-border pl-2">
-                      <Button
-                        aria-expanded={isSettingsOpen}
-                        aria-controls={`member-permissions-${member.id}`}
-                        aria-label={`设置 ${member.nickname} 的权限`}
-                        className="h-10 w-10 rounded-lg p-0"
-                        data-testid={`member-settings-${member.id}`}
-                        onClick={() => setOpenSettingsMemberId(isSettingsOpen ? null : member.id)}
-                        title="设置权限"
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                      >
-                        <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
-                          <path d="M4 7h16M4 12h16M4 17h16" />
-                          <circle cx="9" cy="7" r="2" fill="currentColor" stroke="none" />
-                          <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
-                          <circle cx="11" cy="17" r="2" fill="currentColor" stroke="none" />
-                        </svg>
-                      </Button>
-                      <Button
-                        aria-label={`移除 ${member.nickname}`}
-                        className="h-10 w-10 rounded-lg p-0 text-red-300 hover:text-red-200"
-                        data-testid={`member-remove-${member.id}`}
-                        onClick={() => setRemoveTarget(member)}
-                        title="移除成员"
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                      >
-                        <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
-                          <path d="M9 10h6M10 14h4M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" />
-                          <path d="m17 17 4 4M21 17l-4 4" />
-                        </svg>
-                      </Button>
-                    </div>
-                  ) : null}
+                    <span className={`flex shrink-0 items-center gap-1.5 text-xs ${presence.text}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />
+                      {presence.label}
+                    </span>
+                    <svg aria-hidden="true" className={`h-4 w-4 shrink-0 text-foreground-muted transition-transform duration-200 ${isSettingsOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
                 </article>
                 {isSettingsOpen ? (
                   <div className="motion-safe:animate-fade-in border-t border-surface-border bg-background/30 px-3 py-3 sm:px-4" data-testid={`member-permissions-${member.id}`} id={`member-permissions-${member.id}`}>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold text-foreground">房间权限</span>
-                      <span className="text-[10px] text-foreground-muted">仅房主可修改</span>
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <span className="block text-xs font-semibold text-foreground">房间权限</span>
+                        <span className="mt-1 block text-[10px] tabular-nums text-foreground-muted" data-testid={`member-duration-${member.id}`}>
+                          已在房间 {formatMemberDuration(getMemberDurationMs(member, now))}
+                        </span>
+                      </div>
+                      {canManageMember ? (
+                        <Button
+                          aria-label={`移除 ${member.nickname}`}
+                          className="h-8 px-2 text-xs text-red-300 hover:text-red-200"
+                          data-testid={`member-remove-${member.id}`}
+                          onClick={() => setRemoveTarget(member)}
+                          title="移除成员"
+                          type="button"
+                          variant="ghost"
+                        >
+                          移除成员
+                        </Button>
+                      ) : (
+                        <span className="pt-0.5 text-[10px] text-foreground-muted">仅房主可修改</span>
+                      )}
                     </div>
                     <MemberPermissionControls
-                      disabled={pendingPermission !== null}
+                      disabled={!canManageMember || pendingPermission !== null}
                       onChange={(permission, checked) => void handlePermissionChange(member, permission, checked)}
                       pendingPermission={pendingPermission?.startsWith(`${member.id}:`) ? pendingPermission.slice(member.id.length + 1) as keyof RoomMemberPermissions : null}
                       permissions={getRoomMemberPermissions(member)}

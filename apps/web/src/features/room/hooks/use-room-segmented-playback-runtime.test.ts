@@ -16,6 +16,7 @@ import {
   resolveRoomAudioPositionMs,
   resolveRemoteAudioTimelineKey,
   shouldDisableSourcePlayback,
+  shouldSkipUnavailableStreamingTrack,
   shouldWaitForLocalAudioContext
 } from "@/features/room/playback/room-audio-path";
 
@@ -99,6 +100,17 @@ describe("receiver playback state", () => {
     })).toBe(true);
   });
 
+  it("does not restart an RTP-active receiver just because MediaStream time is stale", () => {
+    expect(shouldRecoverStalledReceiverAudio({
+      boundAtMs: 1_000,
+      hasStarted: true,
+      lastProgressAtMs: 1_000,
+      receiverRtpActive: true,
+      audioPaused: false,
+      nowMs: 8_000
+    })).toBe(false);
+  });
+
   it("does not treat an autoplay-paused element as a media failure", () => {
     expect(shouldRecoverStalledReceiverAudio({
       boundAtMs: 1_000,
@@ -128,14 +140,14 @@ describe("receiver playback state", () => {
     })).toBe("live");
   });
 
-  it("reports buffering when RTP is live but the media clock has stalled", () => {
+  it("keeps RTP-active playback live when the MediaStream clock is stale", () => {
     expect(resolveReceiverPlaybackState({
       receiverRtpActive: true,
       hasStarted: true,
       lastProgressAtMs: 10_000,
       missingMediaSinceMs: null,
       nowMs: 13_000
-    })).toBe("buffering");
+    })).toBe("live");
   });
 
   it("shows buffering only after the receiver gap exceeds the grace period", () => {
@@ -450,6 +462,23 @@ describe("provider cache source transition", () => {
     expect(shouldDisableSourcePlayback({
       isCurrentSource: false,
       localAudioStatus: "available"
+    })).toBe(false);
+  });
+
+  it("skips a streaming-only source track when its room playback asset is absent", () => {
+    expect(shouldSkipUnavailableStreamingTrack({
+      isCurrentSource: true,
+      streamingOnlyPlayback: true,
+      playback: { status: "playing", currentTrackId: "track-1" },
+      currentTrackId: "track-1",
+      playbackAsset: null
+    })).toBe(true);
+    expect(shouldSkipUnavailableStreamingTrack({
+      isCurrentSource: true,
+      streamingOnlyPlayback: true,
+      playback: { status: "playing", currentTrackId: "track-1" },
+      currentTrackId: "track-1",
+      playbackAsset: { assetId: "asset-1" } as never
     })).toBe(false);
   });
 });

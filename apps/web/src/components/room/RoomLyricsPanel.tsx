@@ -106,7 +106,7 @@ export function RoomLyricsPanel({
   return (
     <section
       aria-label="歌词"
-      className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive ? "flex-1" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
+      className={`pointer-events-auto relative z-20 mx-auto flex w-full ${immersive || mobile ? "max-w-none" : "max-w-[min(100%,34rem)]"} ${immersive || mobile ? "flex-1 self-stretch" : "flex-none"} flex-col overflow-hidden px-3 ${frozen ? "" : "animate-fade-in"} sm:px-6 ${panelHeightClass} ${className ?? ""}`}
       data-testid="room-lyrics-panel"
     >
       {showControls && !isChineseLyrics && (translatedLines.length > 0 || romanizedLines.length > 0) ? (

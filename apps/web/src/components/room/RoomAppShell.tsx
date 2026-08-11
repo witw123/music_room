@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
@@ -74,6 +74,7 @@ export function RoomAppShell({
   workspaceViewModel
 }: RoomAppShellProps) {
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+  const requestRoomSeekRef = useRef<(positionMs: number) => void>(() => undefined);
 
   useEffect(() => {
     const syncLyricsPreference = () => setIsLyricsOpen(getAppSettings().playback.showLyricsByDefault);
@@ -156,7 +157,7 @@ export function RoomAppShell({
           onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
           isLyricsOpen={isLyricsOpen}
           onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
-          onSeek={roomActions.seekTrack}
+          onSeek={(positionMs) => requestRoomSeekRef.current(positionMs)}
           socket={socket}
           playerSlot={null}
             />
@@ -178,6 +179,9 @@ export function RoomAppShell({
         onPlay={playbackActions.handlePlayTrack}
         onPause={roomActions.pauseTrack}
         onSeek={roomActions.seekTrack}
+        onSeekRequestReady={(requestSeek) => {
+          requestRoomSeekRef.current = requestSeek ?? (() => undefined);
+        }}
         onPrev={playbackActions.handlePrevTrack}
         onNext={playbackActions.handleNextTrack}
         onCyclePlaybackMode={() =>

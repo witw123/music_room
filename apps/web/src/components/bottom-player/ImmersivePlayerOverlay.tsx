@@ -351,7 +351,7 @@ function MobileImmersivePlayer({
                 <SquareAlbumCover artworkUrl={artworkUrl} className="h-11 w-11 shrink-0 rounded-md" />
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{currentTrack?.title ?? "等待选择歌曲"}</span><span className="mt-0.5 block truncate text-xs text-white/55">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span></span>
               </button>
-              <div className="flex min-h-0 flex-1 items-center">
+              <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
                 <ImmersiveLyrics frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} mobile onSeekToPosition={onSeekToPosition} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} translatedLyrics={currentTrack?.translatedLyrics ?? null} romanizedLyrics={currentTrack?.romanizedLyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
               </div>
             </div>

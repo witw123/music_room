@@ -34,6 +34,7 @@ type BottomPlayerControllerProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
+  onSeekRequestReady?: (requestSeek: ((positionMs: number) => void) | null) => void;
   mobileVariant?: "compact" | "full";
 };
 
@@ -62,6 +63,7 @@ function BottomPlayerControllerBase({
   onReorderQueue,
   isLyricsOpen,
   onToggleLyrics,
+  onSeekRequestReady,
   mobileVariant = "full"
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
@@ -166,6 +168,7 @@ function BottomPlayerControllerBase({
       onReorderQueue={onReorderQueue}
       isLyricsOpen={isLyricsOpen}
       onToggleLyrics={onToggleLyrics}
+      onSeekRequestReady={onSeekRequestReady}
     />
   );
 }

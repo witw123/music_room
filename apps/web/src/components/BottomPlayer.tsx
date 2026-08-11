@@ -67,6 +67,7 @@ type BottomPlayerProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   isLyricsOpen?: boolean;
   onToggleLyrics?: () => void;
+  onSeekRequestReady?: (requestSeek: ((positionMs: number) => void) | null) => void;
   mobileVariant?: "compact" | "full";
 };
 
@@ -127,6 +128,7 @@ function BottomPlayerBase({
   onReorderQueue,
   isLyricsOpen = false,
   onToggleLyrics,
+  onSeekRequestReady,
   mobileVariant = "full"
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
@@ -333,13 +335,14 @@ function BottomPlayerBase({
     clearPendingSeek(pendingSeek.requestId);
   }, [clearPendingSeek, currentTrackDuration, pendingSeek, playback]);
 
-  const commitSeek = useCallback(() => {
-    if (seekDraft !== null && canSeekPlayback && canControlPlayback) {
-      const targetPositionMs = clampProgressMs(seekDraft, currentTrackDuration);
+  const requestSeek = useCallback((requestedPositionMs: number) => {
+    if (canSeekPlayback && canControlPlayback) {
+      const targetPositionMs = clampProgressMs(requestedPositionMs, currentTrackDuration);
       if (seekCommitTargetRef.current === targetPositionMs) {
         return;
       }
       seekCommitTargetRef.current = targetPositionMs;
+      setSeekDraft(targetPositionMs);
       const requestId = seekRequestIdRef.current + 1;
       seekRequestIdRef.current = requestId;
       setPendingSeek({
@@ -386,10 +389,21 @@ function BottomPlayerBase({
     currentTrackDuration,
     onSeek,
     playback?.currentTrackId,
-    seekDraft,
     setPendingSeek,
+    setSeekDraft,
     startTransition
   ]);
+
+  const commitSeek = useCallback(() => {
+    if (seekDraft !== null) {
+      requestSeek(seekDraft);
+    }
+  }, [requestSeek, seekDraft]);
+
+  useEffect(() => {
+    onSeekRequestReady?.(requestSeek);
+    return () => onSeekRequestReady?.(null);
+  }, [onSeekRequestReady, requestSeek]);
 
   const getLiveProgressMs = useCallback(
     () => resolveBarrierProgressMs(playbackBarrier, currentTrackDuration) ?? (
@@ -598,7 +612,7 @@ function BottomPlayerBase({
       favoriteTrackIsPending={favoriteTrackIsPending}
       onToggleFavoriteTrack={toggleCurrentFavorite}
       onClose={() => setIsImmersiveOpen(false)}
-      onSeekToPosition={(positionMs) => void onSeek(positionMs)}
+      onSeekToPosition={requestSeek}
     />
     <MiniPlayerOverlay
       isOpen={isMiniOpen}

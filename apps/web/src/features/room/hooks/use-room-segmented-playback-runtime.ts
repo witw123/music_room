@@ -57,6 +57,7 @@ import {
   resolveRoomAudioPath,
   resolveRoomAudioPositionMs,
   shouldDisableSourcePlayback,
+  shouldSkipUnavailableStreamingTrack,
   shouldWaitForLocalAudioContext,
   waitForLocalAudioMetadata,
   type LocalAudioObjectUrl,
@@ -339,6 +340,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const localAudioReadyKeyRef = useRef<string | null>(null);
   const localAudioTimelineKeyRef = useRef<string | null>(null);
   const remoteAudioTimelineKeyRef = useRef<string | null>(null);
+  const skippedUnavailableStreamingTimelineRef = useRef<string | null>(null);
   const failedLocalAudioKeysRef = useRef<Set<string>>(new Set());
   const readinessPublishKeyRef = useRef<string | null>(null);
   const cacheBarrierParticipationRef = useRef(false);
@@ -371,6 +373,41 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return resolved;
     });
   }, []);
+
+  useEffect(() => {
+    const roomPlayback = input.roomSnapshot?.room.playback;
+    if (!shouldSkipUnavailableStreamingTrack({
+      isCurrentSource: input.isCurrentSource,
+      streamingOnlyPlayback,
+      playback: roomPlayback,
+      currentTrackId: input.currentTrack?.id,
+      playbackAsset: currentPlaybackAsset
+    })) {
+      return;
+    }
+
+    const timelineKey = [
+      input.roomSnapshot?.room.id,
+      roomPlayback?.currentTrackId,
+      roomPlayback?.mediaEpoch
+    ].join(":");
+    if (skippedUnavailableStreamingTimelineRef.current === timelineKey) {
+      return;
+    }
+    skippedUnavailableStreamingTimelineRef.current = timelineKey;
+    setStatusMessage(`《${input.currentTrack?.title ?? "当前歌曲"}》没有可用播放资产，已跳过。`);
+    void onPlaybackEnded();
+  }, [
+    currentPlaybackAsset,
+    input.currentTrack?.id,
+    input.currentTrack?.title,
+    input.isCurrentSource,
+    input.roomSnapshot?.room.id,
+    input.roomSnapshot?.room.playback,
+    onPlaybackEnded,
+    setStatusMessage,
+    streamingOnlyPlayback
+  ]);
 
   useEffect(() => {
     const track = input.currentTrack;
@@ -1519,6 +1556,26 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       if (remote?.remoteStream && remote.receiverTrackState === "live" && audio) {
         const now = Date.now();
         const health = receiverAudioHealthRef.current;
+        const remoteTimelineKey = roomPlayback
+          ? resolveRemoteAudioTimelineKey(roomPlayback)
+          : null;
+        const timelineChanged = remoteTimelineKey !== null &&
+          remoteAudioTimelineKeyRef.current !== null &&
+          remoteAudioTimelineKeyRef.current !== remoteTimelineKey;
+        if (remoteTimelineKey !== null) {
+          remoteAudioTimelineKeyRef.current = remoteTimelineKey;
+        }
+        if (timelineChanged) {
+          // Pause, resume and seek intentionally interrupt the remote media
+          // clock. Start a fresh health window instead of treating the old
+          // timestamp as a stuck receiver and restarting the media peer.
+          health.boundAtMs = now;
+          health.lastProgressAtMs = now;
+          health.lastCurrentTime = null;
+          health.hasStarted = false;
+          health.waitingSinceMs = null;
+          missingMediaSinceRef.current = null;
+        }
         // Some browsers keep firing `playing` while the MediaStream clock is
         // frozen. Poll the clock as well as listening for media events so a
         // connected-but-silent receiver cannot stay falsely healthy forever.
@@ -1529,7 +1586,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           nowMs: now
         });
         health.hasStarted = health.hasStarted || !audio.paused;
-        const mediaClockStalled = health.hasStarted &&
+        const mediaClockStalled = remote.receiverRtpActive !== true && health.hasStarted &&
           now - health.lastProgressAtMs >= receiverBufferingGraceMs;
         // Only clear the one-shot recovery latch after the media clock is
         // moving again. A live track with a frozen clock must remain eligible
@@ -1576,18 +1633,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           loudnessGainDb: runtime.loudnessGainDb
         });
         boundMediaKeyRef.current = remoteTrackId;
-        const remoteTimelineKey = roomPlayback
-          ? resolveRemoteAudioTimelineKey(roomPlayback)
-          : null;
-        const timelineChanged = remoteTimelineKey !== null &&
-          remoteAudioTimelineKeyRef.current !== null &&
-          remoteAudioTimelineKeyRef.current !== remoteTimelineKey;
-        if (remoteTimelineKey !== null) {
-          // A seek/resume changes the room clock without replacing the RTP
-          // track. Remember it once so the media element gets one controlled
-          // play() nudge instead of entering the connection recovery path.
-          remoteAudioTimelineKeyRef.current = remoteTimelineKey;
-        }
         // A remote MediaStream is played directly by the media element. It
         // must not be blocked by the shared AudioContext unlock flag, which is
         // required by local Web Audio graphs but is not part of this path.

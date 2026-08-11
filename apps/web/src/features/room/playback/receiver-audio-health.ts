@@ -66,6 +66,12 @@ export function shouldRecoverStalledReceiverAudio(input: {
   if (!input.hasStarted || input.audioPaused === true) {
     return false;
   }
+  // `HTMLMediaElement.currentTime` is not a dependable health clock for a
+  // live MediaStream in every browser. When RTP is still arriving, restarting
+  // the peer only replays its jitter buffer and creates an audible loop.
+  if (input.receiverRtpActive === true) {
+    return false;
+  }
   const startupStalled = input.receiverRtpActive === false &&
     input.nowMs - input.boundAtMs >= (input.startupGraceMs ?? receiverStartupGraceMs);
   const progressStalled = input.nowMs - input.boundAtMs >=
@@ -87,7 +93,7 @@ export function resolveReceiverPlaybackState(input: {
   if (!input.hasStarted) {
     return "buffering";
   }
-  if (input.receiverRtpActive === true && hasRecentProgress) {
+  if (input.receiverRtpActive === true) {
     return "live";
   }
   // When progress telemetry is available, a live RTP track without a moving
