@@ -14,6 +14,8 @@ export type RoomAudioElementPlayResult = {
 
 export type RoomAudioElementPlayOptions = {
   force?: boolean;
+  /** Prevent an asynchronous play request from starting after its timeline was replaced. */
+  isCurrent?: () => boolean;
   /** Remote MediaStream elements do not depend on the shared Web Audio graph. */
   resumeAudioContext?: boolean;
   /** Fail instead of reporting success when this element is routed through Web Audio but its context cannot run. */
@@ -65,6 +67,12 @@ export class RoomAudioActivationManager {
     }
 
     try {
+      if (options.isCurrent?.() === false) {
+        return {
+          ok: false,
+          error: "play-obsolete"
+        };
+      }
       let audioContextReady = true;
       if (options.resumeAudioContext !== false) {
         audioContextReady = await this.resumeSharedAudioContext();
@@ -73,6 +81,12 @@ export class RoomAudioActivationManager {
         return {
           ok: false,
           error: "audio-context-suspended"
+        };
+      }
+      if (options.isCurrent?.() === false) {
+        return {
+          ok: false,
+          error: "play-obsolete"
         };
       }
       const sourceKey = this.getElementSourceKey(element);
@@ -91,6 +105,12 @@ export class RoomAudioActivationManager {
         return {
           ok: true,
           error: null
+        };
+      }
+      if (options.isCurrent?.() === false) {
+        return {
+          ok: false,
+          error: "play-obsolete"
         };
       }
       await element.play();
@@ -118,6 +138,12 @@ export class RoomAudioActivationManager {
       const originalMuted = element.muted;
       const originalVolume = element.volume;
       try {
+        if (options.isCurrent?.() === false) {
+          return {
+            ok: false,
+            error: "play-obsolete"
+          };
+        }
         // Chromium permits muted autoplay even after the transient click token
         // has expired. Start the concrete local source muted, then restore
         // its audible state without replacing or reloading the element again.

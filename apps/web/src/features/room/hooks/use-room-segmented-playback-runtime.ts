@@ -838,6 +838,30 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   ]);
 
   useEffect(() => {
+    if (!usesNativeLocalAudio) {
+      return;
+    }
+
+    // Seeking keeps the room status as "playing" while the server assigns a
+    // new clock anchor. Pause the cached element immediately instead of
+    // waiting for the 250ms media sync, so an earlier asynchronous play()
+    // request cannot leak a pre-seek fragment into the new timeline.
+    audioRef.current?.pause();
+  }, [
+    audioRef,
+    usesNativeLocalAudio,
+    readinessPlaybackStatus,
+    readinessPlaybackRevision,
+    readinessTrackId,
+    readinessMediaEpoch,
+    input.roomSnapshot?.room.playback.positionMs,
+    input.roomSnapshot?.room.playback.startAt,
+    input.roomSnapshot?.room.playback.startedAt,
+    playbackBarrier.holdPositionMs,
+    playbackBarrier.resumeAtMs
+  ]);
+
+  useEffect(() => {
     if (usesNativeLocalAudio) {
       return;
     }
@@ -1011,7 +1035,28 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         roomPlayback.startAt === null &&
         roomPlayback.startedAt === null;
       if (awaitingAuthoritativeTimeline) {
-        audio?.pause();
+        if (audio) {
+          // A seek creates a hard timeline boundary. Keeping the old remote
+          // MediaStream attached lets its jitter buffer drain after the
+          // authoritative clock arrives, replaying a fragment from before the
+          // seek. Detach only the element; the media PeerConnection remains
+          // alive and the confirmed timeline binds the same track again.
+          audio.pause();
+          if (!runtime.isCurrentSource && audio.srcObject) {
+            audio.srcObject = null;
+            boundMediaKeyRef.current = null;
+            remoteAudioTimelineKeyRef.current = null;
+            receiverAudioHealthRef.current = {
+              boundAtMs: 0,
+              lastProgressAtMs: 0,
+              lastCurrentTime: null,
+              hasStarted: false,
+              waitingSinceMs: null,
+              lastRecoveryAtMs: 0,
+              recoveryCount: 0
+            };
+          }
+        }
         runtime.setLocalAudioStream(
           runtime.isCurrentSource ? roomAudioOutput.getBroadcastStream() : null,
           runtime.isCurrentSource ? runtime.peerId : sourcePeerId,
@@ -1337,7 +1382,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             return;
           }
 
-          const result = await roomAudioOutput.playElement(audio);
+          const result = await roomAudioOutput.playElement(audio, {
+            // AudioContext resume can be asynchronous. Check again directly
+            // before element.play() so a pause or seek cannot revive this old
+            // local-cache request after the room timeline has moved on.
+            isCurrent: isCurrentLocalAudioRequest
+          });
           if (!isCurrentLocalAudioRequest()) {
             if (
               localAudioObjectUrlRef.current?.key === localAudioKey &&
@@ -1523,9 +1573,27 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         missingMediaSinceRef.current = null;
         mediaEnsureKeyRef.current = null;
         if (audio) {
-          // Keep srcObject bound so resume reuses the browser jitter buffer,
-          // but never let a paused room continue consuming the remote stream.
+          // Pausing is an authoritative timeline boundary. Leaving an RTP
+          // MediaStream bound here can make Chromium/WebKit drain packets from
+          // the pre-pause jitter buffer after resume, audibly replaying the
+          // old segment. This resets only the element binding, not the live
+          // media peer, so resume gets the current RTP timeline without a
+          // new ICE/DTLS negotiation.
           audio.pause();
+          if (audio.srcObject) {
+            audio.srcObject = null;
+            boundMediaKeyRef.current = null;
+            remoteAudioTimelineKeyRef.current = null;
+            receiverAudioHealthRef.current = {
+              boundAtMs: 0,
+              lastProgressAtMs: 0,
+              lastCurrentTime: null,
+              hasStarted: false,
+              waitingSinceMs: null,
+              lastRecoveryAtMs: 0,
+              recoveryCount: 0
+            };
+          }
         }
         setMediaPlayback({
           state: "paused",

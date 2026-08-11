@@ -110,6 +110,20 @@ describe("RoomAudioActivationManager", () => {
     expect(manager.isActivated()).toBe(true);
   });
 
+  it("does not start an obsolete play request", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+
+    await expect(manager.playElement(audio, {
+      isCurrent: () => false
+    })).resolves.toEqual({
+      ok: false,
+      error: "play-obsolete"
+    });
+
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
   it("does not replay an already-playing element for the same source", async () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();
