@@ -622,6 +622,15 @@ describe("native local audio timeline", () => {
     );
   });
 
+  it("does not interrupt cached audio for ordinary playing clock updates", () => {
+    expect(resolveLocalAudioTimelineKey(playback)).toBe(
+      resolveLocalAudioTimelineKey({
+        ...playback,
+        positionMs: 4_000
+      })
+    );
+  });
+
   it("invalidates an in-flight cache play when a barrier starts waiting", () => {
     expect(resolveLocalAudioTimelineKey(playback)).not.toBe(
       resolveLocalAudioTimelineKey(playback, {

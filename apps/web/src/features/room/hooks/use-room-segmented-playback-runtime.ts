@@ -281,6 +281,21 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     localAudioTrackKey
   );
   const usesNativeLocalAudio = !streamingOnlyPlayback && currentLocalAudioAvailable;
+  const nativeLocalAudioTimelineKey = useMemo(() => {
+    const roomPlayback = input.roomSnapshot?.room.playback ?? null;
+    return roomPlayback
+      ? resolveLocalAudioTimelineKey(roomPlayback, playbackBarrier)
+      : null;
+  }, [
+    input.roomSnapshot?.room.playback.currentTrackId,
+    input.roomSnapshot?.room.playback.mediaEpoch,
+    input.roomSnapshot?.room.playback.positionMs,
+    input.roomSnapshot?.room.playback.startAt,
+    input.roomSnapshot?.room.playback.startedAt,
+    input.roomSnapshot?.room.playback.status,
+    playbackBarrier.holdPositionMs,
+    playbackBarrier.resumeAtMs
+  ]);
   const effectiveOfflineFallbackAsset = streamingOnlyPlayback
     ? null
     : offlineFallbackAsset;
@@ -338,6 +353,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const localAudioObjectUrlRef = useRef<LocalAudioObjectUrl | null>(null);
   const localAudioReadyKeyRef = useRef<string | null>(null);
   const localAudioTimelineKeyRef = useRef<string | null>(null);
+  const nativeLocalAudioTimelineRef = useRef<string | null>(null);
   const remoteAudioTimelineKeyRef = useRef<string | null>(null);
   const skippedUnavailableStreamingTimelineRef = useRef<string | null>(null);
   const failedLocalAudioKeysRef = useRef<Set<string>>(new Set());
@@ -839,26 +855,25 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
   useEffect(() => {
     if (!usesNativeLocalAudio) {
+      nativeLocalAudioTimelineRef.current = null;
       return;
     }
 
-    // Seeking keeps the room status as "playing" while the server assigns a
-    // new clock anchor. Pause the cached element immediately instead of
-    // waiting for the 250ms media sync, so an earlier asynchronous play()
-    // request cannot leak a pre-seek fragment into the new timeline.
-    audioRef.current?.pause();
+    const previousTimelineKey = nativeLocalAudioTimelineRef.current;
+    nativeLocalAudioTimelineRef.current = nativeLocalAudioTimelineKey;
+    if (
+      previousTimelineKey !== null &&
+      previousTimelineKey !== nativeLocalAudioTimelineKey
+    ) {
+      // Seeking keeps the room status as "playing" while the server assigns
+      // a new clock anchor. Only a real timeline replacement may interrupt
+      // the cached element; playbackRevision updates are routine sync data.
+      audioRef.current?.pause();
+    }
   }, [
     audioRef,
     usesNativeLocalAudio,
-    readinessPlaybackStatus,
-    readinessPlaybackRevision,
-    readinessTrackId,
-    readinessMediaEpoch,
-    input.roomSnapshot?.room.playback.positionMs,
-    input.roomSnapshot?.room.playback.startAt,
-    input.roomSnapshot?.room.playback.startedAt,
-    playbackBarrier.holdPositionMs,
-    playbackBarrier.resumeAtMs
+    nativeLocalAudioTimelineKey
   ]);
 
   useEffect(() => {
