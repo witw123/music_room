@@ -286,16 +286,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     return roomPlayback
       ? resolveLocalAudioTimelineKey(roomPlayback, playbackBarrier)
       : null;
-  }, [
-    input.roomSnapshot?.room.playback.currentTrackId,
-    input.roomSnapshot?.room.playback.mediaEpoch,
-    input.roomSnapshot?.room.playback.positionMs,
-    input.roomSnapshot?.room.playback.startAt,
-    input.roomSnapshot?.room.playback.startedAt,
-    input.roomSnapshot?.room.playback.status,
-    playbackBarrier.holdPositionMs,
-    playbackBarrier.resumeAtMs
-  ]);
+  }, [input.roomSnapshot?.room.playback, playbackBarrier]);
   const effectiveOfflineFallbackAsset = streamingOnlyPlayback
     ? null
     : offlineFallbackAsset;

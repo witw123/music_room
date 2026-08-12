@@ -165,7 +165,6 @@ function RoomWorkspaceBase({
 
       <div className="hidden md:contents">
         <AppSidebar
-          activeSession={activeSession}
           hasBottomPlayer
           compactMobile
           keepHomeInRoom

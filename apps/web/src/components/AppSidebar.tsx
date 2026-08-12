@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Route } from "next";
-import type { AuthSession } from "@music-room/shared";
 import { storeAwayRoomId } from "@/lib/domain/away-room";
 import {
   applyAppTheme,
@@ -19,7 +18,6 @@ import {
 export type AppNavItemId = "home" | "discover" | "playlists" | "profile";
 
 type AppSidebarProps = {
-  activeSession: AuthSession | null;
   activeItem?: AppNavItemId;
   hasBottomPlayer?: boolean;
   compactMobile?: boolean;
@@ -48,7 +46,6 @@ type IconName =
   | "expand";
 
 export function AppSidebar({
-  activeSession,
   activeItem,
   hasBottomPlayer = false,
   compactMobile = false,

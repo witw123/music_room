@@ -285,7 +285,6 @@ export function RoomsHomePage({
       {showSidebar ? (
         <AppSidebar
           activeItem="home"
-          activeSession={activeSession}
           hasBottomPlayer={hasBottomPlayer}
           onLogout={handleLogout}
         />

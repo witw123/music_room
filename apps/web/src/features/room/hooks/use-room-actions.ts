@@ -606,6 +606,7 @@ export function useRoomActions({
     [
       roomSnapshot,
       activeSession,
+      dispatchRoomStateEvent,
       getCurrentPlaybackPositionMs,
       getCurrentPeerId,
       runPlaybackMutation
