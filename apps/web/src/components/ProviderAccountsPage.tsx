@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { LocalPlaylistsOverview } from "@/components/LocalPlaylistsOverview";
 import { PersonalOverview } from "@/components/PersonalOverview";
-import { FavoriteAlbumsPage } from "@/components/FavoriteAlbumsPage";
 import { SettingsPage } from "@/components/SettingsPage";
 import { Button } from "@/components/ui/button";
 
@@ -32,7 +30,7 @@ export function ProviderAccountsPage() {
   }
 
   return (
-    <main className="workspace-page relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-12 md:pt-20">
         {view === "overview" ? (
@@ -45,12 +43,6 @@ export function ProviderAccountsPage() {
                 </Button>
               }
             />
-            <section className="mt-8 border-t border-surface-border pt-7 sm:mt-10 sm:pt-8">
-              <FavoriteAlbumsPage embedded />
-            </section>
-            <div className="mt-8 sm:mt-10">
-              <LocalPlaylistsOverview />
-            </div>
           </>
         ) : null}
         {view === "settings" ? <SettingsPage embedded onBack={() => setView("overview")} /> : null}

@@ -179,12 +179,6 @@ export function AppSidebar({
 
         </nav>
 
-        {activeSession && !collapsed ? (
-          <div className={`hidden border-t border-[var(--sidebar-divider)] pt-4 md:block ${collapsed ? "md:px-0" : ""}`}>
-            <UserSummary activeSession={activeSession} />
-          </div>
-        ) : null}
-
         <div className={`app-sidebar__footer hidden flex-col border-t md:flex ${collapsed ? "md:items-center md:gap-3 md:px-0 md:pb-1 md:pt-4" : "md:items-stretch md:gap-1 md:px-0 md:pb-1 md:pt-3"}`}>
           <button
             aria-label={`切换到${themeActionLabel}`}
@@ -277,24 +271,6 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
     return "home";
   }
   return null;
-}
-
-function UserSummary({ activeSession }: { activeSession: AuthSession }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-xs font-bold text-accent">
-        {getInitial(activeSession.nickname)}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-[var(--sidebar-foreground)]">{activeSession.nickname}</p>
-        <p className="truncate text-[10px] text-[var(--sidebar-secondary)]">@{activeSession.username}</p>
-      </div>
-    </div>
-  );
-}
-
-function getInitial(value: string) {
-  return value.trim().slice(0, 1).toUpperCase() || "M";
 }
 
 function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {

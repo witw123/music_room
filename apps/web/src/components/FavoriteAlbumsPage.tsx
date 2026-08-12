@@ -42,9 +42,11 @@ type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
 export function FavoriteAlbumsPage({
   embedded = false,
+  fixedHeight = true,
   onBack
 }: {
   embedded?: boolean;
+  fixedHeight?: boolean;
   onBack?: () => void;
 }) {
   const router = useRouter();
@@ -370,8 +372,82 @@ export function FavoriteAlbumsPage({
     }
   }
 
+  const favoriteBody = (
+    <div className={embedded ? "hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 pr-1" : ""}>
+      {favoriteView === "tracks" ? (
+        <FavoriteTracksSection
+          loading={favoriteTracksLoading}
+          tracks={favoriteTracks.map(favoriteTrackToCandidate)}
+          trackActions={favoriteTrackActions()}
+        />
+      ) : favoriteView === "artists" ? (
+        <FavoriteArtistsSection artists={artists} pending={pending} onRemove={removeArtist} />
+      ) : detail && detailItem ? (
+        <ProviderAlbumDetailView
+          album={detail}
+          isFavorite
+          onBack={() => setDetail(null)}
+          onToggleFavorite={() => removeAlbum(detailItem)}
+          pending={pending}
+          trackActions={{
+            isDownloaded: (track) => getLocalRecord(track).availableOffline,
+            isPlayable: () => true,
+            isQueueable: (track) => player.isTrackPlayable(getLocalRecord(track)) || playbackTracks.some((item) => item.id === localPlaylistTrackId(track) && !!item.fileHash),
+            isQueued: (track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
+            isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}`,
+            isPreparingPlayback: (track) => pending === `play:${track.provider}:${track.providerTrackId}`,
+            onDownload: (track) => void downloadTrack(track),
+            onAddToQueue: (track) => player.addToQueue(getLocalRecord(track)),
+            onPlay: (track) => void playFavoriteTrack(track),
+            onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
+            isFavorite: (track) => isFavoriteTrack(track),
+            isTogglingFavorite: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
+            onToggleFavorite: toggleFavoriteSong
+          }}
+        />
+      ) : (
+        <section className="mt-4">
+          {items.length ? (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+              {items.map((item) => (
+                <article className="group relative min-w-0" key={item.id}>
+                  <button className="block w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70" disabled={pending !== null} onClick={() => void openAlbum(item)} type="button">
+                    <div className="relative aspect-square overflow-hidden rounded-xl border border-surface-border bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
+                      <AlbumArtwork alt={item.title} className="h-full w-full" src={item.artworkUrl} />
+                    </div>
+                    <div className="min-w-0 px-1 pt-3">
+                      <strong className="block truncate text-[15px] font-semibold text-foreground">{item.title}</strong>
+                      <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
+                    </div>
+                  </button>
+                  <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
+                </article>
+              ))}
+            </div>
+          ) : !favoritesLoaded ? (
+            <div className="workspace-surface flex min-h-[430px] items-center justify-center px-6 text-center text-sm text-foreground-muted">
+              正在加载收藏…
+            </div>
+          ) : (
+            <div className="workspace-surface flex min-h-[430px] flex-col items-center justify-center px-6 text-center">
+              <HeartIcon />
+              <p className="mt-4 text-sm font-medium text-foreground-muted">还没有收藏专辑</p>
+              <p className="mt-2 text-xs text-foreground-muted">在搜索页打开专辑并点击收藏。</p>
+            </div>
+          )}
+        </section>
+      )}
+      {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
+      {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
+    </div>
+  );
+
   const content = (
-      <div className={embedded ? "h-[29rem] min-w-0 overflow-y-auto pr-1 sm:h-[32rem] lg:h-[34rem]" : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
+      <div className={embedded
+        ? fixedHeight
+          ? "flex h-[29rem] min-w-0 flex-col overflow-hidden sm:h-[32rem] lg:h-[34rem]"
+          : "flex min-w-0 flex-col"
+        : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
         <header className="workspace-page__header flex-wrap">
           <div>
             <h1 className="workspace-page__title">收藏</h1>
@@ -385,73 +461,7 @@ export function FavoriteAlbumsPage({
             {embedded && onBack ? <Button onClick={onBack} size="sm" type="button" variant="outline">返回我的</Button> : null}
           </div>
         </header>
-        {favoriteView === "tracks" ? (
-          <FavoriteTracksSection
-            loading={favoriteTracksLoading}
-            tracks={favoriteTracks.map(favoriteTrackToCandidate)}
-            trackActions={favoriteTrackActions()}
-          />
-        ) : favoriteView === "artists" ? (
-          <FavoriteArtistsSection artists={artists} pending={pending} onRemove={removeArtist} />
-        ) : detail && detailItem ? (
-          <ProviderAlbumDetailView
-            album={detail}
-            isFavorite
-            onBack={() => setDetail(null)}
-            onToggleFavorite={() => removeAlbum(detailItem)}
-            pending={pending}
-            trackActions={{
-              isDownloaded: (track) => getLocalRecord(track).availableOffline,
-              isPlayable: () => true,
-              isQueueable: (track) => player.isTrackPlayable(getLocalRecord(track)) || playbackTracks.some((item) => item.id === localPlaylistTrackId(track) && !!item.fileHash),
-              isQueued: (track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
-              isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}`,
-              isPreparingPlayback: (track) => pending === `play:${track.provider}:${track.providerTrackId}`,
-              onDownload: (track) => void downloadTrack(track),
-              onAddToQueue: (track) => player.addToQueue(getLocalRecord(track)),
-              onPlay: (track) => void playFavoriteTrack(track),
-              onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
-              isFavorite: (track) => isFavoriteTrack(track),
-              isTogglingFavorite: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
-              onToggleFavorite: toggleFavoriteSong
-            }}
-          />
-        ) : (
-          <>
-            <section className="mt-4">
-              {items.length ? (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-                  {items.map((item) => (
-                    <article className="group relative min-w-0" key={item.id}>
-                      <button className="block w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70" disabled={pending !== null} onClick={() => void openAlbum(item)} type="button">
-                        <div className="relative aspect-square overflow-hidden rounded-xl border border-surface-border bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
-                          <AlbumArtwork alt={item.title} className="h-full w-full" src={item.artworkUrl} />
-                        </div>
-                        <div className="min-w-0 px-1 pt-3">
-                          <strong className="block truncate text-[15px] font-semibold text-foreground">{item.title}</strong>
-                          <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
-                        </div>
-                      </button>
-                      <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>
-                    </article>
-                  ))}
-                </div>
-              ) : !favoritesLoaded ? (
-                <div className="workspace-surface flex min-h-[430px] items-center justify-center px-6 text-center text-sm text-foreground-muted">
-                  正在加载收藏…
-                </div>
-              ) : (
-                <div className="workspace-surface flex min-h-[430px] flex-col items-center justify-center px-6 text-center">
-                  <HeartIcon />
-                  <p className="mt-4 text-sm font-medium text-foreground-muted">还没有收藏专辑</p>
-                  <p className="mt-2 text-xs text-foreground-muted">在搜索页打开专辑并点击收藏。</p>
-                </div>
-              )}
-            </section>
-          </>
-        )}
-        {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
-        {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
+        {favoriteBody}
       </div>
   );
 
