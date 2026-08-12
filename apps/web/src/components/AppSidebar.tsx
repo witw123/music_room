@@ -16,7 +16,7 @@ import {
   type ThemePreference
 } from "@/features/settings/settings-store";
 
-export type AppNavItemId = "home" | "discover" | "search" | "playlists" | "profile;
+export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";
 
 type AppSidebarProps = {
   activeSession: AuthSession | null;
@@ -28,7 +28,7 @@ type AppSidebarProps = {
   onLogout?: () => void;
 };
 
-const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [\n  { id: "home", label: "首页", href: "/app", icon: "home" },\n  { id: "discover", label: "发现", href: "/app/discover", icon: "discover" },\n  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },\n  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }\n];
+const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [\n  { id: "home", label: "首页", href: "/app", icon: "home" },\n  { id: "discover", label: "发现", href: "/app/discover", icon:export type AppNavItemId = "home" | "discover" | "playlists" | "profile";},\n  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },\n  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }\n];
 
 type IconName =
   | "home"
@@ -413,6 +413,7 @@ function NavIcon({ name, size = 18 }: { name: IconName; size?: number }) {
     </svg>
   );
 }
+
 
 
 
