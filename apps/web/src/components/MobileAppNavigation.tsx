@@ -5,7 +5,7 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type MobileNavIconName = "home" | "discover" | "playlist" | "favorite" | "profile" | "settings";
+type MobileNavIconName = "home" | "discover" | "playlist" | "profile;
 
 type MobileNavItem = {
   id: "home" | "discover" | "playlists" | "favorites" | "profile" | "settings";
@@ -17,11 +17,7 @@ type MobileNavItem = {
 const items: MobileNavItem[] = [
   { id: "home", label: "首页", href: "/app", icon: "home" },
   { id: "discover", label: "发现", href: "/app/discover" as Route, icon: "discover" },
-  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
-  { id: "favorites", label: "收藏", href: "/app/favorites", icon: "favorite" },
-  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" },
-  { id: "settings", label: "设置", href: "/app/settings", icon: "settings" }
-];
+  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },\n  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }\n];
 
 export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () => void }) {
   const pathname = usePathname();
@@ -131,3 +127,5 @@ function isActivePath(pathname: string | null, href: Route) {
   }
   return pathname?.startsWith(href) ?? false;
 }
+
+
