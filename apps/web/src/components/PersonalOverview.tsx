@@ -2,6 +2,7 @@
 
 import type { AuthSession } from "@music-room/shared";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   musicRoomApi,
   type PlaybackHistoryStats,
@@ -10,7 +11,13 @@ import {
 
 const activityRefreshIntervalMs = 60_000;
 
-export function PersonalOverview({ activeSession }: { activeSession: AuthSession }) {
+export function PersonalOverview({
+  activeSession,
+  onOpenFavorites
+}: {
+  activeSession: AuthSession;
+  onOpenFavorites: () => void;
+}) {
   const [recentRooms, setRecentRooms] = useState<RoomActivitySummary[]>([]);
   const [playbackStats, setPlaybackStats] = useState<PlaybackHistoryStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,6 +139,16 @@ export function PersonalOverview({ activeSession }: { activeSession: AuthSession
             ) : null}
           </div>
         </div>
+      </div>
+
+      <div className="mt-7 flex items-center justify-between gap-4 border-t border-surface-border pt-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">收藏</h2>
+          <p className="mt-1 text-xs text-foreground-muted">查看收藏的歌曲、专辑和歌手。</p>
+        </div>
+        <Button className="shrink-0" onClick={onOpenFavorites} size="sm" type="button" variant="outline">
+          查看收藏
+        </Button>
       </div>
     </section>
   );

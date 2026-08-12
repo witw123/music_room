@@ -40,9 +40,15 @@ import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorite
 
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
-export function FavoriteAlbumsPage() {
+export function FavoriteAlbumsPage({
+  embedded = false,
+  onBack
+}: {
+  embedded?: boolean;
+  onBack?: () => void;
+}) {
   const router = useRouter();
-  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/favorites" });
+  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/profile" });
   const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -364,18 +370,19 @@ export function FavoriteAlbumsPage() {
     }
   }
 
-  return (
-    <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
-      <div className="workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20">
+  const content = (
+      <div className={embedded ? "min-w-0" : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
         <header className="workspace-page__header flex-wrap">
           <div>
-            <p className="workspace-page__eyebrow">Library</p>
             <h1 className="workspace-page__title">收藏</h1>
           </div>
-          <div aria-label="收藏内容类型" className="workspace-segmented" role="tablist">
-            <button aria-selected={favoriteView === "tracks"} className="workspace-segmented__item" onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
-            <button aria-selected={favoriteView === "albums"} className="workspace-segmented__item" onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
-            <button aria-selected={favoriteView === "artists"} className="workspace-segmented__item" onClick={() => { setFavoriteView("artists"); setDetail(null); }} role="tab" type="button">歌手</button>
+          <div className="flex items-center gap-3">
+            <div aria-label="收藏内容类型" className="workspace-segmented" role="tablist">
+              <button aria-selected={favoriteView === "tracks"} className="workspace-segmented__item" onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
+              <button aria-selected={favoriteView === "albums"} className="workspace-segmented__item" onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
+              <button aria-selected={favoriteView === "artists"} className="workspace-segmented__item" onClick={() => { setFavoriteView("artists"); setDetail(null); }} role="tab" type="button">歌手</button>
+            </div>
+            {embedded && onBack ? <Button onClick={onBack} size="sm" type="button" variant="outline">返回我的</Button> : null}
           </div>
         </header>
         {favoriteView === "tracks" ? (
@@ -446,7 +453,9 @@ export function FavoriteAlbumsPage() {
         {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
       </div>
-      {playlistPickerTrack && playlistPickerAnchor ? (
+  );
+
+  const picker = playlistPickerTrack && playlistPickerAnchor ? (
         <ProviderPlaylistPickerDialog
           anchor={playlistPickerAnchor}
           loading={playlistPickerLoading}
@@ -461,9 +470,13 @@ export function FavoriteAlbumsPage() {
           }}
           onSelect={(option) => void addTrackToPlaylist(option)}
         />
-      ) : null}
-    </main>
-  );
+      ) : null;
+
+  if (embedded) {
+    return <>{content}{picker}</>;
+  }
+
+  return <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">{content}{picker}</main>;
 }
 
 function FavoriteArtistsSection({

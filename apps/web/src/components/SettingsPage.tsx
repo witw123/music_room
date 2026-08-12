@@ -54,9 +54,15 @@ const enabledDiscoverProviders: DiscoverProvider[] = [
   ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
 ];
 
-export function SettingsPage() {
+export function SettingsPage({
+  embedded = false,
+  onBack
+}: {
+  embedded?: boolean;
+  onBack?: () => void;
+}) {
   const router = useRouter();
-  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/settings" });
+  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/profile" });
   const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -121,17 +127,20 @@ export function SettingsPage() {
     router.replace(authEntryHref as Route);
   }
 
-  return (
-    <main className="workspace-page settings-page-scroll overflow-y-auto md:pl-60 lg:pb-28">
-      <div className="workspace-page__inner pt-6 sm:pt-10 md:pt-16">
+  const content = (
+      <div className={embedded ? "min-w-0" : "workspace-page__inner pt-6 sm:pt-10 md:pt-16"}>
         <header className="workspace-page__header items-start">
           <div>
             <h1 className="workspace-page__title">设置</h1>
             <p className="workspace-page__description">调整播放和界面偏好。</p>
           </div>
-          <Link className="text-xs font-medium text-foreground-muted transition hover:text-foreground" href="/app/profile">
-            账号与歌单
-          </Link>
+          {embedded && onBack ? (
+            <Button onClick={onBack} size="sm" type="button" variant="outline">返回我的</Button>
+          ) : (
+            <Link className="text-xs font-medium text-foreground-muted transition hover:text-foreground" href="/app/profile">
+              账号与歌单
+            </Link>
+          )}
         </header>
 
         <div className="mt-6 space-y-8">
@@ -358,7 +367,9 @@ export function SettingsPage() {
 
         {statusMessage ? <p className="mt-6 text-xs text-foreground-muted" role="status">{statusMessage}</p> : null}
       </div>
-      {isCustomLayoutEditorOpen ? (
+  );
+
+  const editor = isCustomLayoutEditorOpen ? (
         <CustomLayoutEditor
           onApply={(customLayout) => {
             patchSettings({ layout: { customLayout: { ...normalizeCustomLayoutSettings(customLayout), enabled: true } } });
@@ -371,9 +382,13 @@ export function SettingsPage() {
           onClose={() => setIsCustomLayoutEditorOpen(false)}
           value={settings.layout.customLayout}
         />
-      ) : null}
-    </main>
-  );
+      ) : null;
+
+  if (embedded) {
+    return <>{content}{editor}</>;
+  }
+
+  return <main className="workspace-page settings-page-scroll overflow-y-auto md:pl-60 lg:pb-28">{content}{editor}</main>;
 }
 
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
