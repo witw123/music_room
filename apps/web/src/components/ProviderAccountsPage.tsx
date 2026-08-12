@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { LocalPlaylistsOverview } from "@/components/LocalPlaylistsOverview";
 import { PersonalOverview } from "@/components/PersonalOverview";
 import { FavoriteAlbumsPage } from "@/components/FavoriteAlbumsPage";
 import { SettingsPage } from "@/components/SettingsPage";
@@ -18,7 +19,7 @@ export function ProviderAccountsPage() {
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const [view, setView] = useState<"overview" | "favorites" | "settings">("overview");
+  const [view, setView] = useState<"overview" | "settings">("overview");
 
   useEffect(() => {
     if (hydrated && !activeSession) {
@@ -36,15 +37,22 @@ export function ProviderAccountsPage() {
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-12 md:pt-20">
         {view === "overview" ? (
           <>
-            <div className="mb-5 flex justify-end sm:mb-7">
-              <Button aria-label="打开设置" className="h-10 w-10" onClick={() => setView("settings")} size="icon" title="设置" type="button" variant="outline">
+            <PersonalOverview
+              activeSession={activeSession}
+              headerAction={
+                <Button aria-label="打开设置" className="h-10 w-10" onClick={() => setView("settings")} size="icon" title="设置" type="button" variant="outline">
                 <SettingsIcon />
-              </Button>
+                </Button>
+              }
+            />
+            <section className="mt-8 border-t border-surface-border pt-7 sm:mt-10 sm:pt-8">
+              <FavoriteAlbumsPage embedded />
+            </section>
+            <div className="mt-8 sm:mt-10">
+              <LocalPlaylistsOverview />
             </div>
-            <PersonalOverview activeSession={activeSession} onOpenFavorites={() => setView("favorites")} />
           </>
         ) : null}
-        {view === "favorites" ? <FavoriteAlbumsPage embedded onBack={() => setView("overview")} /> : null}
         {view === "settings" ? <SettingsPage embedded onBack={() => setView("overview")} /> : null}
       </div>
     </main>

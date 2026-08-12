@@ -371,7 +371,7 @@ export function FavoriteAlbumsPage({
   }
 
   const content = (
-      <div className={embedded ? "min-w-0" : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
+      <div className={embedded ? "h-[29rem] min-w-0 overflow-y-auto pr-1 sm:h-[32rem] lg:h-[34rem]" : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
         <header className="workspace-page__header flex-wrap">
           <div>
             <h1 className="workspace-page__title">收藏</h1>
