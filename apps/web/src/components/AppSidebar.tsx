@@ -16,7 +16,7 @@ import {
   type ThemePreference
 } from "@/features/settings/settings-store";
 
-export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";|export type AppNavItemId = "home" | "discover" | "playlists" | "profile";
+export type AppNavItemId = "home" | "discover" | "playlists" | "profile";
 
 type AppSidebarProps = {
   activeSession: AuthSession | null;
@@ -28,7 +28,12 @@ type AppSidebarProps = {
   onLogout?: () => void;
 };
 
-const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [\n  { id: "home", label: "首页", href: "/app", icon: "home" },\n  { id: "discover", label: "发现", href: "/app/discover", icon:export type AppNavItemId = "home" | "discover" | "playlists" | "profile";},\n  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },\n  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }\n];
+const navItems: Array<{ id: AppNavItemId; label: string; href: string; icon: IconName }> = [
+  { id: "home", label: "首页", href: "/app", icon: "home" },
+  { id: "discover", label: "发现", href: "/app/discover", icon: "discover" },
+  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
+  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }
+];
 
 type IconName =
   | "home"
@@ -265,14 +270,8 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
   if (pathname?.startsWith("/app/playlists")) {
     return "playlists";
   }
-  if (pathname?.startsWith("/app/favorites")) {
-    return "favorites";
-  }
   if (pathname?.startsWith("/app/profile")) {
     return "profile";
-  }
-  if (pathname?.startsWith("/app/settings")) {
-    return "settings";
   }
   if (pathname === "/app" || pathname === "/rooms") {
     return "home";

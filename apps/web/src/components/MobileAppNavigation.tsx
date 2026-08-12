@@ -5,10 +5,10 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type MobileNavIconName = "home" | "discover" | "playlist" | "profile;
+type MobileNavIconName = "home" | "discover" | "playlist" | "profile";
 
 type MobileNavItem = {
-  id: "home" | "discover" | "playlists" | "favorites" | "profile" | "settings";
+  id: "home" | "discover" | "playlists" | "profile";
   label: string;
   href: Route;
   icon: MobileNavIconName;
@@ -17,7 +17,9 @@ type MobileNavItem = {
 const items: MobileNavItem[] = [
   { id: "home", label: "首页", href: "/app", icon: "home" },
   { id: "discover", label: "发现", href: "/app/discover" as Route, icon: "discover" },
-  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },\n  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }\n];
+  { id: "playlists", label: "歌单", href: "/app/playlists", icon: "playlist" },
+  { id: "profile", label: "我的", href: "/app/profile", icon: "profile" }
+];
 
 export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () => void }) {
   const pathname = usePathname();
@@ -29,7 +31,7 @@ export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () =>
 
   return (
     <nav className="mobile-app-navigation fixed inset-x-0 bottom-0 z-[70] isolate h-[calc(4.5rem+env(safe-area-inset-bottom))] md:hidden" data-custom-layout-item="mobile-navigation" aria-label="主导航">
-      <div className="grid h-full grid-cols-6 items-stretch px-1.5 pb-[env(safe-area-inset-bottom)] pt-1">
+      <div className="grid h-full grid-cols-4 items-stretch px-1.5 pb-[env(safe-area-inset-bottom)] pt-1">
         {items.map((item) => {
           const active = pendingHref === item.href || isActivePath(pathname, item.href);
           return (
@@ -96,14 +98,6 @@ function MobileNavIcon({ name }: { name: MobileNavIconName }) {
     );
   }
 
-  if (name === "favorite") {
-    return (
-      <svg {...commonProps} className="mobile-app-navigation__icon">
-        <path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" />
-      </svg>
-    );
-  }
-
   if (name === "profile") {
     return (
       <svg {...commonProps} className="mobile-app-navigation__icon">
@@ -113,12 +107,7 @@ function MobileNavIcon({ name }: { name: MobileNavIconName }) {
     );
   }
 
-  return (
-    <svg {...commonProps} className="mobile-app-navigation__icon">
-      <path d="m12 3.5 1.3 1.8 2.2-.3.7 2 2 .7-.3 2.2 1.8 1.3-1.8 1.3.3 2.2-2 .7-.7 2-2.2-.3L12 21l-1.3-1.8-2.2.3-.7-2-2-.7.3-2.2L4.3 12l1.8-1.3-.3-2.2 2-.7.7-2 2.2.3L12 3.5Z" />
-      <circle cx="12" cy="12" r="3.2" />
-    </svg>
-  );
+  return null;
 }
 
 function isActivePath(pathname: string | null, href: Route) {
