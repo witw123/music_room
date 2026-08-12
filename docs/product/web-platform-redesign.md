@@ -1,7 +1,7 @@
 # Web 平台当前设计基线
 
-最后更新：`2026-07-23`
-当前版本：`0.2.8`
+最后更新：`2026-08-12`
+当前版本：`0.2.9`
 
 ## 文档状态
 
@@ -86,3 +86,5 @@ IndexedDB segmented Opus
 - 非媒体会话变化时 `outputTrackId`、`remoteTrackId` 和 `audio.srcObject` 保持稳定
 - 缺片、解码等待、RTP 丢包和媒体重连有可观测状态
 - UI 不出现缓存下载、资产互传或旧播放 fallback 的入口和文案
+
+

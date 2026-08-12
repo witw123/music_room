@@ -45,3 +45,5 @@ WebRTC media connection
 ### 历史设计
 
 早期 P2P 分片同步、手动缓存和成员间资产传输方案已删除，不是当前实现，也没有运行时兼容开关。历史讨论请见 `docs/refactor/02-p2p-mesh.md`，其中内容仅用于记录迁移背景。
+
+

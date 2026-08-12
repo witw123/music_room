@@ -70,3 +70,5 @@ REDIS_SENTINEL_PASSWORD=replace-with-a-separate-sentinel-password
 - 长期：再考虑更完整的 Redis 托管或 Cluster 方案
 
 Sentinel 端口只应在应用内网可见。样例 compose 不再发布 `26379` 到宿主机，外部防火墙也不应放行 Redis 的 `6379` 或 Sentinel 的 `26379`。
+
+

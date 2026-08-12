@@ -17,3 +17,5 @@
 - [06 · 顶层组件编排重构](./06-music-room-app.md)
 
 这些文档保留文件级背景，具体实现和协议以 `apps/**`、`packages/shared/**` 以及 `docs/architecture/**` 为准。
+
+

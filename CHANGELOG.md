@@ -2,9 +2,9 @@
 
 本文档记录项目对外发布的重要变更。
 
-## [Unreleased]
+## [0.2.9] - 2026-08-12
 
-### 文档
+### 文档更新
 
 - 同步播放链路与权限模型文档：明确 `player` 权限、owner 唯一媒体源、provider offline fallback、gapless/watchdog 与单实例部署约束
 
@@ -148,3 +148,5 @@
 - 修复 Windows 桌面端打包流程
 - 修复 monorepo 场景下桌面构建兼容问题
 - 修复桌面端重复打包与产物清理问题
+
+

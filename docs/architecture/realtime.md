@@ -1,6 +1,6 @@
 # 实时链路
 
-最后更新：`2026-07-27`
+最后更新：`2026-08-12`
 
 ## 角色划分
 
@@ -73,3 +73,5 @@ Socket.IO 不传输音频文件、播放资产或缓存分片。
 - 媒体连接正常但卡顿或有噪声：优先看 AudioContext、缓冲 ahead、underrun、limiter peak/RMS、RTP jitter 和丢包
 
 恢复过程中应保留当前输出总线和 Track identity；只有媒体会话确实变化时才释放并创建新的 Track。
+
+

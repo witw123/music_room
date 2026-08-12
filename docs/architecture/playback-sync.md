@@ -1,6 +1,6 @@
 # 播放同步
 
-最后更新：`2026-07-27`
+最后更新：`2026-08-12`
 
 ## 权威模型
 
@@ -70,3 +70,5 @@ startAt | sourcePeerId | remoteTrackId
 ## 诊断
 
 共享 `segmentedPlaybackStatus` 只描述分段 Opus/WebRTC 会话：资产、会话 key、源 peer、AudioContext、输出/远端 Track、缓冲、欠载、解码峰值/RMS、解码错误和媒体恢复状态。它不描述资产下载、缓存同步或播放 fallback。
+
+

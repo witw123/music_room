@@ -1,7 +1,7 @@
 # WebSocket 事件
 
-最后更新：`2026-07-27`
-当前版本：`0.2.8`
+最后更新：`2026-08-12`
+当前版本：`0.2.9`
 
 ## 连接规范
 
@@ -56,7 +56,7 @@ ack 成功时包含 `ok`、`serverNow`、`recoveryGeneration` 和 `bootstrap`：
 ```json
 {
   "ok": true,
-  "serverNow": "2026-07-27T10:10:00.000Z"",
+  "serverNow": "2026-08-12T10:10:00.000Z"",
   "recoveryGeneration": 3,
   "bootstrap": {
     "roomId": "room_xxx",
@@ -199,3 +199,5 @@ ack 成功时包含 `ok`、`serverNow`、`recoveryGeneration` 和 `bootstrap`：
 3. 服务端返回新的 `recoveryGeneration` 和 bootstrap
 4. 客户端丢弃旧 generation 的 signal，恢复当前控制/媒体连接
 5. 成功后成员回到 `online`；超时则转为 `offline`
+
+

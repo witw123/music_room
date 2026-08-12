@@ -12,3 +12,5 @@
 - 成员之间不传输原始资产、播放资产或缓存分片
 
 当前连接生命周期见 [WebRTC 媒体与控制](../architecture/p2p-distribution.md) 和 [实时链路](../architecture/realtime.md)。
+
+

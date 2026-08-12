@@ -40,3 +40,5 @@ IndexedDB 分段 Opus
 - 切歌和 seek 没有重叠音或硬切 click
 - destination 与 output Track identity 在单个房间媒体会话内保持稳定
 - 旧命名和旧 schema 不出现在运行时代码或协议中
+
+

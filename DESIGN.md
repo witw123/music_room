@@ -1,6 +1,6 @@
 # Music Room Design System
 
-Last updated: `2026-07-23`
+Last updated: `2026-08-12`
 
 ## Purpose
 
@@ -282,3 +282,4 @@ If the requested screen is new, it should still feel like it belongs next to:
 - the room stage with the vinyl hero
 - the bottom playback rail
 - the library/personal-playlist/members workspace
+

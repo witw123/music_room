@@ -10,3 +10,5 @@
 - 房间 realtime、播放媒体会话和 WebRTC peer 生命周期保持独立
 - 成员/presence/普通快照变化不能造成媒体 effect 重建
 - 共享协议以 `packages/shared` schema 为唯一来源
+
+

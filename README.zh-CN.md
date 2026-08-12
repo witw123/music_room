@@ -8,7 +8,7 @@
 Music Room 是一个面向多人同步听歌的浏览器音乐房应用。仓库采用 Monorepo，包含 Next.js 网页端、NestJS 服务端以及前后端共享协议。
 
 当前工作区版本：`0.2.8`<br>
-文档快照：`2026-07-27`
+文档快照：`2026-08-12`
 
 ## 项目定位
 
@@ -252,3 +252,4 @@ pnpm deploy:check
 ## License
 
 [MIT](./LICENSE)
+

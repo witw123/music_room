@@ -1,6 +1,6 @@
 # 整体架构
 
-最后更新：`2026-07-27`
+最后更新：`2026-08-12`
 
 ## 组件划分
 
@@ -42,3 +42,5 @@ WebRTC 的 `music-room-control` DataChannel 只用于控制和连接健康协调
 - Redis：房间 patch、presence 和跨实例协作
 - coturn：WebRTC 中继
 - Nginx：Web、API、WebSocket 反代
+
+

@@ -1,6 +1,6 @@
 # TURN 外网媒体链路检查清单
 
-最后更新：`2026-07-23`
+最后更新：`2026-08-12`
 
 本项目的跨网络播放质量取决于 WebRTC Media RTP 的实际 ICE 路径。控制 DataChannel 和媒体连接独立建立，但两者都依赖正确的信令、候选地址和 TURN 配置。房间不通过 WebRTC 传输音频文件或缓存分片。
 
@@ -56,3 +56,5 @@ relay 端口段缺失时，外网设备可能无法建立稳定的 RTP 媒体链
 - Media connected 但 RTP bitrate 为零：检查发送端 output Track、媒体协商方向和源端 AudioContext
 - RTP 有数据但无声：检查远端 Track 绑定、`audio.play()`、浏览器自动播放策略和页面静音状态
 - RTP 有数据且反复 underrun：检查源端 IndexedDB 读取、解码耗时、buffer ahead、jitter 和 packet loss
+
+

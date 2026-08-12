@@ -7,8 +7,8 @@
 
 Music Room is a browser-first collaborative music-room application for listening to users' own local audio together. The monorepo contains the Next.js web app, NestJS server, and shared frontend/server contracts.
 
-Current workspace version: `0.2.8`<br>
-Documentation snapshot: `2026-07-27`
+Current workspace version: `0.2.9`<br>
+Documentation snapshot: `2026-08-12`
 
 ## Product Scope
 
@@ -254,3 +254,5 @@ Production releases use `Dockerfile.web`, `Dockerfile.server`, and the Compose d
 ## License
 
 [MIT](./LICENSE)
+
+

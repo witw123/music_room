@@ -13,3 +13,5 @@
 - source owner 离线时暂停当前媒体源，不切换到不存在的替代资产
 
 当前协议见 [WebSocket 事件](../api/websocket-events.md)，当前播放会话见 [播放同步](../architecture/playback-sync.md)。
+
+

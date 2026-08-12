@@ -1,7 +1,7 @@
 # 接口文档
 
-最后更新：`2026-07-23`
-当前版本：`0.2.8`
+最后更新：`2026-08-12`
+当前版本：`0.2.9`
 
 ## 适用范围
 
@@ -56,3 +56,5 @@ pnpm dev
 - 房间不提供音频资产下载、成员间缓存同步或播放 fallback
 - 成员与诊断页面用于查看 AudioContext、buffer、underrun、limiter、RTP、ICE 和 Track identity
 - 房间工作区当前使用 `Library / My Playlists / Members`；共享队列由房间状态和播放器承载
+
+
