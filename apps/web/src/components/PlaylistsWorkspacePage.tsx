@@ -597,19 +597,6 @@ export function PlaylistsWorkspacePage({
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
         : "workspace-page__inner relative z-10 pt-6 sm:pt-10 md:pt-20"}>
-        {!embedded && playlistView === "local" ? (
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h1 className="workspace-page__title">
-                本地歌单
-              </h1>
-              <p className="workspace-page__description max-w-2xl">
-                每个本地歌单读取各自选择的目录。
-              </p>
-            </div>
-          </div>
-        ) : null}
-
         {selectedPlaylist ? (
           <PlaylistDetailView
             localTracks={localTracks}
@@ -655,12 +642,8 @@ export function PlaylistsWorkspacePage({
         ) : (
           <>
             {playlistView === "local" ? (
-              <section className="mt-4 flex flex-col gap-3" data-testid="local-playlists">
-                <div className="flex flex-col items-stretch gap-3 border-b border-surface-border pb-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <p className="text-lg font-bold text-foreground">本地歌单</p>
-                    <p className="mt-1 text-xs text-foreground-muted">每个本地歌单读取各自选择的目录</p>
-                  </div>
+              <section className="mt-6 flex flex-col gap-4" data-testid="local-playlists">
+                <div className="flex justify-end">
                   <Button onClick={() => void openCreateDialog("local")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
                     新建本地歌单
@@ -683,9 +666,8 @@ export function PlaylistsWorkspacePage({
                 ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">当前没有本地歌单，可使用右上角按钮新建。</div>}
               </section>
             ) : (
-              <section className="mt-4 flex flex-col gap-3" data-testid="network-playlists">
-                <div className="flex flex-col items-stretch gap-3 border-b border-surface-border pb-2 sm:flex-row sm:items-end sm:justify-between">
-                  <p className="text-lg font-bold text-foreground">歌单</p>
+              <section className="mt-6 flex flex-col gap-4" data-testid="network-playlists">
+                <div className="flex justify-end">
                   <Button onClick={() => void openCreateDialog("network")} size="sm" variant="outline" type="button">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
                     新建歌单

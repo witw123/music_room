@@ -18,9 +18,8 @@ export function PlaylistsLibraryPage() {
   return (
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <div aria-hidden="true" className="workspace-page-background" />
-      <div className="workspace-page__inner relative z-10 pt-6 sm:pt-10 md:pt-20">
-        <header className="workspace-page__header flex-wrap">
-          <h1 className="workspace-page__title">歌单</h1>
+      <div className="workspace-page__inner relative z-10 pt-[calc(2.5rem+env(safe-area-inset-top))] sm:pt-12 md:pt-20">
+        <header className="flex justify-center">
           <div aria-label="歌单分类" className="workspace-segmented" role="tablist">
             {tabs.map((tab) => (
               <button
@@ -39,7 +38,7 @@ export function PlaylistsLibraryPage() {
 
         {activeTab === "local" ? <PlaylistsWorkspacePage embedded playlistView="local" /> : null}
         {activeTab === "network" ? <PlaylistsWorkspacePage embedded playlistView="network" /> : null}
-        {activeTab === "favorites" ? <FavoriteAlbumsPage embedded fixedHeight={false} /> : null}
+        {activeTab === "favorites" ? <FavoriteAlbumsPage embedded fixedHeight={false} showTitle={false} /> : null}
       </div>
     </main>
   );

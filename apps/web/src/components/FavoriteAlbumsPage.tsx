@@ -43,10 +43,12 @@ type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 export function FavoriteAlbumsPage({
   embedded = false,
   fixedHeight = true,
+  showTitle = true,
   onBack
 }: {
   embedded?: boolean;
   fixedHeight?: boolean;
+  showTitle?: boolean;
   onBack?: () => void;
 }) {
   const router = useRouter();
@@ -448,10 +450,12 @@ export function FavoriteAlbumsPage({
           ? "flex h-[29rem] min-w-0 flex-col overflow-hidden sm:h-[32rem] lg:h-[34rem]"
           : "flex min-w-0 flex-col"
         : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
-        <header className="workspace-page__header flex-wrap">
-          <div>
-            <h1 className="workspace-page__title">收藏</h1>
-          </div>
+        <header className={`flex flex-wrap items-center gap-3 ${showTitle ? "workspace-page__header" : "justify-end pb-3 pt-1"}`}>
+          {showTitle ? (
+            <div>
+              <h1 className="workspace-page__title">收藏</h1>
+            </div>
+          ) : null}
           <div className="flex items-center gap-3">
             <div aria-label="收藏内容类型" className="workspace-segmented" role="tablist">
               <button aria-selected={favoriteView === "tracks"} className="workspace-segmented__item" onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
