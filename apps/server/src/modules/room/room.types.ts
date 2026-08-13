@@ -11,6 +11,7 @@ import type {
   Room,
   RoomMember,
   RoomMemberPermissions,
+  RoomRequest,
   TrackMeta
 } from "@music-room/shared";
 import { z } from "zod";
@@ -22,6 +23,7 @@ export type RoomRecord = {
   queue: QueueItem[];
   /** Host-assigned member permissions survive leave/rejoin while the room exists. */
   memberPermissionProfiles?: Record<string, RoomMemberPermissions>;
+  requests?: RoomRequest[];
 };
 
 export const roomRecordSchema = z.object({
@@ -30,6 +32,7 @@ export const roomRecordSchema = z.object({
   tracks: z.array(trackMetaSchema),
   queue: z.array(queueItemSchema),
   memberPermissionProfiles: z.record(roomMemberPermissionsSchema).default({})
+  ,requests: z.array(z.any()).default([])
 });
 
 export type PersistedRoomRecord = {
@@ -40,6 +43,7 @@ export type PersistedRoomRecord = {
   description?: string | null;
   passwordHash?: string | null;
   visibility: string;
+  roomType?: string;
   presenceRevision?: number;
   roomRevision?: number;
   playback: unknown;
@@ -53,15 +57,17 @@ export type PersistedRoomRecord = {
 type PersistedPlayback = Partial<PlaybackSnapshot> & {
   presenceRevision?: number;
   roomRevision?: number;
+  radioAutoFill?: boolean;
   newMemberPermissions?: unknown;
   memberPermissionProfiles?: unknown;
 };
 
 export function serializePlaybackForPersistence(
-  room: Pick<Room, "playback" | "presenceRevision" | "roomRevision">
+  room: Pick<Room, "playback" | "presenceRevision" | "roomRevision" | "radioAutoFill">
 ) {
   return {
     ...room.playback,
+    radioAutoFill: room.radioAutoFill !== false,
     presenceRevision: room.presenceRevision,
     roomRevision: room.roomRevision ?? 0
   };
@@ -81,6 +87,9 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
   const parsedNewMemberPermissions = roomMemberPermissionsSchema.safeParse(
     persisted.newMemberPermissions ?? persistedPlayback.newMemberPermissions
   );
+  const requests = Array.isArray((persistedPlayback as { requests?: unknown }).requests)
+    ? (persistedPlayback as { requests: RoomRequest[] }).requests
+    : [];
   const record = {
     room: {
       id: persisted.id,
@@ -90,6 +99,9 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       description: persisted.description ?? null,
       hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
+      roomType: persisted.roomType === "request" || persisted.roomType === "radio" ? persisted.roomType : "interactive",
+      radioAutoFill: persistedPlayback.radioAutoFill !== false,
+      requests,
       ...(parsedNewMemberPermissions.success
         ? { newMemberPermissions: parsedNewMemberPermissions.data }
         : {}),
@@ -135,6 +147,7 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
     tracks: persisted.tracks,
     queue: persisted.queue,
     memberPermissionProfiles
+    ,requests
   };
 
   const normalized = normalizeRoomRecord(record);
@@ -189,6 +202,7 @@ export function normalizeRoomRecord(value: unknown): RoomRecord | null {
     tracks,
     queue,
     memberPermissionProfiles
+    ,requests: Array.isArray(value.requests) ? value.requests : []
   };
   const recordResult = roomRecordSchema.safeParse(candidate);
   return recordResult.success ? recordResult.data : null;

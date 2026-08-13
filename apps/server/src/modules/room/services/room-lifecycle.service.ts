@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Playlist, Room, RoomMemberPermissions } from "@music-room/shared";
+import type { Playlist, Room, RoomMemberPermissions, RoomType } from "@music-room/shared";
 import { defaultRoomMemberPermissions, getNewMemberPermissions } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import {
@@ -48,6 +48,8 @@ export class RoomLifecycleService {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
+      roomType?: RoomType;
+      radioAutoFill?: boolean;
     }
   ) {
     const hostSession = await this.authService.getUserOrThrow(hostSessionId);
@@ -62,6 +64,9 @@ export class RoomLifecycleService {
       description,
       hasPassword: !!password,
       visibility,
+      roomType: metadata?.roomType ?? "interactive",
+      radioAutoFill: metadata?.radioAutoFill ?? true,
+      requests: [],
       newMemberPermissions: metadata?.newMemberPermissions
         ? { ...metadata.newMemberPermissions }
         : { ...defaultRoomMemberPermissions },
@@ -94,6 +99,7 @@ export class RoomLifecycleService {
       tracks: [],
       queue: [],
       memberPermissionProfiles: {}
+      ,requests: []
     };
 
     await this.roomRecordRepository.persistRecord(record);
@@ -163,6 +169,8 @@ export class RoomLifecycleService {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
+      roomType?: RoomType;
+      radioAutoFill?: boolean;
     }
   ) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
@@ -172,6 +180,14 @@ export class RoomLifecycleService {
 
     const password = input.password?.trim();
     record.room.visibility = input.visibility;
+    if (input.roomType !== undefined && input.roomType !== record.room.roomType) {
+      record.room.roomType = input.roomType;
+      record.requests = (record.requests ?? []).filter((request) => request.status !== "pending");
+      record.room.requests = record.requests;
+    }
+    if (input.radioAutoFill !== undefined) {
+      record.room.radioAutoFill = input.radioAutoFill;
+    }
     record.room.name = input.name.trim();
     record.room.description = input.description?.trim() || null;
     if (input.newMemberPermissions !== undefined) {

@@ -26,6 +26,7 @@ import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { MemberPermissionControls } from "./MembersPanel";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
+import type { RoomReactionPayload } from "@music-room/shared";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -55,6 +56,7 @@ type RoomStageProps = {
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
   return {
     visibility: roomSnapshot.room.visibility,
+    roomType: roomSnapshot.room.roomType ?? "interactive",
     name: roomSnapshot.room.name ?? "",
     description: roomSnapshot.room.description ?? "",
     password: "",
@@ -104,7 +106,8 @@ function RoomStageBase({
   onDeleteRoom,
   onUpdateRoom,
   isLyricsOpen,
-  onSeek
+  onSeek,
+  socket
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -135,6 +138,7 @@ function RoomStageBase({
   const [isSharing, setIsSharing] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
+  const [reactionCounts, setReactionCounts] = useState({ like: 0, applause: 0 });
   const [lyricsText, setLyricsText] = useState<string | null>(null);
   const [translatedLyricsText, setTranslatedLyricsText] = useState<string | null>(null);
   const [romanizedLyricsText, setRomanizedLyricsText] = useState<string | null>(null);
@@ -147,6 +151,30 @@ function RoomStageBase({
   const playback = roomSnapshot.room.playback;
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
+
+  useEffect(() => {
+    if (!socket) return;
+    const receiveReaction = (payload: RoomReactionPayload) => {
+      if (payload.trackId !== playback.currentTrackId) return;
+      setReactionCounts((current) => ({ ...current, [payload.reaction]: payload.totalCount }));
+    };
+    socket.on("room.reaction", receiveReaction);
+    return () => { socket.off("room.reaction", receiveReaction); };
+  }, [playback.currentTrackId, socket]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReactionCounts({ like: 0, applause: 0 });
+    void musicRoomApi.getRoomReactionCounts(roomSnapshot.room.id, playback.currentTrackId)
+      .then((counts) => { if (!cancelled) setReactionCounts(counts); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [playback.currentTrackId, roomSnapshot.room.id]);
+
+  function sendReaction(reaction: "like" | "applause") {
+    if (!socket) return;
+    socket.emit("room.reaction", { roomId: roomSnapshot.room.id, reaction, trackId: playback.currentTrackId });
+  }
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
   const artworkUrl = resolvePreferredArtworkUrl(cachedArtworkUrl, currentTrack?.artworkUrl)
     ?? cachedArtworkUrl
@@ -213,8 +241,9 @@ function RoomStageBase({
         visibility: editRoomForm.visibility,
         name: editRoomForm.name.trim(),
         description: editRoomForm.description?.trim() || null,
-        password: editRoomForm.password?.trim() ?? "",
-        newMemberPermissions: editRoomForm.newMemberPermissions
+      password: editRoomForm.password?.trim() ?? "",
+      roomType: editRoomForm.roomType,
+      newMemberPermissions: editRoomForm.newMemberPermissions
       });
       if (updated) setShowEditRoom(false);
     } finally {
@@ -423,7 +452,6 @@ function RoomStageBase({
               <span>{isSharing ? "已复制" : "分享房间"}</span>
             </button>
           </div>
-
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] tracking-[0.18em] text-white/50">
             <span className="flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -445,8 +473,10 @@ function RoomStageBase({
             <span>·</span>
             <span>{sourceModeLabel}</span>
           </div>
-
-
+          <div className="mt-3 flex items-center gap-2">
+            <button aria-label="点赞" className="light-control-surface inline-flex h-8 items-center gap-1 border border-white/10 bg-white/10 px-2 text-xs text-white/80 hover:bg-white/20" onClick={() => sendReaction("like")} type="button">♥ <span>{reactionCounts.like}</span></button>
+            <button aria-label="鼓掌" className="light-control-surface inline-flex h-8 items-center gap-1 border border-white/10 bg-white/10 px-2 text-xs text-white/80 hover:bg-white/20" onClick={() => sendReaction("applause")} type="button">👏 <span>{reactionCounts.applause}</span></button>
+          </div>
         </div>
 
         <div className="relative shrink-0 pointer-events-auto">
@@ -747,6 +777,20 @@ function RoomEditDialog({
                 type="button"
               >
                 {visibility === "public" ? "公开房间" : "私密房间"}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="房间类型">
+            {(["interactive", "request", "radio"] as const).map((roomType) => (
+              <button
+                aria-checked={form.roomType === roomType}
+                className={`rounded-lg border px-3 py-2 text-sm transition ${form.roomType === roomType ? "border-accent bg-accent/15 text-foreground" : "border-white/10 text-foreground-muted hover:bg-white/10"}`}
+                key={roomType}
+                onClick={() => onChange((current) => ({ ...current, roomType }))}
+                role="radio"
+                type="button"
+              >
+                {roomType === "request" ? "点歌房" : roomType === "radio" ? "自由电台" : "多人互动房"}
               </button>
             ))}
           </div>

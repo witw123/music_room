@@ -23,6 +23,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.session.replaced"),
   z.literal("peer.signal"),
   z.literal("room.chat"),
+  z.literal("room.reaction"),
   z.literal("diagnostics.report"),
   z.literal("session.revoked")
 ]);
@@ -246,6 +247,27 @@ export const roomChatEventSchema = z.object({
   payload: roomChatPayloadSchema
 });
 
+export const roomReactionPayloadSchema = z.object({
+  roomId: z.string(),
+  senderId: z.string(),
+  senderName: z.string(),
+  reaction: z.enum(["like", "applause"]),
+  trackId: z.string().nullable(),
+  timestamp: z.number(),
+  totalCount: z.number().int().nonnegative()
+});
+
+export const roomReactionInputPayloadSchema = z.object({
+  roomId: z.string().trim().min(1).max(160),
+  reaction: z.enum(["like", "applause"]),
+  trackId: z.string().nullable().optional()
+}).strict();
+
+export const roomReactionEventSchema = z.object({
+  event: z.literal("room.reaction"),
+  payload: roomReactionPayloadSchema
+});
+
 export type WebsocketEvent = z.infer<typeof websocketEventSchema>;
 export type RoomSubscribePayload = z.infer<typeof roomSubscribePayloadSchema>;
 export type RoomSubscribeBootstrapMember = z.infer<typeof roomSubscribeBootstrapMemberSchema>;
@@ -265,6 +287,8 @@ export type RoomTrackDeletedPayload = z.infer<typeof roomTrackDeletedPayloadSche
 export type RoomMemberRemovedPayload = z.infer<typeof roomMemberRemovedPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
+export type RoomReactionPayload = z.infer<typeof roomReactionPayloadSchema>;
+export type RoomReactionInputPayload = z.infer<typeof roomReactionInputPayloadSchema>;
 export type RoomClockInputPayload = z.infer<typeof roomClockInputPayloadSchema>;
 export type RoomClockAckPayload = z.infer<typeof roomClockAckPayloadSchema>;
 export type DiagnosticsReportPayload = TelemetryReport;
@@ -283,6 +307,7 @@ export type ServerToClientEvents = {
   "room.member.removed": (payload: RoomMemberRemovedPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
+  "room.reaction": (payload: RoomReactionPayload) => void;
   "session.revoked": () => void;
   connect: () => void;
   disconnect: () => void;
@@ -297,6 +322,7 @@ export type ClientToServerEvents = {
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatInputPayload) => void;
+  "room.reaction": (payload: RoomReactionInputPayload) => void;
   "room.clock": (
     payload: RoomClockInputPayload,
     ack?: (payload: RoomClockAckPayload) => void

@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { PersonalOverview } from "@/components/PersonalOverview";
+import { RoomCenterOverview } from "@/components/RoomCenterOverview";
 import { SettingsPage } from "@/components/SettingsPage";
 import { Button } from "@/components/ui/button";
 
@@ -43,6 +44,7 @@ export function ProviderAccountsPage() {
                 </Button>
               }
             />
+            <RoomCenterOverview activeSession={activeSession} />
           </>
         ) : null}
         {view === "settings" ? <SettingsPage embedded onBack={() => setView("overview")} /> : null}

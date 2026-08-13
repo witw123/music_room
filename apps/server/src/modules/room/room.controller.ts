@@ -16,6 +16,7 @@ import {
 import {
   computeAssetId,
   createRoomRequestSchema,
+  createRoomSongRequestSchema,
   joinRoomByCodeRequestSchema,
   registerTrackRequestSchema,
   registerTracksRequestSchema,
@@ -64,6 +65,8 @@ export class RoomController {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
+      roomType?: import("@music-room/shared").RoomType;
+      radioAutoFill?: boolean;
     },
     @Ip() ipAddress?: string
   ) {
@@ -79,7 +82,9 @@ export class RoomController {
       ...(payload.password !== undefined ? { password: payload.password } : {}),
       ...(payload.newMemberPermissions !== undefined
         ? { newMemberPermissions: payload.newMemberPermissions }
-        : {})
+        : {}),
+      ...(payload.roomType !== undefined ? { roomType: payload.roomType } : {}),
+      ...(payload.radioAutoFill !== undefined ? { radioAutoFill: payload.radioAutoFill } : {})
     };
     const snapshot = Object.keys(metadata).length > 0
       ? await this.roomService.createRoom(userId, payload.visibility, metadata)
@@ -117,6 +122,18 @@ export class RoomController {
   async listRoomActivity(@Headers("x-session-token") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.listRoomActivitiesForSession(userId);
+  }
+
+  @Get("owned")
+  async listOwnedRooms(@Headers("x-session-token") sessionToken: string | undefined) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.listOwnedRoomSnapshotsForSession(userId);
+  }
+
+  @Get("stats")
+  async getRoomStats(@Headers("x-session-token") sessionToken: string | undefined) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.getRoomStatsForSession(userId);
   }
 
   @Get(":roomId/recover")
@@ -214,6 +231,8 @@ export class RoomController {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
+      roomType?: import("@music-room/shared").RoomType;
+      radioAutoFill?: boolean;
     },
     @Ip() ipAddress?: string
   ) {
@@ -223,7 +242,11 @@ export class RoomController {
       { name: "user", value: userId }
     ], { limit: 10, windowMs: 60 * 60 * 1000 });
     const payload = parseRequestBody(updateRoomRequestSchema, body);
-    await this.roomService.updateRoom(roomId, userId, payload);
+    const updateInput = {
+      ...payload,
+      ...(payload.radioAutoFill !== undefined ? { radioAutoFill: payload.radioAutoFill } : {})
+    };
+    await this.roomService.updateRoom(roomId, userId, updateInput);
     let playlists: Playlist[] = [];
     try {
       playlists = await this.playlistService.listPlaylistsForRoom(roomId);
@@ -318,6 +341,72 @@ export class RoomController {
     });
     await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
     return track;
+  }
+
+  @Get(":roomId/requests")
+  async listRoomRequests(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.listRoomRequests(roomId, userId);
+  }
+
+  @Post(":roomId/requests")
+  async createRoomRequest(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: unknown,
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:request-song", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId },
+      { name: "room", value: roomId }
+    ], { limit: 20, windowMs: 10 * 60 * 1000 });
+    const payload = parseRequestBody(createRoomSongRequestSchema, body);
+    const request = await this.roomService.createRoomRequest(roomId, userId, {
+      ...payload,
+      album: payload.album ?? null,
+      artworkUrl: payload.artworkUrl ?? null
+    });
+    await this.roomRealtimePublisher.emitSnapshot(roomId);
+    return request;
+  }
+
+  @Post(":roomId/requests/:requestId/approve")
+  async approveRoomRequest(
+    @Param("roomId") roomId: string,
+    @Param("requestId") requestId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const request = await this.roomService.decideRoomRequest(roomId, userId, requestId, "approved");
+    await this.roomRealtimePublisher.emitSnapshot(roomId);
+    return request;
+  }
+
+  @Post(":roomId/requests/:requestId/reject")
+  async rejectRoomRequest(
+    @Param("roomId") roomId: string,
+    @Param("requestId") requestId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const request = await this.roomService.decideRoomRequest(roomId, userId, requestId, "rejected");
+    await this.roomRealtimePublisher.emitSnapshot(roomId);
+    return request;
+  }
+
+  @Get(":roomId/reactions")
+  async getRoomReactions(
+    @Param("roomId") roomId: string,
+    @Query("trackId") trackId: string | undefined,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.getRoomReactionCounts(roomId, trackId || null, userId);
   }
 
   @Post(":roomId/tracks/batch")

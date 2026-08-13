@@ -375,7 +375,7 @@ export function FavoriteAlbumsPage({
   }
 
   const favoriteBody = (
-    <div className={embedded ? "hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 pr-1" : ""}>
+    <div className={embedded ? "min-w-0 pb-1" : ""}>
       {favoriteView === "tracks" ? (
         <FavoriteTracksSection
           loading={favoriteTracksLoading}
@@ -450,17 +450,17 @@ export function FavoriteAlbumsPage({
           ? "flex h-[29rem] min-w-0 flex-col overflow-hidden sm:h-[32rem] lg:h-[34rem]"
           : "flex min-w-0 flex-col"
         : "workspace-page__inner workspace-page__inner--wide pt-6 sm:pt-10 md:pt-20"}>
-        <header className={`flex flex-wrap items-center gap-3 ${showTitle ? "workspace-page__header" : "justify-end pb-3 pt-1"}`}>
+        <header className={`flex flex-wrap items-center gap-3 ${showTitle ? "workspace-page__header" : "justify-start pb-3 pt-1"}`}>
           {showTitle ? (
             <div>
               <h1 className="workspace-page__title">收藏</h1>
             </div>
           ) : null}
           <div className="flex items-center gap-3">
-            <div aria-label="收藏内容类型" className="workspace-segmented" role="tablist">
-              <button aria-selected={favoriteView === "tracks"} className="workspace-segmented__item" onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
-              <button aria-selected={favoriteView === "albums"} className="workspace-segmented__item" onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
-              <button aria-selected={favoriteView === "artists"} className="workspace-segmented__item" onClick={() => { setFavoriteView("artists"); setDetail(null); }} role="tab" type="button">歌手</button>
+            <div aria-label="收藏内容类型" className="flex items-center gap-5 border-b border-surface-border" role="tablist">
+              <button aria-selected={favoriteView === "tracks"} className={`border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors ${favoriteView === "tracks" ? "border-accent text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"}`} onClick={() => { setFavoriteView("tracks"); setDetail(null); }} role="tab" type="button">歌曲</button>
+              <button aria-selected={favoriteView === "albums"} className={`border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors ${favoriteView === "albums" ? "border-accent text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"}`} onClick={() => setFavoriteView("albums")} role="tab" type="button">专辑</button>
+              <button aria-selected={favoriteView === "artists"} className={`border-b-2 px-0.5 py-2 text-sm font-semibold transition-colors ${favoriteView === "artists" ? "border-accent text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"}`} onClick={() => { setFavoriteView("artists"); setDetail(null); }} role="tab" type="button">歌手</button>
             </div>
             {embedded && onBack ? <Button onClick={onBack} size="sm" type="button" variant="outline">返回我的</Button> : null}
           </div>

@@ -38,6 +38,8 @@ import {
   type RoomJoinResponse,
   type RoomMemberPermissions,
   type RoomSnapshot,
+  type RoomRequest,
+  type RoomType,
   type RoomSyncResponse,
   type TrackMeta,
   type UpdateRoomRequest
@@ -92,6 +94,13 @@ export type RoomActivitySummary = {
   durationMs: number;
   lastJoinedAt: string;
   isActive: boolean;
+  roomType: RoomType;
+};
+
+export type RoomInteractionStats = {
+  sentLikes: number;
+  sentApplause: number;
+  receivedReactions: number;
 };
 
 export type AuthConfig = {
@@ -296,6 +305,8 @@ export const musicRoomApi = {
     }),
   createRoom: (input?: {
     visibility?: "private" | "public";
+    roomType?: RoomType;
+    radioAutoFill?: boolean;
     name?: string;
     description?: string | null;
     password?: string;
@@ -308,6 +319,8 @@ export const musicRoomApi = {
   getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
   getRecentRooms: () => request<RoomSnapshot[]>("/v1/rooms/recent"),
   getRoomActivity: () => request<RoomActivitySummary[]>("/v1/rooms/activity"),
+  listOwnedRooms: () => request<RoomSnapshot[]>("/v1/rooms/owned"),
+  getRoomInteractionStats: () => request<RoomInteractionStats>("/v1/rooms/stats"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
   listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
@@ -332,6 +345,18 @@ export const musicRoomApi = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
+  listRoomRequests: (roomId: string) => request<RoomRequest[]>(`/v1/rooms/${roomId}/requests`),
+  createRoomRequest: (roomId: string, input: Omit<RoomRequest, "id" | "roomId" | "requesterId" | "requesterName" | "status" | "createdAt">) =>
+    request<RoomRequest>(`/v1/rooms/${roomId}/requests`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  approveRoomRequest: (roomId: string, requestId: string) =>
+    request<RoomRequest>(`/v1/rooms/${roomId}/requests/${requestId}/approve`, { method: "POST" }),
+  rejectRoomRequest: (roomId: string, requestId: string) =>
+    request<RoomRequest>(`/v1/rooms/${roomId}/requests/${requestId}/reject`, { method: "POST" }),
+  getRoomReactionCounts: (roomId: string, trackId?: string | null) =>
+    request<{ like: number; applause: number }>(`/v1/rooms/${roomId}/reactions${trackId ? `?trackId=${encodeURIComponent(trackId)}` : ""}`),
   updateRoomMemberPermissions: (
     roomId: string,
     memberId: string,

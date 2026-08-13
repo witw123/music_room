@@ -9,7 +9,7 @@ import {
   trackSourceTypeSchema
 } from "../playlist/models";
 import { playbackModeSchema } from "../playback/models";
-import { roomMemberPermissionsSchema } from "../room/models";
+import { roomMemberPermissionsSchema, roomTypeSchema } from "../room/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const accountSchema = trimmedString(64).regex(/^[a-zA-Z0-9_.-]+$/);
@@ -43,7 +43,9 @@ export const loginRequestSchema = z
 
 export const createRoomRequestSchema = z
   .object({
-    visibility: z.enum(["private", "public"]).optional(),
+  visibility: z.enum(["private", "public"]).optional(),
+    roomType: roomTypeSchema.optional(),
+    radioAutoFill: z.boolean().optional(),
     name: trimmedString(120).optional(),
     description: optionalNullableText(500),
     password: z.string().trim().min(4).max(128).optional(),
@@ -53,7 +55,9 @@ export const createRoomRequestSchema = z
 
 export const updateRoomRequestSchema = z
   .object({
-    visibility: z.enum(["private", "public"]),
+  visibility: z.enum(["private", "public"]),
+    roomType: roomTypeSchema.optional(),
+    radioAutoFill: z.boolean().optional(),
     name: trimmedString(120),
     description: optionalNullableText(500),
     password: z
@@ -71,6 +75,16 @@ export const updateRoomMemberPermissionsRequestSchema = z
     permissions: roomMemberPermissionsSchema
   })
   .strict();
+
+export const createRoomSongRequestSchema = z.object({
+  provider: z.enum(["netease", "qqmusic", "local"]),
+  providerTrackId: trimmedString(240),
+  title: trimmedString(240),
+  artist: trimmedString(240),
+  album: z.string().trim().max(240).nullable().optional(),
+  durationMs: z.number().int().nonnegative().max(3 * 60 * 60 * 1000),
+  artworkUrl: z.string().trim().max(4096).nullable().optional()
+}).strict();
 
 export const joinRoomByCodeRequestSchema = z
   .object({

@@ -6,7 +6,7 @@ import { PrismaService } from "../../../infra/prisma/prisma.service";
 const presenceStaleAfterMs = 45_000;
 const presenceWriteIntervalMs = 20_000;
 
-type RoomActivityRoom = Pick<Room, "id" | "name" | "joinCode">;
+type RoomActivityRoom = Pick<Room, "id" | "name" | "joinCode" | "roomType">;
 
 @Injectable()
 export class RoomActivityService {
@@ -36,6 +36,7 @@ export class RoomActivityService {
             roomId: room.id,
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
+            roomType: room.roomType ?? "interactive",
             totalDurationMs: 0n,
             // The persisted room member timestamp can describe an old
             // membership, not this online session. Activity starts at the
@@ -63,6 +64,7 @@ export class RoomActivityService {
           data: {
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
+            roomType: room.roomType ?? "interactive",
             totalDurationMs: { increment: BigInt(closedDurationMs) },
             activeStartedAt: now,
             lastPresenceAt: now,
@@ -78,6 +80,7 @@ export class RoomActivityService {
           data: {
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
+            roomType: room.roomType ?? "interactive",
             activeStartedAt: now,
             lastPresenceAt: now,
             lastJoinedAt: now
@@ -95,6 +98,7 @@ export class RoomActivityService {
           data: {
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
+            roomType: room.roomType ?? "interactive",
             lastPresenceAt: now
           }
         });
@@ -123,7 +127,7 @@ export class RoomActivityService {
         where: { id: current.id },
         data: {
           ...(room
-            ? { roomName: room.name ?? "未命名房间", joinCode: room.joinCode }
+            ? { roomName: room.name ?? "未命名房间", joinCode: room.joinCode, roomType: room.roomType ?? "interactive" }
             : {}),
           totalDurationMs: { increment: BigInt(durationMs) },
           activeStartedAt: null,
@@ -159,6 +163,7 @@ export class RoomActivityService {
           roomId: record.roomId,
           roomName: record.roomName,
           joinCode: record.joinCode,
+          roomType: record.roomType,
           durationMs: Number(record.totalDurationMs) + activeDurationMs,
           lastJoinedAt: record.lastJoinedAt.toISOString(),
           isActive

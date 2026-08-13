@@ -1,4 +1,5 @@
 import { Injectable, Optional } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import type {
   PlaybackSnapshot,
   Playlist,
@@ -6,6 +7,7 @@ import type {
   RoomMember,
   RoomSnapshot,
   RoomSyncResponse
+  ,RoomRequest
 } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -148,6 +150,92 @@ export class RoomService {
     return this.roomSnapshotService.buildSnapshot(record, playlists);
   }
 
+  async recordRoomReaction(input: {
+    roomId: string;
+    userId: string;
+    trackId: string | null;
+    reactionType: "like" | "applause";
+  }) {
+    if (!this.prisma.isAvailable()) return 0;
+    const reactionModel = (this.prisma as PrismaService & { roomReaction: { create: (args: unknown) => Promise<unknown>; count: (args: unknown) => Promise<number> } }).roomReaction;
+    await reactionModel.create({
+      data: {
+        id: `reaction_${randomUUID()}`,
+        roomId: input.roomId,
+        userId: input.userId,
+        trackId: input.trackId,
+        reactionType: input.reactionType
+      }
+    });
+    return reactionModel.count({
+      where: {
+        roomId: input.roomId,
+        trackId: input.trackId,
+        reactionType: input.reactionType
+      }
+    });
+  }
+
+  async getRoomReactionCounts(roomId: string, trackId: string | null, sessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    if (!this.prisma.isAvailable()) {
+      return { like: 0, applause: 0 };
+    }
+    const reactionModel = this.prisma.roomReaction;
+    const [like, applause] = await Promise.all([
+      reactionModel.count({ where: { roomId, trackId, reactionType: "like" } }),
+      reactionModel.count({ where: { roomId, trackId, reactionType: "applause" } })
+    ]);
+    return { like, applause };
+  }
+
+  async createRoomRequest(roomId: string, sessionId: string, input: Omit<RoomRequest, "id" | "roomId" | "requesterId" | "requesterName" | "status" | "createdAt">) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    if (record.room.roomType !== "request" && record.room.roomType !== "radio") {
+      throw new Error("当前房间不支持点歌请求。");
+    }
+    const session = await this.authService.getUserOrThrow(sessionId);
+    const requests = record.requests ?? [];
+    const duplicate = requests.find((request) =>
+      request.status === "pending" && request.provider === input.provider && request.providerTrackId === input.providerTrackId
+    );
+    if (duplicate) return duplicate;
+    const request: RoomRequest = {
+      ...input,
+      id: `request_${randomUUID()}`,
+      roomId,
+      requesterId: session.id,
+      requesterName: session.nickname,
+      status: "pending",
+      createdAt: new Date().toISOString()
+    };
+    record.requests = [...requests, request];
+    record.room.requests = record.requests;
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return request;
+  }
+
+  async listRoomRequests(roomId: string, sessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    return record.requests ?? [];
+  }
+
+  async decideRoomRequest(roomId: string, sessionId: string, requestId: string, decision: "approved" | "rejected") {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    if (record.room.hostId !== sessionId) throw new Error("Only the host can decide song requests.");
+    const request = (record.requests ?? []).find((item) => item.id === requestId);
+    if (!request) throw new Error("Song request not found.");
+    request.status = decision;
+    record.room.requests = record.requests;
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return request;
+  }
+
   async getAccessibleRoomSnapshot(
     roomId: string,
     playlists: Playlist[],
@@ -244,6 +332,33 @@ export class RoomService {
     return this.roomActivityService.listRecent(sessionId);
   }
 
+  async listOwnedRoomSnapshotsForSession(sessionId: string) {
+    const records = await this.roomRecordRepository.listRecoverableRecords();
+    return Promise.all(
+      records
+        .filter((record) => record.room.hostId === sessionId)
+        .map((record) => this.roomSnapshotService.buildSnapshot(record, []))
+    );
+  }
+
+  async getRoomStatsForSession(sessionId: string) {
+    if (!this.prisma.isAvailable()) {
+      return { sentLikes: 0, sentApplause: 0, receivedReactions: 0 };
+    }
+    const reactionModel = this.prisma.roomReaction;
+    const ownedRoomIds = (await this.roomRecordRepository.listRecoverableRecords())
+      .filter((record) => record.room.hostId === sessionId)
+      .map((record) => record.room.id);
+    const [sentLikes, sentApplause, receivedReactions] = await Promise.all([
+      reactionModel.count({ where: { userId: sessionId, reactionType: "like" } }),
+      reactionModel.count({ where: { userId: sessionId, reactionType: "applause" } }),
+      ownedRoomIds.length
+        ? reactionModel.count({ where: { roomId: { in: ownedRoomIds }, userId: { not: sessionId } } })
+        : Promise.resolve(0)
+    ]);
+    return { sentLikes, sentApplause, receivedReactions };
+  }
+
   async listPublicRooms(): Promise<RoomSnapshot[]> {
     const records = await this.roomRecordRepository.listRecoverableRecords();
     const publicRecords = records.filter((record) => record.room.visibility === "public");
@@ -284,6 +399,7 @@ export class RoomService {
           description: snapshot.room.description,
           hasPassword: snapshot.room.hasPassword,
           visibility: snapshot.room.visibility,
+          roomType: snapshot.room.roomType ?? "interactive",
           members: [],
           directoryHostNickname: host?.nickname ?? "",
           directoryMemberCount: record.room.members.length,
@@ -421,6 +537,9 @@ export class RoomService {
 
     if (input.actorSessionId) {
       assertMember(record, input.actorSessionId);
+      if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== input.actorSessionId) {
+        throw new Error("Only the host can control playback in this room.");
+      }
       assertPermission(record, input.actorSessionId, "player");
       if (input.actorPeerId) {
         await this.presenceOrchestrator.refreshPresenceLease(
@@ -493,6 +612,8 @@ export class RoomService {
       description?: string | null;
       password?: string;
       newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
+      roomType?: import("@music-room/shared").RoomType;
+      radioAutoFill?: boolean;
     }
   ) {
     return this.lifecycleService.createRoom(hostSessionId, visibility, metadata);
@@ -511,6 +632,8 @@ export class RoomService {
       description?: string | null;
       password?: string;
       newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
+      roomType?: import("@music-room/shared").RoomType;
+      radioAutoFill?: boolean;
     }
   ) {
     return this.lifecycleService.updateRoom(roomId, sessionId, input);

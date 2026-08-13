@@ -191,6 +191,9 @@ export class RoomContentService {
     const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== sessionId) {
+      throw new BadRequestException("当前房间请先提交点歌请求，等待房主审核。");
+    }
     assertPermission(record, sessionId, "queue");
 
     if (record.queue.length >= maxRoomQueueItems) {
@@ -223,6 +226,9 @@ export class RoomContentService {
     const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== sessionId) {
+      throw new BadRequestException("当前房间成员不能直接导入共享队列。");
+    }
     assertPermission(record, sessionId, "queue");
 
     const validTrackIds = trackIds.filter((trackId) =>
@@ -259,6 +265,9 @@ export class RoomContentService {
   async removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, actorSessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== actorSessionId) {
+      throw new BadRequestException("只有房主可以管理当前房间队列。");
+    }
     assertPermission(record, actorSessionId, "queue");
     const removed = record.queue.find((item) => item.id === queueItemId);
 
@@ -300,6 +309,9 @@ export class RoomContentService {
   async setNextQueueItem(roomId: string, actorSessionId: string, queueItemId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, actorSessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== actorSessionId) {
+      throw new BadRequestException("只有房主可以管理当前房间队列。");
+    }
     assertPermission(record, actorSessionId, "player");
 
     const queueItem = record.queue.find((item) => item.id === queueItemId);
@@ -320,6 +332,9 @@ export class RoomContentService {
   async reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, actorSessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== actorSessionId) {
+      throw new BadRequestException("只有房主可以管理当前房间队列。");
+    }
     assertPermission(record, actorSessionId, "queue");
 
     const existingIds = record.queue.map((item) => item.id);

@@ -22,6 +22,7 @@ import type {
   RoomSubscribePayload,
   RoomSnapshot,
   RoomUnsubscribePayload
+  , RoomReactionInputPayload
 } from "@music-room/shared";
 import { readUserSessionCookie } from "../auth/auth.cookies";
 import {
@@ -34,6 +35,7 @@ import {
   roomPresencePayloadSchema,
   roomSubscribePayloadSchema,
   roomUnsubscribePayloadSchema
+  , roomReactionInputPayloadSchema
 } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -296,6 +298,42 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     };
 
     client.to(parsed.data.roomId).emit("room.chat", nextPayload);
+    return nextPayload;
+  }
+
+  @SubscribeMessage("room.reaction")
+  async handleRoomReaction(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: RoomReactionInputPayload
+  ) {
+    this.assertRealtimeRateLimit(client, "room.reaction", 20);
+    const parsed = roomReactionInputPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException("Invalid room reaction payload.", errorCodes.validationFailed, parsed.error.flatten());
+    }
+    this.assertRealtimeClient(client, parsed.data.roomId);
+    await this.sessionLease.assert(client);
+    const sessionId = client.data.sessionId as string | undefined;
+    if (!sessionId) throw new WsException("Unauthorized realtime request.");
+    const user = await this.authService.getUserOrThrow(sessionId);
+    const snapshot = await this.roomService.getRoomSnapshot(parsed.data.roomId, []);
+    const trackId = parsed.data.trackId ?? snapshot.room.playback.currentTrackId;
+    const totalCount = await this.roomService.recordRoomReaction({
+      roomId: parsed.data.roomId,
+      userId: user.id,
+      trackId,
+      reactionType: parsed.data.reaction
+    });
+    const nextPayload = {
+      roomId: parsed.data.roomId,
+      senderId: user.id,
+      senderName: user.nickname,
+      reaction: parsed.data.reaction,
+      trackId,
+      timestamp: Date.now(),
+      totalCount
+    };
+    this.server.to(parsed.data.roomId).emit("room.reaction", nextPayload);
     return nextPayload;
   }
 

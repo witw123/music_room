@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
-import { defaultRoomMemberPermissions, type RoomMemberPermissions, type RoomSnapshot } from "@music-room/shared";
+import { defaultRoomMemberPermissions, type RoomMemberPermissions, type RoomSnapshot, type RoomType } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -41,6 +41,7 @@ type CreateRoomForm = {
   name: string;
   description: string;
   password: string;
+  roomType: RoomType;
   newMemberPermissions: RoomMemberPermissions;
 };
 
@@ -49,6 +50,7 @@ const emptyCreateRoomForm: CreateRoomForm = {
   name: "",
   description: "",
   password: "",
+  roomType: "interactive",
   newMemberPermissions: { ...defaultRoomMemberPermissions }
 };
 
@@ -82,6 +84,7 @@ export function RoomsHomePage({
   const [roomsLoaded, setRoomsLoaded] = useState(() =>
     Boolean(activeSession && getCachedRooms(activeSession.userId))
   );
+  const [roomTypeFilter, setRoomTypeFilter] = useState<"all" | RoomType>("all");
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
@@ -192,6 +195,7 @@ export function RoomsHomePage({
         name: createForm.name.trim() || undefined,
         description: createForm.description.trim() || undefined,
         password: createForm.password.trim() || undefined,
+        roomType: createForm.roomType,
         newMemberPermissions: createForm.newMemberPermissions
       });
       storeRoomSnapshotHandoff(snapshot);
@@ -268,11 +272,13 @@ export function RoomsHomePage({
   }
 
   const visibleRooms = useMemo(
-    () => [...availableRooms].sort((left, right) =>
+    () => availableRooms
+      .filter((room) => roomTypeFilter === "all" || (room.room.roomType ?? "interactive") === roomTypeFilter)
+      .sort((left, right) =>
       (right.room.directoryOnlineMemberCount ?? getOnlineMemberCount(right.room.members)) -
       (left.room.directoryOnlineMemberCount ?? getOnlineMemberCount(left.room.members))
     ),
-    [availableRooms]
+    [availableRooms, roomTypeFilter]
   );
 
   if (!hydrated || !activeSession) {
@@ -379,6 +385,15 @@ export function RoomsHomePage({
         </div>
 
         <div className="workspace-surface min-h-[300px] p-3 lg:p-5 xl:p-6">
+          <div className="mb-4 flex justify-center">
+            <div className="workspace-segmented" role="tablist" aria-label="房间类型筛选">
+              {(["all", "interactive", "request", "radio"] as const).map((roomType) => (
+                <button aria-selected={roomTypeFilter === roomType} className="workspace-segmented__item" key={roomType} onClick={() => setRoomTypeFilter(roomType)} role="tab" type="button">
+                  {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="mb-3 flex items-center justify-between md:hidden">
             <h2 className="text-lg font-semibold leading-6 text-foreground">全部房间</h2>
             <span className="text-sm text-foreground-muted">{visibleRooms.length} 个</span>
@@ -449,6 +464,21 @@ export function RoomsHomePage({
                   type="button"
                 >
                   {visibility === "public" ? "公开房间" : "私密房间"}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="房间类型">
+              {(["interactive", "request", "radio"] as const).map((roomType) => (
+                <button
+                  key={roomType}
+                  aria-checked={createForm.roomType === roomType}
+                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${createForm.roomType === roomType ? "border-accent bg-accent/15 text-foreground" : "border-surface-border text-foreground-muted hover:bg-surface-hover"}`}
+                  onClick={() => setCreateForm((current) => ({ ...current, roomType }))}
+                  role="radio"
+                  type="button"
+                >
+                  <span className="block font-medium">{roomTypeLabel(roomType)}</span>
+                  <span className="mt-1 block text-xs opacity-70">{roomTypeDescription(roomType)}</span>
                 </button>
               ))}
             </div>
@@ -630,9 +660,15 @@ function RoomDirectoryCard({
         </span>
       </div>
       <div className="mt-0.5">
-        <h3 className="truncate font-semibold text-foreground">{room.room.name ?? "未命名房间"}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="min-w-0 truncate font-semibold text-foreground">{room.room.name ?? "未命名房间"}</h3>
+          <span className="shrink-0 text-[11px] text-foreground-muted">{roomTypeLabel(room.room.roomType ?? "interactive")}</span>
+        </div>
         <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
           {room.room.description?.trim() || `房主 ${host}`}
+        </p>
+        <p className="mt-2 truncate text-[11px] text-foreground-muted">
+          {room.room.roomType === "request" ? `${room.room.requests?.filter((request) => request.status === "pending").length ?? 0} 个待审核点歌` : room.room.roomType === "radio" ? "相关推荐自动续播" : room.room.playback.status === "playing" ? "正在同步播放" : "等待播放"}
         </p>
       </div>
       {room.room.hasPassword ? (
@@ -644,6 +680,14 @@ function RoomDirectoryCard({
       ) : null}
     </article>
   );
+}
+
+function roomTypeLabel(roomType: RoomType) {
+  return roomType === "request" ? "点歌房" : roomType === "radio" ? "自由电台" : "多人互动房";
+}
+
+function roomTypeDescription(roomType: RoomType) {
+  return roomType === "request" ? "房主审核点歌" : roomType === "radio" ? "种子队列自动续播" : "成员共同播放";
 }
 
 function primeRoomAudioFromUserGesture() {

@@ -580,11 +580,15 @@ export class RoomRecordRepository {
       description: record.room.description ?? null,
       passwordHash: record.passwordHash ?? null,
       visibility: record.room.visibility,
+      roomType: record.room.roomType,
       roomRevision: record.room.roomRevision ?? 0,
       presenceRevision: record.room.presenceRevision,
       playback: {
         ...serializePlaybackForPersistence(record.room),
         newMemberPermissions: record.room.newMemberPermissions ?? null,
+        roomType: record.room.roomType,
+        radioAutoFill: record.room.radioAutoFill !== false,
+        requests: record.requests ?? record.room.requests ?? [],
         memberPermissionProfiles: record.memberPermissionProfiles ?? {}
       },
       members: record.room.members,

@@ -24,6 +24,7 @@ import type { LocalMemberPanelState } from "./MembersPanel";
 import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
+import { RoomRequestsPanel } from "./RoomRequestsPanel";
 
 type TabId = "library" | "local" | "members";
 
@@ -187,8 +188,10 @@ function RoomDashboardViewBase({
     activeSession?.userId
   );
   const canManageLibrary = currentRoomPermissions?.library === true;
-  const canAddToQueue = currentRoomPermissions?.queue === true;
   const isHost = isRoomHost(roomSnapshot, activeSession?.userId);
+  const hostManagedRoom = roomSnapshot.room.roomType === "request" || roomSnapshot.room.roomType === "radio";
+  const canManageScenarioContent = !hostManagedRoom || isHost;
+  const canAddToQueue = currentRoomPermissions?.queue === true && canManageScenarioContent;
 
   useEffect(() => {
     const updateMembershipNow = () => setMembershipNow(Date.now());
@@ -299,6 +302,14 @@ function RoomDashboardViewBase({
           id={`room-panel-${activeTab}`}
           role="tabpanel"
         >
+          <RoomRequestsPanel
+            roomSnapshot={roomSnapshot}
+            activeSessionId={activeSession?.userId ?? null}
+            onImportNeteaseTrack={onImportNeteaseTrack}
+            onImportQqMusicTrack={onImportQqMusicTrack}
+            onAddToQueue={onAddToQueue}
+            onUpdateRoom={onUpdateRoom}
+          />
           {activeTab === "library" ? (
             <LibraryTabPanel
               tracks={roomSnapshot.tracks}
@@ -307,7 +318,7 @@ function RoomDashboardViewBase({
               localSavedFileHashes={localStorageSummary.localSavedFileHashes}
               onSaveTrackToLocal={onSaveTrackToLocal}
               canControlPlayback={canControlPlayback}
-              canManageLibrary={canManageLibrary}
+              canManageLibrary={canManageLibrary && canManageScenarioContent}
               canManageAllTracks={isHost}
               canAddToQueue={canAddToQueue}
               activeSession={activeSession}

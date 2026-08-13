@@ -113,6 +113,7 @@ model RoomState {
   description      String?
   passwordHash     String?
   visibility       String
+  roomType         String          @default("interactive")
   roomRevision     Int      @default(0)
   presenceRevision Int      @default(0)
   playback         Json
@@ -225,6 +226,7 @@ model UserRoomActivity {
   id              String    @id
   userId          String
   roomId          String
+  roomType        String        @default("interactive")
   roomName        String
   joinCode        String
   totalDurationMs BigInt    @default(0)
@@ -238,6 +240,18 @@ model UserRoomActivity {
 
   @@unique([userId, roomId])
   @@index([userId, lastJoinedAt])
+}
+
+model RoomReaction {
+  id           String   @id
+  roomId       String
+  userId       String
+  trackId      String?
+  reactionType String
+  createdAt    DateTime @default(now())
+
+  @@index([roomId, trackId, reactionType, createdAt])
+  @@index([userId, createdAt])
 }
 
 model OperationalIncident {

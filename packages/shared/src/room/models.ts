@@ -3,6 +3,26 @@ import { playbackSnapshotSchema } from "../playback/models";
 import { playlistSchema, queueItemSchema, trackMetaSchema } from "../playlist/models";
 
 export const roomPresenceStateSchema = z.enum(["online", "reconnecting", "offline"]);
+export const roomTypeSchema = z.enum(["interactive", "request", "radio"]);
+export type RoomType = z.infer<typeof roomTypeSchema>;
+
+export const roomRequestStatusSchema = z.enum(["pending", "approved", "rejected"]);
+export const roomRequestSchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  requesterId: z.string(),
+  requesterName: z.string(),
+  provider: z.enum(["netease", "qqmusic", "local"]),
+  providerTrackId: z.string(),
+  title: z.string(),
+  artist: z.string(),
+  album: z.string().nullable(),
+  durationMs: z.number().int().nonnegative(),
+  artworkUrl: z.string().nullable(),
+  status: roomRequestStatusSchema,
+  createdAt: z.string().datetime()
+});
+export type RoomRequest = z.infer<typeof roomRequestSchema>;
 
 export const roomMemberPermissionsSchema = z.object({
   library: z.boolean(),
@@ -37,6 +57,9 @@ export const roomSchema = z.object({
   description: z.string().nullable().optional(),
   hasPassword: z.boolean().optional(),
   visibility: z.enum(["private", "public"]),
+  roomType: roomTypeSchema.optional(),
+  radioAutoFill: z.boolean().optional(),
+  requests: z.array(roomRequestSchema).optional(),
   // Optional so snapshots persisted before room-level defaults remain valid.
   newMemberPermissions: roomMemberPermissionsSchema.optional(),
   members: z.array(roomMemberSchema),
