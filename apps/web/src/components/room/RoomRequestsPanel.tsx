@@ -31,6 +31,10 @@ export function RoomRequestsPanel({ roomSnapshot, activeSessionId, onImportNetea
   });
 
   useEffect(() => setRequests(roomSnapshot.room.requests ?? []), [roomSnapshot.room.requests]);
+  const ownRequests = useMemo(
+    () => requests.filter((request) => request.requesterId === activeSessionId),
+    [activeSessionId, requests]
+  );
   if (roomType === "interactive") return null;
 
   async function refresh() {
@@ -95,8 +99,6 @@ export function RoomRequestsPanel({ roomSnapshot, activeSessionId, onImportNetea
       await refresh();
     } finally { setPendingKey(null); }
   }
-
-  const ownRequests = useMemo(() => requests.filter((request) => request.requesterId === activeSessionId), [activeSessionId, requests]);
 
   return (
     <section className="mb-5 border-b border-white/[0.08] pb-5">
