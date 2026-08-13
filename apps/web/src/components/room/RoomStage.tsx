@@ -26,7 +26,7 @@ import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { MemberPermissionControls } from "./MembersPanel";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
-import { RoomReactionControls } from "./RoomReactionControls";
+import type { RoomReactionPayload } from "@music-room/shared";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -48,10 +48,8 @@ type RoomStageProps = {
   onDeleteRoom: () => void;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
   isLyricsOpen: boolean;
-  onToggleLyrics: () => void;
   onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;
-  layoutVariant?: "interactive" | "request" | "radio";
 };
 
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
@@ -107,10 +105,8 @@ function RoomStageBase({
   onDeleteRoom,
   onUpdateRoom,
   isLyricsOpen,
-  onToggleLyrics,
   onSeek,
-  socket,
-  layoutVariant = "interactive"
+  socket
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -141,6 +137,7 @@ function RoomStageBase({
   const [isSharing, setIsSharing] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
+  const [reactionCounts, setReactionCounts] = useState({ like: 0, applause: 0 });
   const [lyricsText, setLyricsText] = useState<string | null>(null);
   const [translatedLyricsText, setTranslatedLyricsText] = useState<string | null>(null);
   const [romanizedLyricsText, setRomanizedLyricsText] = useState<string | null>(null);
@@ -160,13 +157,7 @@ function RoomStageBase({
     ?? null;
   const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
-  const recordSize = layoutVariant === "radio"
-    ? ultraCompactStage
-      ? "clamp(10rem, min(29vh, 48vw), 13rem)"
-      : compactStage
-        ? "clamp(11rem, min(33vh, 46vw), 15rem)"
-        : "clamp(13rem, min(42vh, 46vw), 23rem)"
-    : ultraCompactStage
+  const recordSize = ultraCompactStage
     ? "clamp(9.5rem, min(26vh, 44vw), 12rem)"
     : compactStage
       ? "clamp(10rem, min(28vh, 42vw), 14rem)"
@@ -180,6 +171,32 @@ function RoomStageBase({
         : "-translate-y-[clamp(2rem,5vh,4rem)]";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
+
+  useEffect(() => {
+    if (!socket) return;
+    const receiveReaction = (payload: RoomReactionPayload) => {
+      if (payload.trackId !== playback.currentTrackId) return;
+      setReactionCounts((current) => ({ ...current, [payload.reaction]: payload.totalCount }));
+    };
+    socket.on("room.reaction", receiveReaction);
+    return () => {
+      socket.off("room.reaction", receiveReaction);
+    };
+  }, [playback.currentTrackId, socket]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReactionCounts({ like: 0, applause: 0 });
+    void musicRoomApi.getRoomReactionCounts(roomSnapshot.room.id, playback.currentTrackId)
+      .then((counts) => { if (!cancelled) setReactionCounts(counts); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [playback.currentTrackId, roomSnapshot.room.id]);
+
+  function sendReaction(reaction: "like" | "applause") {
+    if (!socket) return;
+    socket.emit("room.reaction", { roomId: roomSnapshot.room.id, reaction, trackId: playback.currentTrackId });
+  }
 
   const handleCopyJoinCode = async () => {
     if (isCopying) return;
@@ -375,29 +392,9 @@ function RoomStageBase({
     };
   }, [currentTrack, sourceProvider, sourceTrackId]);
 
-  if (layoutVariant === "request") {
-    return (
-      <section className="relative flex w-full min-w-0 flex-col px-3 py-3 sm:px-5 lg:px-7" data-room-stage-variant="request">
-        <div className="flex min-w-0 items-center gap-3">
-          {artworkUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" className="h-11 w-11 shrink-0 object-cover sm:h-12 sm:w-12" src={artworkUrl} />
-          ) : <span className="h-11 w-11 shrink-0 bg-surface sm:h-12 sm:w-12" />}
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2"><strong className="truncate text-sm font-semibold text-foreground">{currentTrack?.title ?? "未选择歌曲"}</strong><span className={`shrink-0 text-[10px] ${isPlaying ? "text-accent" : "text-foreground-muted"}`}>{playbackBarrier?.blocked ? "缓存中" : isPlaying ? "播放中" : "已暂停"}</span></div>
-            <span className="mt-1 block truncate text-xs text-foreground-muted">{currentTrack ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}` : ""}</span>
-          </div>
-          <div className="hidden min-w-0 items-center gap-2 sm:flex"><RoomReactionControls roomId={roomSnapshot.room.id} socket={socket} trackId={playback.currentTrackId} /></div>
-          <button aria-pressed={isLyricsOpen} className={`shrink-0 border px-2.5 py-2 text-xs font-semibold transition ${isLyricsOpen ? "border-accent bg-accent/10 text-accent" : "border-surface-border text-foreground-muted hover:text-foreground"}`} onClick={onToggleLyrics} type="button">歌词</button>
-        </div>
-        {isLyricsOpen ? <div className="mx-auto mt-3 w-full max-w-3xl"><RoomLyricsPanel className="max-w-none" frozen={playbackBarrier?.blocked === true} visibleLines={3} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={lyricsText} translatedLyrics={translatedLyricsText} romanizedLyrics={romanizedLyricsText} showControls={false} showTranslation={lyricPreferences.showLyricTranslation} showRomanized={lyricPreferences.showLyricRomanized} positionMs={lyricsPositionMs} status={lyricsStatus} onSeek={onSeek} /></div> : null}
-      </section>
-    );
-  }
-
   return (
     <section
-      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 pt-[calc(2.25rem+env(safe-area-inset-top))] sm:px-5 md:px-8 lg:h-full ${layoutVariant === "radio" ? "lg:pt-6" : ""} ${
+      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 pt-[calc(2.25rem+env(safe-area-inset-top))] sm:px-5 md:px-8 lg:h-full ${
         ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
       }`}
     >
@@ -478,7 +475,10 @@ function RoomStageBase({
             <span>·</span>
             <span>{sourceModeLabel}</span>
           </div>
-          <RoomReactionControls roomId={roomSnapshot.room.id} socket={socket} trackId={playback.currentTrackId} className="mt-3" />
+          <div className="mt-3 flex items-center gap-2">
+            <button aria-label="点赞" className="light-control-surface inline-flex h-8 items-center gap-1 border border-white/10 bg-white/10 px-2 text-xs text-white/80 hover:bg-white/20" onClick={() => sendReaction("like")} type="button">♥ <span>{reactionCounts.like}</span></button>
+            <button aria-label="鼓掌" className="light-control-surface inline-flex h-8 items-center gap-1 border border-white/10 bg-white/10 px-2 text-xs text-white/80 hover:bg-white/20" onClick={() => sendReaction("applause")} type="button">👏 <span>{reactionCounts.applause}</span></button>
+          </div>
         </div>
 
         <div className="relative shrink-0 pointer-events-auto">
