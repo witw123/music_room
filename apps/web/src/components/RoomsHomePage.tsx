@@ -286,7 +286,7 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="workspace-page home-workspace-page relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60">
+    <main className="workspace-page home-workspace-page hide-scrollbar relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60">
 
       {showSidebar ? (
         <AppSidebar
@@ -309,40 +309,6 @@ export function RoomsHomePage({
             <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
           </Link>
         </header>
-
-        <div className="workspace-page__header hidden flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:flex">
-          <div>
-            <p className="workspace-page__eyebrow mb-1">
-              All rooms
-            </p>
-            <h2 className="flex items-center gap-3 text-xl font-semibold leading-8 text-foreground">
-              所有房间
-              {isPending ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-              ) : null}
-            </h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
-              创建公开房间
-            </Button>
-            <Button data-testid="create-private-room" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={() => openCreateRoom("private")} type="button">
-              创建私密房间
-            </Button>
-            <Button data-testid="open-join-room-dialog" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={openJoinDialog} type="button">
-              输入房间码加入
-            </Button>
-            <Button
-              aria-label="刷新房间列表"
-              variant="ghost"
-              size="sm"
-              onClick={() => startTransition(() => void refreshAvailableRooms())}
-              type="button"
-            >
-              刷新
-            </Button>
-          </div>
-        </div>
 
         <div className="flex flex-col gap-3 md:hidden">
           <div className="flex items-center gap-2">
@@ -384,8 +350,38 @@ export function RoomsHomePage({
           </form>
         </div>
 
+        <div className="hidden items-center justify-between gap-4 md:flex">
+          <div className="workspace-segmented" role="tablist" aria-label="房间类型筛选">
+            {(["all", "interactive", "request", "radio"] as const).map((roomType) => (
+              <button aria-selected={roomTypeFilter === roomType} className="workspace-segmented__item" key={roomType} onClick={() => setRoomTypeFilter(roomType)} role="tab" type="button">
+                {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
+              创建公开房间
+            </Button>
+            <Button data-testid="create-private-room" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={() => openCreateRoom("private")} type="button">
+              创建私密房间
+            </Button>
+            <Button data-testid="open-join-room-dialog" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={openJoinDialog} type="button">
+              输入房间码加入
+            </Button>
+            <Button
+              aria-label="刷新房间列表"
+              variant="ghost"
+              size="sm"
+              onClick={() => startTransition(() => void refreshAvailableRooms())}
+              type="button"
+            >
+              刷新
+            </Button>
+          </div>
+        </div>
+
         <div className="workspace-surface min-h-[300px] p-3 lg:p-5 xl:p-6">
-          <div className="mb-4 flex justify-center">
+          <div className="mb-4 flex justify-center md:hidden">
             <div className="workspace-segmented" role="tablist" aria-label="房间类型筛选">
               {(["all", "interactive", "request", "radio"] as const).map((roomType) => (
                 <button aria-selected={roomTypeFilter === roomType} className="workspace-segmented__item" key={roomType} onClick={() => setRoomTypeFilter(roomType)} role="tab" type="button">
@@ -720,7 +716,7 @@ function RoomDialog({
     <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" onMouseDown={onClose} role="presentation">
       <div
         aria-modal="true"
-        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface hide-scrollbar max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >

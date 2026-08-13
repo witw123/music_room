@@ -16,6 +16,8 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
   const [ownedRooms, setOwnedRooms] = useState<RoomSnapshot[]>([]);
   const [recentRooms, setRecentRooms] = useState<RoomActivitySummary[]>([]);
   const [stats, setStats] = useState<RoomInteractionStats | null>(null);
+  const [showAllOwned, setShowAllOwned] = useState(false);
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,15 +42,16 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
           <Link className="text-xs text-accent hover:text-accent/80" href="/app">房间大厅</Link>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {ownedRooms.map((snapshot) => <OwnedRoomCard key={snapshot.room.id} snapshot={snapshot} />)}
+          {(showAllOwned ? ownedRooms : ownedRooms.slice(0, 5)).map((snapshot) => <OwnedRoomCard key={snapshot.room.id} snapshot={snapshot} />)}
           {ownedRooms.length === 0 ? <EmptyState text="还没有创建房间" /> : null}
         </div>
+        {ownedRooms.length > 5 ? <button className="mt-4 text-sm font-medium text-accent transition hover:text-accent/80" onClick={() => setShowAllOwned((current) => !current)} type="button">{showAllOwned ? "收起" : `查看全部 ${ownedRooms.length} 个房间`}</button> : null}
       </section>
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-foreground">最近参与</h2>
         <div className="grid gap-2">
-          {recentRooms.slice(0, 6).map((room) => (
+          {(showAllRecent ? recentRooms : recentRooms.slice(0, 5)).map((room) => (
             <Link className="flex items-center justify-between gap-3 border-b border-surface-border py-3 text-sm transition hover:text-accent" href={`/room/${room.roomId}`} key={room.roomId}>
               <span className="min-w-0"><span className="block truncate text-foreground">{room.roomName}</span><span className="mt-1 block text-[11px] text-foreground-muted">{roomTypeLabel[room.roomType]}</span></span>
               <span className="shrink-0 text-xs text-foreground-muted">{room.isActive ? "正在房间中" : formatDuration(room.durationMs)}</span>
@@ -56,6 +59,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
           ))}
           {recentRooms.length === 0 ? <EmptyState text="还没有参与记录" /> : null}
         </div>
+        {recentRooms.length > 5 ? <button className="mt-4 text-sm font-medium text-accent transition hover:text-accent/80" onClick={() => setShowAllRecent((current) => !current)} type="button">{showAllRecent ? "收起" : `查看全部 ${recentRooms.length} 条记录`}</button> : null}
       </section>
 
       <section>

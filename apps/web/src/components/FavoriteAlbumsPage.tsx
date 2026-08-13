@@ -523,7 +523,7 @@ function FavoriteTracksSection({
   if (tracks.length === 0) {
     return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-surface-border px-6 text-center"><HeartIcon /><p className="mt-4 text-sm font-medium text-foreground-muted">还没有收藏歌曲</p><p className="mt-2 text-xs text-foreground-muted">在发现、歌单或播放器中点击心形按钮收藏歌曲。</p></div>;
   }
-  return <section className="mt-6"><ProviderAlbumTrackTable actions={trackActions} tracks={tracks} /></section>;
+  return <section className="mt-5"><ProviderAlbumTrackTable actions={trackActions} showToolbar={false} tracks={tracks} /></section>;
 }
 
 function AlbumArtwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {

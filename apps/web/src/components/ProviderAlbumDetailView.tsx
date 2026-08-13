@@ -100,7 +100,15 @@ function DescriptionDisclosure({ description }: { description: string | null }) 
   );
 }
 
-export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; actions?: ProviderAlbumTrackActions }) {
+export function ProviderAlbumTrackTable({
+  tracks,
+  actions,
+  showToolbar = true
+}: {
+  tracks: Track[];
+  actions?: ProviderAlbumTrackActions;
+  showToolbar?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const visibleTracks = normalizedQuery
@@ -108,8 +116,8 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
     : tracks;
 
   return (
-    <section className="mt-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.1]">
+    <section className={showToolbar ? "mt-8" : "mt-1"}>
+      {showToolbar ? <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.1]">
         <div className="flex items-center gap-6">
           <span className="relative pb-4 text-sm font-semibold text-white">歌曲 <span className="text-white/35">{tracks.length}</span><span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /></span>
           <span className="pb-4 text-sm text-white/35">详情</span>
@@ -119,8 +127,8 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
           <span className="sr-only">搜索专辑歌曲</span>
           <input aria-label="搜索专辑歌曲" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/35" onChange={(event) => setQuery(event.target.value)} placeholder="搜索" type="search" value={query} />
         </label>
-      </div>
-      <div className="mt-4 divide-y divide-white/[0.07]">
+      </div> : null}
+      <div className={`${showToolbar ? "mt-4" : ""} divide-y divide-white/[0.07]`}>
         {visibleTracks.length ? visibleTracks.map((track, index) => (
           <div
             className={`group grid gap-x-3 gap-y-2 px-3 py-3 transition-colors hover:bg-white/[0.035] ${actions ? "grid-cols-[minmax(0,1fr)_auto] cursor-pointer md:cursor-default" : "grid-cols-[minmax(0,1fr)]"} md:items-center md:gap-3 md:px-3 md:py-3 ${actions ? "md:grid-cols-[48px_minmax(0,1.4fr)_minmax(0,0.8fr)_112px_minmax(0,auto)]" : "md:grid-cols-[48px_minmax(0,1.5fr)_minmax(0,0.8fr)_112px]"}`}
@@ -145,7 +153,7 @@ export function ProviderAlbumTrackTable({ tracks, actions }: { tracks: Track[]; 
             </div>
             <div className="flex min-w-0 items-center gap-3"><TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium text-white/90">{track.title}</p><p className="mt-1 flex min-w-0 items-center gap-1 truncate text-xs text-white/45"><span className="truncate">{track.artist}</span><span aria-hidden="true" className="shrink-0 text-white/25">·</span><span className="shrink-0">{actions?.isDownloaded?.(track) ? "已下载" : "可直接播放"}</span></p></div></div>
             <span className="hidden truncate text-xs text-white/55 md:block">{track.album ?? "未知专辑"}</span>
-            <span className="col-start-1 text-xs tabular-nums text-white/40 md:col-auto md:text-right">{formatDuration(track.durationMs)}</span>
+            <span className="col-start-1 hidden text-xs tabular-nums text-white/40 md:col-auto md:block md:text-right">{formatDuration(track.durationMs)}</span>
             {actions ? <TrackActions track={track} actions={actions} /> : null}
           </div>
         )) : <p className="px-4 py-10 text-center text-xs text-white/35">没有匹配的歌曲。</p>}
