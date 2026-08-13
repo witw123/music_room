@@ -51,6 +51,7 @@ type RoomStageProps = {
   onToggleLyrics: () => void;
   onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;
+  layoutVariant?: "interactive" | "request" | "radio";
 };
 
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
@@ -107,7 +108,8 @@ function RoomStageBase({
   onUpdateRoom,
   isLyricsOpen,
   onSeek,
-  socket
+  socket,
+  layoutVariant = "interactive"
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -181,7 +183,13 @@ function RoomStageBase({
     ?? null;
   const artworkPalette = useArtworkPalette(artworkUrl);
   const playerStyle = usePlayerStyle();
-  const recordSize = ultraCompactStage
+  const recordSize = layoutVariant === "radio"
+    ? ultraCompactStage
+      ? "clamp(10rem, min(29vh, 48vw), 13rem)"
+      : compactStage
+        ? "clamp(11rem, min(33vh, 46vw), 15rem)"
+        : "clamp(13rem, min(42vh, 46vw), 23rem)"
+    : ultraCompactStage
     ? "clamp(9.5rem, min(26vh, 44vw), 12rem)"
     : compactStage
       ? "clamp(10rem, min(28vh, 42vw), 14rem)"
@@ -392,7 +400,7 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 pt-[calc(2.25rem+env(safe-area-inset-top))] sm:px-5 md:px-8 lg:h-full ${
+      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 pt-[calc(2.25rem+env(safe-area-inset-top))] sm:px-5 md:px-8 lg:h-full ${layoutVariant === "radio" ? "lg:pt-6" : ""} ${
         ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
       }`}
     >

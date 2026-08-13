@@ -12,16 +12,17 @@ type Props = {
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
+  variant?: "request" | "radio";
 };
 
-export function RoomRequestsPanel({ roomSnapshot, activeSessionId, onImportNeteaseTrack, onImportQqMusicTrack, onAddToQueue, onUpdateRoom }: Props) {
+export function RoomRequestsPanel({ roomSnapshot, activeSessionId, onImportNeteaseTrack, onImportQqMusicTrack, onAddToQueue, onUpdateRoom, variant }: Props) {
   const roomType = roomSnapshot.room.roomType ?? "interactive";
   const isHost = roomSnapshot.room.hostId === activeSessionId;
   const [requests, setRequests] = useState<RoomRequest[]>(roomSnapshot.room.requests ?? []);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<NeteaseTrackCandidate | QqMusicTrackCandidate>>([]);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const radioStatus = useRadioAutoFill({
+  useRadioAutoFill({
     roomSnapshot,
     enabled: roomType === "radio",
     isHost,
@@ -35,7 +36,8 @@ export function RoomRequestsPanel({ roomSnapshot, activeSessionId, onImportNetea
     () => requests.filter((request) => request.requesterId === activeSessionId),
     [activeSessionId, requests]
   );
-  if (roomType === "interactive") return null;
+  const panelType = variant ?? roomType;
+  if (panelType === "interactive") return null;
 
   async function refresh() {
     setRequests(await musicRoomApi.listRoomRequests(roomSnapshot.room.id));
@@ -101,9 +103,9 @@ export function RoomRequestsPanel({ roomSnapshot, activeSessionId, onImportNetea
   }
 
   return (
-    <section className="mb-5 border-b border-white/[0.08] pb-5">
-      <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-semibold text-white">{roomType === "radio" ? "点歌建议" : "点歌请求"}</h2><button className="text-xs text-accent" onClick={() => void refresh()} type="button">刷新</button></div>
-      {roomType === "radio" ? <div className="mb-3 flex items-center justify-between gap-3 text-xs"><span className="text-white/45">{radioStatus ?? "使用当前歌曲作为推荐种子"}</span>{isHost ? <button className="text-accent" onClick={() => void onUpdateRoom({ visibility: roomSnapshot.room.visibility, name: roomSnapshot.room.name ?? "未命名房间", description: roomSnapshot.room.description, roomType, radioAutoFill: roomSnapshot.room.radioAutoFill === false })} type="button">{roomSnapshot.room.radioAutoFill === false ? "开启自动补歌" : "暂停自动补歌"}</button> : null}</div> : null}
+    <section className="mb-5">
+      <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-base font-semibold text-white">{panelType === "radio" ? "点歌建议" : "点歌台"}</h2><button className="text-xs text-accent" onClick={() => void refresh()} type="button">刷新</button></div>
+      {panelType === "radio" && isHost ? <div className="mb-4 flex justify-end border-b border-white/[0.08] pb-3 text-xs"><button className="shrink-0 text-accent" onClick={() => void onUpdateRoom({ visibility: roomSnapshot.room.visibility, name: roomSnapshot.room.name ?? "未命名房间", description: roomSnapshot.room.description, roomType, radioAutoFill: roomSnapshot.room.radioAutoFill === false })} type="button">{roomSnapshot.room.radioAutoFill === false ? "开启自动补歌" : "暂停自动补歌"}</button></div> : null}
       <div className="flex gap-2"><input className="min-w-0 flex-1 border border-white/10 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-accent" onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void search()} placeholder="搜索网易云或 QQ 音乐" value={query} /><button className="border border-white/10 px-3 text-sm text-white" disabled={pendingKey === "search"} onClick={() => void search()} type="button">搜索</button></div>
       {results.length ? <div className="mt-3 grid gap-2">{results.map((track) => <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.06] py-2" key={`${track.provider}:${track.providerTrackId}`}><span className="min-w-0 truncate text-sm text-white"><b>{track.title}</b><small className="ml-2 text-white/45">{track.artist}</small></span><button className="shrink-0 text-xs text-accent" disabled={pendingKey === `${track.provider}:${track.providerTrackId}`} onClick={() => void requestSong(track)} type="button">点歌</button></div>)}</div> : null}
       {isHost ? <RequestList requests={requests.filter((request) => request.status === "pending")} pendingKey={pendingKey} onDecide={decide} /> : <RequestList requests={ownRequests} pendingKey={pendingKey} />}

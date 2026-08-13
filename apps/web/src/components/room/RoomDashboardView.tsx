@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import type {
   AuthSession,
@@ -24,9 +24,11 @@ import type { LocalMemberPanelState } from "./MembersPanel";
 import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import { RoomRequestsPanel } from "./RoomRequestsPanel";
 
-type TabId = "library" | "local" | "members";
+type ManagementTabId = "library" | "local" | "members";
+type TabId = "scenario" | ManagementTabId;
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -77,20 +79,22 @@ type RoomDashboardViewProps = {
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   socket: RoomSocket | null;
-  onTabChange?: (tab: TabId) => void;
+  onTabChange?: (tab: ManagementTabId) => void;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
   isLyricsOpen: boolean;
   onToggleLyrics: () => void;
   onSeek: (positionMs: number) => void;
 };
 
-const tabLabels: Record<TabId, string> = {
-  library: "曲库",
-  local: "我的歌单",
-  members: "成员"
-};
+const managementTabIds: ManagementTabId[] = ["library", "local", "members"];
 
-const tabIds: TabId[] = ["library", "local", "members"];
+function getScenarioTabLabel(roomType: "interactive" | "request" | "radio") {
+  return roomType === "request" ? "点歌台" : roomType === "radio" ? "电台队列" : "曲库";
+}
+
+function getDefaultTab(roomType: "interactive" | "request" | "radio"): TabId {
+  return roomType === "interactive" ? "library" : "scenario";
+}
 
 const LibraryTabPanel = dynamic(
   () => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel),
@@ -180,7 +184,8 @@ function RoomDashboardViewBase({
   onToggleLyrics,
   onSeek
 }: RoomDashboardViewProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("library");
+  const roomType = roomSnapshot.room.roomType ?? "interactive";
+  const [activeTab, setActiveTab] = useState<TabId>(() => getDefaultTab(roomType));
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const currentSourcePeerId = resolveCurrentSourcePeerId(roomSnapshot, roomSnapshot.room.playback);
   const currentRoomPermissions = getCurrentRoomMemberPermissions(
@@ -192,6 +197,20 @@ function RoomDashboardViewBase({
   const hostManagedRoom = roomSnapshot.room.roomType === "request" || roomSnapshot.room.roomType === "radio";
   const canManageScenarioContent = !hostManagedRoom || isHost;
   const canAddToQueue = currentRoomPermissions?.queue === true && canManageScenarioContent;
+  const tabIds = useMemo<TabId[]>(
+    () => roomType === "interactive" ? managementTabIds : ["scenario", ...managementTabIds],
+    [roomType]
+  );
+  const tabLabels: Record<TabId, string> = {
+    scenario: getScenarioTabLabel(roomType),
+    library: "曲库",
+    local: "我的歌单",
+    members: "成员"
+  };
+
+  useEffect(() => {
+    setActiveTab(getDefaultTab(roomType));
+  }, [roomType]);
 
   useEffect(() => {
     const updateMembershipNow = () => setMembershipNow(Date.now());
@@ -206,7 +225,9 @@ function RoomDashboardViewBase({
       if (tab !== "members") {
         onDiagnosticsVisibilityChange?.(false);
       }
-      onTabChange?.(tab);
+      if (tab !== "scenario") {
+        onTabChange?.(tab);
+      }
     },
     [onDiagnosticsVisibilityChange, onTabChange]
   );
@@ -217,10 +238,16 @@ function RoomDashboardViewBase({
     const nextTab = tabIds[(tabIds.indexOf(tab) + direction + tabIds.length) % tabIds.length];
     handleTabChange(nextTab);
     document.getElementById(`room-tab-${nextTab}`)?.focus();
-  }, [handleTabChange]);
+  }, [handleTabChange, tabIds]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:overflow-hidden lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:gap-0" data-custom-layout-room-root="true">
+    <div className={`relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:overflow-hidden lg:gap-0 ${
+      roomType === "radio"
+        ? "lg:grid-cols-[minmax(0,1.28fr)_minmax(24rem,0.72fr)]"
+        : roomType === "request"
+          ? "lg:grid-cols-[minmax(0,1fr)_minmax(25rem,1fr)]"
+          : "lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)]"
+    }`} data-custom-layout-room-root="true">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
           <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" />
@@ -255,6 +282,7 @@ function RoomDashboardViewBase({
             onToggleLyrics={onToggleLyrics}
             onSeek={onSeek}
             socket={socket}
+            layoutVariant={roomType}
           />
         </div>
 
@@ -302,14 +330,16 @@ function RoomDashboardViewBase({
           id={`room-panel-${activeTab}`}
           role="tabpanel"
         >
-          <RoomRequestsPanel
-            roomSnapshot={roomSnapshot}
-            activeSessionId={activeSession?.userId ?? null}
-            onImportNeteaseTrack={onImportNeteaseTrack}
-            onImportQqMusicTrack={onImportQqMusicTrack}
-            onAddToQueue={onAddToQueue}
-            onUpdateRoom={onUpdateRoom}
-          />
+          {activeTab === "scenario" ? (
+            <RoomScenarioPanel
+              roomSnapshot={roomSnapshot}
+              activeSessionId={activeSession?.userId ?? null}
+              onImportNeteaseTrack={onImportNeteaseTrack}
+              onImportQqMusicTrack={onImportQqMusicTrack}
+              onAddToQueue={onAddToQueue}
+              onUpdateRoom={onUpdateRoom}
+            />
+          ) : null}
           {activeTab === "library" ? (
             <LibraryTabPanel
               tracks={roomSnapshot.tracks}
@@ -377,3 +407,58 @@ function RoomDashboardViewBase({
 }
 
 export const RoomDashboardView = memo(RoomDashboardViewBase);
+
+function RoomScenarioPanel({
+  roomSnapshot,
+  activeSessionId,
+  onImportNeteaseTrack,
+  onImportQqMusicTrack,
+  onAddToQueue,
+  onUpdateRoom
+}: {
+  roomSnapshot: RoomSnapshot;
+  activeSessionId: string | null;
+  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onAddToQueue: (trackId: string) => Promise<unknown>;
+  onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
+}) {
+  const roomType = roomSnapshot.room.roomType ?? "interactive";
+  if (roomType === "request") {
+    return <RoomRequestsPanel
+      activeSessionId={activeSessionId}
+      onAddToQueue={onAddToQueue}
+      onImportNeteaseTrack={onImportNeteaseTrack}
+      onImportQqMusicTrack={onImportQqMusicTrack}
+      onUpdateRoom={onUpdateRoom}
+      roomSnapshot={roomSnapshot}
+      variant="request"
+    />;
+  }
+  if (roomType === "radio") {
+    return <div className="grid gap-6"><RadioQueuePanel roomSnapshot={roomSnapshot} /><RoomRequestsPanel
+      activeSessionId={activeSessionId}
+      onAddToQueue={onAddToQueue}
+      onImportNeteaseTrack={onImportNeteaseTrack}
+      onImportQqMusicTrack={onImportQqMusicTrack}
+      onUpdateRoom={onUpdateRoom}
+      roomSnapshot={roomSnapshot}
+      variant="radio"
+    /></div>;
+  }
+  return null;
+}
+
+function RadioQueuePanel({ roomSnapshot }: { roomSnapshot: RoomSnapshot }) {
+  const currentTrackId = roomSnapshot.room.playback.currentTrackId;
+  const queueTracks = roomSnapshot.queue
+    .map((item) => roomSnapshot.tracks.find((track) => track.id === item.trackId))
+    .filter((track): track is TrackMeta => !!track);
+  const currentTrack = roomSnapshot.tracks.find((track) => track.id === currentTrackId) ?? null;
+
+  return <section className="border-b border-white/[0.08] pb-5">
+    <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-base font-semibold text-white">电台队列</h2><span className="shrink-0 text-xs text-white/45">{queueTracks.length} 首待播</span></div>
+    {currentTrack ? <div className="mb-4 flex min-w-0 items-center gap-3 border-l-2 border-accent py-1 pl-3"><span className="min-w-0"><strong className="block truncate text-sm font-medium text-white">{currentTrack.title}</strong><span className="mt-1 block truncate text-xs text-white/45">{currentTrack.artist}</span></span></div> : null}
+    <div className="divide-y divide-white/[0.07]">{queueTracks.filter((track) => track.id !== currentTrackId).slice(0, 6).map((track, index) => <div className="flex min-w-0 items-center justify-between gap-3 py-3" key={track.id}><span className="flex min-w-0 items-center gap-3"><span className="w-5 shrink-0 text-xs tabular-nums text-white/35">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0"><strong className="block truncate text-sm font-medium text-white/90">{track.title}</strong><span className="mt-1 block truncate text-xs text-white/45">{track.artist}</span></span></span><span className="shrink-0 text-xs tabular-nums text-white/40">{formatDuration(track.durationMs)}</span></div>)}</div>
+  </section>;
+}
