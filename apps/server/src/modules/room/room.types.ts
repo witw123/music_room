@@ -1,9 +1,11 @@
 import {
   defaultRoomMemberPermissions,
+  inactiveRadioAutopilot,
   radioAutopilotSchema,
   queueItemSchema,
   roomMemberPermissionsSchema,
   roomSchema,
+  roomTypeSchema,
   trackMetaSchema
 } from "@music-room/shared";
 import type {
@@ -88,10 +90,10 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
   const parsedNewMemberPermissions = roomMemberPermissionsSchema.safeParse(
     persisted.newMemberPermissions ?? persistedPlayback.newMemberPermissions
   );
-  const parsedRadioAutopilot = radioAutopilotSchema.safeParse(persistedPlayback.radioAutopilot);
-  if (!parsedRadioAutopilot.success) {
-    throw new Error(`Invalid persisted radio autopilot state: ${persisted.id}`);
-  }
+  const radioAutopilot = readPersistedRadioAutopilot(
+    persistedPlayback.radioAutopilot,
+    persisted.id
+  );
   const requests = Array.isArray((persistedPlayback as { requests?: unknown }).requests)
     ? (persistedPlayback as { requests: RoomRequest[] }).requests
     : [];
@@ -104,8 +106,8 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       description: persisted.description ?? null,
       hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
-      roomType: persisted.roomType as Room["roomType"],
-      radioAutopilot: parsedRadioAutopilot.data,
+      roomType: readPersistedRoomType(persisted.roomType, persisted.id),
+      radioAutopilot,
       requests,
       ...(parsedNewMemberPermissions.success
         ? { newMemberPermissions: parsedNewMemberPermissions.data }
@@ -173,7 +175,7 @@ export function normalizeRoomRecord(value: unknown): RoomRecord | null {
     return null;
   }
 
-  const roomResult = roomSchema.safeParse(value.room);
+  const roomResult = roomSchema.safeParse(upgradeLegacyRoomPayload(value.room));
   if (!roomResult.success) {
     return null;
   }
@@ -318,9 +320,57 @@ function normalizeQueue(value: unknown, trackIds: Set<string>): QueueItem[] {
   }
 
   return value.flatMap((item) => {
-    const parsed = queueItemSchema.safeParse(item);
+    const parsed = queueItemSchema.safeParse(upgradeLegacyQueueItem(item));
     return parsed.success && trackIds.has(parsed.data.trackId) ? [parsed.data] : [];
   });
+}
+
+function readPersistedRoomType(value: unknown, roomId: string): Room["roomType"] {
+  if (value === undefined) {
+    return "interactive";
+  }
+
+  const parsed = roomTypeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Invalid persisted room type: ${roomId}`);
+  }
+  return parsed.data;
+}
+
+function readPersistedRadioAutopilot(value: unknown, roomId: string) {
+  if (value === undefined) {
+    return { ...inactiveRadioAutopilot };
+  }
+
+  const parsed = radioAutopilotSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Invalid persisted radio autopilot state: ${roomId}`);
+  }
+  return parsed.data;
+}
+
+function upgradeLegacyRoomPayload(value: unknown) {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    ...(value.roomType === undefined ? { roomType: "interactive" } : {}),
+    ...(value.radioAutopilot === undefined ? { radioAutopilot: { ...inactiveRadioAutopilot } } : {})
+  };
+}
+
+function upgradeLegacyQueueItem(value: unknown) {
+  if (!isRecord(value) || value.source !== undefined || value.sourceSeedTrackId !== undefined) {
+    return value;
+  }
+
+  return {
+    ...value,
+    source: "manual",
+    sourceSeedTrackId: null
+  };
 }
 
 function normalizeRoomMembers(members: RoomMember[]) {

@@ -68,6 +68,94 @@ describe("room.types persistence helpers", () => {
     expect(record.room.playback.playbackRevision).toBe(2);
   });
 
+  it("upgrades rooms created before room types and queue sources existed", () => {
+    const record = deserializeRoomRecord({
+      id: "room_before_types",
+      hostId: "host_1",
+      joinCode: "ABC123",
+      visibility: "public",
+      playback: {
+        status: "paused",
+        currentTrackId: null,
+        currentQueueItemId: null,
+        sourceSessionId: "host_1",
+        sourcePeerId: null,
+        sourceTrackId: null,
+        positionMs: 0,
+        startedAt: null,
+        queueVersion: 1,
+        playbackRevision: 1,
+        mediaEpoch: 0
+      },
+      members: [],
+      tracks: [{
+        id: "track_legacy",
+        title: "Legacy track",
+        artist: "Artist",
+        album: null,
+        durationMs: 120_000,
+        bitrate: null,
+        sizeBytes: null,
+        codec: null,
+        mimeType: null,
+        fileHash: "a".repeat(64),
+        artworkUrl: null,
+        ownerSessionId: "host_1",
+        ownerNickname: "Host",
+        sourceType: "local_upload"
+      }],
+      queue: [{
+        id: "queue_legacy",
+        trackId: "track_legacy",
+        requestedBy: "Host",
+        requestedById: "host_1",
+        position: 0,
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }]
+    } satisfies PersistedRoomRecord);
+
+    expect(record.room.roomType).toBe("interactive");
+    expect(record.room.radioAutopilot).toEqual({
+      enabled: false,
+      seedTrackId: null,
+      seedProvider: null,
+      seedProviderTrackId: null
+    });
+    expect(record.queue).toEqual([
+      expect.objectContaining({ source: "manual", sourceSeedTrackId: null })
+    ]);
+  });
+
+  it("upgrades legacy Redis room records to interactive rooms", () => {
+    const record = normalizeRoomRecord({
+      room: {
+        id: "room_cached_before_types",
+        hostId: "host_1",
+        joinCode: "ABC123",
+        visibility: "public",
+        members: [],
+        playback: {
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host_1",
+          sourcePeerId: null,
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 1,
+          mediaEpoch: 0
+        }
+      },
+      tracks: [],
+      queue: []
+    });
+
+    expect(record?.room.roomType).toBe("interactive");
+    expect(record?.room.radioAutopilot.enabled).toBe(false);
+  });
+
   it("restores room and member permissions from the persisted playback payload", () => {
     const record = deserializeRoomRecord({
       id: "room_permissions",
