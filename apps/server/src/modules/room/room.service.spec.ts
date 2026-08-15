@@ -63,6 +63,85 @@ describe("RoomService", () => {
     jest.useRealTimers();
   });
 
+  it("lets only a radio host configure and append deduplicated autopilot songs", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "radio" });
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    const registerProviderTrack = (
+      trackId: string,
+      title: string,
+      artist: string,
+      provider: "netease" | "qqmusic" = "netease"
+    ) =>
+      roomService.registerTrack(snapshot.room.id, host.id, {
+        title,
+        artist,
+        album: null,
+        durationMs: 180_000,
+        bitrate: null,
+        sizeBytes: null,
+        codec: null,
+        mimeType: null,
+        fileHash: `hash_${trackId}`,
+        artworkUrl: null,
+        ownerSessionId: host.id,
+        ownerNickname: host.nickname,
+        sourceType: provider,
+        sourceRef: { provider, trackId }
+      });
+
+    const seed = await registerProviderTrack("1001", "Seed", "Seed Artist");
+    const candidates = [
+      await registerProviderTrack("1002", "One", "Artist One"),
+      await registerProviderTrack("1003", "Two", "Artist Two"),
+      await registerProviderTrack("1004", "Three", "Artist Three"),
+      await registerProviderTrack("1005", "Four", "Artist Four")
+    ];
+    const otherProviderCandidate = await registerProviderTrack(
+      "qq_1006",
+      "Other Provider",
+      "Artist Five",
+      "qqmusic"
+    );
+
+    await expect(
+      roomService.updateRadioAutopilot(snapshot.room.id, member.id, {
+        enabled: true,
+        seedTrackId: seed.id
+      })
+    ).rejects.toThrow("Only the host");
+
+    await roomService.updateRadioAutopilot(snapshot.room.id, host.id, {
+      enabled: true,
+      seedTrackId: seed.id
+    });
+    const appended = await roomService.appendRadioAutopilotQueueItems(
+      snapshot.room.id,
+      host.id,
+      [otherProviderCandidate.id, ...candidates.map((track) => track.id)]
+    );
+
+    expect(appended).toHaveLength(3);
+    expect(appended).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "autopilot", sourceSeedTrackId: seed.id })
+    ]));
+    expect(appended).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ trackId: otherProviderCandidate.id })
+    ]));
+    await expect(
+      roomService.appendRadioAutopilotQueueItems(snapshot.room.id, host.id, [candidates[3].id])
+    ).resolves.toEqual([]);
+    await expect(
+      roomService.appendRadioAutopilotQueueItems(snapshot.room.id, member.id, [candidates[3].id])
+    ).rejects.toThrow("Only the host");
+  });
+
   it("limits member management to the host and removes access after a kick", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
@@ -1886,6 +1965,11 @@ describe("RoomService", () => {
 
     const request = await roomService.createRoomRequest(requestRoom.room.id, member.id, requestInput);
     expect(request.status).toBe("pending");
+    const hostRequest = await roomService.createRoomRequest(requestRoom.room.id, host.id, {
+      ...requestInput,
+      providerTrackId: "003HOST"
+    });
+    expect(hostRequest).toMatchObject({ requesterId: host.id, status: "pending" });
     await expect(
       roomService.createRoomRequest(interactiveRoom.room.id, member.id, requestInput)
     ).rejects.toThrow("当前房间不支持点歌请求。");

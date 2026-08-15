@@ -14,6 +14,7 @@ function buildSnapshot(roomId = "room_1"): RoomSnapshot {
       joinCode: "ABC123",
       visibility: "public",
       roomType: "interactive",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       members: [],
       presenceRevision: 0,
       playback: {

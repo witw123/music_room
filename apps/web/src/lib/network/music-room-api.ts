@@ -61,6 +61,10 @@ export type QueueMutationResponse = {
   playback: PlaybackSnapshot;
 };
 
+export type RadioAutopilotQueueMutationResponse = QueueMutationResponse & {
+  appendedQueueItemIds: string[];
+};
+
 export type PlaybackHistoryProvider = "local_upload" | "netease" | "qqmusic";
 
 export type PlaybackHistoryRecord = {
@@ -394,6 +398,16 @@ export const musicRoomApi = {
     }),
   addQueueItem: (roomId: string, payload: { trackId: string }) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateRadioAutopilot: (roomId: string, payload: { enabled: boolean; seedTrackId: string | null }) =>
+    request<RoomSnapshot>(`/v1/rooms/${roomId}/radio-autopilot`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  appendRadioAutopilotQueueItems: (roomId: string, payload: { trackIds: string[] }) =>
+    request<RadioAutopilotQueueMutationResponse>(`/v1/rooms/${roomId}/radio-autopilot/queue`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),

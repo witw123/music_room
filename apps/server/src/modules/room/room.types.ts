@@ -1,5 +1,6 @@
 import {
   defaultRoomMemberPermissions,
+  radioAutopilotSchema,
   queueItemSchema,
   roomMemberPermissionsSchema,
   roomSchema,
@@ -59,13 +60,15 @@ type PersistedPlayback = Partial<PlaybackSnapshot> & {
   roomRevision?: number;
   newMemberPermissions?: unknown;
   memberPermissionProfiles?: unknown;
+  radioAutopilot?: unknown;
 };
 
 export function serializePlaybackForPersistence(
-  room: Pick<Room, "playback" | "presenceRevision" | "roomRevision">
+  room: Pick<Room, "playback" | "presenceRevision" | "roomRevision" | "radioAutopilot">
 ) {
   return {
     ...room.playback,
+    radioAutopilot: room.radioAutopilot,
     presenceRevision: room.presenceRevision,
     roomRevision: room.roomRevision ?? 0
   };
@@ -85,6 +88,10 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
   const parsedNewMemberPermissions = roomMemberPermissionsSchema.safeParse(
     persisted.newMemberPermissions ?? persistedPlayback.newMemberPermissions
   );
+  const parsedRadioAutopilot = radioAutopilotSchema.safeParse(persistedPlayback.radioAutopilot);
+  if (!parsedRadioAutopilot.success) {
+    throw new Error(`Invalid persisted radio autopilot state: ${persisted.id}`);
+  }
   const requests = Array.isArray((persistedPlayback as { requests?: unknown }).requests)
     ? (persistedPlayback as { requests: RoomRequest[] }).requests
     : [];
@@ -98,6 +105,7 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
       roomType: persisted.roomType as Room["roomType"],
+      radioAutopilot: parsedRadioAutopilot.data,
       requests,
       ...(parsedNewMemberPermissions.success
         ? { newMemberPermissions: parsedNewMemberPermissions.data }

@@ -44,12 +44,14 @@ describe("request contracts", () => {
     expect(createRoomRequestSchema.parse({
       visibility: "private",
       roomType: "interactive",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       name: "  Study Room ",
       description: "  For late night listening  ",
       password: "secret"
     })).toEqual({
       visibility: "private",
       roomType: "interactive",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       name: "Study Room",
       description: "For late night listening",
       password: "secret"
@@ -66,6 +68,7 @@ describe("request contracts", () => {
     expect(() => createRoomRequestSchema.parse({
       visibility: "public",
       roomType: "radio",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       newMemberPermissions: { library: true, queue: true, player: true }
     })).toThrow();
     expect(updateRoomRequestSchema.parse({
@@ -78,6 +81,7 @@ describe("request contracts", () => {
     expect(() => updateRoomRequestSchema.parse({
       visibility: "public",
       roomType: "radio",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       name: "Room"
     })).toThrow();
   });

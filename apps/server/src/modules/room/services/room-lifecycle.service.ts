@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Playlist, Room, RoomMemberPermissions, RoomType } from "@music-room/shared";
-import { defaultRoomMemberPermissions, getNewMemberPermissions } from "@music-room/shared";
+import {
+  defaultRoomMemberPermissions,
+  getNewMemberPermissions,
+  inactiveRadioAutopilot
+} from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import {
   assertHost,
@@ -67,6 +71,7 @@ export class RoomLifecycleService {
       hasPassword: !!password,
       visibility,
       roomType,
+      radioAutopilot: { ...inactiveRadioAutopilot },
       requests: [],
       newMemberPermissions: roomType === "interactive"
         ? (metadata.newMemberPermissions

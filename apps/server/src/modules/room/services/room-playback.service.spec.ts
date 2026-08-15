@@ -73,6 +73,7 @@ function record(positionMs: number, nextOwnerSessionId = "owner"): RoomRecord {
       hasPassword: false,
       visibility: "private",
       roomType: "interactive",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       members: [],
       playback,
       presenceRevision: 1,
@@ -85,6 +86,8 @@ function record(positionMs: number, nextOwnerSessionId = "owner"): RoomRecord {
         trackId: first.id,
         requestedBy: "owner",
         requestedById: "owner",
+        source: "manual" as const,
+        sourceSeedTrackId: null,
         position: 0,
         createdAt: "2026-07-19T00:00:00.000Z"
       },
@@ -93,6 +96,8 @@ function record(positionMs: number, nextOwnerSessionId = "owner"): RoomRecord {
         trackId: second.id,
         requestedBy: "owner",
         requestedById: "owner",
+        source: "manual" as const,
+        sourceSeedTrackId: null,
         position: 1,
         createdAt: "2026-07-19T00:00:01.000Z"
       }
@@ -179,6 +184,8 @@ describe("RoomPlaybackService gapless playback", () => {
         trackId: item.id,
         requestedBy: "owner",
         requestedById: "owner",
+        source: "manual" as const,
+        sourceSeedTrackId: null,
         position: index + 2,
         createdAt: `2026-07-19T00:00:0${index + 2}.000Z`
       }))

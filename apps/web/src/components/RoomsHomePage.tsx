@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
+import { RoomDirectoryCard } from "@/components/RoomDirectoryCard";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
@@ -396,11 +397,10 @@ export function RoomsHomePage({
             <span className="text-sm text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid w-full grid-cols-1 justify-center gap-5 sm:grid-cols-[repeat(auto-fit,minmax(20rem,26rem))] xl:gap-6">
               {visibleRooms.map((item) => (
                 <RoomDirectoryCard
                   key={item.room.id}
-                  isAway={item.room.id === effectiveAwayRoomId}
                   room={item}
                   onOpen={() => openRoomDetails(item)}
                 />
@@ -621,55 +621,6 @@ export function RoomsHomePage({
       ) : null}
     </main>
   );
-}
-
-function RoomDirectoryCard({
-  room,
-  isAway,
-  onOpen
-}: {
-  room: RoomDirectoryItem;
-  isAway: boolean;
-  onOpen: () => void;
-}) {
-  return <DirectoryCardFrame onOpen={onOpen} room={room}>
-    <div className="flex min-h-[172px] flex-col p-5">
-      <CardMeta isAway={isAway} room={room} />
-      <div className="mt-6">
-        <h3 className="truncate text-base font-semibold text-foreground">{room.room.name}</h3>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">{room.room.description?.trim() || `房主 ${room.room.directoryHostNickname || "未知"}`}</p>
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-3 pt-3 text-xs text-foreground-muted">
-        <span>{room.room.playbackStatus === "playing" ? "播放中" : "已暂停"}</span>
-        <span>{room.room.directoryQueueDepth} 首在队列</span>
-      </div>
-    </div>
-  </DirectoryCardFrame>;
-}
-
-function DirectoryCardFrame({ children, onOpen, room }: { children: ReactNode; onOpen: () => void; room: RoomDirectoryItem }) {
-  return <article
-    className="group relative min-h-[172px] cursor-pointer overflow-hidden rounded-xl border border-surface-border bg-surface/45 text-left shadow-[0_14px_40px_rgba(0,0,0,0.22)] transition-[transform,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:border-accent/70 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-    onClick={onOpen}
-    onKeyDown={(event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        onOpen();
-      }
-    }}
-    role="button"
-    tabIndex={0}
-    aria-label={`进入${room.room.name}`}
-  >{children}</article>;
-}
-
-function CardMeta({ isAway, room }: { isAway: boolean; room: RoomDirectoryItem }) {
-  return <div className="flex items-center justify-between gap-3">
-    <span className="font-mono text-[11px] font-semibold tracking-[0.1em] text-foreground-muted">{room.room.joinCode}</span>
-    <span className="ml-auto text-xs text-foreground-muted">{room.room.directoryOnlineMemberCount} 人在线</span>
-    {room.room.hasPassword ? <span className="text-[11px] text-foreground-muted">需密码</span> : null}
-    {isAway ? <span className="sr-only">已暂离</span> : null}
-  </div>;
 }
 
 function roomTypeLabel(roomType: RoomType) {

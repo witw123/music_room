@@ -83,7 +83,7 @@ describe("BottomPlayer source", () => {
     );
     const shellSource = readFileSync(new URL("./room/RoomAppShell.tsx", import.meta.url), "utf8");
 
-    expect(shellSource).toContain("canSeekPlayback={true}");
+    expect(shellSource).toContain("canSeekPlayback={!isHostControlledRoom || isRoomHost}");
     expect(shellSource).not.toContain("activePlaybackSource");
     expect(controllerSource).toContain("canSeekPlayback={canSeekPlayback}");
     expect(controllerSource).toContain("hasRoomPermission(");
@@ -104,6 +104,12 @@ describe("BottomPlayer source", () => {
     expect(playerSource).not.toContain("canControlPlayback && !isPlaybackBarrierBlocked");
     expect(controllerSource).toContain("playbackBarrier?.holdPositionMs");
     expect(controllerSource).not.toContain("isPlaybackBarrierBlocked ? 0 : progressMs");
+  });
+
+  it("keeps the room mobile player above the mobile navigation layer", () => {
+    const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain('bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[80]');
   });
 
   it("commits range seeking for pointer and keyboard interaction", () => {

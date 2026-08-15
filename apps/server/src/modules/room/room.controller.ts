@@ -14,6 +14,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import {
+  appendRadioAutopilotQueueRequestSchema,
   computeAssetId,
   createRoomRequestSchema,
   createRoomSongRequestSchema,
@@ -21,6 +22,7 @@ import {
   registerTrackRequestSchema,
   registerTracksRequestSchema,
   updateRoomMemberPermissionsRequestSchema,
+  updateRadioAutopilotRequestSchema,
   updateRoomRequestSchema,
   type Playlist,
   type RegisterTrackRequest,
@@ -387,6 +389,35 @@ export class RoomController {
     const request = await this.roomService.decideRoomRequest(roomId, userId, requestId, "rejected");
     await this.roomRealtimePublisher.emitSnapshot(roomId);
     return request;
+  }
+
+  @Patch(":roomId/radio-autopilot")
+  async updateRadioAutopilot(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: unknown
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(updateRadioAutopilotRequestSchema, body);
+    await this.roomService.updateRadioAutopilot(roomId, userId, payload);
+    return this.roomRealtimePublisher.emitSnapshot(roomId);
+  }
+
+  @Post(":roomId/radio-autopilot/queue")
+  async appendRadioAutopilotQueueItems(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: unknown
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(appendRadioAutopilotQueueRequestSchema, body);
+    const appended = await this.roomService.appendRadioAutopilotQueueItems(roomId, userId, payload.trackIds);
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback,
+      appendedQueueItemIds: appended.map((item) => item.id)
+    };
   }
 
   @Get(":roomId/reactions")

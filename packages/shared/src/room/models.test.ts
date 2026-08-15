@@ -15,6 +15,7 @@ describe("roomSnapshotSchema", () => {
         joinCode: "ABC123",
         visibility: "private",
         roomType: "interactive",
+        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
         members: [
           {
             id: "guest_1",

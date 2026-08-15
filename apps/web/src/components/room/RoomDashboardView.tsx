@@ -75,6 +75,7 @@ export type RoomDashboardViewProps = {
   onAddToQueue: (trackId: string) => Promise<unknown>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
+  onRefreshRoom: () => Promise<RoomSnapshot | null>;
   socket: RoomSocket | null;
   onTabChange?: (tab: ManagementTabId) => void;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;

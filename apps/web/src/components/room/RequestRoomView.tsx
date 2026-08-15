@@ -45,20 +45,6 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     [requests]
   );
 
-  const submitRequest = async (track: ProviderCandidate) => {
-    setMessage(null);
-    await musicRoomApi.createRoomRequest(roomId, {
-      provider: track.provider,
-      providerTrackId: track.providerTrackId,
-      title: track.title,
-      artist: track.artist,
-      album: track.album ?? null,
-      durationMs: track.durationMs,
-      artworkUrl: track.artworkUrl ?? null
-    });
-    setMessage(`《${track.title}》已送入房主审核队列。`);
-  };
-
   const decideRequest = async (request: RoomRequest, decision: "approved" | "rejected") => {
     if (pendingRequestId) return;
     setPendingRequestId(request.id);
@@ -91,6 +77,24 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     }
   };
 
+  const submitRequest = async (track: ProviderCandidate) => {
+    setMessage(null);
+    const request = await musicRoomApi.createRoomRequest(roomId, {
+      provider: track.provider,
+      providerTrackId: track.providerTrackId,
+      title: track.title,
+      artist: track.artist,
+      album: track.album ?? null,
+      durationMs: track.durationMs,
+      artworkUrl: track.artworkUrl ?? null
+    });
+    if (isHost) {
+      await decideRequest(request, "approved");
+      return;
+    }
+    setMessage(`《${track.title}》已送入房主审核队列。`);
+  };
+
   return <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-32" data-room-view="request">
     <div className="grid min-h-full min-w-0 lg:grid-cols-[minmax(0,0.94fr)_minmax(25rem,0.76fr)]">
       <section className="min-h-[31rem] border-b border-white/[0.06] lg:min-h-0 lg:border-b-0 lg:border-r">
@@ -101,17 +105,25 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           <header className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-4">
             <div>
               <h1 className="text-xl font-semibold text-foreground">点歌台</h1>
-              <p className="mt-1 text-sm text-foreground-muted">{isHost ? "审核点歌并安排接下来的播放。" : "搜索歌曲，提交给房主审核。"}</p>
+              <p className="mt-1 text-sm text-foreground-muted">{isHost ? "审核成员点歌，自己的点歌会直接加入队列。" : "搜索歌曲，提交给房主审核。"}</p>
             </div>
             <span className="font-mono text-xs text-foreground-muted">{pendingRequests.length} 首待处理</span>
           </header>
 
-          {isHost ? <RequestInbox
-            pendingRequestId={pendingRequestId}
-            pendingRequests={pendingRequests}
-            handledRequests={handledRequests}
-            onDecide={decideRequest}
-          /> : <>
+          {isHost ? <>
+            <RoomProviderTrackSearch
+              mode="request"
+              roomTracks={props.roomSnapshot.tracks}
+              onRequestTrack={submitRequest}
+              testId="request-room-host-search"
+            />
+            <RequestInbox
+              pendingRequestId={pendingRequestId}
+              pendingRequests={pendingRequests}
+              handledRequests={handledRequests}
+              onDecide={decideRequest}
+            />
+          </> : <>
             <RoomProviderTrackSearch
               mode="request"
               roomTracks={props.roomSnapshot.tracks}
@@ -235,6 +247,10 @@ async function importRequestedTrack(
     throw new Error("本地点歌需要房主手动导入后再加入队列。");
   }
 
+  snapshotRef.current = await musicRoomApi.getRoom(request.roomId);
+  const importedTrack = findProviderTrack(snapshotRef.current.tracks, request);
+  if (importedTrack) return importedTrack;
+
   return waitForImportedTrack(snapshotRef, request);
 }
 
@@ -247,6 +263,7 @@ async function waitForImportedTrack(
   request: RoomRequest
 ) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
+    snapshotRef.current = await musicRoomApi.getRoom(request.roomId);
     const track = findProviderTrack(snapshotRef.current.tracks, request);
     if (track) return track;
     await new Promise<void>((resolve) => window.setTimeout(resolve, 200));

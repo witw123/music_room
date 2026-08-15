@@ -247,6 +247,13 @@ The stage should dominate attention first. The workspace should feel structured 
 - Emphasize room visibility, online count, host, and join affordance
 - Cards should feel operational and quick to scan
 
+### Room Directory Themes
+
+- Directory cards may use a room-format accent to make interactive, request, and radio rooms distinguishable at a glance.
+- These accents are scoped to the card frame, stage, primary action, and signal graphic; they do not replace electric blue as the global product accent.
+- Online presence continues to use the shared success color, and each card displays the online count only once in its top-right status.
+- Directory stages use abstract interface compositions rather than stock photography or invented member and track data.
+
 ## Do
 
 - Keep backgrounds deep black with subtle structure

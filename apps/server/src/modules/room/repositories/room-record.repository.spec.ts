@@ -9,6 +9,7 @@ function createRoomRecord(roomRevision: number): RoomRecord {
     joinCode: "ABC123",
     visibility: "public",
     roomType: "interactive",
+    radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
     members: [
       {
         id: "host_1",
@@ -172,6 +173,8 @@ describe("RoomRecordRepository", () => {
       trackId: "track_1",
       requestedBy: "Host",
       requestedById: "host_1",
+      source: "manual",
+      sourceSeedTrackId: null,
       position: 0,
       createdAt: "2026-01-01T00:00:00.000Z"
     });

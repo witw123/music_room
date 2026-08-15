@@ -82,6 +82,7 @@ type RoomWorkspaceProps = {
   onAddToQueue: (trackId: string) => Promise<unknown>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
+  onRefreshRoom: () => Promise<RoomSnapshot | null>;
   onTabChange: (tab: "library" | "local" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   isLyricsOpen: boolean;
@@ -146,6 +147,7 @@ function RoomWorkspaceBase({
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
+  onRefreshRoom,
   onTabChange,
   onDiagnosticsVisibilityChange,
   isLyricsOpen,
@@ -253,6 +255,7 @@ function RoomWorkspaceBase({
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
+              onRefreshRoom={onRefreshRoom}
               socket={socket}
               onTabChange={onTabChange}
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}

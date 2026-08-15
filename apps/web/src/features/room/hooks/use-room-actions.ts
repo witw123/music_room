@@ -193,6 +193,11 @@ export function useRoomActions({
     [dispatchRoomStateEvent]
   );
 
+  const refreshRoomSnapshot = useCallback(async () => {
+    if (!roomSnapshot) return null;
+    return syncRoomSnapshot(roomSnapshot.room.id);
+  }, [roomSnapshot, syncRoomSnapshot]);
+
   const updateRoom = useCallback(
     async (input: UpdateRoomRequest) => {
       if (!activeSession || !roomSnapshot || roomSnapshot.room.hostId !== activeSession.userId) {
@@ -910,6 +915,7 @@ export function useRoomActions({
   }, [roomSnapshot, nextTrack]);
 
   return {
+    refreshRoomSnapshot,
     leaveRoom,
     deleteRoom,
     deleteTrack,

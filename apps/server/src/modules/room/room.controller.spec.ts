@@ -34,7 +34,13 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
         playbackRevision: 1,
         mediaEpoch: 0
       },
-      ...overrides
+      ...overrides,
+      radioAutopilot: overrides?.radioAutopilot ?? {
+        enabled: false,
+        seedTrackId: null,
+        seedProvider: null,
+        seedProviderTrackId: null
+      }
     },
     tracks: [],
     queue: [],
@@ -337,6 +343,73 @@ describe("RoomController", () => {
     expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
     expect(roomRealtimePublisher.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);
     expect(roomRealtimePublisher.emitRoomMissing).toHaveBeenCalledWith("room_1");
+  });
+
+  it("updates radio autopilot settings and emits the refreshed room snapshot", async () => {
+    const snapshot = buildSnapshot({ roomType: "radio" });
+    const roomService = {
+      updateRadioAutopilot: jest.fn().mockResolvedValue(snapshot.room.radioAutopilot)
+    };
+    const roomRealtimePublisher = {
+      ...createRoomRealtimePublisherMock(),
+      emitSnapshot: jest.fn().mockResolvedValue(snapshot)
+    };
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      createAuthServiceMock() as never,
+      createPlaylistServiceMock() as never
+    );
+
+    await expect(controller.updateRadioAutopilot("room_1", "token", {
+      enabled: true,
+      seedTrackId: "track_seed"
+    })).resolves.toEqual(snapshot);
+
+    expect(roomService.updateRadioAutopilot).toHaveBeenCalledWith("room_1", "guest_host", {
+      enabled: true,
+      seedTrackId: "track_seed"
+    });
+    expect(roomRealtimePublisher.emitSnapshot).toHaveBeenCalledWith("room_1");
+  });
+
+  it("returns the standard queue mutation payload for an autopilot refill", async () => {
+    const snapshot = buildSnapshot({ roomType: "radio" });
+    const appended = {
+      id: "queue_1",
+      trackId: "track_1",
+      requestedBy: "自动推荐",
+      requestedById: "guest_host",
+      source: "autopilot" as const,
+      sourceSeedTrackId: "track_seed",
+      position: 0,
+      createdAt: new Date().toISOString()
+    };
+    snapshot.queue = [appended];
+    const roomService = {
+      appendRadioAutopilotQueueItems: jest.fn().mockResolvedValue([appended])
+    };
+    const roomRealtimePublisher = {
+      ...createRoomRealtimePublisherMock(),
+      emitQueueSnapshot: jest.fn().mockResolvedValue(snapshot)
+    };
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      createAuthServiceMock() as never,
+      createPlaylistServiceMock() as never
+    );
+
+    await expect(controller.appendRadioAutopilotQueueItems("room_1", "token", {
+      trackIds: ["track_1"]
+    })).resolves.toEqual({
+      queue: snapshot.queue,
+      playback: snapshot.room.playback,
+      appendedQueueItemIds: ["queue_1"]
+    });
+
+    expect(roomService.appendRadioAutopilotQueueItems).toHaveBeenCalledWith("room_1", "guest_host", ["track_1"]);
+    expect(roomRealtimePublisher.emitQueueSnapshot).toHaveBeenCalledWith("room_1");
   });
 
   it("finishes room deletion and broadcasts when playlist cleanup is unavailable", async () => {

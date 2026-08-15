@@ -62,7 +62,13 @@ function createRoomSnapshot(
       presenceRevision: 1,
       roomRevision: 1,
       playback,
-      ...roomOverrides
+      ...roomOverrides,
+      radioAutopilot: roomOverrides?.radioAutopilot ?? {
+        enabled: false,
+        seedTrackId: null,
+        seedProvider: null,
+        seedProviderTrackId: null
+      }
     },
     tracks: tracks ?? [
       {
@@ -88,6 +94,8 @@ function createRoomSnapshot(
         trackId: "track_1",
         requestedBy: "Host",
         requestedById: "host",
+        source: "manual",
+        sourceSeedTrackId: null,
         position: 0,
         createdAt: "2026-04-04T00:00:00.000Z"
       }

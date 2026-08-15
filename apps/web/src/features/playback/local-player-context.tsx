@@ -928,6 +928,8 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       trackId: track.id,
       requestedBy: "本地歌单",
       requestedById: localQueueOwnerId,
+      source: "manual" as const,
+      sourceSeedTrackId: null,
       position,
       createdAt: track.createdAt
     })),

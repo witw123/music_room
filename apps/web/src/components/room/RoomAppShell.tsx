@@ -156,6 +156,7 @@ export function RoomAppShell({
           onAddToQueue={roomActions.addToQueue}
           onDeleteTrack={roomActions.deleteTrack}
           onPlayTrack={playbackActions.handlePlayTrack}
+          onRefreshRoom={roomActions.refreshRoomSnapshot}
           onTabChange={pageState.setActiveDashboardTab}
           onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
           isLyricsOpen={isLyricsOpen}

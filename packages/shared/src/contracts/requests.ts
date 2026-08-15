@@ -164,6 +164,28 @@ export const addQueueItemRequestSchema = z
   })
   .strict();
 
+export const updateRadioAutopilotRequestSchema = z
+  .object({
+    enabled: z.boolean(),
+    seedTrackId: stringId.nullable()
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.enabled && !payload.seedTrackId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["seedTrackId"],
+        message: "开启自动推荐需要选择种子歌曲。"
+      });
+    }
+  });
+
+export const appendRadioAutopilotQueueRequestSchema = z
+  .object({
+    trackIds: z.array(stringId).min(1).max(3)
+  })
+  .strict();
+
 export const reorderQueueRequestSchema = z
   .object({
     queueItemIds: z.array(stringId).max(500)
@@ -241,6 +263,8 @@ export type JoinRoomByCodeRequest = z.infer<typeof joinRoomByCodeRequestSchema>;
 export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
 export type RegisterTracksRequest = z.infer<typeof registerTracksRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;
+export type UpdateRadioAutopilotRequest = z.infer<typeof updateRadioAutopilotRequestSchema>;
+export type AppendRadioAutopilotQueueRequest = z.infer<typeof appendRadioAutopilotQueueRequestSchema>;
 export type ReorderQueueRequest = z.infer<typeof reorderQueueRequestSchema>;
 export type SetNextQueueItemRequest = z.infer<typeof setNextQueueItemRequestSchema>;
 export type UpdatePlaybackRequest = z.infer<typeof updatePlaybackRequestSchema>;

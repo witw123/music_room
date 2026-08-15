@@ -6,6 +6,35 @@ export const roomPresenceStateSchema = z.enum(["online", "reconnecting", "offlin
 export const roomTypeSchema = z.enum(["interactive", "request", "radio"]);
 export type RoomType = z.infer<typeof roomTypeSchema>;
 
+export const radioAutopilotSchema = z
+  .object({
+    enabled: z.boolean(),
+    seedTrackId: z.string().nullable(),
+    seedProvider: z.enum(["netease", "qqmusic"]).nullable(),
+    seedProviderTrackId: z.string().nullable()
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.enabled &&
+      (!value.seedTrackId || !value.seedProvider || !value.seedProviderTrackId)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Autopilot requires a provider-backed seed track."
+      });
+    }
+  });
+
+export type RadioAutopilot = z.infer<typeof radioAutopilotSchema>;
+
+export const inactiveRadioAutopilot: RadioAutopilot = {
+  enabled: false,
+  seedTrackId: null,
+  seedProvider: null,
+  seedProviderTrackId: null
+};
+
 export const roomDirectoryNowPlayingSchema = z.object({
   title: z.string().min(1).max(240),
   artist: z.string().min(1).max(240),
@@ -64,6 +93,7 @@ export const roomSchema = z.object({
   hasPassword: z.boolean().optional(),
   visibility: z.enum(["private", "public"]),
   roomType: roomTypeSchema,
+  radioAutopilot: radioAutopilotSchema,
   requests: z.array(roomRequestSchema).optional(),
   // Optional so snapshots persisted before room-level defaults remain valid.
   newMemberPermissions: roomMemberPermissionsSchema.optional(),

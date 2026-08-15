@@ -53,6 +53,7 @@ function createSnapshot(overrides: {
       joinCode: "ABC123",
       visibility: "public",
       roomType: "interactive",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       members: [],
       presenceRevision: 1,
       roomRevision: 1,

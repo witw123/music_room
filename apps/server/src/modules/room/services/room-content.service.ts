@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { QueueItem, RoomTrackDeletion, TrackMeta } from "@music-room/shared";
+import type { QueueItem, RadioAutopilot, RoomTrackDeletion, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import {
+  assertHost,
   assertMember,
   assertPermission,
   incrementPlaybackRevision,
@@ -209,6 +210,8 @@ export class RoomContentService {
       trackId,
       requestedBy: session.nickname,
       requestedById: session.id,
+      source: "manual",
+      sourceSeedTrackId: null,
       position: record.queue.length,
       createdAt: new Date().toISOString()
     };
@@ -249,6 +252,8 @@ export class RoomContentService {
         trackId,
         requestedBy: session.nickname,
         requestedById: session.id,
+        source: "manual",
+        sourceSeedTrackId: null,
         position: record.queue.length + offset,
         createdAt: new Date().toISOString()
       })
@@ -260,6 +265,99 @@ export class RoomContentService {
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
+  }
+
+  async updateRadioAutopilot(
+    roomId: string,
+    sessionId: string,
+    input: { enabled: boolean; seedTrackId: string | null }
+  ): Promise<RadioAutopilot> {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    assertHost(record, sessionId);
+    if (record.room.roomType !== "radio") {
+      throw new BadRequestException("只有自由电台可以开启自动推荐。");
+    }
+
+    if (!input.enabled) {
+      record.room.radioAutopilot = {
+        enabled: false,
+        seedTrackId: null,
+        seedProvider: null,
+        seedProviderTrackId: null
+      };
+    } else {
+      const seedTrack = record.tracks.find((track) => track.id === input.seedTrackId);
+      if (!seedTrack?.sourceRef || (seedTrack.sourceType !== "netease" && seedTrack.sourceType !== "qqmusic")) {
+        throw new BadRequestException("请选择已导入的网易云音乐或 QQ 音乐歌曲作为种子。");
+      }
+      record.room.radioAutopilot = {
+        enabled: true,
+        seedTrackId: seedTrack.id,
+        seedProvider: seedTrack.sourceRef.provider,
+        seedProviderTrackId: seedTrack.sourceRef.trackId
+      };
+    }
+
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.room.radioAutopilot;
+  }
+
+  async appendRadioAutopilotQueueItems(
+    roomId: string,
+    sessionId: string,
+    trackIds: string[]
+  ): Promise<QueueItem[]> {
+    const session = await this.authService.getUserOrThrow(sessionId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+    assertHost(record, sessionId);
+    if (record.room.roomType !== "radio" || !record.room.radioAutopilot.enabled) {
+      throw new BadRequestException("当前电台未开启自动推荐。");
+    }
+
+    const pendingDepth = getRadioPendingQueueDepth(record);
+    const availableSlots = Math.min(3 - pendingDepth, maxRoomQueueItems - record.queue.length);
+    if (availableSlots <= 0) return [];
+
+    const queuedTrackIds = new Set(record.queue.map((item) => item.trackId));
+    const recentTracks = getRecentRadioTracks(record, 50);
+    const recentTrackIds = new Set(recentTracks.map((track) => track.id));
+    const recentArtists = new Set(
+      getRecentRadioTracks(record, 3).map((track) => normalizeArtist(track.artist))
+    );
+    const candidates = trackIds
+      .map((trackId) => record.tracks.find((track) => track.id === trackId))
+      .filter((track): track is TrackMeta => !!track)
+      .filter((track) =>
+        track.id !== record.room.radioAutopilot.seedTrackId &&
+        track.sourceRef?.provider === record.room.radioAutopilot.seedProvider &&
+        track.id !== record.room.playback.currentTrackId &&
+        !queuedTrackIds.has(track.id) &&
+        !recentTrackIds.has(track.id) &&
+        !recentArtists.has(normalizeArtist(track.artist))
+      )
+      .slice(0, availableSlots);
+
+    const nextItems = candidates.map((track, offset): QueueItem => ({
+      id: `queue_${randomUUID()}`,
+      trackId: track.id,
+      requestedBy: "自动推荐",
+      requestedById: session.id,
+      source: "autopilot",
+      sourceSeedTrackId: record.room.radioAutopilot.seedTrackId,
+      position: record.queue.length + offset,
+      createdAt: new Date().toISOString()
+    }));
+    if (nextItems.length === 0) return [];
+
+    record.queue.push(...nextItems);
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, nextItems.map((item) => item.trackId));
+    incrementQueueVersion(record.room.playback);
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return nextItems;
   }
 
   async removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
@@ -412,4 +510,27 @@ export class RoomContentService {
       throw new BadRequestException("原始音频资源超过允许的最大大小。");
     }
   }
+}
+
+function getRadioPendingQueueDepth(record: RoomRecord) {
+  const currentQueueItemId = record.room.playback.currentQueueItemId;
+  if (!currentQueueItemId) return record.queue.length;
+  const currentIndex = record.queue.findIndex((item) => item.id === currentQueueItemId);
+  return currentIndex < 0 ? record.queue.length : record.queue.length - currentIndex - 1;
+}
+
+function getRecentRadioTracks(record: RoomRecord, limit: number) {
+  const currentQueueItemId = record.room.playback.currentQueueItemId;
+  const currentIndex = currentQueueItemId
+    ? record.queue.findIndex((item) => item.id === currentQueueItemId)
+    : -1;
+  if (currentIndex < 0) return [];
+  return record.queue
+    .slice(Math.max(0, currentIndex - limit + 1), currentIndex + 1)
+    .map((item) => record.tracks.find((track) => track.id === item.trackId))
+    .filter((track): track is TrackMeta => !!track);
+}
+
+function normalizeArtist(value: string) {
+  return value.trim().toLocaleLowerCase();
 }

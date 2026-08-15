@@ -94,6 +94,7 @@ describe("LocalRepository", () => {
         joinCode: "ROOM01",
         visibility: "private",
         roomType: "interactive",
+        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
         members: [],
         playback: {
           status: "paused",

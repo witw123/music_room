@@ -703,6 +703,18 @@ export class RoomService {
     return this.contentService.setNextQueueItem(roomId, actorSessionId, queueItemId);
   }
 
+  updateRadioAutopilot(
+    roomId: string,
+    sessionId: string,
+    input: { enabled: boolean; seedTrackId: string | null }
+  ) {
+    return this.contentService.updateRadioAutopilot(roomId, sessionId, input);
+  }
+
+  appendRadioAutopilotQueueItems(roomId: string, sessionId: string, trackIds: string[]) {
+    return this.contentService.appendRadioAutopilotQueueItems(roomId, sessionId, trackIds);
+  }
+
   reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
     return this.contentService.reorderQueue(roomId, actorSessionId, queueItemIds);
   }

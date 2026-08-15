@@ -91,6 +91,8 @@ export const queueItemSchema = z.object({
   trackId: z.string(),
   requestedBy: z.string(),
   requestedById: z.string(),
+  source: z.enum(["manual", "autopilot"]),
+  sourceSeedTrackId: z.string().nullable(),
   position: z.number().int().nonnegative(),
   createdAt: z.string().datetime()
 });

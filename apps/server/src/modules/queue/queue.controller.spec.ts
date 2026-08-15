@@ -9,6 +9,7 @@ function buildSnapshot(): RoomSnapshot {
       joinCode: "ABC123",
       visibility: "public",
       roomType: "interactive",
+      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       members: [
         {
           id: "guest_host",
@@ -41,6 +42,8 @@ function buildSnapshot(): RoomSnapshot {
         trackId: "track_1",
         requestedBy: "Host",
         requestedById: "guest_host",
+        source: "manual",
+        sourceSeedTrackId: null,
         position: 0,
         createdAt: new Date().toISOString()
       }
