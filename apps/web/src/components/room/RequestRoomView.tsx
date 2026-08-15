@@ -28,7 +28,10 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     snapshotRef.current = props.roomSnapshot;
   }, [props.roomSnapshot]);
 
-  const requests = props.roomSnapshot.room.requests ?? [];
+  const requests = useMemo(
+    () => props.roomSnapshot.room.requests ?? [],
+    [props.roomSnapshot.room.requests]
+  );
   const myRequests = useMemo(
     () => requests.filter((request) => request.requesterId === props.activeSession?.userId),
     [props.activeSession?.userId, requests]

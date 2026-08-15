@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";

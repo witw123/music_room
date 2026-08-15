@@ -3,8 +3,7 @@ import type {
   Playlist,
   ProviderAlbumFavorite,
   QqMusicAccountStatus,
-  RoomDirectoryItem,
-  RoomSnapshot
+  RoomDirectoryItem
 } from "@music-room/shared";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";

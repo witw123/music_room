@@ -5,7 +5,6 @@ import type {
   IceConfigResponse,
   RoomMediaConnectionState,
   RoomDirectoryItem,
-  RoomSnapshot,
   Playlist,
   RoomPlaybackReadinessPayload
 } from "@music-room/shared";
