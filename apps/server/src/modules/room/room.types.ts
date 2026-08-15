@@ -57,17 +57,15 @@ export type PersistedRoomRecord = {
 type PersistedPlayback = Partial<PlaybackSnapshot> & {
   presenceRevision?: number;
   roomRevision?: number;
-  radioAutoFill?: boolean;
   newMemberPermissions?: unknown;
   memberPermissionProfiles?: unknown;
 };
 
 export function serializePlaybackForPersistence(
-  room: Pick<Room, "playback" | "presenceRevision" | "roomRevision" | "radioAutoFill">
+  room: Pick<Room, "playback" | "presenceRevision" | "roomRevision">
 ) {
   return {
     ...room.playback,
-    radioAutoFill: room.radioAutoFill !== false,
     presenceRevision: room.presenceRevision,
     roomRevision: room.roomRevision ?? 0
   };
@@ -99,8 +97,7 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       description: persisted.description ?? null,
       hasPassword: Boolean(persisted.passwordHash),
       visibility: persisted.visibility as Room["visibility"],
-      roomType: persisted.roomType === "request" || persisted.roomType === "radio" ? persisted.roomType : "interactive",
-      radioAutoFill: persistedPlayback.radioAutoFill !== false,
+      roomType: persisted.roomType as Room["roomType"],
       requests,
       ...(parsedNewMemberPermissions.success
         ? { newMemberPermissions: parsedNewMemberPermissions.data }

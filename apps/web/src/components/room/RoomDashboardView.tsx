@@ -27,7 +27,7 @@ import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/roo
 
 type ManagementTabId = "library" | "local" | "members";
 
-type RoomDashboardViewProps = {
+export type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
   playbackBarrier?: RoomPlaybackBarrierClock | null;
   currentTrack: TrackMeta | null;
@@ -144,7 +144,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
     </div>
     <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:min-h-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
       <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
-        <RoomStage {...stageProps(props)} />
+        <RoomStage {...buildRoomStageProps(props)} />
       </div>
     </div>
     <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
@@ -154,7 +154,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
           {managementTabIds.map((tab) => <button key={tab} id={`room-tab-${tab}`} data-testid={`room-tab-${tab}`} aria-controls={`room-panel-${tab}`} aria-selected={activeTab === tab} onClick={() => handleTabChange(tab)} onKeyDown={(event) => handleTabKeyDown(event, tab)} role="tab" tabIndex={activeTab === tab ? 0 : -1} className={`relative z-10 flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-[color,opacity] duration-150 ease-out sm:text-sm ${activeTab === tab ? "text-white" : "text-white/50 hover:text-white/80"}`} type="button">{managementTabLabel(tab)}</button>)}
         </div>
       </div>
-      <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
+      <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[var(--room-mobile-bottom-inset)] pt-3 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
         <RoomManagementContent {...props} activeTab={activeTab} />
       </div>
     </section>
@@ -167,7 +167,7 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
   return <MembersTabPanel members={props.roomSnapshot.room.members} now={props.membershipNow} peerDiagnostics={props.peerDiagnostics} peerRecentEvents={props.peerRecentEvents} localMemberState={props.localMemberState} playbackStatus={props.roomSnapshot.room.playback.status} sourceSessionId={props.roomSnapshot.room.playback.sourceSessionId} sourcePeerId={props.currentSourcePeerId} iceConfigSource={props.iceConfigSource} iceConfigStatus={props.iceConfigStatus} activeSessionId={props.activeSession?.userId ?? null} isHost={props.isHost} onUpdateMemberPermissions={props.onUpdateMemberPermissions} onRemoveMember={props.onRemoveMember} onDiagnosticsVisibilityChange={props.onDiagnosticsVisibilityChange} />;
 }
 
-function stageProps(props: RoomLayoutProps) {
+export function buildRoomStageProps(props: RoomDashboardViewProps) {
   return {
     roomSnapshot: props.roomSnapshot,
     playbackBarrier: props.playbackBarrier,

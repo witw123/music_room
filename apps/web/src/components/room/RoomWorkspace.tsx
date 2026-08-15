@@ -16,7 +16,9 @@ import type {
 } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
-import { RoomDashboardView } from "@/components/room/RoomDashboardView";
+import { InteractiveRoomView } from "@/components/room/InteractiveRoomView";
+import { RequestRoomView } from "@/components/room/RequestRoomView";
+import { RadioRoomView } from "@/components/room/RadioRoomView";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -159,9 +161,14 @@ function RoomWorkspaceBase({
   const currentTrackDuration = currentTrack?.durationMs ?? 0;
   const currentSourceOwnerNickname =
     resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
+  const RoomView = roomSnapshot?.room.roomType === "request"
+    ? RequestRoomView
+    : roomSnapshot?.room.roomType === "radio"
+      ? RadioRoomView
+      : InteractiveRoomView;
 
   return (
-    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[calc(11rem+env(safe-area-inset-bottom))] md:pl-60 lg:pb-[4.5rem]" data-custom-layout-room-host="true">
+    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[var(--room-mobile-bottom-inset)] md:pl-60 lg:pb-[var(--room-desktop-bottom-inset)]" data-custom-layout-room-host="true">
 
       <div className="hidden md:contents">
         <AppSidebar
@@ -198,7 +205,7 @@ function RoomWorkspaceBase({
       <div className="relative min-h-0 flex-1 overflow-hidden" role="tabpanel">
         <div className="h-full min-h-0 w-full">
           {roomSnapshot ? (
-            <RoomDashboardView
+            <RoomView
               roomSnapshot={roomSnapshot}
               playbackBarrier={playbackBarrier}
               currentTrack={currentTrack}

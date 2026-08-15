@@ -23,6 +23,14 @@ import { RoomPresenceOrchestratorService } from "./room-presence-orchestrator.se
 import { RoomPresenceService } from "./room-presence.service";
 import { RoomSnapshotService } from "./room-snapshot.service";
 
+type CreateRoomMetadata = {
+  name?: string;
+  description?: string | null;
+  password?: string;
+  newMemberPermissions?: RoomMemberPermissions;
+  roomType: RoomType;
+};
+
 /**
  * Room lifecycle and membership: create/join/leave/delete a room, and manage
  * members (permissions, removal). Presence-sensitive operations are serialized
@@ -42,20 +50,14 @@ export class RoomLifecycleService {
 
   async createRoom(
     hostSessionId: string,
-    visibility: Room["visibility"] = "public",
-    metadata?: {
-      name?: string;
-      description?: string | null;
-      password?: string;
-      newMemberPermissions?: RoomMemberPermissions;
-      roomType?: RoomType;
-      radioAutoFill?: boolean;
-    }
+    visibility: Room["visibility"],
+    metadata: CreateRoomMetadata
   ) {
     const hostSession = await this.authService.getUserOrThrow(hostSessionId);
-    const name = metadata?.name?.trim() || "未命名房间";
-    const description = metadata?.description?.trim() || null;
-    const password = metadata?.password?.trim() || null;
+    const name = metadata.name?.trim() || "未命名房间";
+    const description = metadata.description?.trim() || null;
+    const password = metadata.password?.trim() || null;
+    const roomType = metadata.roomType;
     const room: Room = {
       id: `room_${randomUUID()}`,
       hostId: hostSession.id,
@@ -64,12 +66,13 @@ export class RoomLifecycleService {
       description,
       hasPassword: !!password,
       visibility,
-      roomType: metadata?.roomType ?? "interactive",
-      radioAutoFill: metadata?.radioAutoFill ?? true,
+      roomType,
       requests: [],
-      newMemberPermissions: metadata?.newMemberPermissions
-        ? { ...metadata.newMemberPermissions }
-        : { ...defaultRoomMemberPermissions },
+      newMemberPermissions: roomType === "interactive"
+        ? (metadata.newMemberPermissions
+            ? { ...metadata.newMemberPermissions }
+            : { ...defaultRoomMemberPermissions })
+        : { library: false, queue: false, player: false },
       members: [buildMember(hostSession, "host")],
       presenceRevision: 0,
       roomRevision: 0,
@@ -169,8 +172,6 @@ export class RoomLifecycleService {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
-      roomType?: RoomType;
-      radioAutoFill?: boolean;
     }
   ) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
@@ -180,17 +181,9 @@ export class RoomLifecycleService {
 
     const password = input.password?.trim();
     record.room.visibility = input.visibility;
-    if (input.roomType !== undefined && input.roomType !== record.room.roomType) {
-      record.room.roomType = input.roomType;
-      record.requests = (record.requests ?? []).filter((request) => request.status !== "pending");
-      record.room.requests = record.requests;
-    }
-    if (input.radioAutoFill !== undefined) {
-      record.room.radioAutoFill = input.radioAutoFill;
-    }
     record.room.name = input.name.trim();
     record.room.description = input.description?.trim() || null;
-    if (input.newMemberPermissions !== undefined) {
+    if (record.room.roomType === "interactive" && input.newMemberPermissions !== undefined) {
       record.room.newMemberPermissions = { ...input.newMemberPermissions };
     }
     if (input.password !== undefined) {
@@ -211,6 +204,9 @@ export class RoomLifecycleService {
     return this.presenceOrchestrator.enqueuePresenceUpdate(roomId, actorSessionId, async () => {
       const record = await this.roomRecordRepository.getRoomRecord(roomId);
       assertHost(record, actorSessionId);
+      if (record.room.roomType !== "interactive") {
+        throw new BadRequestException("当前房间的成员控制权限由房主规则固定。");
+      }
       const member = record.room.members.find((candidate) => candidate.id === memberId);
       if (!member) {
         throw new Error("Room member not found.");

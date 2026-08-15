@@ -47,7 +47,8 @@ describe("RoomActivityService", () => {
 const room = {
   id: "room_1",
   name: "测试房间",
-  joinCode: "ABC123"
+  joinCode: "ABC123",
+  roomType: "interactive" as const
 };
 
 function createPrismaMock({ current }: { current: unknown }) {

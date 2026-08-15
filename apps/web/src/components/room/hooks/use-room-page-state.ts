@@ -4,6 +4,7 @@ import { useCallback, useReducer, type SetStateAction } from "react";
 import type {
   IceConfigResponse,
   RoomMediaConnectionState,
+  RoomDirectoryItem,
   RoomSnapshot,
   Playlist,
   RoomPlaybackReadinessPayload
@@ -36,7 +37,7 @@ export type RoomPageState = {
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;
   isPageVisible: boolean;
-  availableRooms: RoomSnapshot[];
+  availableRooms: RoomDirectoryItem[];
   playlists: Playlist[];
   connectedPeers: string[];
   mediaConnectedPeers: string[];
@@ -142,7 +143,7 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
   );
 
   const setAvailableRooms = useCallback(
-    (value: SetStateAction<RoomSnapshot[]>) =>
+    (value: SetStateAction<RoomDirectoryItem[]>) =>
       dispatch({ type: "set", key: "availableRooms", value }),
     []
   );

@@ -36,7 +36,7 @@ export class RoomActivityService {
             roomId: room.id,
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
-            roomType: room.roomType ?? "interactive",
+            roomType: room.roomType,
             totalDurationMs: 0n,
             // The persisted room member timestamp can describe an old
             // membership, not this online session. Activity starts at the
@@ -64,7 +64,7 @@ export class RoomActivityService {
           data: {
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
-            roomType: room.roomType ?? "interactive",
+            roomType: room.roomType,
             totalDurationMs: { increment: BigInt(closedDurationMs) },
             activeStartedAt: now,
             lastPresenceAt: now,
@@ -80,7 +80,7 @@ export class RoomActivityService {
           data: {
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
-            roomType: room.roomType ?? "interactive",
+            roomType: room.roomType,
             activeStartedAt: now,
             lastPresenceAt: now,
             lastJoinedAt: now
@@ -98,7 +98,7 @@ export class RoomActivityService {
           data: {
             roomName: room.name ?? "未命名房间",
             joinCode: room.joinCode,
-            roomType: room.roomType ?? "interactive",
+            roomType: room.roomType,
             lastPresenceAt: now
           }
         });
@@ -127,7 +127,7 @@ export class RoomActivityService {
         where: { id: current.id },
         data: {
           ...(room
-            ? { roomName: room.name ?? "未命名房间", joinCode: room.joinCode, roomType: room.roomType ?? "interactive" }
+            ? { roomName: room.name ?? "未命名房间", joinCode: room.joinCode, roomType: room.roomType }
             : {}),
           totalDurationMs: { increment: BigInt(durationMs) },
           activeStartedAt: null,

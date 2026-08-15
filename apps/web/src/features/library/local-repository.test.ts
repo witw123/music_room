@@ -93,6 +93,7 @@ describe("LocalRepository", () => {
         hostId: "owner-a",
         joinCode: "ROOM01",
         visibility: "private",
+        roomType: "interactive",
         members: [],
         playback: {
           status: "paused",

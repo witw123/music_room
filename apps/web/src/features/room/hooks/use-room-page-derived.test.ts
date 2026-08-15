@@ -35,6 +35,7 @@ function createSnapshot(input: {
       hostId: "host",
       joinCode: "ROOM42",
       visibility: "public",
+      roomType: "interactive",
       playback: {
         status: "playing",
         currentTrackId: "track_cached",

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomDirectoryItem, RoomSnapshot } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -12,7 +12,7 @@ import {
   buildAppEntryHref,
   buildWorkspaceAuthHref
 } from "@/lib/domain/client-shell";
-import { getOnlineMemberCount, toUserFacingError } from "@/lib/domain/music-room-ui";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import {
   buildRoomJoinBootstrapSnapshot,
   storeRoomSnapshotHandoff
@@ -29,7 +29,7 @@ export function HomeRoomSection() {
   });
   const buildRoomHref = (roomId: string) => `/room/${roomId}`;
   const [joinCode, setJoinCode] = useState("");
-  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
+  const [availableRooms, setAvailableRooms] = useState<RoomDirectoryItem[]>([]);
   const [recentRoom, setRecentRoom] = useState<RoomSnapshot | null>(null);
   const [isPending, startTransition] = useTransition();
   const {
@@ -104,7 +104,7 @@ export function HomeRoomSection() {
 
   async function handleCreateRoom(visibility: "public" | "private") {
     try {
-      const snapshot = await musicRoomApi.createRoom({ visibility });
+      const snapshot = await musicRoomApi.createRoom({ visibility, roomType: "interactive" });
       storeRoomSnapshotHandoff(snapshot);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
       router.push(buildRoomHref(snapshot.room.id) as Route);
@@ -154,7 +154,7 @@ export function HomeRoomSection() {
 
   const visibleRooms = useMemo(
     () => [...availableRooms].sort(
-      (left, right) => getOnlineMemberCount(right.room.members) - getOnlineMemberCount(left.room.members)
+      (left, right) => right.room.directoryOnlineMemberCount - left.room.directoryOnlineMemberCount
     ),
     [availableRooms]
   );
@@ -258,7 +258,7 @@ export function HomeRoomSection() {
                       {recentRoom.room.joinCode}
                     </span>
                     <span className="text-sm text-white/[0.55]">
-                       {recentRoom.room.directoryOnlineMemberCount ?? getOnlineMemberCount(recentRoom.room.members)} 人在线
+                       {recentRoom.room.directoryOnlineMemberCount ?? 0} 人在线
                     </span>
                   </div>
                 </button>
@@ -280,7 +280,7 @@ export function HomeRoomSection() {
                       >
                         <span className="font-mono text-sm font-semibold text-white">{room.room.joinCode}</span>
                         <span className="text-xs text-white/[0.45]">
-                          {room.room.directoryOnlineMemberCount ?? getOnlineMemberCount(room.room.members)} 人在线
+                          {room.room.directoryOnlineMemberCount} 人在线
                         </span>
                       </button>
                     ))}

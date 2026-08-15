@@ -55,7 +55,6 @@ type RoomStageProps = {
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
   return {
     visibility: roomSnapshot.room.visibility,
-    roomType: roomSnapshot.room.roomType ?? "interactive",
     name: roomSnapshot.room.name ?? "",
     description: roomSnapshot.room.description ?? "",
     password: "",
@@ -243,9 +242,10 @@ function RoomStageBase({
         visibility: editRoomForm.visibility,
         name: editRoomForm.name.trim(),
         description: editRoomForm.description?.trim() || null,
-      password: editRoomForm.password?.trim() ?? "",
-      roomType: editRoomForm.roomType,
-      newMemberPermissions: editRoomForm.newMemberPermissions
+        password: editRoomForm.password?.trim() ?? "",
+        ...(roomSnapshot.room.roomType === "interactive"
+          ? { newMemberPermissions: editRoomForm.newMemberPermissions }
+          : {})
       });
       if (updated) setShowEditRoom(false);
     } finally {
@@ -720,6 +720,7 @@ function RoomStageBase({
       />
       <RoomEditDialog
         form={editRoomForm}
+        roomType={roomSnapshot.room.roomType}
         onChange={setEditRoomForm}
         onClose={() => {
           if (!isUpdatingRoom) setShowEditRoom(false);
@@ -736,6 +737,7 @@ export const RoomStage = memo(RoomStageBase);
 
 function RoomEditDialog({
   form,
+  roomType,
   onChange,
   onClose,
   onSubmit,
@@ -743,6 +745,7 @@ function RoomEditDialog({
   pending
 }: {
   form: UpdateRoomRequest;
+  roomType: RoomSnapshot["room"]["roomType"];
   onChange: Dispatch<SetStateAction<UpdateRoomRequest>>;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -782,19 +785,10 @@ function RoomEditDialog({
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="房间类型">
-            {(["interactive", "request", "radio"] as const).map((roomType) => (
-              <button
-                aria-checked={form.roomType === roomType}
-                className={`rounded-lg border px-3 py-2 text-sm transition ${form.roomType === roomType ? "border-accent bg-accent/15 text-foreground" : "border-white/10 text-foreground-muted hover:bg-white/10"}`}
-                key={roomType}
-                onClick={() => onChange((current) => ({ ...current, roomType }))}
-                role="radio"
-                type="button"
-              >
-                {roomType === "request" ? "点歌房" : roomType === "radio" ? "自由电台" : "多人互动房"}
-              </button>
-            ))}
+          <div className="border border-white/10 bg-black/20 px-3 py-2.5">
+            <span className="block text-xs text-foreground-muted">房间类型</span>
+            <span className="mt-1 block text-sm font-medium text-foreground">{roomType === "request" ? "点歌房" : roomType === "radio" ? "自由电台" : "多人互动房"}</span>
+            <span className="mt-1 block text-xs text-foreground-muted">创建后不可更改。</span>
           </div>
           <label className="flex flex-col gap-2 text-sm text-foreground">
             房间名称
@@ -808,7 +802,7 @@ function RoomEditDialog({
             房间密码 <span className="text-xs text-foreground-muted">留空表示移除密码，至少 4 位</span>
             <input className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent" maxLength={128} minLength={4} onChange={(event) => onChange((current) => ({ ...current, password: event.target.value }))} placeholder="留空表示无需密码" type="password" value={form.password ?? ""} />
           </label>
-          <div className="flex flex-col gap-2">
+          {roomType === "interactive" ? <div className="flex flex-col gap-2">
             <div>
               <span className="block text-sm text-foreground">新成员默认权限</span>
               <span className="mt-1 block text-xs text-foreground-muted">只影响之后首次进入房间的成员，已有成员权限不会改变。</span>
@@ -824,7 +818,7 @@ function RoomEditDialog({
               permissions={getNewMemberPermissions({ newMemberPermissions: form.newMemberPermissions })}
               disabled={pending}
             />
-          </div>
+          </div> : null}
           <div className="flex justify-end gap-2 pt-2">
             <Button disabled={pending} onClick={onClose} type="button" variant="ghost">取消</Button>
             <Button disabled={pending || !form.name.trim() || (!!form.password?.trim() && form.password.trim().length < 4)} type="submit">{pending ? "保存中…" : "保存修改"}</Button>

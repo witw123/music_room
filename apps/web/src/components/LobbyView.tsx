@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { GuestSession, RoomSnapshot } from "@music-room/shared";
-import { getOnlineMemberCount } from "@/lib/domain/music-room-ui";
+import type { GuestSession, RoomDirectoryItem } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 
 type LobbyViewProps = {
   nickname: string;
   setNickname: (n: string) => void;
   activeSession: GuestSession | null;
-  visibleRooms: RoomSnapshot[];
+  visibleRooms: RoomDirectoryItem[];
   statusMessage: string;
   onConfirmIdentity: () => Promise<void>;
   onCreateRoom: () => void;
@@ -155,9 +154,6 @@ export function LobbyView({
         {visibleRooms.length ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {visibleRooms.map((item) => {
-              const roomHost =
-                item.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
-
               return (
                 <button
                   key={item.room.id}
@@ -167,10 +163,10 @@ export function LobbyView({
                 >
                   <div className="flex flex-col gap-1">
                     <span className="font-mono font-bold text-xl text-foreground group-hover:text-accent transition-colors">{item.room.joinCode}</span>
-                    <span className="text-sm text-foreground-muted truncate max-w-[120px]">房主：{roomHost}</span>
+                    <span className="text-sm text-foreground-muted truncate max-w-[120px]">房主：{item.room.directoryHostNickname}</span>
                   </div>
                   <span className="px-2 py-1 bg-surface rounded-md text-xs font-medium text-foreground-muted border border-surface-border">
-                    {getOnlineMemberCount(item.room.members)} 在线
+                    {item.room.directoryOnlineMemberCount} 在线
                   </span>
                 </button>
               );

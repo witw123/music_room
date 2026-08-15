@@ -5,11 +5,11 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
-import { defaultRoomMemberPermissions, type RoomMemberPermissions, type RoomSnapshot, type RoomType } from "@music-room/shared";
+import { defaultRoomMemberPermissions, type RoomDirectoryItem, type RoomMemberPermissions, type RoomType } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { getOnlineMemberCount, toUserFacingError } from "@/lib/domain/music-room-ui";
+import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import {
   buildRoomJoinBootstrapSnapshot,
   storeRoomSnapshotHandoff
@@ -78,7 +78,7 @@ export function RoomsHomePage({
     initialStatusMessage: ""
   });
   const [joinCode, setJoinCode] = useState("");
-  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>(() =>
+  const [availableRooms, setAvailableRooms] = useState<RoomDirectoryItem[]>(() =>
     activeSession ? getCachedRooms(activeSession.userId) ?? [] : []
   );
   const [roomsLoaded, setRoomsLoaded] = useState(() =>
@@ -88,7 +88,7 @@ export function RoomsHomePage({
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
-  const [selectedRoom, setSelectedRoom] = useState<RoomSnapshot | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<RoomDirectoryItem | null>(null);
   const [joinPassword, setJoinPassword] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
@@ -196,7 +196,9 @@ export function RoomsHomePage({
         description: createForm.description.trim() || undefined,
         password: createForm.password.trim() || undefined,
         roomType: createForm.roomType,
-        newMemberPermissions: createForm.newMemberPermissions
+        ...(createForm.roomType === "interactive"
+          ? { newMemberPermissions: createForm.newMemberPermissions }
+          : {})
       });
       storeRoomSnapshotHandoff(snapshot);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
@@ -227,7 +229,7 @@ export function RoomsHomePage({
     }
   }
 
-  function openRoomDetails(room: RoomSnapshot) {
+  function openRoomDetails(room: RoomDirectoryItem) {
     if (room.room.id === effectiveAwayRoomId) {
       handleResumeAwayRoom();
       return;
@@ -273,10 +275,9 @@ export function RoomsHomePage({
 
   const visibleRooms = useMemo(
     () => availableRooms
-      .filter((room) => roomTypeFilter === "all" || (room.room.roomType ?? "interactive") === roomTypeFilter)
+      .filter((room) => roomTypeFilter === "all" || room.room.roomType === roomTypeFilter)
       .sort((left, right) =>
-      (right.room.directoryOnlineMemberCount ?? getOnlineMemberCount(right.room.members)) -
-      (left.room.directoryOnlineMemberCount ?? getOnlineMemberCount(left.room.members))
+      right.room.directoryOnlineMemberCount - left.room.directoryOnlineMemberCount
     ),
     [availableRooms, roomTypeFilter]
   );
@@ -463,18 +464,20 @@ export function RoomsHomePage({
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="房间类型">
+            <div className="flex flex-col gap-2" role="group" aria-label="选择房间用途">
               {(["interactive", "request", "radio"] as const).map((roomType) => (
                 <button
                   key={roomType}
-                  aria-checked={createForm.roomType === roomType}
-                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${createForm.roomType === roomType ? "border-accent bg-accent/15 text-foreground" : "border-surface-border text-foreground-muted hover:bg-surface-hover"}`}
+                  aria-pressed={createForm.roomType === roomType}
+                  className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border px-4 py-3 text-left transition ${createForm.roomType === roomType ? "border-accent bg-accent/10 shadow-[0_10px_30px_rgba(0,112,243,0.12)]" : "border-surface-border bg-surface/20 hover:border-white/20 hover:bg-surface-hover"}`}
                   onClick={() => setCreateForm((current) => ({ ...current, roomType }))}
-                  role="radio"
                   type="button"
                 >
-                  <span className="block font-medium">{roomTypeLabel(roomType)}</span>
-                  <span className="mt-1 block text-xs opacity-70">{roomTypeDescription(roomType)}</span>
+                  <span>
+                    <span className="block text-sm font-semibold text-foreground">{roomTypeLabel(roomType)}</span>
+                    <span className="mt-1 block text-xs leading-5 text-foreground-muted">{roomTypeDescription(roomType)}</span>
+                  </span>
+                  {createForm.roomType === roomType ? <span className="text-xs font-semibold text-accent">已选择</span> : null}
                 </button>
               ))}
             </div>
@@ -512,7 +515,7 @@ export function RoomsHomePage({
                 value={createForm.password}
               />
             </label>
-            <div className="flex flex-col gap-2">
+            {createForm.roomType === "interactive" ? <div className="flex flex-col gap-2">
               <div>
                 <span className="block text-sm text-foreground">新成员默认权限</span>
                 <span className="mt-1 block text-xs text-foreground-muted">控制新成员首次进入房间时可以使用的功能。</span>
@@ -528,7 +531,11 @@ export function RoomsHomePage({
                 }))}
                 permissions={createForm.newMemberPermissions}
               />
-            </div>
+            </div> : <div className="border border-surface-border bg-surface/20 px-3 py-2.5 text-xs leading-5 text-foreground-muted">
+              {createForm.roomType === "request"
+                ? "成员可提交点歌，只有房主能够导入、审核与控制播放。"
+                : "房主负责节目单和播放控制，听众以收听、查看节目预告和发送反应为主。"}
+            </div>}
             {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button disabled={isPending} onClick={() => setCreateDialogOpen(false)} type="button" variant="ghost">取消</Button>
@@ -579,15 +586,15 @@ export function RoomsHomePage({
       {selectedRoom ? (
         <RoomDialog
           title={selectedRoom.room.name ?? "未命名房间"}
-          description={selectedRoom.room.description?.trim() || "进入后可以参与播放、队列和成员协作。"}
+          description={selectedRoom.room.description?.trim() || roomTypeDescription(selectedRoom.room.roomType)}
           onClose={() => setSelectedRoom(null)}
         >
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3 rounded-xl border border-surface-border bg-background/50 p-3 text-sm">
-              <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryHostNickname ?? selectedRoom.room.members.find((member) => member.role === "host")?.nickname ?? "未知"}</span></div>
+              <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryHostNickname || "未知"}</span></div>
               <div><span className="block text-xs text-foreground-muted">房间码</span><span className="mt-1 block font-mono text-foreground">{selectedRoom.room.joinCode}</span></div>
               <div><span className="block text-xs text-foreground-muted">状态</span><span className="mt-1 block text-foreground">{selectedRoom.room.visibility === "private" ? "私密" : "公开"}</span></div>
-              <div><span className="block text-xs text-foreground-muted">在线成员</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryOnlineMemberCount ?? getOnlineMemberCount(selectedRoom.room.members)} 人</span></div>
+              <div><span className="block text-xs text-foreground-muted">在线成员</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryOnlineMemberCount} 人</span></div>
             </div>
             {selectedRoom.room.hasPassword ? (
               <label className="flex flex-col gap-2 text-sm text-foreground">
@@ -621,61 +628,100 @@ function RoomDirectoryCard({
   isAway,
   onOpen
 }: {
-  room: RoomSnapshot;
+  room: RoomDirectoryItem;
   isAway: boolean;
   onOpen: () => void;
 }) {
-  const host = room.room.directoryHostNickname ?? room.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
+  const props = { room, isAway, onOpen };
+  if (room.room.roomType === "request") return <RequestRoomDirectoryCard {...props} />;
+  if (room.room.roomType === "radio") return <RadioRoomDirectoryCard {...props} />;
+  return <InteractiveRoomDirectoryCard {...props} />;
+}
 
-  return (
-    <article
-      className="group flex min-h-[158px] cursor-pointer flex-col gap-3 rounded-xl border border-surface-border bg-surface/50 p-5 text-left shadow-md backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-accent hover:bg-surface-hover focus-visible:border-accent focus-visible:outline-none"
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded-md border border-surface-border bg-background/60 px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.12em] text-foreground-muted">
-            {room.room.joinCode}
-          </span>
-          {isAway ? (
-            <span className="shrink-0 rounded-full border border-amber-200/60 bg-amber-200/15 px-2 py-1 text-[10px] font-bold text-amber-100">
-              已暂离
-            </span>
-          ) : null}
-        </div>
-        <span className="shrink-0 rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
-          {room.room.directoryOnlineMemberCount ?? getOnlineMemberCount(room.room.members)} 人在线
-        </span>
+type RoomDirectoryCardProps = {
+  room: RoomDirectoryItem;
+  isAway: boolean;
+  onOpen: () => void;
+};
+
+function DirectoryCardFrame({ children, onOpen, room }: { children: ReactNode; onOpen: () => void; room: RoomDirectoryItem }) {
+  return <article
+    className="group relative min-h-[172px] cursor-pointer overflow-hidden border border-surface-border bg-surface/45 text-left shadow-[0_14px_40px_rgba(0,0,0,0.22)] transition-[transform,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:border-accent/70 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+    onClick={onOpen}
+    onKeyDown={(event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen();
+      }
+    }}
+    role="button"
+    tabIndex={0}
+    aria-label={`进入${room.room.name}`}
+  >{children}</article>;
+}
+
+function CardMeta({ isAway, room }: Pick<RoomDirectoryCardProps, "isAway" | "room">) {
+  return <div className="flex items-center justify-between gap-3">
+    <span className="font-mono text-[11px] font-semibold tracking-[0.1em] text-foreground-muted">{room.room.joinCode}</span>
+    <span className="ml-auto text-xs text-foreground-muted">{room.room.directoryOnlineMemberCount} 人在线</span>
+    {room.room.hasPassword ? <span className="text-[11px] text-foreground-muted">需密码</span> : null}
+    {isAway ? <span className="sr-only">已暂离</span> : null}
+  </div>;
+}
+
+function InteractiveRoomDirectoryCard({ room, isAway, onOpen }: RoomDirectoryCardProps) {
+  return <DirectoryCardFrame onOpen={onOpen} room={room}>
+    <div className="flex min-h-[172px] flex-col p-5">
+      <CardMeta isAway={isAway} room={room} />
+      <div className="mt-6">
+        <h3 className="truncate text-base font-semibold text-foreground">{room.room.name}</h3>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">{room.room.description?.trim() || `与 ${room.room.directoryHostNickname || "房主"} 一起协作播放`}</p>
       </div>
-      <div className="mt-0.5">
-        <div className="flex items-center gap-2">
-          <h3 className="min-w-0 truncate font-semibold text-foreground">{room.room.name ?? "未命名房间"}</h3>
-          <span className="shrink-0 text-[11px] text-foreground-muted">{roomTypeLabel(room.room.roomType ?? "interactive")}</span>
-        </div>
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-          {room.room.description?.trim() || `房主 ${host}`}
-        </p>
-        <p className="mt-2 truncate text-[11px] text-foreground-muted">
-          {room.room.roomType === "request" ? `${room.room.requests?.filter((request) => request.status === "pending").length ?? 0} 个待审核点歌` : room.room.roomType === "radio" ? "相关推荐自动续播" : room.room.playback.status === "playing" ? "正在同步播放" : "等待播放"}
-        </p>
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
+        <span>{room.room.playbackStatus === "playing" ? "正在同步播放" : "等待开始"}</span>
+        <span>{room.room.directoryQueueDepth} 首在队列</span>
       </div>
-      {room.room.hasPassword ? (
-        <div className="mt-auto flex justify-end pt-1">
-          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
-            有密码
-          </span>
+    </div>
+  </DirectoryCardFrame>;
+}
+
+function RequestRoomDirectoryCard({ room, isAway, onOpen }: RoomDirectoryCardProps) {
+  return <DirectoryCardFrame onOpen={onOpen} room={room}>
+    <div className="grid min-h-[172px] grid-cols-[minmax(0,1fr)_auto] gap-4 p-5">
+      <div className="flex min-w-0 flex-col">
+        <CardMeta isAway={isAway} room={room} />
+        <div className="mt-6">
+          <p className="text-xs text-accent">正在收集点歌</p>
+          <h3 className="mt-1 truncate text-base font-semibold text-foreground">{room.room.name}</h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">房主 {room.room.directoryHostNickname || ""} 审核后加入播放队列</p>
         </div>
-      ) : null}
-    </article>
-  );
+      </div>
+      <div className="flex min-w-16 flex-col items-end justify-end border-l border-dashed border-surface-border pl-4 text-right">
+        <span className="text-3xl font-semibold tabular-nums text-foreground">{room.room.directoryPendingRequestCount}</span>
+        <span className="mt-1 text-[11px] text-foreground-muted">待审核</span>
+      </div>
+    </div>
+  </DirectoryCardFrame>;
+}
+
+function RadioRoomDirectoryCard({ room, isAway, onOpen }: RoomDirectoryCardProps) {
+  const onAir = room.room.directoryBroadcastState === "on_air";
+  return <DirectoryCardFrame onOpen={onOpen} room={room}>
+    {room.room.directoryNowPlaying?.artworkUrl ? <img alt="" className="absolute inset-y-0 right-0 h-full w-[44%] object-cover opacity-45 transition-opacity duration-200 group-hover:opacity-60" src={room.room.directoryNowPlaying.artworkUrl} /> : null}
+    <div className="absolute inset-y-0 right-0 w-[58%] bg-gradient-to-r from-background via-background/80 to-transparent" aria-hidden="true" />
+    <div className="relative flex min-h-[172px] flex-col p-5">
+      <CardMeta isAway={isAway} room={room} />
+      <div className="mt-6 max-w-[70%]">
+        <p className={`text-xs font-semibold ${onAir ? "text-accent" : "text-foreground-muted"}`}>{onAir ? "ON AIR" : "OFF AIR"}</p>
+        <h3 className="mt-1 truncate text-base font-semibold text-foreground">{onAir ? room.room.directoryNowPlaying?.title : room.room.name}</h3>
+        <p className="mt-1 truncate text-xs text-foreground-muted">{onAir ? room.room.directoryNowPlaying?.artist : `主持人 ${room.room.directoryHostNickname || ""} 正在准备节目`}</p>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
+        <span>{room.room.name}</span>
+        <span>{room.room.directoryQueueDepth} 首预告</span>
+      </div>
+    </div>
+  </DirectoryCardFrame>;
 }
 
 function roomTypeLabel(roomType: RoomType) {
@@ -683,7 +729,7 @@ function roomTypeLabel(roomType: RoomType) {
 }
 
 function roomTypeDescription(roomType: RoomType) {
-  return roomType === "request" ? "房主审核点歌" : roomType === "radio" ? "种子队列自动续播" : "成员共同播放";
+  return roomType === "request" ? "成员提交歌曲，由房主审核后加入队列" : roomType === "radio" ? "主持人策展播出，听众专注收听" : "成员共同管理曲库、队列与播放";
 }
 
 function primeRoomAudioFromUserGesture() {

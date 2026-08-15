@@ -40,6 +40,7 @@ function createRoomSnapshot(
       hostId: "host",
       joinCode: "ABC123",
       visibility: "public",
+      roomType: roomOverrides?.roomType ?? "interactive",
       members: [
         {
           id: "host",

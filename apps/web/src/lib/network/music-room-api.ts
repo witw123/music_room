@@ -35,6 +35,7 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
+  type RoomDirectoryItem,
   type RoomJoinResponse,
   type RoomMemberPermissions,
   type RoomSnapshot,
@@ -303,10 +304,9 @@ export const musicRoomApi = {
       body: JSON.stringify(input),
       keepalive: true
     }),
-  createRoom: (input?: {
+  createRoom: (input: {
     visibility?: "private" | "public";
-    roomType?: RoomType;
-    radioAutoFill?: boolean;
+    roomType: RoomType;
     name?: string;
     description?: string | null;
     password?: string;
@@ -314,7 +314,7 @@ export const musicRoomApi = {
   }) =>
     request<RoomSnapshot>("/v1/rooms", {
       method: "POST",
-      body: JSON.stringify(input ?? {})
+      body: JSON.stringify(input)
     }),
   getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
   getRecentRooms: () => request<RoomSnapshot[]>("/v1/rooms/recent"),
@@ -323,7 +323,7 @@ export const musicRoomApi = {
   getRoomInteractionStats: () => request<RoomInteractionStats>("/v1/rooms/stats"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
-  listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
+  listRooms: () => request<RoomDirectoryItem[]>("/v1/rooms"),
   joinRoomByCode: (joinCode: string, password?: string) =>
     request<RoomJoinResponse>("/v1/rooms/join-by-code", {
       method: "POST",

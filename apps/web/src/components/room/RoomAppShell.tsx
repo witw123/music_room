@@ -75,6 +75,9 @@ export function RoomAppShell({
 }: RoomAppShellProps) {
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const requestRoomSeekRef = useRef<(positionMs: number) => void>(() => undefined);
+  const roomType = roomSnapshot?.room.roomType;
+  const isHostControlledRoom = roomType === "request" || roomType === "radio";
+  const isRoomHost = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
 
   useEffect(() => {
     const syncLyricsPreference = () => setIsLyricsOpen(getAppSettings().playback.showLyricsByDefault);
@@ -172,7 +175,8 @@ export function RoomAppShell({
         playbackBarrier={playbackBarrier}
         activeSession={activeSession}
         currentTrack={currentTrack}
-        canSeekPlayback={true}
+        canSeekPlayback={!isHostControlledRoom || isRoomHost}
+        canControlPlaybackOverride={isHostControlledRoom ? isRoomHost : undefined}
         resetEpoch={pageState.playerResetEpoch}
         onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
         onVolumeChange={pageState.setVolume}
@@ -189,8 +193,8 @@ export function RoomAppShell({
             getNextPlaybackMode(roomSnapshot?.room.playback.playbackMode ?? "sequence")
           )
         }
-        canReorderQueue={canReorderQueue}
-        canRemoveQueue={!!activeSession && canReorderQueue}
+        canReorderQueue={isHostControlledRoom ? isRoomHost : canReorderQueue}
+        canRemoveQueue={isHostControlledRoom ? isRoomHost : !!activeSession && canReorderQueue}
         onPlayQueueItem={playbackActions.handlePlayQueueItem}
         onPlayNextQueueItem={roomActions.setNextQueueItem}
         onRemoveQueueItem={roomActions.removeQueueItem}

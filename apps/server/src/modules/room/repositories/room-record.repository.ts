@@ -587,7 +587,6 @@ export class RoomRecordRepository {
         ...serializePlaybackForPersistence(record.room),
         newMemberPermissions: record.room.newMemberPermissions ?? null,
         roomType: record.room.roomType,
-        radioAutoFill: record.room.radioAutoFill !== false,
         requests: record.requests ?? record.room.requests ?? [],
         memberPermissionProfiles: record.memberPermissionProfiles ?? {}
       },

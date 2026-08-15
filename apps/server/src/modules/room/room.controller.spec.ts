@@ -8,6 +8,7 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
       hostId: "guest_host",
       joinCode: "ABC123",
       visibility: "private",
+      roomType: overrides?.roomType ?? "interactive",
       members: [
         {
           id: "guest_host",
@@ -262,7 +263,7 @@ describe("RoomController", () => {
     );
 
     await expect(
-      controller.createRoom("token", { visibility: "friends" as never })
+      controller.createRoom("token", { visibility: "friends" as never, roomType: "interactive" })
     ).rejects.toMatchObject({
       response: expect.objectContaining({
         code: "VALIDATION_FAILED"

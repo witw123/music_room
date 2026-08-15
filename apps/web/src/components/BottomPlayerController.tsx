@@ -17,6 +17,7 @@ type BottomPlayerControllerProps = {
   activeSession: AuthSession | null;
   currentTrack: TrackMeta | null;
   canSeekPlayback: boolean;
+  canControlPlaybackOverride?: boolean;
   resetEpoch: number;
   onPlaybackPositionChange: (positionMs: number) => void;
   onVolumeChange: (volume: number) => void;
@@ -46,6 +47,7 @@ function BottomPlayerControllerBase({
   activeSession,
   currentTrack,
   canSeekPlayback,
+  canControlPlaybackOverride,
   resetEpoch,
   onPlaybackPositionChange,
   onVolumeChange,
@@ -67,11 +69,12 @@ function BottomPlayerControllerBase({
   mobileVariant = "full"
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
-  const canControlPlayback = hasRoomPermission(
+  const inferredCanControlPlayback = hasRoomPermission(
     roomSnapshot,
     activeSession?.userId,
     "player"
   );
+  const canControlPlayback = canControlPlaybackOverride ?? inferredCanControlPlayback;
   const {
     progressTrack,
     progressMs,

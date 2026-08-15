@@ -8,6 +8,7 @@ function buildSnapshot(): RoomSnapshot {
       hostId: "guest_host",
       joinCode: "ABC123",
       visibility: "public",
+      roomType: "interactive",
       members: [
         {
           id: "guest_host",

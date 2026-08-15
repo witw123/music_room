@@ -11,6 +11,7 @@ import {
 } from "react";
 import type {
   Playlist,
+  RoomDirectoryItem,
   RoomMediaConnectionState,
   RoomSnapshot
 } from "@music-room/shared";
@@ -48,7 +49,7 @@ type UseRoomPageRoomActionsInput = {
   resetPeerDiagnostics: () => void;
   roomSnapshot: RoomSnapshot | null;
   router: RoomRouter;
-  setAvailableRooms: Dispatch<SetStateAction<RoomSnapshot[]>>;
+  setAvailableRooms: Dispatch<SetStateAction<RoomDirectoryItem[]>>;
   setBufferHealth: Dispatch<SetStateAction<"healthy" | "low" | "critical">>;
   setIsNavigatingRoomExit: Dispatch<SetStateAction<boolean>>;
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;

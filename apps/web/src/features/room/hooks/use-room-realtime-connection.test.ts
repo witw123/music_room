@@ -52,6 +52,7 @@ function createSnapshot(overrides: {
       hostId: "host",
       joinCode: "ABC123",
       visibility: "public",
+      roomType: "interactive",
       members: [],
       presenceRevision: 1,
       roomRevision: 1,

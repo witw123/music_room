@@ -50,6 +50,7 @@ function createRecord(overrides: {
       description: null,
       hasPassword: false,
       visibility: "public",
+      roomType: "interactive",
       members,
       presenceRevision: 0,
       roomRevision: 0,

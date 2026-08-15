@@ -71,7 +71,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id, "private");
+    const snapshot = await roomService.createRoom(host.id, "private", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
 
     await expect(
@@ -117,7 +117,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
 
     await roomService.updateMemberPermissions(snapshot.room.id, host.id, member.id, {
@@ -146,6 +146,7 @@ describe("RoomService", () => {
     const firstMember = await authService.createGuestSession("First Member");
     const secondMember = await authService.createGuestSession("Second Member");
     const snapshot = await roomService.createRoom(host.id, "public", {
+      roomType: "interactive",
       newMemberPermissions: {
         library: false,
         queue: true,
@@ -204,7 +205,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -245,7 +246,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Immediate Playback",
       artist: "Local Upload",
@@ -281,7 +282,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Revision Track",
@@ -318,7 +319,7 @@ describe("RoomService", () => {
     const host = await authService.createGuestSession("Host");
     const requester = await authService.createGuestSession("Requester");
     const otherMember = await authService.createGuestSession("Other");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, requester.id);
     await roomService.joinRoom(snapshot.room.id, otherMember.id);
@@ -351,7 +352,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -409,7 +410,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Direct playback",
@@ -452,7 +453,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -494,7 +495,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     const firstJoinedAt = snapshot.room.members.find((member) => member.id === host.id)?.joinedAt;
 
     await roomService.leaveRoom(snapshot.room.id, host.id);
@@ -516,7 +517,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.leaveRoom(snapshot.room.id, member.id);
@@ -534,7 +535,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
@@ -592,7 +593,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.leaveRoom(snapshot.room.id, member.id);
@@ -616,7 +617,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -657,7 +658,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -694,7 +695,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -755,7 +756,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -806,7 +807,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -888,7 +889,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -946,7 +947,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -988,7 +989,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
@@ -1031,7 +1032,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     const track = await roomService.registerTrack(snapshot.room.id, member.id, {
@@ -1061,7 +1062,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -1090,7 +1091,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
@@ -1126,7 +1127,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -1195,7 +1196,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Conflict",
@@ -1234,7 +1235,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -1294,7 +1295,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -1341,7 +1342,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -1398,7 +1399,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
@@ -1449,7 +1450,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
 
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -1502,7 +1503,7 @@ describe("RoomService", () => {
       const roomService = new RoomService(authService, prisma as never, redis as never);
 
       const host = await authService.createGuestSession("Host");
-      const snapshot = await roomService.createRoom(host.id);
+      const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
       const track = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -1546,7 +1547,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -1595,7 +1596,7 @@ describe("RoomService", () => {
 
       const host = await authService.createGuestSession("Host");
       const member = await authService.createGuestSession("Member");
-      const snapshot = await roomService.createRoom(host.id);
+      const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
       await roomService.joinRoom(snapshot.room.id, member.id);
       await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
@@ -1641,7 +1642,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     const restored = await roomService.getRecentRoomSnapshotForSession(host.id);
 
@@ -1659,8 +1660,8 @@ describe("RoomService", () => {
     const hostOne = await authService.createGuestSession("Host One");
     const hostTwo = await authService.createGuestSession("Host Two");
     const member = await authService.createGuestSession("Member");
-    const firstRoom = await roomService.createRoom(hostOne.id);
-    const secondRoom = await roomService.createRoom(hostTwo.id);
+    const firstRoom = await roomService.createRoom(hostOne.id, "public", { roomType: "interactive" });
+    const secondRoom = await roomService.createRoom(hostTwo.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(firstRoom.room.id, member.id);
     await roomService.joinRoom(secondRoom.room.id, member.id);
@@ -1680,8 +1681,8 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const firstRoom = await roomService.createRoom(host.id);
-    const secondRoom = await roomService.createRoom(host.id);
+    const firstRoom = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
+    const secondRoom = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(firstRoom.room.id, member.id);
     await roomService.joinRoom(secondRoom.room.id, member.id);
@@ -1707,7 +1708,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
     const host = await authService.createGuestSession("Host");
 
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     expect(snapshot.room.joinCode).toMatch(/^[A-Z0-9]{6}$/);
   });
@@ -1719,7 +1720,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     const restoredService = new RoomService(authService, prisma as never, redis as never);
 
     const rooms = await restoredService.listRoomsForSession(host.id);
@@ -1737,7 +1738,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const outsider = await authService.createGuestSession("Outsider");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await expect(
       roomService.getRecoverableRoomSnapshot(snapshot.room.id, outsider.id)
@@ -1757,7 +1758,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
@@ -1775,7 +1776,7 @@ describe("RoomService", () => {
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
   });
 
-  it("returns a bounded directory without live room identity or playback details", async () => {
+  it("returns a sanitized directory summary without members, queue, or playback identity", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -1783,32 +1784,117 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const visitor = await authService.createGuestSession("Visitor");
-    const snapshot = await roomService.createRoom(host.id, "public");
+    const requester = await authService.createGuestSession("Requester");
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "request" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.joinRoom(snapshot.room.id, requester.id);
+    await roomService.createRoomRequest(snapshot.room.id, requester.id, {
+      provider: "netease",
+      providerTrackId: "123456",
+      title: "Requested Song",
+      artist: "Artist",
+      album: null,
+      durationMs: 180_000,
+      artworkUrl: null
+    });
 
     const [directoryItem] = await roomService.listRoomDirectoryForSession(visitor.id);
 
     expect(directoryItem).toMatchObject({
       room: {
         id: snapshot.room.id,
-        hostId: "",
         joinCode: snapshot.room.joinCode,
-        members: [],
         directoryHostNickname: "Host",
-        directoryMemberCount: 1,
+        directoryMemberCount: 2,
+        directoryOnlineMemberCount: 1,
         directoryIsMember: false,
-        playback: {
-          currentTrackId: null,
-          sourceSessionId: null,
-          sourcePeerId: null,
-          sourceTrackId: null,
-          gaplessNext: null
-        }
-      },
-      tracks: [],
-      queue: [],
-      playlists: []
+        directoryQueueDepth: 0,
+        directoryPendingRequestCount: 1,
+        directoryBroadcastState: null,
+        directoryNowPlaying: null,
+        playbackStatus: "paused"
+      }
     });
+    expect(directoryItem.room).not.toHaveProperty("hostId");
+    expect(directoryItem.room).not.toHaveProperty("members");
+    expect(directoryItem).not.toHaveProperty("tracks");
+    expect(directoryItem).not.toHaveProperty("queue");
+    expect(directoryItem).not.toHaveProperty("playlists");
+  });
+
+  it("locks request and radio rooms to host-managed playback and member controls", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const requestRoom = await roomService.createRoom(host.id, "public", { roomType: "request" });
+    const radioRoom = await roomService.createRoom(host.id, "public", { roomType: "radio" });
+    await roomService.joinRoom(requestRoom.room.id, member.id);
+    await roomService.joinRoom(radioRoom.room.id, member.id);
+
+    const requestSnapshot = await roomService.getAccessibleRoomSnapshot(requestRoom.room.id, [], host.id);
+    const requestMember = requestSnapshot.room.members.find((candidate) => candidate.id === member.id);
+    expect(requestMember?.permissions).toEqual({ library: false, queue: false, player: false });
+
+    await expect(
+      roomService.updateMemberPermissions(requestRoom.room.id, host.id, member.id, {
+        library: true,
+        queue: true,
+        player: true
+      })
+    ).rejects.toThrow("成员控制权限由房主规则固定");
+    await expect(
+      roomService.updatePlayback(requestRoom.room.id, {
+        action: "pause",
+        actorSessionId: member.id,
+        expectedVersion: 1
+      })
+    ).rejects.toThrow("Only the host can control playback in this room.");
+    await expect(
+      roomService.updatePlayback(radioRoom.room.id, {
+        action: "pause",
+        actorSessionId: member.id,
+        expectedVersion: 1
+      })
+    ).rejects.toThrow("Only the host can control playback in this room.");
+  });
+
+  it("accepts song requests only in request rooms and lets only the host decide them", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const requestRoom = await roomService.createRoom(host.id, "public", { roomType: "request" });
+    const interactiveRoom = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
+    await roomService.joinRoom(requestRoom.room.id, member.id);
+    await roomService.joinRoom(interactiveRoom.room.id, member.id);
+    const requestInput = {
+      provider: "qqmusic" as const,
+      providerTrackId: "003ABC",
+      title: "Request Me",
+      artist: "Artist",
+      album: null,
+      durationMs: 210_000,
+      artworkUrl: null
+    };
+
+    const request = await roomService.createRoomRequest(requestRoom.room.id, member.id, requestInput);
+    expect(request.status).toBe("pending");
+    await expect(
+      roomService.createRoomRequest(interactiveRoom.room.id, member.id, requestInput)
+    ).rejects.toThrow("当前房间不支持点歌请求。");
+    await expect(
+      roomService.decideRoomRequest(requestRoom.room.id, member.id, request.id, "approved")
+    ).rejects.toThrow("Only the host can decide song requests.");
+    await expect(
+      roomService.decideRoomRequest(requestRoom.room.id, host.id, request.id, "approved")
+    ).resolves.toMatchObject({ status: "approved" });
   });
 
   it("rejects joining a room with a duplicate nickname", async () => {
@@ -1819,7 +1905,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const duplicate = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await expect(roomService.joinRoom(snapshot.room.id, duplicate.id)).rejects.toThrow(
       "Nickname already exists in this room."
@@ -1833,7 +1919,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Same",
@@ -1878,7 +1964,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "QQ Song",
       artist: "Artist",
@@ -1924,7 +2010,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
@@ -1953,7 +2039,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
 
     const refreshed = await roomService.refreshRealtimePresence(
       snapshot.room.id,
@@ -1978,7 +2064,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-old", "online");
 
     await Promise.all([
@@ -2002,7 +2088,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
 
     await Promise.all([
@@ -2027,7 +2113,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Disconnect Source",
@@ -2087,7 +2173,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host", "online");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Source Peer Refresh",
@@ -2127,7 +2213,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Active Source",
@@ -2182,7 +2268,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
@@ -2250,7 +2336,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Offline Source",
@@ -2299,7 +2385,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -2360,7 +2446,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
     await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
@@ -2436,7 +2522,7 @@ describe("RoomService", () => {
     const roomService = new RoomService(authService, prisma as never, redis as never);
 
     const host = await authService.createGuestSession("Host");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
 
     const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -2493,7 +2579,7 @@ describe("RoomService", () => {
 
     const host = await authService.createGuestSession("Host");
     const member = await authService.createGuestSession("Member");
-    const snapshot = await roomService.createRoom(host.id);
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
     await roomService.joinRoom(snapshot.room.id, member.id);
 
     await expect(roomService.deleteRoom(snapshot.room.id, member.id)).rejects.toThrow(

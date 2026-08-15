@@ -14,6 +14,7 @@ describe("roomSnapshotSchema", () => {
         hostId: "guest_1",
         joinCode: "ABC123",
         visibility: "private",
+        roomType: "interactive",
         members: [
           {
             id: "guest_1",

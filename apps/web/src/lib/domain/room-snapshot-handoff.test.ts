@@ -13,6 +13,7 @@ function buildSnapshot(roomId = "room_1"): RoomSnapshot {
       hostId: "user_host",
       joinCode: "ABC123",
       visibility: "public",
+      roomType: "interactive",
       members: [],
       presenceRevision: 0,
       playback: {

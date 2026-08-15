@@ -193,7 +193,7 @@ export class RoomService {
   async createRoomRequest(roomId: string, sessionId: string, input: Omit<RoomRequest, "id" | "roomId" | "requesterId" | "requesterName" | "status" | "createdAt">) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);
-    if (record.room.roomType !== "request" && record.room.roomType !== "radio") {
+    if (record.room.roomType !== "request") {
       throw new Error("当前房间不支持点歌请求。");
     }
     const session = await this.authService.getUserOrThrow(sessionId);
@@ -226,6 +226,9 @@ export class RoomService {
 
   async decideRoomRequest(roomId: string, sessionId: string, requestId: string, decision: "approved" | "rejected") {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    if (record.room.roomType !== "request") {
+      throw new Error("当前房间不支持点歌审核。");
+    }
     if (record.room.hostId !== sessionId) throw new Error("Only the host can decide song requests.");
     const request = (record.requests ?? []).find((item) => item.id === requestId);
     if (!request) throw new Error("Song request not found.");
@@ -387,45 +390,42 @@ export class RoomService {
       const onlineMemberCount = snapshot.room.members.filter(
         (member) => member.presenceState === "online" && !!member.peerId
       ).length;
+      const currentTrack = snapshot.room.playback.currentTrackId
+        ? record.tracks.find((track) => track.id === snapshot.room.playback.currentTrackId) ?? null
+        : null;
+      const isOnAir = record.room.roomType === "radio" &&
+        snapshot.room.playback.status === "playing" &&
+        !!currentTrack;
 
       return {
         room: {
           id: snapshot.room.id,
-          // Directory consumers only need a join target and display metadata.
-          // Do not expose user ids, live peer ids, or playback asset ids here.
-          hostId: "",
           joinCode: snapshot.room.joinCode,
-          name: snapshot.room.name,
-          description: snapshot.room.description,
-          hasPassword: snapshot.room.hasPassword,
+          name: snapshot.room.name ?? "未命名房间",
+          description: snapshot.room.description ?? null,
+          hasPassword: snapshot.room.hasPassword === true,
           visibility: snapshot.room.visibility,
-          roomType: snapshot.room.roomType ?? "interactive",
-          members: [],
+          roomType: snapshot.room.roomType,
           directoryHostNickname: host?.nickname ?? "",
           directoryMemberCount: record.room.members.length,
           directoryOnlineMemberCount: onlineMemberCount,
           directoryIsMember: isMember,
-          presenceRevision: 0,
-          roomRevision: 0,
-          playback: {
-            ...snapshot.room.playback,
-            currentTrackId: null,
-            currentQueueItemId: null,
-            playbackAssetId: null,
-            startAt: null,
-            sourceSessionId: null,
-            sourcePeerId: null,
-            sourceTrackId: null,
-            positionMs: 0,
-            startedAt: null,
-            shuffleBagTrackIds: [],
-            nextQueueItemId: null,
-            gaplessNext: null
-          }
-        },
-        tracks: [],
-        queue: [],
-        playlists: []
+          directoryQueueDepth: record.queue.length,
+          directoryPendingRequestCount: record.room.roomType === "request"
+            ? (record.requests ?? []).filter((request) => request.status === "pending").length
+            : 0,
+          directoryBroadcastState: record.room.roomType === "radio"
+            ? (isOnAir ? "on_air" : "off_air")
+            : null,
+          directoryNowPlaying: currentTrack
+            ? {
+                title: currentTrack.title,
+                artist: currentTrack.artist,
+                artworkUrl: currentTrack.artworkUrl
+              }
+            : null,
+          playbackStatus: snapshot.room.playback.status
+        }
       };
     }));
   }
@@ -606,14 +606,13 @@ export class RoomService {
 
   createRoom(
     hostSessionId: string,
-    visibility: import("@music-room/shared").Room["visibility"] = "public",
-    metadata?: {
+    visibility: import("@music-room/shared").Room["visibility"],
+    metadata: {
       name?: string;
       description?: string | null;
       password?: string;
       newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
-      roomType?: import("@music-room/shared").RoomType;
-      radioAutoFill?: boolean;
+      roomType: import("@music-room/shared").RoomType;
     }
   ) {
     return this.lifecycleService.createRoom(hostSessionId, visibility, metadata);
@@ -632,8 +631,6 @@ export class RoomService {
       description?: string | null;
       password?: string;
       newMemberPermissions?: import("@music-room/shared").RoomMemberPermissions;
-      roomType?: import("@music-room/shared").RoomType;
-      radioAutoFill?: boolean;
     }
   ) {
     return this.lifecycleService.updateRoom(roomId, sessionId, input);

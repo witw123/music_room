@@ -19,6 +19,8 @@
     --accent: #007aff;
     --accent-hover: #3395ff;
     --accent-glow: rgba(0, 122, 255, 0.42);
+    --room-mobile-bottom-inset: calc(11rem + env(safe-area-inset-bottom));
+    --room-desktop-bottom-inset: 4.5rem;
 
     --sidebar-background: rgba(15, 16, 18, 0.88);
     --sidebar-solid-background: #0f1012;

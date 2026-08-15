@@ -43,11 +43,13 @@ describe("request contracts", () => {
   it("validates room creation and join code payloads", () => {
     expect(createRoomRequestSchema.parse({
       visibility: "private",
+      roomType: "interactive",
       name: "  Study Room ",
       description: "  For late night listening  ",
       password: "secret"
     })).toEqual({
       visibility: "private",
+      roomType: "interactive",
       name: "Study Room",
       description: "For late night listening",
       password: "secret"
@@ -59,7 +61,13 @@ describe("request contracts", () => {
     expect(joinRoomByCodeRequestSchema.parse({ joinCode: "abc123" })).toEqual({
       joinCode: "ABC123"
     });
-    expect(() => createRoomRequestSchema.parse({ visibility: "friends" })).toThrow();
+    expect(() => createRoomRequestSchema.parse({ visibility: "friends", roomType: "interactive" })).toThrow();
+    expect(() => createRoomRequestSchema.parse({ visibility: "public" })).toThrow();
+    expect(() => createRoomRequestSchema.parse({
+      visibility: "public",
+      roomType: "radio",
+      newMemberPermissions: { library: true, queue: true, player: true }
+    })).toThrow();
     expect(updateRoomRequestSchema.parse({
       visibility: "public",
       name: "Room",
@@ -67,6 +75,11 @@ describe("request contracts", () => {
       password: "",
       newMemberPermissions: { library: false, queue: true, player: false }
     }).newMemberPermissions).toEqual({ library: false, queue: true, player: false });
+    expect(() => updateRoomRequestSchema.parse({
+      visibility: "public",
+      roomType: "radio",
+      name: "Room"
+    })).toThrow();
   });
 
   it("validates track registration numeric bounds", () => {

@@ -8,6 +8,7 @@ function createRoomRecord(roomRevision: number): RoomRecord {
     hostId: "host_1",
     joinCode: "ABC123",
     visibility: "public",
+    roomType: "interactive",
     members: [
       {
         id: "host_1",

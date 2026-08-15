@@ -43,21 +43,27 @@ export const loginRequestSchema = z
 
 export const createRoomRequestSchema = z
   .object({
-  visibility: z.enum(["private", "public"]).optional(),
-    roomType: roomTypeSchema.optional(),
-    radioAutoFill: z.boolean().optional(),
+    visibility: z.enum(["private", "public"]).optional(),
+    roomType: roomTypeSchema,
     name: trimmedString(120).optional(),
     description: optionalNullableText(500),
     password: z.string().trim().min(4).max(128).optional(),
     newMemberPermissions: roomMemberPermissionsSchema.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.roomType !== "interactive" && payload.newMemberPermissions) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["newMemberPermissions"],
+        message: "Only interactive rooms can configure member permissions."
+      });
+    }
+  });
 
 export const updateRoomRequestSchema = z
   .object({
-  visibility: z.enum(["private", "public"]),
-    roomType: roomTypeSchema.optional(),
-    radioAutoFill: z.boolean().optional(),
+    visibility: z.enum(["private", "public"]),
     name: trimmedString(120),
     description: optionalNullableText(500),
     password: z

@@ -6,6 +6,12 @@ export const roomPresenceStateSchema = z.enum(["online", "reconnecting", "offlin
 export const roomTypeSchema = z.enum(["interactive", "request", "radio"]);
 export type RoomType = z.infer<typeof roomTypeSchema>;
 
+export const roomDirectoryNowPlayingSchema = z.object({
+  title: z.string().min(1).max(240),
+  artist: z.string().min(1).max(240),
+  artworkUrl: z.string().nullable()
+});
+
 export const roomRequestStatusSchema = z.enum(["pending", "approved", "rejected"]);
 export const roomRequestSchema = z.object({
   id: z.string(),
@@ -57,8 +63,7 @@ export const roomSchema = z.object({
   description: z.string().nullable().optional(),
   hasPassword: z.boolean().optional(),
   visibility: z.enum(["private", "public"]),
-  roomType: roomTypeSchema.optional(),
-  radioAutoFill: z.boolean().optional(),
+  roomType: roomTypeSchema,
   requests: z.array(roomRequestSchema).optional(),
   // Optional so snapshots persisted before room-level defaults remain valid.
   newMemberPermissions: roomMemberPermissionsSchema.optional(),
@@ -79,6 +84,27 @@ export const roomSnapshotSchema = z.object({
   tracks: z.array(trackMetaSchema),
   queue: z.array(queueItemSchema),
   playlists: z.array(playlistSchema)
+});
+
+export const roomDirectoryItemSchema = z.object({
+  room: z.object({
+    id: z.string(),
+    joinCode: z.string(),
+    name: z.string().min(1).max(120),
+    description: z.string().nullable(),
+    hasPassword: z.boolean(),
+    visibility: z.enum(["private", "public"]),
+    roomType: roomTypeSchema,
+    directoryHostNickname: z.string().max(80),
+    directoryMemberCount: z.number().int().nonnegative(),
+    directoryOnlineMemberCount: z.number().int().nonnegative(),
+    directoryIsMember: z.boolean(),
+    directoryQueueDepth: z.number().int().nonnegative(),
+    directoryPendingRequestCount: z.number().int().nonnegative(),
+    directoryBroadcastState: z.enum(["on_air", "off_air"]).nullable(),
+    directoryNowPlaying: roomDirectoryNowPlayingSchema.nullable(),
+    playbackStatus: playbackSnapshotSchema.shape.status
+  })
 });
 
 export const roomTrackDeletionSchema = z.object({
@@ -111,7 +137,7 @@ export const roomJoinResponseSchema = z.object({
 export type RoomMember = z.infer<typeof roomMemberSchema>;
 export type Room = z.infer<typeof roomSchema>;
 export type RoomSnapshot = z.infer<typeof roomSnapshotSchema>;
-export type RoomDirectoryItem = RoomSnapshot;
+export type RoomDirectoryItem = z.infer<typeof roomDirectoryItemSchema>;
 export type RoomTrackDeletion = z.infer<typeof roomTrackDeletionSchema>;
 export type RoomSyncResponse = z.infer<typeof roomSyncResponseSchema>;
 export type RoomJoinResponse = z.infer<typeof roomJoinResponseSchema>;

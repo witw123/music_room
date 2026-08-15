@@ -61,12 +61,11 @@ export class RoomController {
     @Body()
     body: {
       visibility?: "private" | "public";
+      roomType: import("@music-room/shared").RoomType;
       name?: string;
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
-      roomType?: import("@music-room/shared").RoomType;
-      radioAutoFill?: boolean;
     },
     @Ip() ipAddress?: string
   ) {
@@ -83,12 +82,9 @@ export class RoomController {
       ...(payload.newMemberPermissions !== undefined
         ? { newMemberPermissions: payload.newMemberPermissions }
         : {}),
-      ...(payload.roomType !== undefined ? { roomType: payload.roomType } : {}),
-      ...(payload.radioAutoFill !== undefined ? { radioAutoFill: payload.radioAutoFill } : {})
+      roomType: payload.roomType
     };
-    const snapshot = Object.keys(metadata).length > 0
-      ? await this.roomService.createRoom(userId, payload.visibility, metadata)
-      : await this.roomService.createRoom(userId, payload.visibility);
+    const snapshot = await this.roomService.createRoom(userId, payload.visibility ?? "public", metadata);
     await this.roomRealtimePublisher.emitSnapshot(snapshot.room.id);
     return snapshot;
   }
@@ -231,8 +227,6 @@ export class RoomController {
       description?: string | null;
       password?: string;
       newMemberPermissions?: RoomMemberPermissions;
-      roomType?: import("@music-room/shared").RoomType;
-      radioAutoFill?: boolean;
     },
     @Ip() ipAddress?: string
   ) {
@@ -242,11 +236,7 @@ export class RoomController {
       { name: "user", value: userId }
     ], { limit: 10, windowMs: 60 * 60 * 1000 });
     const payload = parseRequestBody(updateRoomRequestSchema, body);
-    const updateInput = {
-      ...payload,
-      ...(payload.radioAutoFill !== undefined ? { radioAutoFill: payload.radioAutoFill } : {})
-    };
-    await this.roomService.updateRoom(roomId, userId, updateInput);
+    await this.roomService.updateRoom(roomId, userId, payload);
     let playlists: Playlist[] = [];
     try {
       playlists = await this.playlistService.listPlaylistsForRoom(roomId);

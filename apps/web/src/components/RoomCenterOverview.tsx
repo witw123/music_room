@@ -75,7 +75,7 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
     <Link className="border border-surface-border bg-surface/45 p-4 transition hover:border-accent/60 hover:bg-surface-hover" href={`/room/${room.id}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 truncate font-medium text-foreground">{room.name ?? "未命名房间"}</span>
-        <span className="shrink-0 text-[11px] text-foreground-muted">{roomTypeLabel[room.roomType ?? "interactive"]}</span>
+        <span className="shrink-0 text-[11px] text-foreground-muted">{roomTypeLabel[room.roomType]}</span>
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-foreground-muted">
         <span>{getOnlineMemberCount(room.members)} 人在线</span>

@@ -72,6 +72,7 @@ function record(positionMs: number, nextOwnerSessionId = "owner"): RoomRecord {
       description: null,
       hasPassword: false,
       visibility: "private",
+      roomType: "interactive",
       members: [],
       playback,
       presenceRevision: 1,
