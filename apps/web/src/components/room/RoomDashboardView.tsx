@@ -168,7 +168,10 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
   return <MembersTabPanel members={props.roomSnapshot.room.members} now={props.membershipNow} peerDiagnostics={props.peerDiagnostics} peerRecentEvents={props.peerRecentEvents} localMemberState={props.localMemberState} playbackStatus={props.roomSnapshot.room.playback.status} sourceSessionId={props.roomSnapshot.room.playback.sourceSessionId} sourcePeerId={props.currentSourcePeerId} iceConfigSource={props.iceConfigSource} iceConfigStatus={props.iceConfigStatus} activeSessionId={props.activeSession?.userId ?? null} isHost={props.isHost} onUpdateMemberPermissions={props.onUpdateMemberPermissions} onRemoveMember={props.onRemoveMember} onDiagnosticsVisibilityChange={props.onDiagnosticsVisibilityChange} />;
 }
 
-export function buildRoomStageProps(props: RoomDashboardViewProps) {
+export function buildRoomStageProps(
+  props: RoomDashboardViewProps,
+  options?: { showMobilePlayer?: boolean }
+) {
   return {
     roomSnapshot: props.roomSnapshot,
     playbackBarrier: props.playbackBarrier,
@@ -190,7 +193,7 @@ export function buildRoomStageProps(props: RoomDashboardViewProps) {
     onDeleteRoom: props.onDeleteRoom,
     isLyricsOpen: props.isLyricsOpen,
     onSeek: props.onSeek,
-    socket: props.socket
+    showMobilePlayer: options?.showMobilePlayer
   };
 }
 

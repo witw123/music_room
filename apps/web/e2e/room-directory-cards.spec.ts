@@ -48,7 +48,7 @@ test("room directory gives each room format a distinct stage", async ({ page }, 
     await expect(card).toHaveCount(1);
     await expect(card.getByTestId("room-directory-stage")).toHaveAttribute("data-card-scene", roomType);
     await expect(card.getByText(/\d+ 人在线/)).toHaveCount(1);
-    await expect(card.getByTestId("room-directory-share")).toBeVisible();
+    await expect(card.getByTestId("room-directory-open")).toHaveAccessibleName(`查看 ${room.name} 的房间详情`);
     await expect(card.getByText(/OFF AIR|正在收集点歌|等待下一首/)).toHaveCount(0);
   }
   await page.screenshot({ path: testInfo.outputPath("room-directory-desktop.png"), fullPage: true });

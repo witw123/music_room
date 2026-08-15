@@ -31,12 +31,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   const onAir = playback.status === "playing" && !!currentTrack;
 
   return <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-32" data-room-view="radio">
-    <section className="relative min-h-[34rem] border-b border-white/[0.06]">
-      <div className="absolute left-0 right-0 top-[calc(10rem+env(safe-area-inset-top))] z-10 flex items-center justify-between gap-3 px-4 md:top-[calc(8rem+env(safe-area-inset-top))] sm:px-6 lg:px-8">
-        <span className={`border px-2.5 py-1 font-mono text-[11px] font-semibold ${onAir ? "border-accent/60 bg-accent/10 text-accent" : "border-surface-border bg-surface/40 text-foreground-muted"}`}>{onAir ? "ON AIR" : "OFF AIR"}</span>
-        <span className="text-xs text-foreground-muted">{props.roomSnapshot.room.directoryOnlineMemberCount ?? props.roomSnapshot.room.members.filter((member) => member.presenceState === "online").length} 位听众在线</span>
-      </div>
-      <RoomStage {...buildRoomStageProps(props)} />
+    <section className="relative min-h-[30rem] border-b border-white/[0.06] lg:min-h-[34rem]">
+      <RoomStage {...buildRoomStageProps(props, { showMobilePlayer: true })} />
     </section>
 
     <section className="mx-auto grid w-full max-w-[1400px] gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(23rem,0.66fr)]">

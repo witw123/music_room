@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import type { RoomDirectoryItem, RoomType } from "@music-room/shared";
 
 type RoomDirectoryCardProps = {
@@ -54,8 +54,6 @@ const roomCardThemes: Record<RoomType, RoomCardTheme> = {
 export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectoryCardProps) {
   const room = directoryItem.room;
   const theme = roomCardThemes[room.roomType];
-  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
-  const resetFeedbackTimer = useRef<number | null>(null);
   const cardStyle: RoomCardStyle = {
     "--room-accent": theme.accent,
     "--room-border": theme.border,
@@ -63,51 +61,21 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
     "--room-soft": theme.soft
   };
 
-  useEffect(() => () => {
-    if (resetFeedbackTimer.current !== null) window.clearTimeout(resetFeedbackTimer.current);
-  }, []);
-
-  function showShareFeedback(message: string) {
-    setShareFeedback(message);
-    if (resetFeedbackTimer.current !== null) window.clearTimeout(resetFeedbackTimer.current);
-    resetFeedbackTimer.current = window.setTimeout(() => setShareFeedback(null), 1800);
-  }
-
-  async function copyRoomCode() {
-    try {
-      if (!navigator.clipboard?.writeText) return false;
-      await navigator.clipboard.writeText(room.joinCode);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async function shareRoom() {
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({
-          title: room.name,
-          text: `${room.name}，房间码 ${room.joinCode}`,
-          url: new URL(`/room/${room.id}`, window.location.origin).toString()
-        });
-        return;
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") return;
-      }
-    }
-
-    showShareFeedback(await copyRoomCode() ? "已复制房间码" : "无法分享");
-  }
-
   return (
     <article
-      className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--room-border)] bg-[#111114] p-4 shadow-[0_18px_44px_var(--room-shadow)] transition-[border-color,box-shadow] duration-200 hover:border-[color:var(--room-accent)] hover:shadow-[0_22px_52px_var(--room-shadow)] motion-reduce:transition-none sm:p-5"
+      className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--room-border)] bg-[#111114] p-4 shadow-[0_18px_44px_var(--room-shadow)] transition-[border-color,box-shadow] duration-200 hover:border-[color:var(--room-accent)] hover:shadow-[0_22px_52px_var(--room-shadow)] focus-within:border-[color:var(--room-accent)] focus-within:ring-2 focus-within:ring-[color:var(--room-accent)] focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none sm:p-5"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
       style={cardStyle}
     >
+      <button
+        aria-label={`查看 ${room.name} 的房间详情`}
+        className="absolute inset-0 z-10 cursor-pointer rounded-[inherit] focus:outline-none"
+        data-testid="room-directory-open"
+        onClick={onOpen}
+        type="button"
+      />
       <header className="flex min-h-9 items-center justify-between gap-3">
         <span className="inline-flex min-h-8 items-center gap-2 rounded-full border border-[color:var(--room-border)] bg-[color:var(--room-soft)] px-3 text-sm font-semibold text-foreground">
           <RoomTypeGlyph roomType={room.roomType} />
@@ -132,28 +100,6 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         <p className="mt-1 line-clamp-3 min-h-[4.125rem] break-words text-sm leading-[1.375rem] text-foreground-muted">
           {room.description?.trim() || fallbackDescription(room)}
         </p>
-      </div>
-
-      <div className="mt-5 grid grid-cols-[minmax(0,1.45fr)_minmax(6.5rem,0.75fr)] gap-3">
-        <button
-          className="room-card-action room-card-action--primary inline-flex min-h-12 items-center justify-center gap-2 px-4 text-sm font-semibold text-white hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--room-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-          onClick={onOpen}
-          type="button"
-        >
-          <RoomTypeGlyph roomType={room.roomType} />
-          进入房间
-        </button>
-        <button
-          aria-label={`分享${room.name}`}
-          className="room-card-action room-card-action--secondary inline-flex min-h-12 items-center justify-center gap-2 px-3 text-sm font-medium text-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--room-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-          data-testid="room-directory-share"
-          onClick={() => void shareRoom()}
-          title="分享房间"
-          type="button"
-        >
-          <ShareGlyph />
-          <span className="whitespace-nowrap">{shareFeedback ?? "分享"}</span>
-        </button>
       </div>
     </article>
   );
@@ -200,10 +146,6 @@ function RoomTypeGlyph({ large = false, roomType }: { large?: boolean; roomType:
   if (roomType === "request") return <span aria-hidden="true" className={`inline-flex ${sizeClass} shrink-0 items-center justify-center font-semibold leading-none text-current`}>♪</span>;
   if (roomType === "radio") return <span aria-hidden="true" className={`relative inline-flex ${sizeClass} shrink-0 items-center justify-center`}><span className="h-[60%] w-[58%] rounded-[3px] border border-current" /><span className="absolute left-[30%] top-[42%] h-[18%] w-[18%] rounded-full bg-current" /><span className="absolute right-[25%] top-[28%] h-[3px] w-[3px] rounded-full bg-current" /></span>;
   return <span aria-hidden="true" className={`relative inline-flex ${sizeClass} shrink-0 items-center justify-center`}><span className="absolute left-[10%] top-[14%] h-[34%] w-[34%] rounded-full border border-current" /><span className="absolute right-[10%] top-[14%] h-[34%] w-[34%] rounded-full border border-current" /><span className="absolute bottom-[10%] left-[4%] h-[36%] w-[42%] rounded-t-full border border-b-0 border-current" /><span className="absolute bottom-[10%] right-[4%] h-[36%] w-[42%] rounded-t-full border border-b-0 border-current" /></span>;
-}
-
-function ShareGlyph() {
-  return <span aria-hidden="true" className="relative inline-flex h-4 w-4 shrink-0"><span className="absolute left-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full border border-current" /><span className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full border border-current" /><span className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-current" /><span className="absolute left-[5px] top-[5px] h-px w-2 rotate-[-28deg] bg-current" /><span className="absolute bottom-[5px] left-[5px] h-px w-2 rotate-[28deg] bg-current" /></span>;
 }
 
 function fallbackDescription(room: RoomDirectoryItem["room"]) {

@@ -10,7 +10,6 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/domain/music-room-ui";
-import type { RoomSocket } from "@/lib/network/ws-client";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
@@ -26,7 +25,6 @@ import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { MemberPermissionControls } from "./MembersPanel";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
-import type { RoomReactionPayload } from "@music-room/shared";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -49,7 +47,7 @@ type RoomStageProps = {
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
   isLyricsOpen: boolean;
   onSeek: (positionMs: number) => void;
-  socket: RoomSocket | null;
+  showMobilePlayer?: boolean;
 };
 
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
@@ -105,7 +103,7 @@ function RoomStageBase({
   onUpdateRoom,
   isLyricsOpen,
   onSeek,
-  socket
+  showMobilePlayer = false
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -136,7 +134,6 @@ function RoomStageBase({
   const [isSharing, setIsSharing] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
-  const [reactionCounts, setReactionCounts] = useState({ like: 0, applause: 0 });
   const [lyricsText, setLyricsText] = useState<string | null>(null);
   const [translatedLyricsText, setTranslatedLyricsText] = useState<string | null>(null);
   const [romanizedLyricsText, setRomanizedLyricsText] = useState<string | null>(null);
@@ -170,32 +167,6 @@ function RoomStageBase({
         : "-translate-y-[clamp(2rem,5vh,4rem)]";
 
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
-
-  useEffect(() => {
-    if (!socket) return;
-    const receiveReaction = (payload: RoomReactionPayload) => {
-      if (payload.trackId !== playback.currentTrackId) return;
-      setReactionCounts((current) => ({ ...current, [payload.reaction]: payload.totalCount }));
-    };
-    socket.on("room.reaction", receiveReaction);
-    return () => {
-      socket.off("room.reaction", receiveReaction);
-    };
-  }, [playback.currentTrackId, socket]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setReactionCounts({ like: 0, applause: 0 });
-    void musicRoomApi.getRoomReactionCounts(roomSnapshot.room.id, playback.currentTrackId)
-      .then((counts) => { if (!cancelled) setReactionCounts(counts); })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [playback.currentTrackId, roomSnapshot.room.id]);
-
-  function sendReaction(reaction: "like" | "applause") {
-    if (!socket) return;
-    socket.emit("room.reaction", { roomId: roomSnapshot.room.id, reaction, trackId: playback.currentTrackId });
-  }
 
   const handleCopyJoinCode = async () => {
     if (isCopying) return;
@@ -475,10 +446,6 @@ function RoomStageBase({
             <span>·</span>
             <span>{sourceModeLabel}</span>
           </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button aria-label="点赞" className="light-control-surface inline-flex h-8 items-center gap-1 border border-white/10 bg-white/10 px-2 text-xs text-white/80 hover:bg-white/20" onClick={() => sendReaction("like")} type="button">♥ <span>{reactionCounts.like}</span></button>
-            <button aria-label="鼓掌" className="light-control-surface inline-flex h-8 items-center gap-1 border border-white/10 bg-white/10 px-2 text-xs text-white/80 hover:bg-white/20" onClick={() => sendReaction("applause")} type="button">👏 <span>{reactionCounts.applause}</span></button>
-          </div>
         </div>
 
         <div className="relative shrink-0 pointer-events-auto">
@@ -552,6 +519,19 @@ function RoomStageBase({
           ) : null}
         </div>
       </div>
+
+      {showMobilePlayer ? (
+        <MobileRoomStagePlayer
+          artworkPalette={artworkPalette}
+          artworkUrl={artworkUrl}
+          currentTrack={currentTrack}
+          currentTrackDuration={currentTrackDuration}
+          isPlaying={isPlaying}
+          playbackBarrier={playbackBarrier}
+          playerStyle={playerStyle}
+          progressMs={lyricsPositionMs}
+        />
+      ) : null}
 
       <div className="relative z-20 hidden min-h-0 flex-1 flex-col items-center overflow-visible lg:flex">
         <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-visible">
@@ -734,6 +714,59 @@ function RoomStageBase({
 }
 
 export const RoomStage = memo(RoomStageBase);
+
+function MobileRoomStagePlayer({
+  artworkPalette,
+  artworkUrl,
+  currentTrack,
+  currentTrackDuration,
+  isPlaying,
+  playbackBarrier,
+  playerStyle,
+  progressMs
+}: {
+  artworkPalette: ReturnType<typeof useArtworkPalette>;
+  artworkUrl: string | null;
+  currentTrack: TrackMeta | null;
+  currentTrackDuration: number;
+  isPlaying: boolean;
+  playbackBarrier?: RoomPlaybackBarrierClock | null;
+  playerStyle: ReturnType<typeof usePlayerStyle>;
+  progressMs: number;
+}) {
+  const boundedProgressMs = currentTrackDuration > 0
+    ? Math.min(Math.max(0, progressMs), currentTrackDuration)
+    : 0;
+  const progressPercent = currentTrackDuration > 0
+    ? Math.round((boundedProgressMs / currentTrackDuration) * 100)
+    : 0;
+  const playbackLabel = playbackBarrier?.blocked ? "缓存中" : isPlaying ? "正在播放" : "准备就绪";
+
+  return <div className="relative z-20 flex min-h-[22rem] flex-1 flex-col items-center justify-center px-5 pb-7 pt-4 text-center lg:hidden" data-room-mobile-player="true">
+    <div className="relative flex w-full max-w-[22rem] flex-col items-center">
+      <div className="relative aspect-square w-[min(56vw,15rem)]">
+        {playerStyle === "square-cover" ? (
+          <SquareAlbumCover artworkUrl={artworkUrl} className="h-full w-full rounded-2xl border border-white/10 shadow-[0_18px_44px_rgba(0,0,0,0.38)]" />
+        ) : (
+          <div className="relative flex h-full w-full items-center justify-center rounded-full border border-white/10 bg-black shadow-[0_18px_44px_rgba(0,0,0,0.38)]">
+            <div className="absolute inset-[7%] overflow-hidden rounded-full border border-white/10 bg-white/[0.04]">
+              {artworkUrl ? <div aria-hidden="true" className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }} /> : <div className="flex h-full w-full items-center justify-center text-xs text-white/45">音乐</div>}
+            </div>
+            <div className="relative z-10 h-[18%] w-[18%] rounded-full border border-white/15 bg-black" style={{ boxShadow: `0 0 0 0.6rem ${artworkPalette.accentSoft}` }} />
+          </div>
+        )}
+        <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border px-2.5 py-1 font-mono text-[10px] font-semibold" style={{ borderColor: artworkPalette.border, backgroundColor: artworkPalette.accentSoft, color: artworkPalette.accent }}>{playbackLabel}</span>
+      </div>
+
+      <div className="mt-7 min-w-0 w-full">
+        <h2 className="mx-auto max-w-[22ch] truncate text-xl font-semibold text-white">{currentTrack?.title ?? "等待节目开始"}</h2>
+        <p className="mx-auto mt-1 max-w-[28ch] truncate text-sm text-white/60">{currentTrack ? `${currentTrack.artist}${currentTrack.album ? ` · ${currentTrack.album}` : ""}` : "主持人准备好节目后会在这里播放"}</p>
+        <div className="mt-5 h-px w-full overflow-hidden bg-white/10"><div className="h-full transition-[width] duration-200" style={{ width: `${progressPercent}%`, backgroundColor: artworkPalette.accent }} /></div>
+        <div className="mt-2 flex justify-between font-mono text-[10px] text-white/45"><span>{formatDuration(boundedProgressMs)}</span><span>{formatDuration(currentTrackDuration)}</span></div>
+      </div>
+    </div>
+  </div>;
+}
 
 function RoomEditDialog({
   form,

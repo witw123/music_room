@@ -112,7 +112,7 @@ test("room directory cards match the visual hierarchy at desktop and mobile", as
   for (const card of await cards.all()) {
     await expect(card.getByText(/\d+ 人在线/)).toHaveCount(1);
     await expect(card.locator('[data-testid="room-directory-online-members"]')).toHaveCount(0);
-    await expect(card.getByTestId("room-directory-share")).toBeVisible();
+    await expect(card.getByTestId("room-directory-open")).toBeVisible();
     await expect(card.getByText(/OFF AIR|正在收集点歌|等待下一首/)).toHaveCount(0);
   }
 
@@ -121,4 +121,7 @@ test("room directory cards match the visual hierarchy at desktop and mobile", as
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(cards.first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("room-directory-reference-mobile.png"), fullPage: true });
+
+  await cards.first().getByTestId("room-directory-open").click();
+  await expect(page.getByRole("dialog")).toContainText(rooms[0].room.name);
 });

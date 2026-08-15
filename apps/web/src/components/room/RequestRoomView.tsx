@@ -98,7 +98,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
   return <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-32" data-room-view="request">
     <div className="grid min-h-full min-w-0 lg:grid-cols-[minmax(0,0.94fr)_minmax(25rem,0.76fr)]">
       <section className="min-h-[31rem] border-b border-white/[0.06] lg:min-h-0 lg:border-b-0 lg:border-r">
-        <RoomStage {...buildRoomStageProps(props)} />
+        <RoomStage {...buildRoomStageProps(props, { showMobilePlayer: true })} />
       </section>
       <section className="min-w-0 px-3 py-4 sm:px-5 sm:py-6 lg:px-6">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
