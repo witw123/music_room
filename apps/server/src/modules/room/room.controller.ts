@@ -151,6 +151,21 @@ export class RoomController {
     return this.roomChatService.listHistory(roomId, userId, before?.trim() || undefined);
   }
 
+  @Delete(":roomId/chat/:messageId")
+  async deleteRadioChatMessage(
+    @Param("roomId") roomId: string,
+    @Param("messageId") messageId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    if (!this.roomChatService) {
+      throw new ServiceUnavailableException("聊天记录服务暂不可用。");
+    }
+    const result = await this.roomChatService.deleteMessage(roomId, userId, messageId);
+    this.roomRealtimePublisher.emitChatDeleted(roomId, messageId);
+    return result;
+  }
+
   @Get(":roomId/recover")
   async recoverRoom(
     @Param("roomId") roomId: string,

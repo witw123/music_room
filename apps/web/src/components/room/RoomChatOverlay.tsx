@@ -9,15 +9,17 @@ import type { RoomSocket } from "@/lib/network/ws-client";
 type RoomChatPanelProps = {
   roomId: string;
   activeSession: AuthSession | null;
+  isHost: boolean;
   socket: RoomSocket | null;
 };
 
-export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelProps) {
+export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomChatPanelProps) {
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
 
@@ -66,9 +68,16 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
       }
     };
 
+    const handleChatDeleted = (payload: { roomId: string; messageId: string }) => {
+      if (payload.roomId !== roomId) return;
+      setMessages((current) => current.filter((message) => message.id !== payload.messageId));
+    };
+
     socket.on("room.chat", handleChat);
+    socket.on("room.chat.deleted", handleChatDeleted);
     return () => {
       socket.off("room.chat", handleChat);
+      socket.off("room.chat.deleted", handleChatDeleted);
     };
   }, [roomId, socket]);
 
@@ -103,6 +112,20 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
     setInputValue("");
   };
 
+  const deleteMessage = async (messageId: string) => {
+    if (!isHost || deletingMessageId) return;
+    setDeletingMessageId(messageId);
+    setErrorMessage(null);
+    try {
+      await musicRoomApi.deleteRoomChatMessage(roomId, messageId);
+      setMessages((current) => current.filter((message) => message.id !== messageId));
+    } catch (error) {
+      setErrorMessage(toChatErrorMessage(error));
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   return (
     <section className="flex min-h-[24rem] min-w-0 flex-col bg-surface/25" data-testid="radio-chat-panel">
       <header className="shrink-0 px-4 py-4 sm:px-5">
@@ -124,11 +147,15 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
           {messages.map((message) => {
             const isCurrentUser = message.senderId === activeSession?.userId;
             return (
-              <article className={`flex min-w-0 items-end gap-3 ${isCurrentUser ? "justify-end" : "justify-start"}`} key={message.id}>
+              <article className={`group flex min-w-0 items-start gap-3 ${isCurrentUser ? "justify-end" : "justify-start"}`} key={message.id}>
                 {!isCurrentUser ? <ChatAvatar name={message.senderName} /> : null}
-                <div className={`min-w-0 max-w-[min(78%,32rem)] ${isCurrentUser ? "order-first text-right" : "text-left"}`}>
+                <div className={`min-w-0 max-w-[min(78%,32rem)] ${isCurrentUser ? "text-right" : "text-left"}`}>
                   <strong className="mb-1.5 block truncate px-1 text-xs font-medium text-foreground-muted">{message.senderName}</strong>
-                  <div className={`inline-block max-w-full rounded-[1.25rem] px-4 py-3 text-left ${isCurrentUser ? "bg-accent/75 text-white shadow-[0_8px_20px_rgba(0,112,243,0.16)]" : "bg-white/[0.12] text-foreground"}`}><p className="break-words text-sm leading-6">{message.content}</p><time className={`mt-1 block text-right font-mono text-[10px] ${isCurrentUser ? "text-white/55" : "text-foreground-muted"}`} dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time></div>
+                  <div className={`inline-block max-w-full rounded-[1.25rem] px-4 py-2.5 text-left ${isCurrentUser ? "bg-accent/75 text-white shadow-[0_8px_20px_rgba(0,112,243,0.16)]" : "bg-white/[0.12] text-foreground"}`}><p className="break-words text-sm leading-6">{message.content}</p></div>
+                  <div className={`mt-1 flex items-center gap-2 px-1 ${isCurrentUser ? "justify-end" : "justify-start"}`}>
+                    <time className="font-mono text-[10px] text-foreground-muted" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
+                    {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="text-[10px] text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
+                  </div>
                 </div>
                 {isCurrentUser ? <ChatAvatar currentUser name={message.senderName} /> : null}
               </article>
@@ -155,7 +182,7 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
 }
 
 function ChatAvatar({ name, currentUser = false }: { name: string; currentUser?: boolean }) {
-  return <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${currentUser ? "bg-accent/20 text-accent" : "bg-white/[0.08] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
+  return <span aria-hidden="true" className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${currentUser ? "bg-accent/20 text-accent" : "bg-white/[0.08] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function mergeMessages(

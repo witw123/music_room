@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   RoomLibraryPatchPayload,
+  RoomChatDeletedPayload,
   RoomPlaybackPatchPayload,
   RoomPlaybackReadinessPayload,
   RoomPresencePatchPayload,
@@ -14,6 +15,7 @@ import type { Server } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
 import {
   roomDeletedChannel,
+  roomChatDeletedChannel,
   roomLibraryPatchChannel,
   roomMemberRemovedChannel,
   roomPlaybackPatchChannel,
@@ -165,6 +167,16 @@ export class RoomRealtimeBroadcaster {
     const message: RoomMemberRemovedPayload = { roomId, memberId };
     this.server?.to(roomId).emit("room.member.removed", message);
     this.publish(roomMemberRemovedChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitChatDeleted(roomId: string, messageId: string) {
+    const message: RoomChatDeletedPayload = { roomId, messageId };
+    this.server?.to(roomId).emit("room.chat.deleted", message);
+    this.publish(roomChatDeletedChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message

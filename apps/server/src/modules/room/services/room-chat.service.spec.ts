@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { RoomChatService } from "./room-chat.service";
 
 describe("RoomChatService", () => {
@@ -36,6 +36,24 @@ describe("RoomChatService", () => {
 
     const radio = new RoomChatService(createRoomRepository("radio") as never, prisma as never);
     await expect(radio.listHistory("room_1", "outsider")).rejects.toThrow("Only room members");
+  });
+
+  it("lets only the radio host delete a persisted message", async () => {
+    const prisma = createPrismaMock();
+    const service = new RoomChatService(createRoomRepository("radio") as never, prisma as never);
+    const message = await service.append({
+      roomId: "room_1",
+      sessionId: "member_1",
+      senderName: "Member",
+      content: "delete me"
+    });
+
+    await expect(service.deleteMessage("room_1", "member_1", message.id)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.deleteMessage("room_1", "host_1", message.id)).resolves.toEqual({
+      roomId: "room_1",
+      messageId: message.id
+    });
+    expect(prisma.messages).toHaveLength(0);
   });
 });
 
@@ -96,7 +114,8 @@ function createRoomRepository(roomType: "interactive" | "radio") {
     getRoomRecord: jest.fn().mockResolvedValue({
       room: {
         roomType,
-        members: [{ id: "member_1" }]
+        hostId: "host_1",
+        members: [{ id: "host_1" }, { id: "member_1" }]
       }
     })
   };

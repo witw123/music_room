@@ -345,6 +345,10 @@ export const musicRoomApi = {
     request<RoomChatHistoryResponse>(
       `/v1/rooms/${roomId}/chat${before ? `?before=${encodeURIComponent(before)}` : ""}`
     ),
+  deleteRoomChatMessage: (roomId: string, messageId: string) =>
+    request<{ roomId: string; messageId: string }>(`/v1/rooms/${roomId}/chat/${messageId}`, {
+      method: "DELETE"
+    }),
   syncRoom: (roomId: string, sinceRevision = 0) =>
     request<RoomSyncResponse>(`/v1/rooms/${roomId}/sync`, {
       headers: { "x-room-revision": String(Math.max(0, Math.floor(sinceRevision))) }

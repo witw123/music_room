@@ -128,7 +128,7 @@ function RadioCommunityPanels(props: RoomDashboardViewProps & {
         </div>
       </div>
       <RadioScrollRegion activeRegion={props.activeScrollRegion} className={`${mobileTab === "chat" ? "block border-b border-surface-border bg-background lg:border-b-0" : "hidden border-b border-surface-border bg-background lg:block lg:border-b-0"} ${chatDesktopDivider}`} id="chat" onActivate={props.onActivateScrollRegion}>
-        <div id="radio-chat" role="tabpanel"><RoomChatPanel activeSession={props.activeSession} roomId={props.roomSnapshot.room.id} socket={props.socket} /></div>
+        <div id="radio-chat" role="tabpanel"><RoomChatPanel activeSession={props.activeSession} isHost={isHost} roomId={props.roomSnapshot.room.id} socket={props.socket} /></div>
       </RadioScrollRegion>
       <RadioScrollRegion activeRegion={props.activeScrollRegion} className={mobileTab === "members" ? "block border-surface-border bg-background lg:border-l" : "hidden border-surface-border bg-background lg:block lg:border-l"} id="members" onActivate={props.onActivateScrollRegion}>
         <section className="min-h-[24rem] bg-surface/25" id="radio-members" role="tabpanel">

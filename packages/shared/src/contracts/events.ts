@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { peerSignalMessageSchema } from "../p2p/models";
 import { p2pProtocolVersion, segmentedOpusCapability } from "../p2p/asset-models";
-import { roomChatMessageSchema, roomSnapshotSchema, roomTrackDeletionSchema } from "../room/models";
+import {
+  roomChatDeletedPayloadSchema,
+  roomChatMessageSchema,
+  roomSnapshotSchema,
+  roomTrackDeletionSchema,
+  type RoomChatDeletedPayload
+} from "../room/models";
 import { playbackSnapshotSchema } from "../playback/models";
 import { queueItemSchema, trackMetaSchema } from "../playlist/models";
 import { telemetryReportSchema, type TelemetryReport } from "./telemetry";
@@ -23,6 +29,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.session.replaced"),
   z.literal("peer.signal"),
   z.literal("room.chat"),
+  z.literal("room.chat.deleted"),
   z.literal("room.reaction"),
   z.literal("diagnostics.report"),
   z.literal("session.revoked")
@@ -240,6 +247,11 @@ export const roomChatEventSchema = z.object({
   payload: roomChatPayloadSchema
 });
 
+export const roomChatDeletedEventSchema = z.object({
+  event: z.literal("room.chat.deleted"),
+  payload: roomChatDeletedPayloadSchema
+});
+
 export const roomReactionPayloadSchema = z.object({
   roomId: z.string(),
   senderId: z.string(),
@@ -300,6 +312,7 @@ export type ServerToClientEvents = {
   "room.member.removed": (payload: RoomMemberRemovedPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
+  "room.chat.deleted": (payload: RoomChatDeletedPayload) => void;
   "room.reaction": (payload: RoomReactionPayload) => void;
   "session.revoked": () => void;
   connect: () => void;

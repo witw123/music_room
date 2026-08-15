@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Server } from "socket.io";
 import type {
   PeerSignalMessage,
+  RoomChatDeletedPayload,
   RoomLibraryPatchPayload,
   RoomMemberRemovedPayload,
   RoomPlaybackPatchPayload,
@@ -13,6 +14,7 @@ import type {
 } from "@music-room/shared";
 import {
   peerSignalMessageSchema,
+  roomChatDeletedPayloadSchema,
   roomDeletedPayloadSchema,
   roomLibraryPatchPayloadSchema,
   roomMemberRemovedPayloadSchema,
@@ -28,6 +30,7 @@ import { RedisService } from "../../infra/redis/redis.service";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
   peerSignalChannel,
+  roomChatDeletedChannel,
   roomDeletedChannel,
   roomLibraryPatchChannel,
   roomMemberRemovedChannel,
@@ -324,6 +327,27 @@ export class RealtimeRedisSubscriber {
       }
 
       this.server!.to(message.roomId).emit("room.member.removed", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
+    void this.redisService.subscribe(roomChatDeletedChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomChatDeletedPayload;
+      };
+
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+
+      const parsed = roomChatDeletedPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server!.to(message.roomId).emit("room.chat.deleted", parsed.data);
     }).then((unsubscribe) => {
       this.redisUnsubscribers.push(unsubscribe);
     });

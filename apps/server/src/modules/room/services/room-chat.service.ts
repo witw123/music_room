@@ -1,8 +1,8 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { RoomChatHistoryResponse, RoomChatMessage } from "@music-room/shared";
+import type { RoomChatDeletedPayload, RoomChatHistoryResponse, RoomChatMessage } from "@music-room/shared";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
-import { assertMember } from "../room-mutation";
+import { assertHost, assertMember } from "../room-mutation";
 import { RoomRecordRepository } from "../repositories/room-record.repository";
 
 const historyPageSize = 50;
@@ -95,6 +95,30 @@ export class RoomChatService {
     }
 
     return toChatMessage(message);
+  }
+
+  async deleteMessage(
+    roomId: string,
+    sessionId: string,
+    messageId: string
+  ): Promise<RoomChatDeletedPayload> {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    if (record.room.roomType !== "radio") {
+      throw new BadRequestException("只有自由电台支持聊天记录。");
+    }
+    try {
+      assertHost(record, sessionId);
+    } catch {
+      throw new ForbiddenException("只有房主可以删除聊天消息。");
+    }
+
+    const messages = this.getMessages();
+    const message = await messages.findUnique({ where: { id: messageId } });
+    if (!message || message.roomId !== roomId) {
+      throw new NotFoundException("聊天消息不存在。");
+    }
+    await messages.deleteMany({ where: { id: { in: [messageId] } } });
+    return { roomId, messageId };
   }
 
   private async assertRadioMember(roomId: string, sessionId: string) {

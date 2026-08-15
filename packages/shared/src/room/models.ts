@@ -32,8 +32,14 @@ export const roomChatHistoryResponseSchema = z.object({
   nextCursor: z.string().min(1).nullable()
 }).strict();
 
+export const roomChatDeletedPayloadSchema = z.object({
+  roomId: z.string().min(1),
+  messageId: z.string().min(1)
+}).strict();
+
 export type RoomChatMessage = z.infer<typeof roomChatMessageSchema>;
 export type RoomChatHistoryResponse = z.infer<typeof roomChatHistoryResponseSchema>;
+export type RoomChatDeletedPayload = z.infer<typeof roomChatDeletedPayloadSchema>;
 
 export const roomDirectoryNowPlayingSchema = z.object({
   title: z.string().min(1).max(240),

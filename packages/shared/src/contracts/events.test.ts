@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { roomChatEventSchema, roomChatInputPayloadSchema, websocketEventSchema } from "./events";
+import { roomChatDeletedEventSchema, roomChatEventSchema, roomChatInputPayloadSchema, websocketEventSchema } from "./events";
 
 describe("websocket event contracts", () => {
   it("accepts room.chat as a declared websocket event", () => {
     expect(websocketEventSchema.parse("room.chat")).toBe("room.chat");
+    expect(websocketEventSchema.parse("room.chat.deleted")).toBe("room.chat.deleted");
   });
 
   it("parses a room.chat event payload", () => {
@@ -28,6 +29,16 @@ describe("websocket event contracts", () => {
         senderName: "Alice",
         content: "hello"
       }
+    });
+  });
+
+  it("parses a room.chat.deleted event payload", () => {
+    expect(roomChatDeletedEventSchema.parse({
+      event: "room.chat.deleted",
+      payload: { roomId: "room_1", messageId: "chat_1" }
+    })).toEqual({
+      event: "room.chat.deleted",
+      payload: { roomId: "room_1", messageId: "chat_1" }
     });
   });
 
