@@ -368,6 +368,32 @@ describe("RoomController", () => {
     expect(roomRealtimePublisher.emitSnapshot).toHaveBeenCalledWith("room_1");
   });
 
+  it("returns persisted radio chat history for the current member", async () => {
+    const history = {
+      messages: [{
+        id: "chat_1",
+        roomId: "room_1",
+        senderId: "guest_host",
+        senderName: "Host",
+        content: "欢迎收听",
+        timestamp: 1
+      }],
+      nextCursor: null
+    };
+    const chatService = { listHistory: jest.fn().mockResolvedValue(history) };
+    const controller = new RoomController(
+      {} as never,
+      createRoomRealtimePublisherMock() as never,
+      createAuthServiceMock() as never,
+      createPlaylistServiceMock() as never,
+      undefined,
+      chatService as never
+    );
+
+    await expect(controller.listRadioChatHistory("room_1", "token", "chat_older")).resolves.toEqual(history);
+    expect(chatService.listHistory).toHaveBeenCalledWith("room_1", "guest_host", "chat_older");
+  });
+
   it("returns the standard queue mutation payload for an autopilot refill", async () => {
     const snapshot = buildSnapshot({ roomType: "radio" });
     const appended = {

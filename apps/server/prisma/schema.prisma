@@ -254,6 +254,17 @@ model RoomReaction {
   @@index([userId, createdAt])
 }
 
+model RoomChatMessage {
+  id         String   @id
+  roomId     String
+  senderId   String
+  senderName String
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([roomId, createdAt, id])
+}
+
 model OperationalIncident {
   id              String           @id
   fingerprint     String           @unique

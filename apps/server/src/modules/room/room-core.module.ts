@@ -13,6 +13,7 @@ import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
 import { RoomContentService } from "./services/room-content.service";
+import { RoomChatService } from "./services/room-chat.service";
 import { RoomLifecycleService } from "./services/room-lifecycle.service";
 import { RoomPresenceOrchestratorService } from "./services/room-presence-orchestrator.service";
 import { RoomService } from "./room.service";
@@ -113,11 +114,13 @@ type RoomPresenceStore = Map<
     },
     RoomPresenceOrchestratorService,
     RoomContentService,
+    RoomChatService,
     RoomLifecycleService,
     RoomRealtimePublisher
   ],
   exports: [
     RoomService,
+    RoomChatService,
     RoomPresenceService,
     RoomRealtimePublisher
   ]

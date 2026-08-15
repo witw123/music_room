@@ -11,6 +11,7 @@ describe("websocket event contracts", () => {
       roomChatEventSchema.parse({
         event: "room.chat",
         payload: {
+          id: "chat_1",
           roomId: "room_1",
           senderId: "user_1",
           senderName: "Alice",
@@ -21,6 +22,7 @@ describe("websocket event contracts", () => {
     ).toMatchObject({
       event: "room.chat",
       payload: {
+        id: "chat_1",
         roomId: "room_1",
         senderId: "user_1",
         senderName: "Alice",
@@ -32,14 +34,12 @@ describe("websocket event contracts", () => {
   it("trims and validates client room.chat input", () => {
     expect(
       roomChatInputPayloadSchema.parse({
-        roomId: "room_1",
-        content: " hello ",
-        timestamp: 1
+      roomId: "room_1",
+        content: " hello "
       })
     ).toEqual({
       roomId: "room_1",
-      content: "hello",
-      timestamp: 1
+      content: "hello"
     });
 
     expect(() =>

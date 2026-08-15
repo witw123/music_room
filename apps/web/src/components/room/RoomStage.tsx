@@ -48,6 +48,7 @@ type RoomStageProps = {
   isLyricsOpen: boolean;
   onSeek: (positionMs: number) => void;
   showMobilePlayer?: boolean;
+  hideRoomMetadata?: boolean;
 };
 
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
@@ -103,7 +104,8 @@ function RoomStageBase({
   onUpdateRoom,
   isLyricsOpen,
   onSeek,
-  showMobilePlayer = false
+  showMobilePlayer = false,
+  hideRoomMetadata = false
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -160,6 +162,8 @@ function RoomStageBase({
       : "clamp(12rem, min(36vh, 42vw), 20rem)";
   const stageContentOffset = isLyricsOpen
     ? "translate-y-0"
+    : hideRoomMetadata
+      ? "translate-y-0"
     : ultraCompactStage
       ? "-translate-y-3"
       : compactStage
@@ -365,16 +369,18 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 pt-[calc(2.25rem+env(safe-area-inset-top))] sm:px-5 md:px-8 lg:h-full ${
+      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 ${hideRoomMetadata ? "pt-[calc(0.75rem+env(safe-area-inset-top))]" : "pt-[calc(2.25rem+env(safe-area-inset-top))]"} sm:px-5 md:px-8 lg:h-full ${
         ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
       }`}
     >
       <div
-        className={`relative z-30 flex w-full shrink-0 items-start justify-between gap-3 ${
-          compactStage ? "mb-0 lg:mb-3" : "mb-0 lg:mb-5 xl:mb-6"
+        className={`z-30 flex shrink-0 items-start gap-3 ${
+          hideRoomMetadata
+            ? "absolute right-3 top-[calc(0.75rem+env(safe-area-inset-top))] sm:right-5 md:right-8"
+            : `relative w-full justify-between ${compactStage ? "mb-0 lg:mb-3" : "mb-0 lg:mb-5 xl:mb-6"}`
         }`}
       >
-        <div className="min-w-0 space-y-2">
+        {hideRoomMetadata ? null : <div className="min-w-0 space-y-2">
           <div className="flex max-w-full items-center gap-2">
             <button
               data-testid="room-code-button"
@@ -446,7 +452,7 @@ function RoomStageBase({
             <span>·</span>
             <span>{sourceModeLabel}</span>
           </div>
-        </div>
+        </div>}
 
         <div className="relative shrink-0 pointer-events-auto">
           <Button

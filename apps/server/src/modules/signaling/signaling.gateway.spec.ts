@@ -111,3 +111,43 @@ describe("SignalingGateway subscription cleanup", () => {
     expect(registry.updatePeerPresence).not.toHaveBeenCalled();
   });
 });
+
+describe("SignalingGateway chat", () => {
+  it("persists a canonical message and broadcasts it to every room client", async () => {
+    const emit = jest.fn();
+    const message = {
+      id: "chat_1",
+      roomId: "room_1",
+      senderId: "user_1",
+      senderName: "Alice",
+      content: "hello",
+      timestamp: 1
+    };
+    const roomChatService = { append: jest.fn().mockResolvedValue(message) };
+    const server = { to: jest.fn().mockReturnValue({ emit }) };
+    const gateway = Object.assign(Object.create(SignalingGateway.prototype), {
+      assertRealtimeRateLimit: jest.fn(),
+      assertRealtimeClient: jest.fn(),
+      sessionLease: { assert: jest.fn().mockResolvedValue(undefined) },
+      authService: { getUserOrThrow: jest.fn().mockResolvedValue({ id: "user_1", nickname: "Alice" }) },
+      roomChatService,
+      server
+    }) as {
+      handleRoomChat: (client: { data: Record<string, unknown> }, payload: unknown) => Promise<unknown>;
+    };
+
+    await expect(gateway.handleRoomChat({ data: { sessionId: "user_1" } }, {
+      roomId: "room_1",
+      content: "hello"
+    })).resolves.toEqual(message);
+
+    expect(roomChatService.append).toHaveBeenCalledWith({
+      roomId: "room_1",
+      sessionId: "user_1",
+      senderName: "Alice",
+      content: "hello"
+    });
+    expect(server.to).toHaveBeenCalledWith("room_1");
+    expect(emit).toHaveBeenCalledWith("room.chat", message);
+  });
+});

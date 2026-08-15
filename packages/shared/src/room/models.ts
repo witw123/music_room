@@ -18,6 +18,23 @@ export const inactiveRadioAutopilot: RadioAutopilot = {
   enabled: false
 };
 
+export const roomChatMessageSchema = z.object({
+  id: z.string().min(1),
+  roomId: z.string().min(1),
+  senderId: z.string().min(1),
+  senderName: z.string().min(1).max(80),
+  content: z.string().min(1).max(500),
+  timestamp: z.number().int().nonnegative()
+}).strict();
+
+export const roomChatHistoryResponseSchema = z.object({
+  messages: z.array(roomChatMessageSchema),
+  nextCursor: z.string().min(1).nullable()
+}).strict();
+
+export type RoomChatMessage = z.infer<typeof roomChatMessageSchema>;
+export type RoomChatHistoryResponse = z.infer<typeof roomChatHistoryResponseSchema>;
+
 export const roomDirectoryNowPlayingSchema = z.object({
   title: z.string().min(1).max(240),
   artist: z.string().min(1).max(240),

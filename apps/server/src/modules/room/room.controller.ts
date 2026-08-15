@@ -11,6 +11,7 @@ import {
   Patch,
   Param,
   Post,
+  ServiceUnavailableException,
   UnauthorizedException
 } from "@nestjs/common";
 import {
@@ -36,6 +37,7 @@ import { AuthService } from "../auth/auth.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomService } from "./room.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
+import { RoomChatService } from "./services/room-chat.service";
 
 @Controller("v1/rooms")
 export class RoomController {
@@ -45,7 +47,9 @@ export class RoomController {
     private readonly authService: AuthService,
     private readonly playlistService: PlaylistService,
     @Optional()
-    private readonly abuseProtection?: AbuseProtectionService
+    private readonly abuseProtection?: AbuseProtectionService,
+    @Optional()
+    private readonly roomChatService?: RoomChatService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -132,6 +136,19 @@ export class RoomController {
   async getRoomStats(@Headers("x-session-token") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getRoomStatsForSession(userId);
+  }
+
+  @Get(":roomId/chat")
+  async listRadioChatHistory(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Query("before") before?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    if (!this.roomChatService) {
+      throw new ServiceUnavailableException("聊天记录服务暂不可用。");
+    }
+    return this.roomChatService.listHistory(roomId, userId, before?.trim() || undefined);
   }
 
   @Get(":roomId/recover")

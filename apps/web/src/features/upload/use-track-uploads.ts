@@ -354,9 +354,9 @@ export function useTrackUploads(options: {
             : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
           ).catch(() => null)
         : null;
-      const lyrics = track.lyrics?.trim()
-        || providerLyrics?.wordSyncedLyric
+      const lyrics = providerLyrics?.wordSyncedLyric
         || providerLyrics?.plainLyric
+        || track.lyrics?.trim()
         || null;
       await saveAudioFileToLocalDirectory({
         file,

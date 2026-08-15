@@ -203,7 +203,10 @@ export class QqMusicApiClient {
                 trans_t: 1,
                 roma_t: 1,
                 qrc_t: 1,
-                crypt: 1,
+                // QQ Music returns an encrypted hexadecimal payload when this
+                // flag is enabled. The unencrypted response is Base64 text and
+                // can be decoded safely below.
+                crypt: 0,
                 lrc_t: 1,
                 interval: 0
               }
@@ -427,6 +430,7 @@ function readQqUinFromCookie(cookie: string) {
 function decodeLyricField(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return null;
   const normalized = value.trim();
+  if (normalized === "0" || isEncryptedQqLyricPayload(normalized)) return null;
   const compact = normalized.replace(/\s+/g, "");
   if (
     compact.length < 8 ||
@@ -448,6 +452,11 @@ function decodeLyricField(value: unknown) {
   } catch {
     return normalized;
   }
+}
+
+function isEncryptedQqLyricPayload(value: string) {
+  const compact = value.replace(/\s+/g, "");
+  return compact.length >= 64 && compact.length % 2 === 0 && /^[a-f0-9]+$/i.test(compact);
 }
 
 function hasUnsupportedControlCharacter(value: string) {

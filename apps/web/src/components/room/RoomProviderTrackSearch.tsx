@@ -23,7 +23,7 @@ const enabledSearchProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
 ];
 
-export type RoomProviderTrackSearchMode = "import" | "request" | "suggest";
+export type RoomProviderTrackSearchMode = "import" | "program" | "request" | "suggest";
 
 type RoomProviderTrackSearchProps = {
   roomTracks: TrackMeta[];
@@ -33,6 +33,8 @@ type RoomProviderTrackSearchProps = {
   onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
   onRequestTrack?: (track: ProviderTrack) => Promise<void>;
   onRequestSubmitted?: () => void;
+  hideUnavailableProvidersNotice?: boolean;
+  surface?: "framed" | "plain";
   testId?: string;
 };
 
@@ -86,6 +88,8 @@ export function RoomProviderTrackSearch({
   onImportQqMusicTrack,
   onRequestTrack,
   onRequestSubmitted,
+  hideUnavailableProvidersNotice = false,
+  surface = "framed",
   testId = "room-provider-track-search"
 }: RoomProviderTrackSearchProps) {
   const [provider, setProvider] = useState<Provider>(enabledSearchProviders[0] ?? "netease");
@@ -123,6 +127,8 @@ export function RoomProviderTrackSearch({
 
   const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
   const isConnected = account?.connected === true;
+  const isProgramMode = mode === "program";
+  const isManagedImport = mode === "import" || isProgramMode;
 
   useEffect(() => {
     if (!isConnected || !searchSuggestionsOpen) {
@@ -208,15 +214,15 @@ export function RoomProviderTrackSearch({
   const handleTrackAction = async (candidate: ProviderTrack) => {
     const actionKey = `${mode}:${candidate.providerTrackId}`;
     if (pending) return;
-    if (mode === "import" && !canManageLibrary) return;
+    if (isManagedImport && !canManageLibrary) return;
     setPending(actionKey);
     setErrorMessage(null);
     setMessage(null);
     try {
-      if (mode === "import") {
+      if (isManagedImport) {
         if (candidate.provider === "netease") await onImportNeteaseTrack?.(candidate);
         else await onImportQqMusicTrack?.(candidate);
-        setMessage(`《${candidate.title}》已导入曲库。`);
+        setMessage(isProgramMode ? `《${candidate.title}》已加入节目单。` : `《${candidate.title}》已导入曲库。`);
       } else {
         await onRequestTrack?.(candidate);
         setMessage(mode === "request" ? "已提交点歌。" : "已提交点歌建议。");
@@ -229,16 +235,17 @@ export function RoomProviderTrackSearch({
     }
   };
 
-  const actionLabel = mode === "import" ? "导入曲库" : mode === "request" ? "点歌" : "建议点歌";
+  const actionLabel = isProgramMode ? "加入节目单" : mode === "import" ? "导入曲库" : mode === "request" ? "点歌" : "建议点歌";
 
   if (enabledSearchProviders.length === 0) {
+    if (hideUnavailableProvidersNotice) return null;
     return <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid={testId}>
       <span className="text-xs text-foreground-muted">网易云音乐和 QQ 音乐当前未启用。</span>
     </section>;
   }
 
   return <section className="flex min-w-0 flex-col gap-3" data-testid={testId}>
-    <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-surface-border bg-surface/35 p-3">
+    <div className={surface === "framed" ? "flex min-w-0 flex-col gap-3 rounded-lg border border-surface-border bg-surface/35 p-3" : "flex min-w-0 flex-col gap-3"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1" role="tablist" aria-label="音乐平台">
           {enabledSearchProviders.map((item) => <button
@@ -287,12 +294,12 @@ export function RoomProviderTrackSearch({
         {results.map((track) => {
           const isInLibrary = libraryTrackIds.has(track.providerTrackId);
           const isPending = pending === `${mode}:${track.providerTrackId}`;
-          const disabled = pending !== null || (mode === "import" && (!canManageLibrary || isInLibrary));
+          const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
           return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
             {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-9 w-9 shrink-0 object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-surface text-[10px] text-foreground-muted">音乐</span>}
             <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-foreground">{track.title}</p><p className="mt-0.5 truncate text-[10px] text-foreground-muted">{track.artist}{track.album ? ` · ${track.album}` : ""} · {formatDuration(track.durationMs)}</p></div>
             <button type="button" disabled={disabled} onClick={() => void handleTrackAction(track)} className="shrink-0 border border-accent/35 bg-accent/10 px-2.5 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60">
-              {mode === "import" && isInLibrary ? "已在曲库" : isPending ? "处理中…" : actionLabel}
+              {isManagedImport && isInLibrary ? isProgramMode ? "已在节目单" : "已在曲库" : isPending ? "处理中…" : actionLabel}
             </button>
           </article>;
         })}

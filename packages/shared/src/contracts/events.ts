@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { peerSignalMessageSchema } from "../p2p/models";
 import { p2pProtocolVersion, segmentedOpusCapability } from "../p2p/asset-models";
-import { roomSnapshotSchema, roomTrackDeletionSchema } from "../room/models";
+import { roomChatMessageSchema, roomSnapshotSchema, roomTrackDeletionSchema } from "../room/models";
 import { playbackSnapshotSchema } from "../playback/models";
 import { queueItemSchema, trackMetaSchema } from "../playlist/models";
 import { telemetryReportSchema, type TelemetryReport } from "./telemetry";
@@ -216,19 +216,12 @@ export const peerSignalEventSchema = z.object({
   payload: peerSignalMessageSchema
 });
 
-export const roomChatPayloadSchema = z.object({
-  roomId: z.string(),
-  senderId: z.string(),
-  senderName: z.string(),
-  content: z.string(),
-  timestamp: z.number().optional()
-});
+export const roomChatPayloadSchema = roomChatMessageSchema;
 
 export const roomChatInputPayloadSchema = z
   .object({
     roomId: z.string().trim().min(1).max(160),
-    content: z.string().trim().min(1).max(500),
-    timestamp: z.number().int().nonnegative().optional()
+    content: z.string().trim().min(1).max(500)
   })
   .strict();
 

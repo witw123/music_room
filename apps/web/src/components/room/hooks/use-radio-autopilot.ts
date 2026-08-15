@@ -37,7 +37,7 @@ export function useRadioAutopilot({
   const runningRef = useRef(false);
   const pausedRef = useRef(false);
   const roomSnapshotRef = useRef(roomSnapshot);
-  const isAutopilotEnabled = roomSnapshot.room.radioAutopilot.enabled;
+  const isAutopilotEnabled = roomSnapshot.room.radioAutopilot?.enabled === true;
   const currentSourceKey = getCurrentProviderSource(roomSnapshot)?.key ?? null;
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export function useRadioAutopilot({
     const source = getCurrentProviderSource(snapshot);
     if (
       !isHost ||
-      !autopilot.enabled ||
+      autopilot?.enabled !== true ||
       !source ||
       snapshot.room.playback.status !== "playing" ||
       !snapshot.room.playback.currentTrackId ||

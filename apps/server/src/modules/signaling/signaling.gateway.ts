@@ -44,6 +44,7 @@ import { getCorsOrigins } from "../../common/cors/get-cors-origins";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
+import { RoomChatService } from "../room/services/room-chat.service";
 import { RoomService } from "../room/room.service";
 import { RoomRealtimeBroadcaster } from "../realtime/room-realtime.broadcaster";
 import {
@@ -93,7 +94,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     private readonly peerSignals: PeerSignalRelayService,
     private readonly readiness: RoomPlaybackReadinessService,
     private readonly registry: RoomSessionRegistryService,
-    private readonly subscriber: RealtimeRedisSubscriber
+    private readonly subscriber: RealtimeRedisSubscriber,
+    private readonly roomChatService: RoomChatService
   ) {}
 
   @WebSocketServer()
@@ -289,15 +291,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     }
 
     const user = await this.authService.getUserOrThrow(sessionId);
-    const nextPayload = {
+    const nextPayload = await this.roomChatService.append({
       roomId: parsed.data.roomId,
-      senderId: user.id,
+      sessionId: user.id,
       senderName: user.nickname,
-      content: parsed.data.content,
-      timestamp: parsed.data.timestamp ?? Date.now()
-    };
+      content: parsed.data.content
+    });
 
-    client.to(parsed.data.roomId).emit("room.chat", nextPayload);
+    this.server.to(parsed.data.roomId).emit("room.chat", nextPayload);
     return nextPayload;
   }
 

@@ -96,6 +96,16 @@ describe("room lyrics", () => {
     })).toBe(wordSynced);
   });
 
+  it("replaces a stored QQ encrypted payload with provider lyrics", () => {
+    const encryptedPayload = "0F3B54CF70B40B084246660B2D7067338AC33B27799529B6FB1C53A563027ABD66B5BED7887C293947839BD941016030459E";
+    const plainLyric = "[00:00.00]三年二班";
+
+    expect(selectRoomLyrics({
+      localLyrics: encryptedPayload,
+      plainLyric
+    })).toBe(plainLyric);
+  });
+
   it("calculates progressive fill within one word", () => {
     const word = { text: "歌词", timeMs: 1_000, durationMs: 400 };
 

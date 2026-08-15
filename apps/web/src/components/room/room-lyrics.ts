@@ -114,17 +114,25 @@ export function selectRoomLyrics(input: {
   wordSyncedLyric?: string | null;
   plainLyric?: string | null;
 }) {
-  const localLyrics = input.localLyrics?.trim() || null;
+  const localLyrics = normalizeRoomLyricsText(input.localLyrics);
   if (hasWordSyncedRoomLyrics(localLyrics)) {
     return localLyrics;
   }
 
-  const wordSyncedLyric = input.wordSyncedLyric?.trim() || null;
+  const wordSyncedLyric = normalizeRoomLyricsText(input.wordSyncedLyric);
   if (hasWordSyncedRoomLyrics(wordSyncedLyric)) {
     return wordSyncedLyric;
   }
 
-  return localLyrics || wordSyncedLyric || input.plainLyric?.trim() || null;
+  return wordSyncedLyric || normalizeRoomLyricsText(input.plainLyric) || localLyrics;
+}
+
+function normalizeRoomLyricsText(value: string | null | undefined) {
+  const normalized = value?.trim() || null;
+  if (!normalized || normalized === "0") return null;
+  const compact = normalized.replace(/\s+/g, "");
+  if (compact.length >= 64 && compact.length % 2 === 0 && /^[a-f0-9]+$/i.test(compact)) return null;
+  return normalized;
 }
 
 function normalizeLyricsSource(value: string) {

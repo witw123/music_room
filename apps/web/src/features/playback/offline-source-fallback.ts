@@ -143,7 +143,7 @@ async function importOfflineProviderTrack(input: {
     );
 
     const providerLyrics = await resolveProviderLyrics(source);
-    const lyrics = track.lyrics?.trim() || providerLyrics?.wordSyncedLyric || providerLyrics?.plainLyric || null;
+    const lyrics = providerLyrics?.wordSyncedLyric || providerLyrics?.plainLyric || track.lyrics?.trim() || null;
     const loudness = track.loudness ?? await analyzeAudioBlobLoudness(file);
     // The room track already owns its content hash. Avoid decoding or creating
     // playback segments here: the downloaded provider file is the local source.

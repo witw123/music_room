@@ -35,6 +35,7 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
+  type RoomChatHistoryResponse,
   type RoomDirectoryItem,
   type RoomJoinResponse,
   type RoomMemberPermissions,
@@ -340,6 +341,10 @@ export const musicRoomApi = {
     }),
   getRoom: (roomId: string) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}`),
+  listRoomChatHistory: (roomId: string, before?: string) =>
+    request<RoomChatHistoryResponse>(
+      `/v1/rooms/${roomId}/chat${before ? `?before=${encodeURIComponent(before)}` : ""}`
+    ),
   syncRoom: (roomId: string, sinceRevision = 0) =>
     request<RoomSyncResponse>(`/v1/rooms/${roomId}/sync`, {
       headers: { "x-room-revision": String(Math.max(0, Math.floor(sinceRevision))) }

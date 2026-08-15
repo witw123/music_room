@@ -435,14 +435,12 @@ async function importProviderTracks(input: {
       if (!prefetched) throw new Error(`歌曲预取结果无效：${candidate.title}`);
 
       const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
-      const lyricsPromise = prefetched.cachedTrack?.lyrics?.trim()
-        ? Promise.resolve(prefetched.cachedTrack.lyrics.trim())
-        : resolveImportedLyrics({
-            title: candidate.title,
-            artist: candidate.artist,
-            sourceType,
-            sourceTrackId: candidate.providerTrackId
-          });
+      const lyricsPromise = resolveImportedLyrics({
+        title: candidate.title,
+        artist: candidate.artist,
+        sourceType,
+        sourceTrackId: candidate.providerTrackId
+      });
       const artworkPromise = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
         ? musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
         : Promise.resolve(undefined);
@@ -701,7 +699,7 @@ async function _importProviderTrack(input: {
       metadata: { ...candidate, artworkUrl: localArtworkUrl },
       sourceRef
     });
-    const lyrics = cachedTrack?.lyrics?.trim() || await lyricsPromise;
+    const lyrics = await lyricsPromise;
     // Register the provider's remote cover with the room. The local data URL
     // is intentionally kept out of this request because it can exceed the
     // room API's 4096-character artwork limit.

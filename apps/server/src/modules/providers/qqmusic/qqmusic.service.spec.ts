@@ -35,8 +35,24 @@ describe("QqMusicService", () => {
     const request = mockedFetchProviderUrl.mock.calls[0]?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({
       comm: { uin: "123" },
-      req_0: { param: { songMID: "song-mid", qrc_t: 1 } }
+      req_0: { param: { songMID: "song-mid", qrc_t: 1, crypt: 0 } }
     });
+  });
+
+  it("does not expose QQ encrypted lyric payloads as plain text", async () => {
+    mockedFetchProviderUrl.mockResolvedValue(new Response(JSON.stringify({
+      req_0: {
+        data: {
+          lyric: "0F3B54CF70B40B084246660B2D7067338AC33B27799529B6FB1C53A563027ABD66B5BED7887C293947839BD941016030459E",
+          qrc: "0"
+        }
+      }
+    }), { status: 200 }));
+
+    await expect(new QqMusicApiClient().getLyrics({
+      trackId: "song-mid",
+      cookie: "uin=o123; qqmusic_key=key"
+    })).resolves.toMatchObject({ lyric: null, qrc: null });
   });
 
   it("keeps an already-decoded QQ word-synced lyric intact", async () => {
