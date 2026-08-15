@@ -23,6 +23,17 @@ type RadioAutopilotState = {
   message: string | null;
 };
 
+export type RadioAutopilotNextTrack = {
+  key: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  artworkUrl: string | null;
+  durationMs: number;
+  provider: "netease" | "qqmusic";
+  preloadStatus: "preloading" | "ready";
+};
+
 const targetPendingQueueDepth = 3;
 const refillIntervalMs = 15_000;
 
@@ -34,6 +45,7 @@ export function useRadioAutopilot({
   onRefreshRoom
 }: UseRadioAutopilotOptions) {
   const [state, setState] = useState<RadioAutopilotState>({ kind: "idle", message: null });
+  const [preloadingCandidate, setPreloadingCandidate] = useState<ProviderTrackCandidate | null>(null);
   const runningRef = useRef(false);
   const pausedRef = useRef(false);
   const roomSnapshotRef = useRef(roomSnapshot);
@@ -68,10 +80,13 @@ export function useRadioAutopilot({
       const selected = selectCandidates(snapshot, candidates, targetPendingQueueDepth - getPendingQueueDepth(snapshot));
       if (selected.length === 0) {
         pausedRef.current = true;
+        setPreloadingCandidate(null);
         setState({ kind: "paused", message: "没有可加入的关联歌曲。" });
         return;
       }
 
+      setPreloadingCandidate(selected[0] ?? null);
+      setState({ kind: "refilling", message: `正在预加载《${selected[0]?.title ?? "下一首"}》…` });
       const importedTrackIds: string[] = [];
       for (const candidate of selected) {
         if (candidate.provider === "netease") {
@@ -93,6 +108,7 @@ export function useRadioAutopilot({
       }
 
       if (getCurrentProviderSource(roomSnapshotRef.current)?.key !== source.key) {
+        setPreloadingCandidate(null);
         setState({ kind: "idle", message: "当前播放歌曲已切换，已取消上一首歌曲的补歌任务。" });
         return;
       }
@@ -107,10 +123,12 @@ export function useRadioAutopilot({
       }
 
       pausedRef.current = false;
-      await onRefreshRoom();
+      const refreshedSnapshot = await onRefreshRoom();
+      if (refreshedSnapshot) roomSnapshotRef.current = refreshedSnapshot;
       setState({ kind: "idle", message: `已根据《${source.track.title}》补充 ${queued.appendedQueueItemIds.length} 首歌曲。` });
     } catch (error) {
       pausedRef.current = true;
+      setPreloadingCandidate(null);
       setState({ kind: "paused", message: toAutopilotErrorMessage(error) });
     } finally {
       runningRef.current = false;
@@ -119,11 +137,13 @@ export function useRadioAutopilot({
 
   useEffect(() => {
     pausedRef.current = false;
+    setPreloadingCandidate(null);
   }, [currentSourceKey]);
 
   useEffect(() => {
     if (!isHost || !isAutopilotEnabled) {
       pausedRef.current = false;
+      setPreloadingCandidate(null);
       setState({ kind: "idle", message: null });
       return;
     }
@@ -144,7 +164,17 @@ export function useRadioAutopilot({
     await refill(true);
   }, [refill]);
 
-  return { state, retry };
+  const queuedNextTrack = isAutopilotEnabled ? getNextAutopilotTrack(roomSnapshot) : null;
+  const queuedNextTrackKey = queuedNextTrack?.key ?? null;
+  const nextTrack = queuedNextTrack ?? (preloadingCandidate
+    ? toNextTrack(preloadingCandidate, "preloading")
+    : null);
+
+  useEffect(() => {
+    if (queuedNextTrackKey) setPreloadingCandidate(null);
+  }, [queuedNextTrackKey]);
+
+  return { state, retry, nextTrack };
 }
 
 function getCurrentProviderSource(snapshot: RoomSnapshot) {
@@ -220,6 +250,46 @@ function getPendingQueueDepth(snapshot: RoomSnapshot) {
   if (!currentQueueItemId) return snapshot.queue.length;
   const currentIndex = snapshot.queue.findIndex((item) => item.id === currentQueueItemId);
   return currentIndex < 0 ? snapshot.queue.length : snapshot.queue.length - currentIndex - 1;
+}
+
+function getNextAutopilotTrack(snapshot: RoomSnapshot): RadioAutopilotNextTrack | null {
+  const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
+  const currentIndex = currentQueueItemId
+    ? snapshot.queue.findIndex((item) => item.id === currentQueueItemId)
+    : -1;
+  const upcomingItems = snapshot.queue.slice(currentIndex < 0 ? 0 : currentIndex + 1);
+  const nextItem = upcomingItems.find((item) => item.source === "autopilot");
+  const track = nextItem
+    ? snapshot.tracks.find((item) => item.id === nextItem.trackId)
+    : null;
+  if (!track?.sourceRef) return null;
+
+  return {
+    key: nextItem?.id ?? track.id,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    artworkUrl: track.artworkUrl,
+    durationMs: track.durationMs,
+    provider: track.sourceRef.provider,
+    preloadStatus: track.playbackAsset ? "ready" : "preloading"
+  };
+}
+
+function toNextTrack(
+  candidate: ProviderTrackCandidate,
+  preloadStatus: RadioAutopilotNextTrack["preloadStatus"]
+): RadioAutopilotNextTrack {
+  return {
+    key: `${candidate.provider}:${candidate.providerTrackId}`,
+    title: candidate.title,
+    artist: candidate.artist,
+    album: candidate.album,
+    artworkUrl: candidate.artworkUrl,
+    durationMs: candidate.durationMs,
+    provider: candidate.provider,
+    preloadStatus
+  };
 }
 
 function normalizeArtist(value: string) {

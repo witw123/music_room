@@ -6,6 +6,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
+import { LocalAudioImport } from "./LocalAudioImport";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
@@ -94,35 +95,10 @@ function TrackListSectionBase({
   };
   return (
     <section className="relative flex w-full flex-col gap-3">
-      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-accent/20 bg-accent/5 p-4 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out hover:border-accent/40 hover:bg-accent/10 sm:p-5">
-        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
-          <svg
-            width="21"
-            height="21"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-        </div>
-        <span className="mb-1 text-sm font-semibold text-foreground">导入本地音频</span>
-        <span className="text-xs text-foreground-muted">点击选择文件，或直接拖拽到这里</span>
-        <input
-          data-testid="track-upload-input"
-          type="file"
-          accept=".flac,.wav,.mp3,audio/flac,audio/wav,audio/x-wav,audio/mpeg,audio/mp3"
-          multiple
-          className="hidden"
-          disabled={!canManageLibrary || pendingAction !== null}
-          onChange={(event) => void runAction("upload", () => onFilesSelected(event.target.files))}
-        />
-      </label>
+      <LocalAudioImport
+        disabled={!canManageLibrary || pendingAction !== null}
+        onFilesSelected={(files) => runAction("upload", () => onFilesSelected(files))}
+      />
 
       <div className="border-b border-surface-border pb-1">
         <div

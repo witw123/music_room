@@ -33,6 +33,7 @@ type LocalStorageTabPanelProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
+  hideUnavailableProvidersNotice?: boolean;
 };
 
 function LocalStorageTabPanelBase({
@@ -50,7 +51,8 @@ function LocalStorageTabPanelBase({
   onImportQqMusicTracks,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
-  onDeletePlaylist
+  onDeletePlaylist,
+  hideUnavailableProvidersNotice = false
 }: LocalStorageTabPanelProps) {
   const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"local" | "network" | "favorites">("local");
@@ -112,6 +114,7 @@ function LocalStorageTabPanelBase({
           roomTracks={tracks}
           mode="import"
           canManageLibrary={canManageLibrary}
+          hideUnavailableProvidersNotice={hideUnavailableProvidersNotice}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
           testId="network-playlist-search"

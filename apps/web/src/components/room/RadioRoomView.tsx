@@ -11,7 +11,9 @@ import { RoomChatPanel } from "./RoomChatOverlay";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
-import { useRadioAutopilot } from "./hooks/use-radio-autopilot";
+import { LocalAudioImport } from "./LocalAudioImport";
+import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
+import { useRadioAutopilot, type RadioAutopilotNextTrack } from "./hooks/use-radio-autopilot";
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type RadioScrollRegionId = "library" | "stage" | "host" | "chat" | "members";
@@ -38,11 +40,11 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   }, []);
 
   return (
-    <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-32" data-room-view="radio" onPointerDown={(event) => { if (event.target === event.currentTarget) setActiveScrollRegion(null); }} onWheelCapture={redirectWheelToPage} ref={pageRef}>
-      <section className="mx-auto grid w-full max-w-[1600px] border-b border-surface-border lg:min-h-[36rem] lg:grid-cols-[minmax(20rem,38fr)_minmax(0,62fr)]">
+    <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio" onPointerDown={(event) => { if (event.target === event.currentTarget) setActiveScrollRegion(null); }} onWheelCapture={redirectWheelToPage} ref={pageRef}>
+      <section className="mx-auto grid w-full max-w-[1600px] lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,38fr)_minmax(0,62fr)]">
         <RadioScrollRegion
           activeRegion={activeScrollRegion}
-          className="order-2 lg:order-1"
+          className="order-2 lg:order-1 lg:min-h-0"
           id="library"
           onActivate={setActiveScrollRegion}
         >
@@ -53,13 +55,13 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             roomTracks={props.roomSnapshot.tracks}
           />
         </RadioScrollRegion>
-        <RadioScrollRegion activeRegion={activeScrollRegion} className="order-1 min-h-[30rem] border-b border-surface-border bg-surface/[0.12] lg:order-2 lg:min-h-0 lg:border-b-0 lg:border-l" id="stage" onActivate={setActiveScrollRegion}>
+        <RadioScrollRegion activeRegion={activeScrollRegion} className="order-1 min-h-[30rem] border-b border-surface-border bg-surface/[0.12] lg:order-2 lg:h-full lg:min-h-0 lg:border-b-0 lg:border-l" id="stage" onActivate={setActiveScrollRegion}>
           <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, showMobilePlayer: true })} />
         </RadioScrollRegion>
       </section>
 
-      <section className={`mx-auto grid w-full max-w-[1600px] ${isHost ? "lg:grid-cols-[minmax(20rem,38fr)_minmax(20rem,34fr)_minmax(18rem,28fr)]" : "lg:grid-cols-[minmax(0,62fr)_minmax(18rem,38fr)]"}`}>
-        {isHost ? <RadioScrollRegion activeRegion={activeScrollRegion} className="min-w-0 border-b border-surface-border bg-background lg:border-b-0 lg:border-r" id="host" onActivate={setActiveScrollRegion}><HostBroadcastDesk {...props} /></RadioScrollRegion> : null}
+      <section className={`mx-auto grid w-full max-w-[1600px] border-t border-surface-border ${isHost ? "lg:grid-cols-[minmax(20rem,38fr)_minmax(20rem,34fr)_minmax(18rem,28fr)]" : "lg:grid-cols-[minmax(0,62fr)_minmax(18rem,38fr)]"}`}>
+        {isHost ? <RadioScrollRegion activeRegion={activeScrollRegion} className="min-w-0 border-b border-surface-border bg-background lg:border-b-0" id="host" onActivate={setActiveScrollRegion}><HostBroadcastDesk {...props} /></RadioScrollRegion> : null}
         <RadioCommunityPanels {...props} activeScrollRegion={activeScrollRegion} membershipNow={membershipNow} onActivateScrollRegion={setActiveScrollRegion} />
       </section>
     </div>
@@ -94,7 +96,7 @@ function RadioLibraryList({
   };
 
   return (
-    <aside className="flex min-h-[22rem] min-w-0 flex-col bg-surface/[0.14]" data-testid="radio-library-list">
+    <aside className="flex min-h-[22rem] min-w-0 flex-col bg-surface/[0.14] lg:h-full lg:min-h-0" data-testid="radio-library-list">
       <header className="shrink-0 px-4 py-5 sm:px-6 lg:px-7">
         <h1 className="text-xl font-semibold text-foreground">曲库单</h1>
       </header>
@@ -114,6 +116,8 @@ function RadioCommunityPanels(props: RoomDashboardViewProps & {
   onActivateScrollRegion: (region: RadioScrollRegionId) => void;
 }) {
   const [mobileTab, setMobileTab] = useState<"chat" | "members">("chat");
+  const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
+  const chatDesktopDivider = isHost ? "lg:border-l" : "";
 
   return (
     <>
@@ -123,10 +127,10 @@ function RadioCommunityPanels(props: RoomDashboardViewProps & {
           <button aria-controls="radio-members" aria-selected={mobileTab === "members"} className={`min-h-10 px-3 text-sm font-medium transition-colors ${mobileTab === "members" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("members")} role="tab" type="button">成员</button>
         </div>
       </div>
-      <RadioScrollRegion activeRegion={props.activeScrollRegion} className={mobileTab === "chat" ? "block border-b border-surface-border bg-background lg:border-b-0 lg:border-r" : "hidden border-b border-surface-border bg-background lg:block lg:border-b-0 lg:border-r"} id="chat" onActivate={props.onActivateScrollRegion}>
+      <RadioScrollRegion activeRegion={props.activeScrollRegion} className={`${mobileTab === "chat" ? "block border-b border-surface-border bg-background lg:border-b-0" : "hidden border-b border-surface-border bg-background lg:block lg:border-b-0"} ${chatDesktopDivider}`} id="chat" onActivate={props.onActivateScrollRegion}>
         <div id="radio-chat" role="tabpanel"><RoomChatPanel activeSession={props.activeSession} roomId={props.roomSnapshot.room.id} socket={props.socket} /></div>
       </RadioScrollRegion>
-      <RadioScrollRegion activeRegion={props.activeScrollRegion} className={mobileTab === "members" ? "block bg-background" : "hidden bg-background lg:block"} id="members" onActivate={props.onActivateScrollRegion}>
+      <RadioScrollRegion activeRegion={props.activeScrollRegion} className={mobileTab === "members" ? "block border-surface-border bg-background lg:border-l" : "hidden border-surface-border bg-background lg:block lg:border-l"} id="members" onActivate={props.onActivateScrollRegion}>
         <section className="min-h-[24rem] bg-surface/25" id="radio-members" role="tabpanel">
           <header className="px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
           <div className="p-3 sm:p-4"><MembersPanel activeSessionId={props.activeSession?.userId ?? null} isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId} members={props.roomSnapshot.room.members} now={props.membershipNow} onRemoveMember={props.onRemoveMember} onUpdateMemberPermissions={props.onUpdateMemberPermissions} /></div>
@@ -138,6 +142,7 @@ function RadioCommunityPanels(props: RoomDashboardViewProps & {
 
 function HostBroadcastDesk(props: RoomDashboardViewProps) {
   const [message, setMessage] = useState<string | null>(null);
+  const [importTab, setImportTab] = useState<"local" | "playlists">("local");
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const isAutopilotEnabled = props.roomSnapshot.room.radioAutopilot?.enabled === true;
   const currentProviderTrack = props.currentTrack?.sourceRef &&
@@ -187,7 +192,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
   };
 
   return (
-    <aside className="min-w-0 px-4 py-6 sm:px-6 lg:px-7 lg:py-7" data-testid="radio-host-console">
+    <aside className="min-w-0 px-4 pb-6 pt-4 sm:px-5 lg:pb-7" data-testid="radio-host-console">
       <div>
         <h2 className="text-base font-semibold text-foreground">主持人控制台</h2>
       </div>
@@ -196,6 +201,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
           <h3 className="text-sm font-semibold text-foreground">自动续播</h3>
         </div>
         {currentProviderTrack ? <p className="mt-1 truncate text-xs text-foreground-muted">{currentProviderTrack.title} · {currentProviderTrack.artist}</p> : null}
+        {autopilot.nextTrack ? <RadioAutopilotNextTrackCard track={autopilot.nextTrack} /> : null}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button disabled={!isAutopilotEnabled && !currentProviderTrack} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={isAutopilotEnabled ? "outline" : "default"}>{isAutopilotEnabled ? "停止自动续播" : "开启自动续播"}</Button>
           {autopilot.state.kind === "paused" && currentProviderTrack ? <Button onClick={() => void autopilot.retry()} size="sm" type="button" variant="outline">重试补歌</Button> : null}
@@ -205,8 +211,68 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
       <div className="mt-6">
         <RoomProviderTrackSearch canManageLibrary hideUnavailableProvidersNotice mode="program" onImportNeteaseTrack={importAndQueue} onImportQqMusicTrack={importAndQueue} roomTracks={props.roomSnapshot.tracks} surface="plain" testId="radio-room-program" />
       </div>
+      <section className="mt-6 border-t border-surface-border pt-5" data-testid="radio-room-imports">
+        <h3 className="text-sm font-semibold text-foreground">导入歌曲</h3>
+        <div aria-label="导入歌曲方式" className="mt-3 grid grid-cols-2 rounded-xl border border-surface-border p-1" role="tablist">
+          <button aria-controls="radio-import-local" aria-selected={importTab === "local"} className={`min-h-10 rounded-lg px-3 text-sm font-medium transition-colors ${importTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setImportTab("local")} role="tab" type="button">本地音频</button>
+          <button aria-controls="radio-import-playlists" aria-selected={importTab === "playlists"} className={`min-h-10 rounded-lg px-3 text-sm font-medium transition-colors ${importTab === "playlists" ? "bg-accent text-white" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setImportTab("playlists")} role="tab" type="button">我的歌单</button>
+        </div>
+        <div className="mt-4">
+          {importTab === "local" ? (
+            <div id="radio-import-local" role="tabpanel">
+              <LocalAudioImport onFilesSelected={props.onFilesSelected} testId="radio-track-upload-input" />
+            </div>
+          ) : (
+            <div id="radio-import-playlists" role="tabpanel">
+              <LocalStorageTabPanel
+                activeSession={props.activeSession}
+                canManageLibrary
+                hideUnavailableProvidersNotice
+                localStorageSummary={props.localStorageSummary}
+                onCleanLocalStorage={props.onCleanLocalStorage}
+                onDeletePlaylist={props.onDeletePlaylist}
+                onImportCachedTrack={props.onImportCachedTrack}
+                onImportNeteaseTrack={props.onImportNeteaseTrack}
+                onImportNeteaseTracks={props.onImportNeteaseTracks}
+                onImportQqMusicTrack={props.onImportQqMusicTrack}
+                onImportQqMusicTracks={props.onImportQqMusicTracks}
+                onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
+                onRefreshLocalStorage={props.onRefreshLocalStorage}
+                onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
+                onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
+                onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
+                playlists={props.playlists}
+                tracks={props.roomSnapshot.tracks}
+              />
+            </div>
+          )}
+        </div>
+      </section>
       {message ? <p className="mt-4 text-sm text-foreground-muted" role="status">{message}</p> : null}
     </aside>
+  );
+}
+
+function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack }) {
+  return (
+    <article className="mt-4 flex min-w-0 items-center gap-3 bg-white/[0.035] p-3" data-testid="radio-autopilot-next-track">
+      {track.artworkUrl ? (
+        <img alt="" className="h-14 w-14 shrink-0 object-cover" src={track.artworkUrl} />
+      ) : (
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center bg-white/[0.06] text-[10px] text-foreground-muted">音乐</span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-accent">下一首自动续播</p>
+        <p className="mt-1 truncate text-sm font-semibold text-foreground" title={track.title}>{track.title}</p>
+        <p className="mt-1 truncate text-xs text-foreground-muted" title={`${track.artist} · ${track.album ?? "未标注专辑"}`}>
+          {track.artist} · {track.album ?? "未标注专辑"}
+        </p>
+        <p className="mt-1 text-[11px] text-foreground-muted">{formatDuration(track.durationMs)} · {track.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
+      </div>
+      <span className={`shrink-0 text-[11px] font-medium ${track.preloadStatus === "ready" ? "text-emerald-300" : "text-accent"}`}>
+        {track.preloadStatus === "ready" ? "已预加载" : "预加载中"}
+      </span>
+    </article>
   );
 }
 

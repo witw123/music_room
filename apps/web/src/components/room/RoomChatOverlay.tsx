@@ -118,19 +118,17 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
       >
         {isLoading ? <p className="py-10 text-center text-sm text-foreground-muted">正在加载聊天记录...</p> : null}
         {isLoadingOlder ? <p className="pb-3 text-center text-xs text-foreground-muted">正在加载更早消息...</p> : null}
-        {!isLoading && !messages.length ? <p className="py-10 text-center text-sm text-foreground-muted">还没有消息。</p> : null}
-        <div className="space-y-4">
+        {errorMessage ? <p className="pb-3 text-center text-xs text-danger" role="status">{errorMessage}</p> : null}
+        {!isLoading && !errorMessage && !messages.length ? <p className="py-10 text-center text-sm text-foreground-muted">还没有消息。</p> : null}
+        <div className="space-y-5">
           {messages.map((message) => {
             const isCurrentUser = message.senderId === activeSession?.userId;
             return (
-              <article className={`flex min-w-0 items-end gap-2.5 ${isCurrentUser ? "justify-end" : "justify-start"}`} key={message.id}>
+              <article className={`flex min-w-0 items-end gap-3 ${isCurrentUser ? "justify-end" : "justify-start"}`} key={message.id}>
                 {!isCurrentUser ? <ChatAvatar name={message.senderName} /> : null}
-                <div className={`min-w-0 max-w-[min(82%,32rem)] rounded-lg px-3 py-2.5 ${isCurrentUser ? "order-first bg-accent text-white shadow-[0_8px_18px_rgba(0,112,243,0.18)]" : "border border-surface-border bg-surface-hover text-foreground"}`}>
-                  <div className={`flex min-w-0 items-center gap-2 ${isCurrentUser ? "justify-end" : "justify-between"}`}>
-                    <strong className={`truncate text-[11px] font-semibold ${isCurrentUser ? "text-white/85" : "text-foreground"}`}>{message.senderName}</strong>
-                    <time className={`shrink-0 font-mono text-[10px] ${isCurrentUser ? "text-white/55" : "text-foreground-muted"}`} dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
-                  </div>
-                  <p className={`mt-1.5 break-words text-sm leading-6 ${isCurrentUser ? "text-white" : "text-foreground-muted"}`}>{message.content}</p>
+                <div className={`min-w-0 max-w-[min(78%,32rem)] ${isCurrentUser ? "order-first text-right" : "text-left"}`}>
+                  <strong className="mb-1.5 block truncate px-1 text-xs font-medium text-foreground-muted">{message.senderName}</strong>
+                  <div className={`inline-block max-w-full rounded-[1.25rem] px-4 py-3 text-left ${isCurrentUser ? "bg-accent/75 text-white shadow-[0_8px_20px_rgba(0,112,243,0.16)]" : "bg-white/[0.12] text-foreground"}`}><p className="break-words text-sm leading-6">{message.content}</p><time className={`mt-1 block text-right font-mono text-[10px] ${isCurrentUser ? "text-white/55" : "text-foreground-muted"}`} dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time></div>
                 </div>
                 {isCurrentUser ? <ChatAvatar currentUser name={message.senderName} /> : null}
               </article>
@@ -152,7 +150,6 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
         />
         <Button disabled={!inputValue.trim() || !socket || !activeSession} size="sm" type="submit">发送</Button>
       </form>
-      {errorMessage ? <p className="border-t border-danger/25 px-4 py-2 text-xs text-danger" role="status">{errorMessage}</p> : null}
     </section>
   );
 }
@@ -180,5 +177,8 @@ function formatChatTime(timestamp: number) {
 }
 
 function toChatErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "聊天记录暂时不可用。";
+  if (error instanceof Error && error.message && !/internal server error/i.test(error.message)) {
+    return error.message;
+  }
+  return "聊天暂时不可用，请稍后重试。";
 }
