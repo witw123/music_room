@@ -314,21 +314,13 @@ export class RoomContentService {
     if (!track) {
       throw new BadRequestException("推荐歌曲尚未导入当前电台曲库。");
     }
-    if (record.queue.some((item) => item.trackId === track.id)) {
+    const sourceKey = getProviderTrackKey(track);
+    const isAlreadyQueued = record.queue.some((item) => {
+      const queuedTrack = record.tracks.find((candidate) => candidate.id === item.trackId);
+      return item.trackId === track.id || (sourceKey !== null && getProviderTrackKey(queuedTrack) === sourceKey);
+    });
+    if (isAlreadyQueued) {
       throw new BadRequestException("推荐歌曲已在节目单中。");
-    }
-
-    const recentTracks = getRecentRadioTracks(record, 50);
-    const recentTrackIds = new Set(recentTracks.map((track) => track.id));
-    const recentArtists = new Set(
-      getRecentRadioTracks(record, 3).map((track) => normalizeArtist(track.artist))
-    );
-    if (
-      track.id === record.room.playback.currentTrackId ||
-      recentTrackIds.has(track.id) ||
-      recentArtists.has(normalizeArtist(track.artist))
-    ) {
-      throw new BadRequestException("推荐歌曲未通过最近播放去重。");
     }
 
     const nextItem: QueueItem = {
@@ -508,18 +500,6 @@ export class RoomContentService {
   }
 }
 
-function getRecentRadioTracks(record: RoomRecord, limit: number) {
-  const currentQueueItemId = record.room.playback.currentQueueItemId;
-  const currentIndex = currentQueueItemId
-    ? record.queue.findIndex((item) => item.id === currentQueueItemId)
-    : -1;
-  if (currentIndex < 0) return [];
-  return record.queue
-    .slice(Math.max(0, currentIndex - limit + 1), currentIndex + 1)
-    .map((item) => record.tracks.find((track) => track.id === item.trackId))
-    .filter((track): track is TrackMeta => !!track);
-}
-
-function normalizeArtist(value: string) {
-  return value.trim().toLocaleLowerCase();
+function getProviderTrackKey(track: TrackMeta | undefined) {
+  return track?.sourceRef ? `${track.sourceRef.provider}:${track.sourceRef.trackId}` : null;
 }

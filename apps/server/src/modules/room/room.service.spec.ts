@@ -98,7 +98,7 @@ describe("RoomService", () => {
 
     const seed = await registerProviderTrack("1001", "Seed", "Seed Artist");
     const existingNext = await registerProviderTrack("1002", "Existing", "Existing Artist");
-    const recommended = await registerProviderTrack("1003", "Recommended", "Recommended Artist");
+    const recommended = await registerProviderTrack("1003", "Recommended", "Seed Artist");
     const otherCandidate = await registerProviderTrack("1004", "Other", "Other Artist");
     const seedQueueItem = await roomService.addQueueItem(snapshot.room.id, host.id, seed.id);
     const existingNextQueueItem = await roomService.addQueueItem(snapshot.room.id, host.id, existingNext.id);

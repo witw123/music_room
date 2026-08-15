@@ -77,12 +77,16 @@ export function useRadioAutopilot({
     runningRef.current = true;
     setState({ kind: "refilling", message: "正在分析并准备下一首…" });
     try {
-      const candidates = await loadRelatedCandidates(seed.provider, seed.providerTrackId);
-      const selected = selectCandidates(snapshot, candidates, 1)[0];
+      const relatedCandidates = await loadRelatedCandidates(seed.provider, seed.providerTrackId).catch(() => []);
+      let selected = selectRadioAutopilotCandidates(snapshot, relatedCandidates, 1)[0];
+      if (!selected) {
+        const searchedCandidates = await searchRecommendationCandidates(seed.provider, seed.track);
+        selected = selectRadioAutopilotCandidates(snapshot, [...relatedCandidates, ...searchedCandidates], 1)[0];
+      }
       if (!selected) {
         pausedRef.current = true;
         setPreloadingCandidate(null);
-        setState({ kind: "paused", message: "没有可加入的关联歌曲。" });
+        setState({ kind: "paused", message: "关联歌单和搜索结果中都没有可用歌曲。" });
         return;
       }
 
@@ -204,9 +208,12 @@ async function loadRelatedCandidates(
   provider: "netease" | "qqmusic",
   providerTrackId: string
 ) {
+  const relatedTrackId = provider === "qqmusic"
+    ? (await musicRoomApi.getQqMusicTrack(providerTrackId)).relatedTrackId ?? providerTrackId
+    : providerTrackId;
   const related = provider === "netease"
-    ? await musicRoomApi.listNeteaseRelatedPlaylists(providerTrackId)
-    : await musicRoomApi.listQqMusicRelatedPlaylists(providerTrackId);
+    ? await musicRoomApi.listNeteaseRelatedPlaylists(relatedTrackId)
+    : await musicRoomApi.listQqMusicRelatedPlaylists(relatedTrackId);
   const playlists = related.items.slice(0, 3);
   const details = await Promise.all(
     playlists.map((playlist) => provider === "netease"
@@ -216,33 +223,49 @@ async function loadRelatedCandidates(
   return details.flatMap((playlist) => playlist.tracks);
 }
 
-function selectCandidates(
+async function searchRecommendationCandidates(
+  provider: "netease" | "qqmusic",
+  track: TrackMeta
+) {
+  const queries = [...new Set(
+    [track.artist, track.album ?? track.title]
+      .map((value) => value.trim())
+      .filter(Boolean)
+  )];
+  const candidates: ProviderTrackCandidate[] = [];
+  let firstError: unknown = null;
+  for (const keywords of queries) {
+    try {
+      const result = provider === "netease"
+        ? await musicRoomApi.searchNeteaseTracks(keywords, { limit: 30 })
+        : await musicRoomApi.searchQqMusicTracks(keywords, { limit: 30 });
+      candidates.push(...result.items);
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (candidates.length === 0 && firstError) throw firstError;
+  return candidates;
+}
+
+export function selectRadioAutopilotCandidates(
   snapshot: RoomSnapshot,
   candidates: ProviderTrackCandidate[],
   limit: number
 ) {
-  const knownProviderTrackIds = new Set(
-    snapshot.tracks.flatMap((track) => track.sourceRef
-      ? [`${track.sourceRef.provider}:${track.sourceRef.trackId}`]
-      : [])
-  );
-  const currentQueueIndex = snapshot.room.playback.currentQueueItemId
-    ? snapshot.queue.findIndex((item) => item.id === snapshot.room.playback.currentQueueItemId)
-    : -1;
-  const recentTracks = currentQueueIndex < 0
-    ? []
-    : snapshot.queue
-      .slice(Math.max(0, currentQueueIndex - 49), currentQueueIndex + 1)
-      .map((item) => snapshot.tracks.find((track) => track.id === item.trackId))
-      .filter((track): track is TrackMeta => !!track);
-  const recentArtists = new Set(
-    recentTracks.slice(-3).map((track) => normalizeArtist(track.artist))
+  const queuedProviderTrackIds = new Set(
+    snapshot.queue.flatMap((queueItem) => {
+      const track = snapshot.tracks.find((item) => item.id === queueItem.trackId);
+      return track?.sourceRef
+        ? [`${track.sourceRef.provider}:${track.sourceRef.trackId}`]
+        : [];
+    })
   );
   const seen = new Set<string>();
 
   return candidates.filter((candidate) => {
     const key = `${candidate.provider}:${candidate.providerTrackId}`;
-    if (knownProviderTrackIds.has(key) || seen.has(key) || recentArtists.has(normalizeArtist(candidate.artist))) {
+    if (queuedProviderTrackIds.has(key) || seen.has(key)) {
       return false;
     }
     seen.add(key);
@@ -288,10 +311,6 @@ function toNextTrack(
     provider: candidate.provider,
     preloadStatus
   };
-}
-
-function normalizeArtist(value: string) {
-  return value.trim().toLocaleLowerCase();
 }
 
 function toAutopilotErrorMessage(error: unknown) {
