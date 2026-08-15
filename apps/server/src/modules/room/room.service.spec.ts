@@ -96,43 +96,31 @@ describe("RoomService", () => {
         sourceRef: { provider, trackId }
       });
 
-    const seed = await registerProviderTrack("1001", "Seed", "Seed Artist");
     const candidates = [
       await registerProviderTrack("1002", "One", "Artist One"),
       await registerProviderTrack("1003", "Two", "Artist Two"),
       await registerProviderTrack("1004", "Three", "Artist Three"),
       await registerProviderTrack("1005", "Four", "Artist Four")
     ];
-    const otherProviderCandidate = await registerProviderTrack(
-      "qq_1006",
-      "Other Provider",
-      "Artist Five",
-      "qqmusic"
-    );
 
     await expect(
       roomService.updateRadioAutopilot(snapshot.room.id, member.id, {
-        enabled: true,
-        seedTrackId: seed.id
+        enabled: true
       })
     ).rejects.toThrow("Only the host");
 
     await roomService.updateRadioAutopilot(snapshot.room.id, host.id, {
-      enabled: true,
-      seedTrackId: seed.id
+      enabled: true
     });
     const appended = await roomService.appendRadioAutopilotQueueItems(
       snapshot.room.id,
       host.id,
-      [otherProviderCandidate.id, ...candidates.map((track) => track.id)]
+      candidates.map((track) => track.id)
     );
 
     expect(appended).toHaveLength(3);
     expect(appended).toEqual(expect.arrayContaining([
-      expect.objectContaining({ source: "autopilot", sourceSeedTrackId: seed.id })
-    ]));
-    expect(appended).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ trackId: otherProviderCandidate.id })
+      expect.objectContaining({ source: "autopilot", sourceSeedTrackId: null })
     ]));
     await expect(
       roomService.appendRadioAutopilotQueueItems(snapshot.room.id, host.id, [candidates[3].id])

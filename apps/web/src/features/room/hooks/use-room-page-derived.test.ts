@@ -36,7 +36,7 @@ function createSnapshot(input: {
       joinCode: "ROOM42",
       visibility: "public",
       roomType: "interactive",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       playback: {
         status: "playing",
         currentTrackId: "track_cached",

@@ -166,19 +166,9 @@ export const addQueueItemRequestSchema = z
 
 export const updateRadioAutopilotRequestSchema = z
   .object({
-    enabled: z.boolean(),
-    seedTrackId: stringId.nullable()
+    enabled: z.boolean()
   })
-  .strict()
-  .superRefine((payload, context) => {
-    if (payload.enabled && !payload.seedTrackId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["seedTrackId"],
-        message: "开启自动推荐需要选择种子歌曲。"
-      });
-    }
-  });
+  .strict();
 
 export const appendRadioAutopilotQueueRequestSchema = z
   .object({

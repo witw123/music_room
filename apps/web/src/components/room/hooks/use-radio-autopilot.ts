@@ -38,6 +38,7 @@ export function useRadioAutopilot({
   const pausedRef = useRef(false);
   const roomSnapshotRef = useRef(roomSnapshot);
   const isAutopilotEnabled = roomSnapshot.room.radioAutopilot.enabled;
+  const currentSourceKey = getCurrentProviderSource(roomSnapshot)?.key ?? null;
 
   useEffect(() => {
     roomSnapshotRef.current = roomSnapshot;
@@ -46,11 +47,11 @@ export function useRadioAutopilot({
   const refill = useCallback(async (force = false) => {
     const snapshot = roomSnapshotRef.current;
     const autopilot = snapshot.room.radioAutopilot;
+    const source = getCurrentProviderSource(snapshot);
     if (
       !isHost ||
       !autopilot.enabled ||
-      !autopilot.seedProvider ||
-      !autopilot.seedProviderTrackId ||
+      !source ||
       snapshot.room.playback.status !== "playing" ||
       !snapshot.room.playback.currentTrackId ||
       runningRef.current ||
@@ -63,7 +64,7 @@ export function useRadioAutopilot({
     runningRef.current = true;
     setState({ kind: "refilling", message: "正在补充节目单…" });
     try {
-      const candidates = await loadRelatedCandidates(autopilot.seedProvider, autopilot.seedProviderTrackId);
+      const candidates = await loadRelatedCandidates(source.provider, source.providerTrackId);
       const selected = selectCandidates(snapshot, candidates, targetPendingQueueDepth - getPendingQueueDepth(snapshot));
       if (selected.length === 0) {
         pausedRef.current = true;
@@ -91,6 +92,11 @@ export function useRadioAutopilot({
         importedTrackIds.push(imported.id);
       }
 
+      if (getCurrentProviderSource(roomSnapshotRef.current)?.key !== source.key) {
+        setState({ kind: "idle", message: "当前播放歌曲已切换，已取消上一首歌曲的补歌任务。" });
+        return;
+      }
+
       const queued = await musicRoomApi.appendRadioAutopilotQueueItems(snapshot.room.id, {
         trackIds: importedTrackIds
       });
@@ -102,7 +108,7 @@ export function useRadioAutopilot({
 
       pausedRef.current = false;
       await onRefreshRoom();
-      setState({ kind: "idle", message: `已补充 ${queued.appendedQueueItemIds.length} 首自动推荐。` });
+      setState({ kind: "idle", message: `已根据《${source.track.title}》补充 ${queued.appendedQueueItemIds.length} 首歌曲。` });
     } catch (error) {
       pausedRef.current = true;
       setState({ kind: "paused", message: toAutopilotErrorMessage(error) });
@@ -112,16 +118,26 @@ export function useRadioAutopilot({
   }, [isHost, onImportNeteaseTrack, onImportQqMusicTrack, onRefreshRoom]);
 
   useEffect(() => {
+    pausedRef.current = false;
+  }, [currentSourceKey]);
+
+  useEffect(() => {
     if (!isHost || !isAutopilotEnabled) {
       pausedRef.current = false;
       setState({ kind: "idle", message: null });
       return;
     }
 
+    if (!currentSourceKey) {
+      pausedRef.current = true;
+      setState({ kind: "paused", message: "请先播放一首网易云音乐或 QQ 音乐歌曲，再开启自动续播。" });
+      return;
+    }
+
     void refill();
     const intervalId = window.setInterval(() => void refill(), refillIntervalMs);
     return () => window.clearInterval(intervalId);
-  }, [isAutopilotEnabled, isHost, refill]);
+  }, [currentSourceKey, isAutopilotEnabled, isHost, refill]);
 
   const retry = useCallback(async () => {
     pausedRef.current = false;
@@ -129,6 +145,24 @@ export function useRadioAutopilot({
   }, [refill]);
 
   return { state, retry };
+}
+
+function getCurrentProviderSource(snapshot: RoomSnapshot) {
+  const trackId = snapshot.room.playback.currentTrackId;
+  const track = trackId ? snapshot.tracks.find((item) => item.id === trackId) : null;
+  if (
+    !track?.sourceRef ||
+    (track.sourceType !== "netease" && track.sourceType !== "qqmusic")
+  ) {
+    return null;
+  }
+
+  return {
+    provider: track.sourceRef.provider,
+    providerTrackId: track.sourceRef.trackId,
+    track,
+    key: `${track.sourceRef.provider}:${track.sourceRef.trackId}`
+  };
 }
 
 async function loadRelatedCandidates(

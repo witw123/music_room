@@ -36,10 +36,7 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
       },
       ...overrides,
       radioAutopilot: overrides?.radioAutopilot ?? {
-        enabled: false,
-        seedTrackId: null,
-        seedProvider: null,
-        seedProviderTrackId: null
+        enabled: false
       }
     },
     tracks: [],
@@ -362,13 +359,11 @@ describe("RoomController", () => {
     );
 
     await expect(controller.updateRadioAutopilot("room_1", "token", {
-      enabled: true,
-      seedTrackId: "track_seed"
+      enabled: true
     })).resolves.toEqual(snapshot);
 
     expect(roomService.updateRadioAutopilot).toHaveBeenCalledWith("room_1", "guest_host", {
-      enabled: true,
-      seedTrackId: "track_seed"
+      enabled: true
     });
     expect(roomRealtimePublisher.emitSnapshot).toHaveBeenCalledWith("room_1");
   });

@@ -9,7 +9,7 @@ function buildSnapshot(): RoomSnapshot {
       joinCode: "ABC123",
       visibility: "public",
       roomType: "interactive",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       members: [
         {
           id: "guest_host",

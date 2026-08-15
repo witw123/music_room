@@ -11,7 +11,7 @@ describe("room.types persistence helpers", () => {
       serializePlaybackForPersistence({
         presenceRevision: 7,
         roomRevision: 11,
-        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+        radioAutopilot: { enabled: false },
         playback: {
           status: "paused",
           currentTrackId: null,
@@ -56,7 +56,7 @@ describe("room.types persistence helpers", () => {
         mediaEpoch: 0,
         presenceRevision: 5,
         roomRevision: 9,
-        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null }
+        radioAutopilot: { enabled: false }
       },
       members: [],
       tracks: [],
@@ -116,10 +116,7 @@ describe("room.types persistence helpers", () => {
 
     expect(record.room.roomType).toBe("interactive");
     expect(record.room.radioAutopilot).toEqual({
-      enabled: false,
-      seedTrackId: null,
-      seedProvider: null,
-      seedProviderTrackId: null
+      enabled: false
     });
     expect(record.queue).toEqual([
       expect.objectContaining({ source: "manual", sourceSeedTrackId: null })
@@ -176,7 +173,7 @@ describe("room.types persistence helpers", () => {
         playbackRevision: 1,
         mediaEpoch: 0,
         newMemberPermissions: { library: false, queue: true, player: false },
-        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+        radioAutopilot: { enabled: false },
         memberPermissionProfiles: {
           member_1: { library: true, queue: false, player: true }
         }
@@ -204,7 +201,7 @@ describe("room.types persistence helpers", () => {
         joinCode: "ABC123",
         visibility: "public",
         roomType: "interactive",
-        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+        radioAutopilot: { enabled: false },
         members: [
           {
             id: "host_1",
@@ -273,7 +270,7 @@ describe("room.types persistence helpers", () => {
     const persisted = serializePlaybackForPersistence({
       presenceRevision: 0,
       roomRevision: 8,
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       playback
     });
     const record = deserializeRoomRecord({
@@ -310,7 +307,7 @@ describe("room.types persistence helpers", () => {
         queueVersion: 1,
         playbackRevision: 1,
         mediaEpoch: 0,
-        radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null }
+        radioAutopilot: { enabled: false }
       },
       members: [],
       tracks: [{

@@ -51,7 +51,7 @@ function createRecord(overrides: {
       hasPassword: false,
       visibility: "public",
       roomType: "interactive",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       members,
       presenceRevision: 0,
       roomRevision: 0,

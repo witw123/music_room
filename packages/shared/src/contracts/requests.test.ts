@@ -5,6 +5,7 @@ import {
   loginRequestSchema,
   registerRequestSchema,
   registerTrackRequestSchema,
+  updateRadioAutopilotRequestSchema,
   updateRoomRequestSchema,
   updatePlaybackRequestSchema
 } from "./requests";
@@ -44,14 +45,12 @@ describe("request contracts", () => {
     expect(createRoomRequestSchema.parse({
       visibility: "private",
       roomType: "interactive",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       name: "  Study Room ",
       description: "  For late night listening  ",
       password: "secret"
     })).toEqual({
       visibility: "private",
       roomType: "interactive",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
       name: "Study Room",
       description: "For late night listening",
       password: "secret"
@@ -68,7 +67,7 @@ describe("request contracts", () => {
     expect(() => createRoomRequestSchema.parse({
       visibility: "public",
       roomType: "radio",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       newMemberPermissions: { library: true, queue: true, player: true }
     })).toThrow();
     expect(updateRoomRequestSchema.parse({
@@ -81,9 +80,11 @@ describe("request contracts", () => {
     expect(() => updateRoomRequestSchema.parse({
       visibility: "public",
       roomType: "radio",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       name: "Room"
     })).toThrow();
+    expect(updateRadioAutopilotRequestSchema.parse({ enabled: true })).toEqual({ enabled: true });
+    expect(() => updateRadioAutopilotRequestSchema.parse({ enabled: true, seedTrackId: "track_seed" })).toThrow();
   });
 
   it("validates track registration numeric bounds", () => {

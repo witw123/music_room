@@ -8,31 +8,14 @@ export type RoomType = z.infer<typeof roomTypeSchema>;
 
 export const radioAutopilotSchema = z
   .object({
-    enabled: z.boolean(),
-    seedTrackId: z.string().nullable(),
-    seedProvider: z.enum(["netease", "qqmusic"]).nullable(),
-    seedProviderTrackId: z.string().nullable()
+    enabled: z.boolean()
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (
-      value.enabled &&
-      (!value.seedTrackId || !value.seedProvider || !value.seedProviderTrackId)
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Autopilot requires a provider-backed seed track."
-      });
-    }
-  });
+  .strict();
 
 export type RadioAutopilot = z.infer<typeof radioAutopilotSchema>;
 
 export const inactiveRadioAutopilot: RadioAutopilot = {
-  enabled: false,
-  seedTrackId: null,
-  seedProvider: null,
-  seedProviderTrackId: null
+  enabled: false
 };
 
 export const roomDirectoryNowPlayingSchema = z.object({

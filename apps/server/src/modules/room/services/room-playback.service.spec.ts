@@ -73,7 +73,7 @@ function record(positionMs: number, nextOwnerSessionId = "owner"): RoomRecord {
       hasPassword: false,
       visibility: "private",
       roomType: "interactive",
-      radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+      radioAutopilot: { enabled: false },
       members: [],
       playback,
       presenceRevision: 1,

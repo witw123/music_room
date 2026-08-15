@@ -64,10 +64,7 @@ function createRoomSnapshot(
       playback,
       ...roomOverrides,
       radioAutopilot: roomOverrides?.radioAutopilot ?? {
-        enabled: false,
-        seedTrackId: null,
-        seedProvider: null,
-        seedProviderTrackId: null
+        enabled: false
       }
     },
     tracks: tracks ?? [

@@ -9,7 +9,7 @@ function createRoomRecord(roomRevision: number): RoomRecord {
     joinCode: "ABC123",
     visibility: "public",
     roomType: "interactive",
-    radioAutopilot: { enabled: false, seedTrackId: null, seedProvider: null, seedProviderTrackId: null },
+    radioAutopilot: { enabled: false },
     members: [
       {
         id: "host_1",

@@ -270,7 +270,7 @@ export class RoomContentService {
   async updateRadioAutopilot(
     roomId: string,
     sessionId: string,
-    input: { enabled: boolean; seedTrackId: string | null }
+    input: { enabled: boolean }
   ): Promise<RadioAutopilot> {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);
@@ -279,25 +279,7 @@ export class RoomContentService {
       throw new BadRequestException("只有自由电台可以开启自动推荐。");
     }
 
-    if (!input.enabled) {
-      record.room.radioAutopilot = {
-        enabled: false,
-        seedTrackId: null,
-        seedProvider: null,
-        seedProviderTrackId: null
-      };
-    } else {
-      const seedTrack = record.tracks.find((track) => track.id === input.seedTrackId);
-      if (!seedTrack?.sourceRef || (seedTrack.sourceType !== "netease" && seedTrack.sourceType !== "qqmusic")) {
-        throw new BadRequestException("请选择已导入的网易云音乐或 QQ 音乐歌曲作为种子。");
-      }
-      record.room.radioAutopilot = {
-        enabled: true,
-        seedTrackId: seedTrack.id,
-        seedProvider: seedTrack.sourceRef.provider,
-        seedProviderTrackId: seedTrack.sourceRef.trackId
-      };
-    }
+    record.room.radioAutopilot = { enabled: input.enabled };
 
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
@@ -331,8 +313,6 @@ export class RoomContentService {
       .map((trackId) => record.tracks.find((track) => track.id === trackId))
       .filter((track): track is TrackMeta => !!track)
       .filter((track) =>
-        track.id !== record.room.radioAutopilot.seedTrackId &&
-        track.sourceRef?.provider === record.room.radioAutopilot.seedProvider &&
         track.id !== record.room.playback.currentTrackId &&
         !queuedTrackIds.has(track.id) &&
         !recentTrackIds.has(track.id) &&
@@ -346,7 +326,7 @@ export class RoomContentService {
       requestedBy: "自动推荐",
       requestedById: session.id,
       source: "autopilot",
-      sourceSeedTrackId: record.room.radioAutopilot.seedTrackId,
+      sourceSeedTrackId: record.room.playback.currentTrackId,
       position: record.queue.length + offset,
       createdAt: new Date().toISOString()
     }));

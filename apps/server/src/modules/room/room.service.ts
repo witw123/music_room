@@ -706,7 +706,7 @@ export class RoomService {
   updateRadioAutopilot(
     roomId: string,
     sessionId: string,
-    input: { enabled: boolean; seedTrackId: string | null }
+    input: { enabled: boolean }
   ) {
     return this.contentService.updateRadioAutopilot(roomId, sessionId, input);
   }

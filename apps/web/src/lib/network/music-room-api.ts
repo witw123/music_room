@@ -401,7 +401,7 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  updateRadioAutopilot: (roomId: string, payload: { enabled: boolean; seedTrackId: string | null }) =>
+  updateRadioAutopilot: (roomId: string, payload: { enabled: boolean }) =>
     request<RoomSnapshot>(`/v1/rooms/${roomId}/radio-autopilot`, {
       method: "PATCH",
       body: JSON.stringify(payload)

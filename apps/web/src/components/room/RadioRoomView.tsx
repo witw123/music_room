@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -13,10 +13,6 @@ import { useRadioAutopilot } from "./hooks/use-radio-autopilot";
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
 export function RadioRoomView(props: RoomDashboardViewProps) {
-  if (!props.roomSnapshot.room.radioAutopilot) {
-    return <RadioAutopilotUnavailable />;
-  }
-
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const playback = props.roomSnapshot.room.playback;
   const currentTrack = props.currentTrack;
@@ -52,23 +48,13 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   </div>;
 }
 
-function RadioAutopilotUnavailable() {
-  return <div className="flex h-full min-h-0 items-center justify-center px-4 pb-[var(--room-mobile-bottom-inset)] lg:px-8 lg:pb-32" data-room-view="radio">
-    <section className="w-full max-w-xl border border-surface-border bg-surface/25 px-5 py-6 sm:px-6" role="alert">
-      <p className="font-mono text-xs font-semibold text-accent">自由电台需要更新</p>
-      <h1 className="mt-3 text-xl font-semibold text-foreground">自动推荐尚不可用</h1>
-      <p className="mt-3 text-sm leading-6 text-foreground-muted">此房间仍在使用旧的服务端快照。重新构建并重启后端后，重新进入房间即可使用自动推荐。</p>
-    </section>
-  </div>;
-}
-
 function HostBroadcastDesk(props: RoomDashboardViewProps) {
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedSeedTrackId, setSelectedSeedTrackId] = useState("");
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
-  const seedTracks = props.roomSnapshot.tracks.filter(
-    (track) => track.sourceType === "netease" || track.sourceType === "qqmusic"
-  );
+  const currentProviderTrack = props.currentTrack?.sourceRef &&
+    (props.currentTrack.sourceType === "netease" || props.currentTrack.sourceType === "qqmusic")
+    ? props.currentTrack
+    : null;
   const autopilot = useRadioAutopilot({
     roomSnapshot: props.roomSnapshot,
     isHost,
@@ -76,17 +62,6 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     onImportQqMusicTrack: props.onImportQqMusicTrack,
     onRefreshRoom: props.onRefreshRoom
   });
-
-  useEffect(() => {
-    const configuredSeedTrackId = props.roomSnapshot.room.radioAutopilot.seedTrackId;
-    if (configuredSeedTrackId && seedTracks.some((track) => track.id === configuredSeedTrackId)) {
-      setSelectedSeedTrackId(configuredSeedTrackId);
-      return;
-    }
-    if (!seedTracks.some((track) => track.id === selectedSeedTrackId)) {
-      setSelectedSeedTrackId(seedTracks[0]?.id ?? "");
-    }
-  }, [props.roomSnapshot.room.radioAutopilot.seedTrackId, seedTracks, selectedSeedTrackId]);
 
   const importAndQueue = async (candidate: ProviderCandidate) => {
     setMessage(null);
@@ -120,11 +95,10 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     setMessage(null);
     try {
       await musicRoomApi.updateRadioAutopilot(props.roomSnapshot.room.id, {
-        enabled: !current.enabled,
-        seedTrackId: current.enabled ? null : selectedSeedTrackId || null
+        enabled: !current.enabled
       });
       await props.onRefreshRoom();
-      setMessage(current.enabled ? "自动推荐已停止。" : "自动推荐已开启。播放时会补足节目单。");
+      setMessage(current.enabled ? "自动续播已停止。" : "自动续播已开启。房主页面会根据当前歌曲补足节目单。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "自动推荐设置失败。请稍后重试。");
     }
@@ -134,16 +108,16 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     <div className="border-b border-surface-border pb-4"><h2 className="font-semibold text-foreground">主持人控制台</h2><p className="mt-1 text-sm text-foreground-muted">导入歌曲后会自动加入节目单。</p></div>
     <section className="mt-5 border border-surface-border bg-surface/25 p-4" data-testid="radio-autopilot">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="text-sm font-semibold text-foreground">自动推荐</h3><p className="mt-1 text-xs leading-5 text-foreground-muted">播出中且待播不足三首时，从种子歌曲的关联歌单补充节目。</p></div>
+        <div><h3 className="text-sm font-semibold text-foreground">自动续播</h3><p className="mt-1 text-xs leading-5 text-foreground-muted">播出中且待播不足三首时，房主页面会根据当前歌曲的关联曲目补充节目单。</p></div>
         <span className={`border px-2 py-1 font-mono text-[10px] font-semibold ${props.roomSnapshot.room.radioAutopilot.enabled ? "border-accent/50 bg-accent/10 text-accent" : "border-surface-border text-foreground-muted"}`}>{props.roomSnapshot.room.radioAutopilot.enabled ? "运行中" : "已关闭"}</span>
       </div>
-      <label className="mt-4 block text-xs font-medium text-foreground-muted" htmlFor="radio-autopilot-seed">种子歌曲</label>
-      <select id="radio-autopilot-seed" className="mt-2 w-full border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60" disabled={props.roomSnapshot.room.radioAutopilot.enabled || seedTracks.length === 0} onChange={(event) => setSelectedSeedTrackId(event.target.value)} value={selectedSeedTrackId}>
-        {seedTracks.length === 0 ? <option value="">先导入网易云音乐或 QQ 音乐歌曲</option> : seedTracks.map((track) => <option key={track.id} value={track.id}>{track.title} · {track.artist}</option>)}
-      </select>
+      <div className="mt-4 border-l-2 border-accent/50 pl-3 text-xs leading-5 text-foreground-muted">
+        <span className="block text-foreground-muted">当前分析依据</span>
+        <span className="mt-1 block truncate text-foreground">{currentProviderTrack ? `${currentProviderTrack.title} · ${currentProviderTrack.artist}` : "等待网易云音乐或 QQ 音乐歌曲开始播放"}</span>
+      </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button disabled={!props.roomSnapshot.room.radioAutopilot.enabled && !selectedSeedTrackId} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={props.roomSnapshot.room.radioAutopilot.enabled ? "outline" : "default"}>{props.roomSnapshot.room.radioAutopilot.enabled ? "停止自动推荐" : "开启自动推荐"}</Button>
-        {autopilot.state.kind === "paused" ? <Button onClick={() => void autopilot.retry()} size="sm" type="button" variant="outline">重试补歌</Button> : null}
+        <Button disabled={!props.roomSnapshot.room.radioAutopilot.enabled && !currentProviderTrack} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={props.roomSnapshot.room.radioAutopilot.enabled ? "outline" : "default"}>{props.roomSnapshot.room.radioAutopilot.enabled ? "停止自动续播" : "开启自动续播"}</Button>
+        {autopilot.state.kind === "paused" && currentProviderTrack ? <Button onClick={() => void autopilot.retry()} size="sm" type="button" variant="outline">重试补歌</Button> : null}
       </div>
       {autopilot.state.message ? <p className={`mt-3 text-xs leading-5 ${autopilot.state.kind === "paused" ? "text-amber-200" : "text-foreground-muted"}`} role="status">{autopilot.state.message}</p> : null}
     </section>
