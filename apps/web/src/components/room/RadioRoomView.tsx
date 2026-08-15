@@ -149,6 +149,11 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     (props.currentTrack.sourceType === "netease" || props.currentTrack.sourceType === "qqmusic")
     ? props.currentTrack
     : null;
+  const canRefillNext = Boolean(
+    currentProviderTrack &&
+    props.roomSnapshot.room.playback.currentQueueItemId &&
+    props.roomSnapshot.room.playback.status === "playing"
+  );
   const autopilot = useRadioAutopilot({
     roomSnapshot: props.roomSnapshot,
     isHost,
@@ -185,7 +190,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     try {
       await musicRoomApi.updateRadioAutopilot(props.roomSnapshot.room.id, { enabled: !isAutopilotEnabled });
       await props.onRefreshRoom();
-      setMessage(isAutopilotEnabled ? "自动续播已停止。" : "自动续播已开启。房主页面会根据当前歌曲补足节目单。");
+      setMessage(isAutopilotEnabled ? "自动续播已停止。" : "自动续播已开启，将在播放到节目单最后一首时补充下一首。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "自动续播设置失败。请稍后重试。");
     }
@@ -203,8 +208,8 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
         {currentProviderTrack ? <p className="mt-1 truncate text-xs text-foreground-muted">{currentProviderTrack.title} · {currentProviderTrack.artist}</p> : null}
         {autopilot.nextTrack ? <RadioAutopilotNextTrackCard track={autopilot.nextTrack} /> : null}
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button disabled={!isAutopilotEnabled && !currentProviderTrack} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={isAutopilotEnabled ? "outline" : "default"}>{isAutopilotEnabled ? "停止自动续播" : "开启自动续播"}</Button>
-          {autopilot.state.kind === "paused" && currentProviderTrack ? <Button onClick={() => void autopilot.retry()} size="sm" type="button" variant="outline">重试补歌</Button> : null}
+          <Button disabled={!isAutopilotEnabled && !canRefillNext} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={isAutopilotEnabled ? "outline" : "default"}>{isAutopilotEnabled ? "停止自动续播" : "开启自动续播"}</Button>
+          <Button disabled={!canRefillNext || autopilot.state.kind === "refilling"} onClick={() => void autopilot.refillNow()} size="sm" type="button" variant="outline">{autopilot.state.kind === "refilling" ? "补充中…" : "补充下一首"}</Button>
         </div>
         {autopilot.state.message ? <p className={`mt-3 text-xs leading-5 ${autopilot.state.kind === "paused" ? "text-amber-200" : "text-foreground-muted"}`} role="status">{autopilot.state.message}</p> : null}
       </section>

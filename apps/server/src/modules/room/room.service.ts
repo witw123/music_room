@@ -711,8 +711,8 @@ export class RoomService {
     return this.contentService.updateRadioAutopilot(roomId, sessionId, input);
   }
 
-  appendRadioAutopilotQueueItems(roomId: string, sessionId: string, trackIds: string[]) {
-    return this.contentService.appendRadioAutopilotQueueItems(roomId, sessionId, trackIds);
+  insertRadioAutopilotNextTrack(roomId: string, sessionId: string, trackId: string) {
+    return this.contentService.insertRadioAutopilotNextTrack(roomId, sessionId, trackId);
   }
 
   reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {

@@ -63,7 +63,7 @@ describe("RoomService", () => {
     jest.useRealTimers();
   });
 
-  it("lets only a radio host configure and append deduplicated autopilot songs", async () => {
+  it("lets only a radio host insert one recommended song as the next queue item", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -96,12 +96,17 @@ describe("RoomService", () => {
         sourceRef: { provider, trackId }
       });
 
-    const candidates = [
-      await registerProviderTrack("1002", "One", "Artist One"),
-      await registerProviderTrack("1003", "Two", "Artist Two"),
-      await registerProviderTrack("1004", "Three", "Artist Three"),
-      await registerProviderTrack("1005", "Four", "Artist Four")
-    ];
+    const seed = await registerProviderTrack("1001", "Seed", "Seed Artist");
+    const existingNext = await registerProviderTrack("1002", "Existing", "Existing Artist");
+    const recommended = await registerProviderTrack("1003", "Recommended", "Recommended Artist");
+    const otherCandidate = await registerProviderTrack("1004", "Other", "Other Artist");
+    const seedQueueItem = await roomService.addQueueItem(snapshot.room.id, host.id, seed.id);
+    const existingNextQueueItem = await roomService.addQueueItem(snapshot.room.id, host.id, existingNext.id);
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: seedQueueItem.id,
+      actorSessionId: host.id
+    });
 
     await expect(
       roomService.updateRadioAutopilot(snapshot.room.id, member.id, {
@@ -109,24 +114,31 @@ describe("RoomService", () => {
       })
     ).rejects.toThrow("Only the host");
 
-    await roomService.updateRadioAutopilot(snapshot.room.id, host.id, {
-      enabled: true
-    });
-    const appended = await roomService.appendRadioAutopilotQueueItems(
+    const inserted = await roomService.insertRadioAutopilotNextTrack(
       snapshot.room.id,
       host.id,
-      candidates.map((track) => track.id)
+      recommended.id
     );
 
-    expect(appended).toHaveLength(3);
-    expect(appended).toEqual(expect.arrayContaining([
-      expect.objectContaining({ source: "autopilot", sourceSeedTrackId: null })
-    ]));
+    expect(inserted).toMatchObject({
+      trackId: recommended.id,
+      source: "autopilot",
+      sourceSeedTrackId: seed.id,
+      position: 1
+    });
+    const afterInsert = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(afterInsert.queue.map((item) => item.id)).toEqual([
+      seedQueueItem.id,
+      inserted.id,
+      existingNextQueueItem.id
+    ]);
+    expect(afterInsert.queue.map((item) => item.position)).toEqual([0, 1, 2]);
+    expect(afterInsert.room.playback.nextQueueItemId).toBe(inserted.id);
     await expect(
-      roomService.appendRadioAutopilotQueueItems(snapshot.room.id, host.id, [candidates[3].id])
-    ).resolves.toEqual([]);
+      roomService.insertRadioAutopilotNextTrack(snapshot.room.id, host.id, recommended.id)
+    ).rejects.toThrow("已在节目单");
     await expect(
-      roomService.appendRadioAutopilotQueueItems(snapshot.room.id, member.id, [candidates[3].id])
+      roomService.insertRadioAutopilotNextTrack(snapshot.room.id, member.id, otherCandidate.id)
     ).rejects.toThrow("Only the host");
   });
 

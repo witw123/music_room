@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createRoomRequestSchema,
+  insertRadioAutopilotNextTrackRequestSchema,
   joinRoomByCodeRequestSchema,
   loginRequestSchema,
   registerRequestSchema,
@@ -85,6 +86,10 @@ describe("request contracts", () => {
     })).toThrow();
     expect(updateRadioAutopilotRequestSchema.parse({ enabled: true })).toEqual({ enabled: true });
     expect(() => updateRadioAutopilotRequestSchema.parse({ enabled: true, seedTrackId: "track_seed" })).toThrow();
+    expect(insertRadioAutopilotNextTrackRequestSchema.parse({ trackId: "track_next" })).toEqual({
+      trackId: "track_next"
+    });
+    expect(() => insertRadioAutopilotNextTrackRequestSchema.parse({ trackIds: ["track_next"] })).toThrow();
   });
 
   it("validates track registration numeric bounds", () => {

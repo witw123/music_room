@@ -170,9 +170,9 @@ export const updateRadioAutopilotRequestSchema = z
   })
   .strict();
 
-export const appendRadioAutopilotQueueRequestSchema = z
+export const insertRadioAutopilotNextTrackRequestSchema = z
   .object({
-    trackIds: z.array(stringId).min(1).max(3)
+    trackId: stringId
   })
   .strict();
 
@@ -254,7 +254,7 @@ export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
 export type RegisterTracksRequest = z.infer<typeof registerTracksRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;
 export type UpdateRadioAutopilotRequest = z.infer<typeof updateRadioAutopilotRequestSchema>;
-export type AppendRadioAutopilotQueueRequest = z.infer<typeof appendRadioAutopilotQueueRequestSchema>;
+export type InsertRadioAutopilotNextTrackRequest = z.infer<typeof insertRadioAutopilotNextTrackRequestSchema>;
 export type ReorderQueueRequest = z.infer<typeof reorderQueueRequestSchema>;
 export type SetNextQueueItemRequest = z.infer<typeof setNextQueueItemRequestSchema>;
 export type UpdatePlaybackRequest = z.infer<typeof updatePlaybackRequestSchema>;

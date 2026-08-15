@@ -34,9 +34,6 @@ export type RadioAutopilotNextTrack = {
   preloadStatus: "preloading" | "ready";
 };
 
-const targetPendingQueueDepth = 3;
-const refillIntervalMs = 15_000;
-
 export function useRadioAutopilot({
   roomSnapshot,
   isHost,
@@ -50,82 +47,76 @@ export function useRadioAutopilot({
   const pausedRef = useRef(false);
   const roomSnapshotRef = useRef(roomSnapshot);
   const isAutopilotEnabled = roomSnapshot.room.radioAutopilot?.enabled === true;
-  const currentSourceKey = getCurrentProviderSource(roomSnapshot)?.key ?? null;
+  const currentSeedKey = getCurrentAutopilotSeed(roomSnapshot)?.key ?? null;
+  const isPlayingLastQueueItem = isRadioPlaybackAtQueueEnd(roomSnapshot);
 
   useEffect(() => {
     roomSnapshotRef.current = roomSnapshot;
   }, [roomSnapshot]);
 
-  const refill = useCallback(async (force = false) => {
+  const refill = useCallback(async (mode: "automatic" | "manual") => {
     const snapshot = roomSnapshotRef.current;
     const autopilot = snapshot.room.radioAutopilot;
-    const source = getCurrentProviderSource(snapshot);
+    const seed = getCurrentAutopilotSeed(snapshot);
+    const isAutomatic = mode === "automatic";
     if (
       !isHost ||
-      autopilot?.enabled !== true ||
-      !source ||
+      !seed ||
       snapshot.room.playback.status !== "playing" ||
       !snapshot.room.playback.currentTrackId ||
       runningRef.current ||
-      (pausedRef.current && !force) ||
-      getPendingQueueDepth(snapshot) >= targetPendingQueueDepth
+      (isAutomatic && (
+        autopilot?.enabled !== true ||
+        pausedRef.current ||
+        !isRadioPlaybackAtQueueEnd(snapshot)
+      ))
     ) {
       return;
     }
 
     runningRef.current = true;
-    setState({ kind: "refilling", message: "正在补充节目单…" });
+    setState({ kind: "refilling", message: "正在分析并准备下一首…" });
     try {
-      const candidates = await loadRelatedCandidates(source.provider, source.providerTrackId);
-      const selected = selectCandidates(snapshot, candidates, targetPendingQueueDepth - getPendingQueueDepth(snapshot));
-      if (selected.length === 0) {
+      const candidates = await loadRelatedCandidates(seed.provider, seed.providerTrackId);
+      const selected = selectCandidates(snapshot, candidates, 1)[0];
+      if (!selected) {
         pausedRef.current = true;
         setPreloadingCandidate(null);
         setState({ kind: "paused", message: "没有可加入的关联歌曲。" });
         return;
       }
 
-      setPreloadingCandidate(selected[0] ?? null);
-      setState({ kind: "refilling", message: `正在预加载《${selected[0]?.title ?? "下一首"}》…` });
-      const importedTrackIds: string[] = [];
-      for (const candidate of selected) {
-        if (candidate.provider === "netease") {
-          await onImportNeteaseTrack(candidate);
-        } else {
-          await onImportQqMusicTrack(candidate);
-        }
-
-        const freshSnapshot = await musicRoomApi.getRoom(snapshot.room.id);
-        const imported = freshSnapshot.tracks.find(
-          (track) =>
-            track.sourceRef?.provider === candidate.provider &&
-            track.sourceRef.trackId === candidate.providerTrackId
-        );
-        if (!imported) {
-          throw new Error(`《${candidate.title}》导入后未同步到曲库。`);
-        }
-        importedTrackIds.push(imported.id);
+      setPreloadingCandidate(selected);
+      setState({ kind: "refilling", message: `正在预加载《${selected.title}》…` });
+      if (selected.provider === "netease") {
+        await onImportNeteaseTrack(selected);
+      } else {
+        await onImportQqMusicTrack(selected);
       }
 
-      if (getCurrentProviderSource(roomSnapshotRef.current)?.key !== source.key) {
+      const freshSnapshot = await musicRoomApi.getRoom(snapshot.room.id);
+      const imported = freshSnapshot.tracks.find(
+        (track) =>
+          track.sourceRef?.provider === selected.provider &&
+          track.sourceRef.trackId === selected.providerTrackId
+      );
+      if (!imported) {
+        throw new Error(`《${selected.title}》导入后未同步到曲库。`);
+      }
+      if (getCurrentAutopilotSeed(freshSnapshot)?.key !== seed.key) {
         setPreloadingCandidate(null);
         setState({ kind: "idle", message: "当前播放歌曲已切换，已取消上一首歌曲的补歌任务。" });
         return;
       }
 
-      const queued = await musicRoomApi.appendRadioAutopilotQueueItems(snapshot.room.id, {
-        trackIds: importedTrackIds
+      await musicRoomApi.insertRadioAutopilotNextTrack(snapshot.room.id, {
+        trackId: imported.id
       });
-      if (queued.appendedQueueItemIds.length === 0) {
-        pausedRef.current = true;
-        setState({ kind: "paused", message: "候选歌曲未通过节目单去重。" });
-        return;
-      }
 
       pausedRef.current = false;
       const refreshedSnapshot = await onRefreshRoom();
       if (refreshedSnapshot) roomSnapshotRef.current = refreshedSnapshot;
-      setState({ kind: "idle", message: `已根据《${source.track.title}》补充 ${queued.appendedQueueItemIds.length} 首歌曲。` });
+      setState({ kind: "idle", message: `已将《${selected.title}》设为下一首。` });
     } catch (error) {
       pausedRef.current = true;
       setPreloadingCandidate(null);
@@ -138,7 +129,7 @@ export function useRadioAutopilot({
   useEffect(() => {
     pausedRef.current = false;
     setPreloadingCandidate(null);
-  }, [currentSourceKey]);
+  }, [currentSeedKey]);
 
   useEffect(() => {
     if (!isHost || !isAutopilotEnabled) {
@@ -148,23 +139,21 @@ export function useRadioAutopilot({
       return;
     }
 
-    if (!currentSourceKey) {
+    if (!currentSeedKey) {
       pausedRef.current = true;
-      setState({ kind: "paused", message: "请先播放一首网易云音乐或 QQ 音乐歌曲，再开启自动续播。" });
+      setState({ kind: "paused", message: "请先从节目单播放一首网易云音乐或 QQ 音乐歌曲。" });
       return;
     }
 
-    void refill();
-    const intervalId = window.setInterval(() => void refill(), refillIntervalMs);
-    return () => window.clearInterval(intervalId);
-  }, [currentSourceKey, isAutopilotEnabled, isHost, refill]);
+    if (isPlayingLastQueueItem) void refill("automatic");
+  }, [currentSeedKey, isAutopilotEnabled, isHost, isPlayingLastQueueItem, refill]);
 
-  const retry = useCallback(async () => {
+  const refillNow = useCallback(async () => {
     pausedRef.current = false;
-    await refill(true);
+    await refill("manual");
   }, [refill]);
 
-  const queuedNextTrack = isAutopilotEnabled ? getNextAutopilotTrack(roomSnapshot) : null;
+  const queuedNextTrack = getNextAutopilotTrack(roomSnapshot);
   const queuedNextTrackKey = queuedNextTrack?.key ?? null;
   const nextTrack = queuedNextTrack ?? (preloadingCandidate
     ? toNextTrack(preloadingCandidate, "preloading")
@@ -174,7 +163,23 @@ export function useRadioAutopilot({
     if (queuedNextTrackKey) setPreloadingCandidate(null);
   }, [queuedNextTrackKey]);
 
-  return { state, retry, nextTrack };
+  return { state, refillNow, nextTrack };
+}
+
+export function isRadioPlaybackAtQueueEnd(snapshot: RoomSnapshot) {
+  const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
+  if (!currentQueueItemId || snapshot.room.playback.status !== "playing") return false;
+  return snapshot.queue.at(-1)?.id === currentQueueItemId;
+}
+
+function getCurrentAutopilotSeed(snapshot: RoomSnapshot) {
+  const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
+  const source = getCurrentProviderSource(snapshot);
+  if (!currentQueueItemId || !source) return null;
+  return {
+    ...source,
+    key: `${currentQueueItemId}:${source.key}`
+  };
 }
 
 function getCurrentProviderSource(snapshot: RoomSnapshot) {
@@ -245,20 +250,13 @@ function selectCandidates(
   }).slice(0, Math.max(0, limit));
 }
 
-function getPendingQueueDepth(snapshot: RoomSnapshot) {
-  const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
-  if (!currentQueueItemId) return snapshot.queue.length;
-  const currentIndex = snapshot.queue.findIndex((item) => item.id === currentQueueItemId);
-  return currentIndex < 0 ? snapshot.queue.length : snapshot.queue.length - currentIndex - 1;
-}
-
 function getNextAutopilotTrack(snapshot: RoomSnapshot): RadioAutopilotNextTrack | null {
   const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
   const currentIndex = currentQueueItemId
     ? snapshot.queue.findIndex((item) => item.id === currentQueueItemId)
     : -1;
-  const upcomingItems = snapshot.queue.slice(currentIndex < 0 ? 0 : currentIndex + 1);
-  const nextItem = upcomingItems.find((item) => item.source === "autopilot");
+  const nextItem = currentIndex >= 0 ? snapshot.queue[currentIndex + 1] : null;
+  if (nextItem?.source !== "autopilot") return null;
   const track = nextItem
     ? snapshot.tracks.find((item) => item.id === nextItem.trackId)
     : null;

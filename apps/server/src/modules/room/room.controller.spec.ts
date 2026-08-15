@@ -394,7 +394,7 @@ describe("RoomController", () => {
     expect(chatService.listHistory).toHaveBeenCalledWith("room_1", "guest_host", "chat_older");
   });
 
-  it("returns the standard queue mutation payload for an autopilot refill", async () => {
+  it("returns the inserted next queue item for an autopilot refill", async () => {
     const snapshot = buildSnapshot({ roomType: "radio" });
     const appended = {
       id: "queue_1",
@@ -408,7 +408,7 @@ describe("RoomController", () => {
     };
     snapshot.queue = [appended];
     const roomService = {
-      appendRadioAutopilotQueueItems: jest.fn().mockResolvedValue([appended])
+      insertRadioAutopilotNextTrack: jest.fn().mockResolvedValue(appended)
     };
     const roomRealtimePublisher = {
       ...createRoomRealtimePublisherMock(),
@@ -421,15 +421,15 @@ describe("RoomController", () => {
       createPlaylistServiceMock() as never
     );
 
-    await expect(controller.appendRadioAutopilotQueueItems("room_1", "token", {
-      trackIds: ["track_1"]
+    await expect(controller.insertRadioAutopilotNextTrack("room_1", "token", {
+      trackId: "track_1"
     })).resolves.toEqual({
       queue: snapshot.queue,
       playback: snapshot.room.playback,
-      appendedQueueItemIds: ["queue_1"]
+      insertedQueueItemId: "queue_1"
     });
 
-    expect(roomService.appendRadioAutopilotQueueItems).toHaveBeenCalledWith("room_1", "guest_host", ["track_1"]);
+    expect(roomService.insertRadioAutopilotNextTrack).toHaveBeenCalledWith("room_1", "guest_host", "track_1");
     expect(roomRealtimePublisher.emitQueueSnapshot).toHaveBeenCalledWith("room_1");
   });
 

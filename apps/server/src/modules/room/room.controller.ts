@@ -15,11 +15,11 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import {
-  appendRadioAutopilotQueueRequestSchema,
   computeAssetId,
   createRoomRequestSchema,
   createRoomSongRequestSchema,
   joinRoomByCodeRequestSchema,
+  insertRadioAutopilotNextTrackRequestSchema,
   registerTrackRequestSchema,
   registerTracksRequestSchema,
   updateRoomMemberPermissionsRequestSchema,
@@ -435,20 +435,20 @@ export class RoomController {
     return this.roomRealtimePublisher.emitSnapshot(roomId);
   }
 
-  @Post(":roomId/radio-autopilot/queue")
-  async appendRadioAutopilotQueueItems(
+  @Post(":roomId/radio-autopilot/next")
+  async insertRadioAutopilotNextTrack(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
     @Body() body: unknown
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const payload = parseRequestBody(appendRadioAutopilotQueueRequestSchema, body);
-    const appended = await this.roomService.appendRadioAutopilotQueueItems(roomId, userId, payload.trackIds);
+    const payload = parseRequestBody(insertRadioAutopilotNextTrackRequestSchema, body);
+    const inserted = await this.roomService.insertRadioAutopilotNextTrack(roomId, userId, payload.trackId);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
       queue: snapshot.queue,
       playback: snapshot.room.playback,
-      appendedQueueItemIds: appended.map((item) => item.id)
+      insertedQueueItemId: inserted.id
     };
   }
 

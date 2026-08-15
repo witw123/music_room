@@ -286,58 +286,74 @@ export class RoomContentService {
     return record.room.radioAutopilot;
   }
 
-  async appendRadioAutopilotQueueItems(
+  async insertRadioAutopilotNextTrack(
     roomId: string,
     sessionId: string,
-    trackIds: string[]
-  ): Promise<QueueItem[]> {
+    trackId: string
+  ): Promise<QueueItem> {
     const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);
     assertHost(record, sessionId);
-    if (record.room.roomType !== "radio" || !record.room.radioAutopilot.enabled) {
-      throw new BadRequestException("当前电台未开启自动推荐。");
+    if (record.room.roomType !== "radio") {
+      throw new BadRequestException("只有自由电台可以补充推荐歌曲。");
+    }
+    if (record.queue.length >= maxRoomQueueItems) {
+      throw new BadRequestException("节目单已达到歌曲数量上限。");
     }
 
-    const pendingDepth = getRadioPendingQueueDepth(record);
-    const availableSlots = Math.min(3 - pendingDepth, maxRoomQueueItems - record.queue.length);
-    if (availableSlots <= 0) return [];
+    const currentQueueItemId = record.room.playback.currentQueueItemId;
+    const currentIndex = currentQueueItemId
+      ? record.queue.findIndex((item) => item.id === currentQueueItemId)
+      : -1;
+    if (currentIndex < 0 || !record.room.playback.currentTrackId) {
+      throw new BadRequestException("请先从节目单播放一首歌曲。");
+    }
 
-    const queuedTrackIds = new Set(record.queue.map((item) => item.trackId));
+    const track = record.tracks.find((item) => item.id === trackId);
+    if (!track) {
+      throw new BadRequestException("推荐歌曲尚未导入当前电台曲库。");
+    }
+    if (record.queue.some((item) => item.trackId === track.id)) {
+      throw new BadRequestException("推荐歌曲已在节目单中。");
+    }
+
     const recentTracks = getRecentRadioTracks(record, 50);
     const recentTrackIds = new Set(recentTracks.map((track) => track.id));
     const recentArtists = new Set(
       getRecentRadioTracks(record, 3).map((track) => normalizeArtist(track.artist))
     );
-    const candidates = trackIds
-      .map((trackId) => record.tracks.find((track) => track.id === trackId))
-      .filter((track): track is TrackMeta => !!track)
-      .filter((track) =>
-        track.id !== record.room.playback.currentTrackId &&
-        !queuedTrackIds.has(track.id) &&
-        !recentTrackIds.has(track.id) &&
-        !recentArtists.has(normalizeArtist(track.artist))
-      )
-      .slice(0, availableSlots);
+    if (
+      track.id === record.room.playback.currentTrackId ||
+      recentTrackIds.has(track.id) ||
+      recentArtists.has(normalizeArtist(track.artist))
+    ) {
+      throw new BadRequestException("推荐歌曲未通过最近播放去重。");
+    }
 
-    const nextItems = candidates.map((track, offset): QueueItem => ({
+    const nextItem: QueueItem = {
       id: `queue_${randomUUID()}`,
       trackId: track.id,
       requestedBy: "自动推荐",
       requestedById: session.id,
       source: "autopilot",
       sourceSeedTrackId: record.room.playback.currentTrackId,
-      position: record.queue.length + offset,
+      position: currentIndex + 1,
       createdAt: new Date().toISOString()
-    }));
-    if (nextItems.length === 0) return [];
+    };
 
-    record.queue.push(...nextItems);
-    this.roomPlaybackService.syncShuffleBagWithQueue(record, nextItems.map((item) => item.trackId));
+    record.queue = [
+      ...record.queue.slice(0, currentIndex + 1),
+      nextItem,
+      ...record.queue.slice(currentIndex + 1)
+    ].map((item, index) => ({ ...item, position: index }));
+    record.room.playback.nextQueueItemId = nextItem.id;
+    this.roomPlaybackService.syncShuffleBagWithQueue(record, [nextItem.trackId]);
+    incrementPlaybackRevision(record.room.playback);
     incrementQueueVersion(record.room.playback);
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
-    return nextItems;
+    return nextItem;
   }
 
   async removeQueueItem(roomId: string, queueItemId: string, actorSessionId: string) {
@@ -490,13 +506,6 @@ export class RoomContentService {
       throw new BadRequestException("原始音频资源超过允许的最大大小。");
     }
   }
-}
-
-function getRadioPendingQueueDepth(record: RoomRecord) {
-  const currentQueueItemId = record.room.playback.currentQueueItemId;
-  if (!currentQueueItemId) return record.queue.length;
-  const currentIndex = record.queue.findIndex((item) => item.id === currentQueueItemId);
-  return currentIndex < 0 ? record.queue.length : record.queue.length - currentIndex - 1;
 }
 
 function getRecentRadioTracks(record: RoomRecord, limit: number) {
