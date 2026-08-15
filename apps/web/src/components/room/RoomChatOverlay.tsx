@@ -119,16 +119,20 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
         {isLoading ? <p className="py-10 text-center text-sm text-foreground-muted">正在加载聊天记录...</p> : null}
         {isLoadingOlder ? <p className="pb-3 text-center text-xs text-foreground-muted">正在加载更早消息...</p> : null}
         {!isLoading && !messages.length ? <p className="py-10 text-center text-sm text-foreground-muted">还没有消息。</p> : null}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {messages.map((message) => {
             const isCurrentUser = message.senderId === activeSession?.userId;
             return (
-              <article className={`min-w-0 border-l-2 px-3 py-1 ${isCurrentUser ? "border-accent bg-accent/[0.06]" : "border-white/15"}`} key={message.id}>
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <strong className={`truncate text-xs ${isCurrentUser ? "text-accent" : "text-foreground"}`}>{message.senderName}</strong>
-                  <time className="shrink-0 font-mono text-[10px] text-foreground-muted" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
+              <article className={`flex min-w-0 items-end gap-2.5 ${isCurrentUser ? "justify-end" : "justify-start"}`} key={message.id}>
+                {!isCurrentUser ? <ChatAvatar name={message.senderName} /> : null}
+                <div className={`min-w-0 max-w-[min(82%,32rem)] rounded-lg px-3 py-2.5 ${isCurrentUser ? "order-first bg-accent text-white shadow-[0_8px_18px_rgba(0,112,243,0.18)]" : "border border-surface-border bg-surface-hover text-foreground"}`}>
+                  <div className={`flex min-w-0 items-center gap-2 ${isCurrentUser ? "justify-end" : "justify-between"}`}>
+                    <strong className={`truncate text-[11px] font-semibold ${isCurrentUser ? "text-white/85" : "text-foreground"}`}>{message.senderName}</strong>
+                    <time className={`shrink-0 font-mono text-[10px] ${isCurrentUser ? "text-white/55" : "text-foreground-muted"}`} dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
+                  </div>
+                  <p className={`mt-1.5 break-words text-sm leading-6 ${isCurrentUser ? "text-white" : "text-foreground-muted"}`}>{message.content}</p>
                 </div>
-                <p className="mt-1 break-words text-sm leading-6 text-foreground-muted">{message.content}</p>
+                {isCurrentUser ? <ChatAvatar currentUser name={message.senderName} /> : null}
               </article>
             );
           })}
@@ -138,7 +142,7 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
       <form className="flex shrink-0 gap-2 border-t border-surface-border p-3 sm:p-4" onSubmit={handleSend}>
         <label className="sr-only" htmlFor={`radio-chat-input-${roomId}`}>发送消息</label>
         <input
-          className="min-w-0 flex-1 border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-w-0 flex-1 rounded-lg border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!socket || !activeSession}
           id={`radio-chat-input-${roomId}`}
           maxLength={500}
@@ -151,6 +155,10 @@ export function RoomChatPanel({ roomId, activeSession, socket }: RoomChatPanelPr
       {errorMessage ? <p className="border-t border-danger/25 px-4 py-2 text-xs text-danger" role="status">{errorMessage}</p> : null}
     </section>
   );
+}
+
+function ChatAvatar({ name, currentUser = false }: { name: string; currentUser?: boolean }) {
+  return <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${currentUser ? "bg-accent/20 text-accent" : "bg-white/[0.08] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function mergeMessages(
