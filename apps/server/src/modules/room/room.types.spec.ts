@@ -153,6 +153,75 @@ describe("room.types persistence helpers", () => {
     expect(record?.room.radioAutopilot.enabled).toBe(false);
   });
 
+  it("keeps old radio and request rooms readable after recommendation seeds were removed", () => {
+    const legacyAutopilot = {
+      enabled: true,
+      seedTrackId: "track_seed",
+      seedProvider: "netease",
+      seedProviderTrackId: "provider_track_seed"
+    };
+    const radioRecord = deserializeRoomRecord({
+      id: "room_legacy_radio",
+      hostId: "host_1",
+      joinCode: "RADIO1",
+      visibility: "public",
+      roomType: "radio",
+      playback: {
+        status: "paused",
+        currentTrackId: null,
+        currentQueueItemId: null,
+        sourceSessionId: "host_1",
+        sourcePeerId: null,
+        sourceTrackId: null,
+        positionMs: 0,
+        startedAt: null,
+        queueVersion: 1,
+        playbackRevision: 1,
+        mediaEpoch: 0,
+        radioAutopilot: legacyAutopilot
+      },
+      members: [],
+      tracks: [],
+      queue: []
+    } satisfies PersistedRoomRecord);
+    const requestRecord = normalizeRoomRecord({
+      room: {
+        id: "room_legacy_request",
+        hostId: "host_1",
+        joinCode: "REQUEST1",
+        visibility: "public",
+        roomType: "request",
+        radioAutopilot: legacyAutopilot,
+        requests: [],
+        members: [],
+        playback: {
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host_1",
+          sourcePeerId: null,
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 1,
+          mediaEpoch: 0
+        }
+      },
+      tracks: [],
+      queue: []
+    });
+
+    expect(radioRecord.room).toMatchObject({
+      roomType: "radio",
+      radioAutopilot: { enabled: true }
+    });
+    expect(requestRecord?.room).toMatchObject({
+      roomType: "request",
+      radioAutopilot: { enabled: true }
+    });
+  });
+
   it("restores room and member permissions from the persisted playback payload", () => {
     const record = deserializeRoomRecord({
       id: "room_permissions",

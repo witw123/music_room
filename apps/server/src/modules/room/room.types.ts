@@ -342,7 +342,7 @@ function readPersistedRadioAutopilot(value: unknown, roomId: string) {
     return { ...inactiveRadioAutopilot };
   }
 
-  const parsed = radioAutopilotSchema.safeParse(value);
+  const parsed = radioAutopilotSchema.safeParse(normalizeLegacyRadioAutopilot(value));
   if (!parsed.success) {
     throw new Error(`Invalid persisted radio autopilot state: ${roomId}`);
   }
@@ -357,8 +357,22 @@ function upgradeLegacyRoomPayload(value: unknown) {
   return {
     ...value,
     ...(value.roomType === undefined ? { roomType: "interactive" } : {}),
-    ...(value.radioAutopilot === undefined ? { radioAutopilot: { ...inactiveRadioAutopilot } } : {})
+    radioAutopilot: normalizeLegacyRadioAutopilot(value.radioAutopilot)
   };
+}
+
+function normalizeLegacyRadioAutopilot(value: unknown) {
+  if (value === undefined) {
+    return { ...inactiveRadioAutopilot };
+  }
+
+  // Older radio and request rooms persisted recommendation seed metadata
+  // alongside the only setting still supported by the current runtime.
+  if (isRecord(value) && typeof value.enabled === "boolean") {
+    return { enabled: value.enabled };
+  }
+
+  return value;
 }
 
 function upgradeLegacyQueueItem(value: unknown) {
