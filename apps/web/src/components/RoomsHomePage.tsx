@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -633,21 +632,24 @@ function RoomDirectoryCard({
   isAway: boolean;
   onOpen: () => void;
 }) {
-  const props = { room, isAway, onOpen };
-  if (room.room.roomType === "request") return <RequestRoomDirectoryCard {...props} />;
-  if (room.room.roomType === "radio") return <RadioRoomDirectoryCard {...props} />;
-  return <InteractiveRoomDirectoryCard {...props} />;
+  return <DirectoryCardFrame onOpen={onOpen} room={room}>
+    <div className="flex min-h-[172px] flex-col p-5">
+      <CardMeta isAway={isAway} room={room} />
+      <div className="mt-6">
+        <h3 className="truncate text-base font-semibold text-foreground">{room.room.name}</h3>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">{room.room.description?.trim() || `房主 ${room.room.directoryHostNickname || "未知"}`}</p>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-3 pt-3 text-xs text-foreground-muted">
+        <span>{room.room.playbackStatus === "playing" ? "播放中" : "已暂停"}</span>
+        <span>{room.room.directoryQueueDepth} 首在队列</span>
+      </div>
+    </div>
+  </DirectoryCardFrame>;
 }
-
-type RoomDirectoryCardProps = {
-  room: RoomDirectoryItem;
-  isAway: boolean;
-  onOpen: () => void;
-};
 
 function DirectoryCardFrame({ children, onOpen, room }: { children: ReactNode; onOpen: () => void; room: RoomDirectoryItem }) {
   return <article
-    className="group relative min-h-[172px] cursor-pointer overflow-hidden border border-surface-border bg-surface/45 text-left shadow-[0_14px_40px_rgba(0,0,0,0.22)] transition-[transform,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:border-accent/70 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+    className="group relative min-h-[172px] cursor-pointer overflow-hidden rounded-xl border border-surface-border bg-surface/45 text-left shadow-[0_14px_40px_rgba(0,0,0,0.22)] transition-[transform,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:border-accent/70 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
     onClick={onOpen}
     onKeyDown={(event) => {
       if (event.key === "Enter" || event.key === " ") {
@@ -661,68 +663,13 @@ function DirectoryCardFrame({ children, onOpen, room }: { children: ReactNode; o
   >{children}</article>;
 }
 
-function CardMeta({ isAway, room }: Pick<RoomDirectoryCardProps, "isAway" | "room">) {
+function CardMeta({ isAway, room }: { isAway: boolean; room: RoomDirectoryItem }) {
   return <div className="flex items-center justify-between gap-3">
     <span className="font-mono text-[11px] font-semibold tracking-[0.1em] text-foreground-muted">{room.room.joinCode}</span>
     <span className="ml-auto text-xs text-foreground-muted">{room.room.directoryOnlineMemberCount} 人在线</span>
     {room.room.hasPassword ? <span className="text-[11px] text-foreground-muted">需密码</span> : null}
     {isAway ? <span className="sr-only">已暂离</span> : null}
   </div>;
-}
-
-function InteractiveRoomDirectoryCard({ room, isAway, onOpen }: RoomDirectoryCardProps) {
-  return <DirectoryCardFrame onOpen={onOpen} room={room}>
-    <div className="flex min-h-[172px] flex-col p-5">
-      <CardMeta isAway={isAway} room={room} />
-      <div className="mt-6">
-        <h3 className="truncate text-base font-semibold text-foreground">{room.room.name}</h3>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">{room.room.description?.trim() || `与 ${room.room.directoryHostNickname || "房主"} 一起协作播放`}</p>
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
-        <span>{room.room.playbackStatus === "playing" ? "正在同步播放" : "等待开始"}</span>
-        <span>{room.room.directoryQueueDepth} 首在队列</span>
-      </div>
-    </div>
-  </DirectoryCardFrame>;
-}
-
-function RequestRoomDirectoryCard({ room, isAway, onOpen }: RoomDirectoryCardProps) {
-  return <DirectoryCardFrame onOpen={onOpen} room={room}>
-    <div className="grid min-h-[172px] grid-cols-[minmax(0,1fr)_auto] gap-4 p-5">
-      <div className="flex min-w-0 flex-col">
-        <CardMeta isAway={isAway} room={room} />
-        <div className="mt-6">
-          <p className="text-xs text-accent">正在收集点歌</p>
-          <h3 className="mt-1 truncate text-base font-semibold text-foreground">{room.room.name}</h3>
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">房主 {room.room.directoryHostNickname || ""} 审核后加入播放队列</p>
-        </div>
-      </div>
-      <div className="flex min-w-16 flex-col items-end justify-end border-l border-dashed border-surface-border pl-4 text-right">
-        <span className="text-3xl font-semibold tabular-nums text-foreground">{room.room.directoryPendingRequestCount}</span>
-        <span className="mt-1 text-[11px] text-foreground-muted">待审核</span>
-      </div>
-    </div>
-  </DirectoryCardFrame>;
-}
-
-function RadioRoomDirectoryCard({ room, isAway, onOpen }: RoomDirectoryCardProps) {
-  const onAir = room.room.directoryBroadcastState === "on_air";
-  return <DirectoryCardFrame onOpen={onOpen} room={room}>
-    {room.room.directoryNowPlaying?.artworkUrl ? <img alt="" className="absolute inset-y-0 right-0 h-full w-[44%] object-cover opacity-45 transition-opacity duration-200 group-hover:opacity-60" src={room.room.directoryNowPlaying.artworkUrl} /> : null}
-    <div className="absolute inset-y-0 right-0 w-[58%] bg-gradient-to-r from-background via-background/80 to-transparent" aria-hidden="true" />
-    <div className="relative flex min-h-[172px] flex-col p-5">
-      <CardMeta isAway={isAway} room={room} />
-      <div className="mt-6 max-w-[70%]">
-        <p className={`text-xs font-semibold ${onAir ? "text-accent" : "text-foreground-muted"}`}>{onAir ? "ON AIR" : "OFF AIR"}</p>
-        <h3 className="mt-1 truncate text-base font-semibold text-foreground">{onAir ? room.room.directoryNowPlaying?.title : room.room.name}</h3>
-        <p className="mt-1 truncate text-xs text-foreground-muted">{onAir ? room.room.directoryNowPlaying?.artist : `主持人 ${room.room.directoryHostNickname || ""} 正在准备节目`}</p>
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-surface-border pt-3 text-xs text-foreground-muted">
-        <span>{room.room.name}</span>
-        <span>{room.room.directoryQueueDepth} 首预告</span>
-      </div>
-    </div>
-  </DirectoryCardFrame>;
 }
 
 function roomTypeLabel(roomType: RoomType) {
