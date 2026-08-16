@@ -133,7 +133,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomCha
       </header>
 
       <div
-        className="hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5"
+        className="min-h-0 flex-1 overflow-visible px-4 py-3 sm:px-5 lg:hide-scrollbar lg:overflow-y-auto lg:overscroll-contain"
         onScroll={(event) => {
           if (event.currentTarget.scrollTop < 48) void loadOlder();
         }}

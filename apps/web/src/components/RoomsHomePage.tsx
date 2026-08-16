@@ -397,7 +397,7 @@ export function RoomsHomePage({
             <span className="text-sm text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
-            <div className="grid w-full grid-cols-1 justify-center gap-5 sm:grid-cols-[repeat(auto-fit,minmax(20rem,26rem))] xl:gap-6">
+            <div className="grid w-full grid-cols-1 justify-center gap-4 md:grid-cols-[repeat(auto-fit,18rem)] xl:gap-5">
               {visibleRooms.map((item) => (
                 <RoomDirectoryCard
                   key={item.room.id}

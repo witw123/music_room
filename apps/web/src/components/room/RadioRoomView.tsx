@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode, type WheelEvent } from "react";
+import { useEffect, useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
@@ -16,23 +16,10 @@ import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
 import { useRadioAutopilot, type RadioAutopilotNextTrack } from "./hooks/use-radio-autopilot";
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
-type RadioScrollRegionId = "library" | "stage" | "host" | "chat" | "members";
 
 export function RadioRoomView(props: RoomDashboardViewProps) {
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
-  const [activeScrollRegion, setActiveScrollRegion] = useState<RadioScrollRegionId | null>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
-  const redirectWheelToPage = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    const target = event.target instanceof Element
-      ? event.target.closest<HTMLElement>("[data-radio-scroll-region]")
-      : null;
-    const regionId = target?.dataset.radioScrollRegion as RadioScrollRegionId | undefined;
-    if (!regionId || regionId === activeScrollRegion) return;
-
-    event.preventDefault();
-    pageRef.current?.scrollBy({ left: event.deltaX, top: event.deltaY });
-  }, [activeScrollRegion]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
@@ -40,29 +27,24 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   }, []);
 
   return (
-    <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio" onPointerDown={(event) => { if (event.target === event.currentTarget) setActiveScrollRegion(null); }} onWheelCapture={redirectWheelToPage} ref={pageRef}>
-      <section className="mx-auto grid w-full max-w-[1600px] lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,38fr)_minmax(0,62fr)]">
-        <RadioScrollRegion
-          activeRegion={activeScrollRegion}
-          className="order-2 lg:order-1 lg:min-h-0"
-          id="library"
-          onActivate={setActiveScrollRegion}
-        >
+    <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
+      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,38fr)_minmax(0,62fr)] lg:gap-0 lg:px-0 lg:pt-0">
+        <div className="order-2 overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.14] lg:order-1 lg:min-h-0 lg:rounded-none lg:border-0">
           <RadioLibraryList
             currentTrack={props.currentTrack}
             isHost={isHost}
             onAddToQueue={props.onAddToQueue}
             roomTracks={props.roomSnapshot.tracks}
           />
-        </RadioScrollRegion>
-        <RadioScrollRegion activeRegion={activeScrollRegion} className="order-1 min-h-[30rem] border-b border-surface-border bg-surface/[0.12] lg:order-2 lg:h-full lg:min-h-0 lg:border-b-0 lg:border-l" id="stage" onActivate={setActiveScrollRegion}>
-          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, showMobilePlayer: true })} />
-        </RadioScrollRegion>
+        </div>
+        <div className="order-1 min-h-0 overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:order-2 lg:h-full lg:min-h-0 lg:rounded-none lg:border-b-0 lg:border-l">
+          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true })} />
+        </div>
       </section>
 
-      <section className={`mx-auto grid w-full max-w-[1600px] border-t border-surface-border ${isHost ? "lg:grid-cols-[minmax(20rem,38fr)_minmax(20rem,34fr)_minmax(18rem,28fr)]" : "lg:grid-cols-[minmax(0,62fr)_minmax(18rem,38fr)]"}`}>
-        {isHost ? <RadioScrollRegion activeRegion={activeScrollRegion} className="min-w-0 border-b border-surface-border bg-background lg:border-b-0" id="host" onActivate={setActiveScrollRegion}><HostBroadcastDesk {...props} /></RadioScrollRegion> : null}
-        <RadioCommunityPanels {...props} activeScrollRegion={activeScrollRegion} membershipNow={membershipNow} onActivateScrollRegion={setActiveScrollRegion} />
+      <section className={`mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:gap-0 lg:border-t lg:border-surface-border lg:px-0 ${isHost ? "lg:grid-cols-[minmax(20rem,38fr)_minmax(20rem,34fr)_minmax(18rem,28fr)]" : "lg:grid-cols-[minmax(0,62fr)_minmax(18rem,38fr)]"}`}>
+        {isHost ? <div className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:rounded-none lg:border-0 lg:border-b-0"><HostBroadcastDesk {...props} /></div> : null}
+        <RadioCommunityPanels {...props} membershipNow={membershipNow} />
       </section>
     </div>
   );
@@ -81,6 +63,7 @@ function RadioLibraryList({
 }) {
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const addTrackToQueue = async (trackId: string) => {
     if (pendingTrackId) return;
@@ -96,13 +79,23 @@ function RadioLibraryList({
   };
 
   return (
-    <aside className="flex min-h-[22rem] min-w-0 flex-col bg-surface/[0.14] lg:h-full lg:min-h-0" data-testid="radio-library-list">
-      <header className="shrink-0 px-4 py-5 sm:px-6 lg:px-7">
+    <aside className="flex min-h-0 min-w-0 flex-col bg-surface/[0.14] lg:h-full lg:min-h-0" data-testid="radio-library-list">
+      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-7">
         <h1 className="text-xl font-semibold text-foreground">曲库单</h1>
+        {roomTracks.length > 4 ? <button
+          aria-controls="radio-library-tracks"
+          aria-expanded={isExpanded}
+          className="inline-flex items-center gap-1 text-xs font-medium text-foreground-muted transition-colors hover:text-foreground lg:hidden"
+          onClick={() => setIsExpanded((current) => !current)}
+          type="button"
+        >
+          {isExpanded ? "收起" : "展开"}
+          <svg aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+        </button> : null}
       </header>
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-6 lg:px-7">
+      <div className="min-h-0 flex-1 overflow-visible px-4 pb-4 sm:px-6 lg:hide-scrollbar lg:overflow-y-auto lg:overscroll-contain lg:px-7 lg:pb-5" id="radio-library-tracks">
         <div className="space-y-1">
-          {roomTracks.map((track, index) => <LibraryTrack key={track.id} index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={addTrackToQueue} pending={pendingTrackId === track.id} track={track} />)}
+          {roomTracks.map((track, index) => <div className={index >= 4 && !isExpanded && track.id !== currentTrack?.id ? "hidden lg:block" : undefined} key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={addTrackToQueue} pending={pendingTrackId === track.id} track={track} /></div>)}
         </div>
         {errorMessage ? <p className="mt-3 text-xs text-danger" role="status">{errorMessage}</p> : null}
       </div>
@@ -110,32 +103,28 @@ function RadioLibraryList({
   );
 }
 
-function RadioCommunityPanels(props: RoomDashboardViewProps & {
-  activeScrollRegion: RadioScrollRegionId | null;
-  membershipNow: number;
-  onActivateScrollRegion: (region: RadioScrollRegionId) => void;
-}) {
+function RadioCommunityPanels(props: RoomDashboardViewProps & { membershipNow: number }) {
   const [mobileTab, setMobileTab] = useState<"chat" | "members">("chat");
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const chatDesktopDivider = isHost ? "lg:border-l" : "";
 
   return (
     <>
-      <div className="col-span-full border-b border-surface-border bg-background px-4 py-3 lg:hidden">
-        <div aria-label="电台社区" className="grid grid-cols-2 border border-surface-border p-1" role="tablist">
-          <button aria-controls="radio-chat" aria-selected={mobileTab === "chat"} className={`min-h-10 px-3 text-sm font-medium transition-colors ${mobileTab === "chat" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("chat")} role="tab" type="button">聊天</button>
-          <button aria-controls="radio-members" aria-selected={mobileTab === "members"} className={`min-h-10 px-3 text-sm font-medium transition-colors ${mobileTab === "members" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("members")} role="tab" type="button">成员</button>
+      <div className="col-span-full lg:hidden">
+        <div aria-label="电台社区" className="grid grid-cols-2 rounded-2xl border border-surface-border bg-surface/[0.12] p-1" role="tablist">
+          <button aria-controls="radio-chat" aria-selected={mobileTab === "chat"} className={`min-h-10 rounded-xl px-3 text-sm font-medium transition-colors ${mobileTab === "chat" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("chat")} role="tab" type="button">聊天</button>
+          <button aria-controls="radio-members" aria-selected={mobileTab === "members"} className={`min-h-10 rounded-xl px-3 text-sm font-medium transition-colors ${mobileTab === "members" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("members")} role="tab" type="button">成员</button>
         </div>
       </div>
-      <RadioScrollRegion activeRegion={props.activeScrollRegion} className={`${mobileTab === "chat" ? "block border-b border-surface-border bg-background lg:border-b-0" : "hidden border-b border-surface-border bg-background lg:block lg:border-b-0"} ${chatDesktopDivider}`} id="chat" onActivate={props.onActivateScrollRegion}>
+      <div className={`${mobileTab === "chat" ? "block overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0" : "hidden overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0"} ${chatDesktopDivider}`}>
         <div id="radio-chat" role="tabpanel"><RoomChatPanel activeSession={props.activeSession} isHost={isHost} roomId={props.roomSnapshot.room.id} socket={props.socket} /></div>
-      </RadioScrollRegion>
-      <RadioScrollRegion activeRegion={props.activeScrollRegion} className={mobileTab === "members" ? "block border-surface-border bg-background lg:border-l" : "hidden border-surface-border bg-background lg:block lg:border-l"} id="members" onActivate={props.onActivateScrollRegion}>
+      </div>
+      <div className={mobileTab === "members" ? "block overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0 lg:border-l" : "hidden overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0 lg:border-l"}>
         <section className="min-h-[24rem] bg-surface/25" id="radio-members" role="tabpanel">
           <header className="px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
           <div className="p-3 sm:p-4"><MembersPanel activeSessionId={props.activeSession?.userId ?? null} isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId} members={props.roomSnapshot.room.members} now={props.membershipNow} onRemoveMember={props.onRemoveMember} onUpdateMemberPermissions={props.onUpdateMemberPermissions} /></div>
         </section>
-      </RadioScrollRegion>
+      </div>
     </>
   );
 }
@@ -293,20 +282,4 @@ function getTrackSourceLabel(track: TrackMeta) {
   if (track.sourceType === "netease") return "网易云音乐";
   if (track.sourceType === "qqmusic") return "QQ 音乐";
   return "本地上传";
-}
-
-function RadioScrollRegion({
-  activeRegion,
-  children,
-  className,
-  id,
-  onActivate
-}: {
-  activeRegion: RadioScrollRegionId | null;
-  children: ReactNode;
-  className?: string;
-  id: RadioScrollRegionId;
-  onActivate: (region: RadioScrollRegionId) => void;
-}) {
-  return <div className={className} data-radio-scroll-region={id} data-radio-scroll-selected={activeRegion === id ? "true" : "false"} onFocusCapture={() => onActivate(id)} onPointerDown={() => onActivate(id)}>{children}</div>;
 }

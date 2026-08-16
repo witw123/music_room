@@ -95,12 +95,12 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     setMessage(`《${track.title}》已送入房主审核队列。`);
   };
 
-  return <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-32" data-room-view="request">
-    <div className="grid min-h-full min-w-0 lg:grid-cols-[minmax(0,0.94fr)_minmax(25rem,0.76fr)]">
-      <section className="min-h-[31rem] border-b border-white/[0.06] lg:min-h-0 lg:border-b-0 lg:border-r">
-        <RoomStage {...buildRoomStageProps(props, { showMobilePlayer: true })} />
+  return <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-[var(--room-mobile-bottom-inset)] pt-3 lg:px-0 lg:pb-32 lg:pt-0" data-room-view="request">
+    <div className="grid min-h-full min-w-0 gap-3 lg:grid-cols-[minmax(0,0.94fr)_minmax(25rem,0.76fr)] lg:gap-0">
+      <section className="min-h-0 overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:rounded-none lg:border-0 lg:border-r">
+        <RoomStage {...buildRoomStageProps(props)} />
       </section>
-      <section className="min-w-0 px-3 py-4 sm:px-5 sm:py-6 lg:px-6">
+      <section className="min-w-0 rounded-2xl border border-surface-border bg-surface/[0.12] px-3 py-4 sm:px-5 sm:py-6 lg:rounded-none lg:border-0 lg:px-6">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
           <header className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-4">
             <div>
@@ -152,7 +152,7 @@ function RequestInbox({
   handledRequests: RoomRequest[];
   onDecide: (request: RoomRequest, decision: "approved" | "rejected") => Promise<void>;
 }) {
-  return <section className="border border-surface-border bg-surface/20" data-testid="request-room-inbox">
+  return <section className="overflow-hidden rounded-2xl border border-surface-border bg-surface/20 lg:rounded-none" data-testid="request-room-inbox">
     <div className="flex items-center justify-between gap-3 border-b border-surface-border px-4 py-3">
       <h2 className="font-semibold text-foreground">待审核点歌</h2>
       <span className="text-xs text-foreground-muted">接受后自动加入队列</span>
@@ -202,7 +202,7 @@ function RequestTicket({
 }
 
 function RequestHistory({ requests, title }: { requests: RoomRequest[]; title: string }) {
-  return <section className="border border-surface-border bg-surface/20">
+  return <section className="overflow-hidden rounded-2xl border border-surface-border bg-surface/20 lg:rounded-none">
     <div className="border-b border-surface-border px-4 py-3"><h2 className="font-semibold text-foreground">{title}</h2></div>
     {requests.length ? <div className="divide-y divide-surface-border">{requests.slice().reverse().map((request) => <RequestHistoryRow key={request.id} request={request} />)}</div> : <div className="px-4 py-10 text-center text-sm text-foreground-muted">还没有提交过点歌。</div>}
   </section>;
@@ -219,7 +219,7 @@ function RequestHistoryRow({ request }: { request: RoomRequest }) {
 
 function QueuePreview({ queue, tracks }: { queue: RoomDashboardViewProps["roomSnapshot"]["queue"]; tracks: TrackMeta[] }) {
   const items = queue.slice(0, 4).map((item) => tracks.find((track) => track.id === item.trackId)).filter((track): track is TrackMeta => !!track);
-  return <section className="border-t border-surface-border pt-5">
+  return <section className="rounded-2xl border border-surface-border bg-surface/[0.12] p-4 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-5">
     <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-foreground">即将播放</h2><span className="text-xs text-foreground-muted">{queue.length} 首在队列</span></div>
     {items.length ? <div className="mt-3 divide-y divide-surface-border border-y border-surface-border">{items.map((track) => <div className="flex min-w-0 items-center gap-3 py-2.5" key={track.id}><Artwork artworkUrl={track.artworkUrl} title={track.title} compact /><div className="min-w-0"><p className="truncate text-xs font-medium text-foreground">{track.title}</p><p className="mt-0.5 truncate text-[11px] text-foreground-muted">{track.artist}</p></div></div>)}</div> : <p className="mt-3 text-sm text-foreground-muted">房主接纳点歌后，它们会按队列在这里出现。</p>}
   </section>;

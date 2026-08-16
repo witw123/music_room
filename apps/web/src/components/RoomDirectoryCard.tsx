@@ -63,7 +63,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--room-border)] bg-[#111114] p-4 shadow-[0_18px_44px_var(--room-shadow)] transition-[border-color,box-shadow] duration-200 hover:border-[color:var(--room-accent)] hover:shadow-[0_22px_52px_var(--room-shadow)] focus-within:border-[color:var(--room-accent)] focus-within:ring-2 focus-within:ring-[color:var(--room-accent)] focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none sm:p-5"
+      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-2xl border border-[color:var(--room-border)] bg-[#111114] p-3.5 shadow-[0_14px_34px_var(--room-shadow)] transition-[border-color,box-shadow] duration-200 hover:border-[color:var(--room-accent)] hover:shadow-[0_18px_40px_var(--room-shadow)] focus-within:border-[color:var(--room-accent)] focus-within:ring-2 focus-within:ring-[color:var(--room-accent)] focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none sm:p-4"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -76,28 +76,28 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         onClick={onOpen}
         type="button"
       />
-      <header className="flex min-h-9 items-center justify-between gap-3">
-        <span className="inline-flex min-h-8 items-center gap-2 rounded-full border border-[color:var(--room-border)] bg-[color:var(--room-soft)] px-3 text-sm font-semibold text-foreground">
+      <header className="flex min-h-8 items-center justify-between gap-2.5">
+        <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-[color:var(--room-border)] bg-[color:var(--room-soft)] px-2.5 text-xs font-semibold text-foreground">
           <RoomTypeGlyph roomType={room.roomType} />
           {theme.label}
         </span>
-        <span className="inline-flex shrink-0 items-center gap-2 text-sm tabular-nums text-foreground-muted">
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-foreground-muted">
           <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_10px_rgba(74,222,128,0.45)]" />
           {room.directoryOnlineMemberCount} 人在线
         </span>
       </header>
 
       <section
-        className="relative mt-4 aspect-[49/20] overflow-hidden rounded-xl border border-white/10 bg-[#090a0e]"
+        className="relative mt-3 aspect-[3/1] overflow-hidden rounded-xl border border-white/10 bg-[#090a0e]"
         data-card-scene={theme.scene}
         data-testid="room-directory-stage"
       >
         <RoomStageScene roomType={room.roomType} />
       </section>
 
-      <div className="pt-4">
-        <h3 className="truncate text-[1.7rem] font-semibold leading-9 text-foreground">{room.name}</h3>
-        <p className="mt-1 line-clamp-3 min-h-[4.125rem] break-words text-sm leading-[1.375rem] text-foreground-muted">
+      <div className="pt-3">
+        <h3 className="truncate text-xl font-semibold leading-7 text-foreground sm:text-[1.35rem]">{room.name}</h3>
+        <p className="mt-1 line-clamp-3 min-h-[3.75rem] break-words text-sm leading-5 text-foreground-muted">
           {room.description?.trim() || fallbackDescription(room)}
         </p>
       </div>
