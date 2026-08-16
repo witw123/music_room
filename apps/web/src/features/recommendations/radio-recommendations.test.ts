@@ -33,14 +33,40 @@ describe("radio recommendation candidates", () => {
       snapshot: snapshot(),
       provider: "netease",
       seed: { title: "Seed", artist: "Seed Artist" }
-    })).resolves.toEqual([
+    })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({
         candidate: expect.objectContaining({ provider: "netease", providerTrackId: "n1" }),
         lastFmMatch: 0.9,
         providerMatchScore: 1
       })
+    ]));
+    expect(api.searchQqMusicTracks).toHaveBeenCalled();
+  });
+
+  it("prefers a free alternate-provider match over a paid seed-provider match", async () => {
+    api.getLastFmSimilarTracks.mockResolvedValue(recall([
+      { title: "Similar One", artist: "Artist One", match: 0.9 }
+    ]));
+    api.searchNeteaseTracks.mockResolvedValue({
+      items: [{ ...track("netease", "n1", "Similar One", "Artist One"), access: "paid" }]
+    });
+    api.searchQqMusicTracks.mockResolvedValue({
+      items: [track("qqmusic", "q1", "Similar One", "Artist One")]
+    });
+
+    await expect(getRadioRecommendationCandidates({
+      userId: "user_1",
+      snapshot: snapshot(),
+      provider: "netease",
+      seed: { title: "Seed", artist: "Seed Artist" }
+    })).resolves.toEqual([
+      expect.objectContaining({
+        candidate: expect.objectContaining({ provider: "qqmusic", providerTrackId: "q1", access: "free" })
+      }),
+      expect.objectContaining({
+        candidate: expect.objectContaining({ provider: "netease", providerTrackId: "n1", access: "paid" })
+      })
     ]);
-    expect(api.searchQqMusicTracks).not.toHaveBeenCalled();
   });
 
   it("uses the alternate provider when the seed provider has no playable match", async () => {

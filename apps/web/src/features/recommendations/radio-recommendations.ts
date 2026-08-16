@@ -41,25 +41,16 @@ export async function getRadioRecommendationCandidates(input: {
   });
   const sources = recall.items.slice(0, mappedCandidateTarget);
   const excludedTrackKeys = getExcludedProviderTrackKeys(input.snapshot);
-  const primary = await mapSimilarTracksToProvider({
-    provider: input.provider,
-    sources,
-    excludedTrackKeys
-  });
-  const mappedSources = new Set(primary.map((candidate) => getSimilarTrackKey(candidate.source)));
   const alternateProvider = input.provider === "netease" ? "qqmusic" : "netease";
-  const alternate = primary.length >= mappedCandidateTarget
-    ? []
-    : await mapSimilarTracksToProvider({
-      provider: alternateProvider,
-      sources: sources.filter((source) => !mappedSources.has(getSimilarTrackKey(source))),
-      excludedTrackKeys
-    });
+  // A provider result can be searchable but still fail during audio import.
+  // Resolve both catalogs so a temporary upstream failure or paid result does
+  // not suppress a playable fallback from the other provider.
+  const [primary, alternate] = await Promise.all([
+    mapSimilarTracksToProvider({ provider: input.provider, sources, excludedTrackKeys }),
+    mapSimilarTracksToProvider({ provider: alternateProvider, sources, excludedTrackKeys })
+  ]);
 
-  const mapped = dedupeMappedCandidates(
-    [...primary, ...alternate],
-    excludedTrackKeys
-  );
+  const mapped = dedupeMappedCandidates([...primary, ...alternate], excludedTrackKeys);
   const profile = await getRecommendationProfile(input.userId)
     .catch(() => buildRecommendationProfile(input.userId, []));
   const mappedByKey = new Map(mapped.map((item) => [getProviderTrackKey(item.candidate), item]));
@@ -140,8 +131,8 @@ function selectProviderMatch(
     }))
     .filter(({ score }) => score >= minimumMatchScore)
     .sort((left, right) =>
-      right.score - left.score ||
       providerAccessScore(right.candidate.access) - providerAccessScore(left.candidate.access) ||
+      right.score - left.score ||
       left.candidate.durationMs - right.candidate.durationMs
     )[0]?.candidate ?? null;
 }
@@ -200,10 +191,6 @@ function getExcludedProviderTrackKeys(snapshot: RoomSnapshot) {
 
 function getProviderTrackKey(candidate: ProviderTrackCandidate) {
   return `${candidate.provider}:${candidate.providerTrackId}`;
-}
-
-function getSimilarTrackKey(track: LastFmSimilarTrack) {
-  return `${normalizeRecommendationText(track.title)}:${normalizeRecommendationText(track.artist)}`;
 }
 
 function textSimilarity(left: string, right: string) {
