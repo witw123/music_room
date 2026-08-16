@@ -127,13 +127,13 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomCha
   };
 
   return (
-    <section className="flex min-h-[24rem] min-w-0 flex-col bg-surface/25" data-testid="radio-chat-panel">
+    <section className="flex h-full min-h-[24rem] min-w-0 flex-col bg-surface/25 lg:min-h-0" data-testid="radio-chat-panel">
       <header className="shrink-0 px-4 py-4 sm:px-5">
         <h2 className="text-base font-semibold text-foreground">聊天</h2>
       </header>
 
       <div
-        className="min-h-0 flex-1 overflow-visible px-4 py-3 sm:px-5 lg:hide-scrollbar lg:overflow-y-auto lg:overscroll-contain"
+        className="min-h-0 flex-1 overflow-visible px-4 py-3 sm:px-5 lg:hide-scrollbar lg:overflow-y-auto"
         onScroll={(event) => {
           if (event.currentTarget.scrollTop < 48) void loadOlder();
         }}

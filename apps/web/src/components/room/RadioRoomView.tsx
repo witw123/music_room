@@ -28,8 +28,17 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,38fr)_minmax(0,62fr)] lg:gap-0 lg:px-0 lg:pt-0">
-        <div className="order-2 overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.14] lg:order-1 lg:min-h-0 lg:rounded-none lg:border-0">
+      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+        <div className="min-h-[32rem] overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
+          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true })} />
+        </div>
+        <div className="min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">
+          <RoomChatPanel activeSession={props.activeSession} isHost={isHost} roomId={props.roomSnapshot.room.id} socket={props.socket} />
+        </div>
+      </section>
+
+      <section className={`mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:h-full lg:min-h-full lg:gap-0 lg:border-t lg:border-surface-border lg:px-0 ${isHost ? "lg:grid-cols-[minmax(0,34fr)_minmax(0,42fr)_minmax(16rem,24fr)]" : "lg:grid-cols-[minmax(0,64fr)_minmax(18rem,36fr)]"}`} data-testid="radio-room-workspace">
+        <div className="min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0">
           <RadioLibraryList
             currentTrack={props.currentTrack}
             isHost={isHost}
@@ -37,14 +46,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             roomTracks={props.roomSnapshot.tracks}
           />
         </div>
-        <div className="order-1 min-h-0 overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:order-2 lg:h-full lg:min-h-0 lg:rounded-none lg:border-b-0 lg:border-l">
-          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true })} />
-        </div>
-      </section>
-
-      <section className={`mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:gap-0 lg:border-t lg:border-surface-border lg:px-0 ${isHost ? "lg:grid-cols-[minmax(20rem,38fr)_minmax(20rem,34fr)_minmax(18rem,28fr)]" : "lg:grid-cols-[minmax(0,62fr)_minmax(18rem,38fr)]"}`}>
-        {isHost ? <div className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:rounded-none lg:border-0 lg:border-b-0"><HostBroadcastDesk {...props} /></div> : null}
-        <RadioCommunityPanels {...props} membershipNow={membershipNow} />
+        {isHost ? <div className="hide-scrollbar min-h-[24rem] min-w-0 overflow-y-auto rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r"><HostBroadcastDesk {...props} /></div> : null}
+        <RadioMembersPanel {...props} membershipNow={membershipNow} />
       </section>
     </div>
   );
@@ -93,7 +96,7 @@ function RadioLibraryList({
           <svg aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
         </button> : null}
       </header>
-      <div className="min-h-0 flex-1 overflow-visible px-4 pb-4 sm:px-6 lg:hide-scrollbar lg:overflow-y-auto lg:overscroll-contain lg:px-7 lg:pb-5" id="radio-library-tracks">
+      <div className="min-h-0 flex-1 overflow-visible px-4 pb-4 sm:px-6 lg:hide-scrollbar lg:overflow-y-auto lg:px-7 lg:pb-5" id="radio-library-tracks">
         <div className="space-y-1">
           {roomTracks.map((track, index) => <div className={index >= 4 && !isExpanded && track.id !== currentTrack?.id ? "hidden lg:block" : undefined} key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={addTrackToQueue} pending={pendingTrackId === track.id} track={track} /></div>)}
         </div>
@@ -103,30 +106,20 @@ function RadioLibraryList({
   );
 }
 
-function RadioCommunityPanels(props: RoomDashboardViewProps & { membershipNow: number }) {
-  const [mobileTab, setMobileTab] = useState<"chat" | "members">("chat");
-  const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
-  const chatDesktopDivider = isHost ? "lg:border-l" : "";
-
-  return (
-    <>
-      <div className="col-span-full lg:hidden">
-        <div aria-label="电台社区" className="grid grid-cols-2 rounded-2xl border border-surface-border bg-surface/[0.12] p-1" role="tablist">
-          <button aria-controls="radio-chat" aria-selected={mobileTab === "chat"} className={`min-h-10 rounded-xl px-3 text-sm font-medium transition-colors ${mobileTab === "chat" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("chat")} role="tab" type="button">聊天</button>
-          <button aria-controls="radio-members" aria-selected={mobileTab === "members"} className={`min-h-10 rounded-xl px-3 text-sm font-medium transition-colors ${mobileTab === "members" ? "bg-accent text-white" : "text-foreground-muted"}`} onClick={() => setMobileTab("members")} role="tab" type="button">成员</button>
-        </div>
-      </div>
-      <div className={`${mobileTab === "chat" ? "block overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0" : "hidden overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0"} ${chatDesktopDivider}`}>
-        <div id="radio-chat" role="tabpanel"><RoomChatPanel activeSession={props.activeSession} isHost={isHost} roomId={props.roomSnapshot.room.id} socket={props.socket} /></div>
-      </div>
-      <div className={mobileTab === "members" ? "block overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0 lg:border-l" : "hidden overflow-hidden rounded-2xl border border-surface-border bg-background lg:block lg:rounded-none lg:border-0 lg:border-l"}>
-        <section className="min-h-[24rem] bg-surface/25" id="radio-members" role="tabpanel">
-          <header className="px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
-          <div className="p-3 sm:p-4"><MembersPanel activeSessionId={props.activeSession?.userId ?? null} isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId} members={props.roomSnapshot.room.members} now={props.membershipNow} onRemoveMember={props.onRemoveMember} onUpdateMemberPermissions={props.onUpdateMemberPermissions} /></div>
-        </section>
-      </div>
-    </>
-  );
+function RadioMembersPanel(props: RoomDashboardViewProps & { membershipNow: number }) {
+  return <section className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0" data-testid="radio-members-panel">
+    <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
+    <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+      <MembersPanel
+        activeSessionId={props.activeSession?.userId ?? null}
+        isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId}
+        members={props.roomSnapshot.room.members}
+        now={props.membershipNow}
+        onRemoveMember={props.onRemoveMember}
+        onUpdateMemberPermissions={props.onUpdateMemberPermissions}
+      />
+    </div>
+  </section>;
 }
 
 function HostBroadcastDesk(props: RoomDashboardViewProps) {

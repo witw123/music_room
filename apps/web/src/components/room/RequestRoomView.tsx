@@ -9,8 +9,11 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { LibraryTabPanel } from "./LibraryTabPanel";
+import { MembersPanel } from "./MembersPanel";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
@@ -23,10 +26,17 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
   const snapshotRef = useRef(props.roomSnapshot);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [membershipNow, setMembershipNow] = useState(() => Date.now());
+  const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<RequestWorkspaceTab>("queue");
 
   useEffect(() => {
     snapshotRef.current = props.roomSnapshot;
   }, [props.roomSnapshot]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const requests = useMemo(
     () => props.roomSnapshot.room.requests ?? [],
@@ -95,50 +105,144 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     setMessage(`《${track.title}》已送入房主审核队列。`);
   };
 
-  return <div className="hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-[var(--room-mobile-bottom-inset)] pt-3 lg:px-0 lg:pb-32 lg:pt-0" data-room-view="request">
-    <div className="grid min-h-full min-w-0 gap-3 lg:grid-cols-[minmax(0,0.94fr)_minmax(25rem,0.76fr)] lg:gap-0">
-      <section className="min-h-0 overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:rounded-none lg:border-0 lg:border-r">
+  return <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
+    <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
+      <div className="min-h-[32rem] overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
         <RoomStage {...buildRoomStageProps(props)} />
-      </section>
-      <section className="min-w-0 rounded-2xl border border-surface-border bg-surface/[0.12] px-3 py-4 sm:px-5 sm:py-6 lg:rounded-none lg:border-0 lg:px-6">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-          <header className="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border pb-4">
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">点歌台</h1>
-              <p className="mt-1 text-sm text-foreground-muted">{isHost ? "审核成员点歌，自己的点歌会直接加入队列。" : "搜索歌曲，提交给房主审核。"}</p>
-            </div>
-            <span className="font-mono text-xs text-foreground-muted">{pendingRequests.length} 首待处理</span>
-          </header>
-
-          {isHost ? <>
-            <RoomProviderTrackSearch
-              mode="request"
-              roomTracks={props.roomSnapshot.tracks}
-              onRequestTrack={submitRequest}
-              testId="request-room-host-search"
-            />
-            <RequestInbox
-              pendingRequestId={pendingRequestId}
-              pendingRequests={pendingRequests}
-              handledRequests={handledRequests}
-              onDecide={decideRequest}
-            />
-          </> : <>
-            <RoomProviderTrackSearch
-              mode="request"
-              roomTracks={props.roomSnapshot.tracks}
-              onRequestTrack={submitRequest}
-              testId="request-room-search"
-            />
-            <RequestHistory requests={myRequests} title="我的点歌" />
-          </>}
-
-          <QueuePreview queue={props.roomSnapshot.queue} tracks={props.roomSnapshot.tracks} />
-          {message ? <p className="border border-surface-border bg-surface/40 px-3 py-2.5 text-sm text-foreground-muted" role="status">{message}</p> : null}
+      </div>
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:rounded-none lg:border-0">
+        <header className="shrink-0 px-4 pb-3 pt-4 sm:px-5 sm:pt-5 lg:px-6">
+          <h1 className="text-xl font-semibold text-foreground">点歌台</h1>
+        </header>
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-5 sm:px-5 lg:px-6">
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+            {isHost ? <>
+              <RoomProviderTrackSearch
+                mode="request"
+                roomTracks={props.roomSnapshot.tracks}
+                onRequestTrack={submitRequest}
+                testId="request-room-host-search"
+              />
+              <RequestInbox
+                pendingRequestId={pendingRequestId}
+                pendingRequests={pendingRequests}
+                handledRequests={handledRequests}
+                onDecide={decideRequest}
+              />
+            </> : <>
+              <RoomProviderTrackSearch
+                mode="request"
+                roomTracks={props.roomSnapshot.tracks}
+                onRequestTrack={submitRequest}
+                testId="request-room-search"
+              />
+              <RequestHistory requests={myRequests} title="我的点歌" />
+            </>}
+            {message ? <p className="border border-surface-border bg-surface/40 px-3 py-2.5 text-sm text-foreground-muted" role="status">{message}</p> : null}
+          </div>
         </div>
       </section>
-    </div>
+    </section>
+
+    <RequestRoomWorkspace
+      {...props}
+      isHost={isHost}
+      membershipNow={membershipNow}
+      mobileTab={mobileWorkspaceTab}
+      onMobileTabChange={setMobileWorkspaceTab}
+    />
   </div>;
+}
+
+type RequestWorkspaceTab = "queue" | "library" | "members";
+
+const requestWorkspaceTabs: Array<{ id: RequestWorkspaceTab; label: string }> = [
+  { id: "queue", label: "队列" },
+  { id: "library", label: "曲库" },
+  { id: "members", label: "成员" }
+];
+
+function RequestRoomWorkspace(
+  props: RoomDashboardViewProps & {
+    isHost: boolean;
+    membershipNow: number;
+    mobileTab: RequestWorkspaceTab;
+    onMobileTabChange: (tab: RequestWorkspaceTab) => void;
+  }
+) {
+  const panelVisibility = (tab: RequestWorkspaceTab) =>
+    props.mobileTab === tab ? "flex" : "hidden lg:flex";
+
+  return <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-surface-border lg:px-0" data-testid="request-room-workspace">
+    <div className="mb-3 grid grid-cols-3 rounded-2xl border border-surface-border bg-surface/[0.12] p-1 lg:hidden" role="tablist" aria-label="点歌房管理">
+      {requestWorkspaceTabs.map((tab) => <button
+        aria-controls={`request-workspace-${tab.id}`}
+        aria-selected={props.mobileTab === tab.id}
+        className={`min-h-10 rounded-xl px-3 text-sm font-medium transition-colors ${props.mobileTab === tab.id ? "bg-accent text-white" : "text-foreground-muted"}`}
+        key={tab.id}
+        onClick={() => props.onMobileTabChange(tab.id)}
+        role="tab"
+        type="button"
+      >{tab.label}</button>)}
+    </div>
+
+    <section className={`${panelVisibility("queue")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0`} id="request-workspace-queue" role="tabpanel">
+      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-5">
+        <h2 className="text-base font-semibold text-foreground">队列</h2>
+        <span className="font-mono text-xs text-foreground-muted">{props.roomSnapshot.queue.length}</span>
+      </header>
+      <PlayerQueueList
+        canControlPlayback={props.canControlPlayback}
+        canRemoveQueue={props.canRemoveQueue}
+        canReorderQueue={props.canReorderQueue}
+        className="bg-transparent lg:h-full"
+        currentQueueItemId={props.roomSnapshot.room.playback.currentQueueItemId}
+        nextQueueItemId={props.roomSnapshot.room.playback.nextQueueItemId ?? null}
+        onPlayNextQueueItem={props.onPlayNextQueueItem}
+        onPlayQueueItem={props.onPlayQueueItem}
+        onRemoveQueueItem={props.onRemoveQueueItem}
+        onReorderQueue={props.onReorderQueue}
+        queue={props.roomSnapshot.queue}
+        tracks={props.roomSnapshot.tracks}
+      />
+    </section>
+
+    <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-library" role="tabpanel">
+      <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">曲库</h2></header>
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+        <LibraryTabPanel
+          activeSession={props.activeSession}
+          canAddToQueue={props.isHost}
+          canControlPlayback={props.canControlPlayback}
+          canManageAllTracks={props.isHost}
+          canManageLibrary={props.isHost}
+          localFolderName={props.localStorageSummary.localFolderName}
+          localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
+          onAddToQueue={props.onAddToQueue}
+          onDeleteTrack={props.onDeleteTrack}
+          onFilesSelected={props.onFilesSelected}
+          onPlayTrack={props.onPlayTrack}
+          onSaveTrackToLocal={props.onSaveTrackToLocal}
+          tracks={props.roomSnapshot.tracks}
+          uploadedTracks={props.uploadedTracks}
+        />
+      </div>
+    </section>
+
+    <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0`} id="request-workspace-members" role="tabpanel">
+      <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+        <MembersPanel
+          activeSessionId={props.activeSession?.userId ?? null}
+          isHost={props.isHost}
+          members={props.roomSnapshot.room.members}
+          now={props.membershipNow}
+          onRemoveMember={props.onRemoveMember}
+          onUpdateMemberPermissions={props.onUpdateMemberPermissions}
+        />
+      </div>
+    </section>
+  </section>;
 }
 
 function RequestInbox({
@@ -152,10 +256,9 @@ function RequestInbox({
   handledRequests: RoomRequest[];
   onDecide: (request: RoomRequest, decision: "approved" | "rejected") => Promise<void>;
 }) {
-  return <section className="overflow-hidden rounded-2xl border border-surface-border bg-surface/20 lg:rounded-none" data-testid="request-room-inbox">
-    <div className="flex items-center justify-between gap-3 border-b border-surface-border px-4 py-3">
+  return <section className="overflow-hidden rounded-lg border border-surface-border bg-surface/20" data-testid="request-room-inbox">
+    <div className="border-b border-surface-border px-4 py-3">
       <h2 className="font-semibold text-foreground">待审核点歌</h2>
-      <span className="text-xs text-foreground-muted">接受后自动加入队列</span>
     </div>
     {pendingRequests.length ? <div className="divide-y divide-surface-border">
       {pendingRequests.map((request) => <RequestTicket
@@ -164,7 +267,7 @@ function RequestInbox({
         pending={pendingRequestId === request.id}
         onDecide={onDecide}
       />)}
-    </div> : <div className="px-4 py-12 text-center text-sm text-foreground-muted">还没有等待审核的点歌。</div>}
+    </div> : <div className="px-4 py-8 text-center text-sm text-foreground-muted">还没有等待审核的点歌。</div>}
     {handledRequests.length ? <div className="border-t border-surface-border px-4 py-3">
       <p className="text-xs text-foreground-muted">最近处理</p>
       <div className="mt-2 divide-y divide-white/[0.06]">
@@ -202,9 +305,9 @@ function RequestTicket({
 }
 
 function RequestHistory({ requests, title }: { requests: RoomRequest[]; title: string }) {
-  return <section className="overflow-hidden rounded-2xl border border-surface-border bg-surface/20 lg:rounded-none">
+  return <section className="overflow-hidden rounded-lg border border-surface-border bg-surface/20">
     <div className="border-b border-surface-border px-4 py-3"><h2 className="font-semibold text-foreground">{title}</h2></div>
-    {requests.length ? <div className="divide-y divide-surface-border">{requests.slice().reverse().map((request) => <RequestHistoryRow key={request.id} request={request} />)}</div> : <div className="px-4 py-10 text-center text-sm text-foreground-muted">还没有提交过点歌。</div>}
+    {requests.length ? <div className="divide-y divide-surface-border">{requests.slice().reverse().map((request) => <RequestHistoryRow key={request.id} request={request} />)}</div> : <div className="px-4 py-8 text-center text-sm text-foreground-muted">还没有提交过点歌。</div>}
   </section>;
 }
 
@@ -215,14 +318,6 @@ function RequestHistoryRow({ request }: { request: RoomRequest }) {
     <div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-foreground">{request.title}</p><p className="mt-0.5 truncate text-[11px] text-foreground-muted">{request.artist}</p></div>
     <span className="shrink-0 text-[11px] text-foreground-muted">{status}</span>
   </div>;
-}
-
-function QueuePreview({ queue, tracks }: { queue: RoomDashboardViewProps["roomSnapshot"]["queue"]; tracks: TrackMeta[] }) {
-  const items = queue.slice(0, 4).map((item) => tracks.find((track) => track.id === item.trackId)).filter((track): track is TrackMeta => !!track);
-  return <section className="rounded-2xl border border-surface-border bg-surface/[0.12] p-4 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-5">
-    <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-foreground">即将播放</h2><span className="text-xs text-foreground-muted">{queue.length} 首在队列</span></div>
-    {items.length ? <div className="mt-3 divide-y divide-surface-border border-y border-surface-border">{items.map((track) => <div className="flex min-w-0 items-center gap-3 py-2.5" key={track.id}><Artwork artworkUrl={track.artworkUrl} title={track.title} compact /><div className="min-w-0"><p className="truncate text-xs font-medium text-foreground">{track.title}</p><p className="mt-0.5 truncate text-[11px] text-foreground-muted">{track.artist}</p></div></div>)}</div> : <p className="mt-3 text-sm text-foreground-muted">房主接纳点歌后，它们会按队列在这里出现。</p>}
-  </section>;
 }
 
 function Artwork({ artworkUrl, title, compact = false }: { artworkUrl: string | null; title: string; compact?: boolean }) {

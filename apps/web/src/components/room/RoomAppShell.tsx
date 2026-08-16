@@ -154,6 +154,12 @@ export function RoomAppShell({
           onDeleteRoom={roomActions.handleDeleteRoomAction}
           onFilesSelected={playbackActions.handleFilesSelected}
           onAddToQueue={roomActions.addToQueue}
+          canReorderQueue={isHostControlledRoom ? isRoomHost : canReorderQueue}
+          canRemoveQueue={isHostControlledRoom ? isRoomHost : !!activeSession && canReorderQueue}
+          onPlayQueueItem={playbackActions.handlePlayQueueItem}
+          onPlayNextQueueItem={roomActions.setNextQueueItem}
+          onRemoveQueueItem={roomActions.removeQueueItem}
+          onReorderQueue={roomActions.reorderQueue}
           onDeleteTrack={roomActions.deleteTrack}
           onPlayTrack={playbackActions.handlePlayTrack}
           onRefreshRoom={roomActions.refreshRoomSnapshot}

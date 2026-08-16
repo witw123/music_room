@@ -80,6 +80,12 @@ type RoomWorkspaceProps = {
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<unknown>;
+  canReorderQueue: boolean;
+  canRemoveQueue: boolean;
+  onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
@@ -145,6 +151,12 @@ function RoomWorkspaceBase({
   onDeleteRoom,
   onFilesSelected,
   onAddToQueue,
+  canReorderQueue,
+  canRemoveQueue,
+  onPlayQueueItem,
+  onPlayNextQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue,
   onDeleteTrack,
   onPlayTrack,
   onRefreshRoom,
@@ -253,6 +265,12 @@ function RoomWorkspaceBase({
               onDeleteRoom={onDeleteRoom}
               onFilesSelected={onFilesSelected}
               onAddToQueue={onAddToQueue}
+              canReorderQueue={canReorderQueue}
+              canRemoveQueue={canRemoveQueue}
+              onPlayQueueItem={onPlayQueueItem}
+              onPlayNextQueueItem={onPlayNextQueueItem}
+              onRemoveQueueItem={onRemoveQueueItem}
+              onReorderQueue={onReorderQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
               onRefreshRoom={onRefreshRoom}

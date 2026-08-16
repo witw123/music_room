@@ -6,7 +6,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
-type PlayerQueueDrawerProps = {
+export type PlayerQueueListProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
@@ -19,6 +19,10 @@ type PlayerQueueDrawerProps = {
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   accentColor?: string;
+  className?: string;
+};
+
+type PlayerQueueDrawerProps = Omit<PlayerQueueListProps, "className"> & {
   accentSoft?: string;
   compactMobile?: boolean;
   testId?: string;
@@ -55,6 +59,69 @@ export function PlayerQueueDrawer({
   testId = "player-queue-button"
 }: PlayerQueueDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const toggleDrawer = () => setIsOpen((current) => !current);
+
+  return (
+    <div className="relative">
+      <Button
+        variant="ghost"
+        size="icon"
+        data-testid={testId}
+        className={compactMobile ? "relative h-11 w-11 rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95" : "relative h-10 w-10 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"}
+        style={compactMobile ? undefined : { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
+        onClick={toggleDrawer}
+        aria-expanded={isOpen}
+        aria-label="歌曲队列"
+        title="歌曲队列"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h12" /><path d="M4 12h16" /><path d="M4 18h12" /><path d="m18 4 2 2-2 2" /></svg>
+        {queue.length > 0 && (
+          <span
+            className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500"
+            style={{ backgroundColor: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
+          >
+            {queue.length}
+          </span>
+        )}
+      </Button>
+
+      {isOpen ? (
+        <aside aria-label="播放队列" data-testid="player-queue-drawer" className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[calc(10.5rem+env(safe-area-inset-bottom))] max-sm:left-2 max-sm:right-2 max-sm:mb-0 max-sm:w-auto max-sm:max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-12rem)]">
+          <PlayerQueueList
+            accentColor={accentColor}
+            canControlPlayback={canControlPlayback}
+            canRemoveQueue={canRemoveQueue}
+            canReorderQueue={canReorderQueue}
+            currentQueueItemId={currentQueueItemId}
+            nextQueueItemId={nextQueueItemId}
+            onPlayNextQueueItem={onPlayNextQueueItem}
+            onPlayQueueItem={onPlayQueueItem}
+            onRemoveQueueItem={onRemoveQueueItem}
+            onReorderQueue={onReorderQueue}
+            queue={queue}
+            tracks={tracks}
+          />
+        </aside>
+      ) : null}
+    </div>
+  );
+}
+
+export function PlayerQueueList({
+  queue,
+  tracks,
+  currentQueueItemId,
+  nextQueueItemId,
+  canControlPlayback,
+  canReorderQueue,
+  canRemoveQueue,
+  onPlayQueueItem,
+  onPlayNextQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue,
+  accentColor = "rgb(0 148 255)",
+  className = ""
+}: PlayerQueueListProps) {
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
   const [dragOverQueueItemId, setDragOverQueueItemId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -69,8 +136,6 @@ export function PlayerQueueDrawer({
       })),
     [queue, tracks]
   );
-
-  const toggleDrawer = () => setIsOpen((current) => !current);
 
   useEffect(() => {
     return () => {
@@ -192,32 +257,7 @@ export function PlayerQueueDrawer({
   }
 
   return (
-    <div className="relative">
-      <Button
-        variant="ghost"
-        size="icon"
-        data-testid={testId}
-        className={compactMobile ? "relative h-11 w-11 rounded-full text-white/80 transition-[transform,color] hover:text-white active:scale-95" : "relative h-10 w-10 text-foreground-muted transition-colors hover:text-foreground sm:h-10 sm:w-10"}
-        style={compactMobile ? undefined : { color: accentColor, ...(isOpen ? { backgroundColor: accentSoft } : {}) }}
-        onClick={toggleDrawer}
-        aria-expanded={isOpen}
-        aria-label="歌曲队列"
-        title="歌曲队列"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h12" /><path d="M4 12h16" /><path d="M4 18h12" /><path d="m18 4 2 2-2 2" /></svg>
-        {queue.length > 0 && (
-          <span
-            className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white transition-[background-color,box-shadow] duration-500"
-            style={{ backgroundColor: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
-          >
-            {queue.length}
-          </span>
-        )}
-      </Button>
-
-      {isOpen ? (
-        <aside aria-label="播放队列" data-testid="player-queue-drawer" className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:bottom-[calc(10.5rem+env(safe-area-inset-bottom))] max-sm:left-2 max-sm:right-2 max-sm:mb-0 max-sm:w-auto max-sm:max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-12rem)]">
-          <div className="light-player-queue-content relative flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar">
+    <div className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar ${className}`}>
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;
@@ -348,10 +388,6 @@ export function PlayerQueueDrawer({
                  </div>
               </div>
             ) : null}
-          </div>
-
-        </aside>
-      ) : null}
     </div>
   );
 }
