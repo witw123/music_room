@@ -115,15 +115,6 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
             </section>
           </div>
 
-          <section className="mt-7 border-t border-surface-border pt-6">
-            <SectionTitle title="最近聆听" />
-            <div className="mt-3 divide-y divide-surface-border">
-              {profile.recent.map((item) => <div className="flex min-w-0 items-center gap-3 py-3" key={`${item.key}:${item.occurredAt}`}>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{item.title}</p><p className="mt-0.5 truncate text-xs text-foreground-muted">{item.artist}</p></div>
-                <div className="shrink-0 text-right"><p className="text-xs tabular-nums text-foreground-muted">{formatDuration(item.listenedMs)}</p><time className="mt-0.5 block text-[11px] text-foreground-muted" dateTime={item.occurredAt}>{formatDateTime(item.occurredAt)}</time></div>
-              </div>)}
-            </div>
-          </section>
         </div>
       )}
     </section>
@@ -154,8 +145,4 @@ function formatDuration(value: number) {
   const minutes = Math.max(0, Math.floor(value / 60_000));
   if (minutes < 1) return "不足 1 分钟";
   return minutes >= 60 ? `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟` : `${minutes} 分钟`;
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }

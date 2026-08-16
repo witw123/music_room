@@ -9,10 +9,10 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { LibraryTabPanel } from "./LibraryTabPanel";
+import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
 import { MembersPanel } from "./MembersPanel";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
@@ -27,7 +27,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
-  const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<RequestWorkspaceTab>("queue");
+  const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<RequestWorkspaceTab>("library");
 
   useEffect(() => {
     snapshotRef.current = props.roomSnapshot;
@@ -154,11 +154,11 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
   </div>;
 }
 
-type RequestWorkspaceTab = "queue" | "library" | "members";
+type RequestWorkspaceTab = "library" | "playlists" | "members";
 
 const requestWorkspaceTabs: Array<{ id: RequestWorkspaceTab; label: string }> = [
-  { id: "queue", label: "队列" },
   { id: "library", label: "曲库" },
+  { id: "playlists", label: "歌单" },
   { id: "members", label: "成员" }
 ];
 
@@ -186,27 +186,6 @@ function RequestRoomWorkspace(
       >{tab.label}</button>)}
     </div>
 
-    <section className={`${panelVisibility("queue")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0`} id="request-workspace-queue" role="tabpanel">
-      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-5">
-        <h2 className="text-base font-semibold text-foreground">队列</h2>
-        <span className="font-mono text-xs text-foreground-muted">{props.roomSnapshot.queue.length}</span>
-      </header>
-      <PlayerQueueList
-        canControlPlayback={props.canControlPlayback}
-        canRemoveQueue={props.canRemoveQueue}
-        canReorderQueue={props.canReorderQueue}
-        className="bg-transparent lg:h-full"
-        currentQueueItemId={props.roomSnapshot.room.playback.currentQueueItemId}
-        nextQueueItemId={props.roomSnapshot.room.playback.nextQueueItemId ?? null}
-        onPlayNextQueueItem={props.onPlayNextQueueItem}
-        onPlayQueueItem={props.onPlayQueueItem}
-        onRemoveQueueItem={props.onRemoveQueueItem}
-        onReorderQueue={props.onReorderQueue}
-        queue={props.roomSnapshot.queue}
-        tracks={props.roomSnapshot.tracks}
-      />
-    </section>
-
     <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-library" role="tabpanel">
       <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">曲库</h2></header>
       <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
@@ -225,6 +204,32 @@ function RequestRoomWorkspace(
           onSaveTrackToLocal={props.onSaveTrackToLocal}
           tracks={props.roomSnapshot.tracks}
           uploadedTracks={props.uploadedTracks}
+        />
+      </div>
+    </section>
+
+    <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-playlists" role="tabpanel">
+      <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">歌单</h2></header>
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+        <LocalStorageTabPanel
+          activeSession={props.activeSession}
+          canManageLibrary={props.isHost}
+          hideUnavailableProvidersNotice
+          localStorageSummary={props.localStorageSummary}
+          onCleanLocalStorage={props.onCleanLocalStorage}
+          onDeletePlaylist={props.onDeletePlaylist}
+          onImportCachedTrack={props.onImportCachedTrack}
+          onImportNeteaseTrack={props.onImportNeteaseTrack}
+          onImportNeteaseTracks={props.onImportNeteaseTracks}
+          onImportQqMusicTrack={props.onImportQqMusicTrack}
+          onImportQqMusicTracks={props.onImportQqMusicTracks}
+          onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
+          onRefreshLocalStorage={props.onRefreshLocalStorage}
+          onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
+          onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
+          onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
+          playlists={props.playlists}
+          tracks={props.roomSnapshot.tracks}
         />
       </div>
     </section>
