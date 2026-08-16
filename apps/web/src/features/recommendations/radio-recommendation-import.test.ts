@@ -70,6 +70,31 @@ describe("radio recommendation import", () => {
     expect(api.getRoom).not.toHaveBeenCalled();
     expect(api.insertRadioAutopilotNextTrack).not.toHaveBeenCalled();
   });
+
+  it("uses a track already in the room without importing it again", async () => {
+    const candidate = recommendation("netease", "n1", "Existing");
+    candidate.existingRoomTrackId = "track_existing";
+    const refreshed = roomWithTrack("track_existing", "netease", "n1");
+    api.getRoom.mockResolvedValue(refreshed);
+    api.insertRadioAutopilotNextTrack.mockResolvedValue({});
+    const importTrack = vi.fn();
+
+    await expect(importRadioRecommendationCandidates({
+      roomId: "room_1",
+      candidates: [candidate],
+      isCurrent: () => true,
+      isSeedCurrent: () => true,
+      onCandidate: vi.fn(),
+      onImportNeteaseTrack: importTrack,
+      onImportQqMusicTrack: vi.fn(),
+      onRefreshRoom: vi.fn().mockResolvedValue(refreshed)
+    })).resolves.toMatchObject({ kind: "inserted", candidate });
+
+    expect(importTrack).not.toHaveBeenCalled();
+    expect(api.insertRadioAutopilotNextTrack).toHaveBeenCalledWith("room_1", {
+      trackId: "track_existing"
+    });
+  });
 });
 
 function recommendation(

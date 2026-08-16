@@ -31,10 +31,12 @@ export async function importRadioRecommendationCandidates(input: {
     if (!input.isCurrent()) return { kind: "cancelled" };
     input.onCandidate(candidate);
     try {
-      if (candidate.candidate.provider === "netease") {
-        await input.onImportNeteaseTrack(candidate.candidate);
-      } else {
-        await input.onImportQqMusicTrack(candidate.candidate);
+      if (!candidate.existingRoomTrackId) {
+        if (candidate.candidate.provider === "netease") {
+          await input.onImportNeteaseTrack(candidate.candidate);
+        } else {
+          await input.onImportQqMusicTrack(candidate.candidate);
+        }
       }
       if (!input.isCurrent()) return { kind: "cancelled" };
 
@@ -44,8 +46,9 @@ export async function importRadioRecommendationCandidates(input: {
       }
       const imported = freshSnapshot.tracks.find(
         (track) =>
-          track.sourceRef?.provider === candidate.candidate.provider &&
-          track.sourceRef.trackId === candidate.candidate.providerTrackId
+          track.id === candidate.existingRoomTrackId ||
+          (track.sourceRef?.provider === candidate.candidate.provider &&
+            track.sourceRef.trackId === candidate.candidate.providerTrackId)
       );
       if (!imported) {
         throw new Error(`《${candidate.candidate.title}》导入后未同步到曲库。`);
