@@ -8,6 +8,7 @@ describe("RadioRoomView layout", () => {
   it("uses the larger player and chat split for the first desktop viewport", () => {
     expect(radioRoomSource).toContain('data-testid="radio-room-hero"');
     expect(radioRoomSource).toContain("lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]");
+    expect(radioRoomSource).toContain("hideRoomMetadata: true, showMobilePlayer: true");
     expect(radioRoomSource.indexOf("<RoomStage")).toBeLessThan(radioRoomSource.indexOf("<RoomChatPanel"));
   });
 

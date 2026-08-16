@@ -7,6 +7,7 @@ describe("RequestRoomView layout", () => {
   it("keeps the player and request desk in the first desktop viewport", () => {
     expect(requestRoomSource).toContain('data-testid="request-room-hero"');
     expect(requestRoomSource).toContain("lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)]");
+    expect(requestRoomSource).toContain("buildRoomStageProps(props, { showMobilePlayer: true })");
     expect(requestRoomSource.indexOf("<RoomStage")).toBeLessThan(requestRoomSource.indexOf("点歌台"));
   });
 
