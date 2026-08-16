@@ -11,13 +11,14 @@ import { getRecommendationProfile } from "./recommendation-store";
 import { normalizeRecommendationText, type RecommendationReason } from "./recommendation-types";
 
 const mappedCandidateTarget = 12;
-const neteaseSourceLimit = 4;
 const providerSearchLimit = 10;
 const providerSearchConcurrency = 3;
-const neteaseSearchConcurrency = 1;
+const nativeFallbackSearchLimit = 20;
+const relatedPlaylistLimit = 3;
 const minimumTitleScore = 0.82;
 const minimumArtistScore = 0.7;
 const minimumMatchScore = 0.8;
+const minimumNativeFallbackScore = 0.42;
 
 export type RadioRecommendationCandidate = {
   candidate: ProviderTrackCandidate;
@@ -25,6 +26,7 @@ export type RadioRecommendationCandidate = {
   providerMatchScore: number;
   recommendationScore: number;
   recommendationReasons: RecommendationReason[];
+  existingRoomTrackId?: string;
 };
 
 export async function getRadioRecommendationCandidates(input: {
@@ -36,31 +38,43 @@ export async function getRadioRecommendationCandidates(input: {
     artist: string;
   };
 }): Promise<RadioRecommendationCandidate[]> {
-  const recall = await musicRoomApi.getLastFmSimilarTracks({
-    artist: input.seed.artist,
-    track: input.seed.title,
-    limit: 100
-  });
-  const sources = recall.items.slice(0, mappedCandidateTarget);
   const excludedTrackKeys = getExcludedProviderTrackKeys(input.snapshot);
   const alternateProvider = input.provider === "netease" ? "qqmusic" : "netease";
+  // Last.fm is an enhancement, not a hard dependency. Start provider-native
+  // recall at the same time so an upstream timeout cannot block the refill.
+  const [sources, nativeFallbacks] = await Promise.all([
+    musicRoomApi.getLastFmSimilarTracks({
+      artist: input.seed.artist,
+      track: input.seed.title,
+      limit: 100
+    })
+      .then((recall) => recall.items.slice(0, mappedCandidateTarget))
+      .catch(() => []),
+    getNativeProviderFallbackCandidates({
+      provider: input.provider,
+      alternateProvider,
+      seed: input.seed,
+      seedProviderTrackId: getCurrentProviderTrackId(input.snapshot),
+      excludedTrackKeys
+    }).catch(() => [])
+  ]);
   // A provider result can be searchable but still fail during audio import.
   // Resolve both catalogs so a temporary upstream failure or paid result does
   // not suppress a playable fallback from the other provider.
   const [primary, alternate] = await Promise.all([
-    mapSimilarTracksToProvider({
-      provider: input.provider,
-      sources: limitSourcesForProvider(input.provider, sources),
-      excludedTrackKeys
-    }),
-    mapSimilarTracksToProvider({
-      provider: alternateProvider,
-      sources: limitSourcesForProvider(alternateProvider, sources),
-      excludedTrackKeys
-    })
+    mapSimilarTracksToProvider({ provider: input.provider, sources, excludedTrackKeys }),
+    mapSimilarTracksToProvider({ provider: alternateProvider, sources, excludedTrackKeys })
   ]);
 
-  const mapped = dedupeMappedCandidates([...primary, ...alternate], excludedTrackKeys);
+  let mapped = dedupeMappedCandidates([...primary, ...alternate, ...nativeFallbacks], excludedTrackKeys);
+
+  if (mapped.length < mappedCandidateTarget) {
+    mapped = dedupeMappedCandidates([
+      ...mapped,
+      ...getRoomLibraryFallbackCandidates(input.snapshot, input.seed, excludedTrackKeys)
+    ], excludedTrackKeys);
+  }
+
   const profile = await getRecommendationProfile(input.userId)
     .catch(() => buildRecommendationProfile(input.userId, []));
   const mappedByKey = new Map(mapped.map((item) => [getProviderTrackKey(item.candidate), item]));
@@ -77,7 +91,7 @@ export async function getRadioRecommendationCandidates(input: {
     }
   );
 
-  return ranked
+  const rankedCandidates = ranked
     .map((item) => {
       const mappedItem = mappedByKey.get(item.candidate.key);
       return mappedItem
@@ -86,12 +100,32 @@ export async function getRadioRecommendationCandidates(input: {
           lastFmMatch: mappedItem.lastFmMatch,
           providerMatchScore: mappedItem.providerMatchScore,
           recommendationScore: item.score,
-          recommendationReasons: item.reasons
+          recommendationReasons: item.reasons,
+          ...(mappedItem.existingRoomTrackId ? { existingRoomTrackId: mappedItem.existingRoomTrackId } : {})
         }
         : null;
     })
     .filter((item): item is RadioRecommendationCandidate => item !== null)
     .slice(0, mappedCandidateTarget);
+
+  if (rankedCandidates.length > 0) return rankedCandidates;
+
+  // The ranking layer intentionally filters recent artists and recent
+  // candidates. If that removes every safe option, keep the station alive by
+  // relaxing only those preference constraints; queue/source de-duplication
+  // has already happened in `mapped` and remains enforced.
+  return mapped
+    .slice()
+    .sort(compareMappedCandidates)
+    .slice(0, mappedCandidateTarget)
+    .map((item) => ({
+      candidate: item.candidate,
+      lastFmMatch: item.lastFmMatch,
+      providerMatchScore: item.providerMatchScore,
+      recommendationScore: item.lastFmMatch * 0.74 + item.providerMatchScore * 0.21 + providerAccessScore(item.candidate.access) * 0.05,
+      recommendationReasons: ["base" as const],
+      ...(item.existingRoomTrackId ? { existingRoomTrackId: item.existingRoomTrackId } : {})
+    }));
 }
 
 type MappedSimilarTrack = {
@@ -99,17 +133,182 @@ type MappedSimilarTrack = {
   lastFmMatch: number;
   providerMatchScore: number;
   source: LastFmSimilarTrack;
+  existingRoomTrackId?: string;
 };
+
+async function getNativeProviderFallbackCandidates(input: {
+  provider: "netease" | "qqmusic";
+  alternateProvider: "netease" | "qqmusic";
+  seed: { title: string; artist: string };
+  seedProviderTrackId: string | null;
+  excludedTrackKeys: Set<string>;
+}) {
+  const providers = [input.provider, input.alternateProvider] as const;
+  const candidates = await Promise.all(providers.map((provider) =>
+    getProviderNativeFallbackCandidates({
+      provider,
+      seed: input.seed,
+      seedProviderTrackId: provider === input.provider ? input.seedProviderTrackId : null,
+      excludedTrackKeys: input.excludedTrackKeys
+    })
+  ));
+  return candidates.flat();
+}
+
+async function getProviderNativeFallbackCandidates(input: {
+  provider: "netease" | "qqmusic";
+  seed: { title: string; artist: string };
+  seedProviderTrackId: string | null;
+  excludedTrackKeys: Set<string>;
+}) {
+  const relatedTracks = input.seedProviderTrackId
+    ? await getRelatedPlaylistTracks(input.provider, input.seedProviderTrackId)
+    : [];
+  const searchTerms = uniqueSearchTerms([
+    `${input.seed.title} ${input.seed.artist}`,
+    input.seed.artist,
+    input.seed.title
+  ]);
+  const searchResults = await Promise.all(
+    searchTerms.map((keywords) => searchProvider(input.provider, keywords, nativeFallbackSearchLimit).catch(() => null))
+  );
+  const candidates = [
+    ...relatedTracks.map((candidate) => ({ candidate, source: "related" as const })),
+    ...searchResults.flatMap((result) => (result?.items ?? []).map((candidate) => ({ candidate, source: "search" as const })))
+  ];
+  const unique = new Map<string, MappedSimilarTrack>();
+
+  for (const item of candidates) {
+    const key = getProviderTrackKey(item.candidate);
+    if (input.excludedTrackKeys.has(key) || unique.has(key)) continue;
+    const metadataScore = scoreSeedRelationship(input.seed, item.candidate);
+    const relationScore = item.source === "related"
+      ? Math.max(0.58, metadataScore)
+      : metadataScore;
+    if (relationScore < minimumNativeFallbackScore) continue;
+    unique.set(key, {
+      candidate: item.candidate,
+      lastFmMatch: relationScore,
+      providerMatchScore: relationScore,
+      source: {
+        title: input.seed.title,
+        artist: input.seed.artist,
+        match: relationScore
+      }
+    });
+  }
+
+  return [...unique.values()];
+}
+
+async function getRelatedPlaylistTracks(
+  provider: "netease" | "qqmusic",
+  trackId: string
+) {
+  const related = await (provider === "netease"
+    ? musicRoomApi.listNeteaseRelatedPlaylists(trackId)
+    : musicRoomApi.listQqMusicRelatedPlaylists(trackId)).catch(() => null);
+  const playlists = related?.items?.slice(0, relatedPlaylistLimit) ?? [];
+  const details = await Promise.all(playlists.map((playlist) => (
+    provider === "netease"
+      ? musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
+      : musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId)
+  ).catch(() => null)));
+  return details.flatMap((detail) => detail?.tracks ?? []);
+}
+
+function uniqueSearchTerms(terms: string[]) {
+  const seen = new Set<string>();
+  return terms
+    .map((term) => term.trim())
+    .filter((term) => {
+      const key = normalizeRecommendationText(term);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function scoreSeedRelationship(
+  seed: { title: string; artist: string },
+  candidate: ProviderTrackCandidate
+) {
+  const titleScore = textSimilarity(seed.title, candidate.title);
+  const artistScore = textSimilarity(seed.artist, candidate.artist);
+  if (artistScore < 0.45 && titleScore < 0.7) return 0;
+  return titleScore * 0.55 + artistScore * 0.45;
+}
+
+function getCurrentProviderTrackId(snapshot: RoomSnapshot) {
+  const currentTrackId = snapshot.room.playback.currentTrackId;
+  const currentTrack = currentTrackId
+    ? snapshot.tracks.find((track) => track.id === currentTrackId)
+    : null;
+  return currentTrack?.sourceRef?.trackId ?? null;
+}
+
+function getRoomLibraryFallbackCandidates(
+  snapshot: RoomSnapshot,
+  seed: { title: string; artist: string },
+  excludedTrackKeys: Set<string>
+) {
+  return snapshot.tracks
+    .filter((track) => track.sourceRef && (track.sourceType === "netease" || track.sourceType === "qqmusic"))
+    .map((track) => {
+      const source = track.sourceRef!;
+      const key = `${source.provider}:${source.trackId}`;
+      return {
+        track,
+        key,
+        score: scoreSeedRelationship(seed, {
+          provider: source.provider,
+          providerTrackId: source.trackId,
+          access: "free",
+          quality: null,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          durationMs: track.durationMs,
+          artworkUrl: track.artworkUrl
+        })
+      };
+    })
+    .filter(({ key, score }) => !excludedTrackKeys.has(key) && score >= minimumNativeFallbackScore)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, mappedCandidateTarget)
+    .map(({ track, score }) => {
+      const source = track.sourceRef!;
+      const candidate: ProviderTrackCandidate = {
+        provider: source.provider,
+        providerTrackId: source.trackId,
+        access: "free",
+        quality: null,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        durationMs: track.durationMs,
+        artworkUrl: track.artworkUrl
+      };
+      return {
+        candidate,
+        lastFmMatch: score,
+        providerMatchScore: score,
+        source: {
+          title: seed.title,
+          artist: seed.artist,
+          match: score
+        },
+        existingRoomTrackId: track.id
+      } satisfies MappedSimilarTrack;
+    });
+}
 
 async function mapSimilarTracksToProvider(input: {
   provider: "netease" | "qqmusic";
   sources: LastFmSimilarTrack[];
   excludedTrackKeys: Set<string>;
 }): Promise<MappedSimilarTrack[]> {
-  const resolved = await mapWithConcurrency(
-    input.sources,
-    input.provider === "netease" ? neteaseSearchConcurrency : providerSearchConcurrency,
-    async (source) => {
+  const resolved = await mapWithConcurrency(input.sources, providerSearchConcurrency, async (source) => {
     const result = await searchProvider(input.provider, `${source.title} ${source.artist}`).catch(() => null);
     if (!result) return null;
     const candidate = selectProviderMatch(source, result.items, input.excludedTrackKeys);
@@ -121,22 +320,14 @@ async function mapSimilarTracksToProvider(input: {
         source
       }
       : null;
-    }
-  );
+  });
   return resolved.filter((candidate): candidate is MappedSimilarTrack => candidate !== null);
 }
 
-function limitSourcesForProvider(
-  provider: "netease" | "qqmusic",
-  sources: LastFmSimilarTrack[]
-) {
-  return provider === "netease" ? sources.slice(0, neteaseSourceLimit) : sources;
-}
-
-function searchProvider(provider: "netease" | "qqmusic", keywords: string) {
+function searchProvider(provider: "netease" | "qqmusic", keywords: string, limit = providerSearchLimit) {
   return provider === "netease"
-    ? musicRoomApi.searchNeteaseTracks(keywords, { limit: providerSearchLimit })
-    : musicRoomApi.searchQqMusicTracks(keywords, { limit: providerSearchLimit });
+    ? musicRoomApi.searchNeteaseTracks(keywords, { limit })
+    : musicRoomApi.searchQqMusicTracks(keywords, { limit });
 }
 
 function selectProviderMatch(

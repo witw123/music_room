@@ -22,9 +22,6 @@ import {
   neteaseQualitySchema,
   neteaseAlbumIdSchema,
   neteaseCatalogPageQuerySchema,
-  neteaseDiscoverAlbumQuerySchema,
-  neteaseDiscoverPlaylistQuerySchema,
-  neteaseRecommendedPlaylistQuerySchema,
   neteasePlaylistIdSchema,
   neteaseSearchQuerySchema,
   neteaseSearchSuggestQuerySchema,
@@ -119,22 +116,6 @@ export class NeteaseController {
     );
   }
 
-  @Get("discover/playlists/recommended")
-  async recommendedPlaylists(
-    @Query() query: Record<string, unknown>,
-    @Headers("x-session-token") sessionToken: string | undefined
-  ) {
-    return this.service.getRecommendedPlaylists(
-      await this.getCurrentUserId(sessionToken),
-      parseRequestBody(neteaseRecommendedPlaylistQuerySchema, query)
-    );
-  }
-
-  @Get("discover/playlists/daily")
-  async dailyPlaylists(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.service.getDailyPlaylists(await this.getCurrentUserId(sessionToken));
-  }
-
   @Get("library")
   async library(@Headers("x-session-token") sessionToken: string | undefined) {
     return this.service.getLibrarySnapshot(await this.getCurrentUserId(sessionToken));
@@ -146,43 +127,6 @@ export class NeteaseController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     return this.service.getRelatedPlaylists(await this.getCurrentUserId(sessionToken), trackId);
-  }
-
-  @Get("discover/playlists")
-  async categoryPlaylists(
-    @Query() query: Record<string, unknown>,
-    @Headers("x-session-token") sessionToken: string | undefined
-  ) {
-    return this.service.getCategoryPlaylists(
-      await this.getCurrentUserId(sessionToken),
-      parseRequestBody(neteaseDiscoverPlaylistQuerySchema, query)
-    );
-  }
-
-  @Get("discover/playlist-categories")
-  async playlistCategories(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.service.getPlaylistCategories(await this.getCurrentUserId(sessionToken));
-  }
-
-  @Get("discover/toplists")
-  async toplists(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.service.getToplists(await this.getCurrentUserId(sessionToken));
-  }
-
-  @Get("discover/albums/new")
-  async newAlbums(
-    @Query() query: Record<string, unknown>,
-    @Headers("x-session-token") sessionToken: string | undefined
-  ) {
-    return this.service.getNewAlbums(
-      await this.getCurrentUserId(sessionToken),
-      parseRequestBody(neteaseDiscoverAlbumQuerySchema, query)
-    );
-  }
-
-  @Get("discover/tracks/daily")
-  async dailyTracks(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.service.getDailyTracks(await this.getCurrentUserId(sessionToken));
   }
 
   @Get("tracks/:trackId/audio-url")

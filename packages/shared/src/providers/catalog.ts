@@ -94,53 +94,6 @@ export const providerPlaylistListResponseSchema = z
   })
   .strict();
 
-export const providerTrackListResponseSchema = z
-  .object({
-    items: z.array(providerTrackCandidateSchema),
-    limit: z.number().int().positive(),
-    offset: z.number().int().nonnegative()
-  })
-  .strict();
-
-export const providerPlaylistCategorySortOptionSchema = z
-  .object({
-    id: z.string().trim().min(1),
-    label: z.string().trim().min(1)
-  })
-  .strict();
-
-export const providerPlaylistCategorySchema = z
-  .object({
-    provider: providerSchema,
-    id: z.string().trim().min(1),
-    name: z.string().trim().min(1),
-    groupName: z.string().trim().min(1).nullable(),
-    sortOptions: z.array(providerPlaylistCategorySortOptionSchema)
-  })
-  .strict();
-
-export const providerPlaylistCategoryListResponseSchema = z
-  .object({
-    items: z.array(providerPlaylistCategorySchema)
-  })
-  .strict();
-
-export const providerDiscoveryBannerSchema = z
-  .object({
-    provider: providerSchema,
-    id: z.string().trim().min(1),
-    title: z.string(),
-    artworkUrl: z.string().url().nullable(),
-    targetUrl: z.string().url().nullable()
-  })
-  .strict();
-
-export const providerDiscoveryBannerListResponseSchema = z
-  .object({
-    items: z.array(providerDiscoveryBannerSchema)
-  })
-  .strict();
-
 export const providerAlbumListResponseSchema = z
   .object({
     items: z.array(providerAlbumSummarySchema),
@@ -214,13 +167,7 @@ export type ProviderPlaylistListResponse = z.infer<typeof providerPlaylistListRe
 export type ProviderAlbumListResponse = z.infer<typeof providerAlbumListResponseSchema>;
 export type ProviderArtistListResponse = z.infer<typeof providerArtistListResponseSchema>;
 export type ProviderLibrarySnapshot = z.infer<typeof providerLibrarySnapshotSchema>;
-export type ProviderTrackListResponse = z.infer<typeof providerTrackListResponseSchema>;
 export type ProviderTrackCandidate = z.infer<typeof providerTrackCandidateSchema>;
-export type ProviderPlaylistCategorySortOption = z.infer<typeof providerPlaylistCategorySortOptionSchema>;
-export type ProviderPlaylistCategory = z.infer<typeof providerPlaylistCategorySchema>;
-export type ProviderPlaylistCategoryListResponse = z.infer<typeof providerPlaylistCategoryListResponseSchema>;
-export type ProviderDiscoveryBanner = z.infer<typeof providerDiscoveryBannerSchema>;
-export type ProviderDiscoveryBannerListResponse = z.infer<typeof providerDiscoveryBannerListResponseSchema>;
 export type ProviderAlbumFavorite = z.infer<typeof providerAlbumFavoriteSchema>;
 export type ProviderTrackFavorite = z.infer<typeof providerTrackFavoriteSchema>;
 export type ProviderArtistFavorite = z.infer<typeof providerArtistFavoriteSchema>;

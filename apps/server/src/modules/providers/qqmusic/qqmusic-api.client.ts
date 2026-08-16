@@ -4,21 +4,16 @@ import {
   checkQQLoginQr,
   getAlbumInfo,
   getAlbumSongs,
-  getDigitalAlbumLists,
   getMusicPlay,
   getQQLoginQr,
-  getRecommendBanner,
   getRelatedPlaylists,
   getSmartbox,
   getHotKey,
   getSearchByKey,
-  getTopLists,
   getUserPlaylists,
   getUserCollectedAlbums,
   getUserCollectedSongLists,
   getUserFollowSingers,
-  songListCategories,
-  songLists,
   songListDetail
 } from "@sansenjian/qq-music-api/services";
 import { fetchProviderUrl } from "../provider-fetch";
@@ -304,58 +299,6 @@ export class QqMusicApiClient {
       }) as ApiResponse;
       assertProviderStatus(response.status);
       return readProviderBody(response.body);
-    });
-  }
-
-  async getPlaylistCategories() {
-    return this.call(async () => {
-      const response = await songListCategories({}) as ApiResponse;
-      assertProviderStatus(response.status);
-      return readSuccessfulProviderBody(response.body);
-    });
-  }
-
-  async getCategoryPlaylists(input: {
-    categoryId: number;
-    sortId: number;
-    limit: number;
-    offset: number;
-  }) {
-    return this.call(async () => {
-      const response = await songLists({
-        params: {
-          categoryId: input.categoryId,
-          sortId: input.sortId,
-          sin: input.offset,
-          ein: input.offset + input.limit - 1
-        }
-      }) as ApiResponse;
-      assertProviderStatus(response.status);
-      return readSuccessfulProviderBody(response.body);
-    });
-  }
-
-  async getToplists() {
-    return this.call(async () => {
-      const response = await getTopLists({}) as ApiResponse;
-      assertProviderStatus(response.status);
-      return readSuccessfulProviderBody(response.body);
-    });
-  }
-
-  async getDigitalAlbums() {
-    return this.call(async () => {
-      const response = await getDigitalAlbumLists({}) as ApiResponse;
-      assertProviderStatus(response.status);
-      return readSuccessfulProviderBody(response.body);
-    });
-  }
-
-  async getBanners() {
-    return this.call(async () => {
-      const response = await getRecommendBanner({}) as ApiResponse;
-      assertProviderStatus(response.status);
-      return readSuccessfulProviderBody(response.body);
     });
   }
 

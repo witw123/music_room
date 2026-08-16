@@ -114,6 +114,81 @@ describe("ListeningProfileService", () => {
     expect(prisma.userListeningTrack.deleteMany).toHaveBeenCalledWith({ where: { userId: "user_1" } });
   });
 
+  it("builds discover seeds and recently heard exclusions from the full profile", async () => {
+    const prisma = {
+      isAvailable: jest.fn().mockReturnValue(true),
+      userListeningTrack: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            candidateKey: "netease:favorite",
+            provider: "netease",
+            providerTrackId: "favorite",
+            title: "收藏的歌",
+            artist: "歌手 A",
+            album: null,
+            durationMs: 180_000,
+            artworkUrl: null,
+            playCount: 3,
+            listenedMs: 400_000n,
+            completionCount: 2,
+            quickSkipCount: 0,
+            isFavorite: true,
+            lastPlayedAt: new Date("2026-08-17T09:00:00.000Z")
+          },
+          {
+            candidateKey: "qqmusic:recent",
+            provider: "qqmusic",
+            providerTrackId: "recent",
+            title: "最近的歌",
+            artist: "歌手 B",
+            album: null,
+            durationMs: 200_000,
+            artworkUrl: null,
+            playCount: 1,
+            listenedMs: 120_000n,
+            completionCount: 0,
+            quickSkipCount: 0,
+            isFavorite: false,
+            lastPlayedAt: new Date("2026-08-17T10:00:00.000Z")
+          },
+          {
+            candidateKey: "local_upload:local",
+            provider: "local_upload",
+            providerTrackId: "local",
+            title: "本地歌曲",
+            artist: "歌手 C",
+            album: null,
+            durationMs: 180_000,
+            artworkUrl: null,
+            playCount: 5,
+            listenedMs: 900_000n,
+            completionCount: 5,
+            quickSkipCount: 0,
+            isFavorite: false,
+            lastPlayedAt: new Date("2026-08-17T11:00:00.000Z")
+          }
+        ])
+      },
+      listeningTrackMetadata: {
+        findMany: jest.fn().mockResolvedValue([
+          { trackKey: "netease:favorite", tags: [{ name: "pop", weight: 100 }] }
+        ])
+      }
+    };
+    const service = new ListeningProfileService(prisma as never, {} as never);
+
+    const context = await service.getDiscoverContext("user_1");
+
+    expect(context.seedTracks.map((track) => track.key)).toEqual(["netease:favorite", "qqmusic:recent"]);
+    expect(context.excludedTrackKeys).toEqual([
+      "local_upload:local",
+      "qqmusic:recent",
+      "netease:favorite"
+    ]);
+    expect(context.topArtists.map((artist) => artist.name)).toEqual(expect.arrayContaining(["歌手 A", "歌手 B", "歌手 C"]));
+    expect(context.tasteTags).toEqual(["流行"]);
+  });
+
   it("retries deferred metadata after an upstream recovery", async () => {
     const prisma = {
       isAvailable: jest.fn().mockReturnValue(true),

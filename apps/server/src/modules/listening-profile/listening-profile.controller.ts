@@ -27,6 +27,11 @@ export class ListeningProfileController {
     return this.listeningProfile.getProfile(await this.getCurrentUserId(sessionToken));
   }
 
+  @Get("discover-context")
+  async getDiscoverContext(@Headers("x-session-token") sessionToken?: string) {
+    return this.listeningProfile.getDiscoverContext(await this.getCurrentUserId(sessionToken));
+  }
+
   @Post("events")
   async recordEvent(
     @Headers("x-session-token") sessionToken: string | undefined,
