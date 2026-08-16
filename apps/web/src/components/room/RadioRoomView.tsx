@@ -139,6 +139,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
   const autopilot = useRadioAutopilot({
     roomSnapshot: props.roomSnapshot,
     isHost,
+    userId: props.activeSession?.userId ?? null,
     onImportNeteaseTrack: props.onImportNeteaseTrack,
     onImportQqMusicTrack: props.onImportQqMusicTrack,
     onRefreshRoom: props.onRefreshRoom

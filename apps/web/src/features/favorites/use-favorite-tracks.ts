@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { recordListeningFavoriteCandidate } from "@/features/recommendations/listening-profile/use-listening-profile-reporter";
 
 type FavoriteTracksSnapshot = {
   tracks: ProviderTrackFavorite[];
@@ -129,6 +130,7 @@ export function useFavoriteTracks(userId: string | null | undefined) {
       const wasFavorite = previousRecords.some((item) => trackKey(item) === key);
       entry.pendingKey = key;
       entry.error = null;
+      let mutationSucceeded = false;
       entry.records = wasFavorite
         ? previousRecords.filter((item) => trackKey(item) !== key)
         : [
@@ -149,6 +151,7 @@ export function useFavoriteTracks(userId: string | null | undefined) {
           const saved = await musicRoomApi.saveFavoriteTrack(track);
           entry.records = (entry.records ?? []).map((item) => (trackKey(item) === key ? saved : item));
         }
+        mutationSucceeded = true;
       } catch (error) {
         entry.records = previousRecords;
         entry.error = error instanceof Error ? error.message : "更新歌曲收藏失败。";
@@ -156,12 +159,19 @@ export function useFavoriteTracks(userId: string | null | undefined) {
       } finally {
         entry.pendingKey = null;
         refreshSnapshot(entry);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("music-room-favorite-tracks-changed"));
+        if (mutationSucceeded && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("music-room-favorite-tracks-changed", {
+            detail: {
+              userId,
+              track,
+              isFavorite: !wasFavorite
+            }
+          }));
+          void recordListeningFavoriteCandidate(track, !wasFavorite).catch(() => undefined);
         }
       }
     },
-    [entry]
+    [entry, userId]
   );
 
   return {

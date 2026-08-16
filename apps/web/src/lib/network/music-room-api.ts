@@ -5,6 +5,9 @@ import {
   type ApiErrorResponse,
   type AuthSession,
   type IceConfigResponse,
+  type LastFmSimilarTracksResponse,
+  type ListeningAudioFeatureRecord,
+  type ListeningProfileResponse,
   type NeteaseAccountStatus,
   type NeteaseQrStartResponse,
   type NeteaseQrStatusResponse,
@@ -42,6 +45,8 @@ import {
   type RoomSnapshot,
   type RoomRequest,
   type RoomType,
+  type RecordListeningProfileEvent,
+  type SaveListeningAudioFeatures,
   type RoomSyncResponse,
   type TrackMeta,
   type UpdateRoomRequest
@@ -64,33 +69,6 @@ export type QueueMutationResponse = {
 
 export type RadioAutopilotNextTrackMutationResponse = QueueMutationResponse & {
   insertedQueueItemId: string;
-};
-
-export type PlaybackHistoryProvider = "local_upload" | "netease" | "qqmusic";
-
-export type PlaybackHistoryRecord = {
-  provider: PlaybackHistoryProvider;
-  providerTrackId: string;
-  title: string;
-  artist: string;
-  album: string | null;
-  durationMs: number;
-  listenedMs: number;
-};
-
-export type PlaybackHistoryStats = {
-  listenedMs: number;
-  trackCount: number;
-  topTracks: Array<{
-    provider: PlaybackHistoryProvider;
-    providerTrackId: string;
-    title: string;
-    artist: string;
-    album: string | null;
-    durationMs: number;
-    listenedMs: number;
-  }>;
-  rangeDays: number;
 };
 
 export type RoomActivitySummary = {
@@ -301,14 +279,26 @@ export const musicRoomApi = {
       method: "POST"
     }),
   me: () => request<AuthSession>("/v1/auth/me", undefined, { notifyAuthExpired: false }),
-  getPlaybackHistoryStats: () =>
-    request<PlaybackHistoryStats>("/v1/playback-history/stats"),
-  recordPlaybackHistory: (input: PlaybackHistoryRecord) =>
-    request<{ ok: boolean }>("/v1/playback-history", {
+  getListeningProfile: () =>
+    request<ListeningProfileResponse>("/v1/listening-profile"),
+  recordListeningProfileEvent: (input: RecordListeningProfileEvent) =>
+    request<{ ok: boolean }>("/v1/listening-profile/events", {
       method: "POST",
       body: JSON.stringify(input),
       keepalive: true
     }),
+  getListeningAudioFeature: (trackKey: string) =>
+    request<ListeningAudioFeatureRecord | null>(
+      `/v1/listening-profile/audio-features/${encodeURIComponent(trackKey)}`
+    ),
+  saveListeningAudioFeatures: (input: SaveListeningAudioFeatures) =>
+    request<ListeningAudioFeatureRecord>("/v1/listening-profile/audio-features", {
+      method: "POST",
+      body: JSON.stringify(input),
+      keepalive: true
+    }),
+  clearListeningProfile: () =>
+    request<{ ok: boolean }>("/v1/listening-profile", { method: "DELETE" }),
   createRoom: (input: {
     visibility?: "private" | "public";
     roomType: RoomType;
@@ -420,6 +410,16 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  getLastFmSimilarTracks: (input: { artist: string; track: string; limit?: number }) => {
+    const params = new URLSearchParams({
+      artist: input.artist,
+      track: input.track,
+      limit: String(input.limit ?? 100)
+    });
+    return request<LastFmSimilarTracksResponse>(
+      `/v1/recommendations/lastfm/similar-tracks?${params.toString()}`
+    );
+  },
   reorderQueue: (roomId: string, payload: { queueItemIds: string[] }) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/reorder`, {
       method: "PATCH",

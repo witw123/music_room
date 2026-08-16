@@ -9,6 +9,7 @@ import {
   type AudioAssetManifest,
   type TrackLoudness
 } from "@music-room/shared";
+import type { RecommendationFeedbackType } from "../recommendations/recommendation-types";
 import { LocalRepository } from "./local-repository";
 
 export type CachedLibraryTrackRecord = {
@@ -190,6 +191,19 @@ export type FavoriteProviderAlbumRecord = {
   updatedAt: string;
 };
 
+export type RecommendationEventRecord = {
+  id: string;
+  userId: string;
+  candidateKey: string;
+  title: string;
+  artist: string;
+  artistKey: string;
+  source: string;
+  eventType: RecommendationFeedbackType;
+  contextKey: string | null;
+  occurredAt: number;
+};
+
 export class MusicRoomDatabase extends Dexie {
   cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
@@ -204,6 +218,7 @@ export class MusicRoomDatabase extends Dexie {
   localAudioCacheFiles!: Table<LocalAudioCacheFileRecord, string>;
   localPlaylistTracks!: Table<LocalPlaylistTrackRecord, string>;
   favoriteProviderAlbums!: Table<FavoriteProviderAlbumRecord, string>;
+  recommendationEvents!: Table<RecommendationEventRecord, string>;
 
   constructor() {
     super("music-room");
@@ -442,6 +457,9 @@ export class MusicRoomDatabase extends Dexie {
     });
     this.version(19).stores({
       playbackAssetDraftUnits: "&draftUnitId, draftId, unitIndex, [draftId+unitIndex]"
+    });
+    this.version(20).stores({
+      recommendationEvents: "&id, userId, candidateKey, artistKey, occurredAt, [userId+occurredAt]"
     });
   }
 }

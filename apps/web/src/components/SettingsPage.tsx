@@ -14,6 +14,7 @@ import { ProviderDataImportSection } from "@/components/ProviderDataImportSectio
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { clearRecommendationProfile } from "@/features/recommendations/recommendation-store";
 import {
   appSettingsChangeEvent,
   getDefaultAppSettings,
@@ -113,6 +114,28 @@ export function SettingsPage({
     if (!window.confirm("确定要恢复默认设置吗？本地歌曲和歌单不会被删除。")) return;
     setSettings(resetAppSettings());
     setStatusMessage("已恢复默认设置");
+  }
+
+  async function resetListeningProfile() {
+    if (!window.confirm("确定要重置听歌画像吗？此操作会清除当前账号的聆听记录和画像统计。")) return;
+    try {
+      await musicRoomApi.clearListeningProfile();
+      setStatusMessage("听歌画像已重置");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "听歌画像重置失败。");
+    }
+  }
+
+  async function resetRadioRecommendationProfile() {
+    if (!window.confirm("确定要重置电台推荐偏好吗？自动续播会重新开始学习。")) return;
+    const userId = activeSession?.userId;
+    if (!userId) return;
+    try {
+      await clearRecommendationProfile(userId);
+      setStatusMessage("电台推荐偏好已重置");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "电台推荐偏好重置失败。");
+    }
   }
 
   const customLayoutEnabled = settings.layout.customLayout.enabled;
@@ -347,6 +370,18 @@ export function SettingsPage({
               >
                 {[3, 5, 7].map((lineCount) => <option key={lineCount} value={lineCount}>{lineCount} 行</option>)}
               </select>
+            </SettingRow>
+          </SettingsSection>
+
+          <SettingsSection title="隐私与数据">
+            <SettingRow label="重置听歌画像" description="清除当前账号已保存的聆听记录和画像统计，不会删除歌曲、收藏或缓存。">
+              <Button onClick={() => void resetListeningProfile()} size="sm" type="button" variant="outline">重置画像</Button>
+            </SettingRow>
+            <SettingRow label="重置电台推荐偏好" description="清除当前设备上的电台自动续播偏好，不影响听歌画像。">
+              <Button onClick={() => void resetRadioRecommendationProfile()} size="sm" type="button" variant="outline">重置偏好</Button>
+            </SettingRow>
+            <SettingRow label="声学特征查询" description="仅以歌名、歌手、专辑和时长查询特征，不会上传本地或缓存音频。">
+              <span className="text-xs text-foreground-muted">ReccoBeats</span>
             </SettingRow>
           </SettingsSection>
 

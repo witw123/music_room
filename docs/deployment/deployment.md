@@ -103,6 +103,14 @@ Web 的 `NEXT_PUBLIC_QQMUSIC_ENABLED` 会在 Web 镜像构建时写入前端 bun
 
 QQ 音乐二维码登录后，Cookie 仅在服务端加密保存。平台接口、CDN 和版权状态可能变化，会员、付费或受限歌曲不保证可用。
 
+自由电台的相似歌曲召回还需要仅配置在 Server 容器中的 Last.fm Key：
+
+```dotenv
+LASTFM_API_KEY=<lastfm-api-key>
+```
+
+该 Key 不会写入 Web bundle。服务端只代理相似歌曲和标签请求，不保存房主偏好、推荐结果或播放画像。
+
 ## 必查健康项
 
 至少确认这些地址是通的：

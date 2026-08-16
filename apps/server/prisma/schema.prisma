@@ -45,7 +45,8 @@ model User {
   favoriteAlbums UserFavoriteAlbum[]
   favoriteTracks UserFavoriteTrack[]
   favoriteArtists UserFavoriteArtist[]
-  playbackHistory UserPlaybackDaily[]
+  listeningEvents  UserListeningEvent[]
+  listeningTracks  UserListeningTrack[]
   roomActivity   UserRoomActivity[]
   adminSessions  AdminSession[]
   userSessions   UserSession[]
@@ -200,26 +201,71 @@ model UserFavoriteArtist {
   @@index([userId, updatedAt])
 }
 
-model UserPlaybackDaily {
-  id             String   @id
-  userId         String
-  day            DateTime @db.Date
-  provider       String
+model UserListeningEvent {
+  id            String   @id
+  userId        String
+  clientEventId String
+  eventType     String
+  candidateKey  String
+  provider      String
   providerTrackId String
-  title          String
-  artist         String
-  album          String?
-  durationMs     Int      @default(0)
-  listenedMs     Int      @default(0)
-  lastPlayedAt   DateTime
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  title         String
+  artist        String
+  album         String?
+  durationMs    Int      @default(0)
+  listenedMs    BigInt   @default(0)
+  completed     Boolean  @default(false)
+  quickSkipped  Boolean  @default(false)
+  timezoneOffsetMinutes Int @default(0)
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, day, provider, providerTrackId])
-  @@index([userId, day])
+  @@unique([userId, clientEventId])
+  @@index([userId, occurredAt])
+}
+
+model UserListeningTrack {
+  id              String   @id
+  userId          String
+  candidateKey    String
+  provider        String
+  providerTrackId String
+  title           String
+  artist          String
+  album           String?
+  durationMs      Int      @default(0)
+  artworkUrl      String?
+  playCount       Int      @default(0)
+  listenedMs      BigInt   @default(0)
+  completionCount Int      @default(0)
+  quickSkipCount  Int      @default(0)
+  isFavorite      Boolean  @default(false)
+  firstPlayedAt   DateTime?
+  lastPlayedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, candidateKey])
   @@index([userId, lastPlayedAt])
+}
+
+model ListeningAudioFeature {
+  trackKey          String   @id
+  title             String
+  artist            String
+  album             String?
+  durationMs        Int      @default(0)
+  providerTrackId   String?
+  reccoBeatsTrackId String?
+  status            String
+  features          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model UserRoomActivity {

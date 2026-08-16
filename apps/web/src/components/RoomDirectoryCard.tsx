@@ -13,7 +13,6 @@ type RoomCardTheme = {
   border: string;
   glow: string;
   label: string;
-  scene: RoomType;
   soft: string;
 };
 
@@ -30,7 +29,6 @@ const roomCardThemes: Record<RoomType, RoomCardTheme> = {
     border: "rgba(0, 112, 243, 0.58)",
     glow: "rgba(0, 112, 243, 0.22)",
     label: "多人互动",
-    scene: "interactive",
     soft: "rgba(0, 112, 243, 0.16)"
   },
   request: {
@@ -38,7 +36,6 @@ const roomCardThemes: Record<RoomType, RoomCardTheme> = {
     border: "rgba(192, 38, 211, 0.58)",
     glow: "rgba(192, 38, 211, 0.2)",
     label: "点歌房",
-    scene: "request",
     soft: "rgba(192, 38, 211, 0.15)"
   },
   radio: {
@@ -46,7 +43,6 @@ const roomCardThemes: Record<RoomType, RoomCardTheme> = {
     border: "rgba(0, 169, 214, 0.58)",
     glow: "rgba(0, 169, 214, 0.2)",
     label: "自由电台",
-    scene: "radio",
     soft: "rgba(0, 169, 214, 0.15)"
   }
 };
@@ -89,7 +85,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       <section
         className="relative mt-3 aspect-[3/1] overflow-hidden rounded-xl border border-white/10 bg-[#090a0e]"
-        data-card-scene={theme.scene}
+        data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
         <RoomStageScene roomType={room.roomType} />
@@ -105,39 +101,33 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
   );
 }
 
+const roomCoverScenes: Record<RoomType, { overlayClassName: string; position: string }> = {
+  interactive: {
+    overlayClassName: "bg-[linear-gradient(90deg,rgba(3,9,32,0.42),transparent_60%),linear-gradient(0deg,rgba(2,5,16,0.34),transparent_65%)]",
+    position: "right 5%"
+  },
+  request: {
+    overlayClassName: "bg-[linear-gradient(90deg,rgba(26,4,43,0.42),transparent_62%),linear-gradient(0deg,rgba(8,3,18,0.32),transparent_65%)]",
+    position: "right 53%"
+  },
+  radio: {
+    overlayClassName: "bg-[linear-gradient(90deg,rgba(0,35,37,0.42),transparent_62%),linear-gradient(0deg,rgba(3,12,13,0.34),transparent_65%)]",
+    position: "right 97%"
+  }
+};
+
 function RoomStageScene({ roomType }: { roomType: RoomType }) {
-  if (roomType === "request") return <RequestStageScene />;
-  if (roomType === "radio") return <RadioStageScene />;
-  return <InteractiveStageScene />;
-}
-
-function InteractiveStageScene() {
+  const scene = roomCoverScenes[roomType];
   return <div aria-hidden="true" className="absolute inset-0 overflow-hidden">
-    <div className="absolute inset-x-7 top-6 flex items-center gap-3">
-      <span className="h-px flex-1 bg-white/10" />
-      {[0, 1, 2, 3, 4].map((index) => <span className="relative h-5 w-5 rounded-md border border-[color:var(--room-border)] bg-[color:var(--room-soft)]" key={index}><span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color:var(--room-accent)]" /></span>)}
-      <span className="h-px flex-1 bg-white/10" />
-    </div>
-    <div className="absolute bottom-7 left-8 right-8 flex h-14 items-end justify-between gap-2 border-b border-white/10 px-3">
-      {[18, 35, 26, 49, 30, 42, 22, 36, 16].map((height, index) => <span className="w-2 rounded-t-sm bg-[color:var(--room-accent)] opacity-80" key={`${height}-${index}`} style={{ height }} />)}
-    </div>
-    <div className="absolute left-1/2 top-[52%] flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-xl border border-[color:var(--room-border)] bg-[#10131a] shadow-[0_0_30px_var(--room-shadow)]"><RoomTypeGlyph large roomType="interactive" /></div>
-  </div>;
-}
-
-function RequestStageScene() {
-  return <div aria-hidden="true" className="absolute inset-0 overflow-hidden">
-    <div className="absolute left-7 top-7 h-16 w-[44%] -rotate-6 rounded-xl border border-white/10 bg-[#121017] opacity-70" />
-    <div className="absolute left-[19%] top-5 h-16 w-[46%] rotate-3 rounded-xl border border-[color:var(--room-border)] bg-[#141018] shadow-[0_0_28px_var(--room-shadow)]"><span className="absolute left-4 top-4 h-7 w-7 rounded-md bg-[color:var(--room-soft)]" /><span className="absolute left-14 right-5 top-4 h-1.5 rounded-full bg-white/25" /><span className="absolute left-14 right-12 top-8 h-1 rounded-full bg-white/10" /></div>
-    <div className="absolute bottom-6 right-7 flex h-16 w-[46%] items-center gap-3 rounded-xl border border-[color:var(--room-border)] bg-[#120f17] px-4 shadow-[0_0_30px_var(--room-shadow)]"><RoomTypeGlyph large roomType="request" /><div className="flex flex-1 items-end gap-1.5">{[13, 25, 18, 35, 23, 29].map((height, index) => <span className="w-1.5 rounded-full bg-[color:var(--room-accent)]" key={`${height}-${index}`} style={{ height }} />)}</div></div>
-  </div>;
-}
-
-function RadioStageScene() {
-  return <div aria-hidden="true" className="absolute inset-0 overflow-hidden">
-    <div className="absolute inset-x-7 top-6 flex items-center gap-2 text-[9px] tabular-nums text-white/35"><span>88</span><span className="h-px flex-1 bg-white/10" /><span>96</span><span className="h-px flex-1 bg-[color:var(--room-accent)] opacity-60" /><span>104</span><span className="h-px flex-1 bg-white/10" /><span>108</span></div>
-    <div className="absolute left-7 top-12 flex h-[4.5rem] w-[38%] items-center justify-center rounded-xl border border-[color:var(--room-border)] bg-[#0d1418] shadow-[0_0_30px_var(--room-shadow)]"><RoomTypeGlyph large roomType="radio" /></div>
-    <div className="absolute bottom-6 right-7 flex h-[4.5rem] w-[46%] items-end justify-between gap-1.5 border-b border-white/10 px-3 pb-2">{[12, 22, 35, 25, 48, 31, 41, 20].map((height, index) => <span className="w-2 rounded-t-sm bg-[color:var(--room-accent)] opacity-85" key={`${height}-${index}`} style={{ height }} />)}</div>
+    <div
+      className="absolute inset-0 bg-no-repeat transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+      style={{
+        backgroundImage: "url('/room-covers/room-type-scenes.png')",
+        backgroundPosition: scene.position,
+        backgroundSize: "auto 330%"
+      }}
+    />
+    <div className={`absolute inset-0 ${scene.overlayClassName}`} />
   </div>;
 }
 

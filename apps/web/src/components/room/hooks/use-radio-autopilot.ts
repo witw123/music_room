@@ -3,16 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   NeteaseTrackCandidate,
-  ProviderTrackCandidate,
   QqMusicTrackCandidate,
-  RoomSnapshot,
-  TrackMeta
+  RoomSnapshot
 } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import {
+  getRadioRecommendationCandidates,
+  type RadioRecommendationCandidate
+} from "@/features/recommendations/radio-recommendations";
+import { importRadioRecommendationCandidates } from "@/features/recommendations/radio-recommendation-import";
+import { recordRadioRecommendationUnavailable } from "@/features/recommendations/radio-recommendation-feedback";
 
 type UseRadioAutopilotOptions = {
   roomSnapshot: RoomSnapshot;
   isHost: boolean;
+  userId: string | null;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
@@ -37,14 +41,16 @@ export type RadioAutopilotNextTrack = {
 export function useRadioAutopilot({
   roomSnapshot,
   isHost,
+  userId,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
   onRefreshRoom
 }: UseRadioAutopilotOptions) {
   const [state, setState] = useState<RadioAutopilotState>({ kind: "idle", message: null });
-  const [preloadingCandidate, setPreloadingCandidate] = useState<ProviderTrackCandidate | null>(null);
+  const [preloadingCandidate, setPreloadingCandidate] = useState<RadioRecommendationCandidate | null>(null);
   const runningRef = useRef(false);
   const pausedRef = useRef(false);
+  const refillGenerationRef = useRef(0);
   const roomSnapshotRef = useRef(roomSnapshot);
   const isAutopilotEnabled = roomSnapshot.room.radioAutopilot?.enabled === true;
   const currentSeedKey = getCurrentAutopilotSeed(roomSnapshot)?.key ?? null;
@@ -54,6 +60,13 @@ export function useRadioAutopilot({
     roomSnapshotRef.current = roomSnapshot;
   }, [roomSnapshot]);
 
+  useEffect(() => {
+    refillGenerationRef.current += 1;
+    return () => {
+      refillGenerationRef.current += 1;
+    };
+  }, [currentSeedKey, isAutopilotEnabled, isHost]);
+
   const refill = useCallback(async (mode: "automatic" | "manual") => {
     const snapshot = roomSnapshotRef.current;
     const autopilot = snapshot.room.radioAutopilot;
@@ -61,6 +74,7 @@ export function useRadioAutopilot({
     const isAutomatic = mode === "automatic";
     if (
       !isHost ||
+      !userId ||
       !seed ||
       snapshot.room.playback.status !== "playing" ||
       !snapshot.room.playback.currentTrackId ||
@@ -74,53 +88,58 @@ export function useRadioAutopilot({
       return;
     }
 
+    const refillGeneration = refillGenerationRef.current;
+    const isCurrentRefill = () => {
+      const current = roomSnapshotRef.current;
+      return refillGeneration === refillGenerationRef.current &&
+        getCurrentAutopilotSeed(current)?.key === seed.key;
+    };
     runningRef.current = true;
     setState({ kind: "refilling", message: "正在分析并准备下一首…" });
     try {
-      const relatedCandidates = await loadRelatedCandidates(seed.provider, seed.providerTrackId).catch(() => []);
-      let selected = selectRadioAutopilotCandidates(snapshot, relatedCandidates, 1)[0];
-      if (!selected) {
-        const searchedCandidates = await searchRecommendationCandidates(seed.provider, seed.track);
-        selected = selectRadioAutopilotCandidates(snapshot, [...relatedCandidates, ...searchedCandidates], 1)[0];
-      }
-      if (!selected) {
+      const candidates = await getRadioRecommendationCandidates({
+        userId,
+        snapshot,
+        provider: seed.provider,
+        seed: {
+          title: seed.track.title,
+          artist: seed.track.artist
+        }
+      });
+      if (!isCurrentRefill()) return;
+      if (candidates.length === 0) {
         pausedRef.current = true;
         setPreloadingCandidate(null);
-        setState({ kind: "paused", message: "关联歌单和搜索结果中都没有可用歌曲。" });
+        setState({ kind: "paused", message: "没有找到可播放的相似歌曲。" });
         return;
       }
 
-      setPreloadingCandidate(selected);
-      setState({ kind: "refilling", message: `正在预加载《${selected.title}》…` });
-      if (selected.provider === "netease") {
-        await onImportNeteaseTrack(selected);
-      } else {
-        await onImportQqMusicTrack(selected);
-      }
-
-      const freshSnapshot = await musicRoomApi.getRoom(snapshot.room.id);
-      const imported = freshSnapshot.tracks.find(
-        (track) =>
-          track.sourceRef?.provider === selected.provider &&
-          track.sourceRef.trackId === selected.providerTrackId
-      );
-      if (!imported) {
-        throw new Error(`《${selected.title}》导入后未同步到曲库。`);
-      }
-      if (getCurrentAutopilotSeed(freshSnapshot)?.key !== seed.key) {
-        setPreloadingCandidate(null);
-        setState({ kind: "idle", message: "当前播放歌曲已切换，已取消上一首歌曲的补歌任务。" });
-        return;
-      }
-
-      await musicRoomApi.insertRadioAutopilotNextTrack(snapshot.room.id, {
-        trackId: imported.id
+      const imported = await importRadioRecommendationCandidates({
+        roomId: snapshot.room.id,
+        candidates,
+        isCurrent: isCurrentRefill,
+        isSeedCurrent: (freshSnapshot) => getCurrentAutopilotSeed(freshSnapshot)?.key === seed.key,
+        onCandidate: (candidate) => {
+          setPreloadingCandidate(candidate);
+          setState({ kind: "refilling", message: `正在预加载《${candidate.candidate.title}》…` });
+        },
+        onCandidateFailed: (candidate) => {
+          void recordRadioRecommendationUnavailable({
+            userId,
+            roomId: snapshot.room.id,
+            candidate: candidate.candidate
+          }).catch(() => undefined);
+        },
+        onImportNeteaseTrack,
+        onImportQqMusicTrack,
+        onRefreshRoom
       });
+      if (imported.kind === "cancelled") return;
+      if (imported.kind === "failed") throw imported.error;
 
       pausedRef.current = false;
-      const refreshedSnapshot = await onRefreshRoom();
-      if (refreshedSnapshot) roomSnapshotRef.current = refreshedSnapshot;
-      setState({ kind: "idle", message: `已将《${selected.title}》设为下一首。` });
+      if (imported.refreshedSnapshot) roomSnapshotRef.current = imported.refreshedSnapshot;
+      setState({ kind: "idle", message: `已将《${imported.candidate.candidate.title}》设为下一首。` });
     } catch (error) {
       pausedRef.current = true;
       setPreloadingCandidate(null);
@@ -128,7 +147,7 @@ export function useRadioAutopilot({
     } finally {
       runningRef.current = false;
     }
-  }, [isHost, onImportNeteaseTrack, onImportQqMusicTrack, onRefreshRoom]);
+  }, [isHost, onImportNeteaseTrack, onImportQqMusicTrack, onRefreshRoom, userId]);
 
   useEffect(() => {
     pausedRef.current = false;
@@ -204,75 +223,6 @@ function getCurrentProviderSource(snapshot: RoomSnapshot) {
   };
 }
 
-async function loadRelatedCandidates(
-  provider: "netease" | "qqmusic",
-  providerTrackId: string
-) {
-  const relatedTrackId = provider === "qqmusic"
-    ? (await musicRoomApi.getQqMusicTrack(providerTrackId)).relatedTrackId ?? providerTrackId
-    : providerTrackId;
-  const related = provider === "netease"
-    ? await musicRoomApi.listNeteaseRelatedPlaylists(relatedTrackId)
-    : await musicRoomApi.listQqMusicRelatedPlaylists(relatedTrackId);
-  const playlists = related.items.slice(0, 3);
-  const details = await Promise.all(
-    playlists.map((playlist) => provider === "netease"
-      ? musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
-      : musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId))
-  );
-  return details.flatMap((playlist) => playlist.tracks);
-}
-
-async function searchRecommendationCandidates(
-  provider: "netease" | "qqmusic",
-  track: TrackMeta
-) {
-  const queries = [...new Set(
-    [track.artist, track.album ?? track.title]
-      .map((value) => value.trim())
-      .filter(Boolean)
-  )];
-  const candidates: ProviderTrackCandidate[] = [];
-  let firstError: unknown = null;
-  for (const keywords of queries) {
-    try {
-      const result = provider === "netease"
-        ? await musicRoomApi.searchNeteaseTracks(keywords, { limit: 30 })
-        : await musicRoomApi.searchQqMusicTracks(keywords, { limit: 30 });
-      candidates.push(...result.items);
-    } catch (error) {
-      firstError ??= error;
-    }
-  }
-  if (candidates.length === 0 && firstError) throw firstError;
-  return candidates;
-}
-
-export function selectRadioAutopilotCandidates(
-  snapshot: RoomSnapshot,
-  candidates: ProviderTrackCandidate[],
-  limit: number
-) {
-  const queuedProviderTrackIds = new Set(
-    snapshot.queue.flatMap((queueItem) => {
-      const track = snapshot.tracks.find((item) => item.id === queueItem.trackId);
-      return track?.sourceRef
-        ? [`${track.sourceRef.provider}:${track.sourceRef.trackId}`]
-        : [];
-    })
-  );
-  const seen = new Set<string>();
-
-  return candidates.filter((candidate) => {
-    const key = `${candidate.provider}:${candidate.providerTrackId}`;
-    if (queuedProviderTrackIds.has(key) || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  }).slice(0, Math.max(0, limit));
-}
-
 function getNextAutopilotTrack(snapshot: RoomSnapshot): RadioAutopilotNextTrack | null {
   const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
   const currentIndex = currentQueueItemId
@@ -298,9 +248,10 @@ function getNextAutopilotTrack(snapshot: RoomSnapshot): RadioAutopilotNextTrack 
 }
 
 function toNextTrack(
-  candidate: ProviderTrackCandidate,
+  recommendation: RadioRecommendationCandidate,
   preloadStatus: RadioAutopilotNextTrack["preloadStatus"]
 ): RadioAutopilotNextTrack {
+  const candidate = recommendation.candidate;
   return {
     key: `${candidate.provider}:${candidate.providerTrackId}`,
     title: candidate.title,
