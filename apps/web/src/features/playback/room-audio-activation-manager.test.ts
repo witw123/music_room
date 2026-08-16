@@ -124,6 +124,48 @@ describe("RoomAudioActivationManager", () => {
     expect(audio.play).not.toHaveBeenCalled();
   });
 
+  it("does not start playback when a request becomes obsolete during context resume", async () => {
+    let notifyResumeStarted!: () => void;
+    let finishResume!: () => void;
+    const resumeStarted = new Promise<void>((resolve) => {
+      notifyResumeStarted = resolve;
+    });
+    class DelayedAudioContext {
+      state: AudioContextState = "suspended";
+      resume = vi.fn(() => {
+        notifyResumeStarted();
+        return new Promise<void>((resolve) => {
+          finishResume = () => {
+            this.state = "running";
+            resolve();
+          };
+        });
+      });
+      addEventListener = vi.fn();
+    }
+    vi.stubGlobal("window", {
+      AudioContext: DelayedAudioContext,
+      addEventListener: vi.fn()
+    });
+
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    let isCurrent = true;
+    const playRequest = manager.playElement(audio, {
+      isCurrent: () => isCurrent
+    });
+
+    await resumeStarted;
+    isCurrent = false;
+    finishResume();
+
+    await expect(playRequest).resolves.toEqual({
+      ok: false,
+      error: "play-obsolete"
+    });
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
   it("does not replay an already-playing element for the same source", async () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();

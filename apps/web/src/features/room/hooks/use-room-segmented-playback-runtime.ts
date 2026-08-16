@@ -1739,6 +1739,21 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             });
           }
         }
+        const isCurrentRemoteAudioRequest = () => {
+          const currentRuntime = runtimeInputRef.current;
+          const currentRoomPlayback = currentRuntime.roomSnapshot?.room.playback ?? null;
+          return !cancelled &&
+            currentRoomPlayback?.status === "playing" &&
+            resolveLocalAudioTimelineKey(
+              currentRoomPlayback,
+              currentRuntime.playbackBarrier
+            ) === operationTimelineKey &&
+            resolveCurrentSourcePeerId(
+              currentRuntime.roomSnapshot,
+              currentRoomPlayback
+            ) === sourcePeerId &&
+            audio.srcObject === remote.remoteStream;
+        };
         const result = await roomAudioOutput.playElement(audio, {
           // Recovery must not keep replaying an already-playing MediaStream.
           // Force is only needed for an authoritative timeline replacement.
@@ -1748,22 +1763,13 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           // iPad Safari while no audible route exists.
           resumeAudioContext: remoteUsesWebAudioGraph,
           requireRunningAudioContext: remoteUsesWebAudioGraph,
-          allowMutedFallback: false
+          allowMutedFallback: false,
+          // Context resume can finish after a background pause. Revalidate the
+          // room timeline immediately before play() so that obsolete work
+          // cannot restart a paused remote stream when the page wakes up.
+          isCurrent: isCurrentRemoteAudioRequest
         });
-        const currentRuntime = runtimeInputRef.current;
-        const currentRoomPlayback = currentRuntime.roomSnapshot?.room.playback ?? null;
-        const remoteOperationStillCurrent = !cancelled &&
-          currentRoomPlayback !== null &&
-          resolveLocalAudioTimelineKey(
-            currentRoomPlayback,
-            currentRuntime.playbackBarrier
-          ) === operationTimelineKey &&
-          resolveCurrentSourcePeerId(
-            currentRuntime.roomSnapshot,
-            currentRoomPlayback
-          ) === sourcePeerId &&
-          audio.srcObject === remote.remoteStream;
-        if (!remoteOperationStillCurrent) {
+        if (!isCurrentRemoteAudioRequest()) {
           if (audio.srcObject === remote.remoteStream) {
             audio.pause();
           }
