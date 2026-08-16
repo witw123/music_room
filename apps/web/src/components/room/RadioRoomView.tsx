@@ -43,6 +43,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             currentTrack={props.currentTrack}
             isHost={isHost}
             onAddToQueue={props.onAddToQueue}
+            onDeleteTrack={props.onDeleteTrack}
             roomTracks={props.roomSnapshot.tracks}
           />
         </div>
@@ -57,27 +58,29 @@ function RadioLibraryList({
   currentTrack,
   isHost,
   onAddToQueue,
+  onDeleteTrack,
   roomTracks,
 }: {
   currentTrack: TrackMeta | null;
   isHost: boolean;
   onAddToQueue: (trackId: string) => Promise<unknown>;
+  onDeleteTrack: (trackId: string) => Promise<void>;
   roomTracks: TrackMeta[];
 }) {
-  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const addTrackToQueue = async (trackId: string) => {
-    if (pendingTrackId) return;
-    setPendingTrackId(trackId);
+  const runTrackAction = async (key: string, action: () => Promise<unknown>) => {
+    if (pendingAction) return;
+    setPendingAction(key);
     setErrorMessage(null);
     try {
-      await onAddToQueue(trackId);
+      await action();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "歌曲未能加入队列，请稍后重试。");
+      setErrorMessage(error instanceof Error ? error.message : "曲库操作失败，请稍后重试。");
     } finally {
-      setPendingTrackId(null);
+      setPendingAction(null);
     }
   };
 
@@ -98,7 +101,7 @@ function RadioLibraryList({
       </header>
       <div className="min-h-0 flex-1 overflow-visible px-4 pb-4 sm:px-6 lg:hide-scrollbar lg:overflow-y-auto lg:px-7 lg:pb-5" id="radio-library-tracks">
         <div className="space-y-1">
-          {roomTracks.map((track, index) => <div className={index >= 4 && !isExpanded && track.id !== currentTrack?.id ? "hidden lg:block" : undefined} key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={addTrackToQueue} pending={pendingTrackId === track.id} track={track} /></div>)}
+          {roomTracks.map((track, index) => <div className={index >= 4 && !isExpanded && track.id !== currentTrack?.id ? "hidden lg:block" : undefined} key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={() => runTrackAction(`queue:${track.id}`, () => onAddToQueue(track.id))} onDeleteTrack={() => runTrackAction(`delete:${track.id}`, () => onDeleteTrack(track.id))} pendingAction={pendingAction} track={track} /></div>)}
         </div>
         {errorMessage ? <p className="mt-3 text-xs text-danger" role="status">{errorMessage}</p> : null}
       </div>
@@ -264,8 +267,10 @@ function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack
   );
 }
 
-function LibraryTrack({ track, index, isCurrent, isHost, pending, onAddToQueue }: { track: TrackMeta; index: number; isCurrent: boolean; isHost: boolean; pending: boolean; onAddToQueue: (trackId: string) => Promise<void> }) {
-  return <article className={`grid min-w-0 grid-cols-[1.25rem_3rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[1.25rem_3rem_minmax(0,1fr)_auto] sm:px-3 ${isCurrent ? "bg-accent/[0.06]" : ""}`}><span className={`pt-1 text-right font-mono text-xs ${isCurrent ? "text-accent" : "text-foreground-muted"}`}>{String(index).padStart(2, "0")}</span><TrackArtwork track={track} /><div className="min-w-0"><p className="break-words text-sm font-medium leading-5 text-foreground">{track.title}</p><p className="mt-1 break-words text-xs leading-5 text-foreground-muted">{track.artist}</p><div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-4 text-foreground-muted"><span className="break-words">{track.album ?? "未标注专辑"}</span><span>{formatDuration(track.durationMs)}</span><span>{getTrackSourceLabel(track)}</span>{track.bitrate ? <span>{Math.round(track.bitrate / 1_000)} kbps</span> : null}</div></div>{isHost ? <Button className="col-start-3 justify-self-start sm:col-start-auto sm:justify-self-end sm:self-center" disabled={pending} onClick={() => void onAddToQueue(track.id)} size="sm" type="button" variant="outline">{pending ? "加入中…" : "加入队列"}</Button> : null}</article>;
+function LibraryTrack({ track, index, isCurrent, isHost, pendingAction, onAddToQueue, onDeleteTrack }: { track: TrackMeta; index: number; isCurrent: boolean; isHost: boolean; pendingAction: string | null; onAddToQueue: () => Promise<void>; onDeleteTrack: () => Promise<void> }) {
+  const isQueuePending = pendingAction === `queue:${track.id}`;
+  const isDeletePending = pendingAction === `delete:${track.id}`;
+  return <article className={`grid min-w-0 grid-cols-[1.25rem_3rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[1.25rem_3rem_minmax(0,1fr)_auto] sm:px-3 ${isCurrent ? "bg-accent/[0.06]" : ""}`}><span className={`pt-1 text-right font-mono text-xs ${isCurrent ? "text-accent" : "text-foreground-muted"}`}>{String(index).padStart(2, "0")}</span><TrackArtwork track={track} /><div className="min-w-0"><p className="break-words text-sm font-medium leading-5 text-foreground">{track.title}</p><p className="mt-1 break-words text-xs leading-5 text-foreground-muted">{track.artist}</p><div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-4 text-foreground-muted"><span className="break-words">{track.album ?? "未标注专辑"}</span><span>{formatDuration(track.durationMs)}</span><span>{getTrackSourceLabel(track)}</span>{track.bitrate ? <span>{Math.round(track.bitrate / 1_000)} kbps</span> : null}</div></div>{isHost ? <div className="col-start-3 flex min-w-max items-center gap-0.5 justify-self-start sm:col-start-auto sm:justify-self-end sm:self-center sm:gap-1"><Button aria-label={`将《${track.title}》加入队列`} data-testid="radio-track-add-queue-button" className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:h-8 sm:w-8" disabled={pendingAction !== null} onClick={() => void onAddToQueue()} size="icon" title={isQueuePending ? "加入中" : "加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M12 5v14M5 12h14" /></svg></Button><Button aria-label={`删除《${track.title}》`} data-testid="radio-track-delete-button" className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:h-8 sm:w-8" disabled={pendingAction !== null} onClick={() => void onDeleteTrack()} size="icon" title={isDeletePending ? "删除中" : "删除"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></Button></div> : null}</article>;
 }
 
 function TrackArtwork({ track }: { track: TrackMeta }) {
