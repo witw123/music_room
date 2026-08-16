@@ -56,15 +56,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
   );
 
   return (
-    <section aria-labelledby="listening-profile-title" className="mt-8 border-y border-surface-border py-6 sm:py-7">
-      <header className="flex min-w-0 flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium text-accent">个人音乐档案</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground" id="listening-profile-title">我的听歌画像</h2>
-        </div>
-        {profile?.startedAt ? <p className="text-xs text-foreground-muted">始于 {formatDate(profile.startedAt)}</p> : null}
-      </header>
-
+    <section className="mt-8 border-y border-surface-border py-6 sm:py-7">
       {loading ? <ProfileLoading /> : !profile || profile.totalPlayCount === 0 ? <ProfileEmpty /> : (
         <div className="mt-6">
           <dl className="grid grid-cols-2 border-y border-surface-border sm:grid-cols-4">
@@ -75,12 +67,12 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
           </dl>
 
           <section className="py-6">
-            <SectionTitle title="声音偏好" />
+            <SectionTitle title="歌曲偏好" />
             {profile.tasteTags.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {profile.tasteTags.map((tag) => <span className="border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent" key={tag}>{tag}</span>)}
               </div>
-            ) : <p className="mt-3 text-sm text-foreground-muted">正在了解你的声音偏好</p>}
+            ) : <p className="mt-3 text-sm text-foreground-muted">已记录播放，正在收集歌曲标签</p>}
           </section>
 
           <div className="grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-2 lg:gap-10">
@@ -105,12 +97,12 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
               <SectionTitle title="常听时段" />
               <div className="mt-4 space-y-3">
                 {profile.timeBands.map((band) => (
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_3.5rem] items-center gap-3" key={band.id}>
+                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_4.75rem] items-center gap-3" key={band.id}>
                     <span className="text-xs text-foreground-muted">{timeBandLabels[band.id]}</span>
                     <div aria-label={`${timeBandLabels[band.id]} ${formatDuration(band.listenedMs)}`} className="h-1.5 overflow-hidden bg-surface-hover">
                       <div className="h-full bg-accent" style={{ width: `${Math.max(band.listenedMs ? 4 : 0, band.listenedMs / timeBandMaximum * 100)}%` }} />
                     </div>
-                    <span className="text-right text-xs tabular-nums text-foreground-muted">{formatDuration(band.listenedMs)}</span>
+                    <span className="whitespace-nowrap text-right text-xs tabular-nums text-foreground-muted">{formatDuration(band.listenedMs)}</span>
                   </div>
                 ))}
               </div>
@@ -162,10 +154,6 @@ function formatDuration(value: number) {
   const minutes = Math.max(0, Math.floor(value / 60_000));
   if (minutes < 1) return "不足 1 分钟";
   return minutes >= 60 ? `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟` : `${minutes} 分钟`;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
 function formatDateTime(value: string) {

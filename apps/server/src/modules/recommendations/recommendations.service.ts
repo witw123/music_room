@@ -95,6 +95,24 @@ export class RecommendationsService {
     };
   }
 
+  async getLastFmTrackTags(
+    userId: string,
+    input: LastFmSimilarTracksQuery
+  ): Promise<LastFmTrackTag[]> {
+    const apiKey = process.env.LASTFM_API_KEY?.trim();
+    if (!apiKey) {
+      throw this.unavailableError(HttpStatus.SERVICE_UNAVAILABLE, "Last.fm metadata is not configured.");
+    }
+
+    this.assertRateLimit(userId);
+    const payload = await this.fetchLastFm("track.getTopTags", input, apiKey);
+    const parsed = lastFmTagsPayloadSchema.safeParse(payload);
+    if (!parsed.success || parsed.data.error !== undefined) {
+      throw this.unavailableError(HttpStatus.BAD_GATEWAY, "Last.fm metadata is unavailable.");
+    }
+    return normalizeTags(parsed.data);
+  }
+
   private async fetchLastFm(
     method: "track.getSimilar" | "track.getTopTags",
     input: LastFmSimilarTracksQuery,

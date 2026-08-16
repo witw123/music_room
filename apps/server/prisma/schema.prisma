@@ -254,18 +254,19 @@ model UserListeningTrack {
   @@index([userId, lastPlayedAt])
 }
 
-model ListeningAudioFeature {
-  trackKey          String   @id
-  title             String
-  artist            String
-  album             String?
-  durationMs        Int      @default(0)
-  providerTrackId   String?
-  reccoBeatsTrackId String?
-  status            String
-  features          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+model ListeningTrackMetadata {
+  trackKey        String   @id
+  provider        String
+  providerTrackId String
+  title           String
+  artist          String
+  album           String?
+  tags            Json
+  status          String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, updatedAt])
 }
 
 model UserRoomActivity {

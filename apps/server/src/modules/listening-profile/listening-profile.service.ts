@@ -1,22 +1,26 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
-  AudioFeatureValues,
   ListeningProfileProvider,
   ListeningProfileResponse,
   ListeningProfileTrack,
-  ListeningTrack,
+  ListeningTrackMetadata,
+  ListeningTrackMetadataStatus,
+  ListeningTrackMetadataTag,
   RecordListeningProfileEvent,
-  SaveListeningAudioFeatures
+  ResolveListeningTrackMetadata
 } from "@music-room/shared";
-import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../../infra/prisma/prisma.service";
+import { RecommendationsService } from "../recommendations/recommendations.service";
 
 const timeBandIds = ["morning", "afternoon", "evening", "late-night"] as const;
 
 @Injectable()
 export class ListeningProfileService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recommendations: RecommendationsService
+  ) {}
 
   async recordEvent(userId: string, input: RecordListeningProfileEvent) {
     this.assertDatabaseAvailable();
@@ -153,14 +157,14 @@ export class ListeningProfileService {
       })
     ]);
 
-    const featureKeys = tracks.map((track) => track.candidateKey);
-    const features = featureKeys.length > 0
-      ? await this.prisma.listeningAudioFeature.findMany({
-          where: { trackKey: { in: featureKeys }, status: "resolved" },
-          select: { trackKey: true, features: true }
+    const metadataKeys = tracks.map((track) => track.candidateKey);
+    const metadata = metadataKeys.length > 0
+      ? await this.prisma.listeningTrackMetadata.findMany({
+          where: { trackKey: { in: metadataKeys }, status: "resolved" },
+          select: { trackKey: true, tags: true }
         })
       : [];
-    const featuresByKey = new Map(features.map((feature) => [feature.trackKey, toAudioFeatureValues(feature.features)]));
+    const metadataByKey = new Map(metadata.map((item) => [item.trackKey, toMetadataTags(item.tags)]));
     const normalizedTracks = tracks.map(toProfileTrack);
     const totalListenedMs = normalizedTracks.reduce((total, track) => total + track.listenedMs, 0);
     const listenedTracks = normalizedTracks.filter((track) => track.playCount > 0);
@@ -202,41 +206,60 @@ export class ListeningProfileService {
       timeBands,
       sourceDistribution,
       recent,
-      tasteTags: deriveTasteTags(normalizedTracks, featuresByKey)
+      tasteTags: deriveTasteTags(normalizedTracks, metadataByKey)
     };
   }
 
-  async getAudioFeature(trackKey: string) {
+  async resolveTrackMetadata(
+    userId: string,
+    input: ResolveListeningTrackMetadata
+  ): Promise<ListeningTrackMetadata> {
     this.assertDatabaseAvailable();
-    return this.prisma.listeningAudioFeature.findUnique({ where: { trackKey } });
-  }
+    const track = input.track;
+    const existing = await this.prisma.listeningTrackMetadata.findUnique({
+      where: { trackKey: track.key }
+    });
+    if (existing && (existing.status === "resolved" || existing.status === "unmatched")) {
+      return toTrackMetadata(existing);
+    }
 
-  async saveAudioFeature(input: SaveListeningAudioFeatures) {
-    this.assertDatabaseAvailable();
-    return this.prisma.listeningAudioFeature.upsert({
-      where: { trackKey: input.trackKey },
+    let tags: ListeningTrackMetadataTag[] = [];
+    let status: ListeningTrackMetadataStatus = "deferred";
+    try {
+      const result = await this.recommendations.getLastFmTrackTags(userId, {
+        artist: track.artist,
+        track: track.title,
+        limit: 1
+      });
+      tags = result;
+      status = tags.length > 0 ? "resolved" : "unmatched";
+    } catch {
+      status = "deferred";
+    }
+
+    const saved = await this.prisma.listeningTrackMetadata.upsert({
+      where: { trackKey: track.key },
       update: {
-        title: input.title,
-        artist: input.artist,
-        album: input.album,
-        durationMs: input.durationMs,
-        providerTrackId: input.providerTrackId,
-        reccoBeatsTrackId: input.reccoBeatsTrackId,
-        status: input.status,
-        features: input.features ?? Prisma.JsonNull
+        provider: track.provider,
+        providerTrackId: track.providerTrackId,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        tags,
+        status
       },
       create: {
-        trackKey: input.trackKey,
-        title: input.title,
-        artist: input.artist,
-        album: input.album,
-        durationMs: input.durationMs,
-        providerTrackId: input.providerTrackId,
-        reccoBeatsTrackId: input.reccoBeatsTrackId,
-        status: input.status,
-        features: input.features ?? Prisma.JsonNull
+        trackKey: track.key,
+        provider: track.provider,
+        providerTrackId: track.providerTrackId,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        tags,
+        status
       }
     });
+    return toTrackMetadata(saved);
   }
 
   async clearProfile(userId: string) {
@@ -351,58 +374,103 @@ function compareFavoriteTracks(left: ListeningProfileTrack, right: ListeningProf
 
 function deriveTasteTags(
   tracks: ListeningProfileTrack[],
-  featuresByKey: ReadonlyMap<string, AudioFeatureValues | null>
+  metadataByKey: ReadonlyMap<string, ListeningTrackMetadataTag[]>
 ) {
-  let totalWeight = 0;
-  const totals = {
-    energy: 0,
-    danceability: 0,
-    acousticness: 0,
-    instrumentalness: 0,
-    valence: 0
-  };
+  const totals = new Map<string, number>();
   for (const track of tracks) {
-    const features = featuresByKey.get(track.key);
-    if (!features || track.listenedMs <= 0) continue;
-    const weight = Math.max(track.listenedMs, track.isFavorite ? Math.max(track.durationMs, 180_000) : 0);
-    if (weight <= 0) continue;
-    totalWeight += weight;
-    for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
-      const value = features[key];
-      if (typeof value === "number") totals[key] += value * weight;
+    const tags = metadataByKey.get(track.key) ?? [];
+    if (!tags.length || track.listenedMs <= 0) continue;
+    const listeningWeight = track.listenedMs * (track.isFavorite ? 1.2 : 1);
+    for (const tag of tags) {
+      const category = classifyMetadataTag(tag.name);
+      if (!category) continue;
+      totals.set(category, (totals.get(category) ?? 0) + listeningWeight * Math.max(1, Math.log1p(tag.weight)));
     }
   }
-  if (totalWeight <= 0) return [];
-  const averages = Object.fromEntries(
-    Object.entries(totals).map(([key, value]) => [key, value / totalWeight])
-  ) as Record<keyof typeof totals, number>;
-  return [
-    averages.energy >= 0.62 ? "高能量" : averages.energy <= 0.38 ? "舒缓" : null,
-    averages.danceability >= 0.62 ? "律动感" : null,
-    averages.acousticness >= 0.6 ? "原声感" : null,
-    averages.instrumentalness >= 0.55 ? "器乐倾向" : null,
-    averages.valence >= 0.62 ? "明朗" : null
-  ].filter((value): value is string => !!value).slice(0, 3);
+  return [...totals.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 3)
+    .map(([label]) => label);
 }
 
-function toAudioFeatureValues(value: unknown): AudioFeatureValues | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const candidate = value as Partial<AudioFeatureValues>;
-  const keys: Array<keyof AudioFeatureValues> = [
-    "danceability", "energy", "valence", "acousticness",
-    "instrumentalness", "speechiness", "liveness", "tempo"
-  ];
-  if (!keys.every((key) => candidate[key] === null || typeof candidate[key] === "number")) return null;
+function classifyMetadataTag(value: string) {
+  const tag = normalizeTag(value);
+  if (!tag || ignoredMetadataTags.has(tag)) return null;
+  for (const [label, aliases] of metadataTagAliases) {
+    if (aliases.some((alias) => tag === alias || tag.includes(alias))) return label;
+  }
+  return null;
+}
+
+function toMetadataTags(value: unknown): ListeningTrackMetadataTag[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const candidate = item as { name?: unknown; weight?: unknown };
+    return typeof candidate.name === "string" && candidate.name.trim()
+      ? [{ name: candidate.name.trim(), weight: Number(candidate.weight) || 0 }]
+      : [];
+  });
+}
+
+function toTrackMetadata(record: {
+  trackKey: string;
+  provider: string;
+  providerTrackId: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  tags: unknown;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): ListeningTrackMetadata {
   return {
-    danceability: candidate.danceability ?? null,
-    energy: candidate.energy ?? null,
-    valence: candidate.valence ?? null,
-    acousticness: candidate.acousticness ?? null,
-    instrumentalness: candidate.instrumentalness ?? null,
-    speechiness: candidate.speechiness ?? null,
-    liveness: candidate.liveness ?? null,
-    tempo: candidate.tempo ?? null
+    trackKey: record.trackKey,
+    provider: record.provider as ListeningProfileProvider,
+    providerTrackId: record.providerTrackId,
+    title: record.title,
+    artist: record.artist,
+    album: record.album,
+    tags: toMetadataTags(record.tags),
+    status: record.status as ListeningTrackMetadataStatus,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
   };
+}
+
+const metadataTagAliases: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ["流行", ["pop", "popular"]],
+  ["摇滚", ["rock", "metal", "punk"]],
+  ["电子", ["electronic", "electronica", "house", "techno", "edm", "dance"]],
+  ["嘻哈", ["hip hop", "hip-hop", "rap"]],
+  ["爵士", ["jazz"]],
+  ["古典", ["classical"]],
+  ["民谣", ["folk", "singer-songwriter"]],
+  ["灵魂乐", ["soul", "r&b", "rnb"]],
+  ["独立音乐", ["indie", "alternative"]],
+  ["舒缓", ["ambient", "chill", "chillout", "relax", "downtempo"]],
+  ["忧郁", ["sad", "sadness", "melancholic", "melancholy"]],
+  ["浪漫", ["romantic", "love"]]
+];
+
+const ignoredMetadataTags = new Set([
+  "seen live",
+  "favorites",
+  "favorite",
+  "under 2000 listeners",
+  "under 1000 listeners",
+  "albums i own",
+  "male vocalists",
+  "female vocalists"
+]);
+
+function normalizeTag(value: string) {
+  return value
+    .normalize("NFKD")
+    .toLocaleLowerCase()
+    .replace(/[\s_]+/g, " ")
+    .trim();
 }
 
 function normalizeArtist(value: string) {

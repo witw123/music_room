@@ -4,22 +4,16 @@ import {
   Delete,
   Get,
   Headers,
-  Param,
   Post,
   UnauthorizedException
 } from "@nestjs/common";
 import {
   recordListeningProfileEventSchema,
-  saveListeningAudioFeaturesSchema
+  resolveListeningTrackMetadataSchema
 } from "@music-room/shared";
-import { z } from "zod";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { ListeningProfileService } from "./listening-profile.service";
-
-const featureParamsSchema = z.object({
-  trackKey: z.string().trim().min(1).max(512)
-}).strict();
 
 @Controller("v1/listening-profile")
 export class ListeningProfileController {
@@ -44,25 +38,14 @@ export class ListeningProfileController {
     );
   }
 
-  @Get("audio-features/:trackKey")
-  async getAudioFeatures(
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Param() params: Record<string, unknown>
-  ) {
-    await this.getCurrentUserId(sessionToken);
-    return this.listeningProfile.getAudioFeature(
-      parseRequestBody(featureParamsSchema, params).trackKey
-    );
-  }
-
-  @Post("audio-features")
-  async saveAudioFeatures(
+  @Post("metadata")
+  async resolveMetadata(
     @Headers("x-session-token") sessionToken: string | undefined,
     @Body() body: unknown
   ) {
-    await this.getCurrentUserId(sessionToken);
-    return this.listeningProfile.saveAudioFeature(
-      parseRequestBody(saveListeningAudioFeaturesSchema, body)
+    return this.listeningProfile.resolveTrackMetadata(
+      await this.getCurrentUserId(sessionToken),
+      parseRequestBody(resolveListeningTrackMetadataSchema, body)
     );
   }
 

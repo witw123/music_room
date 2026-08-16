@@ -40,36 +40,37 @@ export const recordListeningProfileEventSchema = z.union([
   listeningFavoriteEventSchema
 ]);
 
-export const audioFeatureValuesSchema = z.object({
-  danceability: z.number().min(0).max(1).nullable(),
-  energy: z.number().min(0).max(1).nullable(),
-  valence: z.number().min(0).max(1).nullable(),
-  acousticness: z.number().min(0).max(1).nullable(),
-  instrumentalness: z.number().min(0).max(1).nullable(),
-  speechiness: z.number().min(0).max(1).nullable(),
-  liveness: z.number().min(0).max(1).nullable(),
-  tempo: z.number().min(0).max(400).nullable()
+export const listeningTrackMetadataStatusSchema = z.enum([
+  "resolved",
+  "unmatched",
+  "deferred"
+]);
+
+export const listeningTrackMetadataTagSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  weight: z.number().finite().nonnegative()
 }).strict();
 
-export const saveListeningAudioFeaturesSchema = z.object({
-  trackKey: z.string().trim().min(1).max(512),
-  title: z.string().trim().min(1).max(240),
-  artist: z.string().trim().min(1).max(240),
-  album: z.string().trim().max(240).nullable(),
-  durationMs: z.number().int().min(0).max(86_400_000),
-  providerTrackId: z.string().trim().min(1).max(512).nullable(),
-  reccoBeatsTrackId: z.string().trim().min(1).max(256).nullable(),
-  status: z.enum(["resolved", "unmatched", "deferred"]),
-  features: audioFeatureValuesSchema.nullable()
+export const resolveListeningTrackMetadataSchema = z.object({
+  track: listeningTrackSchema
 }).strict();
 
 export type ListeningProfileProvider = z.infer<typeof listeningProfileProviderSchema>;
 export type ListeningTrack = z.infer<typeof listeningTrackSchema>;
 export type RecordListeningProfileEvent = z.infer<typeof recordListeningProfileEventSchema>;
-export type AudioFeatureValues = z.infer<typeof audioFeatureValuesSchema>;
-export type SaveListeningAudioFeatures = z.infer<typeof saveListeningAudioFeaturesSchema>;
+export type ListeningTrackMetadataStatus = z.infer<typeof listeningTrackMetadataStatusSchema>;
+export type ListeningTrackMetadataTag = z.infer<typeof listeningTrackMetadataTagSchema>;
+export type ResolveListeningTrackMetadata = z.infer<typeof resolveListeningTrackMetadataSchema>;
 
-export type ListeningAudioFeatureRecord = SaveListeningAudioFeatures & {
+export type ListeningTrackMetadata = {
+  trackKey: string;
+  provider: ListeningProfileProvider;
+  providerTrackId: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  tags: ListeningTrackMetadataTag[];
+  status: ListeningTrackMetadataStatus;
   createdAt: string;
   updatedAt: string;
 };

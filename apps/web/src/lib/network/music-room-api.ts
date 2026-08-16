@@ -6,8 +6,8 @@ import {
   type AuthSession,
   type IceConfigResponse,
   type LastFmSimilarTracksResponse,
-  type ListeningAudioFeatureRecord,
   type ListeningProfileResponse,
+  type ListeningTrackMetadata,
   type NeteaseAccountStatus,
   type NeteaseQrStartResponse,
   type NeteaseQrStatusResponse,
@@ -38,6 +38,7 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
+  type ListeningTrack,
   type RoomChatHistoryResponse,
   type RoomDirectoryItem,
   type RoomJoinResponse,
@@ -46,7 +47,6 @@ import {
   type RoomRequest,
   type RoomType,
   type RecordListeningProfileEvent,
-  type SaveListeningAudioFeatures,
   type RoomSyncResponse,
   type TrackMeta,
   type UpdateRoomRequest
@@ -287,14 +287,10 @@ export const musicRoomApi = {
       body: JSON.stringify(input),
       keepalive: true
     }),
-  getListeningAudioFeature: (trackKey: string) =>
-    request<ListeningAudioFeatureRecord | null>(
-      `/v1/listening-profile/audio-features/${encodeURIComponent(trackKey)}`
-    ),
-  saveListeningAudioFeatures: (input: SaveListeningAudioFeatures) =>
-    request<ListeningAudioFeatureRecord>("/v1/listening-profile/audio-features", {
+  resolveListeningTrackMetadata: (track: ListeningTrack) =>
+    request<ListeningTrackMetadata>("/v1/listening-profile/metadata", {
       method: "POST",
-      body: JSON.stringify(input),
+      body: JSON.stringify({ track }),
       keepalive: true
     }),
   clearListeningProfile: () =>

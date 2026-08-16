@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ProviderTrackCandidate, TrackMeta } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { ensureListeningAudioFeatures, toListeningTrack } from "./audio-feature-client";
+import { ensureListeningTrackMetadata, toListeningTrack } from "./track-metadata-client";
 
 const heartbeatIntervalMs = 15_000;
 const maxProgressDeltaMs = 60_000;
@@ -18,7 +18,7 @@ type ListeningSession = {
   lastProgressMs: number;
   listenedMs: number;
   completed: boolean;
-  audioFeatureRequested: boolean;
+  metadataRequested: boolean;
 };
 
 export function useListeningProfileReporter(input: {
@@ -48,9 +48,14 @@ export function useListeningProfileReporter(input: {
         occurredAt: session.occurredAt
       });
       window.dispatchEvent(new Event(listeningProfileChangedEvent));
-      if (completed && !session.audioFeatureRequested) {
-        session.audioFeatureRequested = true;
-        void ensureListeningAudioFeatures(session.sourceTrack);
+      const metadataThresholdMs = session.track.durationMs > 0
+        ? Math.min(30_000, Math.round(session.track.durationMs * 0.4))
+        : 30_000;
+      if ((completed || session.listenedMs >= metadataThresholdMs) && !session.metadataRequested) {
+        session.metadataRequested = true;
+        void ensureListeningTrackMetadata(session.sourceTrack).then((metadata) => {
+          if (metadata) window.dispatchEvent(new Event(listeningProfileChangedEvent));
+        }).catch(() => undefined);
       }
     } catch {
       // Listening telemetry must never interrupt playback.
@@ -81,7 +86,7 @@ export function useListeningProfileReporter(input: {
         lastProgressMs: Math.max(0, input.progressMs),
         listenedMs: 0,
         completed: false,
-        audioFeatureRequested: false
+        metadataRequested: false
       };
       return;
     }

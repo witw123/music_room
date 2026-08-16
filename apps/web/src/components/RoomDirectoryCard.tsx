@@ -84,7 +84,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
       </header>
 
       <section
-        className="relative mt-3 aspect-[3/1] overflow-hidden rounded-xl border border-white/10 bg-[#090a0e]"
+        className="relative mt-3 aspect-[2.7/1] overflow-hidden rounded-xl border border-white/10 bg-[#090a0e]"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >

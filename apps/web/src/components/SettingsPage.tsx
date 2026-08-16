@@ -380,8 +380,8 @@ export function SettingsPage({
             <SettingRow label="重置电台推荐偏好" description="清除当前设备上的电台自动续播偏好，不影响听歌画像。">
               <Button onClick={() => void resetRadioRecommendationProfile()} size="sm" type="button" variant="outline">重置偏好</Button>
             </SettingRow>
-            <SettingRow label="声学特征查询" description="仅以歌名、歌手、专辑和时长查询特征，不会上传本地或缓存音频。">
-              <span className="text-xs text-foreground-muted">ReccoBeats</span>
+            <SettingRow label="歌曲标签查询" description="仅以歌名、歌手和专辑查询歌曲标签，不会上传本地或缓存音频。">
+              <span className="text-xs text-foreground-muted">Last.fm</span>
             </SettingRow>
           </SettingsSection>
 

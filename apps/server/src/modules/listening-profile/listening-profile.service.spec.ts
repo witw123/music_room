@@ -70,25 +70,21 @@ describe("ListeningProfileService", () => {
           }
         ])
       },
-      listeningAudioFeature: {
+      listeningTrackMetadata: {
         findMany: jest.fn().mockResolvedValue([
           {
             trackKey: "netease:1",
-            features: {
-              danceability: 0.74,
-              energy: 0.79,
-              valence: 0.68,
-              acousticness: 0.1,
-              instrumentalness: 0.02,
-              speechiness: 0.08,
-              liveness: 0.15,
-              tempo: 126
-            }
+            tags: [
+              { name: "pop", weight: 100 },
+              { name: "dance", weight: 80 },
+              { name: "love", weight: 60 }
+            ]
           }
         ])
-      }
+      },
+      $transaction: jest.fn()
     };
-    const service = new ListeningProfileService(prisma as never);
+    const service = new ListeningProfileService(prisma as never, {} as never);
 
     const profile = await service.getProfile("user_1");
 
@@ -99,7 +95,7 @@ describe("ListeningProfileService", () => {
     expect(profile.topPlayedTracks[0]).toMatchObject({ key: "netease:1" });
     expect(profile.favoriteTracks[0]).toMatchObject({ key: "netease:1", isFavorite: true });
     expect(profile.topArtists[0]).toMatchObject({ name: "歌手 A" });
-    expect(profile.tasteTags).toEqual(expect.arrayContaining(["高能量", "律动感", "明朗"]));
+    expect(profile.tasteTags).toEqual(expect.arrayContaining(["流行", "电子", "浪漫"]));
     expect(profile.timeBands.find((band) => band.id === "morning")?.listenedMs).toBe(120_000);
     expect(profile.timeBands.find((band) => band.id === "late-night")?.listenedMs).toBe(240_000);
   });
@@ -111,10 +107,53 @@ describe("ListeningProfileService", () => {
       userListeningTrack: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn().mockResolvedValue([])
     };
-    const service = new ListeningProfileService(prisma as never);
+    const service = new ListeningProfileService(prisma as never, {} as never);
 
     await expect(service.clearProfile("user_1")).resolves.toEqual({ ok: true });
     expect(prisma.userListeningEvent.deleteMany).toHaveBeenCalledWith({ where: { userId: "user_1" } });
     expect(prisma.userListeningTrack.deleteMany).toHaveBeenCalledWith({ where: { userId: "user_1" } });
+  });
+
+  it("resolves metadata from a provider track without requiring local audio", async () => {
+    const prisma = {
+      isAvailable: jest.fn().mockReturnValue(true),
+      listeningTrackMetadata: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockResolvedValue({
+          trackKey: "netease:provider_track",
+          provider: "netease",
+          providerTrackId: "provider_track",
+          title: "平台歌曲",
+          artist: "歌手",
+          album: "专辑",
+          tags: [{ name: "pop", weight: 100 }],
+          status: "resolved",
+          createdAt: new Date("2026-08-16T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-16T00:00:00.000Z")
+        })
+      }
+    };
+    const recommendations = {
+      getLastFmTrackTags: jest.fn().mockResolvedValue([{ name: "pop", weight: 100 }])
+    };
+    const service = new ListeningProfileService(prisma as never, recommendations as never);
+
+    await expect(service.resolveTrackMetadata("user_1", {
+      track: {
+        key: "netease:provider_track",
+        provider: "netease",
+        providerTrackId: "provider_track",
+        title: "平台歌曲",
+        artist: "歌手",
+        album: "专辑",
+        durationMs: 180_000,
+        artworkUrl: null
+      }
+    })).resolves.toMatchObject({ status: "resolved", tags: [{ name: "pop" }] });
+    expect(recommendations.getLastFmTrackTags).toHaveBeenCalledWith("user_1", {
+      artist: "歌手",
+      track: "平台歌曲",
+      limit: 1
+    });
   });
 });
