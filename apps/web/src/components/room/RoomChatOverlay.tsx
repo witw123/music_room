@@ -143,19 +143,19 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomCha
         {isLoadingOlder ? <p className="pb-3 text-center text-xs text-foreground-muted">正在加载更早消息...</p> : null}
         {errorMessage ? <p className="pb-3 text-center text-xs text-danger" role="status">{errorMessage}</p> : null}
         {!isLoading && !errorMessage && !messages.length ? <p className="py-10 text-center text-sm text-foreground-muted">还没有消息。</p> : null}
-        <div className="space-y-5">
+        <div className="space-y-6">
           {messages.map((message) => {
             const isCurrentUser = message.senderId === activeSession?.userId;
             return (
               <article className={`group flex min-w-0 items-start gap-3 ${isCurrentUser ? "justify-end" : "justify-start"}`} key={message.id}>
                 {!isCurrentUser ? <ChatAvatar name={message.senderName} /> : null}
                 <div className={`min-w-0 max-w-[min(78%,32rem)] ${isCurrentUser ? "text-right" : "text-left"}`}>
-                  <strong className="mb-1.5 block truncate px-1 text-xs font-medium text-foreground-muted">{message.senderName}</strong>
-                  <div className={`inline-block max-w-full rounded-[1.25rem] px-4 py-2.5 text-left ${isCurrentUser ? "bg-accent/75 text-white shadow-[0_8px_20px_rgba(0,112,243,0.16)]" : "bg-white/[0.12] text-foreground"}`}><p className="break-words text-sm leading-6">{message.content}</p></div>
-                  <div className={`mt-1 flex items-center gap-2 px-1 ${isCurrentUser ? "justify-end" : "justify-start"}`}>
-                    <time className="font-mono text-[10px] text-foreground-muted" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
-                    {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="text-[10px] text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
+                  <div className={`mb-2 flex min-w-0 items-baseline gap-2 px-0.5 ${isCurrentUser ? "justify-end" : "justify-start"}`}>
+                    {!isCurrentUser ? <strong className="min-w-0 truncate text-sm font-medium text-accent/65">{message.senderName}</strong> : null}
+                    <time className="shrink-0 text-xs tabular-nums text-foreground-muted/55" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
+                    {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="shrink-0 text-[10px] text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
                   </div>
+                  <div className={`inline-block max-w-full rounded-[0.875rem] px-4 py-3 text-left ${isCurrentUser ? "bg-accent text-white" : "bg-white/[0.1] text-foreground"}`}><p className="break-words text-[15px] leading-6">{message.content}</p></div>
                 </div>
                 {isCurrentUser ? <ChatAvatar currentUser name={message.senderName} /> : null}
               </article>
@@ -182,7 +182,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomCha
 }
 
 function ChatAvatar({ name, currentUser = false }: { name: string; currentUser?: boolean }) {
-  return <span aria-hidden="true" className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${currentUser ? "bg-accent/20 text-accent" : "bg-white/[0.08] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
+  return <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-semibold ${currentUser ? "bg-accent/15 text-accent" : "bg-white/[0.1] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function mergeMessages(
@@ -196,11 +196,10 @@ function mergeMessages(
   );
 }
 
-function formatChatTime(timestamp: number) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(timestamp);
+export function formatChatTime(timestamp: number) {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function toChatErrorMessage(error: unknown) {

@@ -23,4 +23,12 @@ describe("RadioRoomView layout", () => {
     expect(chatSource).toContain("flex h-full min-h-[24rem]");
     expect(chatSource).not.toContain("lg:overscroll-contain");
   });
+
+  it("matches the reference chat message hierarchy", () => {
+    expect(chatSource).toContain("text-accent/65");
+    expect(chatSource).toContain("rounded-[0.875rem]");
+    expect(chatSource).toContain("h-12 w-12");
+    expect(chatSource).toContain("getFullYear()");
+    expect(chatSource.indexOf("formatChatTime(message.timestamp)")).toBeLessThan(chatSource.indexOf("message.content"));
+  });
 });
