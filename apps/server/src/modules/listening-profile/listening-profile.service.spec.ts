@@ -114,6 +114,45 @@ describe("ListeningProfileService", () => {
     expect(prisma.userListeningTrack.deleteMany).toHaveBeenCalledWith({ where: { userId: "user_1" } });
   });
 
+  it("retries deferred metadata after an upstream recovery", async () => {
+    const prisma = {
+      isAvailable: jest.fn().mockReturnValue(true),
+      listeningTrackMetadata: {
+        findUnique: jest.fn().mockResolvedValue({ status: "deferred" }),
+        upsert: jest.fn().mockResolvedValue({
+          trackKey: "netease:provider_track",
+          provider: "netease",
+          providerTrackId: "provider_track",
+          title: "平台歌曲",
+          artist: "歌手",
+          album: "专辑",
+          tags: [{ name: "pop", weight: 100 }],
+          status: "resolved",
+          createdAt: new Date("2026-08-16T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-16T00:00:00.000Z")
+        })
+      }
+    };
+    const recommendations = {
+      getLastFmTrackTags: jest.fn().mockResolvedValue([{ name: "pop", weight: 100 }])
+    };
+    const service = new ListeningProfileService(prisma as never, recommendations as never);
+
+    await expect(service.resolveTrackMetadata("user_1", {
+      track: {
+        key: "netease:provider_track",
+        provider: "netease",
+        providerTrackId: "provider_track",
+        title: "平台歌曲",
+        artist: "歌手",
+        album: "专辑",
+        durationMs: 180_000,
+        artworkUrl: null
+      }
+    })).resolves.toMatchObject({ status: "resolved", tags: [{ name: "pop" }] });
+    expect(recommendations.getLastFmTrackTags).toHaveBeenCalledTimes(1);
+  });
+
   it("resolves metadata from a provider track without requiring local audio", async () => {
     const prisma = {
       isAvailable: jest.fn().mockReturnValue(true),

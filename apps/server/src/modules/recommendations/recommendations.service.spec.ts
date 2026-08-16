@@ -60,6 +60,17 @@ describe("RecommendationsService", () => {
     expect(url?.searchParams.get("api_key")).toBe("private-key");
   });
 
+  it("falls back to artist tags when a track has no Last.fm tags", async () => {
+    process.env.LASTFM_API_KEY = "private-key";
+    mockedFetchProviderUrl
+      .mockResolvedValueOnce(jsonResponse({ toptags: { tag: [] } }))
+      .mockResolvedValueOnce(jsonResponse({ toptags: { tag: [{ name: "C-pop", count: 100 }] } }));
+    const service = new RecommendationsService();
+
+    await expect(service.getLastFmTrackTags("user_1", input)).resolves.toEqual([{ name: "C-pop", weight: 100 }]);
+    expect(mockedFetchProviderUrl.mock.calls[1]?.[0].searchParams.get("method")).toBe("artist.getTopTags");
+  });
+
   it("keeps similar-track results when tags cannot be loaded", async () => {
     process.env.LASTFM_API_KEY = "private-key";
     mockedFetchProviderUrl

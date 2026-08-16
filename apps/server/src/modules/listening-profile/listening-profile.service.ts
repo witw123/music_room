@@ -219,7 +219,7 @@ export class ListeningProfileService {
     const existing = await this.prisma.listeningTrackMetadata.findUnique({
       where: { trackKey: track.key }
     });
-    if (existing && (existing.status === "resolved" || existing.status === "unmatched")) {
+    if (existing && existing.status === "resolved") {
       return toTrackMetadata(existing);
     }
 

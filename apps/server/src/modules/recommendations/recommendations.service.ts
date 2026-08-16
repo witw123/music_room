@@ -110,11 +110,17 @@ export class RecommendationsService {
     if (!parsed.success || parsed.data.error !== undefined) {
       throw this.unavailableError(HttpStatus.BAD_GATEWAY, "Last.fm metadata is unavailable.");
     }
-    return normalizeTags(parsed.data);
+    const trackTags = normalizeTags(parsed.data);
+    if (trackTags.length > 0) return trackTags;
+
+    const artistPayload = await this.fetchLastFm("artist.getTopTags", input, apiKey);
+    const artistTags = lastFmTagsPayloadSchema.safeParse(artistPayload);
+    if (!artistTags.success || artistTags.data.error !== undefined) return [];
+    return normalizeTags(artistTags.data);
   }
 
   private async fetchLastFm(
-    method: "track.getSimilar" | "track.getTopTags",
+    method: "track.getSimilar" | "track.getTopTags" | "artist.getTopTags",
     input: LastFmSimilarTracksQuery,
     apiKey: string
   ) {
@@ -135,7 +141,8 @@ export class RecommendationsService {
         url,
         { headers: { Accept: "application/json" } },
         lastFmRequestTimeoutMs,
-        (hostname) => hostname === lastFmHost
+        (hostname) => hostname === lastFmHost,
+        { allowSyntheticDns: true }
       );
     } catch {
       throw this.unavailableError(HttpStatus.BAD_GATEWAY, "Last.fm recommendation is unavailable.");
