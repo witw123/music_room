@@ -458,7 +458,7 @@ function RoomStageBase({
           </div>
         </div>}
 
-        <div className="relative shrink-0 pointer-events-auto">
+        <div className="relative ml-auto shrink-0 pointer-events-auto">
           <Button
             data-testid="room-settings-button"
             variant="ghost"
