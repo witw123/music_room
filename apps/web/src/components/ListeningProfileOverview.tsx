@@ -23,29 +23,50 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
   const pathname = usePathname();
   const [profile, setProfile] = useState<ListeningProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let request: Promise<void> | null = null;
+    let refreshQueued = false;
+
     const load = () => {
-      setLoading(true);
-      void musicRoomApi.getListeningProfile()
-      .then((next) => {
-        if (!cancelled) setProfile(next);
-      })
-      .catch(() => {
-        if (!cancelled) setProfile(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      if (cancelled) return;
+      if (request) {
+        refreshQueued = true;
+        return;
+      }
+
+      setRefreshing(true);
+      request = musicRoomApi.getListeningProfile()
+        .then((next) => {
+          if (!cancelled) setProfile(next);
+        })
+        .catch(() => {
+          // Keep the last successful profile visible when a background refresh fails.
+        })
+        .finally(() => {
+          request = null;
+          if (cancelled) return;
+          setLoading(false);
+          setRefreshing(false);
+          if (refreshQueued) {
+            refreshQueued = false;
+            load();
+          }
+        });
     };
     const handleProfileChange = () => {
       if (pathname === "/app/profile") load();
     };
+
+    setProfile(null);
+    setLoading(pathname === "/app/profile");
     if (pathname === "/app/profile") load();
     window.addEventListener(listeningProfileChangedEvent, handleProfileChange);
     return () => {
       cancelled = true;
+      request = null;
       window.removeEventListener(listeningProfileChangedEvent, handleProfileChange);
     };
   }, [activeSession.userId, pathname]);
@@ -56,8 +77,8 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
   );
 
   return (
-    <section className="mt-8 border-y border-surface-border py-6 sm:py-7">
-      {loading ? <ProfileLoading /> : !profile || profile.totalPlayCount === 0 ? <ProfileEmpty /> : (
+    <section aria-busy={refreshing} className="mt-8 border-b border-surface-border py-6 sm:py-7">
+      {loading && !profile ? <ProfileLoading /> : !profile || profile.totalPlayCount === 0 ? <ProfileEmpty /> : (
         <div className="mt-6">
           <dl className="grid grid-cols-2 border-y border-surface-border sm:grid-cols-4">
             <Metric label="累计聆听" value={formatDuration(profile.totalListenedMs)} />
@@ -70,7 +91,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
             <SectionTitle title="歌曲偏好" />
             {profile.tasteTags.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {profile.tasteTags.map((tag) => <span className="border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent" key={tag}>{tag}</span>)}
+                {profile.tasteTags.map((tag) => <span className="rounded-full border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent" key={tag}>{tag}</span>)}
               </div>
             ) : <p className="mt-3 text-sm text-foreground-muted">已记录播放，正在收集歌曲标签</p>}
           </section>

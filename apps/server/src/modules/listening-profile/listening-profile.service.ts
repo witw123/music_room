@@ -389,7 +389,7 @@ function deriveTasteTags(
   }
   return [...totals.entries()]
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 3)
+    .slice(0, 5)
     .map(([label]) => label);
 }
 

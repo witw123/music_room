@@ -11,7 +11,7 @@ export function PersonalOverview({
   headerAction?: ReactNode;
 }) {
   return (
-    <section aria-labelledby="personal-overview-title" className="border-b border-surface-border pb-7 sm:pb-8">
+    <section aria-labelledby="personal-overview-title" className="pb-7 sm:pb-8">
       <div className="flex min-w-0 items-center justify-between gap-5">
         <div className="flex min-w-0 items-center gap-4">
           <div
