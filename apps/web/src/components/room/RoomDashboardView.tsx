@@ -176,7 +176,7 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
 
 export function buildRoomStageProps(
   props: RoomDashboardViewProps,
-  options?: { showMobilePlayer?: boolean; hideRoomMetadata?: boolean }
+  options?: { showMobilePlayer?: boolean; hideRoomMetadata?: boolean; mobileControlsOnly?: boolean }
 ) {
   return {
     roomSnapshot: props.roomSnapshot,
@@ -200,7 +200,8 @@ export function buildRoomStageProps(
     isLyricsOpen: props.isLyricsOpen,
     onSeek: props.onSeek,
     showMobilePlayer: options?.showMobilePlayer,
-    hideRoomMetadata: options?.hideRoomMetadata
+    hideRoomMetadata: options?.hideRoomMetadata,
+    mobileControlsOnly: options?.mobileControlsOnly
   };
 }
 

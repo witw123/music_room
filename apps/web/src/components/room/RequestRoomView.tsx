@@ -107,8 +107,8 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   return <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
     <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
-      <div className="hidden min-h-[32rem] overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:block lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
-        <RoomStage {...buildRoomStageProps(props)} />
+      <div className="min-h-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
+        <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
       </div>
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:rounded-none lg:border-0">
         <header className="shrink-0 px-4 pb-3 pt-4 sm:px-5 sm:pt-5 lg:px-6">

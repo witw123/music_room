@@ -49,6 +49,7 @@ type RoomStageProps = {
   onSeek: (positionMs: number) => void;
   showMobilePlayer?: boolean;
   hideRoomMetadata?: boolean;
+  mobileControlsOnly?: boolean;
 };
 
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
@@ -105,7 +106,8 @@ function RoomStageBase({
   isLyricsOpen,
   onSeek,
   showMobilePlayer = false,
-  hideRoomMetadata = false
+  hideRoomMetadata = false,
+  mobileControlsOnly = false
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -369,18 +371,20 @@ function RoomStageBase({
 
   return (
     <section
-      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 ${hideRoomMetadata ? "pt-[calc(0.75rem+env(safe-area-inset-top))]" : "pt-[calc(2.25rem+env(safe-area-inset-top))]"} sm:px-5 md:px-8 lg:h-full ${
+      className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 ${hideRoomMetadata ? "pt-[calc(0.75rem+env(safe-area-inset-top))]" : "pt-[calc(2.25rem+env(safe-area-inset-top))]"} ${mobileControlsOnly ? "max-lg:pb-0 max-lg:pt-3" : ""} sm:px-5 md:px-8 lg:h-full ${
         ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
       }`}
     >
       <div
         className={`z-30 flex shrink-0 items-start gap-3 ${
-          hideRoomMetadata
+          hideRoomMetadata && !mobileControlsOnly
             ? "absolute right-3 top-[calc(0.75rem+env(safe-area-inset-top))] sm:right-5 md:right-8"
-            : `relative w-full justify-between ${compactStage ? "mb-0 lg:mb-3" : "mb-0 lg:mb-5 xl:mb-6"}`
+            : mobileControlsOnly
+              ? `relative w-full justify-end lg:justify-between ${compactStage ? "mb-0 lg:mb-3" : "mb-0 lg:mb-5 xl:mb-6"}`
+              : `relative w-full justify-between ${compactStage ? "mb-0 lg:mb-3" : "mb-0 lg:mb-5 xl:mb-6"}`
         }`}
       >
-        {hideRoomMetadata ? null : <div className="min-w-0 space-y-2">
+        {hideRoomMetadata ? null : <div className={`min-w-0 space-y-2 ${mobileControlsOnly ? "hidden lg:block" : ""}`}>
           <div className="flex max-w-full items-center gap-2">
             <button
               data-testid="room-code-button"

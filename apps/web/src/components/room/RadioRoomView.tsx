@@ -29,8 +29,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
       <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="hidden min-h-[32rem] overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:block lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
-          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true })} />
+        <div className="min-h-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
+          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
         </div>
         <div className="min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">
           <RoomChatPanel activeSession={props.activeSession} isHost={isHost} roomId={props.roomSnapshot.room.id} socket={props.socket} />
