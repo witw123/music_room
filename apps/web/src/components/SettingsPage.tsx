@@ -342,11 +342,8 @@ export function SettingsPage({
           </SettingsSection>
 
           <SettingsSection title="隐私与数据">
-            <SettingRow label="重置听歌画像" description="清除当前账号保存的品味、推荐反馈和平台同步资料，不会删除歌曲、收藏或缓存。">
+            <SettingRow label="重置听歌画像" description="清除当前账号在 Music Room 内产生的品味与推荐反馈，不会删除歌曲、收藏或缓存。">
               <Button onClick={() => void resetListeningProfile()} size="sm" type="button" variant="outline">重置画像</Button>
-            </SettingRow>
-            <SettingRow label="平台资料同步" description="已绑定的网易云音乐和 QQ 音乐资料会在首次使用及每 24 小时自动同步。">
-              <Button onClick={() => void musicRoomApi.syncPersonalizationProviders().then(() => setStatusMessage("平台资料已同步")).catch((error) => setStatusMessage(error instanceof Error ? error.message : "平台资料同步失败。"))} size="sm" type="button" variant="outline">立即同步</Button>
             </SettingRow>
             {recommendationExclusions.length ? <SettingRow label="已排除的推荐" description="这些歌曲不会出现在个性化推荐中。">
               <div className="flex max-w-sm flex-wrap justify-end gap-2">

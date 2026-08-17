@@ -1,5 +1,5 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type {
   PersonalizationFeedback,
   PersonalizationProfileResponse,
@@ -17,7 +17,6 @@ import { RedisService } from "../../infra/redis/redis.service";
 import { NeteaseService } from "../providers/netease/netease.service";
 import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
 
-const syncIntervalMs = 24 * 60 * 60 * 1_000;
 const recallCacheSeconds = 30 * 60;
 const longTermHalfLifeMs = 120 * 24 * 60 * 60 * 1_000;
 const sessionWindowMs = 2 * 60 * 60 * 1_000;
@@ -145,11 +144,9 @@ export class PersonalizationService {
 
   async getProfile(userId: string): Promise<PersonalizationProfileResponse> {
     this.assertDatabaseAvailable();
-    await this.syncProviders(userId, false);
-    const [entities, events, syncs] = await Promise.all([
+    const [entities, events] = await Promise.all([
       this.prisma.userTasteEntity.findMany({ where: { userId } }),
-      this.prisma.userTasteEvent.findMany({ where: { userId, eventType: "playback" } }),
-      this.prisma.userProviderProfileSync.findMany({ where: { userId }, orderBy: { lastSyncedAt: "desc" } })
+      this.prisma.userTasteEvent.findMany({ where: { userId, eventType: "playback" } })
     ]);
     const tracks = entities.filter((item) => item.entityKind === "track");
     const artists = entities.filter((item) => item.entityKind === "artist");
@@ -190,11 +187,7 @@ export class PersonalizationService {
         listenedMs: 0,
         playCount: item.interactionCount
       })),
-      sourceDistribution,
-      syncs: syncs.filter((item) => item.provider === "netease" || item.provider === "qqmusic").map((item) => ({
-        provider: item.provider as Provider,
-        lastSyncedAt: item.lastSyncedAt.toISOString()
-      }))
+      sourceDistribution
     };
   }
 
@@ -203,13 +196,12 @@ export class PersonalizationService {
     query: PersonalizationRecommendationsQuery
   ): Promise<PersonalizationRecommendationsResponse> {
     this.assertDatabaseAvailable();
-    const syncs = await this.syncProviders(userId, false);
     const [entities, events, exclusions] = await Promise.all([
       this.prisma.userTasteEntity.findMany({ where: { userId } }),
       this.prisma.userTasteEvent.findMany({ where: { userId }, orderBy: { occurredAt: "desc" }, take: 50 }),
       this.prisma.userRecommendationExclusion.findMany({ where: { userId } })
     ]);
-    const providers: Provider[] = syncs.flatMap((item) => item.synced ? [item.provider as Provider] : []);
+    const providers = await this.getBoundProviders(userId);
     const version = profileVersion(entities, events);
     const cacheKey = `personalization:recall:${userId}:${version}:${query.surface}:${query.provider ?? "all"}`;
     const cached = this.redis.isAvailable()
@@ -234,63 +226,23 @@ export class PersonalizationService {
     return { profileVersion: version, providers, forYou, familiarArtists, playlists };
   }
 
-  async syncProviders(userId: string, force: boolean) {
-    this.assertDatabaseAvailable();
-    const [netease, qqmusic] = await Promise.all([
-      this.syncProvider(userId, "netease", force),
-      this.syncProvider(userId, "qqmusic", force)
-    ]);
-    return [netease, qqmusic];
-  }
-
   async clearProfile(userId: string) {
     this.assertDatabaseAvailable();
     await this.prisma.$transaction([
       this.prisma.userTasteEvent.deleteMany({ where: { userId } }),
       this.prisma.userTasteEntity.deleteMany({ where: { userId } }),
-      this.prisma.userProviderProfileSync.deleteMany({ where: { userId } }),
       this.prisma.userRecommendationExclusion.deleteMany({ where: { userId } })
     ]);
     await this.clearRecallCache(userId);
     return { ok: true };
   }
 
-  private async syncProvider(userId: string, provider: Provider, force: boolean) {
-    const existing = await this.prisma.userProviderProfileSync.findUnique({ where: { userId_provider: { userId, provider } } });
-    if (!force && existing && Date.now() - existing.lastSyncedAt.getTime() < syncIntervalMs) {
-      return { provider, synced: true, refreshed: false };
-    }
-    try {
-      const snapshot = provider === "netease"
-        ? await this.netease.getLibrarySnapshot(userId)
-        : await this.qqmusic.getLibrarySnapshot(userId);
-      const now = new Date();
-      await this.prisma.$transaction(async (transaction) => {
-        for (const track of snapshot.likedTracks) await this.projectSyncedTrack(transaction, userId, track, 7, now);
-        for (const artist of snapshot.followedArtists) {
-          await this.projectEntity(transaction, userId, "artist", artist.name, { provider, providerItemId: artist.providerArtistId, title: artist.name, artworkUrl: artist.artworkUrl, score: 4, occurredAt: now, retainScore: true });
-        }
-        for (const album of snapshot.collectedAlbums) {
-          await this.projectEntity(transaction, userId, "album", `${provider}:${album.providerAlbumId}`, { provider, providerItemId: album.providerAlbumId, title: album.title, artist: album.artist, album: album.title, artworkUrl: album.artworkUrl, score: 2, occurredAt: now, retainScore: true });
-        }
-        for (const playlist of snapshot.collectedPlaylists) {
-          await this.projectEntity(transaction, userId, "playlist", `${provider}:${playlist.providerPlaylistId}`, { provider, providerItemId: playlist.providerPlaylistId, title: playlist.title, artist: playlist.creatorName, artworkUrl: playlist.artworkUrl, score: 2, occurredAt: now, retainScore: true });
-          for (const tag of extractTasteLabels(`${playlist.title} ${playlist.description ?? ""}`)) {
-            await this.projectEntity(transaction, userId, "tag", tag, { title: tag, score: 0.8, occurredAt: now, retainScore: true });
-          }
-        }
-        const snapshotHash = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
-        await transaction.userProviderProfileSync.upsert({
-          where: { userId_provider: { userId, provider } },
-          update: { snapshotHash, lastSyncedAt: now },
-          create: { id: `provider_sync_${randomUUID()}`, userId, provider, snapshotHash, lastSyncedAt: now }
-        });
-      });
-      await this.clearRecallCache(userId);
-      return { provider, synced: true, refreshed: true };
-    } catch {
-      return { provider, synced: false, refreshed: false };
-    }
+  private async getBoundProviders(userId: string): Promise<Provider[]> {
+    const accounts = await Promise.all([
+      this.prisma.neteaseAccount.findUnique({ where: { userId }, select: { id: true } }),
+      this.prisma.qqMusicAccount.findUnique({ where: { userId }, select: { id: true } })
+    ]);
+    return accounts.flatMap((account, index) => account ? [index === 0 ? "netease" : "qqmusic"] : []);
   }
 
   private async recallCandidates(userId: string, entities: TasteEntityRecord[], providers: Provider[], preferredProvider?: Provider) {
@@ -348,11 +300,6 @@ export class PersonalizationService {
     await this.projectEntity(transaction, userId, "artist", normalizeText(track.artist), { title: track.artist, score: score * 0.55, occurredAt });
     if (track.album) await this.projectEntity(transaction, userId, "album", `${track.provider}:${track.providerAlbumId ?? normalizeText(track.album)}`, { provider: track.provider, providerItemId: track.providerAlbumId ?? null, title: track.album, artist: track.artist, album: track.album, score: score * 0.25, occurredAt });
     await this.projectEntity(transaction, userId, "source", track.provider, { title: track.provider, score: score * 0.1, occurredAt });
-  }
-
-  private async projectSyncedTrack(transaction: Prisma.TransactionClient, userId: string, track: ProviderTrackCandidate, score: number, occurredAt: Date) {
-    await this.projectEntity(transaction, userId, "track", trackKey(track), { provider: track.provider, providerItemId: track.providerTrackId, providerAlbumId: track.providerAlbumId ?? null, access: track.access, quality: track.quality, title: track.title, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score, occurredAt, retainScore: true });
-    await this.projectEntity(transaction, userId, "artist", normalizeText(track.artist), { title: track.artist, score: score * 0.55, occurredAt, retainScore: true });
   }
 
   private async projectEntity(transaction: Prisma.TransactionClient, userId: string, kind: TasteEntityKind, key: string, input: Record<string, unknown> & { score: number; occurredAt: Date; retainScore?: boolean }) {
@@ -527,11 +474,6 @@ function normalizeScore(score: number) {
 
 function entityDate(entity: TasteEntityRecord | undefined, key: "lastRecommendedAt") {
   return entity?.[key] ?? null;
-}
-
-function extractTasteLabels(value: string) {
-  const ignored = new Set(["歌单", "音乐", "收藏", "喜欢", "我的", "playlist"]);
-  return value.split(/[\s,，、/|·:：()（）【】\]-]+/).map((item) => item.trim()).filter((item) => item.length >= 2 && item.length <= 12 && !ignored.has(item.toLocaleLowerCase())).slice(0, 3);
 }
 
 function profileVersion(entities: TasteEntityRecord[], events: TasteEventRecord[]) {

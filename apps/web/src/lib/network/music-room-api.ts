@@ -285,8 +285,6 @@ export const musicRoomApi = {
       body: JSON.stringify(input),
       keepalive: true
     }),
-  syncPersonalizationProviders: () =>
-    request<Array<{ provider: "netease" | "qqmusic"; synced: boolean; refreshed: boolean }>>("/v1/personalization/provider-sync", { method: "POST" }),
   getPersonalizationRecommendations: (input: PersonalizationRecommendationsQuery) => {
     const params = new URLSearchParams({ surface: input.surface });
     if (input.provider) params.set("provider", input.provider);

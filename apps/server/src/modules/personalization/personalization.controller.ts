@@ -28,11 +28,6 @@ export class PersonalizationController {
     );
   }
 
-  @Post("provider-sync")
-  async syncProviders(@Headers("x-session-token") token?: string) {
-    return this.personalization.syncProviders(await this.currentUserId(token), true);
-  }
-
   @Get("recommendations")
   async getRecommendations(
     @Headers("x-session-token") token: string | undefined,

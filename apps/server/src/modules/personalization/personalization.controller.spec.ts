@@ -5,7 +5,6 @@ describe("PersonalizationController", () => {
   const personalization = {
     getProfile: jest.fn().mockResolvedValue({ version: "1" }),
     recordEvent: jest.fn().mockResolvedValue({ ok: true }),
-    syncProviders: jest.fn().mockResolvedValue([]),
     getRecommendations: jest.fn().mockResolvedValue({ forYou: [] }),
     recordFeedback: jest.fn().mockResolvedValue({ ok: true }),
     listExclusions: jest.fn().mockResolvedValue([]),

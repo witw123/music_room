@@ -11,8 +11,7 @@ export const tasteEventTypeSchema = z.enum([
   "completion",
   "quick-skip",
   "dismissed",
-  "unavailable",
-  "provider-sync"
+  "unavailable"
 ]);
 export const recommendationFeedbackActionSchema = z.enum(["not-interested", "exclude-from-profile"]);
 
@@ -88,7 +87,6 @@ export type PersonalizationProfileResponse = {
   topTracks: Array<PersonalizationTrack & { listenedMs: number; playCount: number }>;
   topArtists: Array<{ name: string; score: number; listenedMs: number; playCount: number }>;
   sourceDistribution: Array<{ source: string; listenedMs: number }>;
-  syncs: Array<{ provider: "netease" | "qqmusic"; lastSyncedAt: string }>;
 };
 
 export type PersonalizationRecommendationsResponse = {
