@@ -11,8 +11,10 @@ import { getRecommendationProfile } from "./recommendation-store";
 import { normalizeRecommendationText, type RecommendationReason } from "./recommendation-types";
 
 const mappedCandidateTarget = 12;
+const neteaseSourceLimit = 4;
 const providerSearchLimit = 10;
 const providerSearchConcurrency = 3;
+const neteaseSearchConcurrency = 1;
 const nativeFallbackSearchLimit = 20;
 const relatedPlaylistLimit = 3;
 const minimumTitleScore = 0.82;
@@ -62,8 +64,16 @@ export async function getRadioRecommendationCandidates(input: {
   // Resolve both catalogs so a temporary upstream failure or paid result does
   // not suppress a playable fallback from the other provider.
   const [primary, alternate] = await Promise.all([
-    mapSimilarTracksToProvider({ provider: input.provider, sources, excludedTrackKeys }),
-    mapSimilarTracksToProvider({ provider: alternateProvider, sources, excludedTrackKeys })
+    mapSimilarTracksToProvider({
+      provider: input.provider,
+      sources: limitSourcesForProvider(input.provider, sources),
+      excludedTrackKeys
+    }),
+    mapSimilarTracksToProvider({
+      provider: alternateProvider,
+      sources: limitSourcesForProvider(alternateProvider, sources),
+      excludedTrackKeys
+    })
   ]);
 
   let mapped = dedupeMappedCandidates([...primary, ...alternate, ...nativeFallbacks], excludedTrackKeys);
@@ -308,7 +318,10 @@ async function mapSimilarTracksToProvider(input: {
   sources: LastFmSimilarTrack[];
   excludedTrackKeys: Set<string>;
 }): Promise<MappedSimilarTrack[]> {
-  const resolved = await mapWithConcurrency(input.sources, providerSearchConcurrency, async (source) => {
+  const resolved = await mapWithConcurrency(
+    input.sources,
+    input.provider === "netease" ? neteaseSearchConcurrency : providerSearchConcurrency,
+    async (source) => {
     const result = await searchProvider(input.provider, `${source.title} ${source.artist}`).catch(() => null);
     if (!result) return null;
     const candidate = selectProviderMatch(source, result.items, input.excludedTrackKeys);
@@ -320,8 +333,16 @@ async function mapSimilarTracksToProvider(input: {
         source
       }
       : null;
-  });
+    }
+  );
   return resolved.filter((candidate): candidate is MappedSimilarTrack => candidate !== null);
+}
+
+function limitSourcesForProvider(
+  provider: "netease" | "qqmusic",
+  sources: LastFmSimilarTrack[]
+) {
+  return provider === "netease" ? sources.slice(0, neteaseSourceLimit) : sources;
 }
 
 function searchProvider(provider: "netease" | "qqmusic", keywords: string, limit = providerSearchLimit) {
