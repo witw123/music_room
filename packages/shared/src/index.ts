@@ -14,6 +14,5 @@ export * from "./playlist/models";
 export * from "./providers/netease";
 export * from "./providers/qqmusic";
 export * from "./providers/catalog";
-export * from "./recommendations/models";
-export * from "./listening-profile";
+export * from "./personalization";
 export * from "./room/models";

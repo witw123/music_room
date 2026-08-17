@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ProviderTrackCandidate, ProviderTrackFavorite } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { recordListeningFavoriteCandidate } from "@/features/recommendations/listening-profile/use-listening-profile-reporter";
+import { recordPersonalizationFavoriteCandidate } from "@/features/personalization/use-personalization-reporter";
 
 type FavoriteTracksSnapshot = {
   tracks: ProviderTrackFavorite[];
@@ -167,7 +167,7 @@ export function useFavoriteTracks(userId: string | null | undefined) {
               isFavorite: !wasFavorite
             }
           }));
-          void recordListeningFavoriteCandidate(track, !wasFavorite).catch(() => undefined);
+          void recordPersonalizationFavoriteCandidate(track, !wasFavorite).catch(() => undefined);
         }
       }
     },

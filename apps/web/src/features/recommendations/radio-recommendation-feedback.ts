@@ -2,9 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { ProviderTrackCandidate, QueueItem, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import { providerTrackToRecommendationCandidate, roomTrackToRecommendationCandidate } from "./provider-track-adapter";
-import { recordRecommendationFeedback } from "./recommendation-store";
-import type { RecommendationCandidate } from "./recommendation-types";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+import { recordPersonalizationFavoriteCandidate, toPersonalizationTrack } from "@/features/personalization/use-personalization-reporter";
 
 type FavoriteTracksChangedDetail = {
   userId: string;
@@ -15,7 +14,7 @@ type FavoriteTracksChangedDetail = {
 type PlaybackSession = {
   queueItemId: string;
   mediaEpoch: number;
-  candidate: RecommendationCandidate;
+  track: TrackMeta;
   durationMs: number;
   maxProgressMs: number;
   wasPlaying: boolean;
@@ -58,14 +57,14 @@ export function useRadioRecommendationFeedback(input: {
         if (previousQueueIds.has(queueItem.id) || queueItem.source !== "manual") continue;
         if (queueItem.requestedById !== input.activeUserId) continue;
         const candidate = currentTracks.get(queueItem.trackId);
-        const recommendation = candidate ? roomTrackToRecommendationCandidate(candidate) : null;
+        const recommendation = candidate ? toPersonalizationTrack(candidate) : null;
         if (!recommendation) continue;
-        void recordRecommendationFeedback({
-          userId: input.activeUserId,
-          candidate: recommendation,
-          eventType: "manual-selection",
-          contextKey,
-          dedupeKey: `queue:${queueItem.id}:manual-selection`
+        void musicRoomApi.recordPersonalizationEvent({
+          id: `queue:${queueItem.id}:manual-selection`,
+          track: recommendation,
+          type: "manual-selection",
+          surface: "radio",
+          occurredAt: new Date().toISOString()
         }).catch(() => undefined);
       }
 
@@ -73,14 +72,14 @@ export function useRadioRecommendationFeedback(input: {
         if (currentQueueIds.has(queueItem.id) || queueItem.source !== "autopilot") continue;
         if (queueItem.id === current.room.playback.currentQueueItemId) continue;
         const candidate = previousTracks.get(queueItem.trackId);
-        const recommendation = candidate ? roomTrackToRecommendationCandidate(candidate) : null;
+        const recommendation = candidate ? toPersonalizationTrack(candidate) : null;
         if (!recommendation) continue;
-        void recordRecommendationFeedback({
-          userId: input.activeUserId,
-          candidate: recommendation,
-          eventType: "dismissed",
-          contextKey,
-          dedupeKey: `queue:${queueItem.id}:dismissed`
+        void musicRoomApi.recordPersonalizationEvent({
+          id: `queue:${queueItem.id}:dismissed`,
+          track: recommendation,
+          type: "dismissed",
+          surface: "radio",
+          occurredAt: new Date().toISOString()
         }).catch(() => undefined);
       }
     }
@@ -97,9 +96,9 @@ export function useRadioRecommendationFeedback(input: {
     const track = playback?.currentTrackId
       ? input.roomSnapshot?.tracks.find((item) => item.id === playback.currentTrackId) ?? null
       : null;
-    const candidate = track ? roomTrackToRecommendationCandidate(track) : null;
+    const candidate = track ? toPersonalizationTrack(track) : null;
 
-    if (!isRadioHost || !input.activeUserId || !contextKey || !queueItemId || !candidate || !playback) {
+    if (!isRadioHost || !input.activeUserId || !contextKey || !queueItemId || !candidate || !track || !playback) {
       playbackRef.current = null;
       return;
     }
@@ -112,7 +111,7 @@ export function useRadioRecommendationFeedback(input: {
       playbackRef.current = {
         queueItemId,
         mediaEpoch: playback.mediaEpoch,
-        candidate,
+        track,
         durationMs: Math.max(0, track?.durationMs ?? 0),
         maxProgressMs: Math.max(0, input.progressMs),
         wasPlaying: input.isPlaying,
@@ -123,7 +122,7 @@ export function useRadioRecommendationFeedback(input: {
       existing.maxProgressMs = Math.max(0, input.progressMs);
       existing.wasPlaying = input.isPlaying;
       existing.completed = false;
-      existing.candidate = candidate;
+      existing.track = track;
       existing.durationMs = Math.max(0, track?.durationMs ?? 0);
     } else {
       existing.maxProgressMs = Math.max(existing.maxProgressMs, input.progressMs);
@@ -134,12 +133,12 @@ export function useRadioRecommendationFeedback(input: {
     if (!session || session.completed || !session.wasPlaying || session.durationMs <= 0) return;
     if (session.maxProgressMs / session.durationMs < 0.7) return;
     session.completed = true;
-    void recordRecommendationFeedback({
-      userId: input.activeUserId,
-      candidate: session.candidate,
-      eventType: "completion",
-      contextKey,
-      dedupeKey: `playback:${session.queueItemId}:${session.mediaEpoch}:completion`
+    void musicRoomApi.recordPersonalizationEvent({
+      id: `playback:${session.queueItemId}:${session.mediaEpoch}:completion`,
+      track: toPersonalizationTrack(session.track)!,
+      type: "completion",
+      surface: "radio",
+      occurredAt: new Date().toISOString()
     }).catch(() => undefined);
   }, [contextKey, input.activeUserId, input.isPlaying, input.progressMs, input.roomSnapshot, isRadioHost]);
 
@@ -148,12 +147,7 @@ export function useRadioRecommendationFeedback(input: {
     const handleFavoriteChange = (event: Event) => {
       const detail = (event as CustomEvent<FavoriteTracksChangedDetail>).detail;
       if (!detail?.isFavorite || detail.userId !== input.activeUserId) return;
-      void recordRecommendationFeedback({
-        userId: input.activeUserId,
-        candidate: providerTrackToRecommendationCandidate(detail.track),
-        eventType: "favorite",
-        contextKey
-      }).catch(() => undefined);
+      void recordPersonalizationFavoriteCandidate(detail.track, true).catch(() => undefined);
     };
     window.addEventListener("music-room-favorite-tracks-changed", handleFavoriteChange);
     return () => window.removeEventListener("music-room-favorite-tracks-changed", handleFavoriteChange);
@@ -165,21 +159,33 @@ export function recordRadioRecommendationUnavailable(input: {
   roomId: string;
   candidate: ProviderTrackCandidate;
 }) {
-  return recordRecommendationFeedback({
-    userId: input.userId,
-    candidate: providerTrackToRecommendationCandidate(input.candidate),
-    eventType: "unavailable",
-    contextKey: `radio:${input.roomId}`
+  return musicRoomApi.recordPersonalizationEvent({
+    id: `radio:${input.roomId}:unavailable:${input.candidate.provider}:${input.candidate.providerTrackId}:${Date.now()}`,
+    track: {
+      provider: input.candidate.provider,
+      providerTrackId: input.candidate.providerTrackId,
+      access: input.candidate.access,
+      quality: input.candidate.quality,
+      title: input.candidate.title,
+      artist: input.candidate.artist,
+      album: input.candidate.album,
+      providerAlbumId: input.candidate.providerAlbumId ?? null,
+      durationMs: input.candidate.durationMs,
+      artworkUrl: input.candidate.artworkUrl
+    },
+    type: "unavailable",
+    surface: "radio",
+    occurredAt: new Date().toISOString()
   });
 }
 
-function settlePlaybackSession(session: PlaybackSession, userId: string, contextKey: string) {
+function settlePlaybackSession(session: PlaybackSession, _userId: string, _contextKey: string) {
   if (session.completed || !session.wasPlaying || session.maxProgressMs >= 30_000) return;
-  void recordRecommendationFeedback({
-    userId,
-    candidate: session.candidate,
-    eventType: "quick-skip",
-    contextKey,
-    dedupeKey: `playback:${session.queueItemId}:${session.mediaEpoch}:quick-skip`
+  void musicRoomApi.recordPersonalizationEvent({
+    id: `playback:${session.queueItemId}:${session.mediaEpoch}:quick-skip`,
+    track: toPersonalizationTrack(session.track)!,
+    type: "quick-skip",
+    surface: "radio",
+    occurredAt: new Date().toISOString()
   }).catch(() => undefined);
 }

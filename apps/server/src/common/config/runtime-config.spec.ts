@@ -3,8 +3,7 @@ import { validateRuntimeConfig } from "./runtime-config";
 const validTurnstileConfig = {
   TURNSTILE_ENABLED: "true",
   TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
-  TURNSTILE_SECRET_KEY: "0x0000000000000000000000000000000AA",
-  LASTFM_API_KEY: "lastfm-api-key"
+  TURNSTILE_SECRET_KEY: "0x0000000000000000000000000000000AA"
 };
 
 describe("validateRuntimeConfig", () => {
@@ -29,19 +28,6 @@ describe("validateRuntimeConfig", () => {
         NEXT_PUBLIC_TURN_URL: "turn:static.example.com:3478?transport=udp"
       })
     ).toThrow("Invalid JWT_SECRET for production startup.");
-  });
-
-  it("requires a Last.fm API key in production", () => {
-    expect(() =>
-      validateRuntimeConfig({
-        NODE_ENV: "production",
-        ...validTurnstileConfig,
-        LASTFM_API_KEY: "",
-        JWT_SECRET: "super-secret-jwt",
-        TURN_ENABLED: "false",
-        NEXT_PUBLIC_TURN_URL: "turn:static.example.com:3478?transport=udp"
-      })
-    ).toThrow("LASTFM_API_KEY is required in production startup.");
   });
 
   it("rejects placeholder TURN secret in production when TURN is enabled", () => {

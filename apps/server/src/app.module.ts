@@ -19,8 +19,7 @@ import { QqMusicModule } from "./modules/providers/qqmusic/qqmusic.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
 import { SecurityModule } from "./common/security/security.module";
-import { RecommendationsModule } from "./modules/recommendations/recommendations.module";
-import { ListeningProfileModule } from "./modules/listening-profile/listening-profile.module";
+import { PersonalizationModule } from "./modules/personalization/personalization.module";
 
 @Module({
   imports: [
@@ -47,8 +46,7 @@ import { ListeningProfileModule } from "./modules/listening-profile/listening-pr
     TrackModule,
     NeteaseModule,
     QqMusicModule,
-    RecommendationsModule,
-    ListeningProfileModule,
+    PersonalizationModule,
     AdminModule,
     FavoritesModule
   ]

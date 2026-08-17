@@ -62,10 +62,6 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     );
   }
 
-  if (!env.LASTFM_API_KEY?.trim()) {
-    throw new Error("LASTFM_API_KEY is required in production startup.");
-  }
-
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
   if (insecureJwtSecrets.has(jwtSecret.toLowerCase())) {
     throw new Error("Invalid JWT_SECRET for production startup.");

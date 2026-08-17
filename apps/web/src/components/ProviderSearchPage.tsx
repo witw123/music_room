@@ -55,6 +55,7 @@ import {
   setCachedProviderAccount
 } from "@/features/workspace/page-data-cache";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
+import { rankSearchResultsWithPersonalization } from "@/features/personalization/rank-search-results";
 
 type Provider = "netease" | "qqmusic";
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -234,8 +235,9 @@ export function ProviderSearchPage({
       const response = provider === "netease"
         ? await musicRoomApi.searchNeteaseTracks(query)
         : await musicRoomApi.searchQqMusicTracks(query);
+      const ranked = await rankSearchResultsWithPersonalization(response.items);
       if (searchRequestRef.current === requestId) {
-        setResults(response.items);
+        setResults(ranked);
         setStatusMessage(null);
       }
     } catch (error) {

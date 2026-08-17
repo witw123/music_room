@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { PlaybackMode } from "@music-room/shared";
+import type { PersonalizationExclusion, PlaybackMode } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { CustomLayoutEditor } from "@/components/CustomLayoutEditor";
 import { LocalStorageManagementCard } from "@/components/LocalStorageSettingsSection";
@@ -14,7 +14,6 @@ import { ProviderDataImportSection } from "@/components/ProviderDataImportSectio
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { clearRecommendationProfile } from "@/features/recommendations/recommendation-store";
 import {
   appSettingsChangeEvent,
   getDefaultAppSettings,
@@ -60,6 +59,7 @@ export function SettingsPage({
   const [settings, setSettings] = useState<AppSettings>(() => getDefaultAppSettings());
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isCustomLayoutEditorOpen, setIsCustomLayoutEditorOpen] = useState(false);
+  const [recommendationExclusions, setRecommendationExclusions] = useState<PersonalizationExclusion[]>([]);
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -90,6 +90,14 @@ export function SettingsPage({
     };
   }, [isCustomLayoutEditorOpen]);
 
+  useEffect(() => {
+    if (!activeSession) {
+      setRecommendationExclusions([]);
+      return;
+    }
+    void musicRoomApi.listPersonalizationExclusions().then(setRecommendationExclusions).catch(() => undefined);
+  }, [activeSession]);
+
   if (!hydrated || !activeSession) {
     return <div className="min-h-[100dvh] bg-background" />;
   }
@@ -108,22 +116,10 @@ export function SettingsPage({
   async function resetListeningProfile() {
     if (!window.confirm("确定要重置听歌画像吗？此操作会清除当前账号的聆听记录和画像统计。")) return;
     try {
-      await musicRoomApi.clearListeningProfile();
+      await musicRoomApi.clearPersonalizationProfile();
       setStatusMessage("听歌画像已重置");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "听歌画像重置失败。");
-    }
-  }
-
-  async function resetRadioRecommendationProfile() {
-    if (!window.confirm("确定要重置电台推荐偏好吗？自动续播会重新开始学习。")) return;
-    const userId = activeSession?.userId;
-    if (!userId) return;
-    try {
-      await clearRecommendationProfile(userId);
-      setStatusMessage("电台推荐偏好已重置");
-    } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "电台推荐偏好重置失败。");
     }
   }
 
@@ -346,15 +342,20 @@ export function SettingsPage({
           </SettingsSection>
 
           <SettingsSection title="隐私与数据">
-            <SettingRow label="重置听歌画像" description="清除当前账号已保存的聆听记录和画像统计，不会删除歌曲、收藏或缓存。">
+            <SettingRow label="重置听歌画像" description="清除当前账号保存的品味、推荐反馈和平台同步资料，不会删除歌曲、收藏或缓存。">
               <Button onClick={() => void resetListeningProfile()} size="sm" type="button" variant="outline">重置画像</Button>
             </SettingRow>
-            <SettingRow label="重置电台推荐偏好" description="清除当前设备上的电台自动续播偏好，不影响听歌画像。">
-              <Button onClick={() => void resetRadioRecommendationProfile()} size="sm" type="button" variant="outline">重置偏好</Button>
+            <SettingRow label="平台资料同步" description="已绑定的网易云音乐和 QQ 音乐资料会在首次使用及每 24 小时自动同步。">
+              <Button onClick={() => void musicRoomApi.syncPersonalizationProviders().then(() => setStatusMessage("平台资料已同步")).catch((error) => setStatusMessage(error instanceof Error ? error.message : "平台资料同步失败。"))} size="sm" type="button" variant="outline">立即同步</Button>
             </SettingRow>
-            <SettingRow label="歌曲标签查询" description="仅以歌名、歌手和专辑查询歌曲标签，不会上传本地或缓存音频。">
-              <span className="text-xs text-foreground-muted">Last.fm</span>
-            </SettingRow>
+            {recommendationExclusions.length ? <SettingRow label="已排除的推荐" description="这些歌曲不会出现在个性化推荐中。">
+              <div className="flex max-w-sm flex-wrap justify-end gap-2">
+                {recommendationExclusions.map((item) => <Button key={`${item.kind}:${item.key}`} onClick={() => void musicRoomApi.removePersonalizationExclusion(item.kind, item.key).then(() => {
+                  setRecommendationExclusions((current) => current.filter((candidate) => candidate.key !== item.key || candidate.kind !== item.kind));
+                  setStatusMessage("已恢复推荐。");
+                }).catch((error) => setStatusMessage(error instanceof Error ? error.message : "恢复推荐失败。"))} size="sm" type="button" variant="outline">恢复 {item.label ?? item.key}</Button>)}
+              </div>
+            </SettingRow> : null}
           </SettingsSection>
 
           <SettingsSection title="账号">

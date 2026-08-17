@@ -5,10 +5,6 @@ import {
   type ApiErrorResponse,
   type AuthSession,
   type IceConfigResponse,
-  type LastFmSimilarTracksResponse,
-  type ListeningProfileDiscoverContext,
-  type ListeningProfileResponse,
-  type ListeningTrackMetadata,
   type NeteaseAccountStatus,
   type NeteaseQrStartResponse,
   type NeteaseQrStatusResponse,
@@ -36,7 +32,6 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
-  type ListeningTrack,
   type RoomChatHistoryResponse,
   type RoomDirectoryItem,
   type RoomJoinResponse,
@@ -44,7 +39,12 @@ import {
   type RoomSnapshot,
   type RoomRequest,
   type RoomType,
-  type RecordListeningProfileEvent,
+  type PersonalizationFeedback,
+  type PersonalizationExclusion,
+  type PersonalizationProfileResponse,
+  type PersonalizationRecommendationsQuery,
+  type PersonalizationRecommendationsResponse,
+  type RecordPersonalizationEvent,
   type RoomSyncResponse,
   type TrackMeta,
   type UpdateRoomRequest
@@ -277,24 +277,32 @@ export const musicRoomApi = {
       method: "POST"
     }),
   me: () => request<AuthSession>("/v1/auth/me", undefined, { notifyAuthExpired: false }),
-  getListeningProfile: () =>
-    request<ListeningProfileResponse>("/v1/listening-profile"),
-  getListeningProfileDiscoverContext: () =>
-    request<ListeningProfileDiscoverContext>("/v1/listening-profile/discover-context"),
-  recordListeningProfileEvent: (input: RecordListeningProfileEvent) =>
-    request<{ ok: boolean }>("/v1/listening-profile/events", {
+  getPersonalizationProfile: () =>
+    request<PersonalizationProfileResponse>("/v1/personalization/profile"),
+  recordPersonalizationEvent: (input: RecordPersonalizationEvent) =>
+    request<{ ok: boolean }>("/v1/personalization/events", {
       method: "POST",
       body: JSON.stringify(input),
       keepalive: true
     }),
-  resolveListeningTrackMetadata: (track: ListeningTrack) =>
-    request<ListeningTrackMetadata>("/v1/listening-profile/metadata", {
-      method: "POST",
-      body: JSON.stringify({ track }),
-      keepalive: true
-    }),
-  clearListeningProfile: () =>
-    request<{ ok: boolean }>("/v1/listening-profile", { method: "DELETE" }),
+  syncPersonalizationProviders: () =>
+    request<Array<{ provider: "netease" | "qqmusic"; synced: boolean; refreshed: boolean }>>("/v1/personalization/provider-sync", { method: "POST" }),
+  getPersonalizationRecommendations: (input: PersonalizationRecommendationsQuery) => {
+    const params = new URLSearchParams({ surface: input.surface });
+    if (input.provider) params.set("provider", input.provider);
+    if (input.currentTrackKey) params.set("currentTrackKey", input.currentTrackKey);
+    if (input.query) params.set("query", input.query);
+    if (input.excludedTrackKeys?.length) params.set("excludedTrackKeys", input.excludedTrackKeys.join(","));
+    return request<PersonalizationRecommendationsResponse>(`/v1/personalization/recommendations?${params.toString()}`);
+  },
+  recordPersonalizationFeedback: (input: PersonalizationFeedback) =>
+    request<{ ok: boolean }>("/v1/personalization/feedback", { method: "POST", body: JSON.stringify(input) }),
+  listPersonalizationExclusions: () =>
+    request<PersonalizationExclusion[]>("/v1/personalization/exclusions"),
+  removePersonalizationExclusion: (kind: "track" | "artist", key: string) =>
+    request<{ ok: boolean }>(`/v1/personalization/exclusions/${kind}/${encodeURIComponent(key)}`, { method: "DELETE" }),
+  clearPersonalizationProfile: () =>
+    request<{ ok: boolean }>("/v1/personalization/profile", { method: "DELETE" }),
   createRoom: (input: {
     visibility?: "private" | "public";
     roomType: RoomType;
@@ -406,16 +414,6 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  getLastFmSimilarTracks: (input: { artist: string; track: string; limit?: number }) => {
-    const params = new URLSearchParams({
-      artist: input.artist,
-      track: input.track,
-      limit: String(input.limit ?? 100)
-    });
-    return request<LastFmSimilarTracksResponse>(
-      `/v1/recommendations/lastfm/similar-tracks?${params.toString()}`
-    );
-  },
   reorderQueue: (roomId: string, payload: { queueItemIds: string[] }) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/reorder`, {
       method: "PATCH",

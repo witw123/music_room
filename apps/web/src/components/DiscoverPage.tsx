@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ProviderPlaylistDetail,
   ProviderPlaylistSummary,
@@ -18,7 +18,7 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 import { getProfileProviderRecommendations, type DiscoverPlaylistRecommendation, type DiscoverTrackRecommendation, type ProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
-import { listeningProfileChangedEvent } from "@/features/recommendations/listening-profile/use-listening-profile-reporter";
+import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
@@ -44,13 +44,8 @@ import {
 
 type Provider = "netease" | "qqmusic";
 type Track = ProviderTrackCandidate;
-type DiscoverData = ProfileProviderRecommendations & { seedCount: number };
+type DiscoverData = ProfileProviderRecommendations;
 type Detail = { summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail };
-
-const enabledProviders: Provider[] = [
-  ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
-  ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
-];
 
 const profileRefreshIntervalMs = 90_000;
 
@@ -82,24 +77,8 @@ export function DiscoverPage() {
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const requestVersionRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
-  const excludedCandidateKeysRef = useRef<Set<string>>(new Set());
   const lastProfileRefreshAtRef = useRef(0);
   const profileRefreshTimerRef = useRef<number | null>(null);
-
-  const excludedCandidateKeys = useMemo(() => {
-    const keys = new Set<string>();
-    const sourceRef = player.currentTrack?.sourceRef;
-    if (sourceRef) keys.add(`${sourceRef.provider}:${sourceRef.trackId}`);
-    for (const item of player.queue) {
-      const key = candidateKeyFromLocalTrackId(item.trackId);
-      if (key) keys.add(key);
-    }
-    return keys;
-  }, [player.currentTrack?.sourceRef, player.queue]);
-
-  useEffect(() => {
-    excludedCandidateKeysRef.current = excludedCandidateKeys;
-  }, [excludedCandidateKeys]);
 
   const load = useCallback(async () => {
     if (!activeSession) return;
@@ -111,16 +90,11 @@ export function DiscoverPage() {
     setErrorMessage(null);
 
     try {
-      const context = await musicRoomApi.getListeningProfileDiscoverContext();
       const recommendations = await getProfileProviderRecommendations({
-        userId: activeSession.userId,
-        context,
-        enabledProviders,
-        excludedCandidateKeys: excludedCandidateKeysRef.current,
         signal: controller.signal
       });
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
-      setData({ ...recommendations, seedCount: context.seedTracks.length });
+      setData(recommendations);
     } catch (error) {
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
       setErrorMessage(toErrorMessage(error));
@@ -146,13 +120,13 @@ export function DiscoverPage() {
         void load();
       }, 1_500);
     };
-    window.addEventListener(listeningProfileChangedEvent, onProfileChanged);
+    window.addEventListener(personalizationChangedEvent, onProfileChanged);
     return () => {
       requestVersionRef.current += 1;
       requestAbortRef.current?.abort();
       if (profileRefreshTimerRef.current !== null) window.clearTimeout(profileRefreshTimerRef.current);
       profileRefreshTimerRef.current = null;
-      window.removeEventListener(listeningProfileChangedEvent, onProfileChanged);
+      window.removeEventListener(personalizationChangedEvent, onProfileChanged);
     };
   }, [activeSession, load]);
 
@@ -407,7 +381,18 @@ export function DiscoverPage() {
     onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
     onToggleFavorite: (track) => void toggleFavoriteTrack(track)
       .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "取消收藏" : "收藏"}《${track.title}》。`))
-      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"))
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。")),
+    onFeedback: (track, action) => void musicRoomApi.recordPersonalizationFeedback({
+      action,
+      target: { kind: "track", key: providerTrackKey(track), label: `${track.title} · ${track.artist}` }
+    }).then(() => {
+      setData((current) => current ? {
+        ...current,
+        forYou: current.forYou.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
+        familiarArtists: current.familiarArtists.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track))
+      } : current);
+      setStatusMessage(action === "not-interested" ? "不会再推荐这首歌曲。" : "这首歌曲不会再影响你的品味画像。");
+    }).catch((error) => setErrorMessage(error instanceof Error ? error.message : "反馈保存失败。"))
   };
 
   if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-background" />;
@@ -448,7 +433,7 @@ export function DiscoverPage() {
   const heroSide = data?.forYou.slice(1, 3) ?? [];
   const forYou = data?.forYou.slice(hero ? 1 : 0) ?? [];
   const hasContent = Boolean(hero || data?.familiarArtists.length || data?.playlists.length);
-  const noProfile = Boolean(data && data.seedCount === 0);
+  const noProfile = Boolean(data && !hasContent);
   const noAccounts = Boolean(data && data.providers.length === 0);
 
   return (
@@ -504,6 +489,7 @@ type DiscoverTrackActions = {
   onDownload: (track: Track) => void;
   onAddToPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => void;
   onToggleFavorite: (track: Track) => void;
+  onFeedback: (track: Track, action: "not-interested" | "exclude-from-profile") => void;
 };
 
 function DiscoverSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -563,7 +549,9 @@ function TrackMoreActions({ track, actions, compact = false }: { track: Track; a
     { id: "queue", label: queued ? "已在队列中" : "加入队列", icon: "queue", disabled: loading || queued, onSelect: () => actions.onQueue(track) },
     { id: "download", label: downloaded ? "已下载" : "下载到本地", icon: "download", disabled: loading || downloaded, onSelect: () => actions.onDownload(track) },
     { id: "playlist", label: "加入歌单", icon: "plus", disabled: loading, onSelect: () => { if (menuAnchor) actions.onAddToPlaylist(track, menuAnchor); } },
-    { id: "favorite", label: actions.isFavorite(track) ? "取消收藏" : "收藏歌曲", icon: "heart", disabled: actions.isFavoritePending(track), onSelect: () => actions.onToggleFavorite(track) }
+    { id: "favorite", label: actions.isFavorite(track) ? "取消收藏" : "收藏歌曲", icon: "heart", disabled: actions.isFavoritePending(track), onSelect: () => actions.onToggleFavorite(track) },
+    { id: "not-interested", label: "不再推荐这首", icon: "trash", destructive: true, disabled: loading, onSelect: () => actions.onFeedback(track, "not-interested") },
+    { id: "exclude-profile", label: "不计入我的品味", icon: "move", disabled: loading, onSelect: () => actions.onFeedback(track, "exclude-from-profile") }
   ];
   return <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>{!compact ? <div className="hidden sm:block"><FavoriteTrackButton isFavorite={actions.isFavorite(track)} onToggle={() => actions.onToggleFavorite(track)} pending={actions.isFavoritePending(track)} size="compact" track={track} /></div> : null}<Button aria-label={`打开《${track.title}》的更多操作`} className="h-8 w-8 rounded-full" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost"><MoreIcon /></Button>{menuAnchor ? <MobileTrackActionsMenu anchor={menuAnchor} items={menuItems} onClose={() => setMenuAnchor(null)} subtitle={`${track.artist}${track.album ? ` · ${track.album}` : ""}`} title={track.title} /> : null}</div>;
 }
@@ -614,11 +602,6 @@ function toPlaylistTrackActions(actions: DiscoverTrackActions) {
     isTogglingFavorite: actions.isFavoritePending,
     onToggleFavorite: actions.onToggleFavorite
   };
-}
-
-function candidateKeyFromLocalTrackId(trackId: string) {
-  const match = /^provider:(netease|qqmusic):(.+)$/.exec(trackId);
-  return match ? `${match[1]}:${match[2]}` : null;
 }
 
 function providerTrackKey(track: Pick<Track, "provider" | "providerTrackId">) {

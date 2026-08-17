@@ -45,8 +45,10 @@ model User {
   favoriteAlbums UserFavoriteAlbum[]
   favoriteTracks UserFavoriteTrack[]
   favoriteArtists UserFavoriteArtist[]
-  listeningEvents  UserListeningEvent[]
-  listeningTracks  UserListeningTrack[]
+  tasteEvents      UserTasteEvent[]
+  tasteEntities    UserTasteEntity[]
+  providerProfileSyncs UserProviderProfileSync[]
+  recommendationExclusions UserRecommendationExclusion[]
   roomActivity   UserRoomActivity[]
   adminSessions  AdminSession[]
   userSessions   UserSession[]
@@ -201,21 +203,22 @@ model UserFavoriteArtist {
   @@index([userId, updatedAt])
 }
 
-model UserListeningEvent {
+model UserTasteEvent {
   id            String   @id
   userId        String
   clientEventId String
   eventType     String
-  candidateKey  String
-  provider      String
-  providerTrackId String
-  title         String
-  artist        String
+  surface       String?
+  entityKind    String
+  entityKey     String
+  provider      String?
+  providerItemId String?
+  title         String?
+  artist        String?
   album         String?
   durationMs    Int      @default(0)
   listenedMs    BigInt   @default(0)
-  completed     Boolean  @default(false)
-  quickSkipped  Boolean  @default(false)
+  weight        Float    @default(0)
   timezoneOffsetMinutes Int @default(0)
   occurredAt    DateTime
   createdAt     DateTime @default(now())
@@ -227,46 +230,64 @@ model UserListeningEvent {
   @@index([userId, occurredAt])
 }
 
-model UserListeningTrack {
+model UserTasteEntity {
   id              String   @id
   userId          String
-  candidateKey    String
-  provider        String
-  providerTrackId String
-  title           String
-  artist          String
+  entityKind      String
+  entityKey       String
+  provider        String?
+  providerItemId  String?
+  providerAlbumId String?
+  access          String?
+  quality         String?
+  title           String?
+  artist          String?
   album           String?
   durationMs      Int      @default(0)
   artworkUrl      String?
-  playCount       Int      @default(0)
-  listenedMs      BigInt   @default(0)
-  completionCount Int      @default(0)
-  quickSkipCount  Int      @default(0)
-  isFavorite      Boolean  @default(false)
-  firstPlayedAt   DateTime?
-  lastPlayedAt    DateTime?
+  positiveScore   Float    @default(0)
+  negativeScore   Float    @default(0)
+  confidence      Float    @default(0)
+  interactionCount Int     @default(0)
+  lastOccurredAt  DateTime?
+  lastRecommendedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, candidateKey])
-  @@index([userId, lastPlayedAt])
+  @@unique([userId, entityKind, entityKey])
+  @@index([userId, entityKind, lastOccurredAt])
 }
 
-model ListeningTrackMetadata {
-  trackKey        String   @id
+model UserProviderProfileSync {
+  id              String   @id
+  userId          String
   provider        String
-  providerTrackId String
-  title           String
-  artist          String
-  album           String?
-  tags            Json
-  status          String
+  snapshotHash    String?
+  lastSyncedAt    DateTime
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([status, updatedAt])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId, lastSyncedAt])
+}
+
+model UserRecommendationExclusion {
+  id              String   @id
+  userId          String
+  targetKind      String
+  targetKey       String
+  label           String?
+  reason          String
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetKind, targetKey])
+  @@index([userId, createdAt])
 }
 
 model UserRoomActivity {

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import type { AuthSession, ListeningProfileResponse } from "@music-room/shared";
+import type { AuthSession, PersonalizationProfileResponse } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { listeningProfileChangedEvent } from "@/features/recommendations/listening-profile/use-listening-profile-reporter";
+import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 
 const sourceLabels = {
   netease: "网易云音乐",
@@ -12,16 +12,9 @@ const sourceLabels = {
   local_upload: "本地"
 } as const;
 
-const timeBandLabels = {
-  morning: "清晨",
-  afternoon: "午后",
-  evening: "夜晚",
-  "late-night": "深夜"
-} as const;
-
 export function ListeningProfileOverview({ activeSession }: { activeSession: AuthSession }) {
   const pathname = usePathname();
-  const [profile, setProfile] = useState<ListeningProfileResponse | null>(null);
+  const [profile, setProfile] = useState<PersonalizationProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -38,7 +31,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
       }
 
       setRefreshing(true);
-      request = musicRoomApi.getListeningProfile()
+      request = musicRoomApi.getPersonalizationProfile()
         .then((next) => {
           if (!cancelled) setProfile(next);
         })
@@ -63,18 +56,13 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
     setProfile(null);
     setLoading(pathname === "/app/profile");
     if (pathname === "/app/profile") load();
-    window.addEventListener(listeningProfileChangedEvent, handleProfileChange);
+    window.addEventListener(personalizationChangedEvent, handleProfileChange);
     return () => {
       cancelled = true;
       request = null;
-      window.removeEventListener(listeningProfileChangedEvent, handleProfileChange);
+      window.removeEventListener(personalizationChangedEvent, handleProfileChange);
     };
   }, [activeSession.userId, pathname]);
-
-  const timeBandMaximum = useMemo(
-    () => Math.max(1, ...(profile?.timeBands.map((item) => item.listenedMs) ?? [0])),
-    [profile]
-  );
 
   return (
     <section aria-busy={refreshing} className="mt-8 border-b border-surface-border py-6 sm:py-7">
@@ -91,14 +79,14 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
             <SectionTitle title="歌曲偏好" />
             {profile.tasteTags.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {profile.tasteTags.map((tag) => <span className="rounded-full border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent" key={tag}>{tag}</span>)}
+                {profile.tasteTags.map((tag) => <span className="flex h-16 min-w-16 items-center justify-center rounded-full border border-accent/35 bg-accent/10 px-3 text-center text-xs font-medium text-accent" key={tag.label}>{tag.label}</span>)}
               </div>
-            ) : <p className="mt-3 text-sm text-foreground-muted">已记录播放，正在收集歌曲标签</p>}
+            ) : <p className="mt-3 text-sm text-foreground-muted">继续收听，画像会逐步形成</p>}
           </section>
 
           <div className="grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-2 lg:gap-10">
-            <TrackList items={profile.topPlayedTracks} subtitle="最常播放" value={(item) => `${item.playCount} 次 · ${formatDuration(item.listenedMs)}`} />
-            <TrackList items={profile.favoriteTracks} subtitle="特别喜欢" value={(item) => item.isFavorite ? "已收藏" : `${item.completionCount} 次完整播放`} />
+            <TrackList items={profile.topTracks} subtitle="最常播放" value={(item) => `${item.playCount} 次 · ${formatDuration(item.listenedMs)}`} />
+            <TrackList items={profile.topTracks.slice().sort((left, right) => right.score - left.score)} subtitle="特别喜欢" value={(item) => item.reasons[0] ?? "长期偏好"} />
           </div>
 
           <div className="mt-7 grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10">
@@ -109,28 +97,16 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
                   <div className="flex min-w-0 items-center gap-3 py-3" key={artist.name}>
                     <span className="w-5 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span>
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{artist.name}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-foreground-muted">{formatDuration(artist.listenedMs)}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-foreground-muted">{artist.playCount} 次</span>
                   </div>
                 ))}
               </div>
             </section>
             <section>
-              <SectionTitle title="常听时段" />
-              <div className="mt-4 space-y-3">
-                {profile.timeBands.map((band) => (
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_4.75rem] items-center gap-3" key={band.id}>
-                    <span className="text-xs text-foreground-muted">{timeBandLabels[band.id]}</span>
-                    <div aria-label={`${timeBandLabels[band.id]} ${formatDuration(band.listenedMs)}`} className="h-1.5 overflow-hidden bg-surface-hover">
-                      <div className="h-full bg-accent" style={{ width: `${Math.max(band.listenedMs ? 4 : 0, band.listenedMs / timeBandMaximum * 100)}%` }} />
-                    </div>
-                    <span className="whitespace-nowrap text-right text-xs tabular-nums text-foreground-muted">{formatDuration(band.listenedMs)}</span>
-                  </div>
-                ))}
-              </div>
-              {profile.sourceDistribution.length > 1 ? <div className="mt-6 border-t border-surface-border pt-5">
+              {profile.sourceDistribution.length > 0 ? <div>
                 <SectionTitle title="聆听来源" />
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-                  {profile.sourceDistribution.map((source) => <span className="text-xs text-foreground-muted" key={source.source}>{sourceLabels[source.source]} <strong className="ml-1 font-medium text-foreground">{formatDuration(source.listenedMs)}</strong></span>)}
+                  {profile.sourceDistribution.map((source) => <span className="text-xs text-foreground-muted" key={source.source}>{sourceLabels[source.source as keyof typeof sourceLabels] ?? source.source} <strong className="ml-1 font-medium text-foreground">{formatDuration(source.listenedMs)}</strong></span>)}
                 </div>
               </div> : null}
             </section>
@@ -146,8 +122,8 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <div className="min-w-0 border-r border-surface-border px-3 py-4 first:pl-0 last:border-r-0 sm:px-5 sm:first:pl-0"><dd className="truncate text-lg font-semibold tabular-nums text-foreground sm:text-xl">{value}</dd><dt className="mt-1 text-xs text-foreground-muted">{label}</dt></div>;
 }
 
-function TrackList({ items, subtitle, value }: { items: ListeningProfileResponse["topPlayedTracks"]; subtitle: string; value: (item: ListeningProfileResponse["topPlayedTracks"][number]) => string }) {
-  return <section><SectionTitle title={subtitle} /><div className="mt-3 divide-y divide-surface-border">{items.map((item, index) => <div className="flex min-w-0 items-center gap-3 py-3" key={item.key}><span className="w-5 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{item.title}</p><p className="mt-0.5 truncate text-xs text-foreground-muted">{item.artist}</p></div><span className="shrink-0 text-right text-xs tabular-nums text-foreground-muted">{value(item)}</span></div>)}</div></section>;
+function TrackList({ items, subtitle, value }: { items: PersonalizationProfileResponse["topTracks"]; subtitle: string; value: (item: PersonalizationProfileResponse["topTracks"][number]) => string }) {
+  return <section><SectionTitle title={subtitle} /><div className="mt-3 divide-y divide-surface-border">{items.map((item, index) => <div className="flex min-w-0 items-center gap-3 py-3" key={`${item.provider}:${item.providerTrackId}`}><span className="w-5 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{item.title}</p><p className="mt-0.5 truncate text-xs text-foreground-muted">{item.artist}</p></div><span className="shrink-0 text-right text-xs tabular-nums text-foreground-muted">{value(item)}</span></div>)}</div></section>;
 }
 
 function SectionTitle({ title }: { title: string }) {

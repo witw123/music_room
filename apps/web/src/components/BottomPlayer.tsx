@@ -25,7 +25,7 @@ import { usePreferredArtworkUrl } from "@/components/bottom-player/preferred-art
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
-import { useListeningProfileReporter } from "@/features/recommendations/listening-profile/use-listening-profile-reporter";
+import { usePersonalizationReporter } from "@/features/personalization/use-personalization-reporter";
 import {
   getRoomPlaybackClockNowMs,
   type RoomPlaybackBarrierClock
@@ -209,7 +209,7 @@ function BottomPlayerBase({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  useListeningProfileReporter({
+  usePersonalizationReporter({
     userId: activeSession?.userId ?? null,
     currentTrack,
     isPlaying,
