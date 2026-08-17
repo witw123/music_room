@@ -11,14 +11,11 @@ import type {
   ProviderArtistSummary,
   ProviderLibrarySnapshot,
   ProviderLyrics,
-  ProviderPlaylistCategory,
-  ProviderPlaylistCategoryListResponse,
   ProviderPlaylistDetail,
   ProviderPlaylistListResponse,
   ProviderPlaylistSummary,
   ProviderSearchSuggestion,
   ProviderSearchSuggestionListResponse,
-  ProviderTrackListResponse,
   NeteaseSearchResponse,
   NeteaseTrackCandidate
 } from "@music-room/shared";
@@ -33,9 +30,6 @@ import { NeteaseApiClient, NeteaseApiError } from "./netease-api.client";
 import {
   neteaseQualitySchema,
   type NeteaseCatalogPageQuery,
-  type NeteaseDiscoverAlbumQuery,
-  type NeteaseDiscoverPlaylistQuery,
-  type NeteaseRecommendedPlaylistQuery,
   type NeteaseQuality,
   type NeteaseSearchQuery,
   type NeteaseSearchSuggestQuery
@@ -244,106 +238,6 @@ export class NeteaseService {
     } catch {
       return { items: readTermCache(this.searchHotCache, true) ?? [] };
     }
-  }
-
-  async getRecommendedPlaylists(
-    userId: string,
-    query: NeteaseRecommendedPlaylistQuery
-  ): Promise<ProviderPlaylistListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    const body = await this.callProvider(userId, () =>
-      this.api.getRecommendedPlaylists({ limit: query.limit })
-    );
-    const records = Array.isArray(body.result) ? body.result : [];
-    return {
-      items: records
-        .map((item) => this.toPlaylistSummary(item))
-        .filter((item): item is ProviderPlaylistSummary => !!item),
-      limit: query.limit,
-      offset: 0
-    };
-  }
-
-  async getCategoryPlaylists(
-    userId: string,
-    query: NeteaseDiscoverPlaylistQuery
-  ): Promise<ProviderPlaylistListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    const body = await this.callProvider(userId, () => this.api.getCategoryPlaylists(query));
-    const records = Array.isArray(body.playlists) ? body.playlists : [];
-    return {
-      items: records
-        .map((item) => this.toPlaylistSummary(item))
-        .filter((item): item is ProviderPlaylistSummary => !!item),
-      limit: query.limit,
-      offset: query.offset
-    };
-  }
-
-  async getPlaylistCategories(userId: string): Promise<ProviderPlaylistCategoryListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    const body = await this.callProvider(userId, () => this.api.getPlaylistCategories({}));
-    const groups = asRecord(body.categories);
-    const records = [body.all, ...(Array.isArray(body.sub) ? body.sub : [])];
-    const items = records
-      .map((item, index) => this.toPlaylistCategory(item, groups, index === 0))
-      .filter((item): item is ProviderPlaylistCategory => !!item);
-    return {
-      items: [...new Map(items.map((item) => [item.id, item])).values()]
-    };
-  }
-
-  async getToplists(userId: string): Promise<ProviderPlaylistListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    const body = await this.callProvider(userId, () => this.api.getToplists({}));
-    const records = Array.isArray(body.list) ? body.list : [];
-    const items = records
-      .map((item) => this.toPlaylistSummary(item))
-      .filter((item): item is ProviderPlaylistSummary => !!item);
-    return { items, limit: Math.max(1, items.length), offset: 0 };
-  }
-
-  async getNewAlbums(
-    userId: string,
-    query: NeteaseDiscoverAlbumQuery
-  ): Promise<ProviderAlbumListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`discover:${userId}`, 60, 60_000);
-    const body = await this.callProvider(userId, () => this.api.getNewAlbums(query));
-    return {
-      items: (Array.isArray(body.albums) ? body.albums : [])
-        .map((item) => this.toAlbumSummary(item))
-        .filter((item): item is ProviderAlbumSummary => !!item),
-      limit: query.limit,
-      offset: query.offset
-    };
-  }
-
-  async getDailyPlaylists(userId: string): Promise<ProviderPlaylistListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`daily:${userId}`, 20, 60_000);
-    const cookie = await this.getCookie(userId);
-    const body = await this.callProvider(userId, () => this.api.getDailyPlaylists({ cookie }));
-    const items = (Array.isArray(body.recommend) ? body.recommend : [])
-      .map((item) => this.toPlaylistSummary(item))
-      .filter((item): item is ProviderPlaylistSummary => !!item);
-    return { items, limit: Math.max(1, items.length), offset: 0 };
-  }
-
-  async getDailyTracks(userId: string): Promise<ProviderTrackListResponse> {
-    this.assertEnabled();
-    this.assertRateLimit(`daily:${userId}`, 20, 60_000);
-    const cookie = await this.getCookie(userId);
-    const body = await this.callProvider(userId, () => this.api.getDailyTracks({ cookie }));
-    const data = asRecord(body.data);
-    const items = (Array.isArray(data?.dailySongs) ? data.dailySongs : Array.isArray(body.dailySongs) ? body.dailySongs : [])
-      .map((item) => this.toTrackCandidate(item))
-      .filter((item): item is NeteaseTrackCandidate => !!item);
-    return { items, limit: Math.max(1, items.length), offset: 0 };
   }
 
   async getTrack(userId: string, trackId: string) {
@@ -693,28 +587,6 @@ export class NeteaseService {
       ),
       creatorName: readString(asRecord(playlist.creator)?.nickname),
       trackCount: readNumber(playlist.trackCount) ?? readNumber(playlist.trackNumber) ?? (Array.isArray(playlist.tracks) ? playlist.tracks.length : 0),
-    };
-  }
-
-  private toPlaylistCategory(
-    value: unknown,
-    groups: Record<string, unknown> | null,
-    isAllCategory: boolean
-  ): ProviderPlaylistCategory | null {
-    const category = asRecord(value);
-    const rawName = readString(category?.name);
-    if (!category || !rawName) return null;
-    const name = isAllCategory || rawName === "全部歌单" ? "全部" : rawName;
-    const groupId = readString(category.category);
-    return {
-      provider: "netease",
-      id: name,
-      name,
-      groupName: groupId ? readString(groups?.[groupId]) : null,
-      sortOptions: [
-        { id: "hot", label: "最热" },
-        { id: "new", label: "最新" }
-      ]
     };
   }
 

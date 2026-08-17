@@ -217,57 +217,6 @@ describe("NeteaseService", () => {
     expect(api.getUserPlaylists).toHaveBeenCalledWith({ userId: "99", limit: 30, offset: 0, cookie: "cookie" });
   });
 
-  it("normalizes public discovery catalogs without requiring a provider account", async () => {
-    process.env.NETEASE_ENABLED = "true";
-    const api = {
-      getRecommendedPlaylists: jest.fn().mockResolvedValue({ result: [
-        { id: 1, name: "Recommended", coverImgUrl: "http://p1.music.126.net/recommended.jpg" },
-        { id: 5, name: "Recommended with picUrl", picUrl: "http://p2.music.126.net/recommended-pic.jpg" }
-      ] }),
-      getCategoryPlaylists: jest.fn().mockResolvedValue({ playlists: [{ id: 2, name: "Category" }] }),
-      getPlaylistCategories: jest.fn().mockResolvedValue({
-        all: { name: "全部歌单" },
-        sub: [{ name: "流行", category: 1 }],
-        categories: { "1": "风格" }
-      }),
-      getToplists: jest.fn().mockResolvedValue({ list: [{ id: 3, name: "榜单" }] }),
-      getNewAlbums: jest.fn().mockResolvedValue({ albums: [{ id: 4, name: "新专辑", picUrl: "http://p2.music.126.net/album.jpg", artists: [{ name: "歌手" }] }] })
-    };
-    const service = new NeteaseService(api as never, {} as never, {} as never);
-
-    await expect(service.getRecommendedPlaylists("user_1", { limit: 10 })).resolves.toEqual(expect.objectContaining({
-      items: expect.arrayContaining([
-        expect.objectContaining({
-          providerPlaylistId: "1",
-          title: "Recommended",
-          artworkUrl: "https://p1.music.126.net/recommended.jpg"
-        }),
-        expect.objectContaining({
-          providerPlaylistId: "5",
-          title: "Recommended with picUrl",
-          artworkUrl: "https://p2.music.126.net/recommended-pic.jpg"
-        })
-      ]),
-      offset: 0
-    }));
-    await expect(service.getCategoryPlaylists("user_1", { category: "流行", order: "hot", limit: 10, offset: 0 })).resolves.toMatchObject({
-      items: [{ providerPlaylistId: "2" }]
-    });
-    await expect(service.getPlaylistCategories("user_1")).resolves.toMatchObject({
-      items: [
-        { id: "全部", name: "全部" },
-        { id: "流行", groupName: "风格" }
-      ]
-    });
-    await expect(service.getToplists("user_1")).resolves.toMatchObject({ items: [{ providerPlaylistId: "3" }] });
-    await expect(service.getNewAlbums("user_1", { area: "all", limit: 10, offset: 0 })).resolves.toMatchObject({
-      items: [{ providerAlbumId: "4", artist: "歌手", artworkUrl: "https://p2.music.126.net/album.jpg" }]
-    });
-    expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(1);
-    await service.getRecommendedPlaylists("user_1", { limit: 10 });
-    expect(api.getRecommendedPlaylists).toHaveBeenCalledTimes(2);
-  });
-
   it("loads third-party library data without importing it", async () => {
     process.env.NETEASE_ENABLED = "true";
     const api = {

@@ -6,7 +6,6 @@ export const appSettingsChangeEvent = "music-room-settings-change";
 export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 export type PlayerStyle = "vinyl" | "square-cover";
-export type DiscoverProvider = "netease" | "qqmusic";
 export type CustomLayoutPageId = "home" | "discover" | "playlists" | "favorites" | "profile" | "settings" | "room";
 export type CustomLayoutItemId = "sidebar" | "content" | "player" | "mobile-navigation" | "room-stage" | "room-panel";
 
@@ -92,9 +91,6 @@ export type AppSettings = {
     reduceMotion: boolean;
     customLayout: CustomLayoutSettings;
   };
-  discover: {
-    provider: DiscoverProvider;
-  };
   playback: {
     defaultVolume: number;
     loudnessNormalization: boolean;
@@ -119,9 +115,6 @@ const defaultSettings: AppSettings = {
     sidebarCollapsed: true,
     reduceMotion: false,
     customLayout: getDefaultCustomLayoutSettings()
-  },
-  discover: {
-    provider: "netease"
   },
   playback: {
     defaultVolume: 0.8,
@@ -160,7 +153,6 @@ export function updateAppSettings(
   patch: Partial<{
     theme: ThemePreference;
     layout: Partial<AppSettings["layout"]>;
-    discover: Partial<AppSettings["discover"]>;
     playback: Partial<AppSettings["playback"]>;
   }>
 ) {
@@ -169,7 +161,6 @@ export function updateAppSettings(
     ...current,
     ...patch,
     layout: { ...current.layout, ...patch.layout },
-    discover: { ...current.discover, ...patch.discover },
     playback: { ...current.playback, ...patch.playback }
   });
   if (typeof window !== "undefined") {
@@ -190,7 +181,6 @@ export function resetAppSettings() {
 export function normalizeSettings(value: unknown): AppSettings {
   const input = isRecord(value) ? value : {};
   const layout = isRecord(input.layout) ? input.layout : {};
-  const discover = isRecord(input.discover) ? input.discover : {};
   const playback = isRecord(input.playback) ? input.playback : {};
   const volume = typeof playback.defaultVolume === "number" && Number.isFinite(playback.defaultVolume)
     ? Math.min(1, Math.max(0, playback.defaultVolume))
@@ -215,9 +205,6 @@ export function normalizeSettings(value: unknown): AppSettings {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
       reduceMotion: layout.reduceMotion === true,
       customLayout: normalizeCustomLayoutSettings(layout.customLayout)
-    },
-    discover: {
-      provider: discover.provider === "qqmusic" ? "qqmusic" : "netease"
     },
     playback: {
       defaultVolume: volume,
@@ -246,7 +233,6 @@ function cloneSettings(settings: AppSettings): AppSettings {
       reduceMotion: settings.layout.reduceMotion,
       customLayout: cloneCustomLayoutSettings(settings.layout.customLayout)
     },
-    discover: { ...settings.discover },
     playback: { ...settings.playback }
   };
 }

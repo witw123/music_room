@@ -110,3 +110,10 @@ export type ListeningProfileResponse = {
   recent: ListeningProfileRecentItem[];
   tasteTags: string[];
 };
+
+export type ListeningProfileDiscoverContext = {
+  seedTracks: ListeningProfileTrack[];
+  excludedTrackKeys: string[];
+  topArtists: ListeningProfileArtist[];
+  tasteTags: string[];
+};

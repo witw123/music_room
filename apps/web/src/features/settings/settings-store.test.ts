@@ -22,7 +22,6 @@ describe("app settings store", () => {
     expect(normalizeSettings(null)).toMatchObject({
       theme: "dark",
       layout: { sidebarCollapsed: true },
-      discover: { provider: "netease" },
       playback: {
         defaultVolume: 0.8,
         loudnessNormalization: false,
@@ -62,11 +61,6 @@ describe("app settings store", () => {
       streamingOnlyPlayback: true,
       fullyCachedPlayback: false
     });
-  });
-
-  it("normalizes the discovery provider preference", () => {
-    expect(normalizeSettings({ discover: { provider: "qqmusic" } }).discover.provider).toBe("qqmusic");
-    expect(normalizeSettings({ discover: { provider: "unknown" } }).discover.provider).toBe("netease");
   });
 
   it("keeps custom layout pages independent and bounded", () => {
@@ -169,7 +163,6 @@ describe("app settings store", () => {
 
     updateAppSettings({
       layout: { sidebarCollapsed: false },
-      discover: { provider: "qqmusic" },
       playback: {
         defaultVolume: 2,
         lyricLines: 9,
@@ -179,7 +172,6 @@ describe("app settings store", () => {
     });
     expect(getAppSettings()).toMatchObject({
       layout: { sidebarCollapsed: false },
-      discover: { provider: "qqmusic" },
       playback: {
         defaultVolume: 1,
         disableArtworkColor: false,

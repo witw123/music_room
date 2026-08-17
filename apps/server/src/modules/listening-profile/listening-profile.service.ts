@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ListeningProfileProvider,
   ListeningProfileResponse,
+  ListeningProfileDiscoverContext,
   ListeningProfileTrack,
   ListeningTrackMetadata,
   ListeningTrackMetadataStatus,
@@ -210,6 +211,41 @@ export class ListeningProfileService {
     };
   }
 
+  async getDiscoverContext(userId: string): Promise<ListeningProfileDiscoverContext> {
+    this.assertDatabaseAvailable();
+    const tracks = await this.prisma.userListeningTrack.findMany({ where: { userId } });
+    const normalizedTracks = tracks.map(toProfileTrack);
+    const metadataKeys = normalizedTracks.map((track) => track.key);
+    const metadata = metadataKeys.length > 0
+      ? await this.prisma.listeningTrackMetadata.findMany({
+          where: { trackKey: { in: metadataKeys }, status: "resolved" },
+          select: { trackKey: true, tags: true }
+        })
+      : [];
+    const metadataByKey = new Map(metadata.map((item) => [item.trackKey, toMetadataTags(item.tags)]));
+    const seedTracks = normalizedTracks
+      .filter((track) => track.provider === "netease" || track.provider === "qqmusic")
+      .filter((track) => track.playCount > 0 || track.isFavorite || track.completionCount > 0)
+      .sort(compareDiscoverSeedTracks)
+      .slice(0, 12);
+    const excludedTrackKeys = normalizedTracks
+      .filter((track) => track.playCount > 0)
+      .sort((left, right) => {
+        const rightTime = right.lastPlayedAt ? Date.parse(right.lastPlayedAt) : 0;
+        const leftTime = left.lastPlayedAt ? Date.parse(left.lastPlayedAt) : 0;
+        return rightTime - leftTime || right.playCount - left.playCount || left.key.localeCompare(right.key);
+      })
+      .slice(0, 50)
+      .map((track) => track.key);
+
+    return {
+      seedTracks,
+      excludedTrackKeys,
+      topArtists: aggregateArtists(normalizedTracks).slice(0, 10),
+      tasteTags: deriveTasteTags(normalizedTracks, metadataByKey)
+    };
+  }
+
   async resolveTrackMetadata(
     userId: string,
     input: ResolveListeningTrackMetadata
@@ -370,6 +406,14 @@ function compareFavoriteTracks(left: ListeningProfileTrack, right: ListeningProf
   const leftScore = (left.isFavorite ? 100 : 0) + left.completionCount * 3 + left.playCount - left.quickSkipCount * 4;
   const rightScore = (right.isFavorite ? 100 : 0) + right.completionCount * 3 + right.playCount - right.quickSkipCount * 4;
   return rightScore - leftScore || right.listenedMs - left.listenedMs || left.title.localeCompare(right.title);
+}
+
+function compareDiscoverSeedTracks(left: ListeningProfileTrack, right: ListeningProfileTrack) {
+  const leftScore = (left.isFavorite ? 100 : 0) + left.completionCount * 8 + left.playCount * 3 + left.listenedMs / 60_000 - left.quickSkipCount * 10;
+  const rightScore = (right.isFavorite ? 100 : 0) + right.completionCount * 8 + right.playCount * 3 + right.listenedMs / 60_000 - right.quickSkipCount * 10;
+  const rightLastPlayedAt = right.lastPlayedAt ? Date.parse(right.lastPlayedAt) : 0;
+  const leftLastPlayedAt = left.lastPlayedAt ? Date.parse(left.lastPlayedAt) : 0;
+  return rightScore - leftScore || rightLastPlayedAt - leftLastPlayedAt || left.key.localeCompare(right.key);
 }
 
 function deriveTasteTags(
