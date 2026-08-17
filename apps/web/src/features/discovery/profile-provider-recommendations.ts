@@ -41,16 +41,18 @@ export type ProfileProviderRecommendations = {
   playlists: DiscoverPlaylistRecommendation[];
 };
 
-const maxSeedTracksPerProvider = 2;
-const maxRelatedPlaylistsPerProvider = 2;
-const maxRelatedTracksPerPlaylist = 16;
-const maxArtistQueries = 3;
-const maxPlaylistQueries = 4;
-const providerSearchLimit = 10;
-const providerPlaylistSearchLimit = 8;
-const requestConcurrency = 2;
+const maxSeedTracksPerProvider = 1;
+const maxRelatedPlaylistsPerProvider = 1;
+const maxRelatedTracksPerPlaylist = 12;
+const maxArtistQueries = 1;
+const maxPlaylistQueries = 1;
+const providerSearchLimit = 8;
+const providerPlaylistSearchLimit = 6;
+const requestConcurrency = 1;
 const sectionLimit = 12;
 const playlistLimit = 10;
+const recallCacheTtlMs = 3 * 60_000;
+const recallCache = new Map<string, { expiresAt: number; value: ProfileProviderRecommendations }>();
 
 export async function getProfileProviderRecommendations(input: {
   userId: string;
@@ -60,6 +62,16 @@ export async function getProfileProviderRecommendations(input: {
   signal?: AbortSignal;
 }): Promise<ProfileProviderRecommendations> {
   throwIfAborted(input.signal);
+  const excludedCandidateKeys = new Set([
+    ...input.context.excludedTrackKeys,
+    ...(input.excludedCandidateKeys ?? [])
+  ]);
+  const cacheKey = buildRecallCacheKey(input);
+  const cached = recallCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return applyExclusions(cached.value, excludedCandidateKeys);
+  }
+
   const providers = await getBoundProviders(input.enabledProviders, input.signal);
   if (providers.length === 0 || input.context.seedTracks.length === 0) {
     return { providers, forYou: [], familiarArtists: [], playlists: [] };
@@ -71,10 +83,6 @@ export async function getProfileProviderRecommendations(input: {
   ]);
   throwIfAborted(input.signal);
 
-  const excludedCandidateKeys = new Set([
-    ...input.context.excludedTrackKeys,
-    ...(input.excludedCandidateKeys ?? [])
-  ]);
   const ranked = rankDiscoverTrackCandidates(
     recalls.flatMap((recall) => recall.tracks),
     profile,
@@ -93,12 +101,14 @@ export async function getProfileProviderRecommendations(input: {
     .filter((item) => familiarArtistKeys.has(recommendationArtistKey(item.candidate.artist)))
     .slice(0, sectionLimit);
 
-  return {
+  const result = {
     providers,
     forYou,
     familiarArtists,
     playlists: rankDiscoverPlaylists(recalls.flatMap((recall) => recall.playlists)).slice(0, playlistLimit)
   };
+  recallCache.set(cacheKey, { expiresAt: Date.now() + recallCacheTtlMs, value: result });
+  return result;
 }
 
 export function rankDiscoverTrackCandidates(
@@ -166,8 +176,9 @@ async function recallProvider(
     return response.items;
   });
   const playlistQueries = uniqueText([
-    ...artistNames.slice(0, 2),
-    ...context.tasteTags.slice(0, 2)
+    [artistNames[0], context.tasteTags[0]].filter(Boolean).join(" "),
+    artistNames[0] ?? "",
+    context.tasteTags[0] ?? ""
   ]).slice(0, maxPlaylistQueries);
   const playlistSearches = await mapWithConcurrency(playlistQueries, requestConcurrency, async (query) => {
     const response = await searchPlaylists(provider, query, providerPlaylistSearchLimit);
@@ -192,6 +203,36 @@ async function recallProvider(
       playlist,
       score: playlistQueryScore(playlist, query)
     }))
+  };
+}
+
+function buildRecallCacheKey(input: {
+  userId: string;
+  context: ListeningProfileDiscoverContext;
+  enabledProviders: DiscoverProvider[];
+}) {
+  return [
+    input.userId,
+    [...input.enabledProviders].sort().join(","),
+    input.context.seedTracks.map((track) => `${track.provider}:${track.providerTrackId}`).join(","),
+    input.context.topArtists.map((artist) => normalizeRecommendationText(artist.name)).join(","),
+    input.context.tasteTags.map(normalizeRecommendationText).join(",")
+  ].join("|");
+}
+
+function applyExclusions(
+  result: ProfileProviderRecommendations,
+  excludedCandidateKeys: ReadonlySet<string>
+): ProfileProviderRecommendations {
+  const forYou = result.forYou.filter((item) => !excludedCandidateKeys.has(providerTrackKey(item.candidate)));
+  const forYouKeys = new Set(forYou.map((item) => providerTrackKey(item.candidate)));
+  return {
+    ...result,
+    forYou,
+    familiarArtists: result.familiarArtists.filter((item) => {
+      const key = providerTrackKey(item.candidate);
+      return !excludedCandidateKeys.has(key) && !forYouKeys.has(key);
+    })
   };
 }
 

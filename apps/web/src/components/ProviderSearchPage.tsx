@@ -70,6 +70,7 @@ type ProviderSearchPageProps = {
   onClose?: () => void;
   initialProvider?: Provider;
   embedded?: boolean;
+  inlineSearch?: boolean;
   keywords?: string;
   onKeywordsChange?: (keywords: string) => void;
   searchRequestKey?: number | null;
@@ -79,6 +80,7 @@ export function ProviderSearchPage({
   onClose,
   initialProvider,
   embedded = false,
+  inlineSearch = false,
   keywords: controlledKeywords,
   onKeywordsChange,
   searchRequestKey
@@ -110,6 +112,7 @@ export function ProviderSearchPage({
   const [albums, setAlbums] = useState<ProviderAlbumSummary[]>([]);
   const [album, setAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("songs");
+  const [hasSearched, setHasSearched] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
@@ -218,7 +221,12 @@ export function ProviderSearchPage({
 
   const searchTracksForQuery = useCallback(async (query: string) => {
     const requestId = ++searchRequestRef.current;
-    if (!query || !isConnected) return;
+    if (!query) {
+      setHasSearched(false);
+      return;
+    }
+    setHasSearched(true);
+    if (!isConnected) return;
     setPending("search");
     setErrorMessage(null);
     setContentTab("songs");
@@ -245,6 +253,7 @@ export function ProviderSearchPage({
     searchRequestRef.current += 1;
     setResults([]);
     setPending((current) => current === "search" ? null : current);
+    if (!keywords.trim()) setHasSearched(false);
   }, [keywords]);
 
   useEffect(() => {
@@ -270,6 +279,7 @@ export function ProviderSearchPage({
     const query = keywords.trim();
     setContentTab("playlists");
     if (!query || pending || !isConnected) return;
+    setHasSearched(true);
     setPending("search-playlists");
     setErrorMessage(null);
     try {
@@ -289,6 +299,7 @@ export function ProviderSearchPage({
     const query = keywords.trim();
     setContentTab("albums");
     if (!query || pending || !isConnected) return;
+    setHasSearched(true);
     setPending("search-albums");
     setErrorMessage(null);
     try {
@@ -708,9 +719,40 @@ export function ProviderSearchPage({
 
   if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
 
+  const searchForm = (
+    <form className={`flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] ${embedded ? "mx-auto max-w-[650px]" : "sm:max-w-[650px]"}`} onSubmit={(event) => void searchTracks(event)}>
+      {!embedded ? (
+        onClose ? (
+          <button aria-label="返回发现" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" onClick={onClose} title="返回发现" type="button"><Icon name="arrow-left" /></button>
+        ) : (
+          <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
+        )
+      ) : null}
+      <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
+      <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌手、歌单或专辑</label>
+      <input
+        id="provider-search-input"
+        className="h-full min-w-0 flex-1 bg-transparent px-1 text-base text-white outline-none placeholder:text-white/30"
+        disabled={!isConnected}
+        autoFocus={Boolean(onClose)}
+        maxLength={100}
+        onChange={(event) => updateKeywords(event.target.value)}
+        placeholder="搜索歌曲、歌手、歌单或专辑"
+        type="search"
+        value={keywords}
+      />
+      {enabledProviders.length > 1 ? (
+        <select aria-label="选择音乐平台" className="h-10 w-[4.75rem] shrink-0 rounded-lg border border-white/[0.08] bg-black px-1.5 text-[11px] text-white/75 outline-none sm:w-auto sm:px-2 sm:text-xs" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
+          {enabledProviders.map((item) => <option key={item} value={item}>{item === "netease" ? "网易云" : "QQ 音乐"}</option>)}
+        </select>
+      ) : null}
+    </form>
+  );
+
+  const shouldShowSearchContent = !embedded || !inlineSearch || hasSearched;
   const searchContent = (
     <>
-      {enabledProviders.length > 0 ? (
+      {shouldShowSearchContent && enabledProviders.length > 0 ? (
         <>
           <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-white/[0.1]`} role="tablist" aria-label="搜索结果类型">
             <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
@@ -749,9 +791,9 @@ export function ProviderSearchPage({
             <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} trackActions={providerTrackActions()} />
           ) : null}
         </>
-      ) : (
+      ) : shouldShowSearchContent ? (
         <div className={`${embedded ? "mt-7" : "mt-10"} rounded-2xl border border-white/[0.1] bg-black p-8 text-sm text-white/55`}>当前没有启用音乐平台。</div>
-      )}
+      ) : null}
 
       {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
       {errorMessage ? <p className="mt-5 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-4 py-3 text-xs text-red-200" role="alert">{errorMessage}</p> : null}
@@ -779,6 +821,7 @@ export function ProviderSearchPage({
   if (embedded) {
     return (
       <div className="min-w-0">
+        {inlineSearch ? <header className="sticky top-0 z-10 bg-background/90 py-2 backdrop-blur-md">{searchForm}</header> : null}
         {searchContent}
         {playlistPicker}
       </div>
@@ -789,31 +832,7 @@ export function ProviderSearchPage({
     <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex justify-center">
-          <form className="flex h-12 w-full min-w-0 items-center gap-1 rounded-xl border border-white/[0.12] bg-black p-1 shadow-[0_12px_35px_rgba(0,0,0,0.18)] sm:max-w-[650px]" onSubmit={(event) => void searchTracks(event)}>
-            {onClose ? (
-              <button aria-label="返回发现" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" onClick={onClose} title="返回发现" type="button"><Icon name="arrow-left" /></button>
-            ) : (
-              <Link aria-label="返回首页" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white" href="/app" title="返回首页"><Icon name="arrow-left" /></Link>
-            )}
-            <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
-            <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌单或专辑</label>
-            <input
-              id="provider-search-input"
-              className="h-full min-w-0 flex-1 bg-transparent px-1 text-base text-white outline-none placeholder:text-white/30"
-              disabled={!isConnected}
-              autoFocus={Boolean(onClose)}
-              maxLength={100}
-              onChange={(event) => updateKeywords(event.target.value)}
-              placeholder="搜索歌曲、歌手、歌单或专辑"
-              type="search"
-              value={keywords}
-            />
-            {enabledProviders.length > 1 ? (
-              <select aria-label="选择音乐平台" className="h-10 w-[4.75rem] shrink-0 rounded-lg border border-white/[0.08] bg-black px-1.5 text-[11px] text-white/75 outline-none sm:w-auto sm:px-2 sm:text-xs" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
-                {enabledProviders.map((item) => <option key={item} value={item}>{item === "netease" ? "网易云" : "QQ 音乐"}</option>)}
-              </select>
-            ) : null}
-          </form>
+          {searchForm}
         </header>
         {searchContent}
       </div>

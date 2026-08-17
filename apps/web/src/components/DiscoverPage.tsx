@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProviderPlaylistDetail,
@@ -12,6 +11,7 @@ import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
+import { ProviderSearchPage } from "@/components/ProviderSearchPage";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
@@ -52,6 +52,8 @@ const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
 ];
 
+const profileRefreshIntervalMs = 90_000;
+
 export function DiscoverPage() {
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/discover" });
   const { activeSession, hydrated } = useSessionIdentity({
@@ -80,6 +82,9 @@ export function DiscoverPage() {
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const requestVersionRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
+  const excludedCandidateKeysRef = useRef<Set<string>>(new Set());
+  const lastProfileRefreshAtRef = useRef(0);
+  const profileRefreshTimerRef = useRef<number | null>(null);
 
   const excludedCandidateKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -91,6 +96,10 @@ export function DiscoverPage() {
     }
     return keys;
   }, [player.currentTrack?.sourceRef, player.queue]);
+
+  useEffect(() => {
+    excludedCandidateKeysRef.current = excludedCandidateKeys;
+  }, [excludedCandidateKeys]);
 
   const load = useCallback(async () => {
     if (!activeSession) return;
@@ -107,7 +116,7 @@ export function DiscoverPage() {
         userId: activeSession.userId,
         context,
         enabledProviders,
-        excludedCandidateKeys,
+        excludedCandidateKeys: excludedCandidateKeysRef.current,
         signal: controller.signal
       });
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
@@ -118,7 +127,7 @@ export function DiscoverPage() {
     } finally {
       if (requestVersionRef.current === version) setLoading(false);
     }
-  }, [activeSession, excludedCandidateKeys]);
+  }, [activeSession]);
 
   useEffect(() => {
     if (hydrated && !activeSession) window.location.assign(authEntryHref);
@@ -126,12 +135,23 @@ export function DiscoverPage() {
 
   useEffect(() => {
     if (!activeSession) return;
+    lastProfileRefreshAtRef.current = Date.now();
     void load();
-    const onProfileChanged = () => void load();
+    const onProfileChanged = () => {
+      const elapsed = Date.now() - lastProfileRefreshAtRef.current;
+      if (elapsed < profileRefreshIntervalMs || profileRefreshTimerRef.current !== null) return;
+      profileRefreshTimerRef.current = window.setTimeout(() => {
+        profileRefreshTimerRef.current = null;
+        lastProfileRefreshAtRef.current = Date.now();
+        void load();
+      }, 1_500);
+    };
     window.addEventListener(listeningProfileChangedEvent, onProfileChanged);
     return () => {
       requestVersionRef.current += 1;
       requestAbortRef.current?.abort();
+      if (profileRefreshTimerRef.current !== null) window.clearTimeout(profileRefreshTimerRef.current);
+      profileRefreshTimerRef.current = null;
       window.removeEventListener(listeningProfileChangedEvent, onProfileChanged);
     };
   }, [activeSession, load]);
@@ -434,16 +454,7 @@ export function DiscoverPage() {
   return (
     <main className="workspace-page overflow-y-auto md:pl-60 lg:pb-28">
       <div className="workspace-page__inner workspace-page__inner--wide pb-10 pt-5 sm:pt-8 md:pt-10">
-        <header className="sticky top-0 z-10 -mx-4 flex items-end justify-between gap-4 border-b border-surface-border/70 bg-background/90 px-4 pb-4 pt-2 backdrop-blur-md sm:-mx-7 sm:px-7 md:-mx-10 md:px-10">
-          <div className="min-w-0">
-            <p className="workspace-page__eyebrow">Music Room</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">发现</h1>
-            <p className="mt-1 text-sm text-foreground-muted">{data?.seedCount ? "从你的聆听习惯出发，找一点新声音。" : "从你的每一次播放开始，慢慢形成专属推荐。"}</p>
-          </div>
-          <Link aria-label="前往搜索" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-surface-border bg-surface/70 text-foreground-muted transition hover:border-accent/50 hover:text-foreground active:scale-[0.97]" href="/app/search" title="搜索歌曲、歌手、专辑或歌单">
-            <SearchIcon />
-          </Link>
-        </header>
+        <ProviderSearchPage embedded inlineSearch />
 
         {loading && !data ? <DiscoverSkeleton /> : null}
         {!loading && noAccounts ? <DiscoverEmptyState title="连接音乐平台后开始发现" description="绑定网易云音乐或 QQ 音乐后，发现页会从你的听歌画像召回新的歌曲和歌单。" actionHref="/app/settings" actionLabel="前往绑定" /> : null}
@@ -631,6 +642,5 @@ function toErrorMessage(error: unknown) {
 }
 
 function PlayIcon() { return <svg aria-hidden="true" fill="currentColor" height="15" viewBox="0 0 24 24" width="15"><path d="M8 5v14l11-7z" /></svg>; }
-function SearchIcon() { return <svg aria-hidden="true" fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="17"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>; }
 function MoreIcon() { return <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>; }
 function CompassIcon() { return <svg aria-hidden="true" fill="none" height="28" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" viewBox="0 0 24 24" width="28"><circle cx="12" cy="12" r="8.5" /><path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" /></svg>; }
