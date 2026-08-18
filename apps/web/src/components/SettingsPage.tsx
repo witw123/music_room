@@ -310,35 +310,6 @@ export function SettingsPage({
                 ))}
               </select>
             </SettingRow>
-            <SettingRow label="进入播放器时显示歌词" description="歌词按钮仍可在播放器中随时切换。">
-              <Toggle
-                checked={settings.playback.showLyricsByDefault}
-                label="进入播放器时显示歌词"
-                onChange={(checked) => patchSettings({ playback: { showLyricsByDefault: checked } })}
-              />
-            </SettingRow>
-            <SettingRow label="歌词大小" description="应用于沉浸式播放器歌词。">
-              <select
-                aria-label="歌词大小"
-                className="h-9 min-w-32 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
-                onChange={(event) => patchSettings({ playback: { lyricFontScale: event.target.value as AppSettings["playback"]["lyricFontScale"] } })}
-                value={settings.playback.lyricFontScale}
-              >
-                <option value="small">小</option>
-                <option value="medium">中</option>
-                <option value="large">大</option>
-              </select>
-            </SettingRow>
-            <SettingRow label="歌词显示行数" description="歌词区域同时保留的可见行数。">
-              <select
-                aria-label="歌词显示行数"
-                className="h-9 min-w-32 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
-                onChange={(event) => patchSettings({ playback: { lyricLines: Number(event.target.value) } })}
-                value={settings.playback.lyricLines}
-              >
-                {[3, 5, 7].map((lineCount) => <option key={lineCount} value={lineCount}>{lineCount} 行</option>)}
-              </select>
-            </SettingRow>
           </SettingsSection>
 
           <SettingsSection title="隐私与数据">

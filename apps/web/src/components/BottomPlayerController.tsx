@@ -34,8 +34,6 @@ type BottomPlayerControllerProps = {
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  isLyricsOpen: boolean;
-  onToggleLyrics: () => void;
   onSeekRequestReady?: (requestSeek: ((positionMs: number) => void) | null) => void;
   mobileVariant?: "compact" | "full";
 };
@@ -64,8 +62,6 @@ function BottomPlayerControllerBase({
   onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
-  isLyricsOpen,
-  onToggleLyrics,
   onSeekRequestReady,
   mobileVariant = "full"
 }: BottomPlayerControllerProps) {
@@ -143,6 +139,7 @@ function BottomPlayerControllerBase({
 
   return (
     <BottomPlayer
+      desktopLyricsSource="room"
       mobileVariant={mobileVariant}
       audioRef={audioRef}
       playback={playback}
@@ -177,8 +174,6 @@ function BottomPlayerControllerBase({
       onPlayNextQueueItem={onPlayNextQueueItem}
       onRemoveQueueItem={onRemoveQueueItem}
       onReorderQueue={onReorderQueue}
-      isLyricsOpen={isLyricsOpen}
-      onToggleLyrics={onToggleLyrics}
       onSeekRequestReady={onSeekRequestReady}
     />
   );

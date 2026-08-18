@@ -229,3 +229,4 @@ export function getActiveRoomLyricIndex(lines: RoomLyricLine[], positionMs: numb
   }
   return activeIndex;
 }
+

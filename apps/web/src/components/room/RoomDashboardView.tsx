@@ -85,8 +85,6 @@ export type RoomDashboardViewProps = {
   socket: RoomSocket | null;
   onTabChange?: (tab: ManagementTabId) => void;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
-  isLyricsOpen: boolean;
-  onToggleLyrics: () => void;
   onSeek: (positionMs: number) => void;
 };
 
@@ -197,7 +195,6 @@ export function buildRoomStageProps(
     onAwayRoom: props.onAwayRoom,
     onLeaveRoom: props.onLeaveRoom,
     onDeleteRoom: props.onDeleteRoom,
-    isLyricsOpen: props.isLyricsOpen,
     onSeek: props.onSeek,
     showMobilePlayer: options?.showMobilePlayer,
     hideRoomMetadata: options?.hideRoomMetadata,

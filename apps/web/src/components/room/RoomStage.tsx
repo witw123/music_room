@@ -17,11 +17,10 @@ import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
-import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "./room-lyrics";
+import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { resolvePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
-import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { MemberPermissionControls } from "./MembersPanel";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
@@ -45,7 +44,6 @@ type RoomStageProps = {
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
-  isLyricsOpen: boolean;
   onSeek: (positionMs: number) => void;
   showMobilePlayer?: boolean;
   hideRoomMetadata?: boolean;
@@ -103,7 +101,6 @@ function RoomStageBase({
   onLeaveRoom,
   onDeleteRoom,
   onUpdateRoom,
-  isLyricsOpen,
   onSeek,
   showMobilePlayer = false,
   hideRoomMetadata = false,
@@ -112,7 +109,6 @@ function RoomStageBase({
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
-  const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
   const [editRoomForm, setEditRoomForm] = useState<UpdateRoomRequest>(() =>
     buildRoomEditForm(roomSnapshot)
   );
@@ -124,16 +120,6 @@ function RoomStageBase({
     setEditRoomForm(buildRoomEditForm(roomSnapshot));
   }, [roomSnapshot, showEditRoom]);
 
-  useEffect(() => {
-    const syncPreferences = () => setLyricPreferences(getAppSettings().playback);
-    syncPreferences();
-    window.addEventListener(appSettingsChangeEvent, syncPreferences);
-    window.addEventListener("storage", syncPreferences);
-    return () => {
-      window.removeEventListener(appSettingsChangeEvent, syncPreferences);
-      window.removeEventListener("storage", syncPreferences);
-    };
-  }, []);
   const [isCopying, setIsCopying] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -162,9 +148,7 @@ function RoomStageBase({
     : compactStage
       ? "clamp(10rem, min(28vh, 42vw), 14rem)"
       : "clamp(12rem, min(36vh, 42vw), 20rem)";
-  const stageContentOffset = isLyricsOpen
-    ? "translate-y-0"
-    : hideRoomMetadata
+  const stageContentOffset = hideRoomMetadata
       ? "translate-y-0"
     : ultraCompactStage
       ? "-translate-y-3"
@@ -546,8 +530,7 @@ function RoomStageBase({
       <div className="relative z-20 hidden min-h-0 flex-1 flex-col items-center overflow-visible lg:flex">
         <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-visible">
           <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-visible px-1 ${stageContentOffset}`}>
-            {!isLyricsOpen ? (
-              <div
+            <div
                 className="relative flex h-[var(--record-size)] min-h-0 w-full shrink-0 items-center justify-center"
                 data-room-stage-record="true"
               >
@@ -617,9 +600,7 @@ function RoomStageBase({
 
                 </div>
               </div>
-            ) : null}
-            {!isLyricsOpen ? (
-              <div
+            <div
                 className={`relative z-30 flex shrink-0 flex-col items-center text-center ${
                   ultraCompactStage ? "gap-3 pt-4" : compactStage ? "gap-4 pt-5" : "gap-5 pt-6 sm:gap-6 sm:pt-7"
                 }`}
@@ -677,20 +658,19 @@ function RoomStageBase({
                   </p>
                 )}
               </div>
-            ) : null}
 
             <RoomLyricsPanel
-              className={isLyricsOpen ? "max-w-[42rem]" : "max-w-[36rem]"}
+              className="max-w-[36rem]"
               frozen={playbackBarrier?.blocked === true}
-              visibleLines={isLyricsOpen ? lyricPreferences.lyricLines : 3}
-              fontScale={lyricPreferences.lyricFontScale}
+              visibleLines={3}
+              fontScale="medium"
               isPlaying={isPlaying}
               lyrics={lyricsText}
               translatedLyrics={translatedLyricsText}
               romanizedLyrics={romanizedLyricsText}
               showControls={false}
-              showTranslation={lyricPreferences.showLyricTranslation}
-              showRomanized={lyricPreferences.showLyricRomanized}
+              showTranslation={false}
+              showRomanized={false}
               positionMs={lyricsPositionMs}
               status={lyricsStatus}
               onSeek={onSeek}

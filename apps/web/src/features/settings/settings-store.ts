@@ -97,12 +97,9 @@ export type AppSettings = {
     playerStyle: PlayerStyle;
     disableArtworkColor: boolean;
     localPlaybackMode: PlaybackMode;
-    showLyricsByDefault: boolean;
     preventOfflineAutoLoad: boolean;
     streamingOnlyPlayback: boolean;
     fullyCachedPlayback: boolean;
-    lyricFontScale: "small" | "medium" | "large";
-    lyricLines: number;
     showLyricTranslation: boolean;
     showLyricRomanized: boolean;
   };
@@ -122,12 +119,9 @@ const defaultSettings: AppSettings = {
     playerStyle: "vinyl",
     disableArtworkColor: false,
     localPlaybackMode: "sequence",
-    showLyricsByDefault: false,
     preventOfflineAutoLoad: false,
     streamingOnlyPlayback: false,
     fullyCachedPlayback: false,
-    lyricFontScale: "medium",
-    lyricLines: 5,
     showLyricTranslation: true,
     showLyricRomanized: false
   }
@@ -185,16 +179,10 @@ export function normalizeSettings(value: unknown): AppSettings {
   const volume = typeof playback.defaultVolume === "number" && Number.isFinite(playback.defaultVolume)
     ? Math.min(1, Math.max(0, playback.defaultVolume))
     : defaultSettings.playback.defaultVolume;
-  const lyricLines = typeof playback.lyricLines === "number" && Number.isFinite(playback.lyricLines)
-    ? Math.round(Math.min(7, Math.max(3, playback.lyricLines)))
-    : defaultSettings.playback.lyricLines;
   const playbackMode = playback.localPlaybackMode === "shuffle" || playback.localPlaybackMode === "single"
     ? playback.localPlaybackMode
     : "sequence";
   const playerStyle: PlayerStyle = playback.playerStyle === "square-cover" ? "square-cover" : "vinyl";
-  const lyricFontScale = playback.lyricFontScale === "small" || playback.lyricFontScale === "large"
-    ? playback.lyricFontScale
-    : "medium";
   const streamingOnlyPlayback = playback.streamingOnlyPlayback === true;
   const fullyCachedPlayback = !streamingOnlyPlayback && playback.fullyCachedPlayback === true;
 
@@ -212,12 +200,9 @@ export function normalizeSettings(value: unknown): AppSettings {
       playerStyle,
       disableArtworkColor: playback.disableArtworkColor === true,
       localPlaybackMode: playbackMode,
-      showLyricsByDefault: playback.showLyricsByDefault === true,
       preventOfflineAutoLoad: playback.preventOfflineAutoLoad === true,
       streamingOnlyPlayback,
       fullyCachedPlayback,
-      lyricFontScale,
-      lyricLines,
       showLyricTranslation: playback.showLyricTranslation !== false,
       showLyricRomanized: playback.showLyricRomanized === true
     }

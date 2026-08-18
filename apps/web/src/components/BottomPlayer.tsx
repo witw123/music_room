@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import {
   DesktopBottomPlayerLayout,
@@ -26,6 +26,11 @@ import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { usePersonalizationReporter } from "@/features/personalization/use-personalization-reporter";
+import {
+  useDesktopLyrics,
+  useDesktopLyricsRegistration,
+  type DesktopLyricsSource
+} from "@/features/playback/desktop-lyrics-context";
 import {
   getRoomPlaybackClockNowMs,
   type RoomPlaybackBarrierClock
@@ -65,8 +70,7 @@ type BottomPlayerProps = {
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  isLyricsOpen?: boolean;
-  onToggleLyrics?: () => void;
+  desktopLyricsSource?: DesktopLyricsSource;
   onSeekRequestReady?: (requestSeek: ((positionMs: number) => void) | null) => void;
   mobileVariant?: "compact" | "full";
 };
@@ -126,8 +130,7 @@ function BottomPlayerBase({
   onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
-  isLyricsOpen = false,
-  onToggleLyrics,
+  desktopLyricsSource = "local",
   onSeekRequestReady,
   mobileVariant = "full"
 }: BottomPlayerProps) {
@@ -431,6 +434,21 @@ function BottomPlayerBase({
     void onNext();
   }, [onNext]);
 
+  const desktopLyrics = useDesktopLyrics();
+  const desktopLyricsPlayer = useMemo(() => ({
+    source: desktopLyricsSource,
+    currentTrack,
+    playbackTrackId: playback?.currentTrackId,
+    isPlaying,
+    progressMs: boundedProgressMs,
+    artworkUrl,
+    canControlPlayback: playerControlsEnabled,
+    onPrev: playPrev,
+    onTogglePlay: togglePlayback,
+    onNext: playNext
+  }), [artworkUrl, boundedProgressMs, currentTrack, desktopLyricsSource, isPlaying, playback?.currentTrackId, playerControlsEnabled, playNext, playPrev, togglePlayback]);
+  useDesktopLyricsRegistration(desktopLyricsPlayer);
+
   const applyVolume = useCallback(
     (nextVolume: number) => {
       const boundedVolume = Math.min(1, Math.max(0, nextVolume));
@@ -498,8 +516,8 @@ function BottomPlayerBase({
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
         isMiniOpen={isMiniOpen}
         onToggleMini={toggleMiniPlayer}
-        isLyricsOpen={isLyricsOpen}
-        onToggleLyrics={onToggleLyrics}
+        isLyricsOpen={desktopLyrics.isOpen}
+        onToggleLyrics={desktopLyrics.toggle}
         artworkAccent={artworkPalette.accent}
         artworkAccentSoft={artworkPalette.accentSoft}
         artworkUrl={artworkUrl}
@@ -539,8 +557,8 @@ function BottomPlayerBase({
         onToggleImmersive={() => setIsImmersiveOpen((current) => !current)}
         isMiniOpen={isMiniOpen}
         onToggleMini={toggleMiniPlayer}
-        isLyricsOpen={isLyricsOpen}
-        onToggleLyrics={onToggleLyrics}
+        isLyricsOpen={desktopLyrics.isOpen}
+        onToggleLyrics={desktopLyrics.toggle}
         artworkAccent={artworkPalette.accent}
         artworkAccentSoft={artworkPalette.accentSoft}
         artworkUrl={artworkUrl}

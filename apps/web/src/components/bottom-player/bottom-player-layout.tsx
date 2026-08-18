@@ -210,8 +210,8 @@ export function LyricsToggleButton({
       type="button"
       data-testid="player-lyrics-toggle"
       aria-pressed={isOpen}
-      aria-label={isOpen ? "关闭歌词" : "打开歌词"}
-      title={isOpen ? "关闭歌词" : "打开歌词"}
+      aria-label={isOpen ? "关闭桌面歌词" : "打开桌面歌词"}
+      title={isOpen ? "关闭桌面歌词" : "打开桌面歌词"}
       onClick={onToggle}
       disabled={disabled}
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"

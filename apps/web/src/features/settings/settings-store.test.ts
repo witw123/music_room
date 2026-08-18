@@ -28,7 +28,6 @@ describe("app settings store", () => {
         playerStyle: "vinyl",
         disableArtworkColor: false,
         localPlaybackMode: "sequence",
-        lyricLines: 5,
         preventOfflineAutoLoad: false,
         streamingOnlyPlayback: false,
         fullyCachedPlayback: false
@@ -165,7 +164,6 @@ describe("app settings store", () => {
       layout: { sidebarCollapsed: false },
       playback: {
         defaultVolume: 2,
-        lyricLines: 9,
         preventOfflineAutoLoad: true,
         streamingOnlyPlayback: true
       }
@@ -175,7 +173,6 @@ describe("app settings store", () => {
       playback: {
         defaultVolume: 1,
         disableArtworkColor: false,
-        lyricLines: 7,
         preventOfflineAutoLoad: true,
         streamingOnlyPlayback: true,
         fullyCachedPlayback: false

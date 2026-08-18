@@ -91,8 +91,6 @@ type RoomWorkspaceProps = {
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
   onTabChange: (tab: "library" | "local" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
-  isLyricsOpen: boolean;
-  onToggleLyrics: () => void;
   onSeek: (positionMs: number) => void;
   socket: RoomSocket | null;
   playerSlot: ReactNode;
@@ -162,8 +160,6 @@ function RoomWorkspaceBase({
   onRefreshRoom,
   onTabChange,
   onDiagnosticsVisibilityChange,
-  isLyricsOpen,
-  onToggleLyrics,
   onSeek,
   socket,
   playerSlot
@@ -277,8 +273,6 @@ function RoomWorkspaceBase({
               socket={socket}
               onTabChange={onTabChange}
               onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
-              isLyricsOpen={isLyricsOpen}
-              onToggleLyrics={onToggleLyrics}
               onSeek={onSeek}
             />
           ) : showRoomTransitionState ? (

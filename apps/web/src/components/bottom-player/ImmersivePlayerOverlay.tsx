@@ -6,14 +6,14 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
-import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/components/room/room-lyrics";
+import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
 import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
 import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { type PlaybackMode } from "@/components/bottom-player/playback-mode";
 import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
-import { appSettingsChangeEvent, getAppSettings, getDefaultAppSettings, updateAppSettings } from "@/features/settings/settings-store";
+import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 
@@ -646,7 +646,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
   const [translatedLyric, setTranslatedLyric] = useState<string | null>(null);
   const [romanizedLyric, setRomanizedLyric] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [lyricPreferences, setLyricPreferences] = useState(() => getDefaultAppSettings().playback);
+  const [lyricPreferences, setLyricPreferences] = useState(() => getAppSettings().playback);
 
   useEffect(() => {
     const syncPreferences = () => setLyricPreferences(getAppSettings().playback);
@@ -704,7 +704,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
   }, [isOpen, roomLyrics, sourceProvider, sourceTrackId, storedRomanizedLyrics, storedTranslatedLyrics]);
 
   if (!isOpen) return null;
-  return <div className={desktop || mobile ? "min-h-0 w-full flex-1" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} frozen={frozen} immersive={desktop} mobile={mobile} visibleLines={desktop || mobile ? 7 : lyricPreferences.lyricLines} fontScale={lyricPreferences.lyricFontScale} isPlaying={isPlaying} lyrics={plainLyric} translatedLyrics={translatedLyric} romanizedLyrics={romanizedLyric} showControls showTranslation={lyricPreferences.showLyricTranslation} showRomanized={lyricPreferences.showLyricRomanized} onToggleTranslation={() => updateAppSettings({ playback: { showLyricTranslation: !lyricPreferences.showLyricTranslation } })} onToggleRomanized={() => updateAppSettings({ playback: { showLyricRomanized: !lyricPreferences.showLyricRomanized } })} onSeek={onSeekToPosition} positionMs={positionMs} status={lyricsStatus} /></div>;
+  return <div className={desktop || mobile ? "min-h-0 w-full flex-1" : "mt-4 min-h-0 border-t border-white/[0.08] pt-4"}><RoomLyricsPanel align={desktop ? "left" : "center"} frozen={frozen} immersive={desktop} mobile={mobile} visibleLines={desktop || mobile ? 7 : 3} fontScale="medium" isPlaying={isPlaying} lyrics={plainLyric} translatedLyrics={translatedLyric} romanizedLyrics={romanizedLyric} showControls showTranslation={lyricPreferences.showLyricTranslation} showRomanized={lyricPreferences.showLyricRomanized} onToggleTranslation={() => updateAppSettings({ playback: { showLyricTranslation: !lyricPreferences.showLyricTranslation } })} onToggleRomanized={() => updateAppSettings({ playback: { showLyricRomanized: !lyricPreferences.showLyricRomanized } })} onSeek={onSeekToPosition} positionMs={positionMs} status={lyricsStatus} /></div>;
 }
 
 function getSourceLabel(sourceType: TrackMeta["sourceType"]) {

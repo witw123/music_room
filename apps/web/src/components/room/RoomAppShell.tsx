@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
@@ -15,7 +15,6 @@ import type { useRoomPageRoomActions } from "@/components/room/hooks/use-room-pa
 import type { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 import type { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import type { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
-import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 
 type RoomAppShellProps = {
@@ -73,22 +72,10 @@ export function RoomAppShell({
   workspaceEntryHref,
   workspaceViewModel
 }: RoomAppShellProps) {
-  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const requestRoomSeekRef = useRef<(positionMs: number) => void>(() => undefined);
   const roomType = roomSnapshot?.room.roomType;
   const isHostControlledRoom = roomType === "request" || roomType === "radio";
   const isRoomHost = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
-
-  useEffect(() => {
-    const syncLyricsPreference = () => setIsLyricsOpen(getAppSettings().playback.showLyricsByDefault);
-    syncLyricsPreference();
-    window.addEventListener(appSettingsChangeEvent, syncLyricsPreference);
-    window.addEventListener("storage", syncLyricsPreference);
-    return () => {
-      window.removeEventListener(appSettingsChangeEvent, syncLyricsPreference);
-      window.removeEventListener("storage", syncLyricsPreference);
-    };
-  }, []);
 
   return (
     <>
@@ -165,8 +152,6 @@ export function RoomAppShell({
           onRefreshRoom={roomActions.refreshRoomSnapshot}
           onTabChange={pageState.setActiveDashboardTab}
           onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
-          isLyricsOpen={isLyricsOpen}
-          onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
           onSeek={(positionMs) => requestRoomSeekRef.current(positionMs)}
           socket={socket}
           playerSlot={null}
@@ -206,8 +191,6 @@ export function RoomAppShell({
         onPlayNextQueueItem={roomActions.setNextQueueItem}
         onRemoveQueueItem={roomActions.removeQueueItem}
         onReorderQueue={roomActions.reorderQueue}
-        isLyricsOpen={isLyricsOpen}
-        onToggleLyrics={() => setIsLyricsOpen((current) => !current)}
       />
     </>
   );

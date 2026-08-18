@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { alignRoomLyricLines, getActiveRoomLyricIndex, getRoomLyricDisplayWords, getRoomLyricWordProgress, parseRoomLyrics } from "./room-lyrics";
+import { alignRoomLyricLines, getActiveRoomLyricIndex, getRoomLyricDisplayWords, getRoomLyricWordProgress, parseRoomLyrics } from "@/features/playback/lyrics";
 
 type RoomLyricsPanelProps = {
   lyrics: string | null;

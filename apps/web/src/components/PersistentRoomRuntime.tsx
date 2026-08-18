@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { MusicRoomApp } from "@/components/music-room-app";
 import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/domain/away-room";
+import { DesktopLyricsOverlay } from "@/components/DesktopLyricsOverlay";
+import { DesktopLyricsProvider } from "@/features/playback/desktop-lyrics-context";
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -25,7 +27,7 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const runtimeRoomId = routeRoomId ?? awayRoomId;
 
   return (
-    <>
+    <DesktopLyricsProvider>
       {children}
       {runtimeRoomId ? (
         <LocalPlayerProvider>
@@ -36,7 +38,8 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
           />
         </LocalPlayerProvider>
       ) : null}
-    </>
+      <DesktopLyricsOverlay />
+    </DesktopLyricsProvider>
   );
 }
 

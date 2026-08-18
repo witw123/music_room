@@ -8,6 +8,7 @@ export function AppPersistentPlayer() {
 
   return (
     <BottomPlayer
+      desktopLyricsSource="local"
       mobileVariant="compact"
       audioRef={player.audioRef}
       playback={player.playback}

@@ -7,7 +7,7 @@ import {
   hasWordSyncedRoomLyrics,
   parseRoomLyrics,
   selectRoomLyrics
-} from "./room-lyrics";
+} from "@/features/playback/lyrics";
 
 describe("room lyrics", () => {
   it("aligns auxiliary lyrics by timestamp instead of array index", () => {
