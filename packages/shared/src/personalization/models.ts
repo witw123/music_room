@@ -2,7 +2,7 @@ import { z } from "zod";
 import { providerPlaylistSummarySchema, providerTrackCandidateSchema } from "../providers/catalog";
 
 export const personalizationSurfaceSchema = z.enum(["discover", "radio", "search"]);
-export const tasteEntityKindSchema = z.enum(["track", "artist", "album", "playlist", "tag", "source"]);
+export const tasteEntityKindSchema = z.enum(["track", "artist", "album", "playlist", "source"]);
 export const tasteEventTypeSchema = z.enum([
   "playback",
   "favorite",

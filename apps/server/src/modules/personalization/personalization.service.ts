@@ -16,6 +16,7 @@ import type { Prisma } from "../../generated/prisma";
 import { RedisService } from "../../infra/redis/redis.service";
 import { NeteaseService } from "../providers/netease/netease.service";
 import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
+import { rankTasteTags } from "./taste-taxonomy";
 
 const recallCacheSeconds = 30 * 60;
 const longTermHalfLifeMs = 120 * 24 * 60 * 60 * 1_000;
@@ -45,6 +46,7 @@ type TasteEntityRecord = {
   updatedAt: Date;
 };
 type TasteEventRecord = { entityKind: string; entityKey: string; provider: string | null; listenedMs: bigint; occurredAt: Date; updatedAt: Date };
+type PlaylistTasteRecord = { title: string; description: string | null; tags: unknown; trackIds: unknown };
 
 @Injectable()
 export class PersonalizationService {
@@ -144,20 +146,21 @@ export class PersonalizationService {
 
   async getProfile(userId: string): Promise<PersonalizationProfileResponse> {
     this.assertDatabaseAvailable();
-    const [entities, events] = await Promise.all([
+    const [entities, events, playlists] = await Promise.all([
       this.prisma.userTasteEntity.findMany({ where: { userId } }),
-      this.prisma.userTasteEvent.findMany({ where: { userId, eventType: "playback" } })
+      this.prisma.userTasteEvent.findMany({ where: { userId, eventType: "playback" } }),
+      this.prisma.playlist.findMany({ where: { ownerId: userId }, select: { title: true, description: true, tags: true, trackIds: true } })
     ]);
     const tracks = entities.filter((item) => item.entityKind === "track");
     const artists = entities.filter((item) => item.entityKind === "artist");
-    const tags = entities.filter((item) => item.entityKind === "tag")
-      .sort((left, right) => entityScore(right) - entityScore(left))
-      .slice(0, 5)
-      .map((item) => ({ label: item.title ?? item.entityKey, confidence: Number(item.confidence) }));
-    const artistTags = entities.filter((item) => item.entityKind === "artist")
-      .sort((left, right) => entityScore(right) - entityScore(left))
-      .slice(0, 5)
-      .map((item) => ({ label: item.title ?? item.entityKey, confidence: Math.min(1, entityScore(item) / 7) }));
+    const playlistMetadataByTrack = indexPlaylistMetadata(playlists);
+    const tags = rankTasteTags(tracks.map((item) => ({
+      title: item.title,
+      album: item.album,
+      playlistMetadata: playlistMetadataByTrack.get(item.entityKey),
+      score: entityScore(item),
+      confidence: Number(item.confidence)
+    })), 20);
     const totalListenedMs = events.reduce((total, event) => total + Number(event.listenedMs), 0);
     const topTracks = tracks
       .map((item) => ({ item, candidate: entityToCandidate(item) }))
@@ -183,7 +186,7 @@ export class PersonalizationService {
       totalPlayCount: events.length,
       trackCount: tracks.filter((item) => item.interactionCount > 0).length,
       artistCount: artists.length,
-      tasteTags: tags.length ? tags : artistTags,
+      tasteTags: tags,
       topTracks,
       topArtists: artists.sort((left, right) => entityScore(right) - entityScore(left)).slice(0, 5).map((item) => ({
         name: item.title ?? item.entityKey,
@@ -494,4 +497,21 @@ function profileVersion(entities: TasteEntityRecord[], events: TasteEventRecord[
     ...events.map((item) => item.updatedAt.getTime())
   );
   return `${entities.length}:${events.length}:${latest}`;
+}
+
+function indexPlaylistMetadata(playlists: PlaylistTasteRecord[]) {
+  const metadataByTrack = new Map<string, string[]>();
+  for (const playlist of playlists) {
+    const metadata = [playlist.title, playlist.description, ...toStringList(playlist.tags)]
+      .filter((value): value is string => Boolean(value?.trim()));
+    if (metadata.length === 0) continue;
+    for (const trackId of toStringList(playlist.trackIds)) {
+      metadataByTrack.set(trackId, [...(metadataByTrack.get(trackId) ?? []), ...metadata]);
+    }
+  }
+  return metadataByTrack;
+}
+
+function toStringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }

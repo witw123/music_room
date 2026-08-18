@@ -76,12 +76,12 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
           </dl>
 
           <section className="py-6">
-            <SectionTitle title="歌曲偏好" />
+            <SectionTitle title="音乐偏好" />
             {profile.tasteTags.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {profile.tasteTags.map((tag) => <span className="flex h-16 min-w-16 items-center justify-center rounded-full border border-accent/35 bg-accent/10 px-3 text-center text-xs font-medium text-accent" key={tag.label}>{tag.label}</span>)}
+                {profile.tasteTags.slice(0, 20).map((tag) => <span className="inline-flex h-8 items-center rounded-full border border-accent/35 bg-accent/10 px-3 text-xs font-medium text-accent" key={tag.label}>{tag.label}</span>)}
               </div>
-            ) : <p className="mt-3 text-sm text-foreground-muted">继续收听，画像会逐步形成</p>}
+            ) : <p className="mt-3 text-sm text-foreground-muted">继续收听，音乐偏好会逐步形成</p>}
           </section>
 
           <div className="grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-2 lg:gap-10">
