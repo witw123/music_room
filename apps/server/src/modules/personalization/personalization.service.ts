@@ -154,6 +154,10 @@ export class PersonalizationService {
       .sort((left, right) => entityScore(right) - entityScore(left))
       .slice(0, 5)
       .map((item) => ({ label: item.title ?? item.entityKey, confidence: Number(item.confidence) }));
+    const artistTags = entities.filter((item) => item.entityKind === "artist")
+      .sort((left, right) => entityScore(right) - entityScore(left))
+      .slice(0, 5)
+      .map((item) => ({ label: item.title ?? item.entityKey, confidence: Math.min(1, entityScore(item) / 7) }));
     const totalListenedMs = events.reduce((total, event) => total + Number(event.listenedMs), 0);
     const topTracks = tracks
       .map((item) => ({ item, candidate: entityToCandidate(item) }))
@@ -179,7 +183,7 @@ export class PersonalizationService {
       totalPlayCount: events.length,
       trackCount: tracks.filter((item) => item.interactionCount > 0).length,
       artistCount: artists.length,
-      tasteTags: tags,
+      tasteTags: tags.length ? tags : artistTags,
       topTracks,
       topArtists: artists.sort((left, right) => entityScore(right) - entityScore(left)).slice(0, 5).map((item) => ({
         name: item.title ?? item.entityKey,
@@ -303,7 +307,6 @@ export class PersonalizationService {
   }
 
   private async projectEntity(transaction: Prisma.TransactionClient, userId: string, kind: TasteEntityKind, key: string, input: Record<string, unknown> & { score: number; occurredAt: Date; retainScore?: boolean }) {
-    const existing = await transaction.userTasteEntity.findUnique({ where: { userId_entityKind_entityKey: { userId, entityKind: kind, entityKey: key } } });
     const positiveScore = Math.max(0, input.score);
     const negativeScore = Math.max(0, -input.score);
     const data = {
@@ -319,17 +322,25 @@ export class PersonalizationService {
       artworkUrl: typeof input.artworkUrl === "string" ? input.artworkUrl : null,
       lastOccurredAt: input.occurredAt
     };
-    if (!existing) {
-      await transaction.userTasteEntity.create({ data: { id: `taste_entity_${randomUUID()}`, userId, entityKind: kind, entityKey: key, ...data, positiveScore, negativeScore, confidence: Math.min(1, Math.abs(input.score) / 7), interactionCount: 1 } });
-      return;
-    }
-    await transaction.userTasteEntity.update({
-      where: { id: existing.id },
-      data: {
+    await transaction.userTasteEntity.upsert({
+      where: { userId_entityKind_entityKey: { userId, entityKind: kind, entityKey: key } },
+      create: {
+        id: `taste_entity_${randomUUID()}`,
+        userId,
+        entityKind: kind,
+        entityKey: key,
         ...data,
-        positiveScore: input.retainScore ? Math.max(existing.positiveScore, positiveScore) : { increment: positiveScore },
-        negativeScore: input.retainScore ? Math.max(existing.negativeScore, negativeScore) : { increment: negativeScore },
-        confidence: Math.min(1, existing.confidence + Math.abs(input.score) * 0.04),
+        positiveScore,
+        negativeScore,
+        confidence: Math.min(1, Math.abs(input.score) / 7),
+        interactionCount: 1
+      },
+      update: {
+        ...data,
+        ...(input.retainScore
+          ? { positiveScore: Math.max(0, positiveScore), negativeScore: Math.max(0, negativeScore) }
+          : { positiveScore: { increment: positiveScore }, negativeScore: { increment: negativeScore } }),
+        confidence: { increment: Math.abs(input.score) * 0.04 },
         interactionCount: { increment: input.retainScore ? 0 : 1 }
       }
     });
