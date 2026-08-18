@@ -21,6 +21,7 @@ import {
   resolveOfflineProviderSource
 } from "@/features/playback/offline-source-fallback";
 import { getRoomLocalAudioFile } from "@/features/library/local-audio-storage";
+import { resolveRoomPlaybackStrategy } from "@/features/room/playback/room-playback-strategy";
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import { resolveCurrentRoomPlaybackAsset } from "@/features/playback/room-playback-asset";
 import {
@@ -102,6 +103,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   publishPlaybackReadiness: (payload: RoomPlaybackReadinessInputPayload) => void;
   activeSessionId: string | null;
 }) {
+  const playbackStrategy = resolveRoomPlaybackStrategy(input.roomSnapshot?.room.roomType);
   const setStatusMessage = input.setStatusMessage;
   const onPlaybackEnded = input.onPlaybackEnded;
   const localPeerId = input.peerId;
@@ -134,11 +136,17 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   } = playbackPreferences;
   // Offline auto-cache prevention and stream-only playback take priority over
   // the provider-cache preference when multiple strategies are enabled.
-  const forceProviderCache = !preventOfflineAutoLoad &&
+  const sharedCacheEnabled = playbackStrategy.cache === "shared-library-and-provider";
+  const segmentedStreamEnabled = playbackStrategy.stream === "segmented-opus-with-rtp-fallback";
+  const forceProviderCache = sharedCacheEnabled &&
+    segmentedStreamEnabled &&
+    !preventOfflineAutoLoad &&
     !streamingOnlyPlayback &&
     fullyCachedPlayback &&
     isProviderTrack(input.currentTrack);
-  const cacheBarrierEnabled = fullyCachedPlayback &&
+  const cacheBarrierEnabled = sharedCacheEnabled &&
+    segmentedStreamEnabled &&
+    fullyCachedPlayback &&
     !preventOfflineAutoLoad &&
     !streamingOnlyPlayback &&
     isProviderTrack(input.currentTrack);

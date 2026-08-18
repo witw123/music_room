@@ -44,6 +44,7 @@ import type { Route } from "next";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { ProviderAlbumDetailView, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
+import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
 import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
@@ -107,6 +108,8 @@ export function ProviderSearchPage({
   );
   const [uncontrolledKeywords, setUncontrolledKeywords] = useState("");
   const keywords = controlledKeywords ?? uncontrolledKeywords;
+  const isConnected = account?.connected === true;
+  const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
   const [results, setResults] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<ProviderPlaylistSummary[]>([]);
   const [playlist, setPlaylist] = useState<ProviderPlaylistDetail | null>(null);
@@ -114,6 +117,9 @@ export function ProviderSearchPage({
   const [album, setAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("songs");
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [remoteSuggestions, setRemoteSuggestions] = useState<SearchSuggestionItem[]>([]);
+  const [remoteHotWords, setRemoteHotWords] = useState<SearchSuggestionItem[]>([]);
   const [pending, setPending] = useState<string | null>(null);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
@@ -132,6 +138,7 @@ export function ProviderSearchPage({
   const keywordsRef = useRef(keywords);
   keywordsRef.current = keywords;
   const lastSearchRequestKeyRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const updateKeywords = useCallback((value: string) => {
     if (onKeywordsChange) {
@@ -150,6 +157,43 @@ export function ProviderSearchPage({
       setProvider(initialProvider);
     }
   }, [initialProvider]);
+
+  useEffect(() => {
+    if (!isConnected || !searchSuggestionsOpen) {
+      setRemoteSuggestions([]);
+      setRemoteHotWords([]);
+      return;
+    }
+    let cancelled = false;
+    const query = keywords.trim();
+    const timerId = window.setTimeout(async () => {
+      try {
+        const response = query
+          ? provider === "netease"
+            ? await musicRoomApi.searchNeteaseSuggestions(query)
+            : await musicRoomApi.searchQqMusicSuggestions(query)
+          : provider === "netease"
+            ? await musicRoomApi.getNeteaseSearchHot()
+            : await musicRoomApi.getQqMusicSearchHot();
+        if (cancelled) return;
+        const items = response.items.map((item) => ({
+          label: item.label,
+          hint: item.hint ?? (query ? "联想" : "热词"),
+          provider: item.provider
+        }));
+        if (query) setRemoteSuggestions(items);
+        else setRemoteHotWords(items);
+      } catch {
+        if (cancelled) return;
+        if (query) setRemoteSuggestions([]);
+        else setRemoteHotWords([]);
+      }
+    }, query ? 220 : 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [isConnected, keywords, provider, searchSuggestionsOpen]);
 
   useEffect(() => {
     if (!activeSession) return;
@@ -189,6 +233,9 @@ export function ProviderSearchPage({
     setAlbum(null);
     setErrorMessage(null);
     setStatusMessage(null);
+    setSearchSuggestionsOpen(false);
+    setRemoteSuggestions([]);
+    setRemoteHotWords([]);
     const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
     void load()
       .then((nextAccount) => {
@@ -204,9 +251,6 @@ export function ProviderSearchPage({
       cancelled = true;
     };
   }, [activeSession, provider]);
-
-  const isConnected = account?.connected === true;
-  const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
 
   useEffect(() => {
     let cancelled = false;
@@ -731,18 +775,28 @@ export function ProviderSearchPage({
         )
       ) : null}
       <span className="flex h-10 w-8 shrink-0 items-center justify-center text-white/45"><Icon name="search" /></span>
-      <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌手、歌单或专辑</label>
-      <input
-        id="provider-search-input"
-        className="h-full min-w-0 flex-1 bg-transparent px-1 text-base text-white outline-none placeholder:text-white/30"
-        disabled={!isConnected}
-        autoFocus={Boolean(onClose)}
-        maxLength={100}
-        onChange={(event) => updateKeywords(event.target.value)}
-        placeholder="搜索歌曲、歌手、歌单或专辑"
-        type="search"
-        value={keywords}
-      />
+      <div className="relative min-w-0 flex-1">
+        <label className="sr-only" htmlFor="provider-search-input">搜索歌曲、歌手、歌单或专辑</label>
+        <input
+          ref={searchInputRef}
+          id="provider-search-input"
+          className="h-full w-full min-w-0 bg-transparent px-1 text-base text-white outline-none placeholder:text-white/30"
+          disabled={!isConnected}
+          autoFocus={Boolean(onClose)}
+          maxLength={100}
+          onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 120)}
+          onChange={(event) => { updateKeywords(event.target.value); if (isConnected) setSearchSuggestionsOpen(true); }}
+          onFocus={() => { if (isConnected) setSearchSuggestionsOpen(true); }}
+          onKeyDown={(event) => { if (event.key === "Escape") setSearchSuggestionsOpen(false); }}
+          placeholder="搜索歌曲、歌手、歌单或专辑"
+          type="search"
+          value={keywords}
+        />
+        {searchSuggestionsOpen ? <SearchSuggestions
+          items={keywords.trim() ? remoteSuggestions : remoteHotWords}
+          onSelect={(value) => { updateKeywords(value); setSearchSuggestionsOpen(false); searchInputRef.current?.focus(); }}
+        /> : null}
+      </div>
       {enabledProviders.length > 1 ? (
         <select aria-label="选择音乐平台" className="h-10 w-[4.75rem] shrink-0 rounded-lg border border-white/[0.08] bg-black px-1.5 text-[11px] text-white/75 outline-none sm:w-auto sm:px-2 sm:text-xs" onChange={(event) => setProvider(event.target.value as Provider)} value={provider}>
           {enabledProviders.map((item) => <option key={item} value={item}>{item === "netease" ? "网易云" : "QQ 音乐"}</option>)}
