@@ -2,6 +2,7 @@ export type TasteTagSource = {
   title: string | null;
   album: string | null;
   playlistMetadata?: readonly string[];
+  providerTags?: readonly string[];
   score: number;
   confidence: number;
 };
@@ -61,7 +62,7 @@ export function rankTasteTags(sources: readonly TasteTagSource[], limit = 20): R
 }
 
 export function extractTasteLabels(source: Omit<TasteTagSource, "score" | "confidence">) {
-  const text = [source.title, source.album, ...(source.playlistMetadata ?? [])]
+  const text = [source.title, source.album, ...(source.playlistMetadata ?? []), ...(source.providerTags ?? [])]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
   if (!text) return [];

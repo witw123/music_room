@@ -64,7 +64,7 @@ export async function buildTrackMeta(
     type: TrackSourceType;
     metadata?: Pick<
       NeteaseTrackCandidate | QqMusicTrackCandidate,
-      "title" | "artist" | "album" | "artworkUrl"
+      "title" | "artist" | "album" | "artworkUrl" | "tags"
     >;
     sourceRef?: RemoteTrackSourceRef;
     loudness?: TrackLoudness;
@@ -108,6 +108,7 @@ export async function buildTrackMeta(
     mimeType: file.type || null,
     fileHash,
     artworkUrl: parsedEmbeddedMetadata.artworkUrl ?? source?.metadata?.artworkUrl ?? null,
+    ...(source?.metadata?.tags?.length ? { providerTags: source.metadata.tags } : {}),
     lyrics: embeddedMetadata?.lyrics ?? null,
     ownerSessionId: session.userId,
     ownerNickname: session.nickname,

@@ -55,6 +55,7 @@ export const providerPlaylistSummarySchema = z
     providerPlaylistId: z.string().trim().min(1),
     title: z.string(),
     description: z.string().nullable(),
+    tags: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
     artworkUrl: z.string().url().nullable(),
     creatorName: z.string().nullable(),
     trackCount: z.number().int().nonnegative()

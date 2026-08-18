@@ -355,7 +355,7 @@ export function DiscoverPage() {
           description: playlist.description,
           coverUrl: playlist.artworkUrl ?? playlist.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
           isCollaborative: false,
-          tags: ["network", `network:${key}`],
+          tags: ["network", `network:${key}`, ...playlist.tags].slice(0, 20),
           trackIds: playlist.tracks.map((track) => localPlaylistTrackId(track))
         });
         await Promise.all(playlist.tracks.map((track) => upsertLocalPlaylistTrack(toProviderTrackRecord(track)).catch(() => undefined)));

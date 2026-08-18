@@ -20,6 +20,9 @@ type ListeningSession = {
   quickSkipReported: boolean;
 };
 
+const providerTagCache = new Map<string, string[]>();
+const providerTagRequests = new Map<string, Promise<string[]>>();
+
 export function usePersonalizationReporter(input: {
   userId: string | null;
   currentTrack: TrackMeta | null;
@@ -33,6 +36,7 @@ export function usePersonalizationReporter(input: {
     const session = sessionRef.current;
     if (!session || session.listenedMs < 1_000) return;
     try {
+      session.track = await enrichPersonalizationTrack(session.track);
       await musicRoomApi.recordPersonalizationEvent({
         id: session.id,
         type: "playback",
@@ -93,15 +97,15 @@ export function recordPersonalizationFavorite(track: TrackMeta, isFavorite: bool
 }
 
 export function recordPersonalizationFavoriteCandidate(track: ProviderTrackCandidate, isFavorite: boolean) {
-  return recordFavoriteEvent({ provider: track.provider, providerTrackId: track.providerTrackId, access: track.access, quality: track.quality, title: track.title.trim() || "未命名歌曲", artist: track.artist.trim() || "未知艺人", album: track.album?.trim() || null, providerAlbumId: track.providerAlbumId ?? null, durationMs: Math.max(0, Math.round(track.durationMs)), artworkUrl: /^https?:\/\//i.test(track.artworkUrl ?? "") ? track.artworkUrl : null }, isFavorite);
+  return recordFavoriteEvent({ provider: track.provider, providerTrackId: track.providerTrackId, access: track.access, quality: track.quality, title: track.title.trim() || "未命名歌曲", artist: track.artist.trim() || "未知艺人", album: track.album?.trim() || null, providerAlbumId: track.providerAlbumId ?? null, providerTags: track.tags, durationMs: Math.max(0, Math.round(track.durationMs)), artworkUrl: /^https?:\/\//i.test(track.artworkUrl ?? "") ? track.artworkUrl : null }, isFavorite);
 }
 
 function recordFavoriteEvent(track: PersonalizationTrackInput | null, isFavorite: boolean) {
   if (!track) return Promise.resolve();
-  return musicRoomApi.recordPersonalizationEvent({ id: `${isFavorite ? "favorite" : "unfavorite"}:${trackKey(track)}:${createSessionId()}`, type: isFavorite ? "favorite" : "unfavorite", track, occurredAt: new Date().toISOString() }).then((result) => {
-    window.dispatchEvent(new Event(personalizationChangedEvent));
-    return result;
-  });
+  return enrichPersonalizationTrack(track).then((enrichedTrack) => musicRoomApi.recordPersonalizationEvent({ id: `${isFavorite ? "favorite" : "unfavorite"}:${trackKey(enrichedTrack)}:${createSessionId()}`, type: isFavorite ? "favorite" : "unfavorite", track: enrichedTrack, occurredAt: new Date().toISOString() })).then((result) => {
+      window.dispatchEvent(new Event(personalizationChangedEvent));
+      return result;
+    });
 }
 
 export function toPersonalizationTrack(track: TrackMeta | null): PersonalizationTrackInput | null {
@@ -110,8 +114,28 @@ export function toPersonalizationTrack(track: TrackMeta | null): Personalization
   if (provider !== "local_upload" && provider !== "netease" && provider !== "qqmusic") return null;
   const providerTrackId = track.sourceRef?.trackId ?? track.fileHash ?? track.id;
   if (!providerTrackId) return null;
-  return { provider, providerTrackId, access: "unknown", quality: null, title: track.title.trim() || "未命名歌曲", artist: track.artist.trim() || "未知艺人", album: track.album?.trim() || null, providerAlbumId: null, durationMs: Math.max(0, Math.round(track.durationMs)), artworkUrl: /^https?:\/\//i.test(track.artworkUrl ?? "") ? track.artworkUrl : null };
+  return { provider, providerTrackId, access: "unknown", quality: null, title: track.title.trim() || "未命名歌曲", artist: track.artist.trim() || "未知艺人", album: track.album?.trim() || null, providerAlbumId: null, providerTags: track.providerTags, durationMs: Math.max(0, Math.round(track.durationMs)), artworkUrl: /^https?:\/\//i.test(track.artworkUrl ?? "") ? track.artworkUrl : null };
 }
 
 function trackKey(track: PersonalizationTrackInput) { return `${track.provider}:${track.providerTrackId}`; }
 function createSessionId() { return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}:${Math.random().toString(36).slice(2)}`; }
+
+async function enrichPersonalizationTrack(track: PersonalizationTrackInput) {
+  if (track.provider === "local_upload" || track.providerTags?.length) return track;
+  const key = trackKey(track);
+  const cached = providerTagCache.get(key);
+  if (cached) return { ...track, providerTags: cached };
+  let request = providerTagRequests.get(key);
+  if (!request) {
+    request = (track.provider === "netease" ? musicRoomApi.getNeteaseTrack(track.providerTrackId) : musicRoomApi.getQqMusicTrack(track.providerTrackId))
+      .then((candidate) => candidate.tags ?? [])
+      .catch(() => [])
+      .then((tags) => {
+        providerTagCache.set(key, tags);
+        providerTagRequests.delete(key);
+        return tags;
+      });
+    providerTagRequests.set(key, request);
+  }
+  return { ...track, providerTags: await request };
+}

@@ -461,7 +461,7 @@ export class QqMusicService {
       album?.imgurl
     ) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
     const relatedTrackId = readString(r.songid ?? r.songId ?? r.id);
-    return { provider: "qqmusic", providerTrackId: id, ...(relatedTrackId ? { relatedTrackId } : {}), access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
+    return { provider: "qqmusic", providerTrackId: id, ...(relatedTrackId ? { relatedTrackId } : {}), access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), tags: readProviderTags(r), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
   }
   private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
     const playlist = asRecord(value);
@@ -472,6 +472,7 @@ export class QqMusicService {
       providerPlaylistId: id,
       title: readString(playlist.dissname ?? playlist.topTitle ?? playlist.name ?? playlist.title) ?? "未命名歌单",
       description: readString(playlist.desc ?? playlist.description ?? playlist.introduction ?? playlist.updateTime),
+      tags: readProviderTags(playlist),
       artworkUrl: readHttpUrl(
         playlist.logo,
         playlist.dissCover,
@@ -578,6 +579,33 @@ export class QqMusicService {
 }
 function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
+
+function readProviderTags(playlist: Record<string, any>) {
+  const values = [
+    playlist.tags,
+    playlist.tag,
+    playlist.category,
+    playlist.categoryName,
+    playlist.categories,
+    playlist.genre,
+    playlist.genres,
+    playlist.style,
+    playlist.styles,
+    playlist.dissCate,
+    playlist.disscate
+  ];
+  const tags = values.flatMap((value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => {
+        const record = asRecord(item);
+        return readString(record?.name ?? record?.tagName ?? record?.label ?? record?.catname ?? item);
+      });
+    }
+    const record = asRecord(value);
+    return [readString(record?.name ?? record?.tagName ?? record?.label ?? record?.catname ?? value)];
+  }).filter((value): value is string => !!value);
+  return [...new Set(tags)].slice(0, 20);
+}
 function readQqTrackId(record: Record<string, any>) {
   const mid = readString(record.songmid ?? record.songMid ?? record.song_mid ?? record.mid);
   if (mid) return mid;

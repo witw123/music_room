@@ -561,6 +561,7 @@ export class NeteaseService {
       title,
       artist: artistNames.join(" / ") || "未知歌手",
       album: albumName,
+      tags: readProviderTags(song),
       ...(providerAlbumId ? { providerAlbumId } : {}),
       durationMs: readNumber(song?.duration) ?? readNumber(song?.dt) ?? 0,
       artworkUrl
@@ -576,6 +577,7 @@ export class NeteaseService {
       providerPlaylistId: id,
       title: readString(playlist.name) ?? "未命名歌单",
       description: readString(playlist.description) ?? readString(playlist.desc),
+      tags: readProviderTags(playlist),
       artworkUrl: readNeteaseArtworkUrl(
         playlist.coverImgUrl,
         playlist.coverImgUrlStr,
@@ -736,6 +738,31 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function readString(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readProviderTags(playlist: Record<string, unknown>) {
+  const values = [
+    playlist.tags,
+    playlist.tag,
+    playlist.category,
+    playlist.categoryName,
+    playlist.categories,
+    playlist.genre,
+    playlist.genres,
+    playlist.style,
+    playlist.styles
+  ];
+  const tags = values.flatMap((value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => {
+        const record = asRecord(item);
+        return readString(record?.name ?? record?.tagName ?? record?.label ?? item);
+      });
+    }
+    const record = asRecord(value);
+    return [readString(record?.name ?? record?.tagName ?? record?.label ?? value)];
+  }).filter((value): value is string => !!value);
+  return [...new Set(tags)].slice(0, 20);
 }
 
 function readNumber(value: unknown) {

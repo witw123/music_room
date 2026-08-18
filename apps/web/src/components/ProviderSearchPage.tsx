@@ -653,7 +653,7 @@ export function ProviderSearchPage({
         description: detail.description,
         coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
         isCollaborative: false,
-        tags: ["network", `network:${detail.provider}:${detail.providerPlaylistId}`],
+        tags: ["network", `network:${detail.provider}:${detail.providerPlaylistId}`, ...detail.tags].slice(0, 20),
         trackIds: detail.tracks.map((track) => `provider:${track.provider}:${track.providerTrackId}`)
       });
       await Promise.all(detail.tracks.map(async (track) => {

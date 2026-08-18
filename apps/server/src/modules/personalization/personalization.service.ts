@@ -153,14 +153,24 @@ export class PersonalizationService {
     ]);
     const tracks = entities.filter((item) => item.entityKind === "track");
     const artists = entities.filter((item) => item.entityKind === "artist");
+    const providerTags = entities.filter((item) => item.entityKind === "tag");
     const playlistMetadataByTrack = indexPlaylistMetadata(playlists);
-    const tags = rankTasteTags(tracks.map((item) => ({
-      title: item.title,
-      album: item.album,
-      playlistMetadata: playlistMetadataByTrack.get(item.entityKey),
-      score: entityScore(item),
-      confidence: Number(item.confidence)
-    })), 20);
+    const tags = rankTasteTags([
+      ...tracks.map((item) => ({
+        title: item.title,
+        album: item.album,
+        playlistMetadata: playlistMetadataByTrack.get(item.entityKey),
+        score: entityScore(item),
+        confidence: Number(item.confidence)
+      })),
+      ...providerTags.map((item) => ({
+        title: item.title,
+        album: null,
+        providerTags: item.title ? [item.title] : [],
+        score: entityScore(item),
+        confidence: Number(item.confidence)
+      }))
+    ], 20);
     const totalListenedMs = events.reduce((total, event) => total + Number(event.listenedMs), 0);
     const topTracks = tracks
       .map((item) => ({ item, candidate: entityToCandidate(item) }))
@@ -306,6 +316,9 @@ export class PersonalizationService {
     await this.projectEntity(transaction, userId, "track", trackKey(track), { provider: track.provider, providerItemId: track.providerTrackId, providerAlbumId: track.providerAlbumId ?? null, access: track.access, quality: track.quality, title: track.title, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score, occurredAt });
     await this.projectEntity(transaction, userId, "artist", normalizeText(track.artist), { title: track.artist, score: score * 0.55, occurredAt });
     if (track.album) await this.projectEntity(transaction, userId, "album", `${track.provider}:${track.providerAlbumId ?? normalizeText(track.album)}`, { provider: track.provider, providerItemId: track.providerAlbumId ?? null, title: track.album, artist: track.artist, album: track.album, score: score * 0.25, occurredAt });
+    for (const label of track.providerTags ?? []) {
+      await this.projectEntity(transaction, userId, "tag", normalizeText(label), { title: label, score: score * 0.35, occurredAt });
+    }
     await this.projectEntity(transaction, userId, "source", track.provider, { title: track.provider, score: score * 0.1, occurredAt });
   }
 
@@ -506,7 +519,10 @@ function indexPlaylistMetadata(playlists: PlaylistTasteRecord[]) {
       .filter((value): value is string => Boolean(value?.trim()));
     if (metadata.length === 0) continue;
     for (const trackId of toStringList(playlist.trackIds)) {
-      metadataByTrack.set(trackId, [...(metadataByTrack.get(trackId) ?? []), ...metadata]);
+      const keys = [trackId, trackId.startsWith("provider:") ? trackId.slice("provider:".length) : `provider:${trackId}`];
+      for (const key of keys) {
+        metadataByTrack.set(key, [...(metadataByTrack.get(key) ?? []), ...metadata]);
+      }
     }
   }
   return metadataByTrack;

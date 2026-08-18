@@ -92,7 +92,7 @@ function ProviderImporter({ provider }: { provider: Provider }) {
             description: detail.description,
             coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
             isCollaborative: false,
-            tags: ["network", key],
+            tags: ["network", key, ...detail.tags].slice(0, 20),
             trackIds: detail.tracks.map(localPlaylistTrackId)
           });
           for (const track of detail.tracks) {
