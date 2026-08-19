@@ -17,6 +17,13 @@ import type { Prisma } from "../../generated/prisma";
 import { RedisService } from "../../infra/redis/redis.service";
 import { NeteaseService } from "../providers/netease/netease.service";
 import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
+import {
+  rankRecommendationCandidates,
+  rerankRecommendationCandidates,
+  selectPersonalizedPlaylists,
+  trackIdentity,
+  type RecommendationCandidate
+} from "./recommendation-engine";
 import { buildTasteGroups, extractTasteEvidence } from "./taste-taxonomy";
 
 const recallCacheSeconds = 30 * 60;
@@ -25,8 +32,7 @@ const sessionWindowMs = 2 * 60 * 60 * 1_000;
 const maxTracksPerSection = 12;
 
 type Provider = "netease" | "qqmusic";
-type CandidateSource = "library" | "related" | "artist" | "playlist" | "explore";
-type Candidate = { candidate: ProviderTrackCandidate; source: CandidateSource; baseScore: number };
+type Candidate = RecommendationCandidate;
 type TasteEntityRecord = {
   entityKind: string;
   entityKey: string;
@@ -97,7 +103,7 @@ export class PersonalizationService {
       if (excluded?.reason === "exclude-from-profile") return;
       const delta = weight - previousWeight;
       if (delta === 0 && existing) return;
-      await this.projectTrack(transaction, userId, input.track, delta, occurredAt);
+      await this.projectTrack(transaction, userId, input.track, delta, occurredAt, !existing);
     });
     await this.clearRecallCache(userId);
     return { ok: true };
@@ -156,6 +162,7 @@ export class PersonalizationService {
     const playbackEvents = events.filter((event) => event.eventType === "playback");
     const tracks = entities.filter((item) => item.entityKind === "track");
     const artists = entities.filter((item) => item.entityKind === "artist");
+    const topArtists = buildTopArtists(playbackEvents, artists);
     const tasteGroups = buildTasteGroups({
       entities: [...entities, ...playlistTasteEntities(tracks, playlists), ...historicalTasteEntities(events)],
       behavior: buildBehaviorTasteTags(events, playbackEvents),
@@ -185,15 +192,10 @@ export class PersonalizationService {
       totalListenedMs,
       totalPlayCount: playbackEvents.length,
       trackCount: tracks.filter((item) => item.interactionCount > 0).length,
-      artistCount: artists.length,
+      artistCount: topArtists.length,
       tasteGroups,
       topTracks,
-      topArtists: artists.sort((left, right) => entityScore(right) - entityScore(left)).slice(0, 5).map((item) => ({
-        name: item.title ?? item.entityKey,
-        score: entityScore(item),
-        listenedMs: 0,
-        playCount: item.interactionCount
-      })),
+      topArtists: topArtists.slice(0, 5),
       sourceDistribution
     };
   }
@@ -203,18 +205,32 @@ export class PersonalizationService {
     query: PersonalizationRecommendationsQuery
   ): Promise<PersonalizationRecommendationsResponse> {
     this.assertDatabaseAvailable();
-    const [entities, events, exclusions] = await Promise.all([
+    const [entities, events, exclusions, listenedTracks] = await Promise.all([
       this.prisma.userTasteEntity.findMany({ where: { userId } }),
       this.prisma.userTasteEvent.findMany({ where: { userId }, orderBy: { occurredAt: "desc" }, take: 50 }),
-      this.prisma.userRecommendationExclusion.findMany({ where: { userId } })
+      this.prisma.userRecommendationExclusion.findMany({ where: { userId } }),
+      query.surface === "discover"
+        ? this.prisma.userTasteEvent.findMany({
+            where: { userId, eventType: "playback" },
+            distinct: ["entityKey"],
+            select: { entityKey: true, title: true, artist: true }
+          })
+        : query.surface === "radio"
+          ? this.prisma.userTasteEvent.findMany({
+              where: { userId, eventType: "playback" },
+              orderBy: { occurredAt: "desc" },
+              take: 20,
+              select: { entityKey: true, title: true, artist: true }
+            })
+          : Promise.resolve([])
     ]);
     const providers = await this.getBoundProviders(userId);
     const version = profileVersion(entities, events);
-    const cacheKey = `personalization:recall:${userId}:${version}:${query.surface}:${query.provider ?? "all"}`;
+    const cacheKey = `personalization:recall:v3:${userId}:${version}:${query.surface}:${query.provider ?? "all"}`;
     const cached = this.redis.isAvailable()
       ? await this.redis.getJson<{ candidates: Candidate[]; playlists: ProviderPlaylistSummary[] }>(cacheKey).catch(() => null)
       : null;
-    const recalled: { candidates: Candidate[]; playlists: ProviderPlaylistSummary[] } = cached ?? await this.recallCandidates(userId, entities, providers, query.provider);
+    const recalled: { candidates: Candidate[]; playlists: ProviderPlaylistSummary[] } = cached ?? await this.recallCandidates(userId, entities, events, providers, query.surface, query.provider);
     if (!cached && this.redis.isAvailable()) {
       await this.redis.setJson(cacheKey, recalled, recallCacheSeconds).catch(() => undefined);
     }
@@ -223,12 +239,30 @@ export class PersonalizationService {
       ...(query.currentTrackKey ? [query.currentTrackKey] : []),
       ...exclusions.filter((item) => item.targetKind === "track").map((item) => item.targetKey)
     ]);
+    const excludedIdentities = new Set(listenedTracks.flatMap((item) => item.title && item.artist ? [trackIdentity({ title: item.title, artist: item.artist })] : []));
     const excludedArtists = new Set(exclusions.filter((item) => item.targetKind === "artist").map((item) => item.targetKey));
-    const ranked = rankCandidates(recalled.candidates, entities, events, excludedTracks, excludedArtists, query);
-    const forYou = diversify(ranked.filter((item) => item.source !== "artist"), maxTracksPerSection);
+    const ranked = rankRecommendationCandidates({
+      candidates: recalled.candidates,
+      entities,
+      events,
+      excludedTracks,
+      excludedIdentities,
+      excludedArtists,
+      surface: query.surface,
+      scoreEntity: entityScore
+    });
+    const forYou = rerankRecommendationCandidates({
+      items: ranked.filter((item) => item.source !== "artist"),
+      limit: maxTracksPerSection,
+      explorationRatio: query.surface === "discover" ? 0.17 : 0.08
+    });
     const selectedKeys = new Set(forYou.map((item) => trackKey(item)));
-    const familiarArtists = diversify(ranked.filter((item) => item.source === "artist" && !selectedKeys.has(trackKey(item.candidate))), maxTracksPerSection);
-    const playlists = rankPlaylists(recalled.playlists, entities).slice(0, 10);
+    const familiarArtists = rerankRecommendationCandidates({
+      items: ranked.filter((item) => item.source === "artist" && !selectedKeys.has(trackKey(item.candidate))),
+      limit: maxTracksPerSection,
+      explorationRatio: 0
+    });
+    const playlists = selectPersonalizedPlaylists({ playlists: recalled.playlists, entities, limit: 10, scoreEntity: entityScore });
     await this.markRecommended(userId, [...forYou, ...familiarArtists]);
     return { profileVersion: version, providers, forYou, familiarArtists, playlists };
   }
@@ -252,29 +286,40 @@ export class PersonalizationService {
     return accounts.flatMap((account, index) => account ? [index === 0 ? "netease" : "qqmusic"] : []);
   }
 
-  private async recallCandidates(userId: string, entities: TasteEntityRecord[], providers: Provider[], preferredProvider?: Provider) {
+  private async recallCandidates(userId: string, entities: TasteEntityRecord[], events: TasteEventRecord[], providers: Provider[], surface: PersonalizationRecommendationsQuery["surface"], preferredProvider?: Provider) {
     const orderedProviders = preferredProvider ? providers.filter((provider) => provider === preferredProvider) : providers;
-    const recalls = await Promise.all(orderedProviders.map((provider) => this.recallProvider(userId, provider, entities)));
+    const recalls = await Promise.all(orderedProviders.map((provider) => this.recallProvider(userId, provider, entities, events, surface)));
     return {
       candidates: recalls.flatMap((item) => item.candidates),
       playlists: recalls.flatMap((item) => item.playlists)
     };
   }
 
-  private async recallProvider(userId: string, provider: Provider, entities: TasteEntityRecord[]) {
-    const tracks = entities.filter((item) => item.entityKind === "track" && item.provider === provider);
-    const artists = entities.filter((item) => item.entityKind === "artist" && (item.provider === provider || !item.provider));
-    const playlists = entities.filter((item) => item.entityKind === "playlist" && item.provider === provider);
+  private async recallProvider(userId: string, provider: Provider, entities: TasteEntityRecord[], events: TasteEventRecord[], surface: PersonalizationRecommendationsQuery["surface"]) {
+    const tracks = entities.filter((item) => item.entityKind === "track" && item.provider === provider).sort((left, right) => entityScore(right) - entityScore(left));
+    const sessionArtists = new Set(events.filter((event) => event.artist && Date.now() - event.occurredAt.getTime() <= sessionWindowMs).map((event) => normalizeText(event.artist!)));
+    const artists = entities.filter((item) => item.entityKind === "artist" && (item.provider === provider || !item.provider)).sort((left, right) => {
+      const leftScore = entityScore(left) + (left.title && sessionArtists.has(normalizeText(left.title)) ? 3 : 0);
+      const rightScore = entityScore(right) + (right.title && sessionArtists.has(normalizeText(right.title)) ? 3 : 0);
+      return rightScore - leftScore;
+    });
+    const playlists = entities.filter((item) => item.entityKind === "playlist" && item.provider === provider).sort((left, right) => entityScore(right) - entityScore(left));
+    const tasteTerms = entities.filter((item) => item.entityKind === "genre" || item.entityKind === "scene").sort((left, right) => entityScore(right) - entityScore(left));
     const libraryCandidates = tracks.map(entityToCandidate).filter((item): item is ProviderTrackCandidate => item !== null)
-      .map((candidate) => ({ candidate, source: "library" as const, baseScore: 0.9 }));
+      .map((candidate) => ({ candidate, source: "library" as const, baseScore: 0.9, interestKey: "library", interestLabel: null }));
     const seed = libraryCandidates[0]?.candidate ?? null;
-    const artist = typeof artists[0]?.title === "string" ? artists[0].title : null;
-    const savedPlaylist = playlists[0];
-    const external = await this.getProviderRecall(userId, provider, seed, artist, savedPlaylist);
-    return { candidates: dedupeCandidates([...libraryCandidates, ...external.candidates]), playlists: external.playlists };
+    const artistNames = artists.flatMap((item) => typeof item.title === "string" ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 2);
+    const tasteNames = tasteTerms.flatMap((item) => typeof item.title === "string" && entityScore(item) > 0 ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 2);
+    const playlistQuery = tasteNames[0] ?? artistNames[1] ?? artistNames[0] ?? null;
+    const savedPlaylist = surface === "discover" ? undefined : playlists[0];
+    const external = await this.getProviderRecall(userId, provider, seed, artistNames, tasteNames, playlistQuery, savedPlaylist, surface);
+    return {
+      candidates: dedupeCandidates([...(surface === "discover" ? [] : libraryCandidates), ...external.candidates]),
+      playlists: external.playlists
+    };
   }
 
-  private async getProviderRecall(userId: string, provider: Provider, seed: ProviderTrackCandidate | null, artist: string | null, savedPlaylist: TasteEntityRecord | undefined) {
+  private async getProviderRecall(userId: string, provider: Provider, seed: ProviderTrackCandidate | null, artists: string[], tasteNames: string[], playlistQuery: string | null, savedPlaylist: TasteEntityRecord | undefined, surface: PersonalizationRecommendationsQuery["surface"]) {
     const service = provider === "netease" ? this.netease : this.qqmusic;
     const candidates: Candidate[] = [];
     const playlists: ProviderPlaylistSummary[] = [];
@@ -283,41 +328,54 @@ export class PersonalizationService {
       const related = await service.getRelatedPlaylists(userId, seed.providerTrackId);
       const first = related.items[0];
       if (!first) return;
-      playlists.push(first);
+      playlists.push(...related.items.slice(0, 6));
       const detail = await service.getPlaylist(userId, first.providerPlaylistId);
-      candidates.push(...detail.tracks.slice(0, 24).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82 })));
+      candidates.push(...detail.tracks.slice(0, 24).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82, interestKey: `track:${trackIdentity(seed)}`, interestLabel: seed.title })));
     })().catch(() => undefined));
-    if (artist) tasks.push((async () => {
-      const result = await service.searchTracks(userId, { keywords: artist, limit: 12, offset: 0 });
-      candidates.push(...result.items.map((candidate) => ({ candidate, source: "artist" as const, baseScore: 0.68 })));
-      const found = await service.searchPlaylists(userId, { keywords: artist, limit: 6, offset: 0 });
-      playlists.push(...found.items);
+    if (artists.length) tasks.push((async () => {
+      for (const artist of artists) {
+        const result = await service.searchTracks(userId, { keywords: artist, limit: 8, offset: 0 });
+        candidates.push(...result.items.map((candidate) => ({ candidate, source: "artist" as const, baseScore: 0.68, interestKey: `artist:${normalizeText(artist)}`, interestLabel: artist })));
+      }
+    })().catch(() => undefined));
+    if (tasteNames.length) tasks.push((async () => {
+      for (const tasteName of tasteNames) {
+        const result = await service.searchTracks(userId, { keywords: tasteName, limit: 8, offset: 0 });
+        candidates.push(...result.items.map((candidate) => ({ candidate, source: "explore" as const, baseScore: 0.62, interestKey: `taste:${normalizeText(tasteName)}`, interestLabel: tasteName })));
+      }
+    })().catch(() => undefined));
+    if (playlistQuery) tasks.push((async () => {
+      const found = await service.searchPlaylists(userId, { keywords: playlistQuery, limit: 8, offset: 0 });
+      const summaries = surface === "discover" ? await keepMultiArtistPlaylists(userId, service, found.items.slice(0, 3)) : found.items;
+      playlists.push(...summaries);
     })().catch(() => undefined));
     const savedPlaylistId = savedPlaylist?.providerItemId;
+    const savedPlaylistTitle = savedPlaylist?.title ?? null;
     if (typeof savedPlaylistId === "string") tasks.push((async () => {
       const detail = await service.getPlaylist(userId, savedPlaylistId);
-      candidates.push(...detail.tracks.slice(0, 24).map((candidate) => ({ candidate, source: "playlist" as const, baseScore: 0.78 })));
+      candidates.push(...detail.tracks.slice(0, 24).map((candidate) => ({ candidate, source: "playlist" as const, baseScore: 0.78, interestKey: `playlist:${savedPlaylistId}`, interestLabel: savedPlaylistTitle })));
     })().catch(() => undefined));
     await Promise.all(tasks);
     return { candidates, playlists: dedupePlaylists(playlists) };
   }
 
-  private async projectTrack(transaction: Prisma.TransactionClient, userId: string, track: PersonalizationTrackInput, score: number, occurredAt: Date) {
-    await this.projectEntity(transaction, userId, "track", trackKey(track), { provider: track.provider, providerItemId: track.providerTrackId, providerAlbumId: track.providerAlbumId ?? null, access: track.access, quality: track.quality, title: track.title, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score, occurredAt });
-    await this.projectEntity(transaction, userId, "artist", normalizeText(track.artist), { title: track.artist, score: score * 0.55, occurredAt });
-    if (track.album) await this.projectEntity(transaction, userId, "album", `${track.provider}:${track.providerAlbumId ?? normalizeText(track.album)}`, { provider: track.provider, providerItemId: track.providerAlbumId ?? null, title: track.album, artist: track.artist, album: track.album, score: score * 0.25, occurredAt });
+  private async projectTrack(transaction: Prisma.TransactionClient, userId: string, track: PersonalizationTrackInput, score: number, occurredAt: Date, incrementInteraction: boolean) {
+    await this.projectEntity(transaction, userId, "track", trackKey(track), { provider: track.provider, providerItemId: track.providerTrackId, providerAlbumId: track.providerAlbumId ?? null, access: track.access, quality: track.quality, title: track.title, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score, occurredAt, incrementInteraction });
+    await this.projectEntity(transaction, userId, "artist", normalizeText(track.artist), { title: track.artist, score: score * 0.55, occurredAt, incrementInteraction });
+    if (track.album) await this.projectEntity(transaction, userId, "album", `${track.provider}:${track.providerAlbumId ?? normalizeText(track.album)}`, { provider: track.provider, providerItemId: track.providerAlbumId ?? null, title: track.album, artist: track.artist, album: track.album, score: score * 0.25, occurredAt, incrementInteraction });
     for (const evidence of extractTasteEvidence(track)) {
       await this.projectEntity(transaction, userId, evidence.dimension, `${evidence.source}:${normalizeText(evidence.label)}`, {
         title: evidence.label,
         score: score * evidence.confidence * 0.35,
         confidence: evidence.confidence,
-        occurredAt
+        occurredAt,
+        incrementInteraction
       });
     }
-    await this.projectEntity(transaction, userId, "source", track.provider, { title: track.provider, score: score * 0.1, occurredAt });
+    await this.projectEntity(transaction, userId, "source", track.provider, { title: track.provider, score: score * 0.1, occurredAt, incrementInteraction });
   }
 
-  private async projectEntity(transaction: Prisma.TransactionClient, userId: string, kind: TasteEntityKind, key: string, input: Record<string, unknown> & { score: number; confidence?: number; occurredAt: Date; retainScore?: boolean }) {
+  private async projectEntity(transaction: Prisma.TransactionClient, userId: string, kind: TasteEntityKind, key: string, input: Record<string, unknown> & { score: number; confidence?: number; occurredAt: Date; incrementInteraction?: boolean; retainScore?: boolean }) {
     const positiveScore = Math.max(0, input.score);
     const negativeScore = Math.max(0, -input.score);
     const data = {
@@ -352,7 +410,7 @@ export class PersonalizationService {
           ? { positiveScore: Math.max(0, positiveScore), negativeScore: Math.max(0, negativeScore) }
           : { positiveScore: { increment: positiveScore }, negativeScore: { increment: negativeScore } }),
         confidence: { increment: Math.min(0.1, input.confidence ?? Math.abs(input.score) * 0.04) },
-        interactionCount: { increment: input.retainScore ? 0 : 1 }
+        interactionCount: { increment: input.retainScore || input.incrementInteraction === false ? 0 : 1 }
       }
     });
   }
@@ -368,13 +426,35 @@ export class PersonalizationService {
 
   private async clearRecallCache(userId: string) {
     if (!this.redis.isAvailable()) return;
-    const keys = await this.redis.client.keys(`personalization:recall:${userId}:*`).catch(() => []);
+    const keys = await this.redis.client.keys(`personalization:recall:v3:${userId}:*`).catch(() => []);
     if (keys.length) await this.redis.client.del(...keys).catch(() => undefined);
   }
 
   private assertDatabaseAvailable() {
     if (!this.prisma.isAvailable()) throw new ServiceUnavailableException("Personalization storage is temporarily unavailable.");
   }
+}
+
+export function buildTopArtists(events: TasteEventRecord[], artists: TasteEntityRecord[]) {
+  const artistEntities = new Map(artists.map((artist) => [artist.entityKey, artist]));
+  const stats = new Map<string, { name: string; listenedMs: number; playCount: number }>();
+  for (const event of events) {
+    const name = event.artist?.trim();
+    if (!name) continue;
+    const key = normalizeText(name);
+    const current = stats.get(key) ?? { name, listenedMs: 0, playCount: 0 };
+    current.listenedMs += Number(event.listenedMs);
+    current.playCount += 1;
+    stats.set(key, current);
+  }
+  return [...stats.entries()]
+    .map(([key, stat]) => ({
+      ...stat,
+      score: artistEntities.has(key)
+        ? entityScore(artistEntities.get(key)!)
+        : stat.playCount + stat.listenedMs / 3_600_000
+    }))
+    .sort((left, right) => right.score - left.score || right.playCount - left.playCount || right.listenedMs - left.listenedMs || left.name.localeCompare(right.name, "zh-CN"));
 }
 
 function buildBehaviorTasteTags(events: TasteEventRecord[], playbackEvents: TasteEventRecord[]): PersonalizationTasteTag[] {
@@ -490,55 +570,6 @@ function entityToCandidate(entity: TasteEntityRecord): ProviderTrackCandidate | 
   } as ProviderTrackCandidate;
 }
 
-function rankCandidates(candidates: Candidate[], entities: TasteEntityRecord[], events: TasteEventRecord[], excludedTracks: Set<string>, excludedArtists: Set<string>, _query: PersonalizationRecommendationsQuery) {
-  const trackEntities = new Map(entities.filter((item) => item.entityKind === "track").map((item) => [item.entityKey, item]));
-  const artistEntities = new Map(entities.filter((item) => item.entityKind === "artist").map((item) => [item.entityKey, item]));
-  const sessionTrackKeys = new Set(events.filter((item) => item.entityKind === "track" && item.occurredAt instanceof Date && Date.now() - item.occurredAt.getTime() <= sessionWindowMs).map((item) => String(item.entityKey)));
-  const seenThreshold = Date.now() - 30 * 24 * 60 * 60 * 1_000;
-  return dedupeCandidates(candidates).flatMap((item) => {
-    const key = trackKey(item.candidate);
-    const artistKey = normalizeText(item.candidate.artist);
-    if (excludedTracks.has(key) || excludedArtists.has(artistKey)) return [];
-    const trackScore = trackEntities.get(key) ? entityScore(trackEntities.get(key)!) : 0;
-    const artistScore = artistEntities.get(artistKey) ? entityScore(artistEntities.get(artistKey)!) : 0;
-    const sessionScore = sessionTrackKeys.has(key) ? 0.18 : 0;
-    const availability = item.candidate.access === "free" ? 0.1 : item.candidate.access === "unknown" ? 0.05 : 0;
-    const seenAt = entityDate(trackEntities.get(key), "lastRecommendedAt");
-    const seenPenalty = seenAt && seenAt.getTime() > seenThreshold ? 0.16 : 0;
-    const sourceScore = item.source === "library" ? 0.2 : item.source === "related" ? 0.15 : item.source === "playlist" ? 0.12 : item.source === "artist" ? 0.09 : 0.05;
-    const score = item.baseScore * 0.32 + normalizeScore(trackScore) * 0.28 + normalizeScore(artistScore) * 0.18 + sessionScore + availability + sourceScore - seenPenalty;
-    const reasons = [item.source === "library" ? "来自你的收藏" : item.source === "related" ? "延续你的常听歌曲" : item.source === "playlist" ? "来自收藏歌单" : "常听艺人"];
-    if (sessionScore) reasons.push("延续当前会话");
-    return [{ ...item, score, reasons }];
-  }).sort((left, right) => right.score - left.score || left.candidate.title.localeCompare(right.candidate.title));
-}
-
-function diversify(items: Array<Candidate & { score: number; reasons: string[] }>, limit: number) {
-  const selected: Array<ProviderTrackCandidate & { score: number; reasons: string[] }> = [];
-  const artistCounts = new Map<string, number>();
-  const albumCounts = new Map<string, number>();
-  const sourceCounts = new Map<string, number>();
-  for (const item of items) {
-    if (selected.length >= limit) break;
-    const artist = normalizeText(item.candidate.artist);
-    const album = normalizeText(item.candidate.album ?? "");
-    if ((artistCounts.get(artist) ?? 0) >= 2 || (album && (albumCounts.get(album) ?? 0) >= 3) || (sourceCounts.get(item.source) ?? 0) >= Math.ceil(limit * 0.65)) continue;
-    selected.push({ ...item.candidate, score: item.score, reasons: item.reasons });
-    artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1);
-    if (album) albumCounts.set(album, (albumCounts.get(album) ?? 0) + 1);
-    sourceCounts.set(item.source, (sourceCounts.get(item.source) ?? 0) + 1);
-  }
-  return selected;
-}
-
-function rankPlaylists(playlists: ProviderPlaylistSummary[], entities: TasteEntityRecord[]) {
-  const artistNames = new Set(entities.filter((item) => item.entityKind === "artist").map((item) => normalizeText(String(item.title ?? ""))));
-  return dedupePlaylists(playlists).map((playlist) => {
-    const matchedArtist = artistNames.has(normalizeText(playlist.creatorName ?? ""));
-    return { ...playlist, score: 0.5 + (matchedArtist ? 0.25 : 0) + Math.min(0.2, playlist.trackCount / 2_000), reasons: matchedArtist ? ["常听艺人"] : ["为你挑选"] };
-  }).sort((left, right) => right.score - left.score || left.title.localeCompare(right.title));
-}
-
 function dedupeCandidates(items: Candidate[]) {
   const byIdentity = new Map<string, Candidate>();
   for (const item of items) {
@@ -563,21 +594,14 @@ function accessScore(track: ProviderTrackCandidate) {
   return track.access === "free" ? 3 : track.access === "unknown" ? 2 : 1;
 }
 
-function normalizeScore(score: number) {
-  return 0.5 + Math.tanh(score / 8) * 0.5;
-}
-
-function entityDate(entity: TasteEntityRecord | undefined, key: "lastRecommendedAt") {
-  return entity?.[key] ?? null;
-}
-
 function profileVersion(entities: TasteEntityRecord[], events: TasteEventRecord[]) {
+  const tasteEntities = entities.filter((item) => item.lastOccurredAt !== null);
   const latest = Math.max(
     0,
-    ...entities.map((item) => item.updatedAt.getTime()),
+    ...tasteEntities.map((item) => item.lastOccurredAt!.getTime()),
     ...events.map((item) => item.updatedAt.getTime())
   );
-  return `${entities.length}:${events.length}:${latest}`;
+  return `${tasteEntities.length}:${events.length}:${latest}`;
 }
 
 function indexPlaylistMetadata(playlists: PlaylistTasteRecord[]) {
@@ -596,4 +620,21 @@ function indexPlaylistMetadata(playlists: PlaylistTasteRecord[]) {
 
 function toStringList(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+async function keepMultiArtistPlaylists(
+  userId: string,
+  service: NeteaseService | QqMusicService,
+  playlists: ProviderPlaylistSummary[]
+) {
+  const details = await Promise.all(playlists.map(async (playlist) => {
+    try {
+      const detail = await service.getPlaylist(userId, playlist.providerPlaylistId);
+      const artistCount = new Set(detail.tracks.map((track) => normalizeText(track.artist)).filter(Boolean)).size;
+      return artistCount >= 2 ? playlist : null;
+    } catch {
+      return null;
+    }
+  }));
+  return details.filter((playlist): playlist is ProviderPlaylistSummary => playlist !== null);
 }
