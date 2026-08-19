@@ -30,6 +30,7 @@ export const qqMusicTrackCandidateSchema = z.object({
   album: z.string().nullable(),
   tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   providerAlbumId: z.string().trim().min(1).optional(),
+  releaseTime: z.string().nullable().optional(),
   durationMs: z.number().int().nonnegative(),
   artworkUrl: z.string().url().nullable()
 }).strict();

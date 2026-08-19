@@ -22,6 +22,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
     let cancelled = false;
     let request: Promise<void> | null = null;
     let refreshQueued = false;
+    let refreshTimer: number | null = null;
 
     const load = () => {
       if (cancelled) return;
@@ -50,7 +51,11 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
         });
     };
     const handleProfileChange = () => {
-      if (pathname === "/app/profile") load();
+      if (pathname !== "/app/profile" || refreshTimer !== null) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        load();
+      }, 450);
     };
 
     setProfile(null);
@@ -60,6 +65,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
     return () => {
       cancelled = true;
       request = null;
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       window.removeEventListener(personalizationChangedEvent, handleProfileChange);
     };
   }, [activeSession.userId, pathname]);
@@ -77,11 +83,18 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
 
           <section className="py-6">
             <SectionTitle title="音乐偏好" />
-            {profile.tasteTags.length ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {profile.tasteTags.slice(0, 20).map((tag) => <span className="inline-flex h-8 items-center rounded-full border border-accent/35 bg-accent/10 px-3 text-xs font-medium text-accent" key={tag.label}>{tag.label}</span>)}
-              </div>
-            ) : <p className="mt-3 text-sm text-foreground-muted">继续收听，音乐偏好会逐步形成</p>}
+            <div className="mt-4 grid gap-x-9 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+              {profile.tasteGroups.map((group) => (
+                <section key={group.id}>
+                  <h4 className="text-xs font-medium text-foreground-muted">{group.label}</h4>
+                  {group.tags.length ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {group.tags.map((tag) => <span aria-label={tag.label} className="inline-flex h-8 items-center rounded-full border border-accent/35 bg-accent/10 px-3 text-xs font-medium text-accent" key={`${group.id}:${tag.label}:${tag.source}`} title={tag.label}>{tag.label}</span>)}
+                    </div>
+                  ) : <p className="mt-2 text-xs text-foreground-muted">正在形成</p>}
+                </section>
+              ))}
+            </div>
           </section>
 
           <div className="grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-2 lg:gap-10">

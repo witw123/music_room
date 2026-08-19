@@ -461,7 +461,7 @@ export class QqMusicService {
       album?.imgurl
     ) ?? (albumMid ? buildQqAlbumArtwork(albumMid) : null);
     const relatedTrackId = readString(r.songid ?? r.songId ?? r.id);
-    return { provider: "qqmusic", providerTrackId: id, ...(relatedTrackId ? { relatedTrackId } : {}), access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), tags: readProviderTags(r), ...(albumMid ? { providerAlbumId: albumMid } : {}), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
+    return { provider: "qqmusic", providerTrackId: id, ...(relatedTrackId ? { relatedTrackId } : {}), access: payPlay === 0 ? "free" : payPlay === 1 ? "paid" : "unknown", quality, title, artist: singers || "未知歌手", album: readString(r.albumname ?? r.albumName ?? album?.name), tags: readProviderTags(r), ...(albumMid ? { providerAlbumId: albumMid } : {}), releaseTime: readString(r.pubTime ?? r.publishTime ?? r.time_public ?? album?.pubTime ?? album?.publishTime), durationMs: readDuration(r.interval ?? r.duration), artworkUrl };
   }
   private toPlaylistSummary(value: unknown): ProviderPlaylistSummary | null {
     const playlist = asRecord(value);

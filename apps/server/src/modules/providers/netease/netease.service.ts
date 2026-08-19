@@ -545,6 +545,7 @@ export class NeteaseService {
       .filter((name): name is string => !!name);
     const albumRecord = asRecord(song?.album);
     const legacyAlbumRecord = asRecord(song?.al);
+    const songRecord = asRecord(song);
     const albumName = readString(albumRecord?.name) ?? readString(legacyAlbumRecord?.name);
     const providerAlbumId =
       readString(albumRecord?.id ?? albumRecord?.albumId) ??
@@ -563,6 +564,7 @@ export class NeteaseService {
       album: albumName,
       tags: readProviderTags(song),
       ...(providerAlbumId ? { providerAlbumId } : {}),
+      releaseTime: readString(songRecord?.publishTime ?? songRecord?.publish_time ?? albumRecord?.publishTime ?? legacyAlbumRecord?.publishTime),
       durationMs: readNumber(song?.duration) ?? readNumber(song?.dt) ?? 0,
       artworkUrl
     };
