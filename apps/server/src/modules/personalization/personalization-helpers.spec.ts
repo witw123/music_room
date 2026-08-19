@@ -1,5 +1,5 @@
 import type { ProviderPlaylistSummary, ProviderTrackCandidate } from "@music-room/shared";
-import { rankRecommendationCandidates, isRecommendationCandidateExcluded, rerankRecommendationCandidates, selectPersonalizedPlaylists, trackIdentity } from "./recommendation-engine";
+import { rankRecommendationCandidates, isRecommendationCandidateExcluded, partitionDiscoveryRecommendations, rerankRecommendationCandidates, selectPersonalizedPlaylists, trackIdentity } from "./recommendation-engine";
 import { buildTopArtists } from "./personalization.service";
 
 describe("personalization helpers", () => {
@@ -59,6 +59,37 @@ describe("personalization helpers", () => {
     expect(new Set(artists).size).toBeGreaterThanOrEqual(4);
     expect(artists.slice(0, 2)).not.toEqual(["Artist A", "Artist A"]);
     expect(selected.filter((item) => item.reasons.includes("发现新艺人")).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("partitions the discovery pool into distinct Spotify-style surfaces", () => {
+    const candidates = [
+      ...Array.from({ length: 16 }, (_, index) => recommendation(`General ${index}`, `General Artist ${index}`, `related:${index}`, "related", 0.9 - index / 100)),
+      ...Array.from({ length: 8 }, (_, index) => recommendation(`Artist ${index}`, `Known Artist ${index % 3}`, `artist:${index % 3}`, "artist", 0.82 - index / 100)),
+      ...Array.from({ length: 8 }, (_, index) => recommendation(`Explore ${index}`, `Explore Artist ${index}`, `explore:${index}`, "explore", 0.78 - index / 100))
+    ];
+    const ranked = rankRecommendationCandidates({
+      candidates,
+      entities: [],
+      events: [],
+      excludedTracks: new Set(),
+      excludedIdentities: new Set(),
+      excludedArtists: new Set(),
+      surface: "discover",
+      scoreEntity: () => 0
+    });
+    const sections = partitionDiscoveryRecommendations(ranked, 5);
+    const keys = [
+      ...sections.forYou,
+      ...sections.familiarArtists,
+      ...sections.moodDiscovery,
+      ...sections.deepCuts
+    ].map((item) => `${item.provider}:${item.providerTrackId}`);
+
+    expect(sections.forYou.length).toBeGreaterThan(0);
+    expect(sections.familiarArtists.length).toBeGreaterThan(0);
+    expect(sections.moodDiscovery.length).toBeGreaterThan(0);
+    expect(sections.deepCuts.length).toBeGreaterThan(0);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
 

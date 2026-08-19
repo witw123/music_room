@@ -129,6 +129,8 @@ export type PersonalizationRecommendationsResponse = {
   providers: Array<"netease" | "qqmusic">;
   forYou: PersonalizationTrack[];
   familiarArtists: PersonalizationTrack[];
+  moodDiscovery: PersonalizationTrack[];
+  deepCuts: PersonalizationTrack[];
   playlists: PersonalizationPlaylist[];
 };
 

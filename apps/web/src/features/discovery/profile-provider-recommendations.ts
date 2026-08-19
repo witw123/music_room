@@ -18,6 +18,8 @@ export type ProfileProviderRecommendations = {
   providers: Array<"netease" | "qqmusic">;
   forYou: DiscoverTrackRecommendation[];
   familiarArtists: DiscoverTrackRecommendation[];
+  moodDiscovery: DiscoverTrackRecommendation[];
+  deepCuts: DiscoverTrackRecommendation[];
   playlists: DiscoverPlaylistRecommendation[];
 };
 
@@ -38,6 +40,18 @@ export async function getProfileProviderRecommendations(input: {
     familiarArtists: response.familiarArtists.map((item) => ({
       candidate: item,
       source: "artist",
+      score: item.score,
+      reasons: item.reasons
+    })),
+    moodDiscovery: response.moodDiscovery.map((item) => ({
+      candidate: item,
+      source: "explore",
+      score: item.score,
+      reasons: item.reasons
+    })),
+    deepCuts: response.deepCuts.map((item) => ({
+      candidate: item,
+      source: "related",
       score: item.score,
       reasons: item.reasons
     })),

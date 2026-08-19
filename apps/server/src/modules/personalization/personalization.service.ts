@@ -18,6 +18,7 @@ import { RedisService } from "../../infra/redis/redis.service";
 import { NeteaseService } from "../providers/netease/netease.service";
 import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
 import {
+  partitionDiscoveryRecommendations,
   rankRecommendationCandidates,
   rerankRecommendationCandidates,
   selectPersonalizedPlaylists,
@@ -29,7 +30,7 @@ import { buildTasteGroups, extractTasteEvidence } from "./taste-taxonomy";
 const recallCacheSeconds = 30 * 60;
 const longTermHalfLifeMs = 120 * 24 * 60 * 60 * 1_000;
 const sessionWindowMs = 2 * 60 * 60 * 1_000;
-const maxTracksPerSection = 12;
+const maxTracksPerSection = 16;
 
 type Provider = "netease" | "qqmusic";
 type Candidate = RecommendationCandidate;
@@ -251,20 +252,24 @@ export class PersonalizationService {
       surface: query.surface,
       scoreEntity: entityScore
     });
-    const forYou = rerankRecommendationCandidates({
+    const discoverSections = query.surface === "discover"
+      ? partitionDiscoveryRecommendations(ranked, maxTracksPerSection)
+      : null;
+    const forYou = discoverSections?.forYou ?? rerankRecommendationCandidates({
       items: ranked.filter((item) => item.source !== "artist"),
       limit: maxTracksPerSection,
-      explorationRatio: query.surface === "discover" ? 0.17 : 0.08
+      explorationRatio: 0.08
     });
-    const selectedKeys = new Set(forYou.map((item) => trackKey(item)));
-    const familiarArtists = rerankRecommendationCandidates({
-      items: ranked.filter((item) => item.source === "artist" && !selectedKeys.has(trackKey(item.candidate))),
+    const familiarArtists = discoverSections?.familiarArtists ?? rerankRecommendationCandidates({
+      items: ranked.filter((item) => item.source === "artist" && !new Set(forYou.map(trackKey)).has(trackKey(item.candidate))),
       limit: maxTracksPerSection,
       explorationRatio: 0
     });
+    const moodDiscovery = discoverSections?.moodDiscovery ?? [];
+    const deepCuts = discoverSections?.deepCuts ?? [];
     const playlists = selectPersonalizedPlaylists({ playlists: recalled.playlists, entities, limit: 10, scoreEntity: entityScore });
-    await this.markRecommended(userId, [...forYou, ...familiarArtists]);
-    return { profileVersion: version, providers, forYou, familiarArtists, playlists };
+    await this.markRecommended(userId, [...forYou, ...familiarArtists, ...moodDiscovery, ...deepCuts]);
+    return { profileVersion: version, providers, forYou, familiarArtists, moodDiscovery, deepCuts, playlists };
   }
 
   async clearProfile(userId: string) {
@@ -330,17 +335,17 @@ export class PersonalizationService {
       if (!first) return;
       playlists.push(...related.items.slice(0, 6));
       const detail = await service.getPlaylist(userId, first.providerPlaylistId);
-      candidates.push(...detail.tracks.slice(0, 24).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82, interestKey: `track:${trackIdentity(seed)}`, interestLabel: seed.title })));
+      candidates.push(...detail.tracks.slice(0, 32).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82, interestKey: `track:${trackIdentity(seed)}`, interestLabel: seed.title })));
     })().catch(() => undefined));
     if (artists.length) tasks.push((async () => {
       for (const artist of artists) {
-        const result = await service.searchTracks(userId, { keywords: artist, limit: 8, offset: 0 });
+        const result = await service.searchTracks(userId, { keywords: artist, limit: 12, offset: 0 });
         candidates.push(...result.items.map((candidate) => ({ candidate, source: "artist" as const, baseScore: 0.68, interestKey: `artist:${normalizeText(artist)}`, interestLabel: artist })));
       }
     })().catch(() => undefined));
     if (tasteNames.length) tasks.push((async () => {
       for (const tasteName of tasteNames) {
-        const result = await service.searchTracks(userId, { keywords: tasteName, limit: 8, offset: 0 });
+        const result = await service.searchTracks(userId, { keywords: tasteName, limit: 12, offset: 0 });
         candidates.push(...result.items.map((candidate) => ({ candidate, source: "explore" as const, baseScore: 0.62, interestKey: `taste:${normalizeText(tasteName)}`, interestLabel: tasteName })));
       }
     })().catch(() => undefined));

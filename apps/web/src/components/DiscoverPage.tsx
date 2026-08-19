@@ -389,7 +389,9 @@ export function DiscoverPage() {
       setData((current) => current ? {
         ...current,
         forYou: current.forYou.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
-        familiarArtists: current.familiarArtists.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track))
+        familiarArtists: current.familiarArtists.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
+        moodDiscovery: current.moodDiscovery.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
+        deepCuts: current.deepCuts.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track))
       } : current);
       setStatusMessage(action === "not-interested" ? "不会再推荐这首歌曲。" : "这首歌曲不会再影响你的品味画像。");
     }).catch((error) => setErrorMessage(error instanceof Error ? error.message : "反馈保存失败。"))
@@ -432,7 +434,17 @@ export function DiscoverPage() {
   const hero = data?.forYou[0] ?? null;
   const heroSide = data?.forYou.slice(1, 3) ?? [];
   const forYou = data?.forYou.slice(hero ? 1 : 0) ?? [];
-  const hasContent = Boolean(hero || data?.familiarArtists.length || data?.playlists.length);
+  const collectionCards = buildCollectionCards(data);
+  const chartSections = data ? [
+    { title: "为你准备", items: data.forYou },
+    { title: "熟悉艺人", items: data.familiarArtists },
+    { title: "换个口味", items: data.moodDiscovery },
+    { title: "沿着喜好", items: data.deepCuts }
+  ].filter((section) => section.items.length > 0).slice(0, 3) : [];
+  const compactRecommendations = data
+    ? uniqueRecommendations([...data.forYou, ...data.familiarArtists, ...data.moodDiscovery, ...data.deepCuts]).slice(0, 9)
+    : [];
+  const hasContent = Boolean(hero || data?.familiarArtists.length || data?.moodDiscovery.length || data?.deepCuts.length || data?.playlists.length);
   const noProfile = Boolean(data && !hasContent);
   const noAccounts = Boolean(data && data.providers.length === 0);
 
@@ -446,6 +458,8 @@ export function DiscoverPage() {
         {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="先播放几首歌" description="播放或收藏歌曲后，这里会根据真实聆听记录推荐更多来自网易云音乐和 QQ 音乐的新内容。" actionHref="/app/search" actionLabel="去搜索" /> : null}
         {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="这次没有找到新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
 
+        {collectionCards.length ? <DiscoverCollectionStrip cards={collectionCards} onPlay={trackActions.onPlay} onOpenPlaylist={(playlist) => void openPlaylist(playlist)} /> : null}
+
         {hero ? (
           <section className="mt-7 grid gap-3 lg:grid-cols-[minmax(0,1.72fr)_minmax(260px,0.72fr)]">
             <HeroTrackCard actions={trackActions} track={hero} />
@@ -455,9 +469,14 @@ export function DiscoverPage() {
           </section>
         ) : null}
 
-        {forYou.length ? <DiscoverSection title="为你推荐"><DiscoverTrackRail actions={trackActions} tracks={forYou} /></DiscoverSection> : null}
-        {data?.familiarArtists.length ? <DiscoverSection title="熟悉艺人的新歌"><DiscoverTrackRail actions={trackActions} tracks={data.familiarArtists} /></DiscoverSection> : null}
-        {data?.playlists.length ? <DiscoverSection title="为你挑选的歌单"><DiscoverPlaylistWall items={data.playlists} loadingKey={detailLoading} onOpen={openPlaylist} /></DiscoverSection> : null}
+        {chartSections.length ? <DiscoverSection title="精选推荐"><DiscoverChartGrid sections={chartSections} actions={trackActions} /></DiscoverSection> : null}
+        {data?.playlists.length ? <DiscoverSection title="推荐歌单"><DiscoverPlaylistRail items={data.playlists} loadingKey={detailLoading} onOpen={openPlaylist} /></DiscoverSection> : null}
+
+        {forYou.length ? <DiscoverSection title="为你准备"><DiscoverTrackRail actions={trackActions} tracks={forYou} /></DiscoverSection> : null}
+        {data?.familiarArtists.length ? <DiscoverSection title="熟悉艺人的延展"><DiscoverTrackRail actions={trackActions} tracks={data.familiarArtists} /></DiscoverSection> : null}
+        {data?.moodDiscovery.length ? <DiscoverSection title="换个口味"><DiscoverTrackRail actions={trackActions} tracks={data.moodDiscovery} /></DiscoverSection> : null}
+        {data?.deepCuts.length ? <DiscoverSection title="沿着喜好继续听"><DiscoverTrackRail actions={trackActions} tracks={data.deepCuts} /></DiscoverSection> : null}
+        {compactRecommendations.length ? <DiscoverSection title="你的红心歌曲和相似推荐"><DiscoverCompactTrackGrid tracks={compactRecommendations} actions={trackActions} /></DiscoverSection> : null}
         <Feedback errorMessage={errorMessage} statusMessage={statusMessage} />
       </div>
       <PlaylistPicker
@@ -494,6 +513,51 @@ type DiscoverTrackActions = {
 
 function DiscoverSection({ title, children }: { title: string; children: React.ReactNode }) {
   return <section className="mt-10"><h2 className="text-xl font-semibold text-foreground">{title}</h2><div className="mt-4">{children}</div></section>;
+}
+
+type DiscoverCollectionCard = {
+  title: string;
+  subtitle: string;
+  track: DiscoverTrackRecommendation | null;
+  playlist: ProviderPlaylistSummary | null;
+};
+
+function buildCollectionCards(data: DiscoverData | null): DiscoverCollectionCard[] {
+  if (!data) return [];
+  const cards: DiscoverCollectionCard[] = [
+    { title: "每日推荐", subtitle: "根据你的听歌记录", track: data.forYou[0] ?? null, playlist: null },
+    { title: "私人雷达", subtitle: "熟悉艺人的新声音", track: data.familiarArtists[0] ?? null, playlist: null },
+    { title: "私人漫游", subtitle: "换个口味继续听", track: data.moodDiscovery[0] ?? null, playlist: null },
+    { title: "相似推荐", subtitle: "沿着喜欢的歌曲发现", track: data.deepCuts[0] ?? null, playlist: null },
+    { title: "歌单精选", subtitle: "为你挑选的音乐集合", track: null, playlist: data.playlists[0]?.playlist ?? null }
+  ];
+  return cards.filter((card) => card.track !== null || card.playlist !== null);
+}
+
+function DiscoverCollectionStrip({ cards, onPlay, onOpenPlaylist }: { cards: DiscoverCollectionCard[]; onPlay: (track: Track) => void; onOpenPlaylist: (playlist: ProviderPlaylistSummary) => void }) {
+  return <section aria-label="发现入口" className="mt-7"><div className="hide-scrollbar flex snap-x gap-3 overflow-x-auto pb-2">{cards.map((card) => {
+    const label = card.track?.candidate.title ?? card.playlist?.title ?? card.title;
+    return <button aria-label={`${card.title}，${label}`} className="group relative h-[184px] min-w-[205px] snap-start overflow-hidden rounded-xl border border-surface-border bg-surface text-left transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-[205px] sm:min-w-[238px]" key={card.title} onClick={() => card.track ? onPlay(card.track.candidate) : card.playlist ? onOpenPlaylist(card.playlist) : undefined} type="button">
+      <Artwork alt="" className="absolute inset-0 h-full w-full transition duration-300 group-hover:scale-[1.03]" src={card.track?.candidate.artworkUrl ?? card.playlist?.artworkUrl ?? null} />
+      <span className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/5" />
+      <span className="relative flex h-full flex-col justify-between p-4 text-white"><span className="flex items-center gap-2 text-lg font-semibold"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-sm">{card.track ? "♪" : "▤"}</span>{card.title}</span><span><span className="block truncate text-sm font-medium">{label}</span><span className="mt-1 block truncate text-xs text-white/65">{card.subtitle}</span></span></span>
+    </button>;
+  })}</div></section>;
+}
+
+function DiscoverChartGrid({ sections, actions }: { sections: Array<{ title: string; items: DiscoverTrackRecommendation[] }>; actions: DiscoverTrackActions }) {
+  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{sections.map((section) => <article className="rounded-xl border border-surface-border bg-surface p-4" key={section.title}>
+    <div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-foreground">{section.title}</h3><span className="text-xs text-foreground-muted">个性化精选</span></div>
+    <div className="mt-4 flex gap-4"><div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-background"><Artwork alt="" className="h-full w-full" src={section.items[0]?.candidate.artworkUrl ?? null} /><button aria-label={`播放${section.title}`} className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" disabled={actions.pending !== null} onClick={() => actions.onPlay(section.items[0]!.candidate)} title={`播放${section.title}`} type="button"><PlayIcon /></button></div><div className="min-w-0 flex-1">{section.items.slice(0, 3).map((item, index) => <button aria-label={`播放《${item.candidate.title}》`} className="flex w-full items-center gap-2 py-1 text-left" disabled={actions.pending !== null} key={providerTrackKey(item.candidate)} onClick={() => actions.onPlay(item.candidate)} type="button"><span className="w-4 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span><span className="min-w-0 flex-1 truncate text-sm text-foreground">{item.candidate.title}</span><span className="max-w-[38%] truncate text-xs text-foreground-muted">{item.candidate.artist}</span></button>)}</div></div>
+  </article>)}</div>;
+}
+
+function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPlaylistRecommendation[]; onOpen: (playlist: ProviderPlaylistSummary) => Promise<void>; loadingKey: string | null }) {
+  return <div className="hide-scrollbar flex snap-x gap-4 overflow-x-auto pb-2">{items.map(({ playlist }) => { const loading = loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`; return <button aria-label={`打开歌单《${playlist.title}》`} className="w-[154px] shrink-0 snap-start text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-[178px]" disabled={loading} key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)} onClick={() => void onOpen(playlist)} type="button"><Artwork alt={playlist.title} className="aspect-square w-full rounded-xl border border-surface-border transition duration-200 hover:brightness-110" src={playlist.artworkUrl} /><p className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-foreground">{playlist.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{providerLabel(playlist.provider)}{playlist.creatorName ? ` · ${playlist.creatorName}` : ""}</p></button>; })}</div>;
+}
+
+function DiscoverCompactTrackGrid({ tracks, actions }: { tracks: DiscoverTrackRecommendation[]; actions: DiscoverTrackActions }) {
+  return <div className="grid gap-x-8 gap-y-2 md:grid-cols-2 xl:grid-cols-3">{tracks.map((item) => <div className="flex min-w-0 items-center gap-3 py-2" key={providerTrackKey(item.candidate)}><button aria-label={`播放《${item.candidate.title}》`} className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" disabled={actions.pending !== null} onClick={() => actions.onPlay(item.candidate)} type="button"><Artwork alt="" className="h-full w-full" src={item.candidate.artworkUrl} /><span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition group-hover:opacity-100"><PlayIcon /></span></button><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{item.candidate.title}</p><p className="truncate text-xs text-foreground-muted">{item.candidate.artist}{item.candidate.album ? ` · ${item.candidate.album}` : ""}</p></div><TrackMoreActions actions={actions} compact track={item.candidate} /></div>)}</div>;
 }
 
 function HeroTrackCard({ track, actions }: { track: DiscoverTrackRecommendation; actions: DiscoverTrackActions }) {
@@ -556,10 +620,6 @@ function TrackMoreActions({ track, actions, compact = false }: { track: Track; a
   return <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>{!compact ? <div className="hidden sm:block"><FavoriteTrackButton isFavorite={actions.isFavorite(track)} onToggle={() => actions.onToggleFavorite(track)} pending={actions.isFavoritePending(track)} size="compact" track={track} /></div> : null}<Button aria-label={`打开《${track.title}》的更多操作`} className="h-8 w-8 rounded-full" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost"><MoreIcon /></Button>{menuAnchor ? <MobileTrackActionsMenu anchor={menuAnchor} items={menuItems} onClose={() => setMenuAnchor(null)} subtitle={`${track.artist}${track.album ? ` · ${track.album}` : ""}`} title={track.title} /> : null}</div>;
 }
 
-function DiscoverPlaylistWall({ items, onOpen, loadingKey }: { items: DiscoverPlaylistRecommendation[]; onOpen: (playlist: ProviderPlaylistSummary) => Promise<void>; loadingKey: string | null }) {
-  return <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">{items.map(({ playlist }) => { const loading = loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`; return <button className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" disabled={loading} key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)} onClick={() => void onOpen(playlist)} type="button"><Artwork alt={playlist.title} className="aspect-square w-full rounded-lg border border-surface-border transition duration-200 hover:brightness-110" src={playlist.artworkUrl} /><p className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-foreground">{playlist.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{providerLabel(playlist.provider)}{playlist.creatorName ? ` · ${playlist.creatorName}` : ""}</p></button>; })}</div>;
-}
-
 function PlaylistPicker({ track, anchor, options, loading, pending, onClose, onSelect }: { track: Track | null; anchor: AnchoredDialogAnchor | null; options: ProviderPlaylistPickerOption[]; loading: boolean; pending: string | null; onClose: () => void; onSelect: (option: ProviderPlaylistPickerOption) => Promise<void> }) {
   if (!track || !anchor) return null;
   return <ProviderPlaylistPickerDialog anchor={anchor} loading={loading} options={options} pending={pending !== null} subjectLabel={`《${track.title}》 · ${track.artist}`} onClose={onClose} onSelect={(option) => void onSelect(option)} />;
@@ -614,6 +674,16 @@ function providerPlaylistKey(provider: Provider, playlistId: string) {
 
 function providerLabel(provider: Provider) {
   return provider === "netease" ? "网易云音乐" : "QQ 音乐";
+}
+
+function uniqueRecommendations(items: DiscoverTrackRecommendation[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = providerTrackKey(item.candidate);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function toErrorMessage(error: unknown) {

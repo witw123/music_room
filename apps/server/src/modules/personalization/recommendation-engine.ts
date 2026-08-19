@@ -148,6 +148,31 @@ export function rerankRecommendationCandidates(input: {
   return selected.map(({ candidate, score, reasons }) => ({ ...candidate, score, reasons }));
 }
 
+export function partitionDiscoveryRecommendations(items: RankedRecommendationCandidate[], limit = 16) {
+  const forYou = rerankRecommendationCandidates({
+    items,
+    limit,
+    explorationRatio: 0.17
+  });
+  const selectedKeys = new Set(forYou.map(trackKey));
+  const takeUnselected = (source: RecommendationCandidateSource) => {
+    const section = rerankRecommendationCandidates({
+      items: items.filter((item) => item.source === source && !selectedKeys.has(trackKey(item.candidate))),
+      limit,
+      explorationRatio: source === "explore" ? 0.25 : 0
+    });
+    section.forEach((item) => selectedKeys.add(trackKey(item)));
+    return section;
+  };
+
+  return {
+    forYou,
+    familiarArtists: takeUnselected("artist"),
+    moodDiscovery: takeUnselected("explore"),
+    deepCuts: takeUnselected("related")
+  };
+}
+
 export function selectPersonalizedPlaylists(input: {
   playlists: ProviderPlaylistSummary[];
   entities: RecommendationTasteEntity[];
