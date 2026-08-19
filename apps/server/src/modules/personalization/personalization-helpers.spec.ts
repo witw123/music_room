@@ -91,6 +91,29 @@ describe("personalization helpers", () => {
     expect(sections.deepCuts.length).toBeGreaterThan(0);
     expect(new Set(keys).size).toBe(keys.length);
   });
+
+  it("caps each artist at two tracks while other artists are available", () => {
+    const candidates = [
+      ...Array.from({ length: 8 }, (_, index) => recommendation(`A${index}`, "Artist A", `a:${index}`, "artist", 1 - index / 100)),
+      ...Array.from({ length: 4 }, (_, index) => recommendation(`B${index}`, "Artist B", `b:${index}`, "related", 0.8 - index / 100)),
+      ...Array.from({ length: 4 }, (_, index) => recommendation(`C${index}`, "Artist C", `c:${index}`, "explore", 0.75 - index / 100))
+    ];
+    const ranked = rankRecommendationCandidates({
+      candidates,
+      entities: [],
+      events: [],
+      excludedTracks: new Set(),
+      excludedIdentities: new Set(),
+      excludedArtists: new Set(),
+      surface: "discover",
+      scoreEntity: () => 0
+    });
+    const selected = rerankRecommendationCandidates({ items: ranked, limit: 6, explorationRatio: 0, maxPerArtist: 2 });
+    const counts = selected.reduce((result, item) => result.set(item.artist, (result.get(item.artist) ?? 0) + 1), new Map<string, number>());
+
+    expect(counts.get("Artist A")).toBeLessThanOrEqual(2);
+    expect(new Set(selected.map((item) => item.artist)).size).toBeGreaterThanOrEqual(3);
+  });
 });
 
 function track(input: Pick<ProviderTrackCandidate, "provider" | "providerTrackId" | "title" | "artist">): ProviderTrackCandidate {

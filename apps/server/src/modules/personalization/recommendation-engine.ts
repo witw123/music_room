@@ -101,6 +101,7 @@ export function rerankRecommendationCandidates(input: {
   items: RankedRecommendationCandidate[];
   limit: number;
   explorationRatio: number;
+  maxPerArtist?: number;
 }) {
   const selected: RankedRecommendationCandidate[] = [];
   const remaining = [...input.items];
@@ -114,24 +115,32 @@ export function rerankRecommendationCandidates(input: {
   const maxSource = Math.max(2, Math.ceil(input.limit * 0.35));
   const maxInterest = Math.max(2, Math.ceil(input.limit * 0.4));
   const maxProvider = availableProviders.size > 1 ? Math.ceil(input.limit * 0.65) : input.limit;
+  const maxPerArtist = input.maxPerArtist ?? 2;
 
   while (selected.length < input.limit && remaining.length) {
     const slotsLeft = input.limit - selected.length;
     const explorationNeeded = targetExploration - selected.filter((item) => item.exploratory).length;
     const forceExploration = explorationNeeded > 0 && slotsLeft <= explorationNeeded;
-    const viable = remaining.filter((item) => {
+    const previousArtist = selected.length ? normalizeText(selected[selected.length - 1]!.candidate.artist) : null;
+    const matches = (item: RankedRecommendationCandidate, options: { allowConsecutive: boolean; allowArtistOverflow: boolean; allowOtherOverflow: boolean }) => {
       if (forceExploration && !item.exploratory) return false;
       const artist = normalizeText(item.candidate.artist);
       const album = normalizeText(item.candidate.album ?? "");
-      const previousArtist = selected.length ? normalizeText(selected[selected.length - 1]!.candidate.artist) : null;
-      return artist !== previousArtist
-        && (artistCounts.get(artist) ?? 0) < 2
-        && (!album || (albumCounts.get(album) ?? 0) < 2)
+      const artistAllowed = options.allowArtistOverflow || (artistCounts.get(artist) ?? 0) < maxPerArtist;
+      const otherLimitsAllowed = options.allowOtherOverflow || (
+        (!album || (albumCounts.get(album) ?? 0) < 2)
         && (sourceCounts.get(item.source) ?? 0) < maxSource
         && (interestCounts.get(item.interestKey) ?? 0) < maxInterest
-        && (providerCounts.get(item.candidate.provider) ?? 0) < maxProvider;
-    });
-    const pool = viable.length ? viable : remaining.filter((item) => !forceExploration || item.exploratory);
+        && (providerCounts.get(item.candidate.provider) ?? 0) < maxProvider
+      );
+      return (options.allowConsecutive || artist !== previousArtist) && artistAllowed && otherLimitsAllowed;
+    };
+    const pool = [
+      remaining.filter((item) => matches(item, { allowConsecutive: false, allowArtistOverflow: false, allowOtherOverflow: false })),
+      remaining.filter((item) => matches(item, { allowConsecutive: true, allowArtistOverflow: false, allowOtherOverflow: false })),
+      remaining.filter((item) => matches(item, { allowConsecutive: true, allowArtistOverflow: true, allowOtherOverflow: false })),
+      remaining.filter((item) => matches(item, { allowConsecutive: true, allowArtistOverflow: true, allowOtherOverflow: true }))
+    ].find((items) => items.length > 0) ?? [];
     if (!pool.length) break;
     const next = pool
       .map((item) => ({ item, adjustedScore: diversityAdjustedScore(item, selected, sourceCounts, interestCounts, providerCounts, explorationNeeded) }))
@@ -152,16 +161,24 @@ export function partitionDiscoveryRecommendations(items: RankedRecommendationCan
   const forYou = rerankRecommendationCandidates({
     items,
     limit,
-    explorationRatio: 0.17
+    explorationRatio: 0.17,
+    maxPerArtist: 2
   });
   const selectedKeys = new Set(forYou.map(trackKey));
+  const selectedArtists = new Set(forYou.map((item) => normalizeText(item.artist)));
   const takeUnselected = (source: RecommendationCandidateSource) => {
+    const sourceItems = items.filter((item) => item.source === source && !selectedKeys.has(trackKey(item.candidate)));
+    const freshArtistItems = sourceItems.filter((item) => !selectedArtists.has(normalizeText(item.candidate.artist)));
     const section = rerankRecommendationCandidates({
-      items: items.filter((item) => item.source === source && !selectedKeys.has(trackKey(item.candidate))),
+      items: freshArtistItems.length >= Math.min(4, limit) ? freshArtistItems : sourceItems,
       limit,
-      explorationRatio: source === "explore" ? 0.25 : 0
+      explorationRatio: source === "explore" ? 0.25 : 0,
+      maxPerArtist: 2
     });
-    section.forEach((item) => selectedKeys.add(trackKey(item)));
+    section.forEach((item) => {
+      selectedKeys.add(trackKey(item));
+      selectedArtists.add(normalizeText(item.artist));
+    });
     return section;
   };
 

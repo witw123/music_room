@@ -313,7 +313,7 @@ export class PersonalizationService {
     const libraryCandidates = tracks.map(entityToCandidate).filter((item): item is ProviderTrackCandidate => item !== null)
       .map((candidate) => ({ candidate, source: "library" as const, baseScore: 0.9, interestKey: "library", interestLabel: null }));
     const seed = libraryCandidates[0]?.candidate ?? null;
-    const artistNames = artists.flatMap((item) => typeof item.title === "string" ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 2);
+    const artistNames = artists.flatMap((item) => typeof item.title === "string" ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 4);
     const tasteNames = tasteTerms.flatMap((item) => typeof item.title === "string" && entityScore(item) > 0 ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 2);
     const playlistQuery = tasteNames[0] ?? artistNames[1] ?? artistNames[0] ?? null;
     const savedPlaylist = surface === "discover" ? undefined : playlists[0];
@@ -331,11 +331,11 @@ export class PersonalizationService {
     const tasks: Promise<void>[] = [];
     if (seed) tasks.push((async () => {
       const related = await service.getRelatedPlaylists(userId, seed.providerTrackId);
-      const first = related.items[0];
-      if (!first) return;
       playlists.push(...related.items.slice(0, 6));
-      const detail = await service.getPlaylist(userId, first.providerPlaylistId);
-      candidates.push(...detail.tracks.slice(0, 32).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82, interestKey: `track:${trackIdentity(seed)}`, interestLabel: seed.title })));
+      const details = await Promise.all(related.items.slice(0, 2).map((playlist) => service.getPlaylist(userId, playlist.providerPlaylistId).catch(() => null)));
+      details.filter((detail) => detail !== null).forEach((detail) => {
+        candidates.push(...detail.tracks.slice(0, 20).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82, interestKey: `track:${trackIdentity(seed)}`, interestLabel: seed.title })));
+      });
     })().catch(() => undefined));
     if (artists.length) tasks.push((async () => {
       for (const artist of artists) {
