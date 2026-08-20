@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { MembersPanel } from "./MembersPanel";
@@ -20,6 +21,12 @@ type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 export function RadioRoomView(props: RoomDashboardViewProps) {
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
+  const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
+  const [rightTab, setRightTab] = useState<RadioRightTab>(isHost ? "console" : "members");
+
+  useEffect(() => {
+    if (!isHost) setRightTab("members");
+  }, [isHost]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
@@ -37,19 +44,95 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         </div>
       </section>
 
-      <section className={`mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:h-full lg:min-h-full lg:gap-0 lg:border-t lg:border-surface-border lg:px-0 ${isHost ? "lg:grid-cols-[minmax(0,34fr)_minmax(0,42fr)_minmax(16rem,24fr)]" : "lg:grid-cols-[minmax(0,64fr)_minmax(18rem,36fr)]"}`} data-testid="radio-room-workspace">
-        <div className="min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0">
-          <RadioLibraryList
-            currentTrack={props.currentTrack}
-            isHost={isHost}
-            onAddToQueue={props.onAddToQueue}
-            onDeleteTrack={props.onDeleteTrack}
-            roomTracks={props.roomSnapshot.tracks}
+      <section className="mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:min-h-[32rem] lg:grid-cols-[minmax(0,64fr)_minmax(18rem,36fr)] lg:gap-0 lg:border-t lg:border-surface-border lg:px-0" data-testid="radio-room-workspace">
+        <div className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
+          <RadioWorkspaceTabs
+            activeTab={leftTab}
+            ariaLabel="电台内容"
+            panelPrefix="radio-left"
+            onChange={setLeftTab}
+            tabs={[{ id: "queue", label: "队列" }, { id: "library", label: "曲库" }]}
           />
+          <div aria-labelledby={`radio-left-tab-${leftTab}`} className="min-h-0 flex-1 overflow-y-auto" id={`radio-left-panel-${leftTab}`} role="tabpanel">
+            {leftTab === "queue" ? (
+              <div className="flex h-full min-h-0 flex-col" data-testid="radio-queue-panel">
+                <PlayerQueueList
+                  canControlPlayback={props.canControlPlayback}
+                  canRemoveQueue={props.canRemoveQueue}
+                  canReorderQueue={props.canReorderQueue}
+                  currentQueueItemId={props.roomSnapshot.room.playback.currentQueueItemId}
+                  nextQueueItemId={props.roomSnapshot.room.playback.nextQueueItemId ?? null}
+                  onPlayNextQueueItem={props.onPlayNextQueueItem}
+                  onPlayQueueItem={props.onPlayQueueItem}
+                  onRemoveQueueItem={props.onRemoveQueueItem}
+                  onReorderQueue={props.onReorderQueue}
+                  queue={props.roomSnapshot.queue}
+                  tracks={props.roomSnapshot.tracks}
+                />
+              </div>
+            ) : (
+              <RadioLibraryList
+                currentTrack={props.currentTrack}
+                isHost={isHost}
+                onAddToQueue={props.onAddToQueue}
+                onDeleteTrack={props.onDeleteTrack}
+                roomTracks={props.roomSnapshot.tracks}
+              />
+            )}
+          </div>
         </div>
-        {isHost ? <div className="hide-scrollbar min-h-[24rem] min-w-0 overflow-y-auto rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r"><HostBroadcastDesk {...props} /></div> : null}
-        <RadioMembersPanel {...props} membershipNow={membershipNow} />
+        <div className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0">
+          <RadioWorkspaceTabs
+            activeTab={rightTab}
+            ariaLabel="电台管理"
+            panelPrefix="radio-right"
+            onChange={setRightTab}
+            tabs={isHost ? [{ id: "console", label: "控制台" }, { id: "members", label: "成员" }] : [{ id: "members", label: "成员" }]}
+          />
+          <div aria-labelledby={`radio-right-tab-${rightTab}`} className="min-h-0 flex-1 overflow-y-auto" id={`radio-right-panel-${rightTab}`} role="tabpanel">
+            {rightTab === "console" && isHost ? <HostBroadcastDesk {...props} /> : <RadioMembersPanel {...props} membershipNow={membershipNow} />}
+          </div>
+        </div>
       </section>
+    </div>
+  );
+}
+
+type RadioLeftTab = "queue" | "library";
+type RadioRightTab = "console" | "members";
+
+function RadioWorkspaceTabs<T extends string>({
+  activeTab,
+  ariaLabel,
+  panelPrefix,
+  onChange,
+  tabs
+}: {
+  activeTab: T;
+  ariaLabel: string;
+  panelPrefix: string;
+  onChange: (tab: T) => void;
+  tabs: Array<{ id: T; label: string }>;
+}) {
+  return (
+    <div className="shrink-0 border-b border-surface-border px-3 py-2 sm:px-5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+      <div aria-label={ariaLabel} className="grid grid-flow-col auto-cols-fr gap-1 rounded-xl border border-surface-border bg-surface/55 p-1" role="tablist">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            id={`${panelPrefix}-tab-${tab.id}`}
+            aria-controls={`${panelPrefix}-panel-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.id ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+            onClick={() => onChange(tab.id)}
+            role="tab"
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
