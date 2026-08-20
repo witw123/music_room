@@ -44,7 +44,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         <div className={`min-h-0 overflow-visible lg:min-h-0 lg:border-r lg:border-surface-border lg:bg-surface/[0.12] ${isChatScrollEnabled ? "lg:h-full lg:overflow-hidden" : "lg:h-auto lg:overflow-visible"}`}>
           <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
         </div>
-        <div className={`min-h-[24rem] min-w-0 rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 ${isChatScrollEnabled ? "h-[28rem] overflow-hidden sm:h-[30rem] lg:h-full" : "overflow-visible lg:h-auto"}`}>
+        <div className={`h-[28rem] min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background sm:h-[30rem] lg:min-h-0 lg:rounded-none lg:border-0 ${isChatScrollEnabled ? "lg:h-full" : "lg:h-[32rem]"}`}>
           <RoomChatPanel
             activeSession={props.activeSession}
             isHost={isHost}

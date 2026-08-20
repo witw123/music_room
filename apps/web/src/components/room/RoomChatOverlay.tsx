@@ -130,7 +130,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
 
   return (
     <section
-      className={`min-w-0 bg-surface/25 ${scrollEnabled ? "flex h-full min-h-[24rem] max-h-[28rem] sm:max-h-[30rem] lg:max-h-none" : "block h-auto min-h-[22rem]"} lg:min-h-0`}
+      className="flex h-full min-h-[24rem] min-w-0 flex-col bg-surface/25 lg:min-h-0"
       data-testid="radio-chat-panel"
       data-scroll-enabled={scrollEnabled ? "true" : "false"}
       onFocusCapture={onActivateScroll}
@@ -141,7 +141,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
       </header>
 
       <div
-        className={`hide-scrollbar min-h-0 px-4 py-3 sm:px-5 ${scrollEnabled ? "flex-1 touch-pan-y overflow-y-auto overscroll-contain" : "overflow-visible"}`}
+        className={`hide-scrollbar min-h-0 flex-1 px-4 py-3 sm:px-5 ${scrollEnabled ? "touch-pan-y overflow-y-auto overscroll-contain" : "overflow-hidden"}`}
         onScroll={(event) => {
           if (event.currentTarget.scrollTop < 48) void loadOlder();
         }}
