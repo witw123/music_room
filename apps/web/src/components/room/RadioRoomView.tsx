@@ -21,6 +21,7 @@ type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 export function RadioRoomView(props: RoomDashboardViewProps) {
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
+  const [isChatScrollEnabled, setIsChatScrollEnabled] = useState(false);
   const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
   const [rightTab, setRightTab] = useState<RadioRightTab>(isHost ? "console" : "members");
 
@@ -29,22 +30,33 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   }, [isHost]);
 
   useEffect(() => {
+    setIsChatScrollEnabled(false);
+  }, [props.roomSnapshot.room.id]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="min-h-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
+      <section className={`mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0 ${isChatScrollEnabled ? "lg:h-full lg:min-h-full" : "lg:h-auto lg:min-h-0"}`} data-testid="radio-room-hero">
+        <div className={`min-h-0 overflow-visible lg:min-h-0 lg:border-r lg:border-surface-border lg:bg-surface/[0.12] ${isChatScrollEnabled ? "lg:h-full lg:overflow-hidden" : "lg:h-auto lg:overflow-visible"}`}>
           <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
         </div>
-        <div className="min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">
-          <RoomChatPanel activeSession={props.activeSession} isHost={isHost} roomId={props.roomSnapshot.room.id} socket={props.socket} />
+        <div className={`min-h-[24rem] min-w-0 rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 ${isChatScrollEnabled ? "h-[28rem] overflow-hidden sm:h-[30rem] lg:h-full" : "overflow-visible lg:h-auto"}`}>
+          <RoomChatPanel
+            activeSession={props.activeSession}
+            isHost={isHost}
+            onActivateScroll={() => setIsChatScrollEnabled(true)}
+            roomId={props.roomSnapshot.room.id}
+            scrollEnabled={isChatScrollEnabled}
+            socket={props.socket}
+          />
         </div>
       </section>
 
-      <section className="mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:min-h-[32rem] lg:grid-cols-[minmax(0,64fr)_minmax(18rem,36fr)] lg:gap-0 lg:border-t lg:border-surface-border lg:px-0" data-testid="radio-room-workspace">
+      <section className="mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:min-h-[32rem] lg:grid-cols-[minmax(0,64fr)_minmax(18rem,36fr)] lg:gap-0 lg:px-0" data-testid="radio-room-workspace">
         <div className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
           <RadioWorkspaceTabs
             activeTab={leftTab}
@@ -115,7 +127,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string }>;
 }) {
   return (
-    <div className="shrink-0 border-b border-surface-border px-3 py-2 sm:px-5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="shrink-0 px-3 py-2 sm:px-5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div aria-label={ariaLabel} className="grid grid-flow-col auto-cols-fr gap-1 rounded-xl border border-surface-border bg-surface/55 p-1" role="tablist">
         {tabs.map((tab) => (
           <button
@@ -152,7 +164,13 @@ function RadioLibraryList({
 }) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [visibleTrackCount, setVisibleTrackCount] = useState(10);
+
+  const visibleTracks = roomTracks.slice(0, visibleTrackCount);
+
+  useEffect(() => {
+    setVisibleTrackCount(10);
+  }, [roomTracks.length]);
 
   const runTrackAction = async (key: string, action: () => Promise<unknown>) => {
     if (pendingAction) return;
@@ -171,20 +189,20 @@ function RadioLibraryList({
     <aside className="flex min-h-0 min-w-0 flex-col bg-surface/[0.14] lg:h-full lg:min-h-0" data-testid="radio-library-list">
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-7">
         <h1 className="text-xl font-semibold text-foreground">曲库单</h1>
-        {roomTracks.length > 4 ? <button
-          aria-controls="radio-library-tracks"
-          aria-expanded={isExpanded}
-          className="inline-flex items-center gap-1 text-xs font-medium text-foreground-muted transition-colors hover:text-foreground lg:hidden"
-          onClick={() => setIsExpanded((current) => !current)}
-          type="button"
-        >
-          {isExpanded ? "收起" : "展开"}
-          <svg aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
-        </button> : null}
       </header>
-      <div className="min-h-0 flex-1 overflow-visible px-4 pb-4 sm:px-6 lg:hide-scrollbar lg:overflow-y-auto lg:px-7 lg:pb-5" id="radio-library-tracks">
+      <div
+        className="hide-scrollbar min-h-0 max-h-[36rem] flex-1 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 lg:max-h-[min(42rem,calc(100dvh-10rem))] lg:px-7 lg:pb-5"
+        id="radio-library-tracks"
+        onScroll={(event) => {
+          if (visibleTrackCount >= roomTracks.length) return;
+          const target = event.currentTarget;
+          if (target.scrollHeight - target.scrollTop - target.clientHeight < 160) {
+            setVisibleTrackCount((count) => Math.min(count + 10, roomTracks.length));
+          }
+        }}
+      >
         <div className="space-y-1">
-          {roomTracks.map((track, index) => <div className={index >= 4 && !isExpanded && track.id !== currentTrack?.id ? "hidden lg:block" : undefined} key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={() => runTrackAction(`queue:${track.id}`, () => onAddToQueue(track.id))} onDeleteTrack={() => runTrackAction(`delete:${track.id}`, () => onDeleteTrack(track.id))} pendingAction={pendingAction} track={track} /></div>)}
+          {visibleTracks.map((track, index) => <div key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={() => runTrackAction(`queue:${track.id}`, () => onAddToQueue(track.id))} onDeleteTrack={() => runTrackAction(`delete:${track.id}`, () => onDeleteTrack(track.id))} pendingAction={pendingAction} track={track} /></div>)}
         </div>
         {errorMessage ? <p className="mt-3 text-xs text-danger" role="status">{errorMessage}</p> : null}
       </div>

@@ -11,9 +11,11 @@ type RoomChatPanelProps = {
   activeSession: AuthSession | null;
   isHost: boolean;
   socket: RoomSocket | null;
+  scrollEnabled?: boolean;
+  onActivateScroll?: () => void;
 };
 
-export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomChatPanelProps) {
+export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEnabled = true, onActivateScroll }: RoomChatPanelProps) {
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -127,13 +129,19 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket }: RoomCha
   };
 
   return (
-    <section className="flex h-[28rem] min-h-[22rem] min-w-0 flex-col bg-surface/25 sm:h-[30rem] lg:h-full lg:min-h-0" data-testid="radio-chat-panel">
+    <section
+      className={`min-w-0 bg-surface/25 ${scrollEnabled ? "flex h-full min-h-[24rem] max-h-[28rem] sm:max-h-[30rem] lg:max-h-none" : "block h-auto min-h-[22rem]"} lg:min-h-0`}
+      data-testid="radio-chat-panel"
+      data-scroll-enabled={scrollEnabled ? "true" : "false"}
+      onFocusCapture={onActivateScroll}
+      onClick={onActivateScroll}
+    >
       <header className="shrink-0 px-4 py-4 sm:px-5">
         <h2 className="text-base font-semibold text-foreground">聊天</h2>
       </header>
 
       <div
-        className="hide-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 py-3 sm:px-5"
+        className={`hide-scrollbar min-h-0 px-4 py-3 sm:px-5 ${scrollEnabled ? "flex-1 touch-pan-y overflow-y-auto overscroll-contain" : "overflow-visible"}`}
         onScroll={(event) => {
           if (event.currentTarget.scrollTop < 48) void loadOlder();
         }}

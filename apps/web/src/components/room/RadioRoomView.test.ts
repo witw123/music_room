@@ -20,10 +20,15 @@ describe("RadioRoomView layout", () => {
     expect(radioRoomSource).toContain("<HostBroadcastDesk");
     expect(radioRoomSource).toContain("<RadioMembersPanel");
     expect(radioRoomSource).not.toContain("RadioCommunityPanels");
+    expect(radioRoomSource).toContain("useState(10)");
+    expect(radioRoomSource).toContain("lg:max-h-[min(42rem,calc(100dvh-10rem))]");
+    expect(radioRoomSource).not.toContain("lg:border-t lg:border-surface-border");
   });
 
   it("lets chat scrolling hand control back to the room page at its boundary", () => {
     expect(chatSource).toContain("flex h-full min-h-[24rem]");
+    expect(chatSource).toContain("onClick={onActivateScroll}");
+    expect(chatSource).toContain("data-scroll-enabled");
     expect(chatSource).not.toContain("lg:overscroll-contain");
   });
 
