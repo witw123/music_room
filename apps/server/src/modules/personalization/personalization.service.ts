@@ -315,16 +315,16 @@ export class PersonalizationService {
     const seed = libraryCandidates[0]?.candidate ?? null;
     const artistNames = artists.flatMap((item) => typeof item.title === "string" ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 4);
     const tasteNames = tasteTerms.flatMap((item) => typeof item.title === "string" && entityScore(item) > 0 ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 2);
-    const playlistQuery = tasteNames[0] ?? artistNames[1] ?? artistNames[0] ?? null;
+    const playlistQueries = [...new Set([tasteNames[0], artistNames[0]].filter((value): value is string => Boolean(value)))].slice(0, 2);
     const savedPlaylist = surface === "discover" ? undefined : playlists[0];
-    const external = await this.getProviderRecall(userId, provider, seed, artistNames, tasteNames, playlistQuery, savedPlaylist, surface);
+    const external = await this.getProviderRecall(userId, provider, seed, artistNames, tasteNames, playlistQueries, savedPlaylist, surface);
     return {
       candidates: dedupeCandidates([...(surface === "discover" ? [] : libraryCandidates), ...external.candidates]),
       playlists: external.playlists
     };
   }
 
-  private async getProviderRecall(userId: string, provider: Provider, seed: ProviderTrackCandidate | null, artists: string[], tasteNames: string[], playlistQuery: string | null, savedPlaylist: TasteEntityRecord | undefined, surface: PersonalizationRecommendationsQuery["surface"]) {
+  private async getProviderRecall(userId: string, provider: Provider, seed: ProviderTrackCandidate | null, artists: string[], tasteNames: string[], playlistQueries: string[], savedPlaylist: TasteEntityRecord | undefined, surface: PersonalizationRecommendationsQuery["surface"]) {
     const service = provider === "netease" ? this.netease : this.qqmusic;
     const candidates: Candidate[] = [];
     const playlists: ProviderPlaylistSummary[] = [];
@@ -349,10 +349,13 @@ export class PersonalizationService {
         candidates.push(...result.items.map((candidate) => ({ candidate, source: "explore" as const, baseScore: 0.62, interestKey: `taste:${normalizeText(tasteName)}`, interestLabel: tasteName })));
       }
     })().catch(() => undefined));
-    if (playlistQuery) tasks.push((async () => {
-      const found = await service.searchPlaylists(userId, { keywords: playlistQuery, limit: 8, offset: 0 });
-      const summaries = surface === "discover" ? await keepMultiArtistPlaylists(userId, service, found.items.slice(0, 3)) : found.items;
-      playlists.push(...summaries);
+    if (playlistQueries.length) tasks.push((async () => {
+      const results = await Promise.all(playlistQueries.map((playlistQuery) => service.searchPlaylists(userId, { keywords: playlistQuery, limit: 6, offset: 0 }).catch(() => null)));
+      for (const result of results) {
+        if (!result) continue;
+        const summaries = surface === "discover" ? await keepMultiArtistPlaylists(userId, service, result.items.slice(0, 2)) : result.items;
+        playlists.push(...summaries);
+      }
     })().catch(() => undefined));
     const savedPlaylistId = savedPlaylist?.providerItemId;
     const savedPlaylistTitle = savedPlaylist?.title ?? null;

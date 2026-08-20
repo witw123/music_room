@@ -432,7 +432,6 @@ export function DiscoverPage() {
   }
 
   const forYou = data?.forYou ?? [];
-  const collectionCards = buildCollectionCards(data);
   const chartSections = data ? [
     { title: "为你准备", items: data.forYou },
     { title: "熟悉艺人", items: data.familiarArtists },
@@ -455,8 +454,6 @@ export function DiscoverPage() {
         {!loading && noAccounts ? <DiscoverEmptyState title="连接音乐平台后开始发现" description="绑定网易云音乐或 QQ 音乐后，发现页会从你的听歌画像召回新的歌曲和歌单。" actionHref="/app/settings" actionLabel="前往绑定" /> : null}
         {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="先播放几首歌" description="播放或收藏歌曲后，这里会根据真实聆听记录推荐更多来自网易云音乐和 QQ 音乐的新内容。" actionHref="/app/search" actionLabel="去搜索" /> : null}
         {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="这次没有找到新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
-
-        {collectionCards.length ? <DiscoverCollectionStrip cards={collectionCards} onOpenPlaylist={(playlist) => void openPlaylist(playlist)} /> : null}
 
         {chartSections.length ? <DiscoverSection title="精选推荐"><DiscoverChartGrid sections={chartSections} actions={trackActions} /></DiscoverSection> : null}
         {data?.playlists.length ? <DiscoverSection title="推荐歌单"><DiscoverPlaylistRail items={data.playlists} loadingKey={detailLoading} onOpen={openPlaylist} /></DiscoverSection> : null}
@@ -502,31 +499,6 @@ type DiscoverTrackActions = {
 
 function DiscoverSection({ title, children }: { title: string; children: React.ReactNode }) {
   return <section className="mt-10"><h2 className="text-xl font-semibold text-foreground">{title}</h2><div className="mt-4">{children}</div></section>;
-}
-
-type DiscoverCollectionCard = {
-  title: string;
-  subtitle: string;
-  playlist: ProviderPlaylistSummary;
-};
-
-function buildCollectionCards(data: DiscoverData | null): DiscoverCollectionCard[] {
-  if (!data) return [];
-  return data.playlists.slice(0, 5).map(({ playlist }) => ({
-    title: playlist.title,
-    subtitle: playlist.description?.trim() || playlist.creatorName || providerLabel(playlist.provider),
-    playlist
-  }));
-}
-
-function DiscoverCollectionStrip({ cards, onOpenPlaylist }: { cards: DiscoverCollectionCard[]; onOpenPlaylist: (playlist: ProviderPlaylistSummary) => void }) {
-  return <section aria-label="发现入口" className="mt-7"><div className="hide-scrollbar flex snap-x gap-3 overflow-x-auto pb-2">{cards.map((card) => {
-    return <button aria-label={`打开歌单《${card.title}》`} className="group relative h-[184px] min-w-[205px] snap-start overflow-hidden rounded-xl border border-surface-border bg-surface text-left transition duration-200 hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-[205px] sm:min-w-[238px]" key={providerPlaylistKey(card.playlist.provider, card.playlist.providerPlaylistId)} onClick={() => onOpenPlaylist(card.playlist)} type="button">
-      <Artwork alt="" className="absolute inset-0 h-full w-full transition duration-300 group-hover:scale-[1.03]" src={card.playlist.artworkUrl} />
-      <span className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/5" />
-      <span className="relative flex h-full flex-col justify-end p-4 text-white"><span className="text-xs font-medium text-white/65">{providerLabel(card.playlist.provider)} · {card.playlist.trackCount} 首</span><span className="mt-2 block line-clamp-2 text-lg font-semibold leading-6">{card.title}</span><span className="mt-1 block line-clamp-2 text-xs leading-5 text-white/65">{card.subtitle}</span></span>
-    </button>;
-  })}</div></section>;
 }
 
 function DiscoverChartGrid({ sections, actions }: { sections: Array<{ title: string; items: DiscoverTrackRecommendation[] }>; actions: DiscoverTrackActions }) {
