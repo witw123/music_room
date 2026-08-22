@@ -44,33 +44,33 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Interaction Stats */}
-      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
-        <h3 className="text-base font-bold text-white mb-4">房间互动成就</h3>
+      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
+        <h3 className="text-base font-bold text-foreground mb-4">房间互动成就</h3>
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
           <StatCard
             label="发出点赞"
             value={stats?.sentLikes ?? 0}
-            icon={<HeartIcon className="w-4 h-4 text-[#fa233b]" />}
+            icon={<HeartIcon className="w-4 h-4 text-accent" />}
           />
           <StatCard
             label="发出鼓掌"
             value={stats?.sentApplause ?? 0}
-            icon={<SparklesIcon className="w-4 h-4 text-[#fa233b]" />}
+            icon={<SparklesIcon className="w-4 h-4 text-accent" />}
           />
           <StatCard
             label="收到互动"
             value={stats?.receivedReactions ?? 0}
-            icon={<ActivityIcon className="w-4 h-4 text-[#fa233b]" />}
+            icon={<ActivityIcon className="w-4 h-4 text-accent" />}
           />
         </div>
       </section>
 
       {/* Owned Rooms */}
-      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h3 className="text-base font-bold text-white">我创建的房间</h3>
+          <h3 className="text-base font-bold text-foreground">我创建的房间</h3>
           <Link
-            className="text-xs font-semibold text-[#fa233b] hover:text-[#fc3c44] inline-flex items-center gap-1 transition-colors"
+            className="text-xs font-semibold text-accent hover:text-accent-hover inline-flex items-center gap-1 transition-colors"
             href="/app"
           >
             <span>探索房间大厅</span>
@@ -83,7 +83,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
             <OwnedRoomCard key={snapshot.room.id} snapshot={snapshot} />
           ))}
           {ownedRooms.length === 0 ? (
-            <div className="col-span-full py-8 text-center rounded-xl border border-dashed border-white/[0.06] text-neutral-500 text-xs">
+            <div className="col-span-full py-8 text-center rounded-xl border border-dashed border-surface-border text-foreground-muted text-xs">
               还没有创建房间
             </div>
           ) : null}
@@ -91,7 +91,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
 
         {ownedRooms.length > 6 ? (
           <button
-            className="mt-4 text-xs font-semibold text-[#fa233b] hover:text-[#fc3c44] transition-colors"
+            className="mt-4 text-xs font-semibold text-accent hover:text-accent-hover transition-colors"
             onClick={() => setShowAllOwned((current) => !current)}
             type="button"
           >
@@ -101,14 +101,14 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
       </section>
 
       {/* Recent Rooms */}
-      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
-        <h3 className="text-base font-bold text-white mb-4">最近参与</h3>
+      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
+        <h3 className="text-base font-bold text-foreground mb-4">最近参与</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(showAllRecent ? recentRooms : recentRooms.slice(0, 6)).map((room) => (
             <RecentRoomCard key={room.roomId} room={room} />
           ))}
           {recentRooms.length === 0 ? (
-            <div className="col-span-full py-8 text-center rounded-xl border border-dashed border-white/[0.06] text-neutral-500 text-xs">
+            <div className="col-span-full py-8 text-center rounded-xl border border-dashed border-surface-border text-foreground-muted text-xs">
               还没有参与记录
             </div>
           ) : null}
@@ -116,7 +116,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
 
         {recentRooms.length > 6 ? (
           <button
-            className="mt-4 text-xs font-semibold text-[#fa233b] hover:text-[#fc3c44] transition-colors"
+            className="mt-4 text-xs font-semibold text-accent hover:text-accent-hover transition-colors"
             onClick={() => setShowAllRecent((current) => !current)}
             type="button"
           >
@@ -133,23 +133,23 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
   const onlineCount = getOnlineMemberCount(room.members);
   return (
     <Link
-      className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 transition-all hover:bg-white/[0.06] hover:border-white/[0.12]"
+      className="group rounded-xl border border-surface-border bg-surface/40 p-4 transition-all hover:bg-surface-hover hover:border-accent/40"
       href={`/room/${room.id}`}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 truncate font-semibold text-sm text-white group-hover:text-[#fa233b] transition-colors">
+        <span className="min-w-0 truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors">
           {room.name ?? "未命名房间"}
         </span>
-        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-neutral-400 border border-white/[0.06]">
+        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface text-foreground-muted border border-surface-border">
           {roomTypeLabel[room.roomType]}
         </span>
       </div>
-      <div className="mt-3 flex items-center justify-between text-xs text-neutral-400">
+      <div className="mt-3 flex items-center justify-between text-xs text-foreground-muted">
         <span className="inline-flex items-center gap-1">
-          <UsersIcon className="w-3 h-3 text-[#fa233b]" />
+          <UsersIcon className="w-3 h-3 text-accent" />
           <span>{onlineCount} 人在线</span>
         </span>
-        <span className="text-neutral-500 font-mono text-[11px]">
+        <span className="text-foreground-muted font-mono text-[11px]">
           {room.playback.status === "playing" ? "▶ 播放中" : "已暂停"}
         </span>
       </div>
@@ -160,20 +160,20 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
 function RecentRoomCard({ room }: { room: RoomActivitySummary }) {
   return (
     <Link
-      className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 transition-all hover:bg-white/[0.06] hover:border-white/[0.12]"
+      className="group rounded-xl border border-surface-border bg-surface/40 p-4 transition-all hover:bg-surface-hover hover:border-accent/40"
       href={`/room/${room.roomId}`}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 truncate font-semibold text-sm text-white group-hover:text-[#fa233b] transition-colors">
+        <span className="min-w-0 truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors">
           {room.roomName}
         </span>
-        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-neutral-400 border border-white/[0.06]">
+        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface text-foreground-muted border border-surface-border">
           {roomTypeLabel[room.roomType]}
         </span>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3 text-xs text-neutral-400">
+      <div className="mt-3 flex items-center justify-between gap-3 text-xs text-foreground-muted">
         <span>{room.isActive ? "正在房间中" : "最近参与"}</span>
-        <span className="shrink-0 font-mono text-[11px] text-neutral-500">{formatDuration(room.durationMs)}</span>
+        <span className="shrink-0 font-mono text-[11px] text-foreground-muted">{formatDuration(room.durationMs)}</span>
       </div>
     </Link>
   );
@@ -181,12 +181,12 @@ function RecentRoomCard({ room }: { room: RoomActivitySummary }) {
 
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 sm:p-4">
+    <div className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-neutral-400">{label}</span>
+        <span className="text-xs font-semibold text-foreground-muted">{label}</span>
         {icon}
       </div>
-      <span className="block text-xl sm:text-2xl font-black text-white tabular-nums tracking-tight">
+      <span className="block text-xl sm:text-2xl font-bold text-foreground tabular-nums tracking-tight">
         {value}
       </span>
     </div>

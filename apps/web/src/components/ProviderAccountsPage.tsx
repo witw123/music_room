@@ -46,20 +46,21 @@ export function ProviderAccountsPage() {
   }, [activeSession, authEntryHref, hydrated, router]);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-[100dvh] bg-[#0a0a0c]" />;
+    return <div className="min-h-[100dvh] bg-background" />;
   }
 
   return (
-    <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-[#fa233b]/30 selection:text-white md:pl-60 lg:pb-28 bg-[#0a0a0c]">
-      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-10 md:pt-14">
-        {/* Apple Music Profile Hero Card */}
+    <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+      <AppPageBackground />
+      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-8 md:pt-12">
+        {/* Profile Hero Card aligned with project tokens */}
         <PersonalOverview
           activeSession={activeSession}
           onOpenColdStart={() => setShowColdStartDialog(true)}
           headerAction={
             <Button
               aria-label="打开设置"
-              className="h-10 w-10 rounded-2xl border-white/[0.1] bg-white/[0.05] hover:bg-white/[0.1] text-neutral-300 hover:text-white"
+              className="h-10 w-10 border-surface-border bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground"
               onClick={() => setActiveTab("settings")}
               size="icon"
               title="设置"
@@ -71,8 +72,8 @@ export function ProviderAccountsPage() {
           }
         />
 
-        {/* Apple Music Segmented Control Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-full bg-[#1c1c1e]/90 border border-white/[0.08] mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
+        {/* Unified Segmented Control Tabs */}
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-surface-border bg-surface/50 backdrop-blur-md mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -80,10 +81,10 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${
+                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                   isActive
-                    ? "bg-white/[0.16] text-white shadow-sm"
-                    : "text-neutral-400 hover:text-white hover:bg-white/[0.05]"
+                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold"
+                    : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5" />
@@ -112,7 +113,7 @@ export function ProviderAccountsPage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-7 backdrop-blur-md">
+          <div className="border border-surface-border bg-surface/45 p-5 sm:p-7 rounded-2xl backdrop-blur-md">
             <SettingsPage embedded onBack={() => setActiveTab("taste")} />
           </div>
         )}
@@ -128,4 +129,8 @@ export function ProviderAccountsPage() {
       />
     </main>
   );
+}
+
+function AppPageBackground() {
+  return <div aria-hidden="true" className="workspace-page-background" />;
 }

@@ -60,24 +60,24 @@ export function TasteExclusionsManager({
   return (
     <div className="space-y-6">
       {/* Cold Start / Taste Tuning Banner */}
-      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#fa233b] uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-xs font-semibold text-accent uppercase tracking-wider">
               <SparklesIcon className="w-3.5 h-3.5" />
               <span>品味画像定制</span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-              重新调整你的音乐雷达偏好
+            <h3 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
+              重新调整你的音乐偏好
             </h3>
-            <p className="text-xs sm:text-sm text-neutral-400 max-w-xl">
+            <p className="text-xs sm:text-sm text-foreground-muted max-w-xl">
               无论是想尝试全新曲风，还是调整专注/夜听场景，随时重置你的 3 秒品味种子。
             </p>
           </div>
           <Button
             type="button"
             onClick={onOpenColdStart}
-            className="rounded-xl px-5 py-2.5 bg-[#fa233b] hover:bg-[#e01e34] text-white font-semibold shadow-md shadow-red-950/30 transition-all shrink-0"
+            className="rounded-xl px-5 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all shrink-0"
           >
             <SparklesIcon className="w-4 h-4 mr-2" />
             定制偏好
@@ -86,18 +86,18 @@ export function TasteExclusionsManager({
       </section>
 
       {/* Exclusions List */}
-      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-800 text-neutral-300">
-              <ShieldCheckIcon className="w-4 h-4" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-elevated text-foreground">
+              <ShieldCheckIcon className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">负反馈与屏蔽清单</h3>
-              <p className="text-xs text-neutral-400">已从推荐流与品味画像中排除的曲目或艺人</p>
+              <h3 className="text-base font-bold text-foreground">负反馈与屏蔽清单</h3>
+              <p className="text-xs text-foreground-muted">已从推荐流与品味画像中排除的曲目或艺人</p>
             </div>
           </div>
-          <span className="text-xs tabular-nums text-neutral-400 bg-neutral-800/80 px-2.5 py-1 rounded-full border border-white/[0.06]">
+          <span className="text-xs tabular-nums text-foreground-muted bg-surface px-2.5 py-1 rounded-full border border-surface-border">
             共 {exclusions.length} 项
           </span>
         </div>
@@ -111,29 +111,29 @@ export function TasteExclusionsManager({
         {loading ? (
           <div className="space-y-2 py-4">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="h-14 rounded-xl bg-white/[0.03] animate-pulse" />
+              <div key={i} className="h-14 rounded-xl bg-surface animate-pulse" />
             ))}
           </div>
         ) : exclusions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl border border-dashed border-white/[0.06] bg-white/[0.01]">
-            <ShieldCheckIcon className="w-8 h-8 text-neutral-500 mb-2" />
-            <p className="text-sm font-medium text-neutral-300">暂无屏蔽项目</p>
-            <p className="text-xs text-neutral-500 mt-1">
+          <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl border border-dashed border-surface-border bg-surface/20">
+            <ShieldCheckIcon className="w-8 h-8 text-foreground-muted mb-2" />
+            <p className="text-sm font-medium text-foreground">暂无屏蔽项目</p>
+            <p className="text-xs text-foreground-muted mt-1">
               在发现页对歌曲点击「不再推荐」或「不计入品味」后，可以在这里随时恢复。
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-white/[0.06]">
+          <div className="divide-y divide-surface-border/60">
             {exclusions.map((item) => {
               const itemKey = `${item.kind}:${item.key}`;
               const isRemoving = removingKey === itemKey;
               return (
                 <div
                   key={itemKey}
-                  className="flex items-center justify-between gap-3 py-3 px-2 rounded-xl transition-colors hover:bg-white/[0.02]"
+                  className="flex items-center justify-between gap-3 py-3 px-2 rounded-xl transition-colors hover:bg-surface-hover"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center justify-center w-8 h-8 shrink-0 rounded-lg bg-neutral-800/90 text-neutral-400">
+                    <div className="flex items-center justify-center w-8 h-8 shrink-0 rounded-lg bg-surface-elevated text-foreground-muted">
                       {item.kind === "artist" ? (
                         <LandmarkIcon className="w-4 h-4" />
                       ) : (
@@ -142,20 +142,20 @@ export function TasteExclusionsManager({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-white">
+                        <span className="truncate text-sm font-semibold text-foreground">
                           {item.label || item.key}
                         </span>
                         <span
                           className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium border ${
                             item.action === "not-interested"
                               ? "bg-red-500/10 text-red-400 border-red-500/20"
-                              : "bg-neutral-800 text-neutral-400 border-white/[0.06]"
+                              : "bg-surface text-foreground-muted border-surface-border"
                           }`}
                         >
                           {item.action === "not-interested" ? "不再推荐" : "不计入画像"}
                         </span>
                       </div>
-                      <p className="text-[11px] text-neutral-500 mt-0.5">
+                      <p className="text-[11px] text-foreground-muted mt-0.5">
                         {item.kind === "artist" ? "艺人" : "单曲"} · 屏蔽于 {new Date(item.createdAt).toLocaleDateString("zh-CN")}
                       </p>
                     </div>
@@ -167,7 +167,7 @@ export function TasteExclusionsManager({
                     size="sm"
                     disabled={isRemoving}
                     onClick={() => handleRestore(item.kind, item.key)}
-                    className="shrink-0 h-8 px-3 rounded-lg text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/[0.08] border border-white/[0.08]"
+                    className="shrink-0 h-8 px-3 rounded-lg text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-hover border border-surface-border"
                   >
                     <RotateCcwIcon className="w-3.5 h-3.5 mr-1.5" />
                     {isRemoving ? "恢复中..." : "恢复推荐"}

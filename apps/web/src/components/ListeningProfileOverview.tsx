@@ -133,47 +133,47 @@ export function ListeningProfileOverview({
   return (
     <div className="space-y-6 animate-in fade-in duration-300" aria-busy={refreshing}>
       {statusMessage && (
-        <p className="text-xs text-neutral-300 bg-neutral-800/80 border border-white/[0.08] px-3.5 py-2 rounded-xl">
+        <p className="text-xs text-foreground bg-surface border border-surface-border px-3.5 py-2 rounded-xl">
           {statusMessage}
         </p>
       )}
 
-      {/* Apple Music Replay 4-Metric Grid */}
+      {/* 4-Metric Grid */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <MetricCard
           label="累计聆听时长"
           value={formatDuration(profile.totalListenedMs)}
-          icon={<HeadphonesIcon className="w-4 h-4 text-[#fa233b]" />}
+          icon={<HeadphonesIcon className="w-4 h-4 text-accent" />}
         />
         <MetricCard
           label="播放总次数"
           value={`${profile.totalPlayCount} 次`}
-          icon={<PlayIcon className="w-4 h-4 text-[#fa233b]" />}
+          icon={<PlayIcon className="w-4 h-4 text-accent" />}
         />
         <MetricCard
           label="听过歌曲"
           value={`${profile.trackCount} 首`}
-          icon={<MusicIcon className="w-4 h-4 text-[#fa233b]" />}
+          icon={<MusicIcon className="w-4 h-4 text-accent" />}
         />
         <MetricCard
           label="探索艺人"
           value={`${profile.artistCount} 位`}
-          icon={<LandmarkIcon className="w-4 h-4 text-[#fa233b]" />}
+          icon={<LandmarkIcon className="w-4 h-4 text-accent" />}
         />
       </section>
 
-      {/* Taste Dimensions (品味特征与偏好标签) */}
-      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+      {/* Taste Dimensions */}
+      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
-            <SparklesIcon className="w-4 h-4 text-[#fa233b]" />
-            <h3 className="text-base font-bold text-white tracking-tight">音乐品味特征矩阵</h3>
+            <SparklesIcon className="w-4 h-4 text-accent" />
+            <h3 className="text-base font-bold text-foreground tracking-tight">音乐品味特征矩阵</h3>
           </div>
           {onOpenColdStart && (
             <button
               type="button"
               onClick={onOpenColdStart}
-              className="text-xs font-semibold text-[#fa233b] hover:text-[#fc3c44] transition-colors"
+              className="text-xs font-semibold text-accent hover:text-accent-hover transition-colors"
             >
               调整品味偏好
             </button>
@@ -182,65 +182,65 @@ export function ListeningProfileOverview({
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {profile.tasteGroups.map((group) => (
-            <div key={group.id} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3.5">
-              <h4 className="text-xs font-semibold text-neutral-400 mb-2">{group.label}</h4>
+            <div key={group.id} className="rounded-xl border border-surface-border/60 bg-surface/30 p-3.5">
+              <h4 className="text-xs font-semibold text-foreground-muted mb-2">{group.label}</h4>
               {group.tags.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {group.tags.map((tag) => (
                     <span
                       key={`${group.id}:${tag.label}:${tag.source}`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white/[0.06] text-neutral-200 border border-white/[0.08]"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-surface text-foreground border border-surface-border"
                       title={`契合度: ${(tag.confidence * 100).toFixed(0)}%`}
                     >
                       <span>{tag.label}</span>
                       {tag.confidence >= 0.8 && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#fa233b]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                       )}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-neutral-500">正在形成专属特征...</p>
+                <p className="text-xs text-foreground-muted">正在形成专属特征...</p>
               )}
             </div>
           ))}
         </div>
       </section>
 
-      {/* Top 5 Tracks & Top 5 Artists (Apple Music Replay Ranking) */}
+      {/* Top 5 Tracks & Top 5 Artists */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top 5 Tracks */}
-        <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+        <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
           <div className="flex items-center gap-2 mb-4">
-            <BarChartIcon className="w-4 h-4 text-[#fa233b]" />
-            <h3 className="text-base font-bold text-white tracking-tight">最常播放歌曲 (Top 5)</h3>
+            <BarChartIcon className="w-4 h-4 text-accent" />
+            <h3 className="text-base font-bold text-foreground tracking-tight">最常播放歌曲 (Top 5)</h3>
           </div>
 
-          <div className="divide-y divide-white/[0.06]">
+          <div className="divide-y divide-surface-border/60">
             {profile.topTracks.map((item, index) => {
               const itemKey = `${item.provider}:${item.providerTrackId}`;
               const isRadioRunning = activeRadioTrackKey === itemKey;
               return (
                 <div key={itemKey} className="flex items-center gap-3 py-3 group">
-                  <span className="w-5 shrink-0 text-base font-black tabular-nums text-neutral-500 group-hover:text-[#fa233b] transition-colors">
+                  <span className="w-5 shrink-0 text-base font-bold tabular-nums text-foreground-muted group-hover:text-accent transition-colors">
                     {index + 1}
                   </span>
-                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-neutral-800 border border-white/[0.08]">
+                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-surface border border-surface-border">
                     <Artwork alt="" className="h-full w-full object-cover" src={item.artworkUrl} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-white group-hover:text-[#fa233b] transition-colors">
+                    <p className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
                       {item.title}
                     </p>
-                    <p className="truncate text-xs text-neutral-400">
+                    <p className="truncate text-xs text-foreground-muted">
                       {item.artist}{item.album ? ` · ${item.album}` : ""}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="block text-xs font-semibold tabular-nums text-neutral-300">
+                    <span className="block text-xs font-semibold tabular-nums text-foreground">
                       {item.playCount} 次
                     </span>
-                    <span className="block text-[10px] tabular-nums text-neutral-500">
+                    <span className="block text-[10px] tabular-nums text-foreground-muted">
                       {formatDuration(item.listenedMs)}
                     </span>
                   </div>
@@ -248,7 +248,7 @@ export function ListeningProfileOverview({
                     <button
                       type="button"
                       onClick={() => handlePlayTrack(item)}
-                      className="p-1.5 rounded-full text-neutral-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                      className="p-1.5 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors"
                       title="立即播放"
                     >
                       <PlayIcon className="w-3.5 h-3.5" />
@@ -257,7 +257,7 @@ export function ListeningProfileOverview({
                       type="button"
                       disabled={isRadioRunning}
                       onClick={() => handleStartTrackRadio(item)}
-                      className="p-1.5 rounded-full text-neutral-400 hover:text-[#fa233b] hover:bg-white/[0.1] transition-colors"
+                      className="p-1.5 rounded-full text-foreground-muted hover:text-accent hover:bg-surface-hover transition-colors"
                       title="开启单曲漫游"
                     >
                       <RadioIcon className="w-3.5 h-3.5" />
@@ -272,25 +272,25 @@ export function ListeningProfileOverview({
         {/* Top 5 Artists & Multi-source Bar */}
         <div className="space-y-6">
           {/* Top 5 Artists */}
-          <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+          <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
             <div className="flex items-center gap-2 mb-4">
-              <LandmarkIcon className="w-4 h-4 text-[#fa233b]" />
-              <h3 className="text-base font-bold text-white tracking-tight">常听歌手 (Top 5)</h3>
+              <LandmarkIcon className="w-4 h-4 text-accent" />
+              <h3 className="text-base font-bold text-foreground tracking-tight">常听歌手 (Top 5)</h3>
             </div>
 
-            <div className="divide-y divide-white/[0.06]">
+            <div className="divide-y divide-surface-border/60">
               {profile.topArtists.map((artist, index) => (
                 <div key={artist.name} className="flex items-center gap-3 py-3">
-                  <span className="w-5 shrink-0 text-base font-black tabular-nums text-neutral-500">
+                  <span className="w-5 shrink-0 text-base font-bold tabular-nums text-foreground-muted">
                     {index + 1}
                   </span>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-bold text-neutral-200 border border-white/[0.08]">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-elevated text-xs font-bold text-foreground border border-surface-border">
                     {artist.name.slice(0, 1)}
                   </div>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                     {artist.name}
                   </span>
-                  <span className="shrink-0 text-xs tabular-nums text-neutral-400 font-medium">
+                  <span className="shrink-0 text-xs tabular-nums text-foreground-muted font-medium">
                     {artist.playCount} 次
                   </span>
                 </div>
@@ -298,17 +298,17 @@ export function ListeningProfileOverview({
             </div>
           </section>
 
-          {/* Multi-source Distribution (Apple Storage Style Bar) */}
+          {/* Multi-source Distribution */}
           {profile.sourceDistribution.length > 0 && totalSourceTime > 0 && (
-            <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 backdrop-blur-md">
-              <h4 className="text-xs font-semibold text-neutral-400 mb-3">音源收听分布</h4>
+            <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 backdrop-blur-md">
+              <h4 className="text-xs font-semibold text-foreground-muted mb-3">音源收听分布</h4>
               {/* Segmented Bar */}
-              <div className="h-3 w-full rounded-full bg-neutral-800 flex overflow-hidden p-0.5 gap-0.5">
+              <div className="h-3 w-full rounded-full bg-surface-hover flex overflow-hidden p-0.5 gap-0.5">
                 {profile.sourceDistribution.map((src) => {
                   const cfg = sourceConfig[src.source as keyof typeof sourceConfig] ?? {
                     label: src.source,
-                    color: "bg-neutral-500",
-                    text: "text-neutral-400"
+                    color: "bg-foreground-muted",
+                    text: "text-foreground-muted"
                   };
                   const pct = Math.max(3, (src.listenedMs / totalSourceTime) * 100);
                   return (
@@ -323,19 +323,19 @@ export function ListeningProfileOverview({
               </div>
 
               {/* Legend */}
-              <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-neutral-400">
+              <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-foreground-muted">
                 {profile.sourceDistribution.map((src) => {
                   const cfg = sourceConfig[src.source as keyof typeof sourceConfig] ?? {
                     label: src.source,
-                    color: "bg-neutral-500",
-                    text: "text-neutral-400"
+                    color: "bg-foreground-muted",
+                    text: "text-foreground-muted"
                   };
                   const pct = ((src.listenedMs / totalSourceTime) * 100).toFixed(0);
                   return (
                     <div key={src.source} className="flex items-center gap-1.5">
                       <span className={`w-2 h-2 rounded-full ${cfg.color}`} />
                       <span>{cfg.label}</span>
-                      <span className="font-semibold text-neutral-200">{pct}%</span>
+                      <span className="font-semibold text-foreground">{pct}%</span>
                     </div>
                   );
                 })}
@@ -358,12 +358,12 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-4 sm:p-5 flex flex-col justify-between backdrop-blur-md">
+    <div className="rounded-2xl border border-surface-border bg-surface/45 p-4 sm:p-5 flex flex-col justify-between backdrop-blur-md">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="text-xs font-semibold text-neutral-400">{label}</span>
+        <span className="text-xs font-semibold text-foreground-muted">{label}</span>
         {icon}
       </div>
-      <dd className="text-xl sm:text-2xl font-black text-white tracking-tight tabular-nums truncate">
+      <dd className="text-xl sm:text-2xl font-bold text-foreground tracking-tight tabular-nums truncate">
         {value}
       </dd>
     </div>
@@ -375,7 +375,7 @@ function Artwork({ alt, src, className = "" }: { alt: string; src: string | null
   const source = src ? getArtworkSourceUrl(src) : null;
   if (!source || failed) {
     return (
-      <span aria-label={alt || undefined} className={`flex items-center justify-center bg-neutral-800 text-xs text-neutral-400 ${className}`}>
+      <span aria-label={alt || undefined} className={`flex items-center justify-center bg-surface text-xs text-foreground-muted ${className}`}>
         ♪
       </span>
     );
@@ -389,27 +389,27 @@ function ProfileLoadingSkeleton() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="h-24 rounded-2xl bg-white/[0.03] animate-pulse" />
+          <div key={i} className="h-24 rounded-2xl bg-surface animate-pulse" />
         ))}
       </div>
-      <div className="h-44 rounded-2xl bg-white/[0.03] animate-pulse" />
+      <div className="h-44 rounded-2xl bg-surface animate-pulse" />
     </div>
   );
 }
 
 function ProfileEmptyState({ onOpenColdStart }: { onOpenColdStart?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl border border-dashed border-white/[0.08] bg-[#1c1c1e]/50 text-center">
-      <SparklesIcon className="w-10 h-10 text-[#fa233b] mb-3" />
-      <h3 className="text-base font-bold text-white">开始探索你的音乐画像</h3>
-      <p className="text-xs sm:text-sm text-neutral-400 max-w-sm mt-1 mb-5">
+    <div className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl border border-dashed border-surface-border bg-surface/30 text-center">
+      <SparklesIcon className="w-10 h-10 text-accent mb-3" />
+      <h3 className="text-base font-bold text-foreground">开始探索你的音乐画像</h3>
+      <p className="text-xs sm:text-sm text-foreground-muted max-w-sm mt-1 mb-5">
         在 Music Room 播放或收藏歌曲，或通过 3 秒偏好设置快速定制你的专属推荐。
       </p>
       {onOpenColdStart && (
         <button
           type="button"
           onClick={onOpenColdStart}
-          className="px-5 py-2.5 rounded-xl bg-[#fa233b] hover:bg-[#e01e34] text-white font-semibold text-xs shadow-lg shadow-red-950/40 transition-all"
+          className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white font-semibold text-xs shadow-[0_4px_16px_var(--accent-glow)] transition-all"
         >
           3 秒定制音乐偏好
         </button>
