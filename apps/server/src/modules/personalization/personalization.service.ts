@@ -269,7 +269,204 @@ export class PersonalizationService {
     const deepCuts = discoverSections?.deepCuts ?? [];
     const playlists = selectPersonalizedPlaylists({ playlists: recalled.playlists, entities, limit: 10, scoreEntity: entityScore });
     await this.markRecommended(userId, [...forYou, ...familiarArtists, ...moodDiscovery, ...deepCuts]);
-    return { profileVersion: version, providers, forYou, familiarArtists, moodDiscovery, deepCuts, playlists };
+
+    // Build Daily Radar mix
+    const dailyRadarTracks = dedupeCandidates(
+      [...forYou, ...deepCuts, ...familiarArtists].map((candidate) => ({
+        candidate,
+        source: "related" as const,
+        baseScore: candidate.score,
+        interestKey: trackKey(candidate),
+        interestLabel: candidate.title
+      }))
+    ).slice(0, 30).map((c) => ({ ...c.candidate, score: c.baseScore, reasons: ["今日私享雷达精选"] }));
+
+    const genreSet = new Set<string>();
+    for (const track of dailyRadarTracks) {
+      const evidence = extractTasteEvidence({ title: track.title, artist: track.artist, album: track.album, providerTags: track.tags });
+      evidence.filter((e) => e.dimension === "genre").forEach((e) => genreSet.add(e.label));
+    }
+    const summaryGenres = [...genreSet].slice(0, 4);
+
+    const dailyRadar = query.surface === "discover" && dailyRadarTracks.length > 0 ? {
+      date: new Date().toISOString().slice(0, 10),
+      title: "Music Room 每日心动雷达",
+      subtitle: `根据你最近的品味定制，已融合 ${summaryGenres.length ? summaryGenres.join("、") : "流行与常听"} 风格`,
+      tracks: dailyRadarTracks,
+      summaryGenres
+    } : undefined;
+
+    // Fetch Live Rooms for collaborative discovery
+    let liveRooms: PersonalizationRecommendationsResponse["liveRooms"] = undefined;
+    if (query.surface === "discover") {
+      const publicRooms = await this.prisma.roomState.findMany({
+        where: { visibility: "public" },
+        take: 6,
+        orderBy: { updatedAt: "desc" }
+      }).catch(() => []);
+
+      liveRooms = publicRooms.map((room) => {
+        const members = Array.isArray(room.members) ? room.members : [];
+        const playback = room.playback as { currentTrack?: { title?: string; artist?: string; artworkUrl?: string | null } } | null;
+        return {
+          roomId: room.id,
+          roomTitle: room.name,
+          hostName: "DJ 主播",
+          mode: (room.roomType === "radio" ? "radio" : room.roomType === "request" ? "request" : "common") as "radio" | "request" | "common",
+          listenerCount: members.length || 1,
+          currentTrack: playback?.currentTrack?.title ? {
+            title: playback.currentTrack.title,
+            artist: playback.currentTrack.artist ?? "群内共赏",
+            artworkUrl: playback.currentTrack.artworkUrl ?? null
+          } : null
+        };
+      });
+    }
+
+    return { profileVersion: version, providers, forYou, familiarArtists, moodDiscovery, deepCuts, playlists, dailyRadar, liveRooms };
+  }
+
+  async getTrackRadio(
+    userId: string,
+    query: import("@music-room/shared").TrackRadioQuery
+  ): Promise<import("@music-room/shared").PersonalizationTrack[]> {
+    this.assertDatabaseAvailable();
+    const seed = query.seedTrack;
+    const providers = await this.getBoundProviders(userId);
+    const targetProvider: Provider = (seed.provider === "netease" || seed.provider === "qqmusic")
+      ? seed.provider
+      : (providers[0] ?? "netease");
+
+    const candidates: Candidate[] = [];
+    const service = targetProvider === "netease" ? this.netease : this.qqmusic;
+
+    if (seed.artist) {
+      const artistResult = await service.searchTracks(userId, { keywords: seed.artist, limit: 24, offset: 0 }).catch(() => null);
+      if (artistResult?.items.length) {
+        candidates.push(...artistResult.items.map((candidate) => ({
+          candidate,
+          source: "artist" as const,
+          baseScore: 0.8,
+          interestKey: `artist:${normalizeText(seed.artist)}`,
+          interestLabel: seed.artist
+        })));
+      }
+    }
+
+    const evidence = extractTasteEvidence({
+      title: seed.title,
+      artist: seed.artist,
+      album: seed.album,
+      providerTags: seed.providerTags
+    });
+    const genreLabels = evidence.filter((e) => e.dimension === "genre" || e.dimension === "scene").map((e) => e.label).slice(0, 2);
+    for (const label of genreLabels) {
+      const genreResult = await service.searchTracks(userId, { keywords: label, limit: 16, offset: 0 }).catch(() => null);
+      if (genreResult?.items.length) {
+        candidates.push(...genreResult.items.map((candidate) => ({
+          candidate,
+          source: "explore" as const,
+          baseScore: 0.7,
+          interestKey: `taste:${normalizeText(label)}`,
+          interestLabel: label
+        })));
+      }
+    }
+
+    if (seed.providerTrackId && (seed.provider === "netease" || seed.provider === "qqmusic")) {
+      const related = await service.getRelatedPlaylists(userId, seed.providerTrackId).catch(() => null);
+      if (related?.items.length) {
+        const details = await Promise.all(related.items.slice(0, 2).map((p) => service.getPlaylist(userId, p.providerPlaylistId).catch(() => null)));
+        details.filter((d): d is NonNullable<typeof d> => d !== null).forEach((detail) => {
+          candidates.push(...detail.tracks.slice(0, 15).map((candidate) => ({
+            candidate,
+            source: "related" as const,
+            baseScore: 0.75,
+            interestKey: `seed:${trackIdentity(seed)}`,
+            interestLabel: seed.title
+          })));
+        });
+      }
+    }
+
+    const exclusions = await this.prisma.userRecommendationExclusion.findMany({ where: { userId } });
+    const excludedKeys = new Set([
+      ...(query.excludedTrackKeys ?? []),
+      ...exclusions.filter((e) => e.targetKind === "track").map((e) => e.targetKey)
+    ]);
+
+    const { buildTrackRadioRecommendations } = await import("./recommendation-engine");
+    return buildTrackRadioRecommendations({
+      seedTrack: seed,
+      candidates,
+      excludedTrackKeys: excludedKeys,
+      limit: query.limit
+    });
+  }
+
+  async bootstrapColdStartProfile(
+    userId: string,
+    input: import("@music-room/shared").ColdStartTasteInput
+  ): Promise<{ ok: boolean }> {
+    this.assertDatabaseAvailable();
+    const now = new Date();
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    for (const label of input.selectedLabels) {
+      ops.push(
+        this.prisma.userTasteEntity.upsert({
+          where: { userId_entityKind_entityKey: { userId, entityKind: "genre", entityKey: `seed:${normalizeText(label)}` } },
+          create: {
+            id: randomUUID(),
+            userId,
+            entityKind: "genre",
+            entityKey: `seed:${normalizeText(label)}`,
+            title: label,
+            positiveScore: 8.0,
+            negativeScore: 0,
+            confidence: 0.95,
+            durationMs: 0,
+            updatedAt: now
+          },
+          update: {
+            positiveScore: 8.0,
+            confidence: 0.95,
+            updatedAt: now
+          }
+        })
+      );
+    }
+
+    if (input.initialArtists?.length) {
+      for (const artist of input.initialArtists) {
+        ops.push(
+          this.prisma.userTasteEntity.upsert({
+            where: { userId_entityKind_entityKey: { userId, entityKind: "artist", entityKey: `seed:artist:${normalizeText(artist)}` } },
+            create: {
+              id: randomUUID(),
+              userId,
+              entityKind: "artist",
+              entityKey: `seed:artist:${normalizeText(artist)}`,
+              title: artist,
+              positiveScore: 9.0,
+              negativeScore: 0,
+              confidence: 0.95,
+              durationMs: 0,
+              updatedAt: now
+            },
+            update: {
+              positiveScore: 9.0,
+              confidence: 0.95,
+              updatedAt: now
+            }
+          })
+        );
+      }
+    }
+
+    await this.prisma.$transaction(ops);
+    await this.clearRecallCache(userId);
+    return { ok: true };
   }
 
   async clearProfile(userId: string) {

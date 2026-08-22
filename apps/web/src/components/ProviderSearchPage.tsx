@@ -1007,15 +1007,30 @@ function PlaylistsContent({
 
   return (
     <section className="mt-7">
-      {playlists.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {playlists.map((item) => (
-          <button className="group overflow-hidden rounded-2xl border border-white/[0.08] bg-black text-left transition hover:border-accent/50 hover:bg-white/[0.06]" key={`${item.provider}-${item.providerPlaylistId}`} onClick={() => void onOpen(item)} type="button">
-            <Artwork alt={item.title} src={item.artworkUrl} className="aspect-[1.5] w-full rounded-none" size="lg" />
-            <span className="block truncate px-4 pt-4 text-sm font-medium text-white/85">{item.title}</span>
-            <span className="block truncate px-4 pb-4 pt-1 text-xs text-white/40">{item.creatorName ?? "网络歌单"} · {item.trackCount} 首</span>
-          </button>
-        ))}
-      </div> : <SearchEmptyState title="还没有歌单结果" description="在搜索框输入关键词，再打开歌单标签。" />}
+      {playlists.length ? (
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          {playlists.map((item) => (
+            <button
+              className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 p-2 sm:p-2.5 text-left transition duration-200 hover:border-accent/40 hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              key={`${item.provider}-${item.providerPlaylistId}`}
+              onClick={() => void onOpen(item)}
+              type="button"
+            >
+              <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface">
+                <Artwork alt={item.title} src={item.artworkUrl} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" size="lg" />
+              </div>
+              <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-white/85 group-hover:text-accent transition-colors" title={item.title}>
+                {item.title}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] text-white/40">
+                {item.creatorName ?? "网络歌单"} · {item.trackCount} 首
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <SearchEmptyState title="还没有歌单结果" description="在搜索框输入关键词，再打开歌单标签。" />
+      )}
     </section>
   );
 }
@@ -1056,7 +1071,40 @@ function AlbumsContent({
     );
   }
 
-  return <section className="mt-7">{albums.length ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{albums.map((item) => { const favoriteId = albumKey(item.provider, item.providerAlbumId); return <article className="group min-w-0" key={`${item.provider}-${item.providerAlbumId}`}><button className="block w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-black text-left transition hover:border-accent/50 hover:bg-white/[0.06]" onClick={() => void onOpen(item)} type="button"><Artwork alt={item.title} src={item.artworkUrl} className="aspect-square w-full rounded-none" size="lg" /><span className="block truncate px-3 pt-3 text-sm font-medium text-white/85">{item.title}</span><span className="block truncate px-3 pb-4 pt-1 text-xs text-white/40">{item.artist}</span></button><button aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`} className={`mt-2 flex items-center gap-1.5 px-1 text-xs ${favoriteAlbumIds.has(favoriteId) ? "text-accent-hover" : "text-white/35 hover:text-white/70"}`} disabled={pending !== null} onClick={() => void onToggleFavorite(item)} type="button"><Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />{favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}</button></article>; })}</div> : <SearchEmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" />}</section>;
+  return (
+    <section className="mt-7">
+      {albums.length ? (
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          {albums.map((item) => {
+            const favoriteId = albumKey(item.provider, item.providerAlbumId);
+            return (
+              <article className="group flex flex-col min-w-0 rounded-2xl border border-white/[0.08] bg-black/40 p-2 sm:p-2.5 transition duration-200 hover:border-accent/40 hover:bg-white/[0.05]" key={`${item.provider}-${item.providerAlbumId}`}>
+                <button className="block w-full overflow-hidden text-left focus-visible:outline-none" onClick={() => void onOpen(item)} type="button">
+                  <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface">
+                    <Artwork alt={item.title} src={item.artworkUrl} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" size="lg" />
+                  </div>
+                  <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-white/85 group-hover:text-accent transition-colors" title={item.title}>{item.title}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-white/40">{item.artist}</span>
+                </button>
+                <button
+                  aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`}
+                  className={`mt-2 flex items-center gap-1.5 px-1 text-xs transition ${favoriteAlbumIds.has(favoriteId) ? "text-accent" : "text-white/40 hover:text-white/70"}`}
+                  disabled={pending !== null}
+                  onClick={() => void onToggleFavorite(item)}
+                  type="button"
+                >
+                  <Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />
+                  {favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <SearchEmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" />
+      )}
+    </section>
+  );
 }
 
 function albumKey(provider: Provider, providerAlbumId: string) {

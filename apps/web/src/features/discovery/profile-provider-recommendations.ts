@@ -21,6 +21,8 @@ export type ProfileProviderRecommendations = {
   moodDiscovery: DiscoverTrackRecommendation[];
   deepCuts: DiscoverTrackRecommendation[];
   playlists: DiscoverPlaylistRecommendation[];
+  dailyRadar?: import("@music-room/shared").DailyRadarResponse;
+  liveRooms?: import("@music-room/shared").LiveRoomRecommendation[];
 };
 
 export async function getProfileProviderRecommendations(input: {
@@ -59,7 +61,9 @@ export async function getProfileProviderRecommendations(input: {
       playlist: item,
       score: item.score,
       reasons: item.reasons
-    }))
+    })),
+    dailyRadar: response.dailyRadar,
+    liveRooms: response.liveRooms
   };
 }
 

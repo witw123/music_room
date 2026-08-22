@@ -2,21 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import type { AuthSession, PersonalizationProfileResponse } from "@music-room/shared";
+import type { AuthSession, PersonalizationProfileResponse, ProviderTrackCandidate } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
+import { useLocalPlayer } from "@/features/playback/local-player-context";
+import { localPlaylistTrackId, toProviderTrackRecord } from "@/features/playlist/local-playlist";
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import {
+  PlayIcon,
+  RadioIcon,
+  MusicIcon,
+  HeadphonesIcon,
+  LandmarkIcon,
+  SparklesIcon,
+  BarChartIcon
+} from "@/components/icons/DiscoverIcons";
 
-const sourceLabels = {
-  netease: "网易云音乐",
-  qqmusic: "QQ 音乐",
-  local_upload: "本地"
+const sourceConfig = {
+  netease: { label: "网易云音乐", color: "bg-[#fa233b]", text: "text-[#fa233b]" },
+  qqmusic: { label: "QQ 音乐", color: "bg-[#10b981]", text: "text-[#10b981]" },
+  local_upload: { label: "本地音频", color: "bg-[#a1a1aa]", text: "text-[#a1a1aa]" }
 } as const;
 
-export function ListeningProfileOverview({ activeSession }: { activeSession: AuthSession }) {
+export function ListeningProfileOverview({
+  activeSession,
+  onOpenColdStart
+}: {
+  activeSession: AuthSession;
+  onOpenColdStart?: () => void;
+}) {
   const pathname = usePathname();
+  const player = useLocalPlayer();
   const [profile, setProfile] = useState<PersonalizationProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeRadioTrackKey, setActiveRadioTrackKey] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +58,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
           if (!cancelled) setProfile(next);
         })
         .catch(() => {
-          // Keep the last successful profile visible when a background refresh fails.
+          // Keep the last successful profile visible
         })
         .finally(() => {
           request = null;
@@ -50,6 +71,7 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
           }
         });
     };
+
     const handleProfileChange = () => {
       if (pathname !== "/app/profile" || refreshTimer !== null) return;
       refreshTimer = window.setTimeout(() => {
@@ -70,89 +92,338 @@ export function ListeningProfileOverview({ activeSession }: { activeSession: Aut
     };
   }, [activeSession.userId, pathname]);
 
-  return (
-    <section aria-busy={refreshing} className="mt-8 border-b border-surface-border py-6 sm:py-7">
-      {loading && !profile ? <ProfileLoading /> : !profile || profile.totalPlayCount === 0 ? <ProfileEmpty /> : (
-        <div className="mt-6">
-          <dl className="grid grid-cols-2 border-y border-surface-border sm:grid-cols-4">
-            <Metric label="累计聆听" value={formatDuration(profile.totalListenedMs)} />
-            <Metric label="播放次数" value={String(profile.totalPlayCount)} />
-            <Metric label="听过歌曲" value={String(profile.trackCount)} />
-            <Metric label="听过歌手" value={String(profile.artistCount)} />
-          </dl>
+  const handlePlayTrack = async (candidate: ProviderTrackCandidate) => {
+    try {
+      const record = toProviderTrackRecord(candidate);
+      await player.playTrack(record);
+      setStatusMessage(`正在播放《${candidate.title}》`);
+    } catch {
+      setStatusMessage(`播放《${candidate.title}》失败`);
+    }
+  };
 
-          <section className="py-6">
-            <SectionTitle title="音乐偏好" />
-            <div className="mt-4 grid gap-x-9 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
-              {profile.tasteGroups.map((group) => (
-                <section key={group.id}>
-                  <h4 className="text-xs font-medium text-foreground-muted">{group.label}</h4>
-                  {group.tags.length ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {group.tags.map((tag) => <span aria-label={tag.label} className="inline-flex h-8 items-center rounded-full border border-accent/35 bg-accent/10 px-3 text-xs font-medium text-accent" key={`${group.id}:${tag.label}:${tag.source}`} title={tag.label}>{tag.label}</span>)}
-                    </div>
-                  ) : <p className="mt-2 text-xs text-foreground-muted">正在形成</p>}
-                </section>
+  const handleStartTrackRadio = async (candidate: ProviderTrackCandidate) => {
+    const key = `${candidate.provider}:${candidate.providerTrackId}`;
+    setActiveRadioTrackKey(key);
+    try {
+      const radioTracks = await musicRoomApi.getTrackRadio({ seedTrack: candidate, limit: 15 });
+      const seedRecord = toProviderTrackRecord(candidate);
+      await player.playTrack(seedRecord);
+      for (const nextTrack of radioTracks.slice(0, 10)) {
+        player.addToQueue(toProviderTrackRecord(nextTrack));
+      }
+      setStatusMessage(`已开启从《${candidate.title}》出发的单曲漫游`);
+    } catch {
+      setStatusMessage(`开启漫游失败，请稍后重试`);
+    } finally {
+      setActiveRadioTrackKey(null);
+    }
+  };
+
+  if (loading && !profile) {
+    return <ProfileLoadingSkeleton />;
+  }
+
+  if (!profile || profile.totalPlayCount === 0) {
+    return <ProfileEmptyState onOpenColdStart={onOpenColdStart} />;
+  }
+
+  const totalSourceTime = profile.sourceDistribution.reduce((acc, curr) => acc + curr.listenedMs, 0);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {statusMessage && (
+        <p className="text-xs text-neutral-300 bg-neutral-800/80 border border-white/[0.08] px-3.5 py-2 rounded-xl">
+          {statusMessage}
+        </p>
+      )}
+
+      {/* Apple Music Replay 4-Metric Grid */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+        <MetricCard
+          label="累计聆听时长"
+          value={formatDuration(profile.totalListenedMs)}
+          icon={<HeadphonesIcon className="w-4 h-4 text-[#fa233b]" />}
+        />
+        <MetricCard
+          label="播放总次数"
+          value={`${profile.totalPlayCount} 次`}
+          icon={<PlayIcon className="w-4 h-4 text-[#fa233b]" />}
+        />
+        <MetricCard
+          label="听过歌曲"
+          value={`${profile.trackCount} 首`}
+          icon={<MusicIcon className="w-4 h-4 text-[#fa233b]" />}
+        />
+        <MetricCard
+          label="探索艺人"
+          value={`${profile.artistCount} 位`}
+          icon={<LandmarkIcon className="w-4 h-4 text-[#fa233b]" />}
+        />
+      </section>
+
+      {/* Taste Dimensions (品味特征与偏好标签) */}
+      <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <SparklesIcon className="w-4 h-4 text-[#fa233b]" />
+            <h3 className="text-base font-bold text-white tracking-tight">音乐品味特征矩阵</h3>
+          </div>
+          {onOpenColdStart && (
+            <button
+              type="button"
+              onClick={onOpenColdStart}
+              className="text-xs font-semibold text-[#fa233b] hover:text-[#fc3c44] transition-colors"
+            >
+              调整品味偏好
+            </button>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {profile.tasteGroups.map((group) => (
+            <div key={group.id} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3.5">
+              <h4 className="text-xs font-semibold text-neutral-400 mb-2">{group.label}</h4>
+              {group.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {group.tags.map((tag) => (
+                    <span
+                      key={`${group.id}:${tag.label}:${tag.source}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white/[0.06] text-neutral-200 border border-white/[0.08]"
+                      title={`契合度: ${(tag.confidence * 100).toFixed(0)}%`}
+                    >
+                      <span>{tag.label}</span>
+                      {tag.confidence >= 0.8 && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#fa233b]" />
+                      )}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-neutral-500">正在形成专属特征...</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Top 5 Tracks & Top 5 Artists (Apple Music Replay Ranking) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top 5 Tracks */}
+        <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChartIcon className="w-4 h-4 text-[#fa233b]" />
+            <h3 className="text-base font-bold text-white tracking-tight">最常播放歌曲 (Top 5)</h3>
+          </div>
+
+          <div className="divide-y divide-white/[0.06]">
+            {profile.topTracks.map((item, index) => {
+              const itemKey = `${item.provider}:${item.providerTrackId}`;
+              const isRadioRunning = activeRadioTrackKey === itemKey;
+              return (
+                <div key={itemKey} className="flex items-center gap-3 py-3 group">
+                  <span className="w-5 shrink-0 text-base font-black tabular-nums text-neutral-500 group-hover:text-[#fa233b] transition-colors">
+                    {index + 1}
+                  </span>
+                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-neutral-800 border border-white/[0.08]">
+                    <Artwork alt="" className="h-full w-full object-cover" src={item.artworkUrl} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-white group-hover:text-[#fa233b] transition-colors">
+                      {item.title}
+                    </p>
+                    <p className="truncate text-xs text-neutral-400">
+                      {item.artist}{item.album ? ` · ${item.album}` : ""}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="block text-xs font-semibold tabular-nums text-neutral-300">
+                      {item.playCount} 次
+                    </span>
+                    <span className="block text-[10px] tabular-nums text-neutral-500">
+                      {formatDuration(item.listenedMs)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 pl-1">
+                    <button
+                      type="button"
+                      onClick={() => handlePlayTrack(item)}
+                      className="p-1.5 rounded-full text-neutral-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                      title="立即播放"
+                    >
+                      <PlayIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isRadioRunning}
+                      onClick={() => handleStartTrackRadio(item)}
+                      className="p-1.5 rounded-full text-neutral-400 hover:text-[#fa233b] hover:bg-white/[0.1] transition-colors"
+                      title="开启单曲漫游"
+                    >
+                      <RadioIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Top 5 Artists & Multi-source Bar */}
+        <div className="space-y-6">
+          {/* Top 5 Artists */}
+          <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 sm:p-6 backdrop-blur-md">
+            <div className="flex items-center gap-2 mb-4">
+              <LandmarkIcon className="w-4 h-4 text-[#fa233b]" />
+              <h3 className="text-base font-bold text-white tracking-tight">常听歌手 (Top 5)</h3>
+            </div>
+
+            <div className="divide-y divide-white/[0.06]">
+              {profile.topArtists.map((artist, index) => (
+                <div key={artist.name} className="flex items-center gap-3 py-3">
+                  <span className="w-5 shrink-0 text-base font-black tabular-nums text-neutral-500">
+                    {index + 1}
+                  </span>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-bold text-neutral-200 border border-white/[0.08]">
+                    {artist.name.slice(0, 1)}
+                  </div>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+                    {artist.name}
+                  </span>
+                  <span className="shrink-0 text-xs tabular-nums text-neutral-400 font-medium">
+                    {artist.playCount} 次
+                  </span>
+                </div>
               ))}
             </div>
           </section>
 
-          <div className="grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-2 lg:gap-10">
-            <TrackList items={profile.topTracks} subtitle="最常播放" value={(item) => `${item.playCount} 次 · ${formatDuration(item.listenedMs)}`} />
-            <TrackList items={profile.topTracks.slice().sort((left, right) => right.score - left.score)} subtitle="特别喜欢" value={(item) => item.reasons[0] ?? "长期偏好"} />
-          </div>
+          {/* Multi-source Distribution (Apple Storage Style Bar) */}
+          {profile.sourceDistribution.length > 0 && totalSourceTime > 0 && (
+            <section className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-5 backdrop-blur-md">
+              <h4 className="text-xs font-semibold text-neutral-400 mb-3">音源收听分布</h4>
+              {/* Segmented Bar */}
+              <div className="h-3 w-full rounded-full bg-neutral-800 flex overflow-hidden p-0.5 gap-0.5">
+                {profile.sourceDistribution.map((src) => {
+                  const cfg = sourceConfig[src.source as keyof typeof sourceConfig] ?? {
+                    label: src.source,
+                    color: "bg-neutral-500",
+                    text: "text-neutral-400"
+                  };
+                  const pct = Math.max(3, (src.listenedMs / totalSourceTime) * 100);
+                  return (
+                    <div
+                      key={src.source}
+                      style={{ width: `${pct}%` }}
+                      className={`h-full rounded-full ${cfg.color} transition-all`}
+                      title={`${cfg.label}: ${pct.toFixed(1)}%`}
+                    />
+                  );
+                })}
+              </div>
 
-          <div className="mt-7 grid gap-7 border-t border-surface-border pt-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10">
-            <section>
-              <SectionTitle title="常听歌手" />
-              <div className="mt-3 divide-y divide-surface-border">
-                {profile.topArtists.map((artist, index) => (
-                  <div className="flex min-w-0 items-center gap-3 py-3" key={artist.name}>
-                    <span className="w-5 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{artist.name}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-foreground-muted">{artist.playCount} 次</span>
-                  </div>
-                ))}
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-neutral-400">
+                {profile.sourceDistribution.map((src) => {
+                  const cfg = sourceConfig[src.source as keyof typeof sourceConfig] ?? {
+                    label: src.source,
+                    color: "bg-neutral-500",
+                    text: "text-neutral-400"
+                  };
+                  const pct = ((src.listenedMs / totalSourceTime) * 100).toFixed(0);
+                  return (
+                    <div key={src.source} className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${cfg.color}`} />
+                      <span>{cfg.label}</span>
+                      <span className="font-semibold text-neutral-200">{pct}%</span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
-            <section>
-              {profile.sourceDistribution.length > 0 ? <div>
-                <SectionTitle title="聆听来源" />
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-                  {profile.sourceDistribution.map((source) => <span className="text-xs text-foreground-muted" key={source.source}>{sourceLabels[source.source as keyof typeof sourceLabels] ?? source.source} <strong className="ml-1 font-medium text-foreground">{formatDuration(source.listenedMs)}</strong></span>)}
-                </div>
-              </div> : null}
-            </section>
-          </div>
-
+          )}
         </div>
-      )}
-    </section>
+      </div>
+    </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="min-w-0 border-r border-surface-border px-3 py-4 first:pl-0 last:border-r-0 sm:px-5 sm:first:pl-0"><dd className="truncate text-lg font-semibold tabular-nums text-foreground sm:text-xl">{value}</dd><dt className="mt-1 text-xs text-foreground-muted">{label}</dt></div>;
+function MetricCard({
+  label,
+  value,
+  icon
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-[#1c1c1e]/80 p-4 sm:p-5 flex flex-col justify-between backdrop-blur-md">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <span className="text-xs font-semibold text-neutral-400">{label}</span>
+        {icon}
+      </div>
+      <dd className="text-xl sm:text-2xl font-black text-white tracking-tight tabular-nums truncate">
+        {value}
+      </dd>
+    </div>
+  );
 }
 
-function TrackList({ items, subtitle, value }: { items: PersonalizationProfileResponse["topTracks"]; subtitle: string; value: (item: PersonalizationProfileResponse["topTracks"][number]) => string }) {
-  return <section><SectionTitle title={subtitle} /><div className="mt-3 divide-y divide-surface-border">{items.map((item, index) => <div className="flex min-w-0 items-center gap-3 py-3" key={`${item.provider}:${item.providerTrackId}`}><span className="w-5 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{item.title}</p><p className="mt-0.5 truncate text-xs text-foreground-muted">{item.artist}</p></div><span className="shrink-0 text-right text-xs tabular-nums text-foreground-muted">{value(item)}</span></div>)}</div></section>;
+function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  const source = src ? getArtworkSourceUrl(src) : null;
+  if (!source || failed) {
+    return (
+      <span aria-label={alt || undefined} className={`flex items-center justify-center bg-neutral-800 text-xs text-neutral-400 ${className}`}>
+        ♪
+      </span>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img alt={alt} className={`object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} />;
 }
 
-function SectionTitle({ title }: { title: string }) {
-  return <h3 className="text-sm font-semibold text-foreground">{title}</h3>;
+function ProfileLoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="h-24 rounded-2xl bg-white/[0.03] animate-pulse" />
+        ))}
+      </div>
+      <div className="h-44 rounded-2xl bg-white/[0.03] animate-pulse" />
+    </div>
+  );
 }
 
-function ProfileLoading() {
-  return <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden border border-surface-border bg-surface-border sm:grid-cols-4"><div className="h-20 animate-pulse bg-surface" /><div className="h-20 animate-pulse bg-surface" /><div className="h-20 animate-pulse bg-surface" /><div className="h-20 animate-pulse bg-surface" /></div>;
+function ProfileEmptyState({ onOpenColdStart }: { onOpenColdStart?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl border border-dashed border-white/[0.08] bg-[#1c1c1e]/50 text-center">
+      <SparklesIcon className="w-10 h-10 text-[#fa233b] mb-3" />
+      <h3 className="text-base font-bold text-white">开始探索你的音乐画像</h3>
+      <p className="text-xs sm:text-sm text-neutral-400 max-w-sm mt-1 mb-5">
+        在 Music Room 播放或收藏歌曲，或通过 3 秒偏好设置快速定制你的专属推荐。
+      </p>
+      {onOpenColdStart && (
+        <button
+          type="button"
+          onClick={onOpenColdStart}
+          className="px-5 py-2.5 rounded-xl bg-[#fa233b] hover:bg-[#e01e34] text-white font-semibold text-xs shadow-lg shadow-red-950/40 transition-all"
+        >
+          3 秒定制音乐偏好
+        </button>
+      )}
+    </div>
+  );
 }
 
-function ProfileEmpty() {
-  return <div className="mt-6 border-y border-dashed border-surface-border py-9 text-center"><p className="text-sm font-medium text-foreground-muted">从第一首完整播放开始</p></div>;
-}
-
-function formatDuration(value: number) {
-  const minutes = Math.max(0, Math.floor(value / 60_000));
-  if (minutes < 1) return "不足 1 分钟";
-  return minutes >= 60 ? `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟` : `${minutes} 分钟`;
+function formatDuration(durationMs: number) {
+  const totalMinutes = Math.max(0, Math.floor(durationMs / 60_000));
+  if (totalMinutes < 60) {
+    return `${totalMinutes} 分钟`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours} 小时 ${minutes} 分` : `${hours} 小时`;
 }

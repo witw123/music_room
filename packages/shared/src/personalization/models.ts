@@ -80,6 +80,20 @@ export const personalizationRecommendationsQuerySchema = z.object({
   query: z.string().trim().min(1).max(240).optional()
 }).strict();
 
+export const trackRadioQuerySchema = z.object({
+  seedTrack: personalizationTrackSchema,
+  limit: z.number().int().min(5).max(50).default(20),
+  excludedTrackKeys: z.preprocess(
+    (value) => typeof value === "string" ? value.split(",").filter(Boolean) : value,
+    z.array(z.string().trim().min(1).max(512)).max(100).optional()
+  )
+}).strict();
+
+export const coldStartTasteInputSchema = z.object({
+  selectedLabels: z.array(z.string().trim().min(1).max(80)).min(1).max(10),
+  initialArtists: z.array(z.string().trim().min(1).max(80)).max(10).optional()
+}).strict();
+
 export type PersonalizationSurface = z.infer<typeof personalizationSurfaceSchema>;
 export type TasteEntityKind = z.infer<typeof tasteEntityKindSchema>;
 export type TasteEventType = z.infer<typeof tasteEventTypeSchema>;
@@ -87,6 +101,8 @@ export type RecordPersonalizationEvent = z.infer<typeof recordPersonalizationEve
 export type PersonalizationTrackInput = z.infer<typeof personalizationTrackSchema>;
 export type PersonalizationFeedback = z.infer<typeof personalizationFeedbackSchema>;
 export type PersonalizationRecommendationsQuery = z.infer<typeof personalizationRecommendationsQuerySchema>;
+export type TrackRadioQuery = z.infer<typeof trackRadioQuerySchema>;
+export type ColdStartTasteInput = z.infer<typeof coldStartTasteInputSchema>;
 
 export type PersonalizationTasteGroupId = z.infer<typeof personalizationTasteGroupIdSchema>;
 export type PersonalizationTasteTagSource = z.infer<typeof personalizationTasteTagSourceSchema>;
@@ -124,6 +140,27 @@ export type PersonalizationProfileResponse = {
   sourceDistribution: Array<{ source: string; listenedMs: number }>;
 };
 
+export type LiveRoomRecommendation = {
+  roomId: string;
+  roomTitle: string;
+  hostName: string;
+  mode: "radio" | "request" | "common";
+  listenerCount: number;
+  currentTrack: {
+    title: string;
+    artist: string;
+    artworkUrl: string | null;
+  } | null;
+};
+
+export type DailyRadarResponse = {
+  date: string;
+  title: string;
+  subtitle: string;
+  tracks: PersonalizationTrack[];
+  summaryGenres: string[];
+};
+
 export type PersonalizationRecommendationsResponse = {
   profileVersion: string;
   providers: Array<"netease" | "qqmusic">;
@@ -132,6 +169,8 @@ export type PersonalizationRecommendationsResponse = {
   moodDiscovery: PersonalizationTrack[];
   deepCuts: PersonalizationTrack[];
   playlists: PersonalizationPlaylist[];
+  dailyRadar?: DailyRadarResponse;
+  liveRooms?: LiveRoomRecommendation[];
 };
 
 export type PersonalizationExclusion = {
@@ -141,3 +180,4 @@ export type PersonalizationExclusion = {
   action: "not-interested" | "exclude-from-profile";
   createdAt: string;
 };
+

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
-import { formatDuration } from "@/lib/domain/music-room-ui";
+import { formatDuration, getOnlineMemberCount } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { MembersPanel } from "./MembersPanel";
 import { RoomChatPanel } from "./RoomChatOverlay";
@@ -22,6 +22,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
+  const onlineCount = getOnlineMemberCount(props.roomSnapshot.room.members);
 
   useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
@@ -31,8 +32,23 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
       <section className="mx-auto grid h-full min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="relative z-50 min-h-0 overflow-visible lg:z-auto lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
-          <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
+        <div className="relative z-50 min-h-0 overflow-visible lg:z-auto lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12] flex flex-col">
+          <div className="shrink-0 px-4 pt-3 pb-1 flex items-center justify-between gap-3 text-xs border-b border-white/[0.04]">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                <span>LIVE ON AIR</span>
+              </span>
+              <span className="font-semibold text-foreground/90">{props.roomSnapshot.room.name || "电台广播"}</span>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-foreground-muted">
+              {props.host ? <span>DJ: <strong className="text-accent font-medium">{props.host.nickname}</strong></span> : null}
+              <span className="font-mono">{onlineCount} 人在线</span>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1">
+            <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
+          </div>
         </div>
         <div className="min-h-0 min-w-0 overflow-visible lg:grid lg:h-full lg:min-h-0 lg:grid-rows-[minmax(0,1fr)_minmax(18rem,1fr)] lg:overflow-hidden">
           <div className="min-h-[24rem] min-w-0 overflow-y-auto rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b">
@@ -109,7 +125,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string }>;
 }) {
   return (
-    <div className="shrink-0 px-3 py-2 sm:px-5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="shrink-0 px-3 py-2.5 sm:px-5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div aria-label={ariaLabel} className="grid grid-flow-col auto-cols-fr gap-1 rounded-xl border border-surface-border bg-surface/55 p-1" role="tablist">
         {tabs.map((tab) => (
           <button
@@ -117,7 +133,7 @@ function RadioWorkspaceTabs<T extends string>({
             id={`${panelPrefix}-tab-${tab.id}`}
             aria-controls={`${panelPrefix}-panel-${tab.id}`}
             aria-selected={activeTab === tab.id}
-            className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.id ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+            className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${activeTab === tab.id ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
             onClick={() => onChange(tab.id)}
             role="tab"
             tabIndex={activeTab === tab.id ? 0 : -1}
@@ -169,8 +185,9 @@ function RadioLibraryList({
 
   return (
     <aside className="flex min-h-0 min-w-0 flex-col bg-surface/[0.14] lg:h-full lg:min-h-0" data-testid="radio-library-list">
-      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-7">
+      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3.5 sm:px-6 lg:px-7 border-b border-white/[0.04]">
         <h1 className="text-xl font-semibold text-foreground">曲库单</h1>
+        <span className="text-xs font-mono text-foreground-muted">{roomTracks.length} 首曲目</span>
       </header>
       <div
         className="hide-scrollbar min-h-0 max-h-[36rem] flex-1 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 lg:max-h-[min(42rem,calc(100dvh-10rem))] lg:px-7 lg:pb-5"
@@ -183,7 +200,7 @@ function RadioLibraryList({
           }
         }}
       >
-        <div className="space-y-1">
+        <div className="space-y-1.5 pt-2">
           {visibleTracks.map((track, index) => <div key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={() => runTrackAction(`queue:${track.id}`, () => onAddToQueue(track.id))} onDeleteTrack={() => runTrackAction(`delete:${track.id}`, () => onDeleteTrack(track.id))} pendingAction={pendingAction} track={track} /></div>)}
         </div>
         {errorMessage ? <p className="mt-3 text-xs text-danger" role="status">{errorMessage}</p> : null}
@@ -194,7 +211,7 @@ function RadioLibraryList({
 
 function RadioMembersPanel(props: RoomDashboardViewProps & { membershipNow: number }) {
   return <section className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0" data-testid="radio-members-panel">
-    <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
+    <header className="shrink-0 px-4 py-3.5 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
     <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
       <MembersPanel
         activeSessionId={props.activeSession?.userId ?? null}
@@ -267,31 +284,44 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
 
   return (
     <aside className="min-w-0 px-4 pb-6 pt-4 sm:px-5 lg:pb-7" data-testid="radio-host-console">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">主持人控制台</h2>
+      <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/20 text-accent">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+          </span>
+          <h2 className="text-base font-semibold text-foreground">主持人控制台</h2>
+        </div>
+        <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-semibold text-accent">DJ 播控</span>
       </div>
-      <section className="mt-5 border-l-2 border-accent/50 pl-4" data-testid="radio-autopilot">
+
+      <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3.5 backdrop-blur-md" data-testid="radio-autopilot">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">自动续播</h3>
+          <div className="flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${isAutopilotEnabled ? "bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" : "bg-white/20"}`} />
+            <h3 className="text-sm font-semibold text-foreground">自动续播</h3>
+          </div>
+          <span className="text-[11px] text-foreground-muted">{isAutopilotEnabled ? "已启用推荐流" : "已暂停"}</span>
         </div>
         {currentProviderTrack ? <p className="mt-1 truncate text-xs text-foreground-muted">{currentProviderTrack.title} · {currentProviderTrack.artist}</p> : null}
         {autopilot.nextTrack ? <RadioAutopilotNextTrackCard track={autopilot.nextTrack} /> : null}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button disabled={!isAutopilotEnabled && !canRefillNext} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={isAutopilotEnabled ? "outline" : "default"}>{isAutopilotEnabled ? "停止自动续播" : "开启自动续播"}</Button>
-          <Button disabled={!canRefillNext || autopilot.state.kind === "refilling"} onClick={() => void autopilot.refillNow()} size="sm" type="button" variant="outline">{autopilot.state.kind === "refilling" ? "补充中…" : "补充下一首"}</Button>
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          <Button disabled={!isAutopilotEnabled && !canRefillNext} onClick={() => void toggleAutopilot()} size="sm" type="button" variant={isAutopilotEnabled ? "outline" : "default"} className="rounded-lg">{isAutopilotEnabled ? "停止自动续播" : "开启自动续播"}</Button>
+          <Button disabled={!canRefillNext || autopilot.state.kind === "refilling"} onClick={() => void autopilot.refillNow()} size="sm" type="button" variant="outline" className="rounded-lg">{autopilot.state.kind === "refilling" ? "补充中…" : "补充下一首"}</Button>
         </div>
-        {autopilot.state.message ? <p className={`mt-3 text-xs leading-5 ${autopilot.state.kind === "paused" ? "text-amber-200" : "text-foreground-muted"}`} role="status">{autopilot.state.message}</p> : null}
+        {autopilot.state.message ? <p className={`mt-2.5 text-xs leading-5 ${autopilot.state.kind === "paused" ? "text-amber-200" : "text-foreground-muted"}`} role="status">{autopilot.state.message}</p> : null}
       </section>
-      <div className="mt-6">
+
+      <div className="mt-5">
         <RoomProviderTrackSearch canManageLibrary hideUnavailableProvidersNotice mode="program" onImportNeteaseTrack={importAndQueue} onImportQqMusicTrack={importAndQueue} roomTracks={props.roomSnapshot.tracks} surface="plain" testId="radio-room-program" />
       </div>
-      <section className="mt-6 border-t border-surface-border pt-5" data-testid="radio-room-imports">
+
+      <section className="mt-5 border-t border-surface-border pt-4" data-testid="radio-room-imports">
         <h3 className="text-sm font-semibold text-foreground">导入歌曲</h3>
-        <div aria-label="导入歌曲方式" className="mt-3 grid grid-cols-2 rounded-xl border border-surface-border p-1" role="tablist">
-          <button aria-controls="radio-import-local" aria-selected={importTab === "local"} className={`min-h-10 rounded-lg px-3 text-sm font-medium transition-colors ${importTab === "local" ? "bg-accent text-white" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setImportTab("local")} role="tab" type="button">本地音频</button>
-          <button aria-controls="radio-import-playlists" aria-selected={importTab === "playlists"} className={`min-h-10 rounded-lg px-3 text-sm font-medium transition-colors ${importTab === "playlists" ? "bg-accent text-white" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setImportTab("playlists")} role="tab" type="button">我的歌单</button>
+        <div aria-label="导入歌曲方式" className="mt-3 grid grid-cols-2 rounded-xl border border-surface-border p-1 bg-surface/30" role="tablist">
+          <button aria-controls="radio-import-local" aria-selected={importTab === "local"} className={`min-h-9 rounded-lg px-3 text-xs font-semibold transition-all ${importTab === "local" ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setImportTab("local")} role="tab" type="button">本地音频</button>
+          <button aria-controls="radio-import-playlists" aria-selected={importTab === "playlists"} className={`min-h-9 rounded-lg px-3 text-xs font-semibold transition-all ${importTab === "playlists" ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:text-foreground"}`} onClick={() => setImportTab("playlists")} role="tab" type="button">我的歌单</button>
         </div>
-        <div className="mt-4">
+        <div className="mt-3">
           {importTab === "local" ? (
             <div id="radio-import-local" role="tabpanel">
               <LocalAudioImport onFilesSelected={props.onFilesSelected} testId="radio-track-upload-input" />
@@ -322,28 +352,28 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
           )}
         </div>
       </section>
-      {message ? <p className="mt-4 text-sm text-foreground-muted" role="status">{message}</p> : null}
+      {message ? <p className="mt-3 text-sm text-foreground-muted" role="status">{message}</p> : null}
     </aside>
   );
 }
 
 function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack }) {
   return (
-    <article className="mt-4 flex min-w-0 items-center gap-3 bg-white/[0.035] p-3" data-testid="radio-autopilot-next-track">
+    <article className="mt-3.5 flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 shadow-inner" data-testid="radio-autopilot-next-track">
       {track.artworkUrl ? (
-        <img alt="" className="h-14 w-14 shrink-0 object-cover" src={track.artworkUrl} />
+        <img alt="" className="h-14 w-14 shrink-0 rounded-lg border border-white/10 object-cover shadow-sm" src={track.artworkUrl} />
       ) : (
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center bg-white/[0.06] text-[10px] text-foreground-muted">音乐</span>
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[10px] text-foreground-muted">音乐</span>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium text-accent">下一首自动续播</p>
-        <p className="mt-1 truncate text-sm font-semibold text-foreground" title={track.title}>{track.title}</p>
-        <p className="mt-1 truncate text-xs text-foreground-muted" title={`${track.artist} · ${track.album ?? "未标注专辑"}`}>
+        <p className="text-[11px] font-semibold text-accent">下一首自动续播</p>
+        <p className="mt-0.5 truncate text-sm font-semibold text-foreground" title={track.title}>{track.title}</p>
+        <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${track.artist} · ${track.album ?? "未标注专辑"}`}>
           {track.artist} · {track.album ?? "未标注专辑"}
         </p>
-        <p className="mt-1 text-[11px] text-foreground-muted">{formatDuration(track.durationMs)} · {track.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
+        <p className="mt-1 text-[11px] text-foreground-muted/70">{formatDuration(track.durationMs)} · {track.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
       </div>
-      <span className={`shrink-0 text-[11px] font-medium ${track.preloadStatus === "ready" ? "text-emerald-300" : "text-accent"}`}>
+      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${track.preloadStatus === "ready" ? "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "border border-accent/30 bg-accent/15 text-accent"}`}>
         {track.preloadStatus === "ready" ? "已预加载" : "预加载中"}
       </span>
     </article>
@@ -353,11 +383,11 @@ function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack
 function LibraryTrack({ track, index, isCurrent, isHost, pendingAction, onAddToQueue, onDeleteTrack }: { track: TrackMeta; index: number; isCurrent: boolean; isHost: boolean; pendingAction: string | null; onAddToQueue: () => Promise<void>; onDeleteTrack: () => Promise<void> }) {
   const isQueuePending = pendingAction === `queue:${track.id}`;
   const isDeletePending = pendingAction === `delete:${track.id}`;
-  return <article className={`grid min-w-0 grid-cols-[1.25rem_3rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[1.25rem_3rem_minmax(0,1fr)_auto] sm:px-3 ${isCurrent ? "bg-accent/[0.06]" : ""}`}><span className={`pt-1 text-right font-mono text-xs ${isCurrent ? "text-accent" : "text-foreground-muted"}`}>{String(index).padStart(2, "0")}</span><TrackArtwork track={track} /><div className="min-w-0"><p className="break-words text-sm font-medium leading-5 text-foreground">{track.title}</p><p className="mt-1 break-words text-xs leading-5 text-foreground-muted">{track.artist}</p><div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-4 text-foreground-muted"><span className="break-words">{track.album ?? "未标注专辑"}</span><span>{formatDuration(track.durationMs)}</span><span>{getTrackSourceLabel(track)}</span>{track.bitrate ? <span>{Math.round(track.bitrate / 1_000)} kbps</span> : null}</div></div>{isHost ? <div className="col-start-3 flex min-w-max items-center gap-0.5 justify-self-start sm:col-start-auto sm:justify-self-end sm:self-center sm:gap-1"><Button aria-label={`将《${track.title}》加入队列`} data-testid="radio-track-add-queue-button" className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent hover:text-foreground sm:h-8 sm:w-8" disabled={pendingAction !== null} onClick={() => void onAddToQueue()} size="icon" title={isQueuePending ? "加入中" : "加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M12 5v14M5 12h14" /></svg></Button><Button aria-label={`删除《${track.title}》`} data-testid="radio-track-delete-button" className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:h-8 sm:w-8" disabled={pendingAction !== null} onClick={() => void onDeleteTrack()} size="icon" title={isDeletePending ? "删除中" : "删除"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></Button></div> : null}</article>;
+  return <article className={`grid min-w-0 grid-cols-[1.25rem_3rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 rounded-xl p-2.5 sm:grid-cols-[1.25rem_3rem_minmax(0,1fr)_auto] sm:p-3 transition-colors ${isCurrent ? "bg-accent/[0.08] border border-accent/20" : "hover:bg-white/[0.03]"}`}><span className={`pt-1 text-right font-mono text-xs ${isCurrent ? "text-accent font-bold" : "text-foreground-muted"}`}>{String(index).padStart(2, "0")}</span><TrackArtwork track={track} /><div className="min-w-0"><p className="break-words text-sm font-semibold leading-5 text-foreground">{track.title}</p><p className="mt-0.5 break-words text-xs leading-5 text-foreground-muted">{track.artist}</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4 text-foreground-muted/70"><span className="break-words">{track.album ?? "未标注专辑"}</span><span>·</span><span>{formatDuration(track.durationMs)}</span><span>·</span><span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-foreground-muted">{getTrackSourceLabel(track)}</span>{track.bitrate ? <span className="font-mono">{Math.round(track.bitrate / 1_000)} kbps</span> : null}</div></div>{isHost ? <div className="col-start-3 flex min-w-max items-center gap-1 justify-self-start sm:col-start-auto sm:justify-self-end sm:self-center"><Button aria-label={`将《${track.title}》加入队列`} data-testid="radio-track-add-queue-button" className="h-9 w-9 shrink-0 rounded-lg border border-accent/30 bg-accent/10 p-0 text-accent hover:bg-accent hover:text-white transition-colors" disabled={pendingAction !== null} onClick={() => void onAddToQueue()} size="icon" title={isQueuePending ? "加入中" : "加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="15"><path d="M12 5v14M5 12h14" /></svg></Button><Button aria-label={`删除《${track.title}》`} data-testid="radio-track-delete-button" className="h-9 w-9 shrink-0 rounded-lg border border-red-500/20 bg-red-500/10 p-0 text-red-400 hover:bg-red-500 hover:text-white transition-colors" disabled={pendingAction !== null} onClick={() => void onDeleteTrack()} size="icon" title={isDeletePending ? "删除中" : "删除"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="15"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></Button></div> : null}</article>;
 }
 
 function TrackArtwork({ track }: { track: TrackMeta }) {
-  return track.artworkUrl ? <img alt="" className="h-12 w-12 shrink-0 object-cover" src={track.artworkUrl} /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center bg-white/[0.06] text-[10px] text-foreground-muted">音乐</span>;
+  return track.artworkUrl ? <img alt="" className="h-12 w-12 shrink-0 rounded-lg border border-white/10 object-cover shadow-sm" src={track.artworkUrl} /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[10px] text-foreground-muted">音乐</span>;
 }
 
 function getTrackSourceLabel(track: TrackMeta) {

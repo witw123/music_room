@@ -44,6 +44,9 @@ import {
   type PersonalizationProfileResponse,
   type PersonalizationRecommendationsQuery,
   type PersonalizationRecommendationsResponse,
+  type PersonalizationTrack,
+  type TrackRadioQuery,
+  type ColdStartTasteInput,
   type RecordPersonalizationEvent,
   type RoomSyncResponse,
   type TrackMeta,
@@ -299,6 +302,16 @@ export const musicRoomApi = {
     request<PersonalizationExclusion[]>("/v1/personalization/exclusions"),
   removePersonalizationExclusion: (kind: "track" | "artist", key: string) =>
     request<{ ok: boolean }>(`/v1/personalization/exclusions/${kind}/${encodeURIComponent(key)}`, { method: "DELETE" }),
+  getTrackRadio: (input: TrackRadioQuery) =>
+    request<PersonalizationTrack[]>("/v1/personalization/radio", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  bootstrapColdStartProfile: (input: ColdStartTasteInput) =>
+    request<{ ok: boolean }>("/v1/personalization/cold-start", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   clearPersonalizationProfile: () =>
     request<{ ok: boolean }>("/v1/personalization/profile", { method: "DELETE" }),
   createRoom: (input: {

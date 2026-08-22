@@ -52,29 +52,31 @@ export function ProviderAlbumDetailView({
   trackActions
 }: ProviderAlbumDetailViewProps) {
   return (
-    <section className="mt-7">
-      <button className="inline-flex items-center gap-2 text-xs font-semibold text-white/50 transition hover:text-white" onClick={onBack} type="button">
+    <section className="mt-3 sm:mt-6">
+      <button className="inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white/60 transition hover:bg-white/10 hover:text-white mb-3 sm:mb-5" onClick={onBack} type="button">
         <Icon name="arrow-left" />
-        返回专辑
+        返回
       </button>
-      <div className="mt-5 grid gap-8 border-b border-white/[0.1] pb-9 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <AlbumArtwork alt={album.title} src={album.artworkUrl} />
-        <div className="flex min-w-0 flex-col justify-end">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">Album</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">{album.title}</h1>
-          <p className="mt-3 text-sm text-white/55">{album.artist} · {album.releaseTime || "发行时间未知"}</p>
+      <div className="grid gap-5 sm:gap-7 border-b border-white/[0.08] pb-7 sm:pb-9 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)] items-center sm:items-end">
+        <div className="w-40 sm:w-full max-w-[260px] mx-auto sm:mx-0 shrink-0">
+          <AlbumArtwork alt={album.title} src={album.artworkUrl} />
+        </div>
+        <div className="flex min-w-0 flex-col justify-end text-center sm:text-left">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-accent">Album</p>
+          <h1 className="mt-1.5 sm:mt-2 text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white">{album.title}</h1>
+          <p className="mt-2 text-xs sm:text-sm text-white/60">{album.artist} · {album.releaseTime || "发行时间未知"}</p>
           <DescriptionDisclosure description={album.description} />
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <Button aria-pressed={isFavorite} disabled={pending !== null} onClick={() => void onToggleFavorite()} size="sm" type="button">
+          <div className="mt-4 sm:mt-6 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+            <Button aria-pressed={isFavorite} disabled={pending !== null} onClick={() => void onToggleFavorite()} size="sm" type="button" className="rounded-xl font-medium">
               <Icon name="heart" filled={isFavorite} />
               {isFavorite ? "已收藏" : "收藏专辑"}
             </Button>
             {onAddAlbumToPlaylist ? (
-              <Button aria-label="将专辑加入歌单" disabled={pending !== null} onClick={(event) => onAddAlbumToPlaylist(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="将专辑加入歌单" type="button" variant="ghost">
+              <Button aria-label="将专辑加入歌单" disabled={pending !== null} onClick={(event) => onAddAlbumToPlaylist(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="将专辑加入歌单" type="button" variant="ghost" className="rounded-xl">
                 <Icon name="plus" />
               </Button>
             ) : null}
-            <span className="px-2 text-xs text-white/35">{album.tracks.length} 首歌曲</span>
+            <span className="px-2 text-xs font-mono text-white/40">{album.tracks.length} 首歌曲</span>
           </div>
         </div>
       </div>

@@ -112,7 +112,11 @@ describe("QqMusicApiClient", () => {
   });
 
   it("normalizes lyric, playlist, and album SDK envelopes", async () => {
-    mockedGetLyric.mockResolvedValue({ status: 200, body: { response: { lyric: "[00:01]Line" } } } as never);
+    mockedFetchProviderUrl.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ req_0: { data: { lyric: Buffer.from("[00:01]Line").toString("base64") } } })
+    } as never);
     mockedGetUserPlaylists.mockResolvedValue({ status: 200, body: { response: { code: 0, data: { playlists: [{ dissid: "1", dissname: "Favorites" }] } } } } as never);
     mockedSongListDetail.mockResolvedValue({ status: 200, body: { response: { cdlist: [{ disstid: "1", dissname: "Favorites", songlist: [] }] } } } as never);
     mockedGetAlbumInfo.mockResolvedValue({ status: 200, body: { data: { albumMid: "alb1", albumName: "Album" } } } as never);

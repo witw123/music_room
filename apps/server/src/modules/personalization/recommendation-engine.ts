@@ -306,17 +306,87 @@ function candidateTasteAffinity(candidate: ProviderTrackCandidate, tasteScores: 
   return scores.length ? positiveAffinity(Math.max(...scores)) : 0;
 }
 
+export function buildTrackRadioRecommendations(input: {
+  seedTrack: { title: string; artist: string; album?: string | null; durationMs?: number; tags?: string[] };
+  candidates: RecommendationCandidate[];
+  excludedTrackKeys?: ReadonlySet<string>;
+  limit?: number;
+}): Array<ProviderTrackCandidate & { score: number; reasons: string[] }> {
+  const limit = input.limit ?? 20;
+  const excluded = input.excludedTrackKeys ?? new Set<string>();
+  const seedArtist = normalizeText(input.seedTrack.artist);
+  const seedAlbum = input.seedTrack.album ? normalizeText(input.seedTrack.album) : "";
+  const seedEvidence = extractTasteEvidence({
+    title: input.seedTrack.title,
+    artist: input.seedTrack.artist,
+    album: input.seedTrack.album ?? null,
+    providerTags: input.seedTrack.tags
+  });
+  const seedLabels = new Set(seedEvidence.map((e) => normalizeText(e.label)));
+
+  const scored = dedupeCandidates(input.candidates).flatMap((item) => {
+    const key = trackKey(item.candidate);
+    if (excluded.has(key)) return [];
+    if (trackIdentity(item.candidate) === trackIdentity(input.seedTrack)) return [];
+
+    const candArtist = normalizeText(item.candidate.artist);
+    const candAlbum = item.candidate.album ? normalizeText(item.candidate.album) : "";
+    const isSameArtist = candArtist === seedArtist;
+    const isSameAlbum = Boolean(candAlbum && candAlbum === seedAlbum);
+
+    const candEvidence = extractTasteEvidence({
+      title: item.candidate.title,
+      artist: item.candidate.artist,
+      album: item.candidate.album ?? null,
+      providerTags: item.candidate.tags
+    });
+    const candLabels = candEvidence.map((e) => normalizeText(e.label));
+    const overlapCount = candLabels.filter((l) => seedLabels.has(l)).length;
+    const tagSimilarity = seedLabels.size ? overlapCount / Math.max(1, seedLabels.size) : 0;
+
+    const durationDiffRatio = input.seedTrack.durationMs && item.candidate.durationMs
+      ? 1 - Math.min(1, Math.abs(input.seedTrack.durationMs - item.candidate.durationMs) / 180_000)
+      : 0.5;
+
+    const baseScore = (isSameArtist ? 0.35 : 0)
+      + (isSameAlbum ? 0.15 : 0)
+      + tagSimilarity * 0.35
+      + durationDiffRatio * 0.15;
+
+    const matchedGenre = candEvidence.find((e) => e.dimension === "genre")?.label;
+    const reasons = [
+      isSameArtist ? `同歌手深度探索 · ${item.candidate.artist}` : matchedGenre ? `相似风格 · ${matchedGenre}` : `从《${input.seedTrack.title}》漫游`
+    ];
+
+    return [{
+      ...item.candidate,
+      score: Number(baseScore.toFixed(3)),
+      reasons
+    }];
+  });
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 function recommendationReasons(item: RecommendationCandidate, sessionMatch: boolean, exploratory: boolean) {
-  const reasons = [item.source === "library"
-    ? "来自你的收藏"
-    : item.source === "related"
-      ? "延续你的常听歌曲"
-      : item.source === "playlist"
-        ? "来自收藏歌单"
-        : item.source === "explore" && item.interestLabel
-          ? `符合你的${item.interestLabel}偏好`
-          : "常听艺人"];
-  if (sessionMatch) reasons.push("延续当前会话");
+  const reasons: string[] = [];
+  if (item.source === "library") {
+    reasons.push("来自你的收藏");
+  } else if (item.source === "related") {
+    reasons.push(item.interestLabel ? `与《${item.interestLabel}》相似` : "延续你的常听曲目");
+  } else if (item.source === "playlist") {
+    reasons.push("来自收藏歌单精选");
+  } else if (item.source === "artist") {
+    reasons.push(item.interestLabel ? `常听艺人 · ${item.interestLabel}` : "常听艺人精选");
+  } else if (item.source === "explore" && item.interestLabel) {
+    reasons.push(`探索 · ${item.interestLabel}`);
+  } else {
+    reasons.push("为你挑选");
+  }
+
+  if (sessionMatch) reasons.push("延续当前会话情绪");
   if (exploratory) reasons.push("发现新艺人");
   return reasons;
 }
@@ -379,3 +449,4 @@ function trackKey(track: { provider: string; providerTrackId: string }) {
 function increment<K>(map: Map<K, number>, key: K) {
   map.set(key, (map.get(key) ?? 0) + 1);
 }
+

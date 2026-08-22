@@ -69,7 +69,9 @@ describe("NeteaseService", () => {
           album: "Album",
           providerAlbumId: "456",
           durationMs: 123000,
-          artworkUrl: "https://p1.music.126.net/abc/cover.jpg"
+          artworkUrl: "https://p1.music.126.net/abc/cover.jpg",
+          releaseTime: null,
+          tags: []
         }
       ],
       limit: 20,

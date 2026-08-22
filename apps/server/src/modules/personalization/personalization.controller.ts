@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Headers, Param, Post, Query, UnauthorizedException } from "@nestjs/common";
 import {
+  coldStartTasteInputSchema,
   personalizationFeedbackSchema,
   personalizationRecommendationsQuerySchema,
-  recordPersonalizationEventSchema
+  recordPersonalizationEventSchema,
+  trackRadioQuerySchema
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
@@ -61,6 +63,28 @@ export class PersonalizationController {
     return this.personalization.removeExclusion(await this.currentUserId(token), kind, key);
   }
 
+  @Post("radio")
+  async getTrackRadio(
+    @Headers("x-session-token") token: string | undefined,
+    @Body() body: unknown
+  ) {
+    return this.personalization.getTrackRadio(
+      await this.currentUserId(token),
+      parseRequestBody(trackRadioQuerySchema, body)
+    );
+  }
+
+  @Post("cold-start")
+  async bootstrapColdStart(
+    @Headers("x-session-token") token: string | undefined,
+    @Body() body: unknown
+  ) {
+    return this.personalization.bootstrapColdStartProfile(
+      await this.currentUserId(token),
+      parseRequestBody(coldStartTasteInputSchema, body)
+    );
+  }
+
   @Delete("profile")
   async clearProfile(@Headers("x-session-token") token?: string) {
     return this.personalization.clearProfile(await this.currentUserId(token));
@@ -74,3 +98,4 @@ export class PersonalizationController {
     }
   }
 }
+
