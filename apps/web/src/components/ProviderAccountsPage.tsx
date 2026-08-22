@@ -11,7 +11,6 @@ import { RoomCenterOverview } from "@/components/RoomCenterOverview";
 import { TasteExclusionsManager } from "@/components/discovery/TasteExclusionsManager";
 import { TasteColdStartDialog } from "@/components/discovery/TasteColdStartDialog";
 import { SettingsPage } from "@/components/SettingsPage";
-import { Button } from "@/components/ui/button";
 import {
   BarChartIcon,
   ShieldCheckIcon,
@@ -53,27 +52,11 @@ export function ProviderAccountsPage() {
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-8 md:pt-12">
-        {/* Profile Hero Card aligned with project tokens */}
-        <PersonalOverview
-          activeSession={activeSession}
-          onOpenColdStart={() => setShowColdStartDialog(true)}
-          headerAction={
-            <Button
-              aria-label="打开设置"
-              className="h-10 w-10 border-surface-border bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground"
-              onClick={() => setActiveTab("settings")}
-              size="icon"
-              title="设置"
-              type="button"
-              variant="outline"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </Button>
-          }
-        />
+        {/* Clean Profile Hero Card */}
+        <PersonalOverview activeSession={activeSession} />
 
         {/* Unified Segmented Control Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-surface-border bg-surface/50 backdrop-blur-md mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-surface-border/40 bg-surface/50 backdrop-blur-md mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -113,7 +96,7 @@ export function ProviderAccountsPage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="border border-surface-border bg-surface/45 p-5 sm:p-7 rounded-2xl backdrop-blur-md">
+          <div className="border border-surface-border/40 bg-surface/35 p-5 sm:p-7 rounded-3xl backdrop-blur-xl">
             <SettingsPage embedded onBack={() => setActiveTab("taste")} />
           </div>
         )}

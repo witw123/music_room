@@ -60,7 +60,7 @@ export function TasteExclusionsManager({
   return (
     <div className="space-y-6">
       {/* Cold Start / Taste Tuning Banner */}
-      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-3xl border border-surface-border/40 bg-surface/35 p-5 sm:p-7 backdrop-blur-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-accent uppercase tracking-wider">
@@ -86,10 +86,10 @@ export function TasteExclusionsManager({
       </section>
 
       {/* Exclusions List */}
-      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
-        <div className="flex items-center justify-between gap-3 mb-4">
+      <section className="rounded-3xl border border-surface-border/40 bg-surface/35 p-5 sm:p-7 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-elevated text-foreground">
+            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-surface-elevated text-foreground">
               <ShieldCheckIcon className="w-4 h-4 text-accent" />
             </div>
             <div>
@@ -97,7 +97,7 @@ export function TasteExclusionsManager({
               <p className="text-xs text-foreground-muted">已从推荐流与品味画像中排除的曲目或艺人</p>
             </div>
           </div>
-          <span className="text-xs tabular-nums text-foreground-muted bg-surface px-2.5 py-1 rounded-full border border-surface-border">
+          <span className="text-xs tabular-nums text-foreground-muted bg-surface px-2.5 py-1 rounded-full border border-surface-border/40">
             共 {exclusions.length} 项
           </span>
         </div>
@@ -111,11 +111,11 @@ export function TasteExclusionsManager({
         {loading ? (
           <div className="space-y-2 py-4">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="h-14 rounded-xl bg-surface animate-pulse" />
+              <div key={i} className="h-14 rounded-2xl bg-surface/40 animate-pulse" />
             ))}
           </div>
         ) : exclusions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl border border-dashed border-surface-border bg-surface/20">
+          <div className="flex flex-col items-center justify-center py-10 text-center rounded-2xl border border-dashed border-surface-border/50 bg-surface/20">
             <ShieldCheckIcon className="w-8 h-8 text-foreground-muted mb-2" />
             <p className="text-sm font-medium text-foreground">暂无屏蔽项目</p>
             <p className="text-xs text-foreground-muted mt-1">
@@ -123,17 +123,17 @@ export function TasteExclusionsManager({
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-surface-border/60">
+          <div className="space-y-1">
             {exclusions.map((item) => {
               const itemKey = `${item.kind}:${item.key}`;
               const isRemoving = removingKey === itemKey;
               return (
                 <div
                   key={itemKey}
-                  className="flex items-center justify-between gap-3 py-3 px-2 rounded-xl transition-colors hover:bg-surface-hover"
+                  className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-2xl transition-colors hover:bg-surface-hover"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center justify-center w-8 h-8 shrink-0 rounded-lg bg-surface-elevated text-foreground-muted">
+                    <div className="flex items-center justify-center w-8 h-8 shrink-0 rounded-xl bg-surface-elevated text-foreground-muted">
                       {item.kind === "artist" ? (
                         <LandmarkIcon className="w-4 h-4" />
                       ) : (
@@ -149,7 +149,7 @@ export function TasteExclusionsManager({
                           className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium border ${
                             item.action === "not-interested"
                               ? "bg-red-500/10 text-red-400 border-red-500/20"
-                              : "bg-surface text-foreground-muted border-surface-border"
+                              : "bg-surface text-foreground-muted border-surface-border/40"
                           }`}
                         >
                           {item.action === "not-interested" ? "不再推荐" : "不计入画像"}
@@ -167,7 +167,7 @@ export function TasteExclusionsManager({
                     size="sm"
                     disabled={isRemoving}
                     onClick={() => handleRestore(item.kind, item.key)}
-                    className="shrink-0 h-8 px-3 rounded-lg text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-hover border border-surface-border"
+                    className="shrink-0 h-8 px-3 rounded-xl text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-hover border border-surface-border/40"
                   >
                     <RotateCcwIcon className="w-3.5 h-3.5 mr-1.5" />
                     {isRemoving ? "恢复中..." : "恢复推荐"}

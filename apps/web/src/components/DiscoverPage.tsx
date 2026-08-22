@@ -699,11 +699,11 @@ export function DiscoverPage() {
                       </span>
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground-muted shrink-0">
                         <UsersIcon className="w-3 h-3 text-accent" />
-                        {room.listenerCount} 人
+                        {room.listenerCount > 0 ? `${room.listenerCount} 人` : "空闲"}
                       </span>
                     </div>
                     <p className="mt-0.5 truncate text-xs text-foreground-muted">
-                      {room.currentTrack ? `${room.currentTrack.title} · ${room.currentTrack.artist}` : "正在广播精选歌单"}
+                      {room.currentTrack ? `${room.currentTrack.title} · ${room.currentTrack.artist}` : `房主: ${room.hostName}`}
                     </p>
                   </div>
                 </a>

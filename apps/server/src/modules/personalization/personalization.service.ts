@@ -306,18 +306,27 @@ export class PersonalizationService {
       }).catch(() => []);
 
       liveRooms = publicRooms.map((room) => {
-        const members = Array.isArray(room.members) ? room.members : [];
-        const playback = room.playback as { currentTrack?: { title?: string; artist?: string; artworkUrl?: string | null } } | null;
+        const members = Array.isArray(room.members) ? room.members as Array<{ id?: string; nickname?: string; presenceState?: string; peerId?: string }> : [];
+        const tracks = Array.isArray(room.tracks) ? room.tracks as Array<{ id?: string; title?: string; artist?: string; artworkUrl?: string | null }> : [];
+        const playback = room.playback as { status?: string; currentTrackId?: string | null } | null;
+
+        const currentTrackRecord = playback?.currentTrackId
+          ? tracks.find((t) => t.id === playback.currentTrackId)
+          : (playback?.status === "playing" && tracks.length > 0 ? tracks[0] : null);
+
+        const hostMember = members.find((m) => m.id === room.hostId);
+        const onlineCount = members.filter((m) => m.presenceState === "online" && !!m.peerId).length;
+
         return {
           roomId: room.id,
-          roomTitle: room.name,
-          hostName: "DJ 主播",
+          roomTitle: room.name || "未命名房间",
+          hostName: hostMember?.nickname || "房主",
           mode: (room.roomType === "radio" ? "radio" : room.roomType === "request" ? "request" : "common") as "radio" | "request" | "common",
-          listenerCount: members.length || 1,
-          currentTrack: playback?.currentTrack?.title ? {
-            title: playback.currentTrack.title,
-            artist: playback.currentTrack.artist ?? "群内共赏",
-            artworkUrl: playback.currentTrack.artworkUrl ?? null
+          listenerCount: onlineCount > 0 ? onlineCount : members.length,
+          currentTrack: currentTrackRecord?.title ? {
+            title: currentTrackRecord.title,
+            artist: currentTrackRecord.artist || "未知歌手",
+            artworkUrl: currentTrackRecord.artworkUrl ?? null
           } : null
         };
       });
