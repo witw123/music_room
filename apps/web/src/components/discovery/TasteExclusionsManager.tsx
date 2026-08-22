@@ -10,8 +10,7 @@ import {
   RotateCcwIcon,
   SparklesIcon,
   MusicIcon,
-  LandmarkIcon,
-  TrashIcon
+  LandmarkIcon
 } from "@/components/icons/DiscoverIcons";
 
 export function TasteExclusionsManager({

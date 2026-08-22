@@ -6,7 +6,7 @@ import type { AuthSession, PersonalizationProfileResponse, ProviderTrackCandidat
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
-import { localPlaylistTrackId, toProviderTrackRecord } from "@/features/playlist/local-playlist";
+import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
   PlayIcon,
@@ -131,7 +131,7 @@ export function ListeningProfileOverview({
   const totalSourceTime = profile.sourceDistribution.reduce((acc, curr) => acc + curr.listenedMs, 0);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300" aria-busy={refreshing}>
       {statusMessage && (
         <p className="text-xs text-neutral-300 bg-neutral-800/80 border border-white/[0.08] px-3.5 py-2 rounded-xl">
           {statusMessage}

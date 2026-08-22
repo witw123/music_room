@@ -6,7 +6,6 @@ import type { AuthSession, RoomSnapshot } from "@music-room/shared";
 import { musicRoomApi, type RoomActivitySummary, type RoomInteractionStats } from "@/lib/network/music-room-api";
 import { getOnlineMemberCount } from "@/lib/domain/music-room-ui";
 import {
-  RadioIcon,
   UsersIcon,
   HeartIcon,
   ActivityIcon,
