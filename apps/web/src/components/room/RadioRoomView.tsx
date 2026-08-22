@@ -21,7 +21,6 @@ type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 export function RadioRoomView(props: RoomDashboardViewProps) {
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
-  const [isChatScrollEnabled, setIsChatScrollEnabled] = useState(false);
   const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
   const [rightTab, setRightTab] = useState<RadioRightTab>(isHost ? "console" : "members");
 
@@ -30,27 +29,22 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   }, [isHost]);
 
   useEffect(() => {
-    setIsChatScrollEnabled(false);
-  }, [props.roomSnapshot.room.id]);
-
-  useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className={`mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0 ${isChatScrollEnabled ? "lg:h-full lg:min-h-full" : "lg:h-auto lg:min-h-0"}`} data-testid="radio-room-hero">
-        <div className={`min-h-0 overflow-visible lg:min-h-0 lg:border-r lg:border-surface-border lg:bg-surface/[0.12] ${isChatScrollEnabled ? "lg:h-full lg:overflow-hidden" : "lg:h-auto lg:overflow-visible"}`}>
+      <section className="mx-auto grid h-full min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+        <div className="min-h-0 overflow-hidden lg:h-full lg:min-h-0 lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
           <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
         </div>
-        <div className={`h-[28rem] min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background sm:h-[30rem] lg:min-h-0 lg:rounded-none lg:border-0 ${isChatScrollEnabled ? "lg:h-full" : "lg:h-[32rem]"}`}>
+        <div className="h-[28rem] min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background sm:h-[30rem] lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">
           <RoomChatPanel
             activeSession={props.activeSession}
             isHost={isHost}
-            onActivateScroll={() => setIsChatScrollEnabled(true)}
             roomId={props.roomSnapshot.room.id}
-            scrollEnabled={isChatScrollEnabled}
+            scrollEnabled
             socket={props.socket}
           />
         </div>
