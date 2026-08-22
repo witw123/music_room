@@ -46,6 +46,9 @@ type Provider = "netease" | "qqmusic";
 type Track = ProviderTrackCandidate;
 type DiscoverData = ProfileProviderRecommendations;
 type Detail = { summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail };
+type DiscoverPlaylistCard = DiscoverPlaylistRecommendation & {
+  tracks?: Track[];
+};
 
 const profileRefreshIntervalMs = 90_000;
 
@@ -157,7 +160,19 @@ export function DiscoverPage() {
     return () => window.removeEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
   }, []);
 
-  async function openPlaylist(summary: ProviderPlaylistSummary) {
+  async function openPlaylist(card: DiscoverPlaylistCard) {
+    const summary = card.playlist;
+    if (card.tracks) {
+      setDetail({
+        summary,
+        value: {
+          ...summary,
+          tracks: card.tracks
+        }
+      });
+      return;
+    }
+
     const key = `playlist:${summary.provider}:${summary.providerPlaylistId}`;
     setDetailLoading(key);
     setErrorMessage(null);
@@ -431,16 +446,11 @@ export function DiscoverPage() {
     );
   }
 
-  const forYou = data?.forYou ?? [];
-  const chartSections = data ? [
-    { title: "为你准备", items: data.forYou },
-    { title: "熟悉艺人", items: data.familiarArtists },
-    { title: "换个口味", items: data.moodDiscovery },
-    { title: "沿着喜好", items: data.deepCuts }
-  ].filter((section) => section.items.length > 0).slice(0, 3) : [];
-  const compactRecommendations = data
-    ? uniqueRecommendations([...data.forYou, ...data.familiarArtists, ...data.moodDiscovery, ...data.deepCuts]).slice(0, 9)
+  const curatedPlaylists = data ? buildCuratedPlaylistCards(data) : [];
+  const recommendedPlaylists: DiscoverPlaylistCard[] = data
+    ? [...data.playlists, ...curatedPlaylists]
     : [];
+  const compactRecommendations = data ? uniqueRecommendations(data.deepCuts).slice(0, 9) : [];
   const hasContent = Boolean(data?.forYou.length || data?.familiarArtists.length || data?.moodDiscovery.length || data?.deepCuts.length || data?.playlists.length);
   const noProfile = Boolean(data && !hasContent);
   const noAccounts = Boolean(data && data.providers.length === 0);
@@ -455,12 +465,7 @@ export function DiscoverPage() {
         {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="先播放几首歌" description="播放或收藏歌曲后，这里会根据真实聆听记录推荐更多来自网易云音乐和 QQ 音乐的新内容。" actionHref="/app/search" actionLabel="去搜索" /> : null}
         {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="这次没有找到新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
 
-        {chartSections.length ? <DiscoverSection title="精选推荐"><DiscoverChartGrid sections={chartSections} actions={trackActions} /></DiscoverSection> : null}
-        {data?.playlists.length ? <DiscoverSection title="推荐歌单"><DiscoverPlaylistRail items={data.playlists} loadingKey={detailLoading} onOpen={openPlaylist} /></DiscoverSection> : null}
-
-        {forYou.length ? <DiscoverSection title="为你准备"><DiscoverTrackRail actions={trackActions} tracks={forYou} /></DiscoverSection> : null}
-        {data?.familiarArtists.length ? <DiscoverSection title="熟悉艺人的延展"><DiscoverTrackRail actions={trackActions} tracks={data.familiarArtists} /></DiscoverSection> : null}
-        {data?.moodDiscovery.length ? <DiscoverSection title="换个口味"><DiscoverTrackRail actions={trackActions} tracks={data.moodDiscovery} /></DiscoverSection> : null}
+        {recommendedPlaylists.length ? <DiscoverSection title="推荐歌单"><DiscoverPlaylistRail items={recommendedPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} /></DiscoverSection> : null}
         {data?.deepCuts.length ? <DiscoverSection title="沿着喜好继续听"><DiscoverTrackRail actions={trackActions} tracks={data.deepCuts} /></DiscoverSection> : null}
         {compactRecommendations.length ? <DiscoverSection title="你的红心歌曲和相似推荐"><DiscoverCompactTrackGrid tracks={compactRecommendations} actions={trackActions} /></DiscoverSection> : null}
         <Feedback errorMessage={errorMessage} statusMessage={statusMessage} />
@@ -501,15 +506,8 @@ function DiscoverSection({ title, children }: { title: string; children: React.R
   return <section className="mt-10"><h2 className="text-xl font-semibold text-foreground">{title}</h2><div className="mt-4">{children}</div></section>;
 }
 
-function DiscoverChartGrid({ sections, actions }: { sections: Array<{ title: string; items: DiscoverTrackRecommendation[] }>; actions: DiscoverTrackActions }) {
-  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{sections.map((section) => <article className="rounded-xl border border-surface-border bg-surface p-4" key={section.title}>
-    <div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-foreground">{section.title}</h3><span className="text-xs text-foreground-muted">个性化精选</span></div>
-    <div className="mt-4 flex gap-4"><div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-background"><Artwork alt="" className="h-full w-full" src={section.items[0]?.candidate.artworkUrl ?? null} /><button aria-label={`播放${section.title}`} className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" disabled={actions.pending !== null} onClick={() => actions.onPlay(section.items[0]!.candidate)} title={`播放${section.title}`} type="button"><PlayIcon /></button></div><div className="min-w-0 flex-1">{section.items.slice(0, 3).map((item, index) => <button aria-label={`播放《${item.candidate.title}》`} className="flex w-full items-center gap-2 py-1 text-left" disabled={actions.pending !== null} key={providerTrackKey(item.candidate)} onClick={() => actions.onPlay(item.candidate)} type="button"><span className="w-4 shrink-0 text-xs tabular-nums text-foreground-muted">{index + 1}</span><span className="min-w-0 flex-1 truncate text-sm text-foreground">{item.candidate.title}</span><span className="max-w-[38%] truncate text-xs text-foreground-muted">{item.candidate.artist}</span></button>)}</div></div>
-  </article>)}</div>;
-}
-
-function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPlaylistRecommendation[]; onOpen: (playlist: ProviderPlaylistSummary) => Promise<void>; loadingKey: string | null }) {
-  return <div className="hide-scrollbar flex snap-x gap-4 overflow-x-auto pb-2">{items.map(({ playlist }) => { const loading = loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`; return <button aria-label={`打开歌单《${playlist.title}》`} className="w-[154px] shrink-0 snap-start text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-[178px]" disabled={loading} key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)} onClick={() => void onOpen(playlist)} type="button"><Artwork alt={playlist.title} className="aspect-square w-full rounded-xl border border-surface-border transition duration-200 hover:brightness-110" src={playlist.artworkUrl} /><p className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-foreground">{playlist.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{providerLabel(playlist.provider)}{playlist.creatorName ? ` · ${playlist.creatorName}` : ""}</p></button>; })}</div>;
+function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPlaylistCard[]; onOpen: (card: DiscoverPlaylistCard) => Promise<void>; loadingKey: string | null }) {
+  return <div className="hide-scrollbar flex snap-x gap-4 overflow-x-auto pb-2">{items.map((item) => { const { playlist } = item; const loading = !item.tracks && loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`; return <button aria-label={`打开歌单《${playlist.title}》`} className="w-[154px] shrink-0 snap-start text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-[178px]" disabled={loading} key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)} onClick={() => void onOpen(item)} type="button"><Artwork alt={playlist.title} className="aspect-square w-full rounded-xl border border-surface-border transition duration-200 hover:brightness-110" src={playlist.artworkUrl} /><p className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-foreground">{playlist.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{playlist.providerPlaylistId.startsWith("music-room-curated:") ? "Music Room 推荐" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`}</p></button>; })}</div>;
 }
 
 function DiscoverCompactTrackGrid({ tracks, actions }: { tracks: DiscoverTrackRecommendation[]; actions: DiscoverTrackActions }) {
@@ -602,6 +600,49 @@ function providerTrackKey(track: Pick<Track, "provider" | "providerTrackId">) {
 
 function providerPlaylistKey(provider: Provider, playlistId: string) {
   return `${provider}:${playlistId}`;
+}
+
+function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): DiscoverPlaylistCard[] {
+  const groups = [
+    {
+      id: "for-you",
+      title: "为你准备",
+      description: "根据你的听歌偏好整理的推荐歌曲。",
+      tracks: data.forYou
+    },
+    {
+      id: "familiar-artists",
+      title: "熟悉艺人的延展",
+      description: "从常听艺人延展出的歌曲集合。",
+      tracks: data.familiarArtists
+    },
+    {
+      id: "mood-discovery",
+      title: "换个口味",
+      description: "为你保留一点新鲜感的探索歌曲。",
+      tracks: data.moodDiscovery
+    }
+  ];
+
+  return groups.flatMap(({ id, title, description, tracks }) => {
+    if (!tracks.length) return [];
+    const firstTrack = tracks[0]!.candidate;
+    return [{
+      playlist: {
+        provider: firstTrack.provider,
+        providerPlaylistId: `music-room-curated:${id}`,
+        title,
+        description,
+        tags: ["Music Room", "个性化推荐"],
+        artworkUrl: firstTrack.artworkUrl ?? null,
+        creatorName: "Music Room",
+        trackCount: tracks.length
+      },
+      tracks: tracks.map((item) => item.candidate),
+      score: Math.max(...tracks.map((item) => item.score)),
+      reasons: ["来自你的个性化推荐"]
+    } satisfies DiscoverPlaylistCard];
+  });
 }
 
 function providerLabel(provider: Provider) {
