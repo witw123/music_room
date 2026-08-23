@@ -44,8 +44,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         </div>
       </section>
 
-      <section className="mx-auto mt-3 grid min-h-[calc(100dvh-var(--room-mobile-bottom-inset))] w-full max-w-[1600px] gap-3 px-3 lg:mt-3 lg:min-h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0" data-testid="radio-room-workspace">
-        <div className="flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
+      <section className="mx-auto mt-3 grid h-[calc(100dvh-var(--room-mobile-bottom-inset))] min-h-0 w-full max-w-[1600px] shrink-0 gap-3 overflow-hidden px-3 lg:mt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0" data-testid="radio-room-workspace">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:rounded-none lg:border-0 lg:border-r">
           <RadioWorkspaceTabs
             activeTab={leftTab}
             ariaLabel="电台内容"
@@ -81,7 +81,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             )}
           </div>
         </div>
-        <div className="flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:rounded-none lg:border-0">
           <RadioWorkspaceTabs
             activeTab={rightTab}
             ariaLabel="房间信息"

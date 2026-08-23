@@ -333,6 +333,7 @@ export function RoomProviderTrackSearch({
           {searchSuggestionsOpen ? <SearchSuggestions
             items={keywords.trim() ? remoteSuggestions : remoteHotWords}
             onSelect={(value) => { setKeywords(value); setSearchSuggestionsOpen(false); searchInputRef.current?.focus(); }}
+            position={mode === "request" ? "flow" : "overlay"}
           /> : null}
         </div>
         <button

@@ -10,14 +10,16 @@ export type SearchSuggestionItem = {
 
 export function SearchSuggestions({
   items,
-  onSelect
+  onSelect,
+  position = "overlay"
 }: {
   items: SearchSuggestionItem[];
   onSelect: (value: string) => void;
+  position?: "overlay" | "flow";
 }) {
   if (!items.length) return null;
   return (
-    <div className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-surface-border bg-background-secondary p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)]" role="listbox">
+    <div className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-2" : "relative mt-2"} max-h-64 overflow-y-auto rounded-2xl border border-surface-border bg-background-secondary p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)]`} role="listbox">
       {items.map((item) => (
         <button
           className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground"
