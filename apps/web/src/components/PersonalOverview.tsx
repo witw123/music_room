@@ -10,7 +10,7 @@ export function PersonalOverview({
 }) {
   return (
     <section aria-labelledby="personal-overview-title" className="mb-6">
-      <div className="relative overflow-hidden rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
+      <div className="relative overflow-hidden rounded-3xl border-0 bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl ring-0">
         <div className="flex items-center gap-4 sm:gap-5 min-w-0">
           {/* Avatar */}
           <div

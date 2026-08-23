@@ -807,23 +807,23 @@ function DiscoverSection({ title, icon, children }: { title: string; icon?: Reac
 
 function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPlaylistCard[]; onOpen: (card: DiscoverPlaylistCard) => Promise<void>; loadingKey: string | null }) {
   return (
-    <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="grid min-w-0 grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {items.map((item) => {
         const { playlist } = item;
         const loading = !item.tracks && loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
         return (
           <button
             aria-label={`打开歌单《${playlist.title}》`}
-            className="group flex flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 sm:p-2.5 text-left transition-all duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group flex min-w-0 max-w-full flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 text-left transition-all duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:p-2.5"
             disabled={loading}
             key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)}
             onClick={() => void onOpen(item)}
             type="button"
           >
-            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface-elevated">
+            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated">
               <Artwork
                 alt={playlist.title}
-                className="h-full w-full object-cover block transition duration-300 group-hover:scale-105"
+                className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105"
                 src={playlist.artworkUrl}
               />
               <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
@@ -876,7 +876,7 @@ function DiscoverCompactTrackGrid({ tracks, actions }: { tracks: DiscoverTrackRe
 
 function DiscoverTrackRail({ tracks, actions }: { tracks: DiscoverTrackRecommendation[]; actions: DiscoverTrackActions }) {
   return (
-    <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="grid min-w-0 grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {tracks.map((item) => (
         <DiscoverTrackCard actions={actions} key={providerTrackKey(item.candidate)} track={item.candidate} />
       ))}
@@ -887,15 +887,15 @@ function DiscoverTrackRail({ tracks, actions }: { tracks: DiscoverTrackRecommend
 function DiscoverTrackCard({ track, actions }: { track: Track; actions: DiscoverTrackActions }) {
   const preparing = actions.pending === `play:${track.provider}:${track.providerTrackId}` || actions.pending === `queue:${track.provider}:${track.providerTrackId}`;
   return (
-    <article className="group relative flex w-full min-w-0 flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 sm:p-2.5 text-left transition-all duration-200 hover:bg-surface-hover">
+    <article className="group relative flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 text-left transition-all duration-200 hover:bg-surface-hover sm:p-2.5">
       <button
         aria-label={`播放《${track.title}》`}
-        className="group/btn relative block aspect-square w-full overflow-hidden rounded-xl bg-surface-elevated text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group/btn relative block aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         disabled={actions.pending !== null}
         onClick={() => actions.onPlay(track)}
         type="button"
       >
-        <Artwork alt="" className="h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
+            <Artwork alt="" className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
         <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
         <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-0 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 group-hover:opacity-100 scale-95 group-hover:scale-100">
           <PlayIcon className="w-4 h-4" />
@@ -990,9 +990,9 @@ function DiscoverSkeleton() {
 function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
   const [failed, setFailed] = useState(false);
   const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) return <span aria-label={alt || undefined} className={`flex items-center justify-center bg-surface-elevated text-xl text-foreground-muted ${className}`}>♪</span>;
+  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-surface-elevated text-xl text-foreground-muted ${className}`}>♪</span>;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className={`object-cover block ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} />;
+  return <img alt={alt} className={`block min-w-0 max-w-full object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} style={{ display: "block", height: "100%", maxHeight: "100%", maxWidth: "100%", width: "100%" }} />;
 }
 
 function toPlaylistTrackActions(actions: DiscoverTrackActions) {

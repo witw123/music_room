@@ -49,14 +49,14 @@ export function ProviderAccountsPage() {
   }
 
   return (
-    <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-8 md:pt-12">
         {/* Borderless Profile Hero Card */}
         <PersonalOverview activeSession={activeSession} />
 
         {/* Borderless Segmented Control Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-surface/35 backdrop-blur-xl mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
+        <div className="flex items-center gap-1.5 rounded-2xl border-0 p-1 bg-surface/35 backdrop-blur-xl mb-6 overflow-x-auto scrollbar-none w-fit max-w-full ring-0">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (

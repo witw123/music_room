@@ -132,7 +132,7 @@ export function ListeningProfileOverview({
   const activeTasteGroups = profile.tasteGroups.filter((group) => group.tags.length > 0);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300" aria-busy={refreshing}>
+    <div className="profile-content space-y-6 animate-in fade-in duration-300" aria-busy={refreshing}>
       {statusMessage && (
         <p className="text-xs text-foreground bg-surface/50 px-4 py-2.5 rounded-2xl">
           {statusMessage}
@@ -164,7 +164,7 @@ export function ListeningProfileOverview({
       </section>
 
       {/* Taste Dimensions (Clean, borderless section) */}
-      <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
+      <section className="rounded-3xl border-0 bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl ring-0">
         <div className="flex items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-2">
             <SparklesIcon className="w-4 h-4 text-accent" />
@@ -213,7 +213,7 @@ export function ListeningProfileOverview({
       {/* Top 5 Tracks & Top 5 Artists (Completely borderless and line-free) */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top 5 Tracks */}
-        <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
+        <section className="rounded-3xl border-0 bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl ring-0">
           <div className="flex items-center gap-2 mb-4">
             <BarChartIcon className="w-4 h-4 text-accent" />
             <h3 className="text-base font-bold text-foreground tracking-tight">最常播放歌曲 (Top 5)</h3>
@@ -278,7 +278,7 @@ export function ListeningProfileOverview({
         {/* Top 5 Artists & Multi-source Bar */}
         <div className="space-y-6">
           {/* Top 5 Artists */}
-          <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
+          <section className="rounded-3xl border-0 bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl ring-0">
             <div className="flex items-center gap-2 mb-4">
               <LandmarkIcon className="w-4 h-4 text-accent" />
               <h3 className="text-base font-bold text-foreground tracking-tight">常听歌手 (Top 5)</h3>
@@ -309,7 +309,7 @@ export function ListeningProfileOverview({
 
           {/* Multi-source Distribution */}
           {profile.sourceDistribution.length > 0 && totalSourceTime > 0 && (
-            <section className="rounded-3xl bg-surface/35 p-5 sm:p-6 shadow-[var(--surface-shadow)] backdrop-blur-xl">
+            <section className="rounded-3xl border-0 bg-surface/35 p-5 sm:p-6 shadow-[var(--surface-shadow)] backdrop-blur-xl ring-0">
               <h4 className="text-xs font-semibold text-foreground-muted mb-3">音源收听分布</h4>
               {/* Segmented Bar */}
               <div className="h-2.5 w-full rounded-full bg-surface-hover flex overflow-hidden p-0.5 gap-0.5">
@@ -367,7 +367,7 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-surface/35 p-4 sm:p-5 flex flex-col justify-between shadow-[var(--surface-shadow)] backdrop-blur-xl">
+    <div className="rounded-2xl border-0 bg-surface/35 p-4 sm:p-5 flex flex-col justify-between shadow-[var(--surface-shadow)] backdrop-blur-xl ring-0">
       <div className="flex items-center justify-between gap-2 mb-3">
         <span className="text-xs font-semibold text-foreground-muted">{label}</span>
         {icon}
