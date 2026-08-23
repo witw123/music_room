@@ -9,7 +9,8 @@ import {
   SparklesIcon,
   MusicIcon,
   UsersIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  CheckIcon
 } from "@/components/icons/DiscoverIcons";
 import {
   dispatchLocalReaction,
@@ -52,31 +53,13 @@ export function RoomReactionToolbar({
   className = ""
 }: RoomReactionToolbarProps) {
   const [activeReaction, setActiveReaction] = useState<ReactionType | null>(null);
-  const [selectedSongId, setSelectedSongId] = useState<string | null>(activeSongId ?? (targetSongs[0]?.id ?? null));
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(activeMemberId ?? (targetMembers[0]?.id ?? null));
+  const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [showSelector, setShowSelector] = useState(false);
 
   const throttleTimerRef = useRef<{ [key: string]: number }>({});
   const comboTrackerRef = useRef<{ [key: string]: { count: number; lastAt: number } }>({});
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Synchronize target song if activeSongId changes
-  useEffect(() => {
-    if (activeSongId) {
-      setSelectedSongId(activeSongId);
-    } else if (targetSongs.length > 0 && !selectedSongId) {
-      setSelectedSongId(targetSongs[0].id);
-    }
-  }, [activeSongId, targetSongs, selectedSongId]);
-
-  // Synchronize target member if activeMemberId changes
-  useEffect(() => {
-    if (activeMemberId) {
-      setSelectedMemberId(activeMemberId);
-    } else if (targetMembers.length > 0 && !selectedMemberId) {
-      setSelectedMemberId(targetMembers[0].id);
-    }
-  }, [activeMemberId, targetMembers, selectedMemberId]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -90,8 +73,13 @@ export function RoomReactionToolbar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSelector]);
 
-  const selectedSong = targetSongs.find((s) => s.id === selectedSongId) ?? targetSongs[0] ?? null;
-  const selectedMember = targetMembers.find((m) => m.id === selectedMemberId) ?? targetMembers[0] ?? null;
+  // Resolve effective target song
+  const currentSongId = selectedSongId ?? activeSongId ?? targetSongs[0]?.id ?? null;
+  const selectedSong = targetSongs.find((s) => s.id === currentSongId) ?? targetSongs[0] ?? null;
+
+  // Resolve effective target member
+  const currentMemberId = selectedMemberId ?? activeMemberId ?? targetMembers[0]?.id ?? null;
+  const selectedMember = targetMembers.find((m) => m.id === currentMemberId) ?? targetMembers[0] ?? null;
 
   const handleSendReaction = useCallback((reaction: ReactionType) => {
     const now = Date.now();
@@ -147,20 +135,26 @@ export function RoomReactionToolbar({
           <button
             type="button"
             onClick={() => setShowSelector((prev) => !prev)}
-            className="flex items-center gap-1.5 max-w-[160px] sm:max-w-[200px] px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs text-foreground transition-all active:scale-95"
+            className="flex items-center gap-1.5 max-w-[160px] sm:max-w-[200px] px-2.5 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs text-white transition-all active:scale-95 border border-white/10"
             title="选择要互动的歌曲"
           >
             <MusicIcon className="w-3.5 h-3.5 text-accent shrink-0" />
             <span className="truncate font-medium">{selectedSong ? selectedSong.title : "选择歌曲"}</span>
-            <ChevronDownIcon className={`w-3 h-3 text-foreground-muted transition-transform shrink-0 ${showSelector ? "rotate-180" : ""}`} />
+            <ChevronDownIcon className={`w-3 h-3 text-white/70 transition-transform shrink-0 ${showSelector ? "rotate-180" : ""}`} />
           </button>
         ) : null}
 
         {/* Dropdown Menu for choosing songs */}
         {showSelector && targetSongs.length > 0 && (
-          <div className="absolute bottom-full left-0 mb-2 w-64 max-h-56 overflow-y-auto overscroll-contain rounded-2xl p-1.5 bg-background/95 backdrop-blur-2xl border border-surface-border shadow-2xl z-50 animate-fade-in hide-scrollbar">
-            <p className="px-2.5 py-1 text-[11px] font-semibold text-foreground-muted">选择互动曲目</p>
-            <div className="space-y-1 mt-1">
+          <div
+            className="absolute bottom-full left-0 mb-2 w-72 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-[#18181b] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 animate-fade-in hide-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-2 py-1 border-b border-white/10 mb-1">
+              <span className="text-[11px] font-semibold text-white/70">选择互动歌曲</span>
+              <span className="text-[10px] text-white/40">{targetSongs.length} 首可选</span>
+            </div>
+            <div className="space-y-1">
               {targetSongs.map((song) => {
                 const isSelected = song.id === selectedSong?.id;
                 return (
@@ -171,16 +165,26 @@ export function RoomReactionToolbar({
                       setSelectedSongId(song.id);
                       setShowSelector(false);
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-xs text-left transition-all ${
-                      isSelected ? "bg-accent text-white font-semibold" : "hover:bg-white/[0.06] text-foreground"
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs text-left transition-all ${
+                      isSelected
+                        ? "bg-accent text-white font-semibold shadow-md"
+                        : "hover:bg-white/10 text-white/90"
                     }`}
                   >
-                    <span className="truncate">《{song.title}》</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">《{song.title}》</p>
+                      {song.artist && (
+                        <p className={`text-[10px] truncate mt-0.5 ${isSelected ? "text-white/80" : "text-white/50"}`}>
+                          {song.artist}
+                        </p>
+                      )}
+                    </div>
                     {song.requesterName && (
-                      <span className={`text-[10px] shrink-0 ${isSelected ? "text-white/80" : "text-foreground-muted"}`}>
+                      <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-white/10 text-white/70"}`}>
                         @{song.requesterName}
                       </span>
                     )}
+                    {isSelected && <CheckIcon className="w-3.5 h-3.5 text-white shrink-0 ml-1" />}
                   </button>
                 );
               })}
@@ -228,22 +232,28 @@ export function RoomReactionToolbar({
           <button
             type="button"
             onClick={() => setShowSelector((prev) => !prev)}
-            className="flex items-center gap-1.5 max-w-[150px] sm:max-w-[180px] px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs text-foreground transition-all active:scale-95"
+            className="flex items-center gap-1.5 max-w-[160px] sm:max-w-[190px] px-2.5 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs text-white transition-all active:scale-95 border border-white/10"
             title="选择要互动的成员"
           >
             <UsersIcon className="w-3.5 h-3.5 text-accent shrink-0" />
             <span className="truncate font-medium">
               {selectedMember?.isHost ? `👑 @${selectedMember.nickname}` : `@${selectedMember?.nickname ?? "成员"}`}
             </span>
-            <ChevronDownIcon className={`w-3 h-3 text-foreground-muted transition-transform shrink-0 ${showSelector ? "rotate-180" : ""}`} />
+            <ChevronDownIcon className={`w-3 h-3 text-white/70 transition-transform shrink-0 ${showSelector ? "rotate-180" : ""}`} />
           </button>
         ) : null}
 
         {/* Dropdown Menu for choosing members */}
         {showSelector && targetMembers.length > 0 && (
-          <div className="absolute bottom-full left-0 mb-2 w-56 max-h-56 overflow-y-auto overscroll-contain rounded-2xl p-1.5 bg-background/95 backdrop-blur-2xl border border-surface-border shadow-2xl z-50 animate-fade-in hide-scrollbar">
-            <p className="px-2.5 py-1 text-[11px] font-semibold text-foreground-muted">选择互动成员</p>
-            <div className="space-y-1 mt-1">
+          <div
+            className="absolute bottom-full left-0 mb-2 w-64 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-[#18181b] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 animate-fade-in hide-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-2 py-1 border-b border-white/10 mb-1">
+              <span className="text-[11px] font-semibold text-white/70">选择互动成员</span>
+              <span className="text-[10px] text-white/40">{targetMembers.length} 人在线</span>
+            </div>
+            <div className="space-y-1">
               {targetMembers.map((member) => {
                 const isSelected = member.id === selectedMember?.id;
                 return (
@@ -254,16 +264,26 @@ export function RoomReactionToolbar({
                       setSelectedMemberId(member.id);
                       setShowSelector(false);
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-xs text-left transition-all ${
-                      isSelected ? "bg-accent text-white font-semibold" : "hover:bg-white/[0.06] text-foreground"
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs text-left transition-all ${
+                      isSelected
+                        ? "bg-accent text-white font-semibold shadow-md"
+                        : "hover:bg-white/10 text-white/90"
                     }`}
                   >
-                    <span className="truncate">@{member.nickname}</span>
-                    {member.isHost && (
-                      <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-accent/15 text-accent"}`}>
-                        主理人
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10 text-[10px] font-bold text-white shrink-0">
+                        {member.nickname.slice(0, 1).toUpperCase()}
                       </span>
-                    )}
+                      <span className="truncate font-medium">@{member.nickname}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {member.isHost && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-accent/20 text-accent font-semibold"}`}>
+                          主理人
+                        </span>
+                      )}
+                      {isSelected && <CheckIcon className="w-3.5 h-3.5 text-white" />}
+                    </div>
                   </button>
                 );
               })}

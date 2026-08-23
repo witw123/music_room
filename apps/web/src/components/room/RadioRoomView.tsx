@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
@@ -25,6 +25,14 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
   const [rightTab, setRightTab] = useState<RadioRightTab>("chat");
+
+  const targetMembers = useMemo(() => {
+    return props.roomSnapshot.room.members.map((m) => ({
+      id: m.id,
+      nickname: m.nickname,
+      isHost: m.id === props.roomSnapshot.room.hostId
+    }));
+  }, [props.roomSnapshot.room.members, props.roomSnapshot.room.hostId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
@@ -67,11 +75,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
               roomId={props.roomSnapshot.room.id}
               socket={props.socket}
               variant="radio"
-              targetMembers={props.roomSnapshot.room.members.map((m) => ({
-                id: m.id,
-                nickname: m.nickname,
-                isHost: m.id === props.roomSnapshot.room.hostId
-              }))}
+              targetMembers={targetMembers}
               activeMemberId={props.roomSnapshot.room.hostId}
             />
           </div>
