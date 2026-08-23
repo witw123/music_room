@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   clearLocalOtherFiles,
@@ -11,6 +11,10 @@ import {
   getLocalAudioStorageState,
   type LocalAudioStorageState
 } from "@/features/library/local-audio-storage";
+import {
+  cancelSelectedLocalDirectorySync,
+  syncSelectedLocalDirectoryTracks
+} from "@/features/playlist/local-playlist";
 
 export function LocalStorageManagementCard() {
   const [state, setState] = useState<LocalAudioStorageState | null>(null);
@@ -24,7 +28,7 @@ export function LocalStorageManagementCard() {
   const [message, setMessage] = useState<string | null>(null);
   const pending = pendingAction !== null;
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const [nextState, stats] = await Promise.all([
       getLocalAudioStorageState(),
       getLocalAudioStorageStats()
@@ -36,33 +40,37 @@ export function LocalStorageManagementCard() {
     setSavedBytes(stats.saved.bytes);
     setOtherFileCount(stats.other.fileCount);
     setOtherBytes(stats.other.bytes);
-  };
+  }, []);
 
   useEffect(() => {
-    void refresh().catch(() => setMessage("无法读取本地目录状态。"));
-  }, []);
+    let disposed = false;
+    void (async () => {
+      try {
+        const nextState = await getLocalAudioStorageState();
+        if (nextState.directoryName) {
+          await syncSelectedLocalDirectoryTracks();
+        }
+        if (!disposed) await refresh();
+      } catch {
+        if (!disposed) setMessage("无法同步本地目录状态。");
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [refresh]);
 
   const choose = async () => {
     if (pending) return;
     setPendingAction("choose");
     setMessage(null);
     try {
+      cancelSelectedLocalDirectorySync();
       const name = await chooseLocalAudioDirectory();
-      setState({
-        supported: true,
-        directoryName: name,
-        savedFileHashes: [],
-        cachedFileHashes: [],
-        permission: "granted"
-      });
-      setCacheBytes(0);
-      setCachedTrackCount(0);
-      setSavedBytes(0);
-      setSavedTrackCount(0);
-      setOtherBytes(0);
-      setOtherFileCount(0);
-      setMessage(`本地歌曲保存位置已设置为“${name}”。`);
-      void refresh().catch(() => undefined);
+      setMessage(`正在同步“${name}”中的本地歌曲…`);
+      await syncSelectedLocalDirectoryTracks();
+      await refresh();
+      setMessage(`本地歌曲保存位置已设置为“${name}”，目录数据已同步。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
     } finally {

@@ -136,6 +136,7 @@ export type LocalAudioStorageKind = "cache" | "saved";
 export type LocalAudioFileRecord = {
   fileHash: string;
   fileName: string;
+  lastModified?: number;
   relativePath?: string;
   storageKind?: LocalAudioStorageKind;
   source?: "directory-scan";
@@ -168,6 +169,7 @@ export type LocalPlaylistTrackRecord = {
   providerTrackId: string | null;
   fileHash: string | null;
   fileName: string | null;
+  lastModified?: number;
   sourceDirectoryId?: string | null;
   availableOffline: boolean;
   source?: "directory-scan";
@@ -1087,7 +1089,8 @@ export async function upsertLocalPlaylistTrack(
   input: Omit<LocalPlaylistTrackRecord, "createdAt" | "updatedAt"> & {
     createdAt?: string;
     updatedAt?: string;
-  }
+  },
+  options?: { persistRepository?: boolean }
 ) {
   const existing = await musicRoomDatabase.localPlaylistTracks.get(input.id);
   const now = new Date().toISOString();
@@ -1096,15 +1099,17 @@ export async function upsertLocalPlaylistTrack(
     createdAt: input.createdAt ?? existing?.createdAt ?? now,
     updatedAt: input.updatedAt ?? now
   });
-  const directory = await musicRoomDatabase.localAudioDirectory.get("default");
-  if (directory) {
-    await LocalRepository.open(directory.handle, { recover: false })
-      .then((repository) => repository.writeProviderTrack(input.id, {
-        ...input,
-        createdAt: input.createdAt ?? existing?.createdAt ?? now,
-        updatedAt: input.updatedAt ?? now
-      }))
-      .catch(() => undefined);
+  if (options?.persistRepository !== false) {
+    const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+    if (directory) {
+      await LocalRepository.open(directory.handle, { recover: false })
+        .then((repository) => repository.writeProviderTrack(input.id, {
+          ...input,
+          createdAt: input.createdAt ?? existing?.createdAt ?? now,
+          updatedAt: input.updatedAt ?? now
+        }))
+        .catch(() => undefined);
+    }
   }
 }
 

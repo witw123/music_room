@@ -80,6 +80,9 @@ export function VinylAuraVisualizer({
     };
 
     const scheduleNextFrame = () => {
+      if (!isPlaying || reducedMotion) {
+        return;
+      }
       timeoutId = window.setTimeout(() => {
         animationFrameId = window.requestAnimationFrame(draw);
       }, frameDelayMs);

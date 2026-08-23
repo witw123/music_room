@@ -450,7 +450,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       pendingData: false,
       pendingMedia: false
     }));
-    void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
   });
 
   socket.on("room.playback.patch", ({ playback }) => {
@@ -506,7 +505,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
-    void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
   });
 
   socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
@@ -540,7 +538,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     });
     realtimeEventGate.acceptRoomRevision(roomRevision, currentSnapshot);
     input.lastRealtimeRoomEventAtRef.current = Date.now();
-    void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
     if (presenceAccepted) {
       input.resyncRealtimePeers(members);
     }
@@ -581,7 +578,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
-    void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
   });
 
   socket.on("room.playback.readiness", (payload) => {

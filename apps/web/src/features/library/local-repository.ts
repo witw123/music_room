@@ -208,6 +208,11 @@ export class LocalRepository {
     await writeJsonFile(this.dataDirectory, repositoryManifestFileName, this.manifest);
   }
 
+  async commitCatalogChanges() {
+    await this.writeCatalogIndex();
+    await this.touch();
+  }
+
   async listFiles() {
     return listFilesFromDirectory(this.dataDirectory, localRepositoryDirectoryName);
   }

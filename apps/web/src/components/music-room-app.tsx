@@ -172,9 +172,12 @@ export function MusicRoomApp({
 
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
     usePeerDiagnostics({
-      // Members panel needs sub-second upload/download updates for every peer.
+      // Keep normal room rendering on the low-frequency diagnostics path.
+      // Every stats sample updates the diagnostics object; flushing those
+      // updates at 200ms while the room is open makes the whole workspace
+      // re-render continuously and eventually starves button interaction.
+      // The members/diagnostics surfaces opt into the faster view when open.
       highFrequencyEnabled:
-        !!roomSnapshot ||
         pageState.activeDashboardTab === "members" ||
         pageState.isDiagnosticsPanelOpen,
       highFrequencyFlushDelayMs: 200

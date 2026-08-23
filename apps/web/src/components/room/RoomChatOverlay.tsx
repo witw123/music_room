@@ -201,11 +201,13 @@ function mergeMessages(
   left: RoomChatMessage[],
   right: RoomChatMessage[]
 ) {
+  const maxMessages = 500;
   const messages = new Map<string, RoomChatMessage>();
   for (const message of [...left, ...right]) messages.set(message.id, message);
-  return [...messages.values()].sort((first, second) =>
+  const sortedMessages = [...messages.values()].sort((first, second) =>
     first.timestamp - second.timestamp || first.id.localeCompare(second.id)
   );
+  return sortedMessages.slice(-maxMessages);
 }
 
 export function formatChatTime(timestamp: number) {

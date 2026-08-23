@@ -17,7 +17,8 @@ import {
 import {
   chooseLocalAudioSourceDirectory,
   listLocalAudioFilesInDirectory,
-  listSelectedLocalAudioFiles
+  listSelectedLocalAudioFiles,
+  yieldToBrowser
 } from "@/features/library/local-audio-storage";
 import { readEmbeddedAudioMetadata } from "@/features/library/audio-metadata";
 import { getConfiguredLocalRepository } from "@/features/library/local-audio-storage";
@@ -48,6 +49,8 @@ const defaultLocalPlaylistTitle = "项目根目录";
 const directoryScanSource = "directory-scan" as const;
 let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
 let localPlaylists: LocalPlaylistRecord[] = [];
+let selectedDirectorySyncPromise: Promise<number> | null = null;
+let selectedDirectorySyncController: AbortController | null = null;
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
   return localPlaylists;
@@ -319,9 +322,39 @@ export async function listMergedLocalPlaylistTracks() {
   return [...reconciledExplicit, ...derived];
 }
 
-export async function syncSelectedLocalDirectoryTracks() {
-  const selectedFiles = await listSelectedLocalAudioFiles();
-  if (!selectedFiles) return 0;
+export function syncSelectedLocalDirectoryTracks(options?: { signal?: AbortSignal }) {
+  if (selectedDirectorySyncPromise) return selectedDirectorySyncPromise;
+
+  const controller = new AbortController();
+  selectedDirectorySyncController = controller;
+  const abortFromCaller = () => controller.abort();
+  if (options?.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener("abort", abortFromCaller, { once: true });
+  }
+  const syncPromise = performSelectedLocalDirectorySync({ signal: controller.signal });
+  const settledPromise = syncPromise.finally(() => {
+    options?.signal?.removeEventListener("abort", abortFromCaller);
+    if (selectedDirectorySyncPromise === settledPromise) {
+      selectedDirectorySyncPromise = null;
+      selectedDirectorySyncController = null;
+    }
+  });
+  selectedDirectorySyncPromise = settledPromise;
+  return settledPromise;
+}
+
+export function cancelSelectedLocalDirectorySync() {
+  selectedDirectorySyncController?.abort();
+  selectedDirectorySyncController = null;
+  selectedDirectorySyncPromise = null;
+}
+
+async function performSelectedLocalDirectorySync(options?: { signal?: AbortSignal }) {
+  const selectedFiles = await listSelectedLocalAudioFiles(options);
+  if (!selectedFiles) {
+    throw new Error("无法读取所选本地目录，请重新授权后重试。");
+  }
 
   const [existingTracks, existingFiles] = await Promise.all([
     listLocalPlaylistTracks(),
@@ -332,40 +365,62 @@ export async function syncSelectedLocalDirectoryTracks() {
       .filter((track) => !!track.fileHash)
       .map((track) => [track.fileHash!, track])
   );
+  const existingByFileName = new Map(
+    existingTracks
+      .filter((track) => track.source === directoryScanSource && !!track.fileName && !!track.fileHash)
+      .map((track) => [track.fileName!, track])
+  );
   const scanTimestamp = Date.now();
 
-  const scannedTracks = await Promise.all(
-    selectedFiles.map(async ({ file, fileName }, index) => {
-      const fileHash = await hashAudioBlob(file);
-      const metadata = await readDirectoryTrackMetadata(file);
-      const existing = existingByHash.get(fileHash);
-      // IndexedDB returns tracks by updatedAt descending, so earlier scan entries get later timestamps.
-      const now = existing?.updatedAt ?? new Date(scanTimestamp - index).toISOString();
-      return {
-        track: {
-          id: `local-file:${fileHash}`,
-          title: metadata.title,
-          artist: metadata.artist,
-          album: metadata.album,
-          durationMs: metadata.durationMs,
-          mimeType: file.type || inferAudioMimeType(file.name),
-          sizeBytes: file.size,
-          artworkUrl: metadata.artworkUrl,
-          lyrics: metadata.lyrics,
-          provider: "local_upload" as const,
-          providerTrackId: null,
-          fileHash,
-          fileName,
-          availableOffline: true,
-          source: directoryScanSource,
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now
-        } satisfies LocalPlaylistTrackRecord,
+  const scannedTracks: Array<{ track: LocalPlaylistTrackRecord; fileHash: string; fileName: string }> = [];
+  for (const [index, { file, fileName, lastModified }] of selectedFiles.entries()) {
+    throwIfAborted(options?.signal);
+    const previous = existingByFileName.get(fileName);
+    const previousLastModified = previous?.lastModified ?? null;
+    const canReuse = !!previous?.fileHash &&
+      previous.sizeBytes === file.size &&
+      previousLastModified !== null &&
+      previousLastModified === lastModified;
+    const fileHash = canReuse ? previous.fileHash! : await hashAudioBlob(file);
+    const existing = existingByHash.get(fileHash) ?? previous;
+    const metadata = canReuse
+      ? {
+          title: previous.title,
+          artist: previous.artist,
+          album: previous.album,
+          durationMs: previous.durationMs,
+          artworkUrl: previous.artworkUrl,
+          lyrics: previous.lyrics
+        }
+      : await readDirectoryTrackMetadata(file);
+    // IndexedDB returns tracks by updatedAt descending, so earlier scan entries get later timestamps.
+    const now = existing?.updatedAt ?? new Date(scanTimestamp - index).toISOString();
+    scannedTracks.push({
+      track: {
+        id: `local-file:${fileHash}`,
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        durationMs: metadata.durationMs,
+        mimeType: file.type || inferAudioMimeType(file.name),
+        sizeBytes: file.size,
+        artworkUrl: metadata.artworkUrl,
+        lyrics: metadata.lyrics,
+        provider: "local_upload" as const,
+        providerTrackId: null,
         fileHash,
-        fileName
-      };
-    })
-  );
+        fileName,
+        lastModified,
+        availableOffline: true,
+        source: directoryScanSource,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now
+      } satisfies LocalPlaylistTrackRecord,
+      fileHash,
+      fileName
+    });
+    await yieldToBrowser();
+  }
 
   const currentHashes = new Set(scannedTracks.map((item) => item.fileHash));
   const staleTracks = existingTracks.filter((track) =>
@@ -379,21 +434,36 @@ export async function syncSelectedLocalDirectoryTracks() {
     ...staleTracks.map((track) => deleteLocalPlaylistTrack(track.id)),
     ...staleFiles.map((file) => deleteLocalAudioFileRecord(file.fileHash, "saved"))
   ]);
-  await Promise.all(
-    scannedTracks.flatMap(({ track, fileHash, fileName }) => [
-      upsertLocalPlaylistTrack(track),
+  for (const { track, fileHash, fileName } of scannedTracks) {
+    throwIfAborted(options?.signal);
+    await Promise.all([
+      upsertLocalPlaylistTrack(track, { persistRepository: false }),
       saveLocalAudioFileRecord({
         fileHash,
         fileName,
+        lastModified: track.lastModified,
         storageKind: "saved",
         source: directoryScanSource
       })
-    ])
-  );
+    ]);
+    await yieldToBrowser();
+  }
 
   const repository = await getConfiguredLocalRepository();
   if (repository) {
+    const repositoryTracks = await repository.listTracks();
+    const staleRepositoryTracks = repositoryTracks.filter((track) =>
+      track.retention === "library" &&
+      track.source.kind === "external" &&
+      !!track.source.relativePath &&
+      !currentHashes.has(track.fileHash)
+    );
+    for (const track of staleRepositoryTracks) {
+      throwIfAborted(options?.signal);
+      await repository.deleteTrack(track.fileHash, { updateCatalog: false });
+    }
     for (const { track, fileName } of scannedTracks) {
+      throwIfAborted(options?.signal);
       await repository.writeTrack(createRepositoryTrackRecord({
         fileHash: track.fileHash!,
         title: track.title,
@@ -408,14 +478,22 @@ export async function syncSelectedLocalDirectoryTracks() {
         source: {
           kind: "external",
           relativePath: fileName,
-          sizeBytes: track.sizeBytes
+          sizeBytes: track.sizeBytes,
+          lastModified: track.lastModified
         },
         retention: "library"
-      }));
+      }), { updateCatalog: false });
     }
+    await repository.commitCatalogChanges();
   }
 
   return scannedTracks.length;
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new DOMException("Local directory scan was cancelled.", "AbortError");
+  }
 }
 
 export async function importLocalPlaylistDirectoryTracks(existingSourceDirectoryId?: string | null) {
@@ -432,12 +510,12 @@ export async function importLocalPlaylistDirectoryTracks(existingSourceDirectory
     name: directory.name
   });
 
-  const selectedFilesWithHashes = await Promise.all(
-    selectedFiles.map(async (entry) => ({
-      ...entry,
-      fileHash: await hashAudioBlob(entry.file)
-    }))
-  );
+  const selectedFilesWithHashes: Array<(typeof selectedFiles)[number] & { fileHash: string }> = [];
+  for (const entry of selectedFiles) {
+    const fileHash = await hashAudioBlob(entry.file);
+    selectedFilesWithHashes.push({ ...entry, fileHash });
+    await yieldToBrowser();
+  }
   const currentHashes = new Set(selectedFilesWithHashes.map((entry) => entry.fileHash));
   const [existingTracks, existingFiles] = await Promise.all([
     listLocalPlaylistTracks(),
@@ -478,7 +556,7 @@ export async function importLocalPlaylistDirectoryTracks(existingSourceDirectory
   ]);
 
   const importedTracks: LocalPlaylistTrackRecord[] = [];
-  for (const { file, fileName, fileHash } of selectedFilesWithHashes) {
+  for (const { file, fileName, fileHash, lastModified } of selectedFilesWithHashes) {
     const metadata = await readDirectoryTrackMetadata(file);
     const mimeType = file.type || inferAudioMimeType(file.name);
     const now = new Date().toISOString();
@@ -496,6 +574,7 @@ export async function importLocalPlaylistDirectoryTracks(existingSourceDirectory
       providerTrackId: null,
       fileHash,
       fileName,
+      lastModified,
       sourceDirectoryId,
       availableOffline: true,
       createdAt: now,
@@ -504,11 +583,13 @@ export async function importLocalPlaylistDirectoryTracks(existingSourceDirectory
     await saveLocalAudioFileRecord({
       fileHash,
       fileName,
+      lastModified,
       storageKind: "saved",
       sourceDirectoryId
     });
     await upsertLocalPlaylistTrack(track);
     importedTracks.push(track);
+    await yieldToBrowser();
   }
   return {
     sourceDirectoryId,

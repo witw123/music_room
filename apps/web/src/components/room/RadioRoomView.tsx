@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
-import { formatDuration, getOnlineMemberCount } from "@/lib/domain/music-room-ui";
+import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { MembersPanel } from "./MembersPanel";
 import { RoomChatPanel } from "./RoomChatOverlay";
@@ -22,7 +22,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
-  const onlineCount = getOnlineMemberCount(props.roomSnapshot.room.members);
+  const [rightTab, setRightTab] = useState<RadioRightTab>("chat");
 
   useEffect(() => {
     const timer = window.setInterval(() => setMembershipNow(Date.now()), 60_000);
@@ -31,43 +31,21 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className="mx-auto grid min-h-full w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-visible lg:z-auto lg:h-full lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
-          <div className="shrink-0 px-4 pt-3 pb-1 flex items-center justify-between gap-3 text-xs border-b border-white/[0.04]">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                <span>LIVE ON AIR</span>
-              </span>
-              <span className="font-semibold text-foreground/90">{props.roomSnapshot.room.name || "电台广播"}</span>
-            </div>
-            <div className="flex items-center gap-3 text-[11px] text-foreground-muted">
-              {props.host ? <span>DJ: <strong className="text-accent font-medium">{props.host.nickname}</strong></span> : null}
-              <span className="font-mono">{onlineCount} 人在线</span>
-            </div>
-          </div>
+      <section className="mx-auto grid min-h-[calc(100dvh-var(--room-mobile-bottom-inset))] w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+        <div className="relative z-10 flex min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
           <div className="min-h-0 flex-1">
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
           </div>
         </div>
-        <div className="relative z-0 min-h-0 min-w-0 overflow-visible lg:grid lg:h-full lg:min-h-0 lg:grid-rows-[minmax(0,1fr)_minmax(18rem,1fr)] lg:overflow-hidden">
-          <div className="min-h-[24rem] min-w-0 rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:overflow-y-auto lg:rounded-none lg:border-0 lg:border-b">
+        <div className="relative z-0 min-h-[32rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background lg:h-full lg:min-h-0 lg:overflow-y-auto lg:rounded-none lg:border-0">
+          <div className="min-h-0">
             {isHost ? <HostBroadcastDesk {...props} /> : <RadioMembersPanel {...props} membershipNow={membershipNow} />}
-          </div>
-          <div className="mt-3 h-[28rem] min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background sm:h-[30rem] lg:mt-0 lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">
-            <RoomChatPanel
-              activeSession={props.activeSession}
-              isHost={isHost}
-              roomId={props.roomSnapshot.room.id}
-              scrollEnabled
-              socket={props.socket}
-            />
           </div>
         </div>
       </section>
 
-      <section className={`mx-auto mt-3 grid w-full max-w-[1600px] gap-3 px-3 lg:mt-0 lg:min-h-[32rem] lg:gap-0 lg:px-0 ${isHost ? "lg:grid-cols-[minmax(0,64fr)_minmax(18rem,36fr)]" : "lg:grid-cols-1"}`} data-testid="radio-room-workspace">
-        <div className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
+      <section className="mx-auto mt-3 grid min-h-[calc(100dvh-var(--room-mobile-bottom-inset))] w-full max-w-[1600px] gap-3 px-3 lg:mt-3 lg:min-h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0" data-testid="radio-room-workspace">
+        <div className="flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
           <RadioWorkspaceTabs
             activeTab={leftTab}
             ariaLabel="电台内容"
@@ -103,13 +81,35 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             )}
           </div>
         </div>
-        {isHost ? <RadioMembersPanel {...props} membershipNow={membershipNow} /> : null}
+        <div className="flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0">
+          <RadioWorkspaceTabs
+            activeTab={rightTab}
+            ariaLabel="房间信息"
+            panelPrefix="radio-right"
+            onChange={setRightTab}
+            tabs={[{ id: "chat", label: "聊天" }, { id: "members", label: "成员" }]}
+          />
+          <div aria-labelledby={`radio-right-tab-${rightTab}`} className="min-h-0 flex-1" id={`radio-right-panel-${rightTab}`} role="tabpanel">
+            {rightTab === "chat" ? (
+              <RoomChatPanel
+                activeSession={props.activeSession}
+                isHost={isHost}
+                roomId={props.roomSnapshot.room.id}
+                scrollEnabled
+                socket={props.socket}
+              />
+            ) : (
+              <RadioMembersPanel {...props} membershipNow={membershipNow} />
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );
 }
 
 type RadioLeftTab = "queue" | "library";
+type RadioRightTab = "chat" | "members";
 
 function RadioWorkspaceTabs<T extends string>({
   activeTab,

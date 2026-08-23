@@ -38,7 +38,6 @@ export {
   getCachedLibraryTrackByProviderTrack,
   getCachedLibraryTrackSummary
 } from "./indexeddb";
-import { hydrateLocalRepository } from "./local-repository-hydration";
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 import { resolveLocalArtworkUrl } from "./audio-metadata";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -87,6 +86,7 @@ const localOtherFilePrefixes = [
 export type SelectedLocalAudioFile = {
   file: File;
   fileName: string;
+  lastModified: number;
 };
 
 export function supportsLocalAudioDirectory() {
@@ -112,12 +112,6 @@ export async function chooseLocalAudioDirectory() {
     repositoryId: repository.manifest.repositoryId,
     schemaVersion: repository.manifest.schemaVersion
   });
-  setTimeout(() => {
-    void enqueueLocalRepositoryWrite(async () => {
-      const recoveredRepository = await LocalRepository.open(handle);
-      await hydrateLocalRepository(recoveredRepository);
-    }).catch(() => undefined);
-  }, 0);
   return handle.name;
 }
 
@@ -168,7 +162,7 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   };
 }
 
-export async function listSelectedLocalAudioFiles(): Promise<SelectedLocalAudioFile[] | null> {
+export async function listSelectedLocalAudioFiles(options?: { signal?: AbortSignal }): Promise<SelectedLocalAudioFile[] | null> {
   const directory = await getLocalAudioDirectory();
   if (!directory) return [];
 
@@ -179,8 +173,9 @@ export async function listSelectedLocalAudioFiles(): Promise<SelectedLocalAudioF
 
   const files: SelectedLocalAudioFile[] = [];
   try {
-    await collectSelectedLocalAudioFiles(directory.handle, "", files);
-  } catch {
+    await collectSelectedLocalAudioFiles(directory.handle, "", files, options?.signal);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return null;
   }
   return files;
@@ -196,7 +191,10 @@ export async function chooseLocalAudioSourceDirectory() {
   return picker({ mode: "read" });
 }
 
-export async function listLocalAudioFilesInDirectory(directory: FileSystemDirectoryHandle): Promise<SelectedLocalAudioFile[] | null> {
+export async function listLocalAudioFilesInDirectory(
+  directory: FileSystemDirectoryHandle,
+  options?: { signal?: AbortSignal }
+): Promise<SelectedLocalAudioFile[] | null> {
   const permission = await asPermissionedHandle(directory)
     .queryPermission({ mode: "read" })
     .catch(() => "denied" as PermissionState);
@@ -204,8 +202,9 @@ export async function listLocalAudioFilesInDirectory(directory: FileSystemDirect
 
   const files: SelectedLocalAudioFile[] = [];
   try {
-    await collectSelectedLocalAudioFiles(directory, "", files);
-  } catch {
+    await collectSelectedLocalAudioFiles(directory, "", files, options?.signal);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return null;
   }
   return files;
@@ -836,12 +835,17 @@ export async function getLocalAudioStorageStats(): Promise<LocalAudioStorageStat
   ]);
   const tracks = repository ? await repository.listTracks() : [];
   const tracksByHash = new Map(tracks.map((track) => [track.fileHash, track] as const));
-  const savedSizes = await Promise.all(savedFiles.map(async (file) => {
+  const savedSizes: number[] = [];
+  for (const file of savedFiles) {
     const track = tracksByHash.get(file.fileHash);
-    if (track?.source.kind === "managed") return track.sizeBytes;
+    if (track?.source.kind === "managed") {
+      savedSizes.push(track.sizeBytes);
+      continue;
+    }
     const localFile = await getLocalAudioFile(file.fileHash).catch(() => null);
-    return localFile?.size ?? track?.sizeBytes ?? 0;
-  }));
+    savedSizes.push(localFile?.size ?? track?.sizeBytes ?? 0);
+    await yieldToBrowser();
+  }
   const otherFiles = repository
     ? (await repository.listFiles()).filter(({ relativePath }) => isLocalOtherFile(relativePath))
     : [];
@@ -999,14 +1003,23 @@ function asPermissionedHandle(handle: FileSystemDirectoryHandle) {
 async function collectSelectedLocalAudioFiles(
   directory: FileSystemDirectoryHandle,
   parentPath: string,
-  files: SelectedLocalAudioFile[]
+  files: SelectedLocalAudioFile[],
+  signal?: AbortSignal,
+  counter = { value: 0 }
 ) {
   for await (const entry of (directory as IterableDirectoryHandle).values()) {
+    if (signal?.aborted) {
+      throw new DOMException("Local directory scan was cancelled.", "AbortError");
+    }
+    counter.value += 1;
+    if (counter.value % 24 === 0) {
+      await yieldToBrowser();
+    }
     const fileName = parentPath ? `${parentPath}/${entry.name}` : entry.name;
     if (entry.kind === "file") {
       const file = await entry.getFile();
       if (isAudioFile(file)) {
-        files.push({ file, fileName });
+        files.push({ file, fileName, lastModified: file.lastModified });
       }
       continue;
     }
@@ -1015,8 +1028,16 @@ async function collectSelectedLocalAudioFiles(
     if (!parentPath && entry.name === ".music-room") {
       continue;
     }
-    await collectSelectedLocalAudioFiles(entry, fileName, files);
+    await collectSelectedLocalAudioFiles(entry, fileName, files, signal, counter);
   }
+}
+
+export function yieldToBrowser() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function isAudioFile(file: File) {
@@ -1034,21 +1055,24 @@ async function filterReadableLocalFiles(
   allowExternalRootFiles: boolean
 ) {
   const repository = await LocalRepository.open(root, { recover: false }).catch(() => null);
-  const available = await Promise.all(records.map(async (record) => {
+  const available: string[] = [];
+  for (const record of records) {
     if (record.relativePath && repository && await repository.readPath(record.relativePath)) {
-      return record.fileHash;
+      available.push(record.fileHash);
+      await yieldToBrowser();
+      continue;
     }
     if (allowExternalRootFiles && record.source === "directory-scan") {
       try {
         await getFileByPath(root, record.fileName);
-        return record.fileHash;
+        available.push(record.fileHash);
       } catch {
         // The record points to a file that is no longer present.
       }
     }
-    return null;
-  }));
-  return available.filter((fileHash): fileHash is string => !!fileHash);
+    await yieldToBrowser();
+  }
+  return available;
 }
 
 async function getFileByPath(root: FileSystemDirectoryHandle, fileName: string) {

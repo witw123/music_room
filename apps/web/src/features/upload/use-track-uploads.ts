@@ -52,6 +52,7 @@ import {
   ensureDefaultLocalPlaylist,
   getDefaultLocalPlaylistTrackIds,
   listMergedLocalPlaylistTracks,
+  cancelSelectedLocalDirectorySync,
   restoreLocalPlaylistsFromRepository,
   syncSelectedLocalDirectoryTracks
 } from "@/features/playlist/local-playlist";
@@ -115,6 +116,9 @@ export function useTrackUploads(options: {
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
   const localDirectoryScanAttemptedRef = useRef(false);
+  const refreshCacheLibraryPromiseRef = useRef<Promise<void> | null>(null);
+  const refreshCacheLibraryQueuedRef = useRef(false);
+  const refreshCacheLibraryRef = useRef<(() => Promise<void>) | null>(null);
   const roomTrackIdsKey = [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])]
     .sort()
     .join("|");
@@ -128,45 +132,71 @@ export function useTrackUploads(options: {
     : "";
 
   const refreshCacheLibrary = useCallback(async () => {
-    let localStorageState = await getLocalAudioStorageState();
-    if (localStorageState.directoryName && !localDirectoryScanAttemptedRef.current) {
-      localDirectoryScanAttemptedRef.current = true;
-      await syncSelectedLocalDirectoryTracks().catch(() => undefined);
-      localStorageState = await getLocalAudioStorageState();
+    const activeRefresh = refreshCacheLibraryPromiseRef.current;
+    if (activeRefresh) {
+      refreshCacheLibraryQueuedRef.current = true;
+      return activeRefresh;
     }
-    const [snapshot, localPlaylistTracks, cacheStats] = await Promise.all([
-      loadCacheLibrarySnapshot({ listCachedLibraryTrackSummaries }),
-      listMergedLocalPlaylistTracks(),
-      getLocalAudioCacheStats()
-    ]);
-    await restoreLocalPlaylistsFromRepository();
-    const localPlaylists = ensureDefaultLocalPlaylist({
-      trackIds: getDefaultLocalPlaylistTrackIds(
+
+    const refreshPromise = (async () => {
+      const localStorageState = await getLocalAudioStorageState();
+      if (localStorageState.directoryName && !localDirectoryScanAttemptedRef.current) {
+        localDirectoryScanAttemptedRef.current = true;
+        void syncSelectedLocalDirectoryTracks()
+          .then(() => {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event(cacheLibraryChangedEventName));
+            }
+          })
+          .catch(() => undefined);
+      }
+      const [snapshot, localPlaylistTracks, cacheStats] = await Promise.all([
+        loadCacheLibrarySnapshot({ listCachedLibraryTrackSummaries }),
+        listMergedLocalPlaylistTracks(),
+        getLocalAudioCacheStats()
+      ]);
+      await restoreLocalPlaylistsFromRepository();
+      const localPlaylists = ensureDefaultLocalPlaylist({
+        trackIds: getDefaultLocalPlaylistTrackIds(
+          localPlaylistTracks,
+          new Set(localStorageState.savedFileHashes)
+        ),
+        sourceDirectoryName: localStorageState.directoryName
+      });
+      cacheLibraryTracksRef.current = snapshot.tracksByHash;
+      setCacheLibraryVersion((current) => current + 1);
+      const localCachedFileHashes = localStorageState.directoryName
+        ? new Set(localStorageState.cachedFileHashes)
+        : new Set<string>();
+      setLocalStorageSummary({
+        cacheBytes: cacheStats.bytes,
+        quotaBytes: null,
+        cachedTrackCount: cacheStats.fileCount,
+        cachedLibraryTracks: snapshot.tracks.filter((track) =>
+          localCachedFileHashes.has(track.fileHash)
+        ),
+        localPlaylists,
         localPlaylistTracks,
-        new Set(localStorageState.savedFileHashes)
-      ),
-      sourceDirectoryName: localStorageState.directoryName
-    });
-    cacheLibraryTracksRef.current = snapshot.tracksByHash;
-    setCacheLibraryVersion((current) => current + 1);
-    const localCachedFileHashes = localStorageState.directoryName
-      ? new Set(localStorageState.cachedFileHashes)
-      : new Set<string>();
-    setLocalStorageSummary({
-      cacheBytes: cacheStats.bytes,
-      quotaBytes: null,
-      cachedTrackCount: cacheStats.fileCount,
-      cachedLibraryTracks: snapshot.tracks.filter((track) =>
-        localCachedFileHashes.has(track.fileHash)
-      ),
-      localPlaylists,
-      localPlaylistTracks,
-      localFolderName: localStorageState.directoryName,
-      localCachedFileHashes: localStorageState.cachedFileHashes,
-      localSavedFileHashes: localStorageState.savedFileHashes,
-      supportsLocalFolder: localStorageState.supported
-    });
+        localFolderName: localStorageState.directoryName,
+        localCachedFileHashes: localStorageState.cachedFileHashes,
+        localSavedFileHashes: localStorageState.savedFileHashes,
+        supportsLocalFolder: localStorageState.supported
+      });
+    })();
+    refreshCacheLibraryPromiseRef.current = refreshPromise;
+    try {
+      await refreshPromise;
+    } finally {
+      if (refreshCacheLibraryPromiseRef.current === refreshPromise) {
+        refreshCacheLibraryPromiseRef.current = null;
+      }
+      if (refreshCacheLibraryQueuedRef.current) {
+        refreshCacheLibraryQueuedRef.current = false;
+        void refreshCacheLibraryRef.current?.();
+      }
+    }
   }, []);
+  refreshCacheLibraryRef.current = refreshCacheLibrary;
 
   useUploadRuntimeEffects({
     activeSession,
@@ -272,11 +302,14 @@ export function useTrackUploads(options: {
 
   const chooseLocalFolder = useCallback(async () => {
     try {
+      cancelSelectedLocalDirectorySync();
       const folderName = await chooseLocalAudioDirectory();
       localDirectoryScanAttemptedRef.current = false;
       if (roomSnapshot) {
         await persistRoomSnapshotToLocalRepository(roomSnapshot);
       }
+      await syncSelectedLocalDirectoryTracks();
+      localDirectoryScanAttemptedRef.current = true;
       await refreshCacheLibrary();
       setStatusMessage(`Music Room 本地存储仓库已设置为“${folderName}”，房间歌曲信息会自动镜像到该目录。`);
     } catch (error) {
