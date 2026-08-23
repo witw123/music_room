@@ -17,6 +17,7 @@ import type { Prisma } from "../../generated/prisma";
 import { RedisService } from "../../infra/redis/redis.service";
 import { NeteaseService } from "../providers/netease/netease.service";
 import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
+import { RoomService } from "../room/room.service";
 import {
   partitionDiscoveryRecommendations,
   rankRecommendationCandidates,
@@ -63,7 +64,8 @@ export class PersonalizationService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly netease: NeteaseService,
-    private readonly qqmusic: QqMusicService
+    private readonly qqmusic: QqMusicService,
+    private readonly roomService: RoomService
   ) {}
 
   async recordEvent(userId: string, input: RecordPersonalizationEvent) {
@@ -299,34 +301,31 @@ export class PersonalizationService {
     // Fetch Live Rooms for collaborative discovery
     let liveRooms: PersonalizationRecommendationsResponse["liveRooms"] = undefined;
     if (query.surface === "discover") {
-      const publicRooms = await this.prisma.roomState.findMany({
-        where: { visibility: "public" },
-        take: 6,
-        orderBy: { updatedAt: "desc" }
-      }).catch(() => []);
+      const publicRooms = await this.roomService.listPublicRooms().catch(() => []);
 
-      liveRooms = publicRooms.map((room) => {
-        const members = Array.isArray(room.members) ? room.members as Array<{ id?: string; nickname?: string; presenceState?: string; peerId?: string }> : [];
-        const tracks = Array.isArray(room.tracks) ? room.tracks as Array<{ id?: string; title?: string; artist?: string; artworkUrl?: string | null }> : [];
-        const playback = room.playback as { status?: string; currentTrackId?: string | null } | null;
-
-        const currentTrackRecord = playback?.currentTrackId
-          ? tracks.find((t) => t.id === playback.currentTrackId)
-          : (playback?.status === "playing" && tracks.length > 0 ? tracks[0] : null);
-
-        const hostMember = members.find((m) => m.id === room.hostId);
-        const onlineCount = members.filter((m) => m.presenceState === "online" && !!m.peerId).length;
+      liveRooms = publicRooms.slice(0, 6).map((snapshot) => {
+        const hostMember = snapshot.room.members.find((member) => member.id === snapshot.room.hostId);
+        const onlineCount = snapshot.room.members.filter(
+          (member) => member.presenceState === "online" && !!member.peerId
+        ).length;
+        const currentTrack = snapshot.room.playback.currentTrackId
+          ? snapshot.tracks.find((track) => track.id === snapshot.room.playback.currentTrackId) ?? null
+          : null;
 
         return {
-          roomId: room.id,
-          roomTitle: room.name || "未命名房间",
+          roomId: snapshot.room.id,
+          roomTitle: snapshot.room.name ?? "未命名房间",
           hostName: hostMember?.nickname || "房主",
-          mode: (room.roomType === "radio" ? "radio" : room.roomType === "request" ? "request" : "common") as "radio" | "request" | "common",
-          listenerCount: onlineCount > 0 ? onlineCount : members.length,
-          currentTrack: currentTrackRecord?.title ? {
-            title: currentTrackRecord.title,
-            artist: currentTrackRecord.artist || "未知歌手",
-            artworkUrl: currentTrackRecord.artworkUrl ?? null
+          mode: snapshot.room.roomType === "radio"
+            ? "radio"
+            : snapshot.room.roomType === "request"
+              ? "request"
+              : "common",
+          listenerCount: onlineCount,
+          currentTrack: currentTrack?.title ? {
+            title: currentTrack.title,
+            artist: currentTrack.artist,
+            artworkUrl: currentTrack.artworkUrl ?? null
           } : null
         };
       });

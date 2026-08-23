@@ -145,10 +145,10 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   return <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
     <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
-      <div className="min-h-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
+      <div className="relative z-10 min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
         <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
       </div>
-      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:rounded-none lg:border-0">
+      <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
         <header className="flex shrink-0 items-center justify-between px-4 pb-3 pt-4 sm:px-5 sm:pt-5 lg:px-6 border-b border-white/[0.04]">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/20 text-accent">
@@ -163,7 +163,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
             </span>
           </div>
         </header>
-        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-5 sm:px-5 lg:px-6">
+        <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
             {isHost ? <>
               <RoomProviderTrackSearch
@@ -243,7 +243,7 @@ function RequestRoomWorkspace(
 
     <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-library" role="tabpanel">
       <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">曲库</h2></header>
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+      <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 sm:px-4 lg:overflow-y-auto">
         <LibraryTabPanel
           activeSession={props.activeSession}
           canAddToQueue={props.isHost}
@@ -265,7 +265,7 @@ function RequestRoomWorkspace(
 
     <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-playlists" role="tabpanel">
       <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">歌单</h2></header>
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+      <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 sm:px-4 lg:overflow-y-auto">
         <LocalStorageTabPanel
           activeSession={props.activeSession}
           canManageLibrary={props.isHost}
@@ -291,7 +291,7 @@ function RequestRoomWorkspace(
 
     <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0`} id="request-workspace-members" role="tabpanel">
       <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
+      <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 sm:px-4 lg:overflow-y-auto">
         <MembersPanel
           activeSessionId={props.activeSession?.userId ?? null}
           isHost={props.isHost}

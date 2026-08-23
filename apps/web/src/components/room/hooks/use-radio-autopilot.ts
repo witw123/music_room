@@ -52,6 +52,11 @@ export function useRadioAutopilot({
   const pausedRef = useRef(false);
   const refillGenerationRef = useRef(0);
   const roomSnapshotRef = useRef(roomSnapshot);
+  const callbacksRef = useRef({
+    onImportNeteaseTrack,
+    onImportQqMusicTrack,
+    onRefreshRoom
+  });
   const isAutopilotEnabled = roomSnapshot.room.radioAutopilot?.enabled === true;
   const currentSeedKey = getCurrentAutopilotSeed(roomSnapshot)?.key ?? null;
   const isPlayingLastQueueItem = isRadioPlaybackAtQueueEnd(roomSnapshot);
@@ -59,6 +64,14 @@ export function useRadioAutopilot({
   useEffect(() => {
     roomSnapshotRef.current = roomSnapshot;
   }, [roomSnapshot]);
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onImportNeteaseTrack,
+      onImportQqMusicTrack,
+      onRefreshRoom
+    };
+  }, [onImportNeteaseTrack, onImportQqMusicTrack, onRefreshRoom]);
 
   useEffect(() => {
     refillGenerationRef.current += 1;
@@ -130,9 +143,9 @@ export function useRadioAutopilot({
             candidate: candidate.candidate
           }).catch(() => undefined);
         },
-        onImportNeteaseTrack,
-        onImportQqMusicTrack,
-        onRefreshRoom
+        onImportNeteaseTrack: callbacksRef.current.onImportNeteaseTrack,
+        onImportQqMusicTrack: callbacksRef.current.onImportQqMusicTrack,
+        onRefreshRoom: callbacksRef.current.onRefreshRoom
       });
       if (imported.kind === "cancelled") return;
       if (imported.kind === "failed") throw imported.error;
@@ -147,7 +160,7 @@ export function useRadioAutopilot({
     } finally {
       runningRef.current = false;
     }
-  }, [isHost, onImportNeteaseTrack, onImportQqMusicTrack, onRefreshRoom, userId]);
+  }, [isHost, userId]);
 
   useEffect(() => {
     pausedRef.current = false;
@@ -158,13 +171,17 @@ export function useRadioAutopilot({
     if (!isHost || !isAutopilotEnabled) {
       pausedRef.current = false;
       setPreloadingCandidate(null);
-      setState({ kind: "idle", message: null });
+      setState((current) => current.kind === "idle" && current.message === null
+        ? current
+        : { kind: "idle", message: null });
       return;
     }
 
     if (!currentSeedKey) {
       pausedRef.current = true;
-      setState({ kind: "paused", message: "请先从节目单播放一首网易云音乐或 QQ 音乐歌曲。" });
+      setState((current) => current.kind === "paused" && current.message === "请先从节目单播放一首网易云音乐或 QQ 音乐歌曲。"
+        ? current
+        : { kind: "paused", message: "请先从节目单播放一首网易云音乐或 QQ 音乐歌曲。" });
       return;
     }
 

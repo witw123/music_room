@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type CSSProperties, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { getNewMemberPermissions } from "@music-room/shared";
 import type {
@@ -60,6 +60,14 @@ function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
   };
 }
 
+function areRoomEditFormsEqual(left: UpdateRoomRequest, right: UpdateRoomRequest) {
+  return left.visibility === right.visibility &&
+    left.name === right.name &&
+    left.description === right.description &&
+    left.password === right.password &&
+    JSON.stringify(left.newMemberPermissions ?? null) === JSON.stringify(right.newMemberPermissions ?? null);
+}
+
 
 
 export function getSourceModeLabel(
@@ -112,13 +120,22 @@ function RoomStageBase({
   const [editRoomForm, setEditRoomForm] = useState<UpdateRoomRequest>(() =>
     buildRoomEditForm(roomSnapshot)
   );
+  const roomEditSourceKey = [
+    roomSnapshot.room.id,
+    roomSnapshot.room.name ?? "",
+    roomSnapshot.room.description ?? "",
+    roomSnapshot.room.hasPassword ? "protected" : "open",
+    JSON.stringify(roomSnapshot.room.newMemberPermissions ?? null)
+  ].join("|");
+  const currentTrackId = currentTrack?.id ?? null;
 
   useEffect(() => {
     if (showEditRoom) {
       return;
     }
-    setEditRoomForm(buildRoomEditForm(roomSnapshot));
-  }, [roomSnapshot, showEditRoom]);
+    const nextForm = buildRoomEditForm(roomSnapshot);
+    setEditRoomForm((current) => areRoomEditFormsEqual(current, nextForm) ? current : nextForm);
+  }, [roomEditSourceKey, roomSnapshot, showEditRoom]);
 
   const [isCopying, setIsCopying] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -134,10 +151,38 @@ function RoomStageBase({
   const ultraCompactStage = viewportSize !== null && (viewportSize.height < 760 || viewportSize.width < 640);
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
   const playback = roomSnapshot.room.playback;
+  const playbackPositionMs = playback.positionMs;
+  const playbackStartedAt = playback.startedAt;
+  const playbackStartAt = playback.startAt;
+  const playbackStatus = playback.status;
+  const playbackRevision = playback.playbackRevision;
+  const barrierBlocked = playbackBarrier?.blocked;
+  const barrierHoldPositionMs = playbackBarrier?.holdPositionMs;
+  const barrierResumeAtMs = playbackBarrier?.resumeAtMs;
+  const playbackPositionKey = [
+    playbackPositionMs,
+    playbackStartedAt ?? "",
+    playbackStartAt ?? "",
+    playbackStatus,
+    playbackRevision
+  ].join("|");
+  const playbackBarrierKey = [
+    barrierBlocked ? "blocked" : "ready",
+    barrierHoldPositionMs ?? "",
+    barrierResumeAtMs ?? ""
+  ].join("|");
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
+  const playbackBarrierRef = useRef(playbackBarrier);
+  playbackBarrierRef.current = playbackBarrier;
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
 
   const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
+  const currentTrackFileHash = currentTrack?.fileHash ?? null;
+  const currentTrackLyrics = currentTrack?.lyrics?.trim() || null;
+  const currentTrackTranslatedLyrics = currentTrack?.translatedLyrics?.trim() || null;
+  const currentTrackRomanizedLyrics = currentTrack?.romanizedLyrics?.trim() || null;
   const artworkUrl = resolvePreferredArtworkUrl(cachedArtworkUrl, currentTrack?.artworkUrl)
     ?? cachedArtworkUrl
     ?? null;
@@ -216,7 +261,7 @@ function RoomStageBase({
 
   useEffect(() => {
     let cancelled = false;
-    if (!currentTrack) {
+    if (!currentTrackId) {
       setCachedArtworkUrl(null);
       return;
     }
@@ -225,7 +270,7 @@ function RoomStageBase({
         if (cancelled) return;
         const key = sourceProvider && sourceTrackId
           ? providerTrackKey(sourceProvider, sourceTrackId)
-          : currentTrack.id;
+          : currentTrackId;
         setCachedArtworkUrl(index.get(key)?.artworkUrl ?? null);
       })
       .catch(() => {
@@ -234,7 +279,7 @@ function RoomStageBase({
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, sourceProvider, sourceTrackId]);
+  }, [currentTrackId, sourceProvider, sourceTrackId]);
 
   useEffect(() => {
     const updateViewportSize = () => {
@@ -258,10 +303,10 @@ function RoomStageBase({
     const updatePosition = () => {
       setLyricsPositionMs(
         getPlaybackEffectivePositionMs(
-          playback,
+          playbackRef.current,
           currentTrackDuration,
           undefined,
-          playbackBarrier
+          playbackBarrierRef.current
         )
       );
     };
@@ -269,16 +314,21 @@ function RoomStageBase({
     updatePosition();
     if (
       !isPlaying ||
-      playback.status !== "playing" ||
-      (!playback.startedAt && !playback.startAt && playbackBarrier?.holdPositionMs === null)
+      playbackRef.current.status !== "playing" ||
+      (!playbackRef.current.startedAt && !playbackRef.current.startAt && playbackBarrierRef.current?.holdPositionMs === null)
     ) return;
 
-    const timer = window.setInterval(updatePosition, 50);
+    const timer = window.setInterval(updatePosition, 250);
     return () => window.clearInterval(timer);
-  }, [currentTrackDuration, isPlaying, playback, playbackBarrier]);
+  }, [
+    currentTrackDuration,
+    isPlaying,
+    playbackPositionKey,
+    playbackBarrierKey
+  ]);
 
   useEffect(() => {
-    if (!currentTrack) {
+    if (!currentTrackId) {
       setLyricsText(null);
       setTranslatedLyricsText(null);
       setRomanizedLyricsText(null);
@@ -289,17 +339,17 @@ function RoomStageBase({
     let cancelled = false;
     setLyricsStatus("loading");
     setLyricsText(null);
-    setTranslatedLyricsText(currentTrack.translatedLyrics?.trim() || null);
-    setRomanizedLyricsText(currentTrack.romanizedLyrics?.trim() || null);
+    setTranslatedLyricsText(currentTrackTranslatedLyrics);
+    setRomanizedLyricsText(currentTrackRomanizedLyrics);
 
     const loadLyrics = async () => {
-      let localLyrics: string | null = currentTrack.lyrics?.trim() || null;
+      let localLyrics = currentTrackLyrics;
       try {
         if (!localLyrics) {
           const index = await listRoomPlaylistTrackIndex();
           const records = [...index.values()];
-          const localRecord = index.get(currentTrack.id) ?? records.find((record) =>
-            record.fileHash === currentTrack.fileHash ||
+          const localRecord = index.get(currentTrackId) ?? records.find((record) =>
+            record.fileHash === currentTrackFileHash ||
             (record.provider === sourceProvider && record.providerTrackId === sourceTrackId)
           );
           localLyrics = localRecord?.lyrics?.trim() || null;
@@ -351,7 +401,7 @@ function RoomStageBase({
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, sourceProvider, sourceTrackId]);
+  }, [currentTrackFileHash, currentTrackId, currentTrackLyrics, currentTrackRomanizedLyrics, currentTrackTranslatedLyrics, sourceProvider, sourceTrackId]);
 
   return (
     <section

@@ -31,8 +31,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className="mx-auto grid h-full min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="relative z-50 min-h-0 overflow-visible lg:z-auto lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12] flex flex-col">
+      <section className="mx-auto grid min-h-full w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+        <div className="relative z-10 flex min-h-0 min-w-0 flex-col overflow-visible lg:z-auto lg:h-full lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
           <div className="shrink-0 px-4 pt-3 pb-1 flex items-center justify-between gap-3 text-xs border-b border-white/[0.04]">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-emerald-400">
@@ -50,8 +50,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
           </div>
         </div>
-        <div className="min-h-0 min-w-0 overflow-visible lg:grid lg:h-full lg:min-h-0 lg:grid-rows-[minmax(0,1fr)_minmax(18rem,1fr)] lg:overflow-hidden">
-          <div className="min-h-[24rem] min-w-0 overflow-y-auto rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0 lg:border-b">
+        <div className="relative z-0 min-h-0 min-w-0 overflow-visible lg:grid lg:h-full lg:min-h-0 lg:grid-rows-[minmax(0,1fr)_minmax(18rem,1fr)] lg:overflow-hidden">
+          <div className="min-h-[24rem] min-w-0 rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:overflow-y-auto lg:rounded-none lg:border-0 lg:border-b">
             {isHost ? <HostBroadcastDesk {...props} /> : <RadioMembersPanel {...props} membershipNow={membershipNow} />}
           </div>
           <div className="mt-3 h-[28rem] min-h-[24rem] min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-background sm:h-[30rem] lg:mt-0 lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">

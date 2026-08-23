@@ -677,7 +677,7 @@ export function DiscoverPage() {
 
         {/* Live Interactive Rooms */}
         {data?.liveRooms && data.liveRooms.length > 0 ? (
-          <DiscoverSection title="热门房间 (Live Rooms)">
+          <DiscoverSection title="热门房间">
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
               {data.liveRooms.map((room) => (
                 <a
@@ -718,35 +718,35 @@ export function DiscoverPage() {
 
         {/* Featured Playlists */}
         {filteredPlaylists.length ? (
-          <DiscoverSection title={activeFilterId === "all" ? "推荐歌单 (Featured Playlists)" : `${activeFilter?.label ?? ""}风格歌单`}>
+          <DiscoverSection title={activeFilterId === "all" ? "推荐歌单" : `${activeFilter?.label ?? ""}风格歌单`}>
             <DiscoverPlaylistRail items={filteredPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} />
           </DiscoverSection>
         ) : null}
 
         {/* New Releases / For You */}
         {filteredForYou.length ? (
-          <DiscoverSection title={activeFilterId === "all" ? "新歌速递 (New Releases)" : `${activeFilter?.label ?? ""}精选`}>
+          <DiscoverSection title={activeFilterId === "all" ? "新歌速递" : `${activeFilter?.label ?? ""}精选`}>
             <DiscoverTrackRail actions={trackActions} tracks={filteredForYou} />
           </DiscoverSection>
         ) : null}
 
         {/* Deep Cuts / Featured Tracks */}
         {filteredDeepCuts.length ? (
-          <DiscoverSection title="深度精选 (Deep Cuts)">
+          <DiscoverSection title="深度精选">
             <DiscoverTrackRail actions={trackActions} tracks={filteredDeepCuts} />
           </DiscoverSection>
         ) : null}
 
         {/* Artist Essentials */}
         {filteredFamiliar.length && activeFilterId === "all" ? (
-          <DiscoverSection title="艺人代表作 (Artist Essentials)">
+          <DiscoverSection title="艺人代表作">
             <DiscoverTrackRail actions={trackActions} tracks={filteredFamiliar} />
           </DiscoverSection>
         ) : null}
 
         {/* Compact Grid */}
         {compactRecommendations.length && activeFilterId === "all" ? (
-          <DiscoverSection title="猜你喜欢 (Top Picks)">
+          <DiscoverSection title="猜你喜欢">
             <DiscoverCompactTrackGrid tracks={compactRecommendations} actions={trackActions} />
           </DiscoverSection>
         ) : null}
