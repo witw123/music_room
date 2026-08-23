@@ -136,14 +136,6 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
       onFocusCapture={onActivateScroll}
       onClick={onActivateScroll}
     >
-      <header className="flex shrink-0 items-center justify-between px-4 py-3.5 sm:px-5 border-b border-white/[0.06]">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-accent animate-pulse shadow-[0_0_8px_rgba(0,112,243,0.8)]" />
-          <h2 className="text-base font-semibold text-foreground">聊天</h2>
-        </div>
-        <span className="text-[11px] font-mono text-foreground-muted/60">{messages.length} 条互动</span>
-      </header>
-
       <div
         className={`hide-scrollbar min-h-0 flex-1 px-4 py-3 sm:px-5 ${scrollEnabled ? "touch-pan-y overflow-y-auto overscroll-contain" : "overflow-hidden"}`}
         onScroll={(event) => {

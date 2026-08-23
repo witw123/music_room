@@ -1169,5 +1169,57 @@
   .animate-floating-particle {
     animation: floatingParticle 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
+
+  @keyframes twinkleStar {
+    0%, 100% {
+      opacity: 0.25;
+      transform: scale(0.75);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.25);
+    }
+  }
+
+  @keyframes pulseRadialWave {
+    0% {
+      r: 4px;
+      opacity: 0.9;
+      stroke-width: 1.75px;
+    }
+    60% {
+      opacity: 0.45;
+    }
+    100% {
+      r: 88px;
+      opacity: 0;
+      stroke-width: 0.5px;
+    }
+  }
+
+  @keyframes slowVinylRotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes floatDustParticle {
+    0% {
+      transform: translate3d(0, 0, 0);
+      opacity: 0.2;
+    }
+    50% {
+      transform: translate3d(var(--dust-x, 4px), -12px, 0);
+      opacity: 0.85;
+    }
+    100% {
+      transform: translate3d(calc(var(--dust-x, 4px) * -1), -24px, 0);
+      opacity: 0.1;
+    }
+  }
 }
+
 

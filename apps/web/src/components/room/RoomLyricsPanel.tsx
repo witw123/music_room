@@ -289,7 +289,7 @@ export function RoomLyricsPanel({
 
                       return (
                         <span
-                          className="text-transparent inline-block will-change-[background-image]"
+                          className="text-transparent inline will-change-[background-image]"
                           key={`${line.id}:word:${wordIndex}`}
                           style={{
                             backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${(progress * 100).toFixed(1)}%, rgb(255 255 255 / 0.45) ${(progress * 100).toFixed(1)}%, rgb(255 255 255 / 0.45) 100%)`,
