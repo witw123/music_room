@@ -89,6 +89,7 @@ export type AppSettings = {
   layout: {
     sidebarCollapsed: boolean;
     reduceMotion: boolean;
+    fullMotion: boolean;
     customLayout: CustomLayoutSettings;
   };
   playback: {
@@ -111,6 +112,7 @@ const defaultSettings: AppSettings = {
   layout: {
     sidebarCollapsed: true,
     reduceMotion: false,
+    fullMotion: false,
     customLayout: getDefaultCustomLayoutSettings()
   },
   playback: {
@@ -159,6 +161,10 @@ export function updateAppSettings(
   });
   if (typeof window !== "undefined") {
     window.localStorage.setItem(appSettingsStorageKey, JSON.stringify(next));
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.reduceMotion = String(next.layout.reduceMotion);
+      document.documentElement.dataset.fullMotion = String(next.layout.fullMotion);
+    }
     window.dispatchEvent(new Event(appSettingsChangeEvent));
   }
   return next;
@@ -167,6 +173,10 @@ export function updateAppSettings(
 export function resetAppSettings() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(appSettingsStorageKey);
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.reduceMotion = String(defaultSettings.layout.reduceMotion);
+      document.documentElement.dataset.fullMotion = String(defaultSettings.layout.fullMotion);
+    }
     window.dispatchEvent(new Event(appSettingsChangeEvent));
   }
   return cloneSettings(defaultSettings);
@@ -192,6 +202,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     layout: {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
       reduceMotion: layout.reduceMotion === true,
+      fullMotion: layout.fullMotion === true,
       customLayout: normalizeCustomLayoutSettings(layout.customLayout)
     },
     playback: {
@@ -216,6 +227,7 @@ function cloneSettings(settings: AppSettings): AppSettings {
     layout: {
       sidebarCollapsed: settings.layout.sidebarCollapsed,
       reduceMotion: settings.layout.reduceMotion,
+      fullMotion: settings.layout.fullMotion,
       customLayout: cloneCustomLayoutSettings(settings.layout.customLayout)
     },
     playback: { ...settings.playback }

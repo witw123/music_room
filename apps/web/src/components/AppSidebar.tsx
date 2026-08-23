@@ -79,6 +79,7 @@ export function AppSidebar({
       // client transition, so it must not publish its own initial state here.
       document.documentElement.dataset.sidebarCollapsed = String(nextCollapsed);
       document.documentElement.dataset.reduceMotion = String(settings.layout.reduceMotion);
+      document.documentElement.dataset.fullMotion = String(settings.layout.fullMotion);
       applyAppTheme(settings.theme);
       themeMediaQuery?.removeEventListener("change", syncTheme);
       themeMediaQuery = null;
@@ -139,8 +140,8 @@ export function AppSidebar({
         </Link>
       </div>
 
-      <div className={`flex min-h-0 flex-1 items-center md:flex-col md:items-stretch md:gap-3 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
-        <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto" aria-label="工作区">
+      <div className={`hide-scrollbar flex min-h-0 flex-1 items-center overflow-hidden md:flex-col md:items-stretch md:gap-3 md:p-2 ${compactMobile ? "gap-2 p-1.5" : "gap-3 p-2.5"}`}>
+        <nav className="hide-scrollbar flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto md:overflow-x-hidden" aria-label="工作区">
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
             const keepsHomeInRoom = keepHomeInRoom && item.id === "home";

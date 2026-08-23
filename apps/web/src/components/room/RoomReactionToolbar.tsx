@@ -35,6 +35,7 @@ type RoomReactionToolbarProps = {
   roomId: string;
   socket?: Socket | null;
   variant?: "interactive" | "request" | "radio";
+  dropdownPlacement?: "top" | "bottom";
   targetSongs?: ReactionTargetSong[];
   activeSongId?: string | null;
   targetMembers?: ReactionTargetMember[];
@@ -46,6 +47,7 @@ export function RoomReactionToolbar({
   roomId,
   socket,
   variant = "interactive",
+  dropdownPlacement,
   targetSongs = [],
   activeSongId,
   targetMembers = [],
@@ -56,6 +58,9 @@ export function RoomReactionToolbar({
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [showSelector, setShowSelector] = useState(false);
+
+  const placement = dropdownPlacement ?? (variant === "request" ? "bottom" : "top");
+  const placementClass = placement === "bottom" ? "top-full left-0 mt-2" : "bottom-full left-0 mb-2";
 
   const throttleTimerRef = useRef<{ [key: string]: number }>({});
   const comboTrackerRef = useRef<{ [key: string]: { count: number; lastAt: number } }>({});
@@ -147,7 +152,7 @@ export function RoomReactionToolbar({
         {/* Dropdown Menu for choosing songs */}
         {showSelector && targetSongs.length > 0 && (
           <div
-            className="absolute bottom-full left-0 mb-2 w-72 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-[#18181b] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 animate-fade-in hide-scrollbar"
+            className={`absolute ${placementClass} w-72 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-[#18181b] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 animate-fade-in hide-scrollbar`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-white/10 mb-1">
@@ -246,7 +251,7 @@ export function RoomReactionToolbar({
         {/* Dropdown Menu for choosing members */}
         {showSelector && targetMembers.length > 0 && (
           <div
-            className="absolute bottom-full left-0 mb-2 w-64 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-[#18181b] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 animate-fade-in hide-scrollbar"
+            className={`absolute ${placementClass} w-64 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-[#18181b] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 animate-fade-in hide-scrollbar`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-white/10 mb-1">

@@ -180,11 +180,13 @@ describe("app settings store", () => {
     });
     expect(values.has(appSettingsStorageKey)).toBe(true);
 
-    updateAppSettings({ playback: { disableArtworkColor: true } });
-    expect(getAppSettings().playback.disableArtworkColor).toBe(true);
+    updateAppSettings({ layout: { fullMotion: true } });
+    expect(getAppSettings().layout.fullMotion).toBe(true);
 
     resetAppSettings();
     expect(getAppSettings().layout.sidebarCollapsed).toBe(true);
+    expect(getAppSettings().layout.fullMotion).toBe(false);
     expect(dispatchEvent).toHaveBeenCalled();
   });
 });
+

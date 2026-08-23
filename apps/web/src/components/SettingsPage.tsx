@@ -205,6 +205,13 @@ export function SettingsPage({
                 onChange={(checked) => patchSettings({ layout: { reduceMotion: checked } })}
               />
             </SettingRow>
+            <SettingRow label="开启完全动效" description="常态持续运行房间舞台微光、星空共鸣与黑胶旋转动效（适合高性能设备）。">
+              <Toggle
+                checked={settings.layout.fullMotion}
+                label="开启完全动效"
+                onChange={(checked) => patchSettings({ layout: { fullMotion: checked } })}
+              />
+            </SettingRow>
             <SettingRow label="恢复默认设置" description="只重置界面和播放偏好，不删除本地歌曲。">
               <Button onClick={resetSettings} size="sm" type="button" variant="outline">恢复默认</Button>
             </SettingRow>
