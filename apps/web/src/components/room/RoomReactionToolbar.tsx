@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from "react";
 import type { Socket } from "socket.io-client";
-import type { TrackMeta } from "@music-room/shared";
 import {
   HeartIcon,
   ApplauseIcon,
@@ -20,7 +19,6 @@ type RoomReactionToolbarProps = {
   socket?: Socket | null;
   trackId?: string | null;
   variant?: "interactive" | "request" | "radio";
-  currentTrack?: TrackMeta | null;
   requesterName?: string | null;
   isHost?: boolean;
   className?: string;
@@ -31,7 +29,6 @@ export function RoomReactionToolbar({
   socket,
   trackId,
   variant = "interactive",
-  _currentTrack,
   requesterName,
   isHost = false,
   className = ""
