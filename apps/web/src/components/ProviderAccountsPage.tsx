@@ -52,11 +52,11 @@ export function ProviderAccountsPage() {
     <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-8 md:pt-12">
-        {/* Borderless Profile Hero Card */}
+        {/* Artistic Personal Identity Hero Card */}
         <PersonalOverview activeSession={activeSession} />
 
-        {/* Borderless Segmented Control Tabs */}
-        <div className="flex items-center gap-1.5 rounded-2xl border-0 p-1 bg-surface/35 backdrop-blur-xl mb-6 overflow-x-auto scrollbar-none w-fit max-w-full ring-0">
+        {/* High-End Glassmorphic Segmented Control Navigation */}
+        <div className="flex items-center gap-1.5 rounded-2xl border border-white/[0.06] p-1.5 bg-[#10121a]/80 backdrop-blur-2xl mb-6 overflow-x-auto scrollbar-none w-fit max-w-full shadow-lg">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -64,13 +64,13 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                   isActive
-                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold"
-                    : "text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
+                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold scale-[1.02]"
+                    : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
                 }`}
               >
-                <IconComp className="w-3.5 h-3.5" />
+                <IconComp className="w-4 h-4" />
                 <span>{label}</span>
               </button>
             );
@@ -96,7 +96,7 @@ export function ProviderAccountsPage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="bg-surface/35 p-5 sm:p-7 rounded-3xl backdrop-blur-xl">
+          <div className="rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-5 sm:p-7 shadow-[0_16px_36px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
             <SettingsPage embedded onBack={() => setActiveTab("taste")} />
           </div>
         )}

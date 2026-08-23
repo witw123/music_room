@@ -18,6 +18,7 @@ import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
 import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
+import { MusicIcon } from "@/components/icons/DiscoverIcons";
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -167,80 +168,90 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     return list;
   }, [props.currentTrack, requests]);
 
-  return <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
-    <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
-      <div className="relative z-10 min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
-        <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
-      </div>
-      <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl border border-surface-border bg-surface/[0.12] lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
-        <header className="flex shrink-0 items-center justify-between px-4 pb-3 pt-4 sm:px-5 sm:pt-5 lg:px-6 border-b border-white/[0.04]">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/20 text-accent">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-            </span>
-            <h1 className="text-xl font-semibold text-foreground">点歌台</h1>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-foreground-muted">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[11px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              <span>当前队列 {queueCount} 首</span>
-            </span>
-          </div>
-        </header>
-        <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">
-          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
-            {/* Request Room Dedicated Song Interaction Bar */}
-            <RoomReactionToolbar
-              roomId={roomId}
-              socket={props.socket}
-              variant="request"
-              targetSongs={selectableSongs}
-              activeSongId={props.currentTrack?.id}
-              className="mb-1"
-            />
-
-            {isHost ? <>
-              <RoomProviderTrackSearch
-                mode="request"
-                roomTracks={props.roomSnapshot.tracks}
-                onRequestTrack={submitRequest}
-                testId="request-room-host-search"
-              />
-              <RequestInbox
-                pendingRequestId={pendingRequestId}
-                pendingRequests={pendingRequests}
-                handledRequests={handledRequests}
-                onDecide={decideRequest}
-                onApproveAll={handleApproveAll}
-              />
-            </> : <>
-              <RoomProviderTrackSearch
-                mode="request"
-                roomTracks={props.roomSnapshot.tracks}
-                onRequestTrack={submitRequest}
-                testId="request-room-search"
-              />
-              <RequestHistory
-                queue={props.roomSnapshot.queue}
-                requests={myRequests}
-                title="我的点歌"
-                tracks={props.roomSnapshot.tracks}
-              />
-            </>}
-            {message ? <p className="rounded-xl border border-white/10 bg-surface/60 px-4 py-3 text-sm text-foreground backdrop-blur-md shadow-sm" role="status">{message}</p> : null}
-          </div>
+  return (
+    <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
+      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
+        <div className="relative z-10 min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-white/[0.06] lg:bg-surface/[0.12]">
+          <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
         </div>
-      </section>
-    </section>
+        <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-3xl border border-white/[0.06] bg-[#0c0e15]/90 lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
+          <header className="flex shrink-0 items-center justify-between px-4 pb-3.5 pt-4 sm:px-5 sm:pt-5 lg:px-6 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+                <MusicIcon className="w-4 h-4" />
+              </span>
+              <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">点歌台</h1>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-foreground-muted">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px]">
+                <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
+                <span>当前队列 {queueCount} 首</span>
+              </span>
+            </div>
+          </header>
+          <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">
+            <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
+              {/* Request Room Dedicated Song Interaction Bar */}
+              <RoomReactionToolbar
+                roomId={roomId}
+                socket={props.socket}
+                variant="request"
+                targetSongs={selectableSongs}
+                activeSongId={props.currentTrack?.id}
+                className="mb-1"
+              />
 
-    <RequestRoomWorkspace
-      {...props}
-      isHost={isHost}
-      membershipNow={membershipNow}
-      mobileTab={mobileWorkspaceTab}
-      onMobileTabChange={setMobileWorkspaceTab}
-    />
-  </div>;
+              {isHost ? (
+                <>
+                  <RoomProviderTrackSearch
+                    mode="request"
+                    roomTracks={props.roomSnapshot.tracks}
+                    onRequestTrack={submitRequest}
+                    testId="request-room-host-search"
+                  />
+                  <RequestInbox
+                    pendingRequestId={pendingRequestId}
+                    pendingRequests={pendingRequests}
+                    handledRequests={handledRequests}
+                    onDecide={decideRequest}
+                    onApproveAll={handleApproveAll}
+                  />
+                </>
+              ) : (
+                <>
+                  <RoomProviderTrackSearch
+                    mode="request"
+                    roomTracks={props.roomSnapshot.tracks}
+                    onRequestTrack={submitRequest}
+                    testId="request-room-search"
+                  />
+                  <RequestHistory
+                    queue={props.roomSnapshot.queue}
+                    requests={myRequests}
+                    title="我的点歌"
+                    tracks={props.roomSnapshot.tracks}
+                  />
+                </>
+              )}
+              {message ? (
+                <p className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs sm:text-sm text-white backdrop-blur-md shadow-md" role="status">
+                  {message}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <RequestRoomWorkspace
+        {...props}
+        isHost={isHost}
+        membershipNow={membershipNow}
+        mobileTab={mobileWorkspaceTab}
+        onMobileTabChange={setMobileWorkspaceTab}
+      />
+    </div>
+  );
 }
 
 type RequestWorkspaceTab = "library" | "playlists" | "members";
@@ -262,43 +273,38 @@ function RequestRoomWorkspace(
   const panelVisibility = (tab: RequestWorkspaceTab) =>
     props.mobileTab === tab ? "flex" : "hidden lg:flex";
 
-  const activeIndex = requestWorkspaceTabs.findIndex((t) => t.id === props.mobileTab);
-
   return (
-    <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-surface-border lg:px-0" data-testid="request-room-workspace">
+    <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-white/[0.06] lg:px-0" data-testid="request-room-workspace">
       <div className="mb-3 px-1 lg:hidden" role="tablist" aria-label="点歌房管理">
-        <div className="relative flex items-center rounded-xl bg-black/20 p-1">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-1 rounded-[9px] bg-white/[0.12] shadow-[0_1px_2px_rgba(0,0,0,0.24)] transition-[transform,width] duration-200 ease-out"
-            style={{
-              transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
-              width: `${100 / requestWorkspaceTabs.length}%`
-            }}
-          />
-          {requestWorkspaceTabs.map((tab) => (
-            <button
-              key={tab.id}
-              id={`request-workspace-tab-${tab.id}`}
-              aria-controls={`request-workspace-${tab.id}`}
-              aria-selected={props.mobileTab === tab.id}
-              className={`relative z-10 flex min-h-10 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
-                props.mobileTab === tab.id ? "text-white" : "text-white/50 hover:text-white/80"
-              }`}
-              onClick={() => props.onMobileTabChange(tab.id)}
-              role="tab"
-              tabIndex={props.mobileTab === tab.id ? 0 : -1}
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl">
+          {requestWorkspaceTabs.map((tab) => {
+            const isActive = props.mobileTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                id={`request-workspace-tab-${tab.id}`}
+                aria-controls={`request-workspace-${tab.id}`}
+                aria-selected={isActive}
+                className={`flex-1 flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                  isActive
+                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
+                    : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                }`}
+                onClick={() => props.onMobileTabChange(tab.id)}
+                role="tab"
+                tabIndex={isActive ? 0 : -1}
+                type="button"
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-surface-border`} id="request-workspace-library" role="tabpanel">
-        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">曲库</h2></header>
-        <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 pt-3 sm:px-4 lg:overflow-y-auto">
+      <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-library" role="tabpanel">
+        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">房间曲库</h2></header>
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <LibraryTabPanel
             activeSession={props.activeSession}
             canAddToQueue={props.isHost}
@@ -318,9 +324,9 @@ function RequestRoomWorkspace(
         </div>
       </section>
 
-      <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-surface-border`} id="request-workspace-playlists" role="tabpanel">
-        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">歌单</h2></header>
-        <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 pt-3 sm:px-4 lg:overflow-y-auto">
+      <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-playlists" role="tabpanel">
+        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">歌单管理</h2></header>
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <LocalStorageTabPanel
             activeSession={props.activeSession}
             canManageLibrary={props.isHost}
@@ -344,9 +350,9 @@ function RequestRoomWorkspace(
         </div>
       </section>
 
-      <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
-        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
-        <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 pt-3 sm:px-4 lg:overflow-y-auto">
+      <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
+        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">房间成员</h2></header>
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <MembersPanel
             activeSessionId={props.activeSession?.userId ?? null}
             isHost={props.isHost}
@@ -374,43 +380,55 @@ function RequestInbox({
   onDecide: (request: RoomRequest, decision: "approved" | "rejected", options?: { playNext?: boolean }) => Promise<void>;
   onApproveAll?: () => Promise<void>;
 }) {
-  return <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-sm" data-testid="request-room-inbox">
-    <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
-      <div className="flex items-center gap-2">
-        <h2 className="font-semibold text-foreground">待审核点歌</h2>
-        {pendingRequests.length > 0 ? (
-          <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 text-[11px] font-bold text-amber-300">
-            {pendingRequests.length}
-          </span>
+  return (
+    <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 backdrop-blur-2xl shadow-xl" data-testid="request-room-inbox">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+        <div className="flex items-center gap-2">
+          <h2 className="font-bold text-white text-sm sm:text-base">待审核点歌</h2>
+          {pendingRequests.length > 0 ? (
+            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+              {pendingRequests.length}
+            </span>
+          ) : null}
+        </div>
+        {pendingRequests.length > 1 && onApproveAll ? (
+          <Button
+            disabled={pendingRequestId !== null}
+            onClick={() => void onApproveAll()}
+            size="sm"
+            type="button"
+            className="rounded-xl text-xs bg-accent hover:bg-accent-hover text-white shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+          >
+            全部接纳入队
+          </Button>
         ) : null}
       </div>
-      {pendingRequests.length > 1 && onApproveAll ? (
-        <Button
-          disabled={pendingRequestId !== null}
-          onClick={() => void onApproveAll()}
-          size="sm"
-          type="button"
-          className="rounded-lg text-xs"
-        >
-          全部接纳
-        </Button>
+      {pendingRequests.length ? (
+        <div className="divide-y divide-white/[0.05]">
+          {pendingRequests.map((request) => (
+            <RequestTicket
+              key={request.id}
+              request={request}
+              pending={pendingRequestId === request.id || pendingRequestId === "batch:all"}
+              onDecide={onDecide}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="px-4 py-8 text-center text-xs text-foreground-muted">还没有等待审核的点歌。</div>
+      )}
+      {handledRequests.length ? (
+        <div className="border-t border-white/[0.06] px-4 py-3 sm:px-5">
+          <p className="text-xs font-bold text-foreground-muted uppercase tracking-wider">最近处理记录</p>
+          <div className="mt-2 divide-y divide-white/[0.04]">
+            {handledRequests.slice(0, 4).map((request) => (
+              <RequestHistoryRow key={request.id} request={request} />
+            ))}
+          </div>
+        </div>
       ) : null}
-    </div>
-    {pendingRequests.length ? <div className="divide-y divide-white/5">
-      {pendingRequests.map((request) => <RequestTicket
-        key={request.id}
-        request={request}
-        pending={pendingRequestId === request.id || pendingRequestId === "batch:all"}
-        onDecide={onDecide}
-      />)}
-    </div> : <div className="px-4 py-8 text-center text-sm text-foreground-muted">还没有等待审核的点歌。</div>}
-    {handledRequests.length ? <div className="border-t border-white/[0.06] px-4 py-3 sm:px-5">
-      <p className="text-xs font-semibold text-foreground-muted/80">最近处理</p>
-      <div className="mt-2 divide-y divide-white/[0.04]">
-        {handledRequests.slice(0, 4).map((request) => <RequestHistoryRow key={request.id} request={request} />)}
-      </div>
-    </div> : null}
-  </section>;
+    </section>
+  );
 }
 
 function RequestTicket({
@@ -422,54 +440,56 @@ function RequestTicket({
   pending: boolean;
   onDecide: (request: RoomRequest, decision: "approved" | "rejected", options?: { playNext?: boolean }) => Promise<void>;
 }) {
-  return <article className="flex min-w-0 items-center gap-3.5 px-4 py-3.5 sm:px-5 transition-colors hover:bg-white/[0.02]">
-    <Artwork artworkUrl={request.artworkUrl} title={request.title} />
-    <div className="min-w-0 flex-1">
-      <p className="truncate text-sm font-semibold text-foreground" title={request.title}>{request.title}</p>
-      <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${request.artist}${request.album ? ` · ${request.album}` : ""}`}>
-        {request.artist}{request.album ? ` · ${request.album}` : ""}
-      </p>
-      <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground-muted/70">
-        <span className="font-medium text-accent">{request.requesterName}</span>
-        <span>·</span>
-        <span className="font-mono">{formatDuration(request.durationMs)}</span>
-        <span>·</span>
-        <span className="capitalize">{request.provider === "netease" ? "网易云" : "QQ 音乐"}</span>
+  return (
+    <article className="flex min-w-0 items-center gap-3.5 px-4 py-3 sm:px-5 transition-colors hover:bg-white/[0.03]">
+      <Artwork artworkUrl={request.artworkUrl} title={request.title} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-white" title={request.title}>{request.title}</p>
+        <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${request.artist}${request.album ? ` · ${request.album}` : ""}`}>
+          {request.artist}{request.album ? ` · ${request.album}` : ""}
+        </p>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground-muted/70">
+          <span className="font-medium text-accent">@{request.requesterName}</span>
+          <span>·</span>
+          <span className="font-mono">{formatDuration(request.durationMs)}</span>
+          <span>·</span>
+          <span className="capitalize">{request.provider === "netease" ? "网易云" : "QQ 音乐"}</span>
+        </div>
       </div>
-    </div>
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-      <Button
-        disabled={pending}
-        onClick={() => void onDecide(request, "approved")}
-        size="sm"
-        type="button"
-        className="rounded-lg text-xs"
-      >
-        {pending ? "处理中…" : "接纳入队"}
-      </Button>
-      <Button
-        disabled={pending}
-        onClick={() => void onDecide(request, "approved", { playNext: true })}
-        size="sm"
-        type="button"
-        variant="outline"
-        className="rounded-lg text-xs hidden sm:inline-flex"
-        title="优先插播为下一首"
-      >
-        插播
-      </Button>
-      <Button
-        disabled={pending}
-        onClick={() => void onDecide(request, "rejected")}
-        size="sm"
-        type="button"
-        variant="ghost"
-        className="rounded-lg text-xs text-foreground-muted hover:text-danger hover:bg-red-500/10"
-      >
-        拒绝
-      </Button>
-    </div>
-  </article>;
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <Button
+          disabled={pending}
+          onClick={() => void onDecide(request, "approved")}
+          size="sm"
+          type="button"
+          className="rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30"
+        >
+          {pending ? "处理中…" : "接纳入队"}
+        </Button>
+        <Button
+          disabled={pending}
+          onClick={() => void onDecide(request, "approved", { playNext: true })}
+          size="sm"
+          type="button"
+          variant="outline"
+          className="rounded-xl text-xs hidden sm:inline-flex bg-accent/15 hover:bg-accent/25 text-accent border-accent/30"
+          title="优先插播为下一首"
+        >
+          插播
+        </Button>
+        <Button
+          disabled={pending}
+          onClick={() => void onDecide(request, "rejected")}
+          size="sm"
+          type="button"
+          variant="ghost"
+          className="rounded-xl text-xs text-foreground-muted hover:text-rose-400 hover:bg-rose-500/10"
+        >
+          婉拒
+        </Button>
+      </div>
+    </article>
+  );
 }
 
 function RequestHistory({
@@ -483,27 +503,33 @@ function RequestHistory({
   title: string;
   tracks?: TrackMeta[];
 }) {
-  return <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-sm">
-    <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
-      <h2 className="font-semibold text-foreground">{title}</h2>
-      <span className="text-xs font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
-    </div>
-    {requests.length ? <div className="divide-y divide-white/5">
-      {requests.slice().reverse().map((request) => {
-        let queuePosition: number | null = null;
-        if (request.status === "approved" && queue.length > 0) {
-          const matchingTrack = tracks.find(
-            (t) => t.sourceRef?.provider === request.provider && t.sourceRef.trackId === request.providerTrackId
-          );
-          if (matchingTrack) {
-            const index = queue.findIndex((q) => q.trackId === matchingTrack.id);
-            if (index >= 0) queuePosition = index + 1;
-          }
-        }
-        return <RequestHistoryRow key={request.id} request={request} queuePosition={queuePosition} />;
-      })}
-    </div> : <div className="px-4 py-8 text-center text-sm text-foreground-muted">还没有提交过点歌。</div>}
-  </section>;
+  return (
+    <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 backdrop-blur-2xl shadow-xl">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+        <h2 className="font-bold text-white text-sm sm:text-base">{title}</h2>
+        <span className="text-xs font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
+      </div>
+      {requests.length ? (
+        <div className="divide-y divide-white/[0.05]">
+          {requests.slice().reverse().map((request) => {
+            let queuePosition: number | null = null;
+            if (request.status === "approved" && queue.length > 0) {
+              const matchingTrack = tracks.find(
+                (t) => t.sourceRef?.provider === request.provider && t.sourceRef.trackId === request.providerTrackId
+              );
+              if (matchingTrack) {
+                const index = queue.findIndex((q) => q.trackId === matchingTrack.id);
+                if (index >= 0) queuePosition = index + 1;
+              }
+            }
+            return <RequestHistoryRow key={request.id} request={request} queuePosition={queuePosition} />;
+          })}
+        </div>
+      ) : (
+        <div className="px-4 py-8 text-center text-xs text-foreground-muted">还没有提交过点歌。</div>
+      )}
+    </section>
+  );
 }
 
 function RequestHistoryRow({
@@ -519,72 +545,73 @@ function RequestHistoryRow({
       ? "未被接纳"
       : "等待审核";
 
-  const statusBadgeClass = request.status === "approved"
-    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+  const statusClass = request.status === "approved"
+    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
     : request.status === "rejected"
-      ? "border-white/10 bg-white/5 text-foreground-muted/60"
-      : "border-amber-400/30 bg-amber-400/10 text-amber-300 animate-pulse";
+      ? "bg-rose-500/15 border-rose-500/30 text-rose-300"
+      : "bg-amber-500/15 border-amber-500/30 text-amber-300";
 
-  return <div className="flex min-w-0 items-center gap-3 px-4 py-3 sm:px-5 transition-colors hover:bg-white/[0.02]">
-    <Artwork artworkUrl={request.artworkUrl} title={request.title} compact />
-    <div className="min-w-0 flex-1">
-      <p className="truncate text-xs font-semibold text-foreground" title={request.title}>{request.title}</p>
-      <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={request.artist}>{request.artist}</p>
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs sm:text-sm font-semibold text-white">{request.title}</p>
+        <p className="truncate text-xs text-foreground-muted">{request.artist}</p>
+      </div>
+      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${statusClass}`}>
+        {statusLabel}
+      </span>
     </div>
-    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${statusBadgeClass}`}>
-      {statusLabel}
-    </span>
-  </div>;
+  );
 }
 
-function Artwork({ artworkUrl, title, compact = false }: { artworkUrl: string | null; title: string; compact?: boolean }) {
-  const size = compact ? "h-9 w-9" : "h-12 w-12";
-  return artworkUrl ? (
-    <img alt="" className={`${size} shrink-0 rounded-lg border border-white/10 object-cover shadow-sm`} src={artworkUrl} />
-  ) : (
-    <span aria-label={`${title} 无封面`} className={`${size} flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[10px] text-foreground-muted`}>
-      音乐
-    </span>
-  );
+function Artwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
+  if (!artworkUrl) {
+    return <span aria-label={title} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] border border-white/[0.08] text-xs text-foreground-muted">♪</span>;
+  }
+  return <img alt={title} className="h-11 w-11 shrink-0 rounded-xl object-cover border border-white/10 shadow-sm" src={artworkUrl} />;
 }
 
 async function importRequestedTrack(
   request: RoomRequest,
   props: RoomDashboardViewProps,
   snapshotRef: MutableRefObject<RoomDashboardViewProps["roomSnapshot"]>
-) {
-  const existing = findProviderTrack(snapshotRef.current.tracks, request);
-  if (existing) return existing;
+): Promise<TrackMeta> {
+  const existingTrack = snapshotRef.current.tracks.find(
+    (item) => item.sourceRef?.provider === request.provider && item.sourceRef.trackId === request.providerTrackId
+  );
+  if (existingTrack) return existingTrack;
+
   if (request.provider === "netease") {
-    const candidate = await musicRoomApi.getNeteaseTrack(request.providerTrackId);
-    await props.onImportNeteaseTrack(candidate);
+    await props.onImportNeteaseTrack({
+      provider: "netease",
+      providerTrackId: request.providerTrackId,
+      access: "unknown",
+      quality: null,
+      title: request.title,
+      artist: request.artist,
+      album: request.album,
+      durationMs: request.durationMs,
+      artworkUrl: request.artworkUrl
+    });
   } else if (request.provider === "qqmusic") {
-    const candidate = await musicRoomApi.getQqMusicTrack(request.providerTrackId);
-    await props.onImportQqMusicTrack(candidate);
-  } else {
-    throw new Error("本地点歌需要房主手动导入后再加入队列。");
+    await props.onImportQqMusicTrack({
+      provider: "qqmusic",
+      providerTrackId: request.providerTrackId,
+      access: "unknown",
+      quality: null,
+      title: request.title,
+      artist: request.artist,
+      album: request.album,
+      durationMs: request.durationMs,
+      artworkUrl: request.artworkUrl
+    });
   }
 
-  snapshotRef.current = await musicRoomApi.getRoom(request.roomId);
-  const importedTrack = findProviderTrack(snapshotRef.current.tracks, request);
-  if (importedTrack) return importedTrack;
-
-  return waitForImportedTrack(snapshotRef, request);
+  snapshotRef.current = await musicRoomApi.getRoom(props.roomSnapshot.room.id);
+  const importedTrack = snapshotRef.current.tracks.find(
+    (item) => item.sourceRef?.provider === request.provider && item.sourceRef.trackId === request.providerTrackId
+  );
+  if (!importedTrack) throw new Error("歌曲导入成功但在房间曲库中未就绪。");
+  return importedTrack;
 }
 
-function findProviderTrack(tracks: TrackMeta[], request: RoomRequest) {
-  return tracks.find((track) => track.sourceRef?.provider === request.provider && track.sourceRef.trackId === request.providerTrackId) ?? null;
-}
-
-async function waitForImportedTrack(
-  snapshotRef: MutableRefObject<RoomDashboardViewProps["roomSnapshot"]>,
-  request: RoomRequest
-) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    snapshotRef.current = await musicRoomApi.getRoom(request.roomId);
-    const track = findProviderTrack(snapshotRef.current.tracks, request);
-    if (track) return track;
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 200));
-  }
-  throw new Error("歌曲已导入但房间未及时同步，请稍后再试。");
-}

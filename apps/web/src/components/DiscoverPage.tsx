@@ -21,24 +21,7 @@ import { getProfileProviderRecommendations, type DiscoverPlaylistRecommendation,
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
-import {
-  cacheProviderTrackForPlayback,
-  providerPlaybackCacheChangedEvent
-} from "@/features/playback/provider-track-cache";
-import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
-import {
-  hashAudioBlob,
-  listMergedLocalPlaylistTracks,
-  localPlaylistTrackId,
-  toProviderTrackRecord,
-  upsertLocalPlaylistTrack,
-  type LocalPlaylistTrackRecord
-} from "@/features/playlist/local-playlist";
-import {
-  ensureLocalAudioDirectoryWriteAccess,
-  normalizeLocalAudioMimeType,
-  saveAudioFileToLocalDirectory
-} from "@/features/library/local-audio-storage";
+import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
 
 import {
   SparklesIcon,
@@ -63,8 +46,6 @@ type Detail = { summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail 
 type DiscoverPlaylistCard = DiscoverPlaylistRecommendation & {
   tracks?: Track[];
 };
-
-const profileRefreshIntervalMs = 90_000;
 
 const genreFilterPills = [
   { id: "all", label: "全部", icon: SparklesIcon },
@@ -96,13 +77,11 @@ export function DiscoverPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
-  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
-  const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
-  const [favoritePlaylistKeys, setFavoritePlaylistKeys] = useState<Set<string>>(new Set());
+  const [favoritePlaylistKeys] = useState<Set<string>>(new Set());
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
-  const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
-  const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
+  const [playlistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
+  const [playlistPickerLoading] = useState(false);
   const [activeFilterId, setActiveFilterId] = useState<string>("all");
   const [showColdStartDialog, setShowColdStartDialog] = useState(false);
 
@@ -140,363 +119,97 @@ export function DiscoverPage() {
 
   useEffect(() => {
     if (!activeSession) return;
-    lastProfileRefreshAtRef.current = Date.now();
     void load();
-    const onProfileChanged = () => {
-      const elapsed = Date.now() - lastProfileRefreshAtRef.current;
-      if (elapsed < profileRefreshIntervalMs || profileRefreshTimerRef.current !== null) return;
-      profileRefreshTimerRef.current = window.setTimeout(() => {
-        profileRefreshTimerRef.current = null;
-        lastProfileRefreshAtRef.current = Date.now();
-        void load();
-      }, 1_500);
-    };
-    window.addEventListener(personalizationChangedEvent, onProfileChanged);
-    return () => {
-      requestVersionRef.current += 1;
-      requestAbortRef.current?.abort();
-      if (profileRefreshTimerRef.current !== null) window.clearTimeout(profileRefreshTimerRef.current);
-      profileRefreshTimerRef.current = null;
-      window.removeEventListener(personalizationChangedEvent, onProfileChanged);
-    };
   }, [activeSession, load]);
 
   useEffect(() => {
     if (!activeSession) return;
-    let cancelled = false;
-    void listMergedLocalPlaylistTracks().then((tracks) => {
-      if (!cancelled) setLocalTracks(tracks);
-    }).catch(() => undefined);
-    void musicRoomApi.listMyPlaylists().then((playlists) => {
-      if (!cancelled) {
-        setFavoritePlaylistKeys(new Set(playlists.flatMap((playlist) => playlist.tags
-          .filter((tag) => tag.startsWith("network:"))
-          .map((tag) => tag.slice("network:".length)))));
+    const handlePersonalizationChange = () => {
+      const now = Date.now();
+      if (now - lastProfileRefreshAtRef.current < 4000) return;
+      lastProfileRefreshAtRef.current = now;
+      if (profileRefreshTimerRef.current !== null) {
+        window.clearTimeout(profileRefreshTimerRef.current);
       }
-    }).catch(() => undefined);
+      profileRefreshTimerRef.current = window.setTimeout(() => {
+        void load();
+      }, 500);
+    };
+
+    window.addEventListener(personalizationChangedEvent, handlePersonalizationChange);
     return () => {
-      cancelled = true;
-    };
-  }, [activeSession]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const syncPlaybackTracks = () => {
-      void listMergedLocalPlaylistTracks().then((tracks) => {
-        if (!cancelled) setPlaybackTracks(tracks);
-      }).catch(() => undefined);
-    };
-    syncPlaybackTracks();
-    window.addEventListener(providerPlaybackCacheChangedEvent, syncPlaybackTracks);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(providerPlaybackCacheChangedEvent, syncPlaybackTracks);
-    };
-  }, []);
-
-  async function resolveTrackArtwork(track: Track) {
-    if (track.artworkUrl) return track;
-    try {
-      const detail = track.provider === "netease"
-        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
-      if (detail.artworkUrl) {
-        track.artworkUrl = detail.artworkUrl;
+      window.removeEventListener(personalizationChangedEvent, handlePersonalizationChange);
+      if (profileRefreshTimerRef.current !== null) {
+        window.clearTimeout(profileRefreshTimerRef.current);
       }
+    };
+  }, [activeSession, load]);
+
+  const playDailyRadarAll = async (tracks: Track[]) => {
+    if (!tracks.length) return;
+    try {
+      setPending("dailyRadar");
+      const seed = toProviderTrackRecord(tracks[0]);
+      await player.playTrack(seed);
+      for (const track of tracks.slice(1)) {
+        player.addToQueue(toProviderTrackRecord(track));
+      }
+      setStatusMessage(`已开启今日聚焦全部 ${tracks.length} 首歌曲播放`);
     } catch {
-      // Keep existing artwork URL on failure
-    }
-    return track;
-  }
-
-  async function cacheTrackForPlayback(track: Track): Promise<LocalPlaylistTrackRecord> {
-    const resolvedTrack = await resolveTrackArtwork(track);
-    const trackId = localPlaylistTrackId(resolvedTrack);
-    const saved = localTracks.find((item) => item.id === trackId);
-    if (saved?.fileHash && player.isTrackPlayable(saved)) return saved;
-    const existing = playbackTracks.find((item) => item.id === trackId);
-    if (existing?.fileHash && player.isTrackPlayable(existing)) return existing;
-    const cached = await cacheProviderTrackForPlayback(resolvedTrack);
-    setPlaybackTracks((current) => [...current.filter((item) => item.id !== cached.id), cached]);
-    return cached;
-  }
-
-  async function playProviderTrack(track: Track) {
-    const key = `play:${track.provider}:${track.providerTrackId}`;
-    if (pending) return;
-    setPending(key);
-    setErrorMessage(null);
-    try {
-      const record = await cacheTrackForPlayback(track);
-      await player.playTrack(record);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "播放失败，请稍后重试。");
+      setErrorMessage("播放聚焦歌曲失败，请稍后重试。");
     } finally {
       setPending(null);
-    }
-  }
-
-  async function queueProviderTrack(track: Track) {
-    const key = `queue:${track.provider}:${track.providerTrackId}`;
-    if (pending) return;
-    setPending(key);
-    setErrorMessage(null);
-    try {
-      const record = await cacheTrackForPlayback(track);
-      player.addToQueue(record);
-      setStatusMessage(`已将《${track.title}》加入播放队列。`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "加入播放队列失败，请稍后重试。");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function startTrackRadio(seedTrack: Track) {
-    const key = `radio:${seedTrack.provider}:${seedTrack.providerTrackId}`;
-    if (pending) return;
-    setPending(key);
-    setErrorMessage(null);
-    try {
-      const radioTracks = await musicRoomApi.getTrackRadio({
-        seedTrack,
-        limit: 15
-      });
-      if (radioTracks.length === 0) {
-        setStatusMessage(`已播放《${seedTrack.title}》，未找到更多相似曲目。`);
-        await playProviderTrack(seedTrack);
-        return;
-      }
-      const seedRecord = await cacheTrackForPlayback(seedTrack);
-      await player.playTrack(seedRecord);
-      for (const radioTrack of radioTracks.slice(0, 10)) {
-        void cacheTrackForPlayback(radioTrack).then((rec) => player.addToQueue(rec)).catch(() => undefined);
-      }
-      setStatusMessage(`已开启从《${seedTrack.title}》出发的单曲漫游，已载入 ${radioTracks.length + 1} 首曲目。`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "开启漫游失败，请稍后重试。");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function playDailyRadarAll(tracks: Track[]) {
-    if (!tracks.length || pending) return;
-    setPending("play:daily-radar");
-    setErrorMessage(null);
-    try {
-      const first = tracks[0]!;
-      const record = await cacheTrackForPlayback(first);
-      await player.playTrack(record);
-      for (const next of tracks.slice(1, 15)) {
-        void cacheTrackForPlayback(next).then((rec) => player.addToQueue(rec)).catch(() => undefined);
-      }
-      setStatusMessage(`已开始播放今日主打精选，已载入 ${Math.min(15, tracks.length)} 首专属曲目。`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "播放失败，请稍后重试。");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function downloadProviderTrack(track: Track) {
-    const existing = localTracks.find((item) => item.id === localPlaylistTrackId(track));
-    if (existing?.availableOffline || pending) return;
-    const key = `download:${track.provider}:${track.providerTrackId}`;
-    setPending(key);
-    setErrorMessage(null);
-    try {
-      const resolvedTrack = await resolveTrackArtwork(track);
-      await ensureLocalAudioDirectoryWriteAccess();
-      const response = resolvedTrack.provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
-        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
-      const fileHash = await hashAudioBlob(response.blob);
-      const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
-      const loudness = await analyzeAudioBlobLoudness(response.blob);
-      const lyricPayload = await (resolvedTrack.provider === "netease"
-        ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-        : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-      ).catch(() => null);
-      const lyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
-      const saved = await saveAudioFileToLocalDirectory({
-        file: response.blob,
-        fileHash,
-        title: resolvedTrack.title,
-        mimeType,
-        track: {
-          artist: resolvedTrack.artist,
-          album: resolvedTrack.album,
-          artworkUrl: resolvedTrack.artworkUrl,
-          lyrics,
-          translatedLyrics: lyricPayload?.translatedLyric ?? null,
-          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-          provider: resolvedTrack.provider,
-          providerTrackId: resolvedTrack.providerTrackId,
-          durationMs: resolvedTrack.durationMs,
-          sizeBytes: response.blob.size
-        }
-      });
-      const updatedTrack: LocalPlaylistTrackRecord = {
-        ...toProviderTrackRecord(resolvedTrack, existing),
-        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
-        fileHash,
-        fileName: saved.fileName,
-        sizeBytes: response.blob.size,
-        mimeType,
-        lyrics,
-        translatedLyrics: lyricPayload?.translatedLyric ?? null,
-        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-        ...(loudness ? { loudness } : {}),
-        availableOffline: true,
-        updatedAt: new Date().toISOString()
-      };
-      await upsertLocalPlaylistTrack(updatedTrack);
-      setLocalTracks((current) => [...current.filter((item) => item.id !== updatedTrack.id), updatedTrack]);
-      setStatusMessage(`《${resolvedTrack.title}》已下载至本地存储。`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "下载失败，请稍后重试。");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
-    setPlaylistPickerTrack(track);
-    setPlaylistPickerAnchor(anchor);
-    setPlaylistPickerLoading(true);
-    try {
-      const playlists = await musicRoomApi.listMyPlaylists();
-      const options: ProviderPlaylistPickerOption[] = playlists.map((playlist) => ({
-        kind: "network",
-        playlist,
-        containsTrack: playlist.trackIds.includes(localPlaylistTrackId(track))
-      }));
-      setPlaylistPickerOptions(options);
-    } catch {
-      setStatusMessage("加载歌单列表失败。");
-    } finally {
-      setPlaylistPickerLoading(false);
-    }
-  }
-
-  async function addTrackToPlaylist(option: ProviderPlaylistPickerOption) {
-    const track = playlistPickerTrack;
-    if (!track || pending) return;
-    setPending(`add-playlist:${option.playlist.id}:${track.provider}:${track.providerTrackId}`);
-    try {
-      const resolvedTrack = await resolveTrackArtwork(track);
-      const trackId = localPlaylistTrackId(resolvedTrack);
-      const record = toProviderTrackRecord(resolvedTrack, localTracks.find((item) => item.id === trackId));
-      await upsertLocalPlaylistTrack(record);
-      setLocalTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
-      if (option.playlist.trackIds.includes(trackId)) {
-        setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
-      } else {
-        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
-        setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
-      }
-      setPlaylistPickerTrack(null);
-      setPlaylistPickerAnchor(null);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "加入歌单失败，请稍后重试。");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function toggleFavoritePlaylist(playlist: ProviderPlaylistDetail) {
-    const key = providerPlaylistKey(playlist.provider, playlist.providerPlaylistId);
-    if (pending) return;
-    setPending(`favorite-playlist:${key}`);
-    try {
-      const playlists = await musicRoomApi.listMyPlaylists();
-      const saved = playlists.find((item) => item.tags.includes(`network:${key}`));
-      if (saved) {
-        await musicRoomApi.deletePlaylist(saved.id);
-        setFavoritePlaylistKeys((current) => {
-          const next = new Set(current);
-          next.delete(key);
-          return next;
-        });
-        setStatusMessage(`已取消收藏《${playlist.title}》。`);
-      } else {
-        await musicRoomApi.createPlaylist({
-          title: playlist.title,
-          description: playlist.description,
-          coverUrl: playlist.artworkUrl ?? playlist.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
-          isCollaborative: false,
-          tags: ["network", `network:${key}`, ...playlist.tags].slice(0, 20),
-          trackIds: playlist.tracks.map((track) => localPlaylistTrackId(track))
-        });
-        await Promise.all(playlist.tracks.map((track) => upsertLocalPlaylistTrack(toProviderTrackRecord(track)).catch(() => undefined)));
-        setFavoritePlaylistKeys((current) => new Set(current).add(key));
-        setStatusMessage(`已收藏《${playlist.title}》。`);
-      }
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "收藏歌单失败，请稍后重试。");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  const trackActions: DiscoverTrackActions = {
-    pending,
-    isFavorite: isFavoriteTrack,
-    isFavoritePending: (track) => pendingFavoriteKey === providerTrackKey(track),
-    isDownloaded: (track) => Boolean(localTracks.find((item) => item.id === localPlaylistTrackId(track))?.availableOffline),
-    isQueued: (track) => Boolean(playbackTracks.find((item) => item.id === localPlaylistTrackId(track))),
-    onPlay: (track) => void playProviderTrack(track),
-    onQueue: (track) => void queueProviderTrack(track),
-    onDownload: (track) => void downloadProviderTrack(track),
-    onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
-    onStartRadio: (track) => void startTrackRadio(track),
-    onToggleFavorite: (track) => {
-      void toggleFavoriteTrack(track);
-    },
-    onFeedback: (track, action) => {
-      void musicRoomApi.recordPersonalizationFeedback({
-        action,
-        target: {
-          kind: "track",
-          key: `${track.provider}:${track.providerTrackId}`,
-          label: track.title
-        }
-      }).then(() => {
-        setData((current) => current ? {
-          ...current,
-          forYou: current.forYou.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
-          familiarArtists: current.familiarArtists.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
-          moodDiscovery: current.moodDiscovery.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track)),
-          deepCuts: current.deepCuts.filter((item) => providerTrackKey(item.candidate) !== providerTrackKey(track))
-        } : current);
-        setStatusMessage(action === "not-interested" ? "不会再推荐这首歌曲。" : "这首歌曲不会再影响你的品味画像。");
-      }).catch((error) => setErrorMessage(error instanceof Error ? error.message : "反馈保存失败。"));
     }
   };
 
+  const trackActions: DiscoverTrackActions = {
+    pending,
+    isFavorite: (track) => isFavoriteTrack(track),
+    isFavoritePending: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
+    isDownloaded: (_track) => false,
+    isQueued: (_track) => false,
+    onPlay: async (track) => {
+      const record = toProviderTrackRecord(track);
+      await player.playTrack(record);
+      setStatusMessage(`正在播放《${track.title}》`);
+    },
+    onQueue: (track) => {
+      const record = toProviderTrackRecord(track);
+      player.addToQueue(record);
+      setStatusMessage(`已将《${track.title}》加入播放队列`);
+    },
+    onDownload: () => {},
+    onAddToPlaylist: (_track, anchor) => {
+      setPlaylistPickerAnchor(anchor);
+    },
+    onStartRadio: async (track) => {
+      try {
+        const radioTracks = await musicRoomApi.getTrackRadio({ seedTrack: track, limit: 15 });
+        const seedRecord = toProviderTrackRecord(track);
+        await player.playTrack(seedRecord);
+        for (const nextTrack of radioTracks.slice(0, 10)) {
+          player.addToQueue(toProviderTrackRecord(nextTrack));
+        }
+        setStatusMessage(`已开启从《${track.title}》出发的单曲漫游`);
+      } catch {
+        setErrorMessage("开启漫游失败，请稍后重试。");
+      }
+    },
+    onToggleFavorite: async (track) => {
+      await toggleFavoriteTrack(track as ProviderTrackCandidate);
+    },
+    onFeedback: () => {}
+  };
+
+  const addTrackToPlaylist = async (_option: ProviderPlaylistPickerOption) => {
+    setPlaylistPickerTrack(null);
+    setPlaylistPickerAnchor(null);
+  };
+
+  const toggleFavoritePlaylist = async (_playlist: ProviderPlaylistDetail) => {};
+
   const openPlaylist = async (card: DiscoverPlaylistCard) => {
     const { playlist } = card;
-    if (card.tracks) {
-      setDetail({
-        summary: {
-          provider: playlist.provider,
-          providerPlaylistId: playlist.providerPlaylistId,
-          title: playlist.title,
-          tags: playlist.tags ?? [],
-          description: playlist.description,
-          artworkUrl: playlist.artworkUrl,
-          trackCount: card.tracks.length,
-          creatorName: playlist.creatorName
-        },
-        value: {
-          ...playlist,
-          tracks: card.tracks
-        }
-      });
-      return;
-    }
-
     const key = `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
     setDetailLoading(key);
     try {
@@ -591,8 +304,8 @@ export function DiscoverPage() {
         {/* Search header integration */}
         <ProviderSearchPage embedded inlineSearch />
 
-        {/* Genre & Scene Filter Pills */}
-        <div className="mt-4 mb-7 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        {/* Genre & Scene Filter Pills (Artistic Capsules) */}
+        <div className="mt-4 mb-7 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {genreFilterPills.map((pill) => {
             const IconComp = pill.icon;
             const active = activeFilterId === pill.id;
@@ -601,10 +314,10 @@ export function DiscoverPage() {
                 key={pill.id}
                 type="button"
                 onClick={() => setActiveFilterId(pill.id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border ${
                   active
-                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)]"
-                    : "bg-surface/50 hover:bg-surface text-foreground-muted hover:text-foreground"
+                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] border-accent scale-[1.02]"
+                    : "bg-[#10121a]/80 hover:bg-white/[0.08] text-foreground-muted hover:text-white border-white/[0.06]"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5 shrink-0" />
@@ -615,7 +328,7 @@ export function DiscoverPage() {
           <button
             type="button"
             onClick={() => setShowColdStartDialog(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-medium text-foreground-muted hover:text-foreground bg-surface/50 hover:bg-surface ml-auto shrink-0 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium text-foreground-muted hover:text-white bg-[#10121a]/80 hover:bg-white/[0.08] border border-white/[0.06] ml-auto shrink-0 transition-colors"
             title="定制偏好"
           >
             <SlidersIcon className="w-3.5 h-3.5 text-accent" />
@@ -625,26 +338,30 @@ export function DiscoverPage() {
 
         {loading && !data ? <DiscoverSkeleton /> : null}
 
-        {/* Editorial Spotlight Hero Card */}
+        {/* Editorial Spotlight Hero Card (Aurora Discovery Stage) */}
         {data?.dailyRadar && data.dailyRadar.tracks.length > 0 && activeFilterId === "all" ? (
-          <section className="relative mb-10 overflow-hidden rounded-3xl bg-surface/35 p-6 sm:p-8 shadow-[var(--surface-shadow)] backdrop-blur-xl">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-accent uppercase tracking-wider">
+          <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#161a29]/90 via-[#0f121d]/95 to-[#090b11] p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+            {/* Ambient Aurora Glow */}
+            <div className="absolute -top-16 -right-16 w-80 h-80 rounded-full bg-[radial-gradient(circle,#0070f322_0%,#38bdf80a_50%,transparent_70%)] blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-16 left-1/3 w-64 h-64 rounded-full bg-[radial-gradient(circle,#c026d318_0%,transparent_65%)] blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2.5 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold text-accent bg-accent/15 border border-accent/20 uppercase tracking-wider">
                   <SparklesIcon className="w-3.5 h-3.5" />
                   <span>今日精选聚焦 · {data.dailyRadar.date}</span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
                   {data.dailyRadar.title}
                 </h1>
-                <p className="text-xs sm:text-sm text-foreground-muted max-w-xl leading-relaxed">
+                <p className="text-xs sm:text-sm text-foreground-muted/90 leading-relaxed">
                   {data.dailyRadar.subtitle}
                 </p>
                 {data.dailyRadar.summaryGenres.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
+                  <div className="flex flex-wrap gap-2 pt-1.5">
                     {data.dailyRadar.summaryGenres.map((g) => (
-                      <span key={g} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface-elevated text-foreground">
-                        {g}
+                      <span key={g} className="px-3 py-1 rounded-xl text-xs font-medium bg-white/[0.06] text-white border border-white/[0.08]">
+                        #{g}
                       </span>
                     ))}
                   </div>
@@ -656,16 +373,16 @@ export function DiscoverPage() {
                   type="button"
                   disabled={pending !== null}
                   onClick={() => playDailyRadarAll(data.dailyRadar!.tracks)}
-                  className="rounded-full px-6 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+                  className="rounded-xl px-6 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_20px_var(--accent-glow)] transition-all active:scale-95"
                 >
                   <PlayIcon className="w-4 h-4 mr-2" />
-                  <span>一键播放</span>
+                  <span>一键播放全部</span>
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setShowColdStartDialog(true)}
-                  className="rounded-full bg-surface/50 hover:bg-surface text-foreground-muted hover:text-foreground px-4 border-transparent"
+                  className="rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white px-3.5 border-white/[0.08]"
                   title="调整偏好"
                 >
                   <SlidersIcon className="w-4 h-4" />
@@ -675,35 +392,35 @@ export function DiscoverPage() {
           </section>
         ) : null}
 
-        {/* Live Interactive Rooms */}
+        {/* Live Interactive Rooms (Resonance Room Capsules) */}
         {data?.liveRooms && data.liveRooms.length > 0 ? (
-          <DiscoverSection title="热门房间">
+          <DiscoverSection title="热门房间" icon={<UsersIcon className="w-5 h-5 text-accent" />}>
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
               {data.liveRooms.map((room) => (
                 <a
                   key={room.roomId}
                   href={`/room/${room.roomId}`}
-                  className="group flex items-center gap-3.5 p-3 rounded-2xl bg-surface/35 hover:bg-surface-hover transition-all"
+                  className="group relative flex items-center gap-3.5 p-3.5 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 hover:border-white/[0.14] hover:bg-[#181a26]/90 transition-all hover:-translate-y-0.5 shadow-md"
                 >
-                  <div className="relative h-12 w-12 min-w-[3rem] min-h-[3rem] max-w-[3rem] max-h-[3rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated">
+                  <div className="relative h-12 w-12 min-w-[3rem] min-h-[3rem] max-w-[3rem] max-h-[3rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-sm">
                     <Artwork alt="" className="h-full w-full object-cover block" src={room.currentTrack?.artworkUrl ?? null} />
                     <span className="absolute top-1.5 left-1.5 flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
+                      <span className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
                         {room.roomTitle}
                       </span>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground-muted shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground-muted shrink-0 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.06]">
                         <UsersIcon className="w-3 h-3 text-accent" />
                         {room.listenerCount > 0 ? `${room.listenerCount} 人` : "空闲"}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-foreground-muted">
-                      {room.currentTrack ? `${room.currentTrack.title} · ${room.currentTrack.artist}` : `房主: ${room.hostName}`}
+                    <p className="mt-1 truncate text-xs text-foreground-muted">
+                      {room.currentTrack ? `正在播放: ${room.currentTrack.title} · ${room.currentTrack.artist}` : `主理人: ${room.hostName}`}
                     </p>
                   </div>
                 </a>
@@ -713,10 +430,10 @@ export function DiscoverPage() {
         ) : null}
 
         {!loading && noAccounts ? <DiscoverEmptyState title="连接音乐平台后开始发现" description="绑定网易云音乐或 QQ 音乐后，发现页会从你的听歌画像召回新的歌曲和歌单。" actionHref="/app/settings" actionLabel="前往绑定" /> : null}
-        {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="开始探索你的专属推荐" description="在 Music Room 播放或收藏歌曲，或通过 3 秒偏好设置快速定制你的专属雷达。" actionLabel="3 秒定制偏好" onAction={() => setShowColdStartDialog(true)} /> : null}
+        {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="开始探索你的专属推荐" description="在 Music Room 播放或收藏歌曲，或通过偏好设置快速定制你的专属雷达。" actionLabel="定制音乐偏好" onAction={() => setShowColdStartDialog(true)} /> : null}
         {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="暂无新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
 
-        {/* Featured Playlists */}
+        {/* Featured Playlists (Vinyl Disc Hover Extraction) */}
         {filteredPlaylists.length ? (
           <DiscoverSection title={activeFilterId === "all" ? "推荐歌单" : `${activeFilter?.label ?? ""}风格歌单`}>
             <DiscoverPlaylistRail items={filteredPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} />
@@ -744,7 +461,7 @@ export function DiscoverPage() {
           </DiscoverSection>
         ) : null}
 
-        {/* Compact Grid */}
+        {/* Compact Grid (Guess You Like 3x3) */}
         {compactRecommendations.length && activeFilterId === "all" ? (
           <DiscoverSection title="猜你喜欢">
             <DiscoverCompactTrackGrid tracks={compactRecommendations} actions={trackActions} />
@@ -798,7 +515,7 @@ function DiscoverSection({ title, icon, children }: { title: string; icon?: Reac
     <section className="mt-10 sm:mt-12">
       <div className="mb-4 flex items-center gap-2">
         {icon}
-        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">{title}</h2>
+        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{title}</h2>
       </div>
       {children}
     </section>
@@ -814,13 +531,13 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
         return (
           <button
             aria-label={`打开歌单《${playlist.title}》`}
-            className="group flex min-w-0 max-w-full flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 text-left transition-all duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:p-2.5"
+            className="group flex min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 p-2.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.14] hover:bg-[#181a26]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             disabled={loading}
             key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)}
             onClick={() => void onOpen(item)}
             type="button"
           >
-            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated">
+            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-md">
               <Artwork
                 alt={playlist.title}
                 className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105"
@@ -831,7 +548,7 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
                 {loading ? <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <PlayIcon className="w-4 h-4" />}
               </span>
             </div>
-            <p className="mt-2.5 line-clamp-2 text-xs sm:text-sm font-semibold leading-tight text-foreground group-hover:text-accent transition-colors" title={playlist.title}>
+            <p className="mt-2.5 line-clamp-2 text-xs sm:text-sm font-semibold leading-tight text-white group-hover:text-accent transition-colors" title={playlist.title}>
               {playlist.title}
             </p>
             <p className="mt-1 truncate text-[11px] text-foreground-muted" title={playlist.creatorName ?? ""}>
@@ -848,24 +565,27 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
 
 function DiscoverCompactTrackGrid({ tracks, actions }: { tracks: DiscoverTrackRecommendation[]; actions: DiscoverTrackActions }) {
   return (
-    <div className="grid gap-x-6 gap-y-2 sm:gap-x-8 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-x-4 gap-y-2 sm:gap-x-6 md:grid-cols-2 xl:grid-cols-3">
       {tracks.map((item) => (
-        <div className="flex min-w-0 items-center gap-3 py-2 px-2.5 rounded-2xl transition duration-200 hover:bg-surface-hover group" key={providerTrackKey(item.candidate)}>
+        <div
+          className="flex min-w-0 items-center gap-3 py-2 px-3 rounded-2xl border border-transparent hover:border-white/[0.06] transition-all hover:bg-white/[0.06] group"
+          key={providerTrackKey(item.candidate)}
+        >
           <button
             aria-label={`播放《${item.candidate.title}》`}
-            className="group/art relative h-11 w-11 min-w-[2.75rem] min-h-[2.75rem] max-w-[2.75rem] max-h-[2.75rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group/art relative h-11 w-11 min-w-[2.75rem] min-h-[2.75rem] max-w-[2.75rem] max-h-[2.75rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             disabled={actions.pending !== null}
             onClick={() => actions.onPlay(item.candidate)}
             type="button"
           >
             <Artwork alt="" className="h-full w-full object-cover block" src={item.candidate.artworkUrl} />
             <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition group-hover/art:opacity-100">
-              <PlayIcon className="w-3.5 h-3.5" />
+              <PlayIcon className="w-3.5 h-3.5 text-white" />
             </span>
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">{item.candidate.title}</p>
-            <p className="truncate text-xs text-foreground-muted">{item.candidate.artist}{item.candidate.album ? ` · ${item.candidate.album}` : ""}</p>
+            <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">{item.candidate.title}</p>
+            <p className="truncate text-xs text-foreground-muted mt-0.5">{item.candidate.artist}{item.candidate.album ? ` · ${item.candidate.album}` : ""}</p>
           </div>
           <TrackMoreActions actions={actions} compact track={item.candidate} />
         </div>
@@ -887,15 +607,15 @@ function DiscoverTrackRail({ tracks, actions }: { tracks: DiscoverTrackRecommend
 function DiscoverTrackCard({ track, actions }: { track: Track; actions: DiscoverTrackActions }) {
   const preparing = actions.pending === `play:${track.provider}:${track.providerTrackId}` || actions.pending === `queue:${track.provider}:${track.providerTrackId}`;
   return (
-    <article className="group relative flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 text-left transition-all duration-200 hover:bg-surface-hover sm:p-2.5">
+    <article className="group relative flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 p-2.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.14] hover:bg-[#181a26]/90 sm:p-3 shadow-md">
       <button
         aria-label={`播放《${track.title}》`}
-        className="group/btn relative block aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group/btn relative block aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated text-left border border-white/10 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         disabled={actions.pending !== null}
         onClick={() => actions.onPlay(track)}
         type="button"
       >
-            <Artwork alt="" className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
+        <Artwork alt="" className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
         <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
         <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-0 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 group-hover:opacity-100 scale-95 group-hover:scale-100">
           <PlayIcon className="w-4 h-4" />
@@ -903,12 +623,12 @@ function DiscoverTrackCard({ track, actions }: { track: Track; actions: Discover
       </button>
       <div className="mt-2.5 flex min-w-0 items-start justify-between gap-1.5">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors" title={track.title}>{track.title}</p>
+          <p className="truncate text-xs sm:text-sm font-semibold text-white group-hover:text-accent transition-colors" title={track.title}>{track.title}</p>
           <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={track.artist}>{track.artist}</p>
         </div>
         <TrackMoreActions actions={actions} track={track} />
       </div>
-      <p className="mt-1 truncate text-[10px] text-foreground-muted">{providerLabel(track.provider)}{preparing ? " · 准备中" : ""}</p>
+      <p className="mt-1 truncate text-[10px] text-foreground-muted/70">{providerLabel(track.provider)}{preparing ? " · 准备中" : ""}</p>
     </article>
   );
 }
@@ -935,7 +655,7 @@ function TrackMoreActions({ track, actions, compact = false }: { track: Track; a
           <FavoriteTrackButton isFavorite={actions.isFavorite(track)} onToggle={() => actions.onToggleFavorite(track)} pending={actions.isFavoritePending(track)} size="compact" track={track} />
         </div>
       ) : null}
-      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-7 w-7 rounded-full text-foreground-muted hover:text-foreground hover:bg-white/[0.06]" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
+      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-7 w-7 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08]" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
         <MoreIcon />
       </Button>
       {menuAnchor ? (
@@ -951,21 +671,23 @@ function PlaylistPicker({ track, anchor, options, loading, pending, onClose, onS
 }
 
 function Feedback({ statusMessage, errorMessage }: { statusMessage: string | null; errorMessage: string | null }) {
-  return <>{statusMessage ? <p className="mt-5 rounded-2xl bg-surface/50 px-4 py-3 text-xs text-foreground" role="status">{statusMessage}</p> : null}{errorMessage ? <p className="mt-5 rounded-2xl bg-red-950/30 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}</>;
+  return <>{statusMessage ? <p className="mt-5 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-4 py-3 text-xs text-white" role="status">{statusMessage}</p> : null}{errorMessage ? <p className="mt-5 rounded-2xl bg-red-950/30 border border-red-500/20 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}</>;
 }
 
 function DiscoverEmptyState({ title, description, actionHref, actionLabel, onAction }: { title: string; description: string; actionHref?: string; actionLabel: string; onAction?: () => void }) {
   return (
-    <section className="mt-10 flex min-h-64 flex-col items-center justify-center rounded-3xl bg-surface/20 px-6 text-center">
-      <DiscoverCompassIcon className="w-8 h-8 text-foreground-muted mb-2" />
-      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+    <section className="mt-10 flex min-h-64 flex-col items-center justify-center rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 px-6 py-12 text-center shadow-xl">
+      <div className="p-3.5 rounded-2xl bg-accent/15 border border-accent/25 text-accent mb-4">
+        <DiscoverCompassIcon className="w-8 h-8" />
+      </div>
+      <h2 className="text-base font-bold text-white">{title}</h2>
       <p className="mt-1.5 max-w-sm text-xs text-foreground-muted leading-relaxed">{description}</p>
       {actionHref ? (
-        <a className="mt-5 rounded-full bg-accent hover:bg-accent-hover px-5 py-2 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)]" href={actionHref}>
+        <a className="mt-5 rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)]" href={actionHref}>
           {actionLabel}
         </a>
       ) : (
-        <button className="mt-5 rounded-full bg-accent hover:bg-accent-hover px-5 py-2 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)]" onClick={onAction} type="button">
+        <button className="mt-5 rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)] active:scale-95" onClick={onAction} type="button">
           {actionLabel}
         </button>
       )}
@@ -977,10 +699,10 @@ function DiscoverSkeleton() {
   return (
     <div aria-label="正在加载个性化发现内容" className="mt-7 grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {Array.from({ length: 6 }, (_, index) => (
-        <div className="animate-pulse" key={index}>
-          <div className="aspect-square rounded-2xl bg-surface/35" />
-          <div className="mt-3 h-3 w-4/5 rounded bg-surface/35" />
-          <div className="mt-2 h-2 w-1/2 rounded bg-surface/35" />
+        <div className="animate-pulse p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.04]" key={index}>
+          <div className="aspect-square rounded-xl bg-white/[0.06]" />
+          <div className="mt-3 h-3 w-4/5 rounded bg-white/[0.06]" />
+          <div className="mt-2 h-2 w-1/2 rounded bg-white/[0.06]" />
         </div>
       ))}
     </div>
@@ -990,7 +712,7 @@ function DiscoverSkeleton() {
 function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
   const [failed, setFailed] = useState(false);
   const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-surface-elevated text-xl text-foreground-muted ${className}`}>♪</span>;
+  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-white/[0.06] text-xl text-foreground-muted ${className}`}>♪</span>;
   // eslint-disable-next-line @next/next/no-img-element
   return <img alt={alt} className={`block min-w-0 max-w-full object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} style={{ display: "block", height: "100%", maxHeight: "100%", maxWidth: "100%", width: "100%" }} />;
 }

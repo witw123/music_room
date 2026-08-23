@@ -353,27 +353,62 @@ export function RoomsHomePage({
         </div>
 
         <div className="hidden items-center justify-between gap-4 md:flex">
-          <div className="workspace-segmented" role="tablist" aria-label="房间类型筛选">
-            {(["all", "interactive", "request", "radio"] as const).map((roomType) => (
-              <button aria-selected={roomTypeFilter === roomType} className="workspace-segmented__item" key={roomType} onClick={() => setRoomTypeFilter(roomType)} role="tab" type="button">
-                {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
-              </button>
-            ))}
+          <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-2xl" role="tablist" aria-label="房间类型筛选">
+            {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
+              const isSelected = roomTypeFilter === roomType;
+              return (
+                <button
+                  aria-selected={isSelected}
+                  className={`flex min-h-9 items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                    isSelected
+                      ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                  key={roomType}
+                  onClick={() => setRoomTypeFilter(roomType)}
+                  role="tab"
+                  type="button"
+                >
+                  {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button data-testid="create-public-room" size="sm" onClick={() => openCreateRoom("public")} type="button">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <Button
+              data-testid="create-public-room"
+              size="sm"
+              className="rounded-xl px-4 text-xs sm:text-sm font-semibold bg-accent hover:bg-accent-hover text-white shadow-[0_4px_20px_var(--accent-glow)] transition-all active:scale-95"
+              onClick={() => openCreateRoom("public")}
+              type="button"
+            >
               创建公开房间
             </Button>
-            <Button data-testid="create-private-room" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={() => openCreateRoom("private")} type="button">
+            <Button
+              data-testid="create-private-room"
+              variant="outline"
+              size="sm"
+              className="rounded-xl border border-white/[0.08] bg-white/[0.05] hover:bg-white/[0.10] text-white text-xs sm:text-sm font-medium transition-all"
+              onClick={() => openCreateRoom("private")}
+              type="button"
+            >
               创建私密房间
             </Button>
-            <Button data-testid="open-join-room-dialog" variant="outline" size="sm" className="border-surface-border bg-surface hover:bg-surface-hover" onClick={openJoinDialog} type="button">
+            <Button
+              data-testid="open-join-room-dialog"
+              variant="outline"
+              size="sm"
+              className="rounded-xl border border-white/[0.08] bg-white/[0.05] hover:bg-white/[0.10] text-white text-xs sm:text-sm font-medium transition-all"
+              onClick={openJoinDialog}
+              type="button"
+            >
               输入房间码加入
             </Button>
             <Button
               aria-label="刷新房间列表"
               variant="ghost"
               size="sm"
+              className="rounded-xl text-foreground-muted hover:text-white hover:bg-white/[0.06] text-xs sm:text-sm transition-all"
               onClick={() => startTransition(() => void refreshAvailableRooms())}
               type="button"
             >
@@ -382,19 +417,33 @@ export function RoomsHomePage({
           </div>
         </div>
 
-        <div className="workspace-surface min-h-[300px] p-3 lg:p-5 xl:p-6">
+        <div className="rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/40 to-[#0c0e15]/60 p-4 lg:p-6 backdrop-blur-2xl min-h-[300px] shadow-2xl">
           <div className="mb-4 flex justify-center md:hidden">
-            <div className="workspace-segmented" role="tablist" aria-label="房间类型筛选">
-              {(["all", "interactive", "request", "radio"] as const).map((roomType) => (
-                <button aria-selected={roomTypeFilter === roomType} className="workspace-segmented__item" key={roomType} onClick={() => setRoomTypeFilter(roomType)} role="tab" type="button">
-                  {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
-                </button>
-              ))}
+            <div className="flex w-full items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80" role="tablist" aria-label="房间类型筛选">
+              {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
+                const isSelected = roomTypeFilter === roomType;
+                return (
+                  <button
+                    aria-selected={isSelected}
+                    className={`flex-1 flex min-h-9 items-center justify-center rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                      isSelected
+                        ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)]"
+                        : "text-foreground-muted hover:text-white"
+                    }`}
+                    key={roomType}
+                    onClick={() => setRoomTypeFilter(roomType)}
+                    role="tab"
+                    type="button"
+                  >
+                    {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <div className="mb-3 flex items-center justify-between md:hidden">
-            <h2 className="text-lg font-semibold leading-6 text-foreground">全部房间</h2>
-            <span className="text-sm text-foreground-muted">{visibleRooms.length} 个</span>
+          <div className="mb-4 flex items-center justify-between md:hidden">
+            <h2 className="text-base font-bold text-white tracking-tight">全部房间</h2>
+            <span className="text-xs text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
             <div className="grid w-full grid-cols-1 justify-center gap-4 md:grid-cols-[repeat(auto-fit,18rem)] xl:gap-5">

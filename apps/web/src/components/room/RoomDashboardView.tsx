@@ -24,6 +24,11 @@ import type { LocalMemberPanelState } from "./MembersPanel";
 import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
+import {
+  MusicIcon,
+  RadioIcon,
+  UsersIcon
+} from "@/components/icons/DiscoverIcons";
 
 type ManagementTabId = "library" | "local" | "members";
 
@@ -96,7 +101,11 @@ type RoomLayoutProps = RoomDashboardViewProps & {
   membershipNow: number;
 };
 
-const managementTabIds: ManagementTabId[] = ["library", "local", "members"];
+const tabConfigs: Array<{ id: ManagementTabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "library", label: "曲库", icon: MusicIcon },
+  { id: "local", label: "我的歌单", icon: RadioIcon },
+  { id: "members", label: "成员", icon: UsersIcon }
+];
 
 const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel));
 const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((mod) => mod.LocalStorageTabPanel));
@@ -138,32 +147,58 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
     const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (!direction) return;
     event.preventDefault();
-    const nextTab = managementTabIds[(managementTabIds.indexOf(tab) + direction + managementTabIds.length) % managementTabIds.length];
+    const tabIds = tabConfigs.map((t) => t.id);
+    const nextTab = tabIds[(tabIds.indexOf(tab) + direction + tabIds.length) % tabIds.length];
     handleTabChange(nextTab);
     document.getElementById(`room-tab-${nextTab}`)?.focus();
   }, [handleTabChange]);
 
-  return <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:overflow-hidden lg:gap-0" data-custom-layout-room-root="true">
-    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-      {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" /> : null}
-    </div>
-    <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:min-h-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
-      <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
-        <RoomStage {...buildRoomStageProps(props)} />
+  return (
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:overflow-hidden lg:gap-0" data-custom-layout-room-root="true">
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" /> : null}
       </div>
-    </div>
-    <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
-      <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.08] px-3 pb-2 pt-2 sm:px-5 sm:pt-4 lg:rounded-none">
-        <div aria-label="房间视图" className="relative flex items-center gap-0 rounded-xl bg-black/20 p-1" role="tablist">
-          <span aria-hidden="true" className="pointer-events-none absolute inset-y-1 rounded-[9px] bg-white/[0.12] shadow-[0_1px_2px_rgba(0,0,0,0.24)] transition-[transform,width] duration-200 ease-out" style={{ transform: `translateX(${managementTabIds.indexOf(activeTab) * 100}%)`, width: `${100 / managementTabIds.length}%` }} />
-          {managementTabIds.map((tab) => <button key={tab} id={`room-tab-${tab}`} data-testid={`room-tab-${tab}`} aria-controls={`room-panel-${tab}`} aria-selected={activeTab === tab} onClick={() => handleTabChange(tab)} onKeyDown={(event) => handleTabKeyDown(event, tab)} role="tab" tabIndex={activeTab === tab ? 0 : -1} className={`relative z-10 flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-[color,opacity] duration-150 ease-out sm:text-sm ${activeTab === tab ? "text-white" : "text-white/50 hover:text-white/80"}`} type="button">{managementTabLabel(tab)}</button>)}
+      <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:min-h-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
+        <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
+          <RoomStage {...buildRoomStageProps(props)} />
         </div>
       </div>
-      <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[var(--room-mobile-bottom-inset)] pt-3 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
-        <RoomManagementContent {...props} activeTab={activeTab} />
-      </div>
-    </section>
-  </div>;
+      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2 pt-2 sm:px-5 sm:pt-4 lg:rounded-none">
+          <div aria-label="房间视图" className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl" role="tablist">
+            {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  id={`room-tab-${tab}`}
+                  data-testid={`room-tab-${tab}`}
+                  aria-controls={`room-panel-${tab}`}
+                  aria-selected={isActive}
+                  onClick={() => handleTabChange(tab)}
+                  onKeyDown={(event) => handleTabKeyDown(event, tab)}
+                  role="tab"
+                  tabIndex={isActive ? 0 : -1}
+                  className={`flex-1 flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                    isActive
+                      ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                  type="button"
+                >
+                  <IconComp className="w-3.5 h-3.5" />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[var(--room-mobile-bottom-inset)] pt-3 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
+          <RoomManagementContent {...props} activeTab={activeTab} />
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementTabId }) {
@@ -203,5 +238,4 @@ export function buildRoomStageProps(
   };
 }
 
-function managementTabLabel(tab: ManagementTabId) { return tab === "library" ? "曲库" : tab === "local" ? "我的歌单" : "成员"; }
 export const RoomDashboardView = memo(RoomDashboardViewBase);

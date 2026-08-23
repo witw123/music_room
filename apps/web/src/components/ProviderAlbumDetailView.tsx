@@ -13,6 +13,12 @@ import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/Mob
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import {
+  PlayIcon,
+  HeartIcon,
+  SparklesIcon,
+  ChevronLeftIcon
+} from "@/components/icons/DiscoverIcons";
 
 type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -52,34 +58,82 @@ export function ProviderAlbumDetailView({
   trackActions
 }: ProviderAlbumDetailViewProps) {
   return (
-    <section className="mt-3 sm:mt-6">
-      <button className="inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white/60 transition hover:bg-white/10 hover:text-white mb-3 sm:mb-5" onClick={onBack} type="button">
-        <Icon name="arrow-left" />
-        返回
+    <section className="mt-3 sm:mt-6 animate-in fade-in duration-300">
+      {/* Sleek Vector Back Button */}
+      <button
+        className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-foreground-muted transition-all hover:bg-white/[0.08] hover:text-white mb-4 sm:mb-6 border border-white/[0.06] backdrop-blur-md"
+        onClick={onBack}
+        type="button"
+      >
+        <ChevronLeftIcon className="w-3.5 h-3.5" />
+        <span>返回</span>
       </button>
-      <div className="grid gap-5 sm:gap-7 border-b border-white/[0.08] pb-7 sm:pb-9 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)] items-center sm:items-end">
-        <div className="w-40 sm:w-full max-w-[260px] mx-auto sm:mx-0 shrink-0">
+
+      {/* Atmospheric Album Hero Stage */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl grid gap-6 sm:gap-8 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] items-center sm:items-end">
+        {/* Ambient Glow Aura */}
+        <div className="absolute -top-12 -right-12 w-64 h-64 rounded-full bg-[radial-gradient(circle,#38bdf818_0%,transparent_70%)] blur-2xl pointer-events-none" />
+
+        <div className="w-44 sm:w-full max-w-[240px] mx-auto sm:mx-0 shrink-0">
           <AlbumArtwork alt={album.title} src={album.artworkUrl} />
         </div>
-        <div className="flex min-w-0 flex-col justify-end text-center sm:text-left">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-accent">Album</p>
-          <h1 className="mt-1.5 sm:mt-2 text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white">{album.title}</h1>
-          <p className="mt-2 text-xs sm:text-sm text-white/60">{album.artist} · {album.releaseTime || "发行时间未知"}</p>
+        <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
+          <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent/15 text-accent border border-accent/20">
+              <SparklesIcon className="w-3 h-3" />
+              <span>ALBUM</span>
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white">{album.title}</h1>
+          <p className="mt-2 text-xs sm:text-sm text-foreground-muted font-medium">
+            {album.artist} · {album.releaseTime || "发行时间未知"} · {album.tracks.length} 首歌曲
+          </p>
           <DescriptionDisclosure description={album.description} />
-          <div className="mt-4 sm:mt-6 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-            <Button aria-pressed={isFavorite} disabled={pending !== null} onClick={() => void onToggleFavorite()} size="sm" type="button" className="rounded-xl font-medium">
-              <Icon name="heart" filled={isFavorite} />
-              {isFavorite ? "已收藏" : "收藏专辑"}
+          <div className="mt-5 flex flex-wrap items-center justify-center sm:justify-start gap-3">
+            {album.tracks[0] && trackActions?.onPlay ? (
+              <button
+                type="button"
+                onClick={() => trackActions.onPlay?.(album.tracks[0])}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+              >
+                <PlayIcon className="w-3.5 h-3.5" />
+                <span>播放专辑</span>
+              </button>
+            ) : null}
+            <Button
+              aria-pressed={isFavorite}
+              disabled={pending !== null}
+              onClick={() => void onToggleFavorite()}
+              size="sm"
+              type="button"
+              className={`rounded-xl text-xs font-medium border border-white/10 ${
+                isFavorite
+                  ? "bg-[#fa233b]/15 text-[#fa233b] hover:bg-[#fa233b]/25 border-[#fa233b]/30"
+                  : "bg-white/[0.06] hover:bg-white/[0.12] text-white"
+              }`}
+            >
+              <HeartIcon className="w-3.5 h-3.5" />
+              <span>{isFavorite ? "已收藏" : "收藏专辑"}</span>
             </Button>
             {onAddAlbumToPlaylist ? (
-              <Button aria-label="将专辑加入歌单" disabled={pending !== null} onClick={(event) => onAddAlbumToPlaylist(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="将专辑加入歌单" type="button" variant="ghost" className="rounded-xl">
+              <Button
+                aria-label="将专辑加入歌单"
+                disabled={pending !== null}
+                onClick={(event) => onAddAlbumToPlaylist(getAnchoredDialogAnchor(event.currentTarget))}
+                size="icon"
+                title="将专辑加入歌单"
+                type="button"
+                variant="ghost"
+                className="rounded-xl border border-white/10 bg-white/[0.06] hover:bg-white/[0.12]"
+              >
                 <Icon name="plus" />
               </Button>
             ) : null}
-            <span className="px-2 text-xs font-mono text-white/40">{album.tracks.length} 首歌曲</span>
           </div>
         </div>
       </div>
+
+      {/* Tracklist Table */}
       <ProviderAlbumTrackTable tracks={album.tracks} actions={trackActions} />
     </section>
   );
@@ -91,10 +145,10 @@ function DescriptionDisclosure({ description }: { description: string | null }) 
   const canExpand = text.length > 120;
 
   return (
-    <div className="mt-5 max-w-3xl">
-      <p className={`text-sm leading-7 text-white/45 ${canExpand && !expanded ? "line-clamp-3" : ""}`}>{text}</p>
+    <div className="mt-4 max-w-3xl">
+      <p className={`text-xs sm:text-sm leading-relaxed text-foreground-muted/90 ${canExpand && !expanded ? "line-clamp-2" : ""}`}>{text}</p>
       {canExpand ? (
-        <button className="mt-2 text-xs font-medium text-accent/80 transition hover:text-accent" onClick={() => setExpanded((current) => !current)} type="button">
+        <button className="mt-1.5 text-xs font-semibold text-accent hover:text-accent-hover transition-colors" onClick={() => setExpanded((current) => !current)} type="button">
           {expanded ? "收起介绍" : "展开介绍"}
         </button>
       ) : null}
@@ -118,47 +172,90 @@ export function ProviderAlbumTrackTable({
     : tracks;
 
   return (
-    <section className={showToolbar ? "mt-8" : "mt-1"}>
-      {showToolbar ? <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.1]">
-        <div className="flex items-center gap-6">
-          <span className="relative pb-4 text-sm font-semibold text-white">歌曲 <span className="text-white/35">{tracks.length}</span><span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /></span>
-          <span className="pb-4 text-sm text-white/35">详情</span>
-        </div>
-        <label className="mb-2 flex h-11 w-full max-w-[220px] items-center gap-2 rounded-full border border-white/[0.1] bg-black px-3 text-white/45 sm:h-9 sm:w-auto">
-          <Icon name="search" />
-          <span className="sr-only">搜索专辑歌曲</span>
-          <input aria-label="搜索专辑歌曲" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/35" onChange={(event) => setQuery(event.target.value)} placeholder="搜索" type="search" value={query} />
-        </label>
-      </div> : null}
-      <div className={`${showToolbar ? "mt-4" : ""} divide-y divide-white/[0.07]`}>
-        {visibleTracks.length ? visibleTracks.map((track, index) => (
-          <div
-            className={`group grid gap-x-3 gap-y-2 px-3 py-3 transition-colors hover:bg-white/[0.035] ${actions ? "grid-cols-[minmax(0,1fr)_auto] cursor-pointer md:cursor-default" : "grid-cols-[minmax(0,1fr)]"} md:items-center md:gap-3 md:px-3 md:py-3 ${actions ? "md:grid-cols-[48px_minmax(0,1.4fr)_minmax(0,0.8fr)_112px_minmax(0,auto)]" : "md:grid-cols-[48px_minmax(0,1.5fr)_minmax(0,0.8fr)_112px]"}`}
-            key={`${track.provider}:${track.providerTrackId}`}
-            onClick={() => {
-              if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
-              if (window.matchMedia("(min-width: 768px)").matches) return;
-              actions.onPlay(track);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return;
-              if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
-              if (window.matchMedia("(min-width: 768px)").matches) return;
-              event.preventDefault();
-              actions.onPlay(track);
-            }}
-            tabIndex={actions?.onPlay ? 0 : undefined}
-          >
-            <div className="hidden items-center gap-2 text-xs tabular-nums text-white/35 md:flex">
-              <GripIcon />
-              <span>{String(index + 1).padStart(2, "0")}</span>
-            </div>
-            <div className="flex min-w-0 items-center gap-3"><TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium text-white/90">{track.title}</p><p className="mt-1 flex min-w-0 items-center gap-1 truncate text-xs text-white/45"><span className="truncate">{track.artist}</span><span aria-hidden="true" className="shrink-0 text-white/25">·</span><span className="shrink-0">{actions?.isDownloaded?.(track) ? "已下载" : "可直接播放"}</span></p></div></div>
-            <span className="hidden truncate text-xs text-white/55 md:block">{track.album ?? "未知专辑"}</span>
-            <span className="col-start-1 hidden text-xs tabular-nums text-white/40 md:col-auto md:block md:text-right">{formatDuration(track.durationMs)}</span>
-            {actions ? <TrackActions track={track} actions={actions} /> : null}
+    <section className={showToolbar ? "mt-8" : "mt-2"}>
+      {showToolbar ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-3 mb-2">
+          <div className="flex items-center gap-3">
+            <span className="text-base font-bold text-white tracking-tight">歌曲列表</span>
+            <span className="text-xs font-medium text-foreground-muted px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08]">
+              {tracks.length} 首
+            </span>
           </div>
-        )) : <p className="px-4 py-10 text-center text-xs text-white/35">没有匹配的歌曲。</p>}
+          <label className="flex h-9 w-full max-w-[240px] items-center gap-2 rounded-xl border border-white/[0.08] bg-[#11131c]/80 px-3 text-foreground-muted sm:w-auto shadow-inner">
+            <Icon name="search" />
+            <span className="sr-only">搜索曲目</span>
+            <input
+              aria-label="搜索曲目"
+              className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-foreground-muted/50"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="在列表中搜索..."
+              type="search"
+              value={query}
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {/* Borderless Smooth Tracklist Rows */}
+      <div className="space-y-1">
+        {visibleTracks.length ? (
+          visibleTracks.map((track, index) => (
+            <div
+              className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${
+                actions ? "cursor-pointer" : ""
+              }`}
+              key={`${track.provider}:${track.providerTrackId}`}
+              onClick={() => {
+                if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
+                actions.onPlay(track);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
+                event.preventDefault();
+                actions.onPlay(track);
+              }}
+              tabIndex={actions?.onPlay ? 0 : undefined}
+            >
+              {/* Index number or Play Icon on hover */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-6 shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
+                  <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
+                  <PlayIcon className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in" />
+                </div>
+
+                {/* Track Artwork Thumbnail */}
+                <TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} />
+
+                {/* Title & Artist */}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
+                    {track.title}
+                  </p>
+                  <p className="truncate text-xs text-foreground-muted mt-0.5">
+                    {track.artist}
+                    {track.album ? ` · ${track.album}` : ""}
+                  </p>
+                </div>
+              </div>
+
+              {/* Album (Desktop only) */}
+              <span className="hidden lg:block min-w-0 max-w-[200px] truncate text-xs text-foreground-muted/70">
+                {track.album ?? "未知专辑"}
+              </span>
+
+              {/* Duration */}
+              <span className="shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
+                {formatDuration(track.durationMs)}
+              </span>
+
+              {/* Action Buttons */}
+              {actions ? <TrackActions track={track} actions={actions} /> : null}
+            </div>
+          ))
+        ) : (
+          <p className="px-4 py-12 text-center text-xs text-foreground-muted">没有匹配的歌曲。</p>
+        )}
       </div>
     </section>
   );
@@ -182,16 +279,66 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
   ];
 
   return (
-    <div className="col-start-2 row-start-1 row-span-2 flex min-w-0 items-center justify-end gap-1 md:col-auto md:row-auto md:flex-nowrap" onClick={(event) => event.stopPropagation()}>
-      <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 md:flex md:flex-nowrap">
-        {actions.onDownload ? <Button aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || downloaded} onClick={() => actions.onDownload?.(track)} size="icon" title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地"} type="button" variant="ghost"><TrackActionIcon name={downloading ? "loading" : "download"} /></Button> : null}
-        {actions.onAddToQueue ? <Button aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || queued || !queueable} onClick={() => actions.onAddToQueue?.(track)} size="icon" title={queued ? "已在队列中" : queueable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><TrackActionIcon name="queue" /></Button> : null}
-        {actions.onPlay ? <Button aria-label={playable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled || !playable} onClick={() => actions.onPlay?.(track)} size="icon" title={preparingPlayback ? "准备播放中" : playable ? "播放" : "需要下载后播放"} type="button" variant="ghost"><TrackActionIcon name="play" /></Button> : null}
-        {actions.onAddToPlaylist ? <Button aria-label={`将《${track.title}》加入歌单`} className="h-10 w-10 md:h-8 md:w-8" disabled={disabled} onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" type="button" variant="ghost"><TrackActionIcon name="plus" /></Button> : null}
-        {actions.onToggleFavorite ? <FavoriteTrackButton isFavorite={actions.isFavorite?.(track) ?? false} onToggle={() => actions.onToggleFavorite?.(track)} pending={actions.isTogglingFavorite?.(track) ?? false} size="compact" track={track as ProviderTrackCandidate} /> : null}
+    <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
+      <div className="hidden items-center gap-1 sm:flex">
+        {actions.onAddToQueue ? (
+          <Button
+            aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            disabled={disabled || queued || !queueable}
+            onClick={() => actions.onAddToQueue?.(track)}
+            size="icon"
+            title={queued ? "已在队列中" : queueable ? "加入队列" : "需要下载后加入队列"}
+            type="button"
+            variant="ghost"
+          >
+            <TrackActionIcon name="queue" />
+          </Button>
+        ) : null}
+        {actions.onAddToPlaylist ? (
+          <Button
+            aria-label={`将《${track.title}》加入歌单`}
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            disabled={disabled}
+            onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))}
+            size="icon"
+            title="加入歌单"
+            type="button"
+            variant="ghost"
+          >
+            <TrackActionIcon name="plus" />
+          </Button>
+        ) : null}
+        {actions.onToggleFavorite ? (
+          <FavoriteTrackButton
+            isFavorite={actions.isFavorite?.(track) ?? false}
+            onToggle={() => actions.onToggleFavorite?.(track)}
+            pending={actions.isTogglingFavorite?.(track) ?? false}
+            size="compact"
+            track={track as ProviderTrackCandidate}
+          />
+        ) : null}
       </div>
-      <Button aria-label={`打开《${track.title}》的操作菜单`} className="h-10 w-10 md:hidden" onClick={(event) => { event.stopPropagation(); setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget)); }} size="icon" title="更多操作" type="button" variant="ghost"><MoreIcon /></Button>
-      {menuAnchor ? <MobileTrackActionsMenu anchor={menuAnchor} items={menuItems} onClose={() => setMenuAnchor(null)} subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`} title={track.title} /> : null}
+      <Button
+        aria-label={`打开《${track.title}》的操作菜单`}
+        className="h-8 w-8 sm:hidden text-foreground-muted hover:text-white"
+        onClick={(event) => { event.stopPropagation(); setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget)); }}
+        size="icon"
+        title="更多操作"
+        type="button"
+        variant="ghost"
+      >
+        <MoreIcon />
+      </Button>
+      {menuAnchor ? (
+        <MobileTrackActionsMenu
+          anchor={menuAnchor}
+          items={menuItems}
+          onClose={() => setMenuAnchor(null)}
+          subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`}
+          title={track.title}
+        />
+      ) : null}
     </div>
   );
 }
@@ -203,31 +350,33 @@ function MoreIcon() {
 function AlbumArtwork({ alt, src }: { alt: string; src: string | null }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
-    return <span aria-label={alt} className="flex aspect-square w-full items-center justify-center rounded-2xl bg-black text-3xl text-white/20">♪</span>;
+    return (
+      <div className="relative aspect-square w-full rounded-2xl bg-gradient-to-tr from-[#1a1d2e] to-[#0a0c16] border border-white/10 flex items-center justify-center text-3xl text-white/20 shadow-2xl">
+        ♪
+      </div>
+    );
   }
-  // External provider artwork is intentionally rendered without Next image optimization.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className="aspect-square w-full rounded-2xl object-cover" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />;
+  return (
+    <div className="relative aspect-square w-full rounded-2xl overflow-hidden border border-white/10 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt={alt} className="aspect-square w-full h-full object-cover" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
+    </div>
+  );
 }
 
 function TrackArtwork({ alt, src }: { alt: string; src: string | null }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
-    return <span aria-label={alt} className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/[0.07] text-sm text-white/35">♪</span>;
+    return <span aria-label={alt} className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/[0.06] border border-white/[0.08] text-xs text-foreground-muted">♪</span>;
   }
-  // Provider artwork URLs are external and intentionally bypass Next image optimization.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className="h-10 w-10 shrink-0 rounded-lg object-cover" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={alt} className="h-10 w-10 shrink-0 rounded-xl object-cover border border-white/10 shadow-sm" decoding="async" loading="lazy" onError={() => setFailed(true)} src={getArtworkSourceUrl(src)} />
+  );
 }
 
-function GripIcon() {
-  return <svg aria-hidden="true" className="h-4 w-3 shrink-0 text-white/25" fill="currentColor" viewBox="0 0 12 24"><circle cx="3" cy="5" r="1" /><circle cx="9" cy="5" r="1" /><circle cx="3" cy="12" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="3" cy="19" r="1" /><circle cx="9" cy="19" r="1" /></svg>;
-}
-
-function Icon({ name, filled = false }: { name: "arrow-left" | "heart" | "search" | "plus"; filled?: boolean }) {
-  const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: filled ? "currentColor" : "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  if (name === "arrow-left") return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></svg>;
-  if (name === "heart") return <svg {...common}><path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" /></svg>;
+function Icon({ name }: { name: "search" | "plus" }) {
+  const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   if (name === "plus") return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
   return <svg {...common}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>;
 }

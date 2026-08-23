@@ -60,7 +60,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111115] p-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition-all duration-300 hover:-translate-y-1 hover:border-[color:var(--room-border)] hover:shadow-[0_20px_48px_var(--room-shadow)] focus-within:border-[color:var(--room-accent)] focus-within:ring-2 focus-within:ring-[color:var(--room-accent)] focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none sm:p-4"
+      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1.5 hover:border-[color:var(--room-border)] hover:shadow-[0_24px_60px_var(--room-shadow)] focus-within:border-[color:var(--room-accent)] focus-within:ring-2 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -74,19 +74,19 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         type="button"
       />
       <header className="flex min-h-8 items-center justify-between gap-2.5">
-        <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-white/10 bg-[color:var(--room-soft)] px-2.5 text-xs font-semibold text-foreground backdrop-blur-md">
+        <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-white/10 bg-[color:var(--room-soft)] px-3 text-xs font-semibold text-white backdrop-blur-md shadow-sm">
           <RoomTypeGlyph roomType={room.roomType} />
           {theme.label}
         </span>
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-foreground-muted">
-          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.85)]" />
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-foreground-muted font-mono">
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
           {room.directoryOnlineMemberCount} 人在线
         </span>
       </header>
 
       {/* Artistic Room Visual Scene (Starfield, Radial Wave, or Vinyl Nebula) */}
       <section
-        className="relative mt-3 aspect-[2.7/1] overflow-hidden rounded-xl border border-white/[0.08] bg-[#07090e]"
+        className="relative mt-3 aspect-[2.6/1] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07090e] shadow-inner"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
@@ -94,10 +94,10 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
       </section>
 
       <div className="pt-3.5">
-        <h3 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-[1.25rem] group-hover:text-white transition-colors">
+        <h3 className="truncate text-base sm:text-lg font-bold tracking-tight text-white group-hover:text-white transition-colors">
           {room.name}
         </h3>
-        <p className="mt-1 line-clamp-2 min-h-[2.5rem] break-words text-xs sm:text-sm leading-5 text-foreground-muted/90">
+        <p className="mt-1 line-clamp-2 min-h-[2.5rem] break-words text-xs leading-relaxed text-foreground-muted/80">
           {room.description?.trim() || fallbackDescription(room)}
         </p>
       </div>

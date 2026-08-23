@@ -110,11 +110,11 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-[var(--sidebar-border)] bg-[var(--sidebar-background)] pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:pt-0 ${desktopBottomOffsetClass}`}
+      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#090b10]/90 pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/[0.06] md:pt-0 ${desktopBottomOffsetClass}`}
       data-custom-layout-item="sidebar"
       aria-label="主导航"
     >
-      <div className={`flex items-center gap-3 border-b border-[var(--sidebar-divider)] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-2 md:py-3`}>
+      <div className={`flex items-center gap-3 border-b border-white/[0.06] md:flex-col md:items-stretch ${compactMobile ? "px-3 py-2.5" : "px-4 py-3"} md:px-2 md:py-3`}>
         <Link
           href="/app"
           className={`flex min-w-0 items-center gap-3 ${collapsed ? "md:justify-center" : ""}`}
@@ -129,12 +129,12 @@ export function AppSidebar({
             }
           }}
         >
-          <span className={`flex shrink-0 items-center justify-center rounded-lg bg-accent text-white shadow-[0_8px_30px_var(--accent-glow)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
+          <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-[0_4px_20px_var(--accent-glow)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
             <NavIcon name="home" size={17} />
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
-            <span className="block truncate text-sm font-bold text-[var(--sidebar-foreground)]">Music Room</span>
-            <span className="mt-1 block truncate text-[10px] text-[var(--sidebar-secondary)]">实时协作听歌空间</span>
+            <span className="block truncate text-sm font-bold text-white tracking-tight">Music Room</span>
+            <span className="mt-1 block truncate text-[10px] text-foreground-muted">实时协作听歌空间</span>
           </span>
         </Link>
       </div>
@@ -160,12 +160,12 @@ export function AppSidebar({
                   }
                 }}
                 title={collapsed ? item.label : undefined}
-                className={`app-sidebar__nav-item group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-lg font-medium transition-[background-color,color,box-shadow] duration-200 sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3 md:py-3 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                className={`app-sidebar__nav-item group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-semibold transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3.5 md:py-2.5 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
-                    ? "app-sidebar__nav-item--active"
+                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
                     : keepsHomeInRoom
-                      ? "cursor-default opacity-60"
-                      : ""
+                      ? "cursor-default opacity-60 text-foreground-muted"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
                 } ${collapsed ? "md:justify-center md:px-2" : ""}`}
               >
                 <NavIcon name={item.icon} />
@@ -176,27 +176,27 @@ export function AppSidebar({
 
         </nav>
 
-        <div className={`app-sidebar__footer hidden flex-col border-t md:flex ${collapsed ? "md:items-center md:gap-3 md:px-0 md:pb-1 md:pt-4" : "md:items-stretch md:gap-1 md:px-0 md:pb-1 md:pt-3"}`}>
+        <div className={`app-sidebar__footer hidden flex-col border-t border-white/[0.06] md:flex ${collapsed ? "md:items-center md:gap-2.5 md:px-0 md:pb-1 md:pt-3" : "md:items-stretch md:gap-1.5 md:px-0 md:pb-1 md:pt-3"}`}>
           <button
             aria-label={`切换到${themeActionLabel}`}
-            className={`app-sidebar__footer-control app-sidebar__theme group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass}`}
+            className={`app-sidebar__footer-control app-sidebar__theme group flex min-w-0 items-center justify-center gap-2.5 font-medium text-foreground-muted hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${footerControlSizeClass}`}
             onClick={handleThemeToggle}
             title={themeActionLabel}
             type="button"
           >
-            <NavIcon name="sun" size={19} />
+            <NavIcon name="sun" size={18} />
             <span className={collapsed ? "md:hidden" : "truncate"}>{themeActionLabel}</span>
           </button>
           <button
             aria-label={collapsed ? "展开侧边栏" : "收纳侧边栏"}
             aria-expanded={!collapsed}
-            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-3 font-medium transition-[background-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${footerControlSizeClass} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
+            className={`app-sidebar__footer-control group flex min-w-0 items-center justify-center gap-2.5 font-medium text-foreground-muted hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${footerControlSizeClass} ${collapsed ? "md:justify-center" : "md:justify-start"}`}
             onClick={() => updateAppSettings({ layout: { sidebarCollapsed: !collapsed } })}
             disabled={customLayoutEnabled}
             title={collapsed ? "展开侧边栏" : "收纳侧边栏"}
             type="button"
           >
-            <NavIcon name={collapsed ? "expand" : "collapse"} size={20} />
+            <NavIcon name={collapsed ? "expand" : "collapse"} size={18} />
             <span className={collapsed ? "md:hidden" : "truncate"}>收起</span>
           </button>
         </div>
