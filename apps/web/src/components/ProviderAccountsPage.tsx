@@ -52,11 +52,11 @@ export function ProviderAccountsPage() {
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-8 md:pt-12">
-        {/* Clean Profile Hero Card */}
+        {/* Borderless Profile Hero Card */}
         <PersonalOverview activeSession={activeSession} />
 
-        {/* Unified Segmented Control Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-surface-border/40 bg-surface/50 backdrop-blur-md mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
+        {/* Borderless Segmented Control Tabs */}
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-surface/35 backdrop-blur-xl mb-6 overflow-x-auto scrollbar-none w-fit max-w-full">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -64,10 +64,10 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                   isActive
                     ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold"
-                    : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
+                    : "text-foreground-muted hover:text-foreground hover:bg-white/[0.04]"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5" />
@@ -96,7 +96,7 @@ export function ProviderAccountsPage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="border border-surface-border/40 bg-surface/35 p-5 sm:p-7 rounded-3xl backdrop-blur-xl">
+          <div className="bg-surface/35 p-5 sm:p-7 rounded-3xl backdrop-blur-xl">
             <SettingsPage embedded onBack={() => setActiveTab("taste")} />
           </div>
         )}

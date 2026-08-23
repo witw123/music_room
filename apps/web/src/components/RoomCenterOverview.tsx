@@ -44,7 +44,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Interaction Stats */}
-      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
         <h3 className="text-base font-bold text-foreground mb-4">房间互动成就</h3>
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
           <StatCard
@@ -66,7 +66,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
       </section>
 
       {/* Owned Rooms */}
-      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3 mb-4">
           <h3 className="text-base font-bold text-foreground">我创建的房间</h3>
           <Link
@@ -83,7 +83,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
             <OwnedRoomCard key={snapshot.room.id} snapshot={snapshot} />
           ))}
           {ownedRooms.length === 0 ? (
-            <div className="col-span-full py-8 text-center rounded-xl border border-dashed border-surface-border text-foreground-muted text-xs">
+            <div className="col-span-full py-8 text-center rounded-2xl bg-surface/20 text-foreground-muted text-xs">
               还没有创建房间
             </div>
           ) : null}
@@ -101,14 +101,14 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
       </section>
 
       {/* Recent Rooms */}
-      <section className="rounded-2xl border border-surface-border bg-surface/45 p-5 sm:p-6 backdrop-blur-md">
+      <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
         <h3 className="text-base font-bold text-foreground mb-4">最近参与</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(showAllRecent ? recentRooms : recentRooms.slice(0, 6)).map((room) => (
             <RecentRoomCard key={room.roomId} room={room} />
           ))}
           {recentRooms.length === 0 ? (
-            <div className="col-span-full py-8 text-center rounded-xl border border-dashed border-surface-border text-foreground-muted text-xs">
+            <div className="col-span-full py-8 text-center rounded-2xl bg-surface/20 text-foreground-muted text-xs">
               还没有参与记录
             </div>
           ) : null}
@@ -133,14 +133,14 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
   const onlineCount = getOnlineMemberCount(room.members);
   return (
     <Link
-      className="group rounded-xl border border-surface-border bg-surface/40 p-4 transition-all hover:bg-surface-hover hover:border-accent/40"
+      className="group rounded-2xl bg-surface/30 p-4 transition-all hover:bg-surface-hover"
       href={`/room/${room.id}`}
     >
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors">
           {room.name ?? "未命名房间"}
         </span>
-        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface text-foreground-muted border border-surface-border">
+        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
           {roomTypeLabel[room.roomType]}
         </span>
       </div>
@@ -160,14 +160,14 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
 function RecentRoomCard({ room }: { room: RoomActivitySummary }) {
   return (
     <Link
-      className="group rounded-xl border border-surface-border bg-surface/40 p-4 transition-all hover:bg-surface-hover hover:border-accent/40"
+      className="group rounded-2xl bg-surface/30 p-4 transition-all hover:bg-surface-hover"
       href={`/room/${room.roomId}`}
     >
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors">
           {room.roomName}
         </span>
-        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface text-foreground-muted border border-surface-border">
+        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
           {roomTypeLabel[room.roomType]}
         </span>
       </div>
@@ -181,7 +181,7 @@ function RecentRoomCard({ room }: { room: RoomActivitySummary }) {
 
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-4">
+    <div className="rounded-2xl bg-surface/30 p-3.5 sm:p-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-foreground-muted">{label}</span>
         {icon}

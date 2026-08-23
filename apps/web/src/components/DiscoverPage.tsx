@@ -591,7 +591,7 @@ export function DiscoverPage() {
         {/* Search header integration */}
         <ProviderSearchPage embedded inlineSearch />
 
-        {/* Genre & Scene Filter Pills aligned with design tokens */}
+        {/* Genre & Scene Filter Pills */}
         <div className="mt-4 mb-7 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {genreFilterPills.map((pill) => {
             const IconComp = pill.icon;
@@ -604,7 +604,7 @@ export function DiscoverPage() {
                 className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                   active
                     ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)]"
-                    : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
+                    : "bg-surface/50 hover:bg-surface text-foreground-muted hover:text-foreground"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5 shrink-0" />
@@ -615,7 +615,7 @@ export function DiscoverPage() {
           <button
             type="button"
             onClick={() => setShowColdStartDialog(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-medium text-foreground-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-surface-border ml-auto shrink-0 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-medium text-foreground-muted hover:text-foreground bg-surface/50 hover:bg-surface ml-auto shrink-0 transition-colors"
             title="定制偏好"
           >
             <SlidersIcon className="w-3.5 h-3.5 text-accent" />
@@ -627,7 +627,7 @@ export function DiscoverPage() {
 
         {/* Editorial Spotlight Hero Card */}
         {data?.dailyRadar && data.dailyRadar.tracks.length > 0 && activeFilterId === "all" ? (
-          <section className="relative mb-10 overflow-hidden rounded-3xl border border-surface-border bg-surface/45 p-6 sm:p-8 shadow-[var(--surface-shadow)] backdrop-blur-xl">
+          <section className="relative mb-10 overflow-hidden rounded-3xl bg-surface/35 p-6 sm:p-8 shadow-[var(--surface-shadow)] backdrop-blur-xl">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-1.5 text-xs font-bold text-accent uppercase tracking-wider">
@@ -643,7 +643,7 @@ export function DiscoverPage() {
                 {data.dailyRadar.summaryGenres.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {data.dailyRadar.summaryGenres.map((g) => (
-                      <span key={g} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface text-foreground border border-surface-border">
+                      <span key={g} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface-elevated text-foreground">
                         {g}
                       </span>
                     ))}
@@ -665,7 +665,7 @@ export function DiscoverPage() {
                   type="button"
                   variant="outline"
                   onClick={() => setShowColdStartDialog(true)}
-                  className="rounded-full border-surface-border bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground px-4"
+                  className="rounded-full bg-surface/50 hover:bg-surface text-foreground-muted hover:text-foreground px-4 border-transparent"
                   title="调整偏好"
                 >
                   <SlidersIcon className="w-4 h-4" />
@@ -682,11 +682,11 @@ export function DiscoverPage() {
               {data.liveRooms.map((room) => (
                 <a
                   key={room.roomId}
-                  href={`/app/rooms/${room.roomId}`}
-                  className="group flex items-center gap-3.5 p-3.5 rounded-2xl border border-surface-border bg-surface/40 hover:bg-surface-hover hover:border-accent/40 transition-all"
+                  href={`/room/${room.roomId}`}
+                  className="group flex items-center gap-3.5 p-3 rounded-2xl bg-surface/35 hover:bg-surface-hover transition-all"
                 >
-                  <div className="relative h-13 w-13 shrink-0 overflow-hidden rounded-xl bg-surface-elevated border border-surface-border">
-                    <Artwork alt="" className="h-full w-full object-cover" src={room.currentTrack?.artworkUrl ?? null} />
+                  <div className="relative h-12 w-12 min-w-[3rem] min-h-[3rem] max-w-[3rem] max-h-[3rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated">
+                    <Artwork alt="" className="h-full w-full object-cover block" src={room.currentTrack?.artworkUrl ?? null} />
                     <span className="absolute top-1.5 left-1.5 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
@@ -814,16 +814,16 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
         return (
           <button
             aria-label={`打开歌单《${playlist.title}》`}
-            className="group flex flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/40 p-2 sm:p-2.5 text-left transition-all duration-200 hover:border-accent/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group flex flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 sm:p-2.5 text-left transition-all duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             disabled={loading}
             key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)}
             onClick={() => void onOpen(item)}
             type="button"
           >
-            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface-elevated border border-surface-border">
+            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface-elevated">
               <Artwork
                 alt={playlist.title}
-                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                className="h-full w-full object-cover block transition duration-300 group-hover:scale-105"
                 src={playlist.artworkUrl}
               />
               <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
@@ -850,15 +850,15 @@ function DiscoverCompactTrackGrid({ tracks, actions }: { tracks: DiscoverTrackRe
   return (
     <div className="grid gap-x-6 gap-y-2 sm:gap-x-8 md:grid-cols-2 xl:grid-cols-3">
       {tracks.map((item) => (
-        <div className="flex min-w-0 items-center gap-3 py-2 px-2.5 rounded-xl transition duration-200 hover:bg-surface-hover border border-transparent hover:border-surface-border group" key={providerTrackKey(item.candidate)}>
+        <div className="flex min-w-0 items-center gap-3 py-2 px-2.5 rounded-2xl transition duration-200 hover:bg-surface-hover group" key={providerTrackKey(item.candidate)}>
           <button
             aria-label={`播放《${item.candidate.title}》`}
-            className="group/art relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-surface-elevated border border-surface-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group/art relative h-11 w-11 min-w-[2.75rem] min-h-[2.75rem] max-w-[2.75rem] max-h-[2.75rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             disabled={actions.pending !== null}
             onClick={() => actions.onPlay(item.candidate)}
             type="button"
           >
-            <Artwork alt="" className="h-full w-full object-cover" src={item.candidate.artworkUrl} />
+            <Artwork alt="" className="h-full w-full object-cover block" src={item.candidate.artworkUrl} />
             <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition group-hover/art:opacity-100">
               <PlayIcon className="w-3.5 h-3.5" />
             </span>
@@ -887,15 +887,15 @@ function DiscoverTrackRail({ tracks, actions }: { tracks: DiscoverTrackRecommend
 function DiscoverTrackCard({ track, actions }: { track: Track; actions: DiscoverTrackActions }) {
   const preparing = actions.pending === `play:${track.provider}:${track.providerTrackId}` || actions.pending === `queue:${track.provider}:${track.providerTrackId}`;
   return (
-    <article className="group relative flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/40 p-2 sm:p-2.5 text-left transition-all duration-200 hover:border-accent/40 hover:bg-surface-hover">
+    <article className="group relative flex w-full min-w-0 flex-col overflow-hidden rounded-2xl bg-surface/35 p-2 sm:p-2.5 text-left transition-all duration-200 hover:bg-surface-hover">
       <button
         aria-label={`播放《${track.title}》`}
-        className="group/btn relative block aspect-square w-full overflow-hidden rounded-xl bg-surface-elevated border border-surface-border text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group/btn relative block aspect-square w-full overflow-hidden rounded-xl bg-surface-elevated text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         disabled={actions.pending !== null}
         onClick={() => actions.onPlay(track)}
         type="button"
       >
-        <Artwork alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
+        <Artwork alt="" className="h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
         <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
         <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-0 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 group-hover:opacity-100 scale-95 group-hover:scale-100">
           <PlayIcon className="w-4 h-4" />
@@ -935,7 +935,7 @@ function TrackMoreActions({ track, actions, compact = false }: { track: Track; a
           <FavoriteTrackButton isFavorite={actions.isFavorite(track)} onToggle={() => actions.onToggleFavorite(track)} pending={actions.isFavoritePending(track)} size="compact" track={track} />
         </div>
       ) : null}
-      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-7 w-7 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-hover" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
+      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-7 w-7 rounded-full text-foreground-muted hover:text-foreground hover:bg-white/[0.06]" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
         <MoreIcon />
       </Button>
       {menuAnchor ? (
@@ -951,12 +951,12 @@ function PlaylistPicker({ track, anchor, options, loading, pending, onClose, onS
 }
 
 function Feedback({ statusMessage, errorMessage }: { statusMessage: string | null; errorMessage: string | null }) {
-  return <>{statusMessage ? <p className="mt-5 rounded-xl border border-surface-border bg-surface px-4 py-3 text-xs text-foreground" role="status">{statusMessage}</p> : null}{errorMessage ? <p className="mt-5 rounded-xl border border-red-500/20 bg-red-950/30 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}</>;
+  return <>{statusMessage ? <p className="mt-5 rounded-2xl bg-surface/50 px-4 py-3 text-xs text-foreground" role="status">{statusMessage}</p> : null}{errorMessage ? <p className="mt-5 rounded-2xl bg-red-950/30 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}</>;
 }
 
 function DiscoverEmptyState({ title, description, actionHref, actionLabel, onAction }: { title: string; description: string; actionHref?: string; actionLabel: string; onAction?: () => void }) {
   return (
-    <section className="mt-10 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-surface-border bg-surface/30 px-6 text-center">
+    <section className="mt-10 flex min-h-64 flex-col items-center justify-center rounded-3xl bg-surface/20 px-6 text-center">
       <DiscoverCompassIcon className="w-8 h-8 text-foreground-muted mb-2" />
       <h2 className="text-base font-semibold text-foreground">{title}</h2>
       <p className="mt-1.5 max-w-sm text-xs text-foreground-muted leading-relaxed">{description}</p>
@@ -978,9 +978,9 @@ function DiscoverSkeleton() {
     <div aria-label="正在加载个性化发现内容" className="mt-7 grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {Array.from({ length: 6 }, (_, index) => (
         <div className="animate-pulse" key={index}>
-          <div className="aspect-square rounded-2xl bg-surface" />
-          <div className="mt-3 h-3 w-4/5 rounded bg-surface" />
-          <div className="mt-2 h-2 w-1/2 rounded bg-surface" />
+          <div className="aspect-square rounded-2xl bg-surface/35" />
+          <div className="mt-3 h-3 w-4/5 rounded bg-surface/35" />
+          <div className="mt-2 h-2 w-1/2 rounded bg-surface/35" />
         </div>
       ))}
     </div>
@@ -990,9 +990,9 @@ function DiscoverSkeleton() {
 function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
   const [failed, setFailed] = useState(false);
   const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) return <span aria-label={alt || undefined} className={`flex items-center justify-center bg-surface text-xl text-foreground-muted ${className}`}>♪</span>;
+  if (!source || failed) return <span aria-label={alt || undefined} className={`flex items-center justify-center bg-surface-elevated text-xl text-foreground-muted ${className}`}>♪</span>;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className={`object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} />;
+  return <img alt={alt} className={`object-cover block ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} />;
 }
 
 function toPlaylistTrackActions(actions: DiscoverTrackActions) {
