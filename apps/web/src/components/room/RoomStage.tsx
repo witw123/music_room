@@ -24,6 +24,9 @@ import { SquareAlbumCover } from "@/components/PlayerArtwork";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { MemberPermissionControls } from "./MembersPanel";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
+import { RoomReactionOverlay } from "./RoomReactionOverlay";
+import { RoomReactionToolbar } from "./RoomReactionToolbar";
+import type { RoomSocket } from "@/lib/network/ws-client";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -48,6 +51,7 @@ type RoomStageProps = {
   showMobilePlayer?: boolean;
   hideRoomMetadata?: boolean;
   mobileControlsOnly?: boolean;
+  socket?: RoomSocket | null;
 };
 
 function buildRoomEditForm(roomSnapshot: RoomSnapshot): UpdateRoomRequest {
@@ -112,7 +116,8 @@ function RoomStageBase({
   onSeek,
   showMobilePlayer = false,
   hideRoomMetadata = false,
-  mobileControlsOnly = false
+  mobileControlsOnly = false,
+  socket
 }: RoomStageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -318,7 +323,7 @@ function RoomStageBase({
       (!playbackRef.current.startedAt && !playbackRef.current.startAt && playbackBarrierRef.current?.holdPositionMs === null)
     ) return;
 
-    const timer = window.setInterval(updatePosition, 250);
+    const timer = window.setInterval(updatePosition, 50);
     return () => window.clearInterval(timer);
   }, [
     currentTrackDuration,
@@ -725,8 +730,23 @@ function RoomStageBase({
               status={lyricsStatus}
               onSeek={onSeek}
             />
+
+            {/* Interactive Room Reaction Bar */}
+            {roomSnapshot.room.roomType === "interactive" && (
+              <div className="mt-3 flex justify-center">
+                <RoomReactionToolbar
+                  roomId={roomSnapshot.room.id}
+                  socket={socket}
+                  trackId={currentTrackId}
+                  variant="interactive"
+                />
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Floating Vector SVG Reaction Overlay */}
+        <RoomReactionOverlay roomId={roomSnapshot.room.id} socket={socket} />
       </div>
       <ConfirmDialog
         confirmLabel="解散房间"

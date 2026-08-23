@@ -11,6 +11,7 @@ import { MembersPanel } from "./MembersPanel";
 import { RoomChatPanel } from "./RoomChatOverlay";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
+import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
 import { LocalAudioImport } from "./LocalAudioImport";
 import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
@@ -57,6 +58,17 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             ) : (
               <RadioMembersPanel {...props} membershipNow={membershipNow} />
             )}
+          </div>
+
+          {/* Radio Dedicated Interaction Bar */}
+          <div className="p-2.5 border-t border-white/[0.04]">
+            <RoomReactionToolbar
+              roomId={props.roomSnapshot.room.id}
+              socket={props.socket}
+              trackId={props.currentTrack?.id}
+              variant="radio"
+              isHost={isHost}
+            />
           </div>
         </div>
       </section>

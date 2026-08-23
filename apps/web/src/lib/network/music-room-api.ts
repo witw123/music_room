@@ -374,7 +374,7 @@ export const musicRoomApi = {
   rejectRoomRequest: (roomId: string, requestId: string) =>
     request<RoomRequest>(`/v1/rooms/${roomId}/requests/${requestId}/reject`, { method: "POST" }),
   getRoomReactionCounts: (roomId: string, trackId?: string | null) =>
-    request<{ like: number; applause: number }>(`/v1/rooms/${roomId}/reactions${trackId ? `?trackId=${encodeURIComponent(trackId)}` : ""}`),
+    request<{ like: number; applause: number; fire?: number; sparkle?: number }>(`/v1/rooms/${roomId}/reactions${trackId ? `?trackId=${encodeURIComponent(trackId)}` : ""}`),
   updateRoomMemberPermissions: (
     roomId: string,
     memberId: string,

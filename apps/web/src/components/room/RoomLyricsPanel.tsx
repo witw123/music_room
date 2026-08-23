@@ -50,11 +50,11 @@ export function RoomLyricsPanel({
   const activeLyrics = lyrics?.trim() || translatedLyrics?.trim() || null;
   const lines = useMemo(() => parseRoomLyrics(activeLyrics), [activeLyrics]);
   const translatedLines = useMemo(
-    () => isChineseLyrics ? [] : parseRoomLyrics(translatedLyrics),
+    () => (isChineseLyrics ? [] : parseRoomLyrics(translatedLyrics)),
     [isChineseLyrics, translatedLyrics]
   );
   const romanizedLines = useMemo(
-    () => isChineseLyrics ? [] : parseRoomLyrics(romanizedLyrics),
+    () => (isChineseLyrics ? [] : parseRoomLyrics(romanizedLyrics)),
     [isChineseLyrics, romanizedLyrics]
   );
   const translatedLinesByPrimary = useMemo(
@@ -69,7 +69,38 @@ export function RoomLyricsPanel({
     () => lines.map((_line, index) => getRoomLyricDisplayWords(lines, index)),
     [lines]
   );
-  const activeIndex = getActiveRoomLyricIndex(lines, positionMs);
+
+  // High precision position interpolation with requestAnimationFrame
+  const [smoothPositionMs, setSmoothPositionMs] = useState(positionMs);
+  const anchorRef = useRef({ baseMs: positionMs, receivedAt: typeof performance !== "undefined" ? performance.now() : Date.now() });
+
+  useEffect(() => {
+    anchorRef.current = {
+      baseMs: positionMs,
+      receivedAt: typeof performance !== "undefined" ? performance.now() : Date.now()
+    };
+    setSmoothPositionMs(positionMs);
+  }, [positionMs]);
+
+  useEffect(() => {
+    if (!isPlaying || frozen) {
+      setSmoothPositionMs(positionMs);
+      return;
+    }
+
+    let animationFrameId: number;
+    const tick = () => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const elapsed = Math.max(0, now - anchorRef.current.receivedAt);
+      setSmoothPositionMs(anchorRef.current.baseMs + elapsed);
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [isPlaying, frozen, positionMs]);
+
+  const activeIndex = getActiveRoomLyricIndex(lines, smoothPositionMs);
   const activeLineRef = useRef<HTMLParagraphElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -236,18 +267,35 @@ export function RoomLyricsPanel({
                 >
                   <span className="block w-full">
                     {displayWords.length > 0 ? displayWords.map((word, wordIndex) => {
-                      const progress = isActive
-                        ? getRoomLyricWordProgress(word, positionMs)
-                        : 0;
+                      if (!isActive) {
+                        return <span key={`${line.id}:word:${wordIndex}`}>{word.text}</span>;
+                      }
+
+                      const progress = getRoomLyricWordProgress(word, smoothPositionMs);
+                      if (progress >= 1) {
+                        return (
+                          <span key={`${line.id}:word:${wordIndex}`} className="text-white">
+                            {word.text}
+                          </span>
+                        );
+                      }
+                      if (progress <= 0) {
+                        return (
+                          <span key={`${line.id}:word:${wordIndex}`} className="text-white/45">
+                            {word.text}
+                          </span>
+                        );
+                      }
+
                       return (
                         <span
-                          className={isActive ? "text-transparent" : undefined}
+                          className="text-transparent inline-block will-change-[background-image]"
                           key={`${line.id}:word:${wordIndex}`}
-                          style={isActive ? {
-                            backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${progress * 100}%, rgb(255 255 255 / 0.45) ${progress * 100}%, rgb(255 255 255 / 0.45) 100%)`,
+                          style={{
+                            backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${(progress * 100).toFixed(1)}%, rgb(255 255 255 / 0.45) ${(progress * 100).toFixed(1)}%, rgb(255 255 255 / 0.45) 100%)`,
                             backgroundClip: "text",
                             WebkitBackgroundClip: "text"
-                          } : undefined}
+                          }}
                         >
                           {word.text}
                         </span>

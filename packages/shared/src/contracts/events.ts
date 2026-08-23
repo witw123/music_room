@@ -256,7 +256,7 @@ export const roomReactionPayloadSchema = z.object({
   roomId: z.string(),
   senderId: z.string(),
   senderName: z.string(),
-  reaction: z.enum(["like", "applause"]),
+  reaction: z.enum(["like", "applause", "fire", "sparkle"]),
   trackId: z.string().nullable(),
   timestamp: z.number(),
   totalCount: z.number().int().nonnegative()
@@ -264,7 +264,7 @@ export const roomReactionPayloadSchema = z.object({
 
 export const roomReactionInputPayloadSchema = z.object({
   roomId: z.string().trim().min(1).max(160),
-  reaction: z.enum(["like", "applause"]),
+  reaction: z.enum(["like", "applause", "fire", "sparkle"]),
   trackId: z.string().nullable().optional()
 }).strict();
 

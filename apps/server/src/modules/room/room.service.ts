@@ -154,7 +154,7 @@ export class RoomService {
     roomId: string;
     userId: string;
     trackId: string | null;
-    reactionType: "like" | "applause";
+    reactionType: "like" | "applause" | "fire" | "sparkle";
   }) {
     if (!this.prisma.isAvailable()) return 0;
     const reactionModel = (this.prisma as PrismaService & { roomReaction: { create: (args: unknown) => Promise<unknown>; count: (args: unknown) => Promise<number> } }).roomReaction;
@@ -180,14 +180,16 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);
     if (!this.prisma.isAvailable()) {
-      return { like: 0, applause: 0 };
+      return { like: 0, applause: 0, fire: 0, sparkle: 0 };
     }
     const reactionModel = this.prisma.roomReaction;
-    const [like, applause] = await Promise.all([
+    const [like, applause, fire, sparkle] = await Promise.all([
       reactionModel.count({ where: { roomId, trackId, reactionType: "like" } }),
-      reactionModel.count({ where: { roomId, trackId, reactionType: "applause" } })
+      reactionModel.count({ where: { roomId, trackId, reactionType: "applause" } }),
+      reactionModel.count({ where: { roomId, trackId, reactionType: "fire" } }),
+      reactionModel.count({ where: { roomId, trackId, reactionType: "sparkle" } })
     ]);
-    return { like, applause };
+    return { like, applause, fire, sparkle };
   }
 
   async createRoomRequest(roomId: string, sessionId: string, input: Omit<RoomRequest, "id" | "roomId" | "requesterId" | "requesterName" | "status" | "createdAt">) {

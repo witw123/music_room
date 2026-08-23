@@ -196,6 +196,7 @@ export function buildRoomStageProps(
     onLeaveRoom: props.onLeaveRoom,
     onDeleteRoom: props.onDeleteRoom,
     onSeek: props.onSeek,
+    socket: props.socket,
     showMobilePlayer: options?.showMobilePlayer,
     hideRoomMetadata: options?.hideRoomMetadata,
     mobileControlsOnly: options?.mobileControlsOnly

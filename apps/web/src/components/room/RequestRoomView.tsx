@@ -16,6 +16,7 @@ import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
 import { MembersPanel } from "./MembersPanel";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
+import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
@@ -165,6 +166,17 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         </header>
         <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
+            {/* Request Room Dedicated Interaction Bar */}
+            <RoomReactionToolbar
+              roomId={roomId}
+              socket={props.socket}
+              trackId={props.currentTrack?.id}
+              variant="request"
+              requesterName={requests.find((r) => r.title === props.currentTrack?.title || r.id === props.currentTrack?.id)?.requesterName ?? null}
+              isHost={isHost}
+              className="mb-1"
+            />
+
             {isHost ? <>
               <RoomProviderTrackSearch
                 mode="request"
