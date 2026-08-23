@@ -144,6 +144,29 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   const queueCount = props.roomSnapshot.queue.length;
 
+  const selectableSongs = useMemo(() => {
+    const list: Array<{ id: string; title: string; artist?: string; requesterName?: string | null }> = [];
+    if (props.currentTrack) {
+      list.push({
+        id: props.currentTrack.id,
+        title: props.currentTrack.title,
+        artist: props.currentTrack.artist,
+        requesterName: requests.find((r) => r.title === props.currentTrack?.title || r.id === props.currentTrack?.id)?.requesterName ?? null
+      });
+    }
+    requests.forEach((r) => {
+      if (!list.some((s) => s.title === r.title)) {
+        list.push({
+          id: r.id,
+          title: r.title,
+          artist: r.artist,
+          requesterName: r.requesterName
+        });
+      }
+    });
+    return list;
+  }, [props.currentTrack, requests]);
+
   return <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
     <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
       <div className="relative z-10 min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-surface-border lg:bg-surface/[0.12]">
@@ -166,14 +189,13 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         </header>
         <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
-            {/* Request Room Dedicated Interaction Bar */}
+            {/* Request Room Dedicated Song Interaction Bar */}
             <RoomReactionToolbar
               roomId={roomId}
               socket={props.socket}
-              trackId={props.currentTrack?.id}
               variant="request"
-              requesterName={requests.find((r) => r.title === props.currentTrack?.title || r.id === props.currentTrack?.id)?.requesterName ?? null}
-              isHost={isHost}
+              targetSongs={selectableSongs}
+              activeSongId={props.currentTrack?.id}
               className="mb-1"
             />
 
@@ -240,81 +262,103 @@ function RequestRoomWorkspace(
   const panelVisibility = (tab: RequestWorkspaceTab) =>
     props.mobileTab === tab ? "flex" : "hidden lg:flex";
 
-  return <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-surface-border lg:px-0" data-testid="request-room-workspace">
-    <div className="mb-3 grid grid-cols-3 rounded-2xl border border-surface-border bg-surface/[0.12] p-1 lg:hidden" role="tablist" aria-label="点歌房管理">
-      {requestWorkspaceTabs.map((tab) => <button
-        aria-controls={`request-workspace-${tab.id}`}
-        aria-selected={props.mobileTab === tab.id}
-        className={`min-h-10 rounded-xl px-3 text-sm font-medium transition-colors ${props.mobileTab === tab.id ? "bg-accent text-white" : "text-foreground-muted"}`}
-        key={tab.id}
-        onClick={() => props.onMobileTabChange(tab.id)}
-        role="tab"
-        type="button"
-      >{tab.label}</button>)}
-    </div>
+  const activeIndex = requestWorkspaceTabs.findIndex((t) => t.id === props.mobileTab);
 
-    <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-library" role="tabpanel">
-      <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">曲库</h2></header>
-      <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 sm:px-4 lg:overflow-y-auto">
-        <LibraryTabPanel
-          activeSession={props.activeSession}
-          canAddToQueue={props.isHost}
-          canControlPlayback={props.canControlPlayback}
-          canManageAllTracks={props.isHost}
-          canManageLibrary={props.isHost}
-          localFolderName={props.localStorageSummary.localFolderName}
-          localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
-          onAddToQueue={props.onAddToQueue}
-          onDeleteTrack={props.onDeleteTrack}
-          onFilesSelected={props.onFilesSelected}
-          onPlayTrack={props.onPlayTrack}
-          onSaveTrackToLocal={props.onSaveTrackToLocal}
-          tracks={props.roomSnapshot.tracks}
-          uploadedTracks={props.uploadedTracks}
-        />
+  return (
+    <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-surface-border lg:px-0" data-testid="request-room-workspace">
+      <div className="mb-3 px-1 lg:hidden" role="tablist" aria-label="点歌房管理">
+        <div className="relative flex items-center rounded-xl bg-black/20 p-1">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-1 rounded-[9px] bg-white/[0.12] shadow-[0_1px_2px_rgba(0,0,0,0.24)] transition-[transform,width] duration-200 ease-out"
+            style={{
+              transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
+              width: `${100 / requestWorkspaceTabs.length}%`
+            }}
+          />
+          {requestWorkspaceTabs.map((tab) => (
+            <button
+              key={tab.id}
+              id={`request-workspace-tab-${tab.id}`}
+              aria-controls={`request-workspace-${tab.id}`}
+              aria-selected={props.mobileTab === tab.id}
+              className={`relative z-10 flex min-h-10 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
+                props.mobileTab === tab.id ? "text-white" : "text-white/50 hover:text-white/80"
+              }`}
+              onClick={() => props.onMobileTabChange(tab.id)}
+              role="tab"
+              tabIndex={props.mobileTab === tab.id ? 0 : -1}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
-    </section>
 
-    <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l lg:border-r`} id="request-workspace-playlists" role="tabpanel">
-      <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">歌单</h2></header>
-      <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 sm:px-4 lg:overflow-y-auto">
-        <LocalStorageTabPanel
-          activeSession={props.activeSession}
-          canManageLibrary={props.isHost}
-          hideUnavailableProvidersNotice
-          localStorageSummary={props.localStorageSummary}
-          onCleanLocalStorage={props.onCleanLocalStorage}
-          onDeletePlaylist={props.onDeletePlaylist}
-          onImportCachedTrack={props.onImportCachedTrack}
-          onImportNeteaseTrack={props.onImportNeteaseTrack}
-          onImportNeteaseTracks={props.onImportNeteaseTracks}
-          onImportQqMusicTrack={props.onImportQqMusicTrack}
-          onImportQqMusicTracks={props.onImportQqMusicTracks}
-          onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
-          onRefreshLocalStorage={props.onRefreshLocalStorage}
-          onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
-          onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
-          onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
-          playlists={props.playlists}
-          tracks={props.roomSnapshot.tracks}
-        />
-      </div>
-    </section>
+      <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-surface-border`} id="request-workspace-library" role="tabpanel">
+        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">曲库</h2></header>
+        <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 pt-3 sm:px-4 lg:overflow-y-auto">
+          <LibraryTabPanel
+            activeSession={props.activeSession}
+            canAddToQueue={props.isHost}
+            canControlPlayback={props.canControlPlayback}
+            canManageAllTracks={props.isHost}
+            canManageLibrary={props.isHost}
+            localFolderName={props.localStorageSummary.localFolderName}
+            localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
+            onAddToQueue={props.onAddToQueue}
+            onDeleteTrack={props.onDeleteTrack}
+            onFilesSelected={props.onFilesSelected}
+            onPlayTrack={props.onPlayTrack}
+            onSaveTrackToLocal={props.onSaveTrackToLocal}
+            tracks={props.roomSnapshot.tracks}
+            uploadedTracks={props.uploadedTracks}
+          />
+        </div>
+      </section>
 
-    <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0`} id="request-workspace-members" role="tabpanel">
-      <header className="shrink-0 px-4 py-4 sm:px-5"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
-      <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 sm:px-4 lg:overflow-y-auto">
-        <MembersPanel
-          activeSessionId={props.activeSession?.userId ?? null}
-          isHost={props.isHost}
-          members={props.roomSnapshot.room.members}
-          now={props.membershipNow}
-          onRemoveMember={props.onRemoveMember}
-          onUpdateMemberPermissions={props.onUpdateMemberPermissions}
-        />
-      </div>
+      <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-surface-border`} id="request-workspace-playlists" role="tabpanel">
+        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">歌单</h2></header>
+        <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 pt-3 sm:px-4 lg:overflow-y-auto">
+          <LocalStorageTabPanel
+            activeSession={props.activeSession}
+            canManageLibrary={props.isHost}
+            hideUnavailableProvidersNotice
+            localStorageSummary={props.localStorageSummary}
+            onCleanLocalStorage={props.onCleanLocalStorage}
+            onDeletePlaylist={props.onDeletePlaylist}
+            onImportCachedTrack={props.onImportCachedTrack}
+            onImportNeteaseTrack={props.onImportNeteaseTrack}
+            onImportNeteaseTracks={props.onImportNeteaseTracks}
+            onImportQqMusicTrack={props.onImportQqMusicTrack}
+            onImportQqMusicTracks={props.onImportQqMusicTracks}
+            onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
+            onRefreshLocalStorage={props.onRefreshLocalStorage}
+            onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
+            onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
+            onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
+            playlists={props.playlists}
+            tracks={props.roomSnapshot.tracks}
+          />
+        </div>
+      </section>
+
+      <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
+        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
+        <div className="hide-scrollbar min-h-0 flex-1 px-3 pb-5 pt-3 sm:px-4 lg:overflow-y-auto">
+          <MembersPanel
+            activeSessionId={props.activeSession?.userId ?? null}
+            isHost={props.isHost}
+            members={props.roomSnapshot.room.members}
+            now={props.membershipNow}
+            onRemoveMember={props.onRemoveMember}
+            onUpdateMemberPermissions={props.onUpdateMemberPermissions}
+          />
+        </div>
+      </section>
     </section>
-  </section>;
+  );
 }
 
 function RequestInbox({

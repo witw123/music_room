@@ -2,11 +2,12 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from "react";
-import type { NeteaseTrackCandidate, QqMusicTrackCandidate, TrackMeta } from "@music-room/shared";
+import type { NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { LibraryTabPanel } from "./LibraryTabPanel";
 import { MembersPanel } from "./MembersPanel";
 import { RoomChatPanel } from "./RoomChatOverlay";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
@@ -33,12 +34,12 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
       <section className="mx-auto grid min-h-[calc(100dvh-var(--room-mobile-bottom-inset))] w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="relative z-10 flex min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r">
+        <div className="relative z-10 flex min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-surface-border">
           <div className="min-h-0 flex-1">
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
           </div>
         </div>
-        <div className="relative z-0 flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:h-full lg:min-h-0 lg:rounded-none lg:border-0">
+        <div className="relative z-0 flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:h-full lg:min-h-0 lg:rounded-none">
           <RadioWorkspaceTabs
             activeTab={rightTab}
             ariaLabel="房间信息"
@@ -60,21 +61,25 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             )}
           </div>
 
-          {/* Radio Dedicated Interaction Bar */}
-          <div className="p-2.5 border-t border-white/[0.04]">
+          {/* Radio Dedicated Member Interaction Bar */}
+          <div className="p-2 border-t border-white/[0.04]">
             <RoomReactionToolbar
               roomId={props.roomSnapshot.room.id}
               socket={props.socket}
-              trackId={props.currentTrack?.id}
               variant="radio"
-              isHost={isHost}
+              targetMembers={props.roomSnapshot.room.members.map((m) => ({
+                id: m.id,
+                nickname: m.nickname,
+                isHost: m.id === props.roomSnapshot.room.hostId
+              }))}
+              activeMemberId={props.roomSnapshot.room.hostId}
             />
           </div>
         </div>
       </section>
 
       <section className={`mx-auto mt-3 h-[calc(100dvh-var(--room-mobile-bottom-inset))] min-h-0 w-full max-w-[1600px] shrink-0 gap-3 overflow-hidden px-3 lg:mt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:gap-0 lg:px-0 ${isHost ? "grid lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]" : "block"}`} data-testid="radio-room-workspace">
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:rounded-none lg:border-0 lg:border-r">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:rounded-none lg:border-r lg:border-surface-border">
           <RadioWorkspaceTabs
             activeTab={leftTab}
             ariaLabel="电台内容"
@@ -84,7 +89,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           />
           <div aria-labelledby={`radio-left-tab-${leftTab}`} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto" id={`radio-left-panel-${leftTab}`} role="tabpanel">
             {leftTab === "queue" ? (
-              <div className="flex h-full min-h-0 flex-col" data-testid="radio-queue-panel">
+              <div className="flex h-full min-h-0 flex-col p-3 sm:p-5" data-testid="radio-queue-panel">
                 <PlayerQueueList
                   canControlPlayback={props.canControlPlayback}
                   canRemoveQueue={props.canRemoveQueue}
@@ -100,18 +105,29 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                 />
               </div>
             ) : (
-              <RadioLibraryList
-                currentTrack={props.currentTrack}
-                isHost={isHost}
-                onAddToQueue={props.onAddToQueue}
-                onDeleteTrack={props.onDeleteTrack}
-                roomTracks={props.roomSnapshot.tracks}
-              />
+              <div className="p-3 sm:p-5">
+                <LibraryTabPanel
+                  activeSession={props.activeSession}
+                  canAddToQueue={isHost}
+                  canControlPlayback={props.canControlPlayback}
+                  canManageAllTracks={isHost}
+                  canManageLibrary={isHost}
+                  localFolderName={props.localStorageSummary.localFolderName}
+                  localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
+                  onAddToQueue={props.onAddToQueue}
+                  onDeleteTrack={props.onDeleteTrack}
+                  onFilesSelected={props.onFilesSelected}
+                  onPlayTrack={props.onPlayTrack}
+                  onSaveTrackToLocal={props.onSaveTrackToLocal}
+                  tracks={props.roomSnapshot.tracks}
+                  uploadedTracks={props.uploadedTracks}
+                />
+              </div>
             )}
           </div>
         </div>
         {isHost ? (
-          <div className="hide-scrollbar flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl border border-surface-border bg-background lg:rounded-none lg:border-0">
+          <div className="hide-scrollbar flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl bg-background lg:rounded-none">
             <HostBroadcastDesk {...props} />
           </div>
         ) : null}
@@ -136,16 +152,29 @@ function RadioWorkspaceTabs<T extends string>({
   onChange: (tab: T) => void;
   tabs: Array<{ id: T; label: string }>;
 }) {
+  const activeIndex = tabs.findIndex((t) => t.id === activeTab);
+  const tabCount = tabs.length;
+
   return (
     <div className="shrink-0 px-3 py-2.5 sm:px-5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
-      <div aria-label={ariaLabel} className="grid grid-flow-col auto-cols-fr gap-1 rounded-xl border border-surface-border bg-surface/55 p-1" role="tablist">
+      <div aria-label={ariaLabel} className="relative flex items-center rounded-xl bg-black/20 p-1" role="tablist">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-1 rounded-[9px] bg-white/[0.12] shadow-[0_1px_2px_rgba(0,0,0,0.24)] transition-[transform,width] duration-200 ease-out"
+          style={{
+            transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
+            width: `${100 / tabCount}%`
+          }}
+        />
         {tabs.map((tab) => (
           <button
             key={tab.id}
             id={`${panelPrefix}-tab-${tab.id}`}
             aria-controls={`${panelPrefix}-panel-${tab.id}`}
             aria-selected={activeTab === tab.id}
-            className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${activeTab === tab.id ? "bg-accent text-white shadow-sm" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+            className={`relative z-10 flex min-h-10 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
+              activeTab === tab.id ? "text-white" : "text-white/50 hover:text-white/80"
+            }`}
             onClick={() => onChange(tab.id)}
             role="tab"
             tabIndex={activeTab === tab.id ? 0 : -1}
@@ -159,78 +188,21 @@ function RadioWorkspaceTabs<T extends string>({
   );
 }
 
-function RadioLibraryList({
-  currentTrack,
-  isHost,
-  onAddToQueue,
-  onDeleteTrack,
-  roomTracks,
-}: {
-  currentTrack: TrackMeta | null;
-  isHost: boolean;
-  onAddToQueue: (trackId: string) => Promise<unknown>;
-  onDeleteTrack: (trackId: string) => Promise<void>;
-  roomTracks: TrackMeta[];
-}) {
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [visibleTrackCount, setVisibleTrackCount] = useState(10);
-
-  const visibleTracks = roomTracks.slice(0, visibleTrackCount);
-
-  useEffect(() => {
-    setVisibleTrackCount(10);
-  }, [roomTracks.length]);
-
-  const runTrackAction = async (key: string, action: () => Promise<unknown>) => {
-    if (pendingAction) return;
-    setPendingAction(key);
-    setErrorMessage(null);
-    try {
-      await action();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "曲库操作失败，请稍后重试。");
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  return (
-    <aside className="flex min-h-0 min-w-0 flex-col bg-surface/[0.14] lg:h-full lg:min-h-0" data-testid="radio-library-list">
-      <div
-        className="hide-scrollbar min-h-0 max-h-[36rem] flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3 sm:px-6 lg:max-h-none lg:px-7 lg:pb-5"
-        id="radio-library-tracks"
-        onScroll={(event) => {
-          if (visibleTrackCount >= roomTracks.length) return;
-          const target = event.currentTarget;
-          if (target.scrollHeight - target.scrollTop - target.clientHeight < 160) {
-            setVisibleTrackCount((count) => Math.min(count + 10, roomTracks.length));
-          }
-        }}
-      >
-        <div className="space-y-1.5 pt-2">
-          {visibleTracks.map((track, index) => <div key={track.id}><LibraryTrack index={index + 1} isCurrent={track.id === currentTrack?.id} isHost={isHost} onAddToQueue={() => runTrackAction(`queue:${track.id}`, () => onAddToQueue(track.id))} onDeleteTrack={() => runTrackAction(`delete:${track.id}`, () => onDeleteTrack(track.id))} pendingAction={pendingAction} track={track} /></div>)}
-        </div>
-        {errorMessage ? <p className="mt-3 text-xs text-danger" role="status">{errorMessage}</p> : null}
-      </div>
-    </aside>
-  );
-}
-
 function RadioMembersPanel(props: RoomDashboardViewProps & { membershipNow: number }) {
-  return <section className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-background lg:min-h-0 lg:rounded-none lg:border-0" data-testid="radio-members-panel">
-    <header className="shrink-0 px-4 py-3.5 sm:px-5 border-b border-white/[0.04]"><h2 className="text-base font-semibold text-foreground">成员</h2></header>
-    <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 sm:px-4">
-      <MembersPanel
-        activeSessionId={props.activeSession?.userId ?? null}
-        isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId}
-        members={props.roomSnapshot.room.members}
-        now={props.membershipNow}
-        onRemoveMember={props.onRemoveMember}
-        onUpdateMemberPermissions={props.onUpdateMemberPermissions}
-      />
-    </div>
-  </section>;
+  return (
+    <section className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none" data-testid="radio-members-panel">
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
+        <MembersPanel
+          activeSessionId={props.activeSession?.userId ?? null}
+          isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId}
+          members={props.roomSnapshot.room.members}
+          now={props.membershipNow}
+          onRemoveMember={props.onRemoveMember}
+          onUpdateMemberPermissions={props.onUpdateMemberPermissions}
+        />
+      </div>
+    </section>
+  );
 }
 
 function HostBroadcastDesk(props: RoomDashboardViewProps) {
@@ -258,25 +230,16 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
 
   const importAndQueue = async (candidate: ProviderCandidate) => {
     setMessage(null);
-    if (candidate.provider === "netease") {
-      await props.onImportNeteaseTrack(candidate);
-    } else {
-      await props.onImportQqMusicTrack(candidate);
+    try {
+      if (candidate.provider === "netease") {
+        await props.onImportNeteaseTrack(candidate);
+      } else {
+        await props.onImportQqMusicTrack(candidate);
+      }
+      setMessage(`已将《${candidate.title}》导入曲库并加入电台节目单。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "导入歌曲失败。请稍后重试。");
     }
-
-    const snapshot = await musicRoomApi.getRoom(props.roomSnapshot.room.id);
-    const track = snapshot.tracks.find((item) =>
-      item.sourceRef?.provider === candidate.provider && item.sourceRef.trackId === candidate.providerTrackId
-    );
-    if (!track) throw new Error("歌曲已导入，但尚未同步到节目单。请稍后重试。");
-    if (snapshot.queue.some((item) => item.trackId === track.id)) {
-      setMessage(`《${track.title}》已在队列中。`);
-      return;
-    }
-
-    const queuedItem = await props.onAddToQueue(track.id);
-    if (!queuedItem) throw new Error("歌曲已导入，但未能加入队列。请稍后重试。");
-    setMessage(`《${track.title}》已加入队列。`);
   };
 
   const toggleAutopilot = async () => {
@@ -386,20 +349,4 @@ function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack
       </span>
     </article>
   );
-}
-
-function LibraryTrack({ track, index, isCurrent, isHost, pendingAction, onAddToQueue, onDeleteTrack }: { track: TrackMeta; index: number; isCurrent: boolean; isHost: boolean; pendingAction: string | null; onAddToQueue: () => Promise<void>; onDeleteTrack: () => Promise<void> }) {
-  const isQueuePending = pendingAction === `queue:${track.id}`;
-  const isDeletePending = pendingAction === `delete:${track.id}`;
-  return <article className={`grid min-w-0 grid-cols-[1.25rem_3rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 rounded-xl p-2.5 sm:grid-cols-[1.25rem_3rem_minmax(0,1fr)_auto] sm:p-3 transition-colors ${isCurrent ? "bg-accent/[0.08] border border-accent/20" : "hover:bg-white/[0.03]"}`}><span className={`pt-1 text-right font-mono text-xs ${isCurrent ? "text-accent font-bold" : "text-foreground-muted"}`}>{String(index).padStart(2, "0")}</span><TrackArtwork track={track} /><div className="min-w-0"><p className="break-words text-sm font-semibold leading-5 text-foreground">{track.title}</p><p className="mt-0.5 break-words text-xs leading-5 text-foreground-muted">{track.artist}</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4 text-foreground-muted/70"><span className="break-words">{track.album ?? "未标注专辑"}</span><span>·</span><span>{formatDuration(track.durationMs)}</span><span>·</span><span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-foreground-muted">{getTrackSourceLabel(track)}</span>{track.bitrate ? <span className="font-mono">{Math.round(track.bitrate / 1_000)} kbps</span> : null}</div></div>{isHost ? <div className="col-start-3 flex min-w-max items-center gap-1 justify-self-start sm:col-start-auto sm:justify-self-end sm:self-center"><Button aria-label={`将《${track.title}》加入队列`} data-testid="radio-track-add-queue-button" className="h-9 w-9 shrink-0 rounded-lg border border-accent/30 bg-accent/10 p-0 text-accent hover:bg-accent hover:text-white transition-colors" disabled={pendingAction !== null} onClick={() => void onAddToQueue()} size="icon" title={isQueuePending ? "加入中" : "加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="15"><path d="M12 5v14M5 12h14" /></svg></Button><Button aria-label={`删除《${track.title}》`} data-testid="radio-track-delete-button" className="h-9 w-9 shrink-0 rounded-lg border border-red-500/20 bg-red-500/10 p-0 text-red-400 hover:bg-red-500 hover:text-white transition-colors" disabled={pendingAction !== null} onClick={() => void onDeleteTrack()} size="icon" title={isDeletePending ? "删除中" : "删除"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="15"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></Button></div> : null}</article>;
-}
-
-function TrackArtwork({ track }: { track: TrackMeta }) {
-  return track.artworkUrl ? <img alt="" className="h-12 w-12 shrink-0 rounded-lg border border-white/10 object-cover shadow-sm" src={track.artworkUrl} /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[10px] text-foreground-muted">音乐</span>;
-}
-
-function getTrackSourceLabel(track: TrackMeta) {
-  if (track.sourceType === "netease") return "网易云音乐";
-  if (track.sourceType === "qqmusic") return "QQ 音乐";
-  return "本地上传";
 }

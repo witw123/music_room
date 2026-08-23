@@ -15,7 +15,9 @@ export type ReactionType = "like" | "applause" | "fire" | "sparkle";
 type FloatingParticle = {
   id: string;
   reaction: ReactionType;
-  senderName: string;
+  senderName?: string;
+  targetLabel?: string;
+  targetType?: "member" | "track";
   startX: number; // percentage across stage width
   driftX: number; // px horizontal drift
   scale: number;
@@ -56,6 +58,8 @@ export const localReactionDispatchEvent = "music-room:local-reaction";
 export function dispatchLocalReaction(payload: {
   reaction: ReactionType;
   senderName?: string;
+  targetLabel?: string;
+  targetType?: "member" | "track";
   comboCount?: number;
 }) {
   if (typeof window === "undefined") return;
@@ -74,7 +78,13 @@ export function RoomReactionOverlay({
   const [particles, setParticles] = useState<FloatingParticle[]>([]);
   const comboTrackerRef = useRef<{ [key: string]: { count: number; lastAt: number } }>({});
 
-  const spawnParticle = useCallback((reaction: ReactionType, senderName = "", explicitCombo?: number) => {
+  const spawnParticle = useCallback((
+    reaction: ReactionType,
+    senderName = "",
+    explicitCombo?: number,
+    targetLabel?: string,
+    targetType?: "member" | "track"
+  ) => {
     const now = Date.now();
     const tracker = comboTrackerRef.current[reaction] ?? { count: 0, lastAt: 0 };
     let combo = explicitCombo ?? 1;
@@ -99,6 +109,8 @@ export function RoomReactionOverlay({
       id: `${reaction}_${now}_${Math.random().toString(36).slice(2, 7)}`,
       reaction,
       senderName,
+      targetLabel,
+      targetType,
       startX,
       driftX,
       scale,
@@ -134,13 +146,17 @@ export function RoomReactionOverlay({
       const customEvent = event as CustomEvent<{
         reaction: ReactionType;
         senderName?: string;
+        targetLabel?: string;
+        targetType?: "member" | "track";
         comboCount?: number;
       }>;
       if (customEvent.detail) {
         spawnParticle(
           customEvent.detail.reaction,
           customEvent.detail.senderName,
-          customEvent.detail.comboCount
+          customEvent.detail.comboCount,
+          customEvent.detail.targetLabel,
+          customEvent.detail.targetType
         );
       }
     };
@@ -187,6 +203,12 @@ export function RoomReactionOverlay({
             >
               <IconComp className={`w-5 h-5 sm:w-6 sm:h-6 ${config.color}`} />
             </div>
+
+            {particle.targetLabel ? (
+              <span className="max-w-[120px] truncate text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full backdrop-blur-md bg-black/60 text-white/90 border border-white/10 shadow-sm">
+                {particle.targetLabel}
+              </span>
+            ) : null}
 
             {isHighCombo && (
               <span className="font-extrabold text-[11px] sm:text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-[0_2px_8px_var(--accent-glow)] animate-bounce">

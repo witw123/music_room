@@ -737,7 +737,6 @@ function RoomStageBase({
                 <RoomReactionToolbar
                   roomId={roomSnapshot.room.id}
                   socket={socket}
-                  trackId={currentTrackId}
                   variant="interactive"
                 />
               </div>
