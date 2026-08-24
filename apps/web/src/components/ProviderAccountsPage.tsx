@@ -51,12 +51,12 @@ export function ProviderAccountsPage() {
   return (
     <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-12 sm:pt-8 md:pt-12">
+      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-8 md:pt-12 md:pb-28">
         {/* Artistic Personal Identity Hero Card */}
         <PersonalOverview activeSession={activeSession} />
 
         {/* High-End Glassmorphic Segmented Control Navigation */}
-        <div className="flex items-center gap-1.5 rounded-2xl border border-white/[0.06] p-1.5 bg-[#10121a]/80 backdrop-blur-2xl mb-6 overflow-x-auto scrollbar-none w-fit max-w-full shadow-lg">
+        <div className="flex items-center gap-1 sm:gap-1.5 rounded-2xl border border-white/[0.06] p-1 sm:p-1.5 bg-[#10121a]/80 backdrop-blur-2xl mb-6 overflow-x-auto hide-scrollbar touch-pan-x w-fit max-w-full shadow-lg">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -64,7 +64,7 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                   isActive
                     ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold scale-[1.02]"
                     : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"

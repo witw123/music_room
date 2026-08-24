@@ -19,12 +19,12 @@ export function PlaylistsLibraryPage() {
   return (
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <div aria-hidden="true" className="workspace-page-background" />
-      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-6 md:pt-10">
+      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-6 md:pt-10 md:pb-28">
         {/* Artistic Segmented Control Navigation */}
         <header className="flex justify-center mb-6">
           <div
             aria-label="歌单分类"
-            className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1.5 bg-[#10121a]/80 backdrop-blur-2xl shadow-lg"
+            className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 sm:p-1.5 bg-[#10121a]/80 backdrop-blur-2xl shadow-lg max-w-full overflow-x-auto hide-scrollbar touch-pan-x"
             role="tablist"
           >
             {tabs.map(({ id, label, icon: IconComp }) => {
@@ -33,7 +33,7 @@ export function PlaylistsLibraryPage() {
                 <button
                   key={id}
                   aria-selected={isActive}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                     isActive
                       ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold scale-[1.02]"
                       : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"

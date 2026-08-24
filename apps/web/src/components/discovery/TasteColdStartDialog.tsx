@@ -92,28 +92,28 @@ export function TasteColdStartDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl p-6 sm:p-8 rounded-3xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3.5">
-            <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)]">
-              <SparklesIcon className="w-6 h-6" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-xl p-4 sm:p-6 md:p-8 rounded-3xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col">
+        <div className="flex items-start justify-between gap-4 mb-4 sm:mb-6 shrink-0">
+          <div className="flex items-center gap-3 sm:gap-3.5">
+            <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] shrink-0">
+              <SparklesIcon className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-foreground tracking-tight">打造你的专属音乐雷达</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">打造你的专属音乐雷达</h2>
               <p className="text-xs sm:text-sm text-foreground-muted">选择 1-5 个你常听的风格或场景，3 秒生成 Music Room 专属推荐</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-foreground-muted hover:text-foreground rounded-full hover:bg-surface-hover transition-colors"
+            className="p-2 text-foreground-muted hover:text-foreground rounded-full hover:bg-surface-hover transition-colors shrink-0"
           >
             <CloseIcon className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-5 flex-1 min-h-0 overflow-y-auto pr-1 hide-scrollbar touch-pan-y">
           {/* Genre selection */}
           <div>
             <div className="flex items-center gap-2 mb-2.5 text-xs font-semibold text-foreground-muted uppercase tracking-wider">

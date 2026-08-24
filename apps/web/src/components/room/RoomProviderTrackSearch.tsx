@@ -302,7 +302,7 @@ export function RoomProviderTrackSearch({
             <input
               ref={searchInputRef}
               id={`${testId}-input`}
-              className="w-full min-w-0 rounded-xl border border-white/10 bg-black/40 py-2.5 pl-9 pr-8 text-sm text-foreground outline-none transition-all placeholder:text-foreground-muted/40 focus:border-accent focus:bg-black/60 focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full min-w-0 rounded-xl border border-white/10 bg-black/40 py-2.5 pl-9 pr-8 text-base sm:text-sm text-foreground outline-none transition-all placeholder:text-foreground-muted/40 focus:border-accent focus:bg-black/60 focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!isConnected}
               maxLength={100}
               onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 120)}

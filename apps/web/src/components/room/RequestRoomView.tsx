@@ -302,7 +302,7 @@ function RequestRoomWorkspace(
         </div>
       </div>
 
-      <section className={`${panelVisibility("library")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-library" role="tabpanel">
+      <section className={`${panelVisibility("library")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-library" role="tabpanel">
         <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">房间曲库</h2></header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <LibraryTabPanel
@@ -324,7 +324,7 @@ function RequestRoomWorkspace(
         </div>
       </section>
 
-      <section className={`${panelVisibility("playlists")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-playlists" role="tabpanel">
+      <section className={`${panelVisibility("playlists")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-playlists" role="tabpanel">
         <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">歌单管理</h2></header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <LocalStorageTabPanel
@@ -350,7 +350,7 @@ function RequestRoomWorkspace(
         </div>
       </section>
 
-      <section className={`${panelVisibility("members")} min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
+      <section className={`${panelVisibility("members")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
         <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">房间成员</h2></header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <MembersPanel

@@ -300,12 +300,12 @@ export function DiscoverPage() {
   return (
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner workspace-page__inner--wide pb-12 pt-4 sm:pt-8 md:pt-10">
+      <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] pt-4 sm:pt-8 md:pt-10 md:pb-28">
         {/* Search header integration */}
         <ProviderSearchPage embedded inlineSearch />
 
         {/* Genre & Scene Filter Pills (Artistic Capsules) */}
-        <div className="mt-4 mb-7 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="mt-4 mb-7 flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
           {genreFilterPills.map((pill) => {
             const IconComp = pill.icon;
             const active = activeFilterId === pill.id;
@@ -314,7 +314,7 @@ export function DiscoverPage() {
                 key={pill.id}
                 type="button"
                 onClick={() => setActiveFilterId(pill.id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border ${
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border ${
                   active
                     ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] border-accent scale-[1.02]"
                     : "bg-[#10121a]/80 hover:bg-white/[0.08] text-foreground-muted hover:text-white border-white/[0.06]"
@@ -328,7 +328,7 @@ export function DiscoverPage() {
           <button
             type="button"
             onClick={() => setShowColdStartDialog(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium text-foreground-muted hover:text-white bg-[#10121a]/80 hover:bg-white/[0.08] border border-white/[0.06] ml-auto shrink-0 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-medium text-foreground-muted hover:text-white bg-[#10121a]/80 hover:bg-white/[0.08] border border-white/[0.06] ml-auto shrink-0 transition-colors"
             title="定制偏好"
           >
             <SlidersIcon className="w-3.5 h-3.5 text-accent" />
@@ -340,7 +340,7 @@ export function DiscoverPage() {
 
         {/* Editorial Spotlight Hero Card (Aurora Discovery Stage) */}
         {data?.dailyRadar && data.dailyRadar.tracks.length > 0 && activeFilterId === "all" ? (
-          <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#161a29]/90 via-[#0f121d]/95 to-[#090b11] p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+          <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#161a29]/90 via-[#0f121d]/95 to-[#090b11] p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
             {/* Ambient Aurora Glow */}
             <div className="absolute -top-16 -right-16 w-80 h-80 rounded-full bg-[radial-gradient(circle,#0070f322_0%,#38bdf80a_50%,transparent_70%)] blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 left-1/3 w-64 h-64 rounded-full bg-[radial-gradient(circle,#c026d318_0%,transparent_65%)] blur-2xl pointer-events-none" />

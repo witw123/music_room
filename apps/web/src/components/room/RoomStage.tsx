@@ -582,7 +582,7 @@ function RoomStageBase({
         />
       ) : null}
 
-      <div className="relative z-20 hidden min-h-0 flex-1 flex-col items-center overflow-visible lg:flex">
+      <div className={`relative z-20 flex min-h-0 flex-1 flex-col items-center overflow-visible ${showMobilePlayer ? "hidden lg:flex" : ""}`}>
         <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-visible">
           <div className={`flex min-h-0 w-full max-w-[48rem] flex-col items-center justify-center overflow-visible px-1 ${stageContentOffset}`}>
             <div
