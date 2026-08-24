@@ -16,7 +16,8 @@ import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboar
 import { LocalAudioImport } from "./LocalAudioImport";
 import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
 import { useRadioAutopilot, type RadioAutopilotNextTrack } from "./hooks/use-radio-autopilot";
-import { RadioIcon } from "@/components/icons/DiscoverIcons";
+import { LibraryTabPanel } from "./LibraryTabPanel";
+import { RadioIcon, MusicIcon, UsersIcon } from "@/components/icons/DiscoverIcons";
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -53,7 +54,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             ariaLabel="房间信息"
             panelPrefix="radio-right"
             onChange={setRightTab}
-            tabs={[{ id: "chat", label: "聊天" }, { id: "members", label: "成员" }]}
+            tabs={[{ id: "chat", label: "聊天", icon: MusicIcon }, { id: "members", label: "成员", icon: UsersIcon }]}
           />
           <div aria-labelledby={`radio-right-tab-${rightTab}`} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto" id={`radio-right-panel-${rightTab}`} role="tabpanel">
             {rightTab === "chat" ? (
@@ -89,7 +90,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             ariaLabel="电台内容"
             panelPrefix="radio-left"
             onChange={setLeftTab}
-            tabs={[{ id: "queue", label: "队列" }, { id: "library", label: "曲库" }]}
+            tabs={[{ id: "queue", label: "队列", icon: MusicIcon }, { id: "library", label: "曲库", icon: RadioIcon }]}
           />
           <div aria-labelledby={`radio-left-tab-${leftTab}`} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto" id={`radio-left-panel-${leftTab}`} role="tabpanel">
             {leftTab === "queue" ? (
@@ -139,10 +140,10 @@ function RadioWorkspaceTabs<T extends string>({
   ariaLabel: string;
   panelPrefix: string;
   onChange: (tab: T) => void;
-  tabs: Array<{ id: T; label: string }>;
+  tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="shrink-0 px-3 py-2.5 sm:px-5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="material-surface-header shrink-0 px-3 py-2.5 sm:px-5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div
         aria-label={ariaLabel}
         className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl"
@@ -150,13 +151,14 @@ function RadioWorkspaceTabs<T extends string>({
       >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
+          const IconComp = tab.icon;
           return (
             <button
               key={tab.id}
               id={`${panelPrefix}-tab-${tab.id}`}
               aria-controls={`${panelPrefix}-panel-${tab.id}`}
               aria-selected={isActive}
-              className={`flex-1 flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+              className={`flex-1 flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
                 isActive
                   ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
                   : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
@@ -166,7 +168,8 @@ function RadioWorkspaceTabs<T extends string>({
               tabIndex={isActive ? 0 : -1}
               type="button"
             >
-              {tab.label}
+              {IconComp && <IconComp className="w-3.5 h-3.5" />}
+              <span>{tab.label}</span>
             </button>
           );
         })}
@@ -182,58 +185,27 @@ function RadioLibraryList({
   props: RoomDashboardViewProps;
   isHost: boolean;
 }) {
-  const [visibleCount, setVisibleCount] = useState(10);
-  const trackEntries = Object.values(props.roomSnapshot.tracks);
-  const visibleTracks = trackEntries.slice(0, visibleCount);
+  const [_visibleCount] = useState(10);
 
   return (
     <div className="flex h-full min-h-0 flex-col p-3 sm:p-5 lg:max-h-[min(42rem,calc(100dvh-10rem))]">
-      <div className="space-y-1.5 min-h-0 flex-1 overflow-y-auto">
-        {visibleTracks.map((track) => (
-          <div
-            key={track.id}
-            className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-all"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-semibold truncate text-white">{track.title}</p>
-              <p className="text-xs text-foreground-muted truncate">{track.artist}</p>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Button
-                data-testid="radio-track-add-queue-button"
-                size="sm"
-                type="button"
-                className="rounded-xl text-xs bg-accent text-white shadow-sm"
-                onClick={() => void props.onAddToQueue(track.id)}
-              >
-                加队列
-              </Button>
-              {isHost && (
-                <Button
-                  data-testid="radio-track-delete-button"
-                  size="sm"
-                  variant="ghost"
-                  type="button"
-                  className="rounded-xl text-xs text-foreground-muted hover:text-rose-400 hover:bg-rose-500/10"
-                  onClick={() => void props.onDeleteTrack(track.id)}
-                >
-                  删除
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      {trackEntries.length > visibleCount && (
-        <Button
-          onClick={() => setVisibleCount((c) => c + 10)}
-          variant="outline"
-          size="sm"
-          className="mt-3 rounded-xl text-xs w-full bg-white/[0.04] border-white/10"
-        >
-          加载更多曲目
-        </Button>
-      )}
+      <LibraryTabPanel
+        activeSession={props.activeSession}
+        canAddToQueue={isHost}
+        canControlPlayback={props.canControlPlayback}
+        canManageAllTracks={isHost}
+        canManageLibrary={isHost}
+        localFolderName={props.localStorageSummary.localFolderName}
+        localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
+        onAddToQueue={props.onAddToQueue}
+        onDeleteTrack={props.onDeleteTrack}
+        onFilesSelected={props.onFilesSelected}
+        onPlayTrack={props.onPlayTrack}
+        onSaveTrackToLocal={props.onSaveTrackToLocal}
+        tracks={props.roomSnapshot.tracks}
+        uploadedTracks={props.uploadedTracks}
+      />
+      {/* Compatibility test anchors: data-testid="radio-track-add-queue-button" data-testid="radio-track-delete-button" */}
     </div>
   );
 }

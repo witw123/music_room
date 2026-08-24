@@ -18,7 +18,7 @@ import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomStage } from "./RoomStage";
 import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
-import { MusicIcon } from "@/components/icons/DiscoverIcons";
+import { MusicIcon, RadioIcon, UsersIcon } from "@/components/icons/DiscoverIcons";
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
@@ -256,10 +256,10 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
 type RequestWorkspaceTab = "library" | "playlists" | "members";
 
-const requestWorkspaceTabs: Array<{ id: RequestWorkspaceTab; label: string }> = [
-  { id: "library", label: "曲库" },
-  { id: "playlists", label: "歌单" },
-  { id: "members", label: "成员" }
+const requestWorkspaceTabs: Array<{ id: RequestWorkspaceTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "library", label: "曲库", icon: MusicIcon },
+  { id: "playlists", label: "歌单", icon: RadioIcon },
+  { id: "members", label: "成员", icon: UsersIcon }
 ];
 
 function RequestRoomWorkspace(
@@ -275,17 +275,18 @@ function RequestRoomWorkspace(
 
   return (
     <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-white/[0.06] lg:px-0" data-testid="request-room-workspace">
-      <div className="mb-3 px-1 lg:hidden" role="tablist" aria-label="点歌房管理">
+      <div className="material-surface-header sticky top-0 z-30 mb-3 px-1 lg:hidden" role="tablist" aria-label="点歌房管理">
         <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl">
           {requestWorkspaceTabs.map((tab) => {
             const isActive = props.mobileTab === tab.id;
+            const IconComp = tab.icon;
             return (
               <button
                 key={tab.id}
                 id={`request-workspace-tab-${tab.id}`}
                 aria-controls={`request-workspace-${tab.id}`}
                 aria-selected={isActive}
-                className={`flex-1 flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                className={`flex-1 flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
                   isActive
                     ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
                     : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
@@ -295,7 +296,8 @@ function RequestRoomWorkspace(
                 tabIndex={isActive ? 0 : -1}
                 type="button"
               >
-                {tab.label}
+                <IconComp className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
               </button>
             );
           })}
@@ -303,7 +305,17 @@ function RequestRoomWorkspace(
       </div>
 
       <section className={`${panelVisibility("library")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-library" role="tabpanel">
-        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">房间曲库</h2></header>
+        <header className="material-surface-header flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
+              <MusicIcon className="w-3.5 h-3.5" />
+            </span>
+            <h2 className="text-sm font-bold text-white tracking-tight">房间曲库</h2>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
+            {props.roomSnapshot.tracks.length} 首
+          </span>
+        </header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <LibraryTabPanel
             activeSession={props.activeSession}
@@ -325,7 +337,17 @@ function RequestRoomWorkspace(
       </section>
 
       <section className={`${panelVisibility("playlists")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-playlists" role="tabpanel">
-        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">歌单管理</h2></header>
+        <header className="material-surface-header flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
+              <RadioIcon className="w-3.5 h-3.5" />
+            </span>
+            <h2 className="text-sm font-bold text-white tracking-tight">歌单管理</h2>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
+            {props.playlists.length} 个
+          </span>
+        </header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <LocalStorageTabPanel
             activeSession={props.activeSession}
@@ -351,7 +373,17 @@ function RequestRoomWorkspace(
       </section>
 
       <section className={`${panelVisibility("members")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
-        <header className="shrink-0 px-4 py-4 sm:px-5 border-b border-white/[0.06]"><h2 className="text-sm sm:text-base font-bold text-white">房间成员</h2></header>
+        <header className="material-surface-header flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
+              <UsersIcon className="w-3.5 h-3.5" />
+            </span>
+            <h2 className="text-sm font-bold text-white tracking-tight">房间成员</h2>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
+            {props.roomSnapshot.room.members.length} 人
+          </span>
+        </header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
           <MembersPanel
             activeSessionId={props.activeSession?.userId ?? null}
