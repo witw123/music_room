@@ -62,7 +62,57 @@ jobs:
           projectPath: './apps/desktop/src-tauri'
           tagName: ${{ github.ref_name }}
           releaseName: 'Music Room ${{ github.ref_name }}'
-          releaseBody: 'Music Room 多平台桌面客户端构建版本。'
+          releaseBody: 'Music Room 多平台客户端构建版本。'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  release-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync Capacitor Android
+        run: |
+          cd apps/mobile
+          npx cap sync android
+
+      - name: Build Android APK
+        run: |
+          cd apps/mobile/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Prepare APK Asset
+        run: |
+          mkdir -p release-apk
+          APK_FILE=$(find apps/mobile/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          cp "$APK_FILE" release-apk/MusicRoom-Android-${{ github.ref_name }}.apk
+
+      - name: Upload Android APK to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: release-apk/MusicRoom-Android-${{ github.ref_name }}.apk
+          draft: true
+

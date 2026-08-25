@@ -1,7 +1,7 @@
 {
   "appId": "com.musicroom.app",
   "appName": "Music Room",
-  "webDir": "../web/out",
+  "webDir": "www",
   "server": {
     "androidScheme": "https",
     "cleartext": true

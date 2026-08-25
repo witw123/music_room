@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Music Room</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html { width: 100%; height: 100%; background-color: #09090b; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .loader { width: 48px; height: 48px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #0070f3; border-radius: 50%; animation: spin 1s linear infinite; }
+    .text { margin-top: 16px; font-size: 14px; color: #a1a1aa; font-weight: 500; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="loader"></div>
+  <div class="text">正在加载 Music Room...</div>
+  <script>
+    // In mobile runtime, load the configured server URL or local app
+    const defaultUrl = window.localStorage.getItem("music_room_server_url") || "https://music.example.com";
+    if (window.location.origin.startsWith("http")) {
+      // Local or remote
+    }
+  </script>
+</body>
+</html>
