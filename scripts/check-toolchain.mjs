@@ -5,9 +5,9 @@ const requiredPnpmMajor = 10;
 let hasFailure = false;
 
 const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "", 10);
-if (nodeMajor !== requiredNodeMajor) {
+if (nodeMajor < requiredNodeMajor) {
   console.error(
-    `[toolchain] Node.js ${requiredNodeMajor}.x is required. Current: ${process.versions.node}`
+    `[toolchain] Node.js >= ${requiredNodeMajor}.x is required. Current: ${process.versions.node}`
   );
   hasFailure = true;
 } else {
