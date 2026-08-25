@@ -7,7 +7,7 @@
     "beforeDevCommand": "pnpm --filter @music-room/web dev",
     "devUrl": "http://localhost:3000",
     "beforeBuildCommand": "pnpm --filter @music-room/web build",
-    "frontendDist": "http://localhost:3000"
+    "frontendDist": "https://musicroom.witw.top"
   },
   "app": {
     "withGlobalTauri": true,
