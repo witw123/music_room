@@ -1,0 +1,35 @@
+{
+  "name": "Music Room",
+  "short_name": "MusicRoom",
+  "description": "与好友实时同步收听本地高保真音乐，提供浏览器与桌面优先的协作听歌体验。",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/icon",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-icon",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "发现音乐",
+      "url": "/",
+      "description": "探索发现推荐音乐与公开房间"
+    },
+    {
+      "name": "本地歌单",
+      "url": "/playlists",
+      "description": "查看并播放我的本地歌单"
+    }
+  ]
+}

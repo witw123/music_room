@@ -1,6 +1,6 @@
 {
   "name": "music-room",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
@@ -10,6 +10,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "e2e": "pnpm --filter @music-room/web e2e",
+    "desktop:dev": "tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
+    "desktop:build": "tauri build --config apps/desktop/src-tauri/tauri.conf.json",
+    "mobile:sync": "pnpm --filter @music-room/mobile sync",
+    "build:desktop": "tauri build --config apps/desktop/src-tauri/tauri.conf.json",
+    "build:app": "pnpm build:desktop",
     "check:toolchain": "node scripts/check-toolchain.mjs",
     "deploy:check": "node scripts/deploy-check.mjs",
     "deploy:linux": "sh scripts/deploy-linux.sh",

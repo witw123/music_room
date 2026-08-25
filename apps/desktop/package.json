@@ -1,0 +1,12 @@
+{
+  "name": "@music-room/desktop",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

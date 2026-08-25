@@ -1,0 +1,19 @@
+{
+  "appId": "com.musicroom.app",
+  "appName": "Music Room",
+  "webDir": "../web/out",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "CapacitorCookies": {
+      "enabled": true
+    }
+  }
+}
