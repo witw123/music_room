@@ -3,7 +3,7 @@
   "appName": "Music Room",
   "webDir": "www",
   "server": {
-    "url": "https://musicroom.witw.top",
+    "url": "https://musicroom.witw.top/app",
     "androidScheme": "https",
     "cleartext": true
   },

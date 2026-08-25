@@ -27,7 +27,7 @@ import {
 } from "@/features/settings/settings-store";
 
 const playbackModeLabels: Record<PlaybackMode, string> = {
-  sequence: "顺序播放",
+  sequence: "列表循环",
   shuffle: "随机播放",
   single: "单曲循环"
 };

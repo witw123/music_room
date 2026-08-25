@@ -2462,7 +2462,7 @@ describe("RoomService", () => {
     expect(roomAfterOffline.playback.playbackRevision).toBeGreaterThan(playback.playbackRevision);
   });
 
-  it("does not wrap next past the end of the queue", async () => {
+  it("wraps next to the start of the queue in sequential list loop mode", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -2511,15 +2511,11 @@ describe("RoomService", () => {
     });
 
     expect(afterNext).toMatchObject({
-      status: "paused",
-      currentTrackId: secondTrack.id,
-      currentQueueItemId: secondItem.id,
-      startAt: null,
-      startedAt: null,
-      positionMs: 60_000
+      status: "playing",
+      currentTrackId: firstTrack.id,
+      currentQueueItemId: firstItem.id,
+      positionMs: 0
     });
-    expect(afterNext.currentTrackId).not.toBe(firstTrack.id);
-    expect(firstItem.id).toBeTruthy();
   });
 
   it("skips offline-owner tracks when advancing next", async () => {

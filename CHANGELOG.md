@@ -13,10 +13,9 @@
   - 新增移动端 Capacitor 接入配置（`apps/mobile`），支持 Android 与 iOS 平台容器同步；
   - 新增 GitHub Actions 多平台自动化构建发版流水线（`.github/workflows/release-desktop.yml`），支持推送版本 Tag 自动矩阵编译全平台原生安装包。
 
-- **多房间模式视觉与交互统一**：
-  - 电台房（Radio Room）与点歌房（Request Room）曲库和队列升级为多人互动房同款全功能曲库工作区（`LibraryTabPanel`），支持本地音频导入、来源分类筛选与高保真专辑封面展示；
-  - 优化移动端触控交互体验，修复点歌台操作卡片在小屏幕向上铺开无法点击的问题；
-  - 设置页面新增完全动效开关（Full Motion），支持用户按需开启全量交互动画。
+- **播放器队列列表循环优化**：
+  - 调整顺序播放为全队列列表循环（List Loop），播完队列最后一首自动平滑循环至第一首，消除队列到头终止停播的问题；
+  - 优化客户端壳入口直接定位至功能工作区 `https://musicroom.witw.top/app`。
 
 ### 修复
 
