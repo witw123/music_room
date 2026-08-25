@@ -5,7 +5,11 @@
   "server": {
     "url": "https://musicroom.witw.top/app",
     "androidScheme": "https",
-    "cleartext": true
+    "cleartext": true,
+    "allowNavigation": [
+      "musicroom.witw.top",
+      "*.witw.top"
+    ]
   },
   "android": {
     "allowMixedContent": true,
