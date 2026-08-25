@@ -479,6 +479,10 @@ export class SegmentedOpusEngine {
     }
   }
 
+  setLoudnessGain(gainDb: number) {
+    this.setLoudnessGainDb(gainDb);
+  }
+
   setBroadcastEnabled(enabled: boolean) {
     if (this.broadcastEnabled === enabled) {
       return;

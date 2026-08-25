@@ -858,6 +858,16 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   ]);
 
   useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    roomAudioOutput.applyVolume({
+      localAudio: audio,
+      volume: input.volume,
+      loudnessGainDb
+    });
+  }, [audioRef, input.volume, loudnessGainDb]);
+
+  useEffect(() => {
     if (!usesNativeLocalAudio) {
       nativeLocalAudioTimelineRef.current = null;
       return;

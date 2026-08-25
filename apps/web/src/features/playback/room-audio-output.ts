@@ -87,10 +87,10 @@ export class RoomAudioOutput {
         ? this.localAudioElementGraph
         : null;
       if (localGraph) {
-        if (volumeChanged) {
+        if (volumeChanged || localGraph.localGain.gain.value !== safeVolume) {
           this.setGraphVolume(localGraph, safeVolume);
         }
-        if (loudnessChanged) {
+        if (loudnessChanged || (typeof input.loudnessGainDb === "number" && localGraph.normalizationGain.gain.value !== loudnessGain)) {
           this.setGraphLoudnessGain(localGraph, loudnessGain);
         }
         element.volume = 1;

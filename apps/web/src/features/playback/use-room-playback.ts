@@ -29,6 +29,7 @@ type UseRoomPlaybackOptions = {
   audioRef: RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null | undefined;
   tracks: TrackMeta[];
+  currentTrack?: TrackMeta | null;
   getLocalPlaybackPositionMs?: () => number | null;
   playbackBarrier?: RoomPlaybackBarrierClock | null;
 };
@@ -251,6 +252,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     audioRef,
     playback,
     tracks,
+    currentTrack,
     getLocalPlaybackPositionMs,
     playbackBarrier
   } = options;
@@ -325,15 +327,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [playback]);
 
   const progressTrack = useMemo(() => {
+    if (currentTrack && (!acceptedPlayback?.currentTrackId || currentTrack.id === acceptedPlayback.currentTrackId)) {
+      return currentTrack;
+    }
     if (!acceptedPlayback?.currentTrackId) {
-      return null;
+      return currentTrack ?? null;
     }
 
-    return tracks.find((item) => item.id === acceptedPlayback.currentTrackId) ?? null;
-  }, [acceptedPlayback?.currentTrackId, tracks]);
-  const loudnessGainDb = progressTrack
-    ? resolveLoudnessGainDb(progressTrack, loudnessNormalization)
-    : undefined;
+    return tracks.find((item) => item.id === acceptedPlayback.currentTrackId) ?? currentTrack ?? null;
+  }, [acceptedPlayback?.currentTrackId, currentTrack, tracks]);
+  const loudnessGainDb = resolveLoudnessGainDb(progressTrack, loudnessNormalization);
 
   useEffect(() => {
     if (!acceptedPlayback || !progressTrack) {

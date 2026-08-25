@@ -140,6 +140,18 @@ describe("local audio cache persistence", () => {
     indexedDbMocks.getTrackAssetLink.mockResolvedValue({
       originalAssetId: "asset_1"
     });
+    indexedDbMocks.getAssetManifest.mockResolvedValue({
+      complete: true,
+      manifest: {
+        kind: "original",
+        assetId: "asset_1",
+        fileHash: "hash_1",
+        unitCount: 1
+      }
+    });
+    indexedDbMocks.getAssetUnits.mockResolvedValue([
+      { unitIndex: 0, payload: new ArrayBuffer(8) }
+    ]);
 
     await expect(getRoomLocalAudioFile({
       trackId: "track_1",

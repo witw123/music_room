@@ -88,6 +88,7 @@ function BottomPlayerControllerBase({
     audioRef,
     playback,
     tracks: roomSnapshot?.tracks ?? [],
+    currentTrack,
     getLocalPlaybackPositionMs: undefined,
     playbackBarrier
   });

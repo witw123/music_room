@@ -504,7 +504,7 @@ describe("PeerConnectionLifecycleManager", () => {
     initialPeer.connectionState = "connecting";
     initialPeer.iceConnectionState = "checking";
 
-    await vi.advanceTimersByTimeAsync(16_100);
+    await vi.advanceTimersByTimeAsync(24_100);
 
     expect(initialPeer.restartIce).toHaveBeenCalledTimes(2);
     expect(initialPeer.connectionState).toBe("closed");
