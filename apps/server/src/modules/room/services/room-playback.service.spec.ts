@@ -174,6 +174,87 @@ describe("RoomPlaybackService gapless playback", () => {
     expect(room.queue.map((item) => item.position)).toEqual([0, 1]);
   });
 
+  it("wraps sequence next from the final queue item to the first", async () => {
+    const room = record(0);
+    room.room.playback.currentTrackId = "track_2";
+    room.room.playback.currentQueueItemId = "queue_2";
+    room.room.playback.playbackAssetId = room.tracks[1]!.playbackAsset!.assetId;
+    room.room.playback.sourceTrackId = "track_2";
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
+    } as never);
+
+    const snapshot = await service.updatePlayback(room, { action: "next" });
+
+    expect(snapshot.currentQueueItemId).toBe("queue_1");
+    expect(snapshot.currentTrackId).toBe("track_1");
+  });
+
+  it("wraps sequence previous from the first queue item to the final", async () => {
+    const room = record(0);
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
+    } as never);
+
+    const snapshot = await service.updatePlayback(room, { action: "prev" });
+
+    expect(snapshot.currentQueueItemId).toBe("queue_2");
+    expect(snapshot.currentTrackId).toBe("track_2");
+  });
+
+  it("loops a one-item sequence queue", async () => {
+    const room = record(0);
+    room.queue = [room.queue[0]!];
+    room.room.playback.currentTrackId = "track_1";
+    room.room.playback.currentQueueItemId = "queue_1";
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
+    } as never);
+
+    const snapshot = await service.updatePlayback(room, { action: "next" });
+
+    expect(snapshot.currentQueueItemId).toBe("queue_1");
+    expect(snapshot.currentTrackId).toBe("track_1");
+    expect(snapshot.status).toBe("playing");
+  });
+
+  it("skips unavailable items while wrapping in sequence order", async () => {
+    const room = record(0);
+    room.room.playback.currentTrackId = "track_2";
+    room.room.playback.currentQueueItemId = "queue_2";
+    room.room.playback.playbackAssetId = room.tracks[1]!.playbackAsset!.assetId;
+    room.room.playback.sourceTrackId = "track_2";
+    room.tracks[0] = { ...room.tracks[0]!, ownerSessionId: "offline-owner" };
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
+    } as never);
+
+    const snapshot = await service.updatePlayback(room, { action: "next" });
+
+    expect(snapshot.currentQueueItemId).toBe("queue_2");
+    expect(snapshot.currentTrackId).toBe("track_2");
+  });
+
+  it("advertises the first queue item after the final item for gapless playback", async () => {
+    const room = record(0);
+    const finalTrack = room.tracks[1]!;
+    room.room.playback.currentTrackId = finalTrack.id;
+    room.room.playback.currentQueueItemId = "queue_2";
+    room.room.playback.playbackAssetId = finalTrack.playbackAsset!.assetId;
+    room.room.playback.sourceTrackId = finalTrack.id;
+    const service = new RoomPlaybackService({
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
+    } as never);
+
+    const snapshot = await service.buildPlaybackForSnapshot(
+      room,
+      new Map([["owner", "peer-owner"]])
+    );
+
+    expect(snapshot.gaplessNext?.queueItemId).toBe("queue_1");
+    expect(snapshot.gaplessNext?.trackId).toBe("track_1");
+  });
+
   it("plays each unique track once per shuffle cycle and avoids a boundary repeat", async () => {
     const room = record(0);
     const extraTracks = ["track_3", "track_4"].map((id) => track(id, "owner", 7_000));

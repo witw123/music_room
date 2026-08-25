@@ -252,8 +252,8 @@ export class RoomPlaybackService {
 
   /**
    * Advance to the next playable queue item after the current one.
-   * Does not wrap to the start of the queue. Skips tracks whose owners are offline.
-   * When nothing playable remains, pauses at the end of the current track.
+   * Optionally wraps to the start of the queue and skips tracks whose owners are
+   * offline. When nothing playable remains, pauses at the end of the current track.
    */
   async advanceToNextPlayable(
     record: RoomRecord,
@@ -370,7 +370,7 @@ export class RoomPlaybackService {
     }
 
     return direction === "next"
-      ? this.advanceToNextPlayable(record, { positionMs, wrap: false })
+      ? this.advanceToNextPlayable(record, { positionMs, wrap: true })
       : this.advanceToPreviousPlayable(record, { positionMs });
   }
 
@@ -455,20 +455,19 @@ export class RoomPlaybackService {
   ): Promise<"advanced" | "restarted" | "cleared"> {
     const playback = record.room.playback;
     const currentIndex = this.getCurrentQueueIndex(record);
+    const startIndex = currentIndex > 0 ? currentIndex - 1 : record.queue.length - 1;
 
-    if (currentIndex > 0) {
-      const candidate = await this.findPlayableQueueItem(record, currentIndex - 1, -1, {
-        wrap: false
-      });
-      if (candidate) {
-        await this.applyTrackPlayback(
-          record,
-          candidate.trackId,
-          options?.positionMs ?? 0,
-          candidate.id
-        );
-        return "advanced";
-      }
+    const candidate = await this.findPlayableQueueItem(record, startIndex, -1, {
+      wrap: true
+    });
+    if (candidate) {
+      await this.applyTrackPlayback(
+        record,
+        candidate.trackId,
+        options?.positionMs ?? 0,
+        candidate.id
+      );
+      return "advanced";
     }
 
     if (playback.currentTrackId) {
@@ -483,13 +482,13 @@ export class RoomPlaybackService {
     }
 
     if (record.queue[0]) {
-      const candidate = await this.findPlayableQueueItem(record, 0, 1, { wrap: false });
-      if (candidate) {
+      const fallback = await this.findPlayableQueueItem(record, 0, 1, { wrap: true });
+      if (fallback) {
         await this.applyTrackPlayback(
           record,
-          candidate.trackId,
+          fallback.trackId,
           options?.positionMs ?? 0,
-          candidate.id
+          fallback.id
         );
         return "advanced";
       }
@@ -698,9 +697,18 @@ export class RoomPlaybackService {
       return null;
     }
 
-    // Wrap is intentionally unused by public next; kept for potential loop mode later.
     if (direction > 0) {
       for (let i = 0; i < startIndex && i < record.queue.length; i += 1) {
+        if (visited.has(i)) continue;
+        const item = record.queue[i]!;
+        const sourceCandidate = await this.resolveTrackSourceCandidate(record, item.trackId);
+        if (sourceCandidate) {
+          return item;
+        }
+      }
+    } else if (direction < 0) {
+      for (let i = record.queue.length - 1; i > startIndex && i >= 0; i -= 1) {
+        if (visited.has(i)) continue;
         const item = record.queue[i]!;
         const sourceCandidate = await this.resolveTrackSourceCandidate(record, item.trackId);
         if (sourceCandidate) {
@@ -756,7 +764,9 @@ export class RoomPlaybackService {
     const transitionAtMs = this.getGaplessTransitionAt(record);
     const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
     const currentIndex = this.getCurrentQueueIndex(record);
-    const nextQueueItem = currentIndex >= 0 ? record.queue[currentIndex + 1] : undefined;
+    const nextQueueItem = currentIndex >= 0
+      ? (record.queue[currentIndex + 1] ?? record.queue[0])
+      : record.queue[0];
     const nextTrack = nextQueueItem
       ? record.tracks.find((track) => track.id === nextQueueItem.trackId)
       : undefined;

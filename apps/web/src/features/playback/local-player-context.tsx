@@ -353,13 +353,14 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     const requestId = ++playRequestRef.current;
     const normalizedStartIndex = Math.min(Math.max(0, startIndex), nextRecords.length - 1);
     const shouldSkipMissingFiles = sequenceKind !== "direct" && playbackMode !== "single";
+    const shouldWrapSequence = sequenceKind !== "direct" && playbackMode !== "shuffle" && playbackMode !== "single";
     const candidateCount = shouldSkipMissingFiles ? nextRecords.length : 1;
     let selectedIndex = normalizedStartIndex;
     let record: LocalPlaylistTrackRecord | undefined;
     let file: Blob | null = null;
 
     for (let offset = 0; offset < candidateCount; offset += 1) {
-      const candidateIndex = playbackMode === "shuffle"
+      const candidateIndex = playbackMode === "shuffle" || shouldWrapSequence
         ? (normalizedStartIndex + offset) % nextRecords.length
         : normalizedStartIndex + offset;
       if (candidateIndex >= nextRecords.length) break;
@@ -661,13 +662,18 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
 
   const findPlayableIndex = useCallback(async (startIndex: number, direction: 1 | -1) => {
     const records = playbackRecordsRef.current;
-    if (records.length < 2) return -1;
+    if (records.length === 0) return -1;
+    if (records.length === 1) {
+      const candidate = records[0];
+      return candidate && (isTrackPlayable(candidate) || (await loadAudioFile(candidate).catch(() => null))) ? 0 : -1;
+    }
 
-    for (let offset = 1; offset < records.length; offset += 1) {
-      const index = startIndex + direction * offset;
-      if (index < 0 || index >= records.length) break;
+    for (let offset = 1; offset <= records.length; offset += 1) {
+      const index = ((startIndex + direction * offset) % records.length + records.length) % records.length;
       const candidate = records[index];
-      if (isTrackPlayable(candidate) || await loadAudioFile(candidate).catch(() => null)) return index;
+      if (candidate && (isTrackPlayable(candidate) || (await loadAudioFile(candidate).catch(() => null)))) {
+        return index;
+      }
     }
     return -1;
   }, [isTrackPlayable, loadAudioFile]);
