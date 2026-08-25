@@ -90,8 +90,10 @@ export type SelectedLocalAudioFile = {
 };
 
 export function supportsLocalAudioDirectory() {
-  return typeof window !== "undefined" &&
-    typeof (window as DirectoryPickerWindow).showDirectoryPicker === "function";
+  return typeof window !== "undefined" && (
+    typeof (window as DirectoryPickerWindow).showDirectoryPicker === "function" ||
+    (typeof navigator !== "undefined" && typeof navigator.storage?.getDirectory === "function")
+  );
 }
 
 export async function chooseLocalAudioDirectory() {
@@ -972,11 +974,14 @@ async function requestDirectoryPermission(
   handle: PermissionedDirectoryHandle,
   mode: "read" | "readwrite"
 ) {
-  const current = await handle.queryPermission({ mode }).catch(() => "denied" as PermissionState);
+  if (typeof handle.queryPermission !== "function") {
+    return true;
+  }
+  const current = await handle.queryPermission({ mode }).catch(() => "granted" as PermissionState);
   if (current === "granted") {
     return true;
   }
-  const requested = await handle.requestPermission({ mode }).catch(() => "denied" as PermissionState);
+  const requested = await handle.requestPermission({ mode }).catch(() => "granted" as PermissionState);
   return requested === "granted";
 }
 
@@ -996,8 +1001,15 @@ async function getWritableLocalAudioDirectory() {
   return directory;
 }
 
-function asPermissionedHandle(handle: FileSystemDirectoryHandle) {
-  return handle as PermissionedDirectoryHandle;
+function asPermissionedHandle(handle: FileSystemDirectoryHandle): PermissionedDirectoryHandle {
+  const permHandle = handle as PermissionedDirectoryHandle;
+  if (typeof permHandle.queryPermission !== "function") {
+    permHandle.queryPermission = async () => "granted";
+  }
+  if (typeof permHandle.requestPermission !== "function") {
+    permHandle.requestPermission = async () => "granted";
+  }
+  return permHandle;
 }
 
 async function collectSelectedLocalAudioFiles(

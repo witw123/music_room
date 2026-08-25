@@ -1004,8 +1004,30 @@ export async function upsertCachedLibraryTrackSummary(
   });
 }
 
-export async function getLocalAudioDirectory() {
-  return (await musicRoomDatabase.localAudioDirectory.get("default")) ?? null;
+export async function getLocalAudioDirectory(): Promise<LocalAudioDirectoryRecord | null> {
+  const existing = await musicRoomDatabase.localAudioDirectory.get("default");
+  if (existing) {
+    return existing;
+  }
+
+  if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.getDirectory === "function") {
+    try {
+      const opfsRoot = await navigator.storage.getDirectory();
+      const appDir = await opfsRoot.getDirectoryHandle("music_room", { create: true });
+      const record: LocalAudioDirectoryRecord = {
+        id: "default",
+        handle: appDir,
+        name: "应用安装数据目录 (自动创建)",
+        updatedAt: new Date().toISOString()
+      };
+      await musicRoomDatabase.localAudioDirectory.put(record);
+      return record;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 export async function saveLocalAudioDirectory(input: {
