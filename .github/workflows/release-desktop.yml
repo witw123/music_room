@@ -68,7 +68,6 @@ jobs:
           args: ${{ matrix.args }}
 
   release-android:
-    needs: release-desktop
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -122,6 +121,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} release-apk/MusicRoom-Android-${{ github.ref_name }}.apk --clobber
+          gh release upload ${{ github.ref_name }} release-apk/MusicRoom-Android-${{ github.ref_name }}.apk --clobber || \
+          gh release create ${{ github.ref_name }} release-apk/MusicRoom-Android-${{ github.ref_name }}.apk --title "Music Room ${{ github.ref_name }}" --notes "Music Room 多平台客户端构建版本。"
 
 
