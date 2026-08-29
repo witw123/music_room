@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import type {
   Playlist
 } from "@music-room/shared";
@@ -1610,8 +1611,8 @@ function PlaylistEditorDialog({
 }) {
   const isLocal = kind === "local";
   const titleId = `create-${kind}-playlist-title`;
-  return (
-    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation">
+  return createPortal(
+    <div className="light-overlay-scrim fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation">
       <form
         aria-labelledby={titleId}
         className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6"
@@ -1656,7 +1657,8 @@ function PlaylistEditorDialog({
           <Button disabled={pending || !title.trim()} type="submit">{pending ? "创建中…" : "创建歌单"}</Button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1741,8 +1743,8 @@ function PlaylistMoveDialog({
 
 function DeletePlaylistDialog({ kind, playlist, pending, onConfirm, onCancel }: { kind: "local" | "network"; playlist: { title: string }; pending: boolean; onConfirm: () => void; onCancel: () => void }) {
   const label = kind === "local" ? "本地歌单" : "网络歌单";
-  return (
-    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation">
+  return createPortal(
+    <div className="light-overlay-scrim fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation">
       <div aria-labelledby="delete-playlist-title" className="light-dialog-surface w-full max-w-sm rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6" role="dialog" aria-modal="true">
         <h2 className="text-lg font-semibold text-foreground" id="delete-playlist-title">删除{label}</h2>
         <p className="mt-3 text-sm leading-6 text-foreground-muted">确定删除“{playlist.title}”吗？已下载到本地的歌曲不会被删除。</p>
@@ -1751,7 +1753,8 @@ function DeletePlaylistDialog({ kind, playlist, pending, onConfirm, onCancel }: 
           <Button className="bg-red-500 hover:bg-red-400" disabled={pending} onClick={onConfirm} type="button">{pending ? "删除中…" : "确认删除"}</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

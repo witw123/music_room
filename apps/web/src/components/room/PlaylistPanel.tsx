@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import type {
   AuthSession,
   NeteaseTrackCandidate,
@@ -573,8 +574,8 @@ function PlaylistDetail({
 }
 
 function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
-  return (
-    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center" role="presentation">
+  return createPortal(
+    <div className="light-overlay-scrim fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center" role="presentation">
       <form
         aria-labelledby="room-save-playlist-title"
         className="light-dialog-surface my-auto max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:p-5"
@@ -610,7 +611,8 @@ function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCance
           <Button disabled={isPending || !title.trim()} type="submit">{isPending ? "保存中…" : "保存歌单"}</Button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 
