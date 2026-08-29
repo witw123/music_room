@@ -3,7 +3,10 @@ import { validateRuntimeConfig } from "./runtime-config";
 const validTurnstileConfig = {
   TURNSTILE_ENABLED: "true",
   TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
-  TURNSTILE_SECRET_KEY: "0x0000000000000000000000000000000AA"
+  TURNSTILE_SECRET_KEY: "0x0000000000000000000000000000000AA",
+  // Production startup binds Turnstile tokens to APP_DOMAIN; tests below that
+  // exercise a missing APP_DOMAIN override it with an empty value.
+  APP_DOMAIN: "example.com"
 };
 
 describe("validateRuntimeConfig", () => {
@@ -74,6 +77,7 @@ describe("validateRuntimeConfig", () => {
       validateRuntimeConfig({
         NODE_ENV: "production",
         ...validTurnstileConfig,
+        APP_DOMAIN: "",
         JWT_SECRET: "super-secret-jwt",
         TURN_ENABLED: "true",
         TURN_SHARED_SECRET: "super-secret-turn"

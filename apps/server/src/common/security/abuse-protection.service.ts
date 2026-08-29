@@ -70,6 +70,15 @@ export class AbuseProtectionService {
     }
 
     const now = Date.now();
+    if (this.localBuckets.size >= 10_000) {
+      // Bucket keys include caller-supplied values (IP, user, room); without a
+      // sweep, key rotation grows the map unbounded in fallback mode.
+      for (const [existingKey, existingBucket] of this.localBuckets) {
+        if (existingBucket.expiresAt <= now) {
+          this.localBuckets.delete(existingKey);
+        }
+      }
+    }
     const exceeded = normalizedDimensions.some((dimension) => {
       const key = this.localKey(scope, dimension.name, dimension.value);
       const current = this.localBuckets.get(key);

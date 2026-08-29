@@ -1,9 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { AuthSession, UserProfile } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
+import { RedisService } from "../../infra/redis/redis.service";
 
 type PersistenceMode = "database" | "fallback";
 
@@ -40,6 +41,11 @@ type FallbackAuthStore = {
 
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const sessionCleanupIntervalMs = 60 * 60 * 1000;
+const userInvalidatedChannel = "music-room:auth:user-invalidated";
+// A valid scrypt hash of an unpublishable random value. Verifying against it
+// for unknown usernames keeps the login path's timing indistinguishable from
+// the known-user path, closing the response-time username oracle.
+const dummyPasswordHash = hashPassword(randomBytes(32).toString("hex"));
 
 @Injectable()
 export class AuthService implements OnModuleInit, OnModuleDestroy {
@@ -55,19 +61,72 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   );
   private fallbackLoaded = false;
   private sessionCleanupTimer?: NodeJS.Timeout;
+  private unsubscribeUserInvalidated?: () => Promise<void> | void;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly redisService?: RedisService
+  ) {}
 
   onModuleInit() {
     this.sessionCleanupTimer = setInterval(() => {
       void this.cleanupExpiredSessions();
     }, sessionCleanupIntervalMs);
     void this.cleanupExpiredSessions();
+    if (this.redisService?.subscribe) {
+      // Admin revokes/disables delete the persisted sessions, but this process
+      // also keeps validated tokens in memory. The publish/subscribe fan-out is
+      // the only way other instances (and this one, via the Redis server) hear
+      // about it in time; without it a revoked token keeps passing
+      // getAuthSessionByTokenOrThrow until its 14-day TTL.
+      this.redisService
+        .subscribe(userInvalidatedChannel, (payload) => {
+          const userId = (payload as { userId?: unknown }).userId;
+          if (typeof userId === "string") {
+            this.invalidateSessionsForUser(userId).catch((error) => {
+              this.logger.warn(`Failed to invalidate sessions for user: ${String(error)}`);
+            });
+          }
+        })
+        .then((unsubscribe) => {
+          this.unsubscribeUserInvalidated = unsubscribe;
+        })
+        .catch((error) => {
+          this.logger.warn(`Auth session invalidation subscription unavailable: ${String(error)}`);
+        });
+    }
   }
 
   onModuleDestroy() {
     if (this.sessionCleanupTimer) {
       clearInterval(this.sessionCleanupTimer);
+    }
+    void this.unsubscribeUserInvalidated?.();
+  }
+
+  /**
+   * Drop every in-memory session belonging to the user. Admin revocation calls
+   * this directly on the handling instance; other instances are reached through
+   * the user-invalidated Redis channel.
+   */
+  async invalidateSessionsForUser(userId: string) {
+    await this.ensureFallbackStoreLoaded();
+
+    let fallbackChanged = false;
+    for (const session of [...this.sessionsByTokenHash.values()]) {
+      if (session.userId !== userId) continue;
+      this.sessionsByTokenHash.delete(session.tokenHash);
+      if (session.token) {
+        this.sessionsByToken.delete(session.token);
+      }
+      if (session.persistence === "fallback") {
+        fallbackChanged = true;
+      }
+    }
+
+    if (fallbackChanged) {
+      await this.persistFallbackStore().catch(() => undefined);
     }
   }
 
@@ -88,8 +147,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       throw new Error("Nickname is required.");
     }
 
-    if (password.trim().length < 6) {
-      throw new Error("Password must be at least 6 characters.");
+    if (password.trim().length < 8) {
+      throw new Error("Password must be at least 8 characters.");
     }
 
     const persistence = await this.resolvePersistenceModeOrThrow();
@@ -111,21 +170,32 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     this.cacheUser(user);
 
     if (persistence === "database") {
-      await this.prisma.user.create({
-        data: {
-          id: user.id,
-          username: user.username,
-          passwordHash: user.passwordHash,
-          nickname: user.nickname,
-          role: user.role,
-          status: user.status,
-          disabledAt: user.disabledAt ? new Date(user.disabledAt) : null,
-          disabledReason: user.disabledReason ?? null,
-          lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt) : null,
-          createdAt: new Date(user.createdAt),
-          updatedAt: new Date(user.updatedAt)
+      try {
+        await this.prisma.user.create({
+          data: {
+            id: user.id,
+            username: user.username,
+            passwordHash: user.passwordHash,
+            nickname: user.nickname,
+            role: user.role,
+            status: user.status,
+            disabledAt: user.disabledAt ? new Date(user.disabledAt) : null,
+            disabledReason: user.disabledReason ?? null,
+            lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt) : null,
+            createdAt: new Date(user.createdAt),
+            updatedAt: new Date(user.updatedAt)
+          }
+        });
+      } catch (error) {
+        // The pre-check races with concurrent registrations; surface the
+        // unique-constraint outcome instead of the raw Prisma message.
+        if (isUniqueConstraintError(error)) {
+          this.usersById.delete(user.id);
+          this.userIdByUsername.delete(user.username);
+          throw new Error("Username already exists.");
         }
-      });
+        throw error;
+      }
     } else {
       await this.persistFallbackStore();
       this.logger.warn(
@@ -160,12 +230,25 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.ensureAuthLookupAvailableOrThrow();
-    const user = await this.getUserByUsernameOrThrow(username);
-    if (user.status === "DISABLED") {
-      throw new Error("Account is disabled.");
+    let user: StoredUser | null = null;
+    try {
+      user = await this.getUserByUsernameOrThrow(username);
+    } catch {
+      user = null;
+    }
+    if (!user) {
+      // Unknown username: still run one scrypt verification so the response
+      // time and error text match the known-user path exactly.
+      verifyPassword(password, dummyPasswordHash);
+      throw new Error("Invalid username or password.");
     }
     if (!verifyPassword(password, user.passwordHash)) {
       throw new Error("Invalid username or password.");
+    }
+    // Disabled state is only revealed after the password check, so the login
+    // endpoint cannot be used to probe whether an account exists.
+    if (user.status === "DISABLED") {
+      throw new Error("Account is disabled.");
     }
 
     const session = await this.createSessionForUser(user);
@@ -181,7 +264,16 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       throw new Error("Username and password are required.");
     }
     await this.ensureAuthLookupAvailableOrThrow();
-    const user = await this.getUserByUsernameOrThrow(username);
+    let user: StoredUser | null = null;
+    try {
+      user = await this.getUserByUsernameOrThrow(username);
+    } catch {
+      user = null;
+    }
+    if (!user) {
+      verifyPassword(input.password, dummyPasswordHash);
+      throw new Error("Invalid username or password.");
+    }
     if (!verifyPassword(input.password, user.passwordHash)) {
       throw new Error("Invalid username or password.");
     }
@@ -636,6 +728,15 @@ function verifyPassword(password: string, storedHash: string) {
   }
 
   return timingSafeEqual(actual, expected);
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "P2002"
+  );
 }
 
 function resolveAllowFallbackPersistence() {

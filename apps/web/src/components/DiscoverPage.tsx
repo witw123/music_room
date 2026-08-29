@@ -211,19 +211,27 @@ export function DiscoverPage() {
   const openPlaylist = async (card: DiscoverPlaylistCard) => {
     const { playlist } = card;
     const key = `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+    const version = ++requestVersionRef.current;
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
     setDetailLoading(key);
     try {
       const full = playlist.provider === "netease"
         ? await musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
         : await musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId);
+      // A slower earlier request must not overwrite the detail the user asked
+      // for last; the version check mirrors the list loader above.
+      if (controller.signal.aborted || requestVersionRef.current !== version) return;
       setDetail({
         summary: playlist,
         value: full
       });
     } catch {
+      if (controller.signal.aborted || requestVersionRef.current !== version) return;
       setErrorMessage("打开歌单失败，请稍后重试。");
     } finally {
-      setDetailLoading(null);
+      if (requestVersionRef.current === version) setDetailLoading(null);
     }
   };
 

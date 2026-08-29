@@ -16,12 +16,12 @@ describe("request contracts", () => {
     expect(
       registerRequestSchema.parse({
         username: " Alice_1 ",
-        password: "secret1",
+        password: "secret12",
         nickname: " Alice "
       })
     ).toEqual({
       username: "Alice_1",
-      password: "secret1",
+      password: "secret12",
       nickname: "Alice"
     });
 

@@ -27,7 +27,7 @@ const trackIdListSchema = z.array(stringId).max(500);
 export const registerRequestSchema = z
   .object({
     username: accountSchema,
-    password: z.string().min(6).max(256),
+    password: z.string().min(8).max(256),
     nickname: trimmedString(80),
     turnstileToken: z.string().trim().min(1).max(2048).optional()
   })

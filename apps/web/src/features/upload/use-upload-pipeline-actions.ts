@@ -284,6 +284,8 @@ export function useUploadPipelineActions({
     (candidate: NeteaseTrackCandidate) => importProviderTracks({
       activeSession, candidates: [candidate], inFlightUploadHashesRef,
       origin: "netease-import", persistTrackIntoLibrary, roomSnapshot,
+      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteLocalTrackData: deleteLocalTrackDataForTracks,
       setStatusMessage, setUploadedTracks, sourceType: "netease",
       syncRoomSnapshot, refreshCacheLibrary
     }),
@@ -303,6 +305,8 @@ export function useUploadPipelineActions({
     (candidate: QqMusicTrackCandidate) => importProviderTracks({
       activeSession, candidates: [candidate], inFlightUploadHashesRef,
       origin: "qqmusic-import", persistTrackIntoLibrary, roomSnapshot,
+      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteLocalTrackData: deleteLocalTrackDataForTracks,
       setStatusMessage, setUploadedTracks, sourceType: "qqmusic",
       syncRoomSnapshot, refreshCacheLibrary
     }),
@@ -327,11 +331,15 @@ export function useUploadPipelineActions({
     handleNeteaseTrackImports: (candidates: NeteaseTrackCandidate[]) => importProviderTracks({
       activeSession, candidates, inFlightUploadHashesRef, origin: "netease-import",
       persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
+      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteLocalTrackData: deleteLocalTrackDataForTracks,
       sourceType: "netease", syncRoomSnapshot, refreshCacheLibrary
     }),
     handleQqMusicTrackImports: (candidates: QqMusicTrackCandidate[]) => importProviderTracks({
       activeSession, candidates, inFlightUploadHashesRef, origin: "qqmusic-import",
       persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
+      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteLocalTrackData: deleteLocalTrackDataForTracks,
       sourceType: "qqmusic", syncRoomSnapshot, refreshCacheLibrary
     })
   };
@@ -374,6 +382,8 @@ async function importProviderTracks(input: {
   sourceType: Exclude<TrackSourceType, "local_upload">;
   syncRoomSnapshot: (roomId: string) => Promise<void>;
   refreshCacheLibrary: () => Promise<void>;
+  deleteTrack?: (roomId: string, trackId: string) => Promise<unknown>;
+  deleteLocalTrackData?: (trackIds: readonly string[]) => Promise<void>;
 }) {
   const { activeSession, candidates, roomSnapshot, sourceType, inFlightUploadHashesRef } = input;
   if (!activeSession || !roomSnapshot) {
@@ -401,6 +411,7 @@ async function importProviderTracks(input: {
 
   const prepared: PreparedProviderImport[] = [];
   const failures: unknown[] = [];
+  const heldInFlightKeys: string[] = [];
   for (const key of pendingCandidateKeys) inFlightUploadHashesRef.current.add(key);
   const prefetchedAudio = new Map<number, Promise<PrefetchedProviderAudioResult>>();
   let nextPrefetchIndex = 0;
@@ -479,10 +490,12 @@ async function importProviderTracks(input: {
         localArtworkUrl,
         lyrics
       });
+      // The candidate is still being committed below; keep the marker until
+      // the whole import finishes so a concurrent run cannot duplicate it.
+      heldInFlightKeys.push(key);
     } catch (error) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       failures.push(error);
-    } finally {
       inFlightUploadHashesRef.current.delete(key);
     }
   }
@@ -490,29 +503,70 @@ async function importProviderTracks(input: {
     throw failures[0] ?? new Error("没有可导入的歌曲。");
   }
 
-  input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
-  const registered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
-    tracks: prepared.map((item) => buildRegisterTrackPayload(item.draft))
-  });
-  const uploadEntries: Record<string, UploadedTrack> = {};
   try {
+    if (prepared.length === 0) {
+      throw failures[0] ?? new Error("没有可导入的歌曲。");
+    }
+
+    input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
+    let registered: TrackMeta[];
+    try {
+      registered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+        tracks: prepared.map((item) => buildRegisterTrackPayload(item.draft))
+      });
+    } catch (error) {
+      for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
+      throw error;
+    }
+
+    const uploadEntries: Record<string, UploadedTrack> = {};
+    const persistedObjectUrls = new Set<string>();
+    const persistFailures: Array<{ track: TrackMeta; error: unknown }> = [];
     await Promise.all(registered.map(async (track, index) => {
       const item = prepared[index];
-    if (!item) return;
-    if (track.originalAsset && track.playbackAsset) {
-      await linkTrackAssets({ trackId: track.id, originalAssetId: track.originalAsset.assetId, playbackAssetId: track.playbackAsset.assetId });
-    }
-    await input.persistTrackIntoLibrary({ track: { ...track, artworkUrl: item.localArtworkUrl }, roomId: roomSnapshot.room.id, file: item.file, lyrics: item.lyrics, refreshCache: false });
-    uploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
+      if (!item) return;
+      try {
+        if (track.originalAsset && track.playbackAsset) {
+          await linkTrackAssets({ trackId: track.id, originalAssetId: track.originalAsset.assetId, playbackAssetId: track.playbackAsset.assetId });
+        }
+        await input.persistTrackIntoLibrary({ track: { ...track, artworkUrl: item.localArtworkUrl }, roomId: roomSnapshot.room.id, file: item.file, lyrics: item.lyrics, refreshCache: false });
+        uploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
+        persistedObjectUrls.add(item.objectUrl);
+      } catch (error) {
+        persistFailures.push({ track, error });
+      }
     }));
-  } catch (error) {
-    for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
-    throw error;
+
+    if (persistFailures.length > 0) {
+      // Roll back only the tracks whose local cache write failed; they would
+      // otherwise sit in the room library with no owner-side asset to stream.
+      const failedTrackIds = new Set(persistFailures.map((failure) => failure.track.id));
+      await Promise.allSettled(
+        [...failedTrackIds].flatMap((trackId) => [
+          input.deleteTrack?.(roomSnapshot.room.id, trackId),
+          input.deleteLocalTrackData?.([trackId])
+        ])
+      );
+      for (const item of prepared) {
+        if (!persistedObjectUrls.has(item.objectUrl)) {
+          URL.revokeObjectURL(item.objectUrl);
+        }
+      }
+      if (Object.keys(uploadEntries).length === 0) {
+        throw persistFailures[0]!.error;
+      }
+    }
+
+    input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
+    await input.syncRoomSnapshot(roomSnapshot.room.id);
+    void input.refreshCacheLibrary().catch(() => undefined);
+    const failedCount = failures.length + persistFailures.length;
+    input.setStatusMessage(`已导入 ${Object.keys(uploadEntries).length} 首歌曲${failedCount ? `，${failedCount} 首失败` : ""}。`);
+  } finally {
+    for (const heldKey of heldInFlightKeys) {
+      inFlightUploadHashesRef.current.delete(heldKey);
+    }
   }
-  input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
-  await input.syncRoomSnapshot(roomSnapshot.room.id);
-  void input.refreshCacheLibrary().catch(() => undefined);
-  input.setStatusMessage(`已导入 ${registered.length} 首歌曲${failures.length ? `，${failures.length} 首失败` : ""}。`);
 }
 
 async function prefetchProviderAudio(

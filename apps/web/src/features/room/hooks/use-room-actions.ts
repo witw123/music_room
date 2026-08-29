@@ -319,6 +319,21 @@ export function useRoomActions({
                 ) {
                   return snapshot.room.playback;
                 }
+                // The mutation never committed: roll the optimistic pending
+                // state back to the authoritative server playback. Its
+                // revision is lower than the pending one, so the normal
+                // version-gated patch path would reject it and the room would
+                // stay diverged until someone else moves playback forward.
+                if (latestPlaybackStateRef.current.roomId === roomId) {
+                  latestPlaybackStateRef.current.revision =
+                    snapshot.room.playback.playbackRevision;
+                }
+                dispatchRoomStateEvent({
+                  type: "playback-rollback",
+                  roomId,
+                  playback: snapshot.room.playback
+                });
+                return snapshot.room.playback;
               } catch {
                 // Preserve the original request error when reconciliation also fails.
               }

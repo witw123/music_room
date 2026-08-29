@@ -22,6 +22,7 @@ type AdminPrincipal = { userId: string; username: string; nickname: string; role
 
 @Injectable()
 export class AdminService implements OnModuleInit, OnModuleDestroy {
+  private readonly developmentAuditHashSecret = randomBytes(32).toString("hex");
   private heartbeatTimer?: NodeJS.Timeout;
   private tombstoneTimer?: NodeJS.Timeout;
   private sessionCleanupTimer?: NodeJS.Timeout;
@@ -283,6 +284,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const reason = adminReasonSchema.parse((statusInput as { reason?: unknown }).reason);
     const disabled = payload === "DISABLED";
     await this.prisma.$transaction(async (tx) => { await tx.user.update({ where: { id: userId }, data: { status: payload, disabledAt: disabled ? new Date() : null, disabledReason: disabled ? reason : null } }); if (disabled) await tx.userSession.deleteMany({ where: { userId } }); await tx.adminAuditLog.create({ data: { id: `audit_${randomUUID()}`, actorUserId: actor.userId, action: disabled ? "user.disable" : "user.enable", targetType: "user", targetId: userId, reason, result: "SUCCEEDED", userAgent: request.headers["user-agent"] ?? null } }); });
+    await this.auth.invalidateSessionsForUser(userId);
     await this.publishUserInvalidated(userId);
     return { ok: true, status: payload };
   }
@@ -294,6 +296,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!user || user.role === "ADMIN") throw new NotFoundException("普通用户不存在。");
     await this.prisma.userSession.deleteMany({ where: { userId } });
     await this.writeAudit(actor.userId, "user.sessions.revoke", "user", userId, adminReasonSchema.parse(reason), "SUCCEEDED", request);
+    await this.auth.invalidateSessionsForUser(userId);
     await this.publishUserInvalidated(userId);
     return { ok: true };
   }
@@ -377,7 +380,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       throw new Error("AUDIT_HASH_SECRET must be configured in production.");
     }
     const ip = request.ip || request.socket.remoteAddress || "unknown";
-    await this.prisma.adminAuditLog.create({ data: { id: `audit_${randomUUID()}`, actorUserId, action, targetType, targetId, reason, result, ipHash: createHmac("sha256", hashSecret || "development-audit-secret").update(ip).digest("hex"), userAgent: request.headers["user-agent"] ?? null } });
+    // Non-production fallback is a per-process random so the audit ipHash can
+    // never be brute-forced from a published source constant.
+    const effectiveHashSecret = hashSecret || this.developmentAuditHashSecret;
+    await this.prisma.adminAuditLog.create({ data: { id: `audit_${randomUUID()}`, actorUserId, action, targetType, targetId, reason, result, ipHash: createHmac("sha256", effectiveHashSecret).update(ip).digest("hex"), userAgent: request.headers["user-agent"] ?? null } });
   }
 }
 

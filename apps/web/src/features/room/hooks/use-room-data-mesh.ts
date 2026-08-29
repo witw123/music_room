@@ -352,6 +352,12 @@ export function createRoomDataMeshRuntime(input: {
         peerBufferedAmountBytes.set(peerId, bufferedAmountBytes);
         input.updatePeerBufferedAmountRef.current(peerId, bufferedAmountBytes);
       },
+      onPeerReleased: (peerId) => {
+        // The manager only reports peers that left the admitted topology.
+        // Without this the per-peer supervisor state (with its sample history)
+        // would accumulate for every peer ever seen in the room.
+        input.connectionSupervisorStatesRef.current.delete(peerId);
+      },
       onStatsSample: ({ peerId, linkKind = "data", sample }) => {
         input.updateConnectionSupervisorTransportStats({
           peerId,
@@ -505,7 +511,10 @@ export function createRoomDataMeshRuntime(input: {
           reason
         });
         input.connectionSupervisorStatesRef.current.set(peerId, nextSupervisorState);
-        const nextIcePolicy = resolvePreferredIceTransportPolicy(nextSupervisorState);
+        const nextIcePolicy = resolvePreferredIceTransportPolicy(
+          nextSupervisorState,
+          input.iceServers
+        );
         input.recordPeerDiagnosticRef.current({
           peerId,
           channelKind: "media",
@@ -533,7 +542,8 @@ export function createRoomDataMeshRuntime(input: {
       autoReconnect: true,
       resolveConnectionConfig: (peerId) => ({
         iceTransportPolicy: resolvePreferredIceTransportPolicy(
-          input.connectionSupervisorStatesRef.current.get(peerId)
+          input.connectionSupervisorStatesRef.current.get(peerId),
+          input.iceServers
         )
       })
     }

@@ -304,11 +304,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async incrementWithTtlMs(key: string, ttlMs: number) {
     this.assertReady(this.client, "publisher");
 
-    const count = await this.client.incr(key);
-    if (count === 1) {
-      await this.client.pexpire(key, ttlMs);
-    }
-    return count;
+    // Atomic INCR + fixed-window TTL in one step. The two-command version
+    // (incr, then pexpire only on count === 1) leaves the key permanent if the
+    // process dies or the connection drops between them, which rate-limits
+    // that key forever. The TTL<0 branch also heals keys that were already
+    // stranded without a TTL by an older deployment.
+    return this.client.eval(
+      `
+      local count = redis.call('INCR', KEYS[1])
+      if count == 1 then
+        redis.call('PEXPIRE', KEYS[1], ARGV[1])
+      elseif redis.call('TTL', KEYS[1]) < 0 then
+        redis.call('PEXPIRE', KEYS[1], ARGV[1])
+      end
+      return count
+      `,
+      1,
+      key,
+      String(ttlMs)
+    ) as unknown as Promise<number>;
   }
 
   async subscribe(channel: string, handler: (payload: unknown) => void) {

@@ -52,7 +52,7 @@ function getAuthFormatError(
   }
   if (field === "password") {
     return mode === "register"
-      ? "密码格式不对，请输入 6-256 位密码。"
+      ? "密码格式不对，请输入 8-256 位密码。"
       : "密码格式不对，请输入不超过 256 位的密码。";
   }
   if (field === "nickname") {
@@ -347,7 +347,7 @@ export function AuthPage() {
                       type="password"
                       value={registerPassword}
                       onChange={(event) => setRegisterPassword(event.target.value)}
-                      placeholder="至少 6 位密码"
+                      placeholder="至少 8 位密码"
                     />
                   </label>
 

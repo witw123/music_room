@@ -87,6 +87,9 @@ export function HomeRoomSection() {
     }
 
     const refresh = () => {
+      // Skip network work for the route-cached hidden page; focus and
+      // visibilitychange re-fire the refresh when the user comes back.
+      if (document.visibilityState === "hidden") return;
       void refreshAvailableRooms();
       void refreshRecentRoom();
     };

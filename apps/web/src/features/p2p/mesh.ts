@@ -39,6 +39,7 @@ type MeshCallbacks = {
     peerId: string;
     bufferedAmountBytes: number;
   }) => void;
+  onPeerReleased?: (peerId: string, linkKind: "data" | "media") => void;
   onSignal?: (payload: {
     peerId: string;
     direction: "sent" | "received";
@@ -139,7 +140,8 @@ export class P2PMesh {
         this.callbacks.onMediaStateChange?.({ peerId, direction, state });
       },
       onMediaTrackMuted: this.callbacks.onMediaTrackMuted,
-      onMediaRecovery: this.callbacks.onMediaRecovery
+      onMediaRecovery: this.callbacks.onMediaRecovery,
+      onPeerReleased: this.callbacks.onPeerReleased
     });
   }
 

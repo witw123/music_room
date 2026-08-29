@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -94,6 +94,7 @@ export function RoomsHomePage({
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const joinInFlightRef = useRef(false);
   const effectiveAwayRoomId = awayRoomId ?? storedAwayRoomId;
 
   useEffect(() => {
@@ -162,6 +163,10 @@ export function RoomsHomePage({
     }
 
     const refresh = () => {
+      // Hidden tabs keep this workspace mounted in the route cache; polling
+      // from a background tab wastes requests and battery for state the user
+      // cannot see until they return (focus/visibilitychange re-fires then).
+      if (document.visibilityState === "hidden") return;
       void refreshAvailableRooms();
     };
 
@@ -214,6 +219,10 @@ export function RoomsHomePage({
       setStatusMessage("请输入房间码。");
       return;
     }
+    // Enter-key submits do not go through the disabled submit button, so a
+    // double keypress would otherwise fire two concurrent join requests.
+    if (joinInFlightRef.current) return;
+    joinInFlightRef.current = true;
 
     primeRoomAudioFromUserGesture();
     try {
@@ -227,6 +236,8 @@ export function RoomsHomePage({
       } else {
         setStatusMessage(toUserFacingError(error));
       }
+    }    finally {
+      joinInFlightRef.current = false;
     }
   }
 
@@ -249,6 +260,7 @@ export function RoomsHomePage({
       openRoomDetails(room);
       return;
     }
+    if (isPending || joinInFlightRef.current) return;
     startTransition(() => void handleJoinRoom(joinCode));
   }
 

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
 import type { AuthSession } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
+import { errorCodes } from "@music-room/shared";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
 
 type SessionSnapshot = {
   activeSession: AuthSession | null;
@@ -52,6 +53,15 @@ function setSharedSession(session: AuthSession | null) {
   });
 }
 
+/**
+ * Only a definitive 401 from the server proves the session is gone. Network
+ * flakes, 5xx responses, or a restarting server must keep the (possibly still
+ * valid) session instead of logging the user out.
+ */
+function isUnauthorizedError(error: unknown) {
+  return error instanceof MusicRoomApiError && error.code === errorCodes.unauthorized;
+}
+
 function ensureSessionProbe() {
   if (sessionProbe || sessionSnapshot.hydrated) return;
 
@@ -65,8 +75,17 @@ function ensureSessionProbe() {
         hydrated: true
       });
     })
-    .catch(() => {
+    .catch((error: unknown) => {
       if (generation !== sessionGeneration) return;
+      if (!isUnauthorizedError(error)) {
+        // Unknown state: stay hydrated without inventing a logged-out verdict.
+        updateSessionSnapshot({
+          activeSession: sessionSnapshot.activeSession,
+          hasStoredSession: sessionSnapshot.hasStoredSession,
+          hydrated: true
+        });
+        return;
+      }
       updateSessionSnapshot({
         activeSession: null,
         hasStoredSession: false,
@@ -154,8 +173,12 @@ export function useSessionIdentity(options: {
       const session = await musicRoomApi.me();
       setActiveSession(session);
       return session;
-    } catch {
-      setActiveSession(null);
+    } catch (error) {
+      // A network failure or server hiccup must not sign the user out; only a
+      // real 401 (which also fires music-room-auth-expired) clears the session.
+      if (isUnauthorizedError(error)) {
+        setActiveSession(null);
+      }
       return null;
     }
   }, [setActiveSession]);

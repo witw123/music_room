@@ -252,9 +252,33 @@ export function useRoomRuntimeLifecycle(input: {
     }
 
     let cancelled = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     setIceConfigResolved(false);
 
-    void (async () => {
+    const clearRefreshTimer = () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
+    };
+
+    const scheduleIceConfigRefresh = (nextIceConfig: IceConfigResponse) => {
+      clearRefreshTimer();
+      // Static and stun-only credentials never expire; ephemeral TURN
+      // credentials do, and coturn rejects HMAC credentials whose expiry has
+      // passed. Renew at 80% of the TTL so any PeerConnection created later
+      // (reconnects, newly joined peers) still gathers relay candidates.
+      if (nextIceConfig.source !== "ephemeral") {
+        return;
+      }
+      const refreshDelayMs = Math.max(30_000, Math.floor(nextIceConfig.ttlSeconds * 800));
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        void loadIceConfig(true);
+      }, refreshDelayMs);
+    };
+
+    const loadIceConfig = async (isRefresh: boolean) => {
       try {
         const nextIceConfig = await musicRoomApi.getIceConfig();
         if (cancelled) {
@@ -262,13 +286,18 @@ export function useRoomRuntimeLifecycle(input: {
         }
 
         setIceConfig(nextIceConfig);
-        setIceConfigResolved(true);
+        if (!isRefresh) {
+          setIceConfigResolved(true);
+        }
+        scheduleIceConfigRefresh(nextIceConfig);
         recordPeerDiagnostic({
           peerId: "system",
           channelKind: "system",
           direction: "local",
-          event: "ice-config",
-          summary: `ICE 配置来源：${nextIceConfig.source}`,
+          event: isRefresh ? "ice-config-refreshed" : "ice-config",
+          summary: isRefresh
+            ? `TURN 凭证已刷新（来源：${nextIceConfig.source}）`
+            : `ICE 配置来源：${nextIceConfig.source}`,
           update: (snapshot) => ({
             ...snapshot,
             mediaConnectionState: nextIceConfig.source,
@@ -307,26 +336,50 @@ export function useRoomRuntimeLifecycle(input: {
           return;
         }
 
-        setIceConfig(null);
-        setIceConfigResolved(true);
+        if (!isRefresh) {
+          setIceConfig(null);
+          setIceConfigResolved(true);
+          recordPeerDiagnostic({
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: "ice-config-fallback",
+            level: "warning",
+            summary: `ICE 配置获取失败，已回退静态配置：${toUserFacingError(error)}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              lastError: toUserFacingError(error),
+              iceConfigSource: "stun-only"
+            })
+          });
+          return;
+        }
+
+        // Refreshing means the current credentials are about to expire (or
+        // already have). Keep retrying on a short interval until a new config
+        // lands instead of letting stale credentials persist for the TTL.
         recordPeerDiagnostic({
           peerId: "system",
           channelKind: "system",
           direction: "local",
-          event: "ice-config-fallback",
+          event: "ice-config-refresh-failed",
           level: "warning",
-          summary: `ICE 配置获取失败，已回退静态配置：${toUserFacingError(error)}`,
-          update: (snapshot) => ({
-            ...snapshot,
-            lastError: toUserFacingError(error),
-            iceConfigSource: "stun-only"
-          })
+          summary: `TURN 凭证刷新失败，30 秒后重试：${toUserFacingError(error)}`,
+          update: (snapshot) => ({ ...snapshot })
         });
+        clearRefreshTimer();
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null;
+          void loadIceConfig(true);
+        }, 30_000);
       }
-    })();
+    };
+
+    void loadIceConfig(false);
 
     return () => {
       cancelled = true;
+      clearRefreshTimer();
     };
   }, [
     roomSnapshot?.room.id,

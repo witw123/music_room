@@ -94,6 +94,11 @@ function buildPeerSignal(input: {
   };
 }
 
+// An offer/answer exchange is expected to complete within a couple of
+// seconds. A remote offer that has been pending longer than this window is
+// treated as wedged and rolled back when the next offer arrives.
+const staleRemoteOfferRollbackMs = 5_000;
+
 export class SignalingTransport {
   private readonly roomId: string;
   private readonly localPeerId: string;
@@ -101,6 +106,15 @@ export class SignalingTransport {
   private readonly onSignal?: SignalDiagnosticRecorder;
   private readonly incomingSignalOrder = new Map<string, IncomingSignalOrder>();
   private readonly latestSenderRecoveryGeneration = new Map<string, number>();
+  // Ordering keys are indexed by the receiver's own recovery generation so a
+  // re-subscribe (which mints a new generation) can garbage-collect every
+  // bucket minted under the previous one. Without this the maps grow by
+  // peers x re-subscribes for the lifetime of the transport.
+  private readonly signalOrderKeysByTargetGeneration = new Map<
+    number,
+    { orderKeys: Set<string>; senderRecoveryKeys: Set<string> }
+  >();
+  private latestTargetRecoveryGeneration = 0;
 
   constructor(input: {
     roomId: string;
@@ -202,7 +216,20 @@ export class SignalingTransport {
           entry.connection.signalingState !== "stable" &&
           entry.connection.signalingState !== "have-local-offer"
         ) {
-          return;
+          // A previous offer can wedge the connection in have-remote-offer
+          // when createAnswer/setLocalDescription threw midway. Without a
+          // rollback every later offer is dropped here and only the outer
+          // watchdog can recover, so roll a stale remote offer back to stable
+          // and process the fresh one.
+          if (
+            entry.connection.signalingState === "have-remote-offer" &&
+            (handlers.nowMs ?? Date.now)() - entry.lastSignalProgressAtMs >
+              staleRemoteOfferRollbackMs
+          ) {
+            await entry.connection.setLocalDescription({ type: "rollback" });
+          } else {
+            return;
+          }
         }
 
         if (entry.connection.signalingState === "have-local-offer") {
@@ -228,6 +255,7 @@ export class SignalingTransport {
         }
 
         await handlers.applyRemoteDescription(entry, remoteDescription);
+        entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
         await handlers.flushPendingCandidates(entry);
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
@@ -294,6 +322,7 @@ export class SignalingTransport {
 
     const {
       key,
+      targetRecoveryGeneration,
       previous,
       connectionGeneration,
       sequence,
@@ -318,6 +347,7 @@ export class SignalingTransport {
         connectionGeneration ?? previous?.connectionGeneration ?? null,
       sequenceByType
     });
+    this.pruneSignalOrderBuckets(key, senderRecoveryKey, targetRecoveryGeneration);
     if (senderRecoveryGeneration !== null) {
       const previousSenderGeneration = this.latestSenderRecoveryGeneration.get(senderRecoveryKey);
       if (previousSenderGeneration === undefined || senderRecoveryGeneration > previousSenderGeneration) {
@@ -382,6 +412,37 @@ export class SignalingTransport {
     return true;
   }
 
+  private pruneSignalOrderBuckets(
+    key: string,
+    senderRecoveryKey: string,
+    targetRecoveryGeneration: number
+  ) {
+    let bucket = this.signalOrderKeysByTargetGeneration.get(targetRecoveryGeneration);
+    if (!bucket) {
+      bucket = { orderKeys: new Set(), senderRecoveryKeys: new Set() };
+      this.signalOrderKeysByTargetGeneration.set(targetRecoveryGeneration, bucket);
+    }
+    bucket.orderKeys.add(key);
+    bucket.senderRecoveryKeys.add(senderRecoveryKey);
+
+    if (targetRecoveryGeneration <= this.latestTargetRecoveryGeneration) {
+      return;
+    }
+    this.latestTargetRecoveryGeneration = targetRecoveryGeneration;
+    for (const [generation, staleBucket] of this.signalOrderKeysByTargetGeneration) {
+      if (generation >= targetRecoveryGeneration) {
+        continue;
+      }
+      for (const staleKey of staleBucket.orderKeys) {
+        this.incomingSignalOrder.delete(staleKey);
+      }
+      for (const staleSenderKey of staleBucket.senderRecoveryKeys) {
+        this.latestSenderRecoveryGeneration.delete(staleSenderKey);
+      }
+      this.signalOrderKeysByTargetGeneration.delete(generation);
+    }
+  }
+
   private getIncomingSignalOrderState(payload: PeerSignalMessage) {
     const linkKind = payload.linkKind ?? "data";
     const targetRecoveryGeneration = payload.recoveryGeneration ?? 0;
@@ -390,6 +451,7 @@ export class SignalingTransport {
     const key = `${senderRecoveryKey}:${senderRecoveryGeneration ?? 0}`;
     return {
       key,
+      targetRecoveryGeneration,
       senderRecoveryKey,
       previous: this.incomingSignalOrder.get(key),
       connectionGeneration: payload.connectionGeneration ?? null,

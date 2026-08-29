@@ -18,6 +18,7 @@ import {
 import { Logger } from "@nestjs/common";
 import { loginRequestSchema, registerRequestSchema, type AuthSession } from "@music-room/shared";
 import type { Response } from "express";
+import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { userSessionCookieName } from "./auth.cookies";
@@ -38,7 +39,9 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly turnstileService: TurnstileService,
     @Optional()
-    private readonly redisService?: RedisService
+    private readonly redisService?: RedisService,
+    @Optional()
+    private readonly abuseProtection?: AbuseProtectionService
   ) {}
 
   @Get("config")
@@ -120,10 +123,15 @@ export class AuthController {
         username,
         password: payload.password
       });
+      await this.clearLoginFailures(username);
       this.logger.log(this.buildAuthLog("login.accepted", clientIp, username, HttpStatus.OK));
       setUserSessionCookie(response, session.token);
       return toPublicAuthSession(session);
     } catch (error) {
+      // Per-username throttling counts only attempts that actually reached
+      // credential verification (i.e. passed Turnstile) and failed. Pre-auth
+      // garbage traffic must not be able to lock a victim's username.
+      await this.recordLoginFailure(username).catch(() => undefined);
       const message = error instanceof Error ? error.message : "Unauthorized.";
       this.logger.warn(
         this.buildAuthLog("login.rejected", clientIp, username, HttpStatus.UNAUTHORIZED, message)
@@ -146,7 +154,23 @@ export class AuthController {
   }
 
   @Get("me")
-  async me(@Headers("x-session-token") sessionToken: string | undefined) {
+  async me(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Req()
+    request: {
+      ip?: string;
+      headers?: Record<string, string | string[] | undefined>;
+      socket?: { remoteAddress?: string };
+    },
+    @Ip() ipAddress?: string
+  ) {
+    // Unknown tokens miss every cache and hit the session store; without a
+    // limit, garbage-token floods translate directly into database load.
+    await this.abuseProtection?.enforce(
+      "auth:me",
+      [{ name: "ip", value: ipAddress?.trim() || request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown" }],
+      { limit: 120, windowMs: 60_000 }
+    );
     try {
       const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
       return toPublicAuthSession(session);
@@ -155,16 +179,23 @@ export class AuthController {
     }
   }
 
-  private async assertAuthRateLimit(action: "register" | "login", clientIp: string, username: string) {
+  private getAuthRateLimits(action: "register" | "login") {
+    return action === "register"
+      ? { perIp: 8, perUsername: 4, windowMs: 60_000 }
+      : { perIp: 12, perUsername: 6, windowMs: 60_000 };
+  }
+
+  private isAuthRateLimitDisabled() {
     // E2E runs multiple isolated browser contexts through the same loopback IP.
-    if (process.env.NODE_ENV === "test" && process.env.AUTH_RATE_LIMIT_DISABLED === "true") {
+    return process.env.NODE_ENV === "test" && process.env.AUTH_RATE_LIMIT_DISABLED === "true";
+  }
+
+  private async assertAuthRateLimit(action: "register" | "login", clientIp: string, username: string) {
+    if (this.isAuthRateLimitDisabled()) {
       return;
     }
 
-    const limits =
-      action === "register"
-        ? { perIp: 8, perUsername: 4, windowMs: 60_000 }
-        : { perIp: 12, perUsername: 6, windowMs: 60_000 };
+    const limits = this.getAuthRateLimits(action);
     const now = Date.now();
     const normalizedUsername = username.trim().toLowerCase() || "anonymous";
 
@@ -184,6 +215,23 @@ export class AuthController {
       now,
       limits.windowMs
     );
+
+    if (ipBucket.timestamps.length >= limits.perIp) {
+      this.logger.warn(
+        this.buildAuthLog(
+          `${action}.rate-limited`,
+          clientIp,
+          normalizedUsername,
+          HttpStatus.TOO_MANY_REQUESTS,
+          "Auth rate limit exceeded."
+        )
+      );
+      throw new HttpException("Auth rate limit exceeded.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    ipBucket.timestamps.push(now);
+
+    // Login usernames are peeked without counting: the count is only increased
+    // by recordLoginFailure after a failed credential verification.
     const usernameBucket = this.getRateLimitBucket(
       this.usernameBuckets,
       `${action}:username:${normalizedUsername}`,
@@ -191,7 +239,7 @@ export class AuthController {
       limits.windowMs
     );
 
-    if (ipBucket.timestamps.length >= limits.perIp || usernameBucket.timestamps.length >= limits.perUsername) {
+    if (usernameBucket.timestamps.length >= limits.perUsername) {
       this.logger.warn(
         this.buildAuthLog(
           `${action}.rate-limited`,
@@ -204,8 +252,50 @@ export class AuthController {
       throw new HttpException("Auth rate limit exceeded.", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    ipBucket.timestamps.push(now);
-    usernameBucket.timestamps.push(now);
+    if (action !== "login") {
+      usernameBucket.timestamps.push(now);
+    }
+  }
+
+  private async recordLoginFailure(username: string) {
+    if (this.isAuthRateLimitDisabled()) {
+      return;
+    }
+    const limits = this.getAuthRateLimits("login");
+    const normalizedUsername = username.trim().toLowerCase() || "anonymous";
+
+    if (
+      this.redisService &&
+      (typeof this.redisService.isAvailable !== "function" || this.redisService.isAvailable())
+    ) {
+      await this.incrementRedisRateLimitKey(
+        `auth:login:username:${normalizedUsername}`,
+        limits.windowMs
+      );
+    }
+
+    const bucket = this.getRateLimitBucket(
+      this.usernameBuckets,
+      `login:username:${normalizedUsername}`,
+      Date.now(),
+      limits.windowMs
+    );
+    bucket.timestamps.push(Date.now());
+  }
+
+  private async clearLoginFailures(username: string) {
+    if (this.isAuthRateLimitDisabled()) {
+      return;
+    }
+    const normalizedUsername = username.trim().toLowerCase() || "anonymous";
+    try {
+      if (this.redisService) {
+        await this.redisService.delete(`auth:login:username:${normalizedUsername}`);
+      }
+    } catch {
+      // A stale failure counter only throttles briefly; clearing is best-effort.
+    }
+    this.usernameBuckets.delete(`login:username:${normalizedUsername}`);
   }
 
   private async tryAssertRedisRateLimit(
@@ -225,15 +315,11 @@ export class AuthController {
     }
 
     try {
-      const [ipCount, usernameCount] = await Promise.all([
-        this.incrementRedisRateLimitKey(`auth:${action}:ip:${clientIp}`, limits.windowMs),
-        this.incrementRedisRateLimitKey(
-          `auth:${action}:username:${normalizedUsername}`,
-          limits.windowMs
-        )
-      ]);
-
-      if (ipCount > limits.perIp || usernameCount > limits.perUsername) {
+      const ipCount = await this.incrementRedisRateLimitKey(
+        `auth:${action}:ip:${clientIp}`,
+        limits.windowMs
+      );
+      if (ipCount > limits.perIp) {
         this.logger.warn(
           this.buildAuthLog(
             `${action}.rate-limited`,
@@ -244,6 +330,41 @@ export class AuthController {
           )
         );
         throw new HttpException("Auth rate limit exceeded.", HttpStatus.TOO_MANY_REQUESTS);
+      }
+
+      if (action === "login") {
+        const usernameCount = await this.peekRedisRateLimitKey(
+          `auth:login:username:${normalizedUsername}`
+        );
+        if (usernameCount > limits.perUsername) {
+          this.logger.warn(
+            this.buildAuthLog(
+              `${action}.rate-limited`,
+              clientIp,
+              normalizedUsername,
+              HttpStatus.TOO_MANY_REQUESTS,
+              "Auth rate limit exceeded."
+            )
+          );
+          throw new HttpException("Auth rate limit exceeded.", HttpStatus.TOO_MANY_REQUESTS);
+        }
+      } else {
+        const usernameCount = await this.incrementRedisRateLimitKey(
+          `auth:register:username:${normalizedUsername}`,
+          limits.windowMs
+        );
+        if (usernameCount > limits.perUsername) {
+          this.logger.warn(
+            this.buildAuthLog(
+              `${action}.rate-limited`,
+              clientIp,
+              normalizedUsername,
+              HttpStatus.TOO_MANY_REQUESTS,
+              "Auth rate limit exceeded."
+            )
+          );
+          throw new HttpException("Auth rate limit exceeded.", HttpStatus.TOO_MANY_REQUESTS);
+        }
       }
 
       return "accepted";
@@ -257,6 +378,15 @@ export class AuthController {
       this.logger.warn(`Auth redis rate limit unavailable; falling back to memory. ${String(error)}`);
       return "fallback";
     }
+  }
+
+  private async peekRedisRateLimitKey(key: string) {
+    if (!this.redisService) {
+      throw new Error("Redis service unavailable.");
+    }
+    const raw = await this.redisService.getString(key);
+    const parsed = Number.parseInt(raw ?? "0", 10);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private async incrementRedisRateLimitKey(key: string, windowMs: number) {
@@ -273,6 +403,18 @@ export class AuthController {
     now: number,
     windowMs: number
   ) {
+    if (buckets.size >= 10_000) {
+      // Buckets are only pruned on re-hit; a caller rotating keys (IPv6
+      // source-address rotation) would otherwise grow the maps forever.
+      for (const [existingKey, existingBucket] of buckets) {
+        if (
+          existingBucket.timestamps.length === 0 ||
+          now - existingBucket.timestamps[existingBucket.timestamps.length - 1]! >= windowMs
+        ) {
+          buckets.delete(existingKey);
+        }
+      }
+    }
     const bucket = buckets.get(key) ?? { timestamps: [] };
     bucket.timestamps = bucket.timestamps.filter((timestamp) => now - timestamp < windowMs);
     buckets.set(key, bucket);

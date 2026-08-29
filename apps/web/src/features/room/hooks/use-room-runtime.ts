@@ -23,6 +23,7 @@ import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } fro
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { clearAwayRoomId } from "@/lib/domain/away-room";
 import { useRoomRuntimeObservability } from "./use-room-runtime-observability";
 import {
   useRoomConnectionSupervisor,
@@ -359,9 +360,12 @@ export function useRoomRuntime({
       setStatusMessage(message);
       setIsNavigatingRoomExit(true);
       // A deleted room must not be restored from the browser's last-room
-      // pointer or a pending handoff snapshot after the realtime exit.
+      // pointer or a pending handoff snapshot after the realtime exit. The
+      // away-room pointer would otherwise keep rendering a "return to room"
+      // button that navigates to a room this socket can no longer reach.
       window.localStorage.removeItem(lastRoomStorageKey);
       window.sessionStorage.removeItem("music-room-pending-room-snapshot");
+      clearAwayRoomId();
       resetPlayerSurfaceRef.current();
       roomAudioOutput.releaseRoomAudioSession();
       dispatchRoomStateEvent({ type: "local-reset" });

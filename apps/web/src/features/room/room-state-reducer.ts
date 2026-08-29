@@ -66,6 +66,15 @@ export type RoomStateEvent =
       playback: PlaybackSnapshot;
     }
   | {
+      // A playback mutation failed without committing on the server. The
+      // fetched server playback is authoritative even though its revision is
+      // lower than the optimistic pending revision, so it replaces the state
+      // unconditionally instead of being blocked by the version gate.
+      type: "playback-rollback";
+      roomId: string;
+      playback: PlaybackSnapshot;
+    }
+  | {
       type: "local-reset";
     };
 
@@ -487,6 +496,25 @@ export function roomStateReducer(
                     playbackRevision: snapshot.room.playback.playbackRevision + 1
                   }
               : snapshot.room.playback
+          }
+        }
+      };
+    }
+
+    case "playback-rollback": {
+      const snapshot = current.snapshot;
+      if (!snapshot || snapshot.room.id !== event.roomId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        source: "authoritative",
+        snapshot: {
+          ...snapshot,
+          room: {
+            ...snapshot.room,
+            playback: event.playback
           }
         }
       };

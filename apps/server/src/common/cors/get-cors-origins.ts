@@ -1,3 +1,10 @@
+// Same-host fallback note: the request Host is attacker-controllable on
+// direct-to-server deployments, so the origin-equals-host fallback here is
+// defense-in-depth only. The boundaries that actually protect cookie-mutating
+// endpoints are SameSite=strict session cookies and the admin double-submit
+// CSRF token; see the audit notes before changing this contract — the
+// reverse-proxy same-origin behavior is codified in get-cors-origins.spec.ts.
+
 const defaultCorsOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",

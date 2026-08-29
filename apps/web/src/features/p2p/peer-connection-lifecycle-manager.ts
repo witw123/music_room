@@ -61,6 +61,7 @@ type PeerConnectionLifecycleManagerInput = {
     peerId: string;
     bufferedAmountBytes: number;
   }) => void;
+  onPeerReleased?: (peerId: string, linkKind: PeerLinkKind) => void;
   onStatsSample?: (payload: {
     peerId: string;
     linkKind?: PeerLinkKind;
@@ -192,6 +193,7 @@ export class PeerConnectionLifecycleManager {
   private readonly onPeerConnectionChange?: PeerConnectionLifecycleManagerInput["onPeerConnectionChange"];
   private readonly onIceConnectionStateChange?: PeerConnectionLifecycleManagerInput["onIceConnectionStateChange"];
   private readonly onDataBufferedAmountChange?: PeerConnectionLifecycleManagerInput["onDataBufferedAmountChange"];
+  private readonly onPeerReleased: PeerConnectionLifecycleManagerInput["onPeerReleased"];
   private readonly onPeerStalled?: PeerConnectionLifecycleManagerInput["onPeerStalled"];
   private readonly onRemoteAudioTrack?: PeerConnectionLifecycleManagerInput["onRemoteAudioTrack"];
   private readonly onMediaStateChange?: PeerConnectionLifecycleManagerInput["onMediaStateChange"];
@@ -245,6 +247,7 @@ export class PeerConnectionLifecycleManager {
     this.onPeerConnectionChange = input.onPeerConnectionChange;
     this.onIceConnectionStateChange = input.onIceConnectionStateChange;
     this.onDataBufferedAmountChange = input.onDataBufferedAmountChange;
+    this.onPeerReleased = input.onPeerReleased;
     this.onPeerStalled = input.onPeerStalled;
     this.onRemoteAudioTrack = input.onRemoteAudioTrack;
     this.onMediaStateChange = input.onMediaStateChange;
@@ -1231,6 +1234,8 @@ export class PeerConnectionLifecycleManager {
     }
     this.statsSampler.start(peerId, entry);
 
+    let registered = false;
+
     bindPeerConnectionEvents({
       peerId,
       entry,
@@ -1343,6 +1348,7 @@ export class PeerConnectionLifecycleManager {
     });
 
     this.peerConnections.set(peerId, entry, linkKind);
+    registered = true;
     if (linkKind === "data") {
       this.schedulePeerWatchdog(peerId, entry);
     } else {
@@ -1401,7 +1407,14 @@ export class PeerConnectionLifecycleManager {
 
       return entry;
     } catch (error) {
-      if (this.peerConnections.get(peerId, linkKind) === entry) {
+      if (registered) {
+        if (this.peerConnections.get(peerId, linkKind) === entry) {
+          this.releasePeer(peerId, entry);
+        }
+      } else if (!entry.releasing) {
+        // The entry never made it into the registry (construction failed
+        // before set), so the registration guard would skip releasePeer and
+        // leak the RTCPeerConnection. Tear it down directly.
         this.releasePeer(peerId, entry);
       }
       throw error;
@@ -1441,6 +1454,16 @@ export class PeerConnectionLifecycleManager {
       stopStatsSampling: (currentEntry) => this.statsSampler.stop(currentEntry),
       onDataBufferedAmountChange: this.onDataBufferedAmountChange
     });
+    // Supervisor state is only dropped when the peer has left the admitted
+    // topology; a recovery recreation keeps its state so budgets and counters
+    // survive the rebuild.
+    if (
+      entry.linkKind === "media"
+        ? !this.expectedMediaPeerIds().has(peerId)
+        : !this.peerConnections.expects(peerId)
+    ) {
+      this.onPeerReleased?.(peerId, entry.linkKind);
+    }
   }
 
   private shouldRestartPeerEntry(entry: PeerEntry) {

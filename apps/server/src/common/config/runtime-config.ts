@@ -81,6 +81,7 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error("Invalid TURNSTILE_SECRET_KEY for production startup.");
   }
 
+
   const turnEnabled = env.TURN_ENABLED !== "false";
   const turnProtocols = (env.TURN_PROTOCOLS ?? "udp,tcp,tls")
     .split(",")
@@ -135,6 +136,14 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
 
   if (!hasTurnHostSource) {
     throw new Error("TURN requires TURN_PUBLIC_HOST or APP_DOMAIN in production startup.");
+  }
+
+  // Without APP_DOMAIN the Turnstile verification skips the hostname binding
+  // (turnstile.service), so a token solved for any domain is accepted here.
+  // Kept after the TURN host validation so TURN misconfigurations surface the
+  // more specific TURN error first.
+  if (!env.APP_DOMAIN?.trim()) {
+    throw new Error("APP_DOMAIN must be configured in production startup to bind Turnstile tokens.");
   }
 
   throw new Error("TURN requires TURN_SHARED_SECRET in production startup.");

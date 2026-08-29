@@ -56,6 +56,9 @@ export function consumeRoomSnapshotHandoff(roomId: string) {
     }
 
     if (payload.roomId !== roomId || !payload.snapshot) {
+      // A mismatched payload can never be consumed by this room; drop it now
+      // instead of letting a stale snapshot leak into a later join.
+      window.sessionStorage.removeItem(roomSnapshotHandoffStorageKey);
       return null;
     }
 

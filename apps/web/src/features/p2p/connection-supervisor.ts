@@ -257,6 +257,8 @@ export function observePeerTransport(input: ObserveTransportInput) {
   let healthyTransportSinceMs = input.state.healthyTransportSinceMs;
   let stableTransportKind = input.state.stableTransportKind;
   let preferredTransportKind = input.state.preferredTransportKind;
+  let iceRestartCount = input.state.iceRestartCount;
+  let hardRecreateCount = input.state.hardRecreateCount;
   if (transportScore === "healthy" && observedTransportKind) {
     if (input.state.lastObservedTransportKind !== observedTransportKind) {
       healthyTransportSinceMs = now;
@@ -271,14 +273,19 @@ export function observePeerTransport(input: ObserveTransportInput) {
       stableTransportKind = observedTransportKind;
       preferredTransportKind = observedTransportKind;
       persistStableTransportKind(input.state.roomId, input.state.peerId, observedTransportKind, now);
+      // The recovery ladder achieved a stable healthy transport. Reset the
+      // counters so a future degradation starts from "direct" again instead of
+      // the sticky relay bias locking the peer out of recovery.
+      iceRestartCount = 0;
+      hardRecreateCount = 0;
     }
   } else {
     healthyTransportSinceMs = null;
   }
 
   if (
-    input.state.iceRestartCount >= 2 &&
-    input.state.hardRecreateCount === 0 &&
+    iceRestartCount >= 2 &&
+    hardRecreateCount === 0 &&
     preferredTransportKind !== "relay"
   ) {
     preferredTransportKind = "relay";
@@ -290,6 +297,8 @@ export function observePeerTransport(input: ObserveTransportInput) {
     transportScore,
     stableTransportKind,
     preferredTransportKind,
+    iceRestartCount,
+    hardRecreateCount,
     healthyTransportSinceMs,
     lastObservedTransportKind: observedTransportKind ?? input.state.lastObservedTransportKind,
     consecutiveDegradedWindows,
@@ -450,14 +459,39 @@ export function toSupervisorDiagnosticPatch(state: PeerConnectionSupervisorState
   } as const;
 }
 
+/**
+ * A relay-capable ICE server is one whose URLs include turn:/turns:. When the
+ * active ICE configuration has no TURN server (stun-only fallback), forcing
+ * `iceTransportPolicy: "relay"` gathers zero candidates and every rebuilt
+ * media connection fails forever, so the relay preference must be ignored.
+ */
+export function hasRelayIceServer(
+  iceServers: ReadonlyArray<{ urls: string | ReadonlyArray<string> }> | null | undefined
+) {
+  if (!iceServers) {
+    return false;
+  }
+  return iceServers.some((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return urls.some((url) => {
+      const normalized = url.trim().toLowerCase();
+      return normalized.startsWith("turn:") || normalized.startsWith("turns:");
+    });
+  });
+}
+
 export function resolvePreferredIceTransportPolicy(
-  state: PeerConnectionSupervisorState | null | undefined
+  state: PeerConnectionSupervisorState | null | undefined,
+  iceServers?: ReadonlyArray<{ urls: string | ReadonlyArray<string> }> | null
 ) {
   // Direct UDP remains the normal path. After repeated ICE failures, rebuild
   // one media incarnation with relay-only candidates so Chromium cannot select
   // the same broken NAT mapping again. A subsequent failed hard recreation
   // flips the preference back to `all`, which prevents a bad TURN deployment
   // from permanently stranding the peer.
+  if (iceServers !== undefined && !hasRelayIceServer(iceServers)) {
+    return "all" as const;
+  }
   return state?.preferredTransportKind === "relay"
     ? "relay" as const
     : "all" as const;

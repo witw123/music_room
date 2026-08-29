@@ -84,7 +84,19 @@ export async function processSelectedTrackFiles(input: {
   for (const file of input.files) {
     const objectUrl = input.createObjectUrl(file);
     let retainObjectUrl = false;
+    // Cheap file-identity marker claimed before the expensive decode/encode:
+    // two concurrent imports of the same file (double submit, cached-library
+    // refresh racing a manual pick) must not both run through buildTrackMeta
+    // and race past the content-hash check below.
+    const fileIdentityKey = `${input.activeSession.userId}:file:${file.name}:${file.size}:${file.lastModified}`;
+    let claimedFileSlot = false;
     try {
+      if (input.inFlightUploadHashes.has(fileIdentityKey)) {
+        continue;
+      }
+      input.inFlightUploadHashes.add(fileIdentityKey);
+      claimedFileSlot = true;
+
       const track = await input.buildTrackMeta(file, objectUrl);
       const uploadHashKey = `${input.activeSession.userId}:${track.fileHash}`;
 
@@ -138,6 +150,9 @@ export async function processSelectedTrackFiles(input: {
       registeredTracks.push(registered);
       currentTracksByHash.set(registered.fileHash, registered);
     } finally {
+      if (claimedFileSlot) {
+        input.inFlightUploadHashes.delete(fileIdentityKey);
+      }
       if (!retainObjectUrl) {
         input.revokeObjectUrl(objectUrl);
       }

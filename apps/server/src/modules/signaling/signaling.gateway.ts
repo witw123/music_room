@@ -41,6 +41,7 @@ import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { getCorsOrigins } from "../../common/cors/get-cors-origins";
+import { isPrivateAddress } from "../providers/provider-fetch";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
@@ -81,6 +82,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
   private readonly maxSocketsPerIp = 20;
   private readonly unauthenticatedConnectionTimeoutMs = 15_000;
   private readonly telemetryLastReportAt = new Map<string, number>();
+  private readonly telemetryReportRetentionMs = 10 * 60 * 1_000;
 
   constructor(
     private readonly redisService: RedisService,
@@ -227,6 +229,15 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     const rateKey = `${report.roomId}:${report.peerId}`;
     const now = Date.now();
     if (now - (this.telemetryLastReportAt.get(rateKey) ?? 0) < 5_000) { this.metrics.incrementDiagnosticsRateLimited(); return { ok: false, rateLimited: true }; }
+    if (this.telemetryLastReportAt.size >= 4_096) {
+      // Entries are only ever written; without a sweep the map grows with
+      // every room/peer combination the process has ever seen.
+      for (const [key, reportedAt] of this.telemetryLastReportAt) {
+        if (now - reportedAt > this.telemetryReportRetentionMs) {
+          this.telemetryLastReportAt.delete(key);
+        }
+      }
+    }
     this.telemetryLastReportAt.set(rateKey, now);
     if (this.redisService.isAvailable()) {
       await this.redisService.setJson(`music-room:admin:telemetry:peer:${report.roomId}:${report.peerId}`, report, 45);
@@ -712,11 +723,19 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
   }
 
   private getSocketIp(client: Socket) {
-    const realIp = client.handshake.headers["x-real-ip"];
-    if (typeof realIp === "string" && realIp.trim()) {
-      return realIp.trim();
+    const directAddress =
+      client.handshake.address || client.conn.remoteAddress || "unknown";
+    // x-real-ip is only meaningful when the TCP peer is our own reverse proxy,
+    // which terminates on a private/loopback address and overwrites the header.
+    // A direct public peer that supplies the header itself is spoofing it to
+    // evade the per-IP socket cap and connect rate limit.
+    if (isPrivateAddress(directAddress)) {
+      const realIp = client.handshake.headers["x-real-ip"];
+      if (typeof realIp === "string" && realIp.trim()) {
+        return realIp.trim();
+      }
     }
-    return client.handshake.address || client.conn.remoteAddress || "unknown";
+    return directAddress;
   }
 
   private releaseSocketIp(client: Socket) {
