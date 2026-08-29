@@ -326,6 +326,7 @@ export function MusicRoomApp({
     setMediaPlaybackEnabled: roomRuntime.setMediaPlaybackEnabled,
     getPeerMediaState: roomRuntime.getPeerMediaState,
     restartMediaPeer: roomRuntime.restartMediaPeer,
+    subscribeRemoteAudioTrack: roomRuntime.subscribeRemoteAudioTrack,
     onPlaybackEnded: roomActions.nextTrack,
     setMediaConnectionState: pageState.setMediaConnectionState,
     setSourceStartState: pageState.setSourceStartState,

@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Music Room 运行时架构",
+    "locale": "zh-CN",
+    "output": "outputs/music-room-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/witw123/music_room.git",
+      "revision": "14c4d87b99b767069ca9d31f043e7b1a55479646"
+    },
+    "views": [
+      {
+        "id": "request-and-state",
+        "label": "请求与权威状态",
+        "focus": ["clients", "edge", "web", "server", "postgres", "redis"],
+        "note": "跟随客户端从入口到房间状态与播放权威。"
+      },
+      {
+        "id": "playback-media",
+        "label": "播放媒体链路",
+        "focus": ["local-repository", "web", "clients", "media", "turn"],
+        "note": "查看本地播放资产如何经浏览器生成 RTP Opus 媒体。"
+      },
+      {
+        "id": "import-boundary",
+        "label": "导入与本地仓库",
+        "focus": ["providers", "server", "web", "local-repository"],
+        "note": "区分 provider 导入代理与本地音频资产的所有权。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "frontend",
+      "label": "Music Room 客户端",
+      "sublabel": "Web / Mobile / Desktop",
+      "tag": "Host + Listener",
+      "sources": [
+        { "path": "apps/web/package.json", "label": "Next.js client" },
+        { "path": "apps/mobile/package.json", "label": "Capacitor shell" },
+        { "path": "apps/desktop/package.json", "label": "Tauri shell" }
+      ],
+      "pos": [40, 340],
+      "size": [190, 76]
+    },
+    {
+      "id": "edge",
+      "type": "cloud",
+      "label": "Nginx",
+      "sublabel": "Web / API / WebSocket 反代",
+      "tag": "Public edge",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 44, "label": "runtime role" },
+        { "path": "deploy/linux/nginx/music-room.conf", "label": "proxy config" }
+      ],
+      "pos": [290, 340],
+      "size": [180, 76]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Next.js Web",
+      "sublabel": "房间 UI + 播放运行时",
+      "tag": "apps/web",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 9, "end_line": 11, "label": "web runtime" },
+        { "path": "apps/web/package.json", "label": "web package" }
+      ],
+      "pos": [530, 340],
+      "size": [195, 82]
+    },
+    {
+      "id": "server",
+      "type": "backend",
+      "label": "NestJS Server",
+      "sublabel": "REST + Socket.IO 信令",
+      "tag": "Single-write authority",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 15, "end_line": 17, "label": "server role" },
+        { "path": "apps/server/package.json", "label": "NestJS package" }
+      ],
+      "pos": [790, 340],
+      "size": [215, 88]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "账号 / 房间 / 播放权威",
+      "tag": "Prisma",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 41, "label": "durable state" },
+        { "path": "apps/server/prisma/schema.prisma", "label": "data model" }
+      ],
+      "pos": [1090, 150],
+      "size": [195, 78]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "patch / presence / 协作",
+      "tag": "Realtime support",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 42, "label": "realtime state" },
+        { "path": "docs/deployment/redis-sentinel.md", "line": 59, "end_line": 64, "label": "deployment role" }
+      ],
+      "pos": [1090, 340],
+      "size": [195, 78]
+    },
+    {
+      "id": "turn",
+      "type": "cloud",
+      "label": "coturn / TURN",
+      "sublabel": "WebRTC 中继",
+      "tag": "ICE relay",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 43, "label": "runtime role" },
+        { "path": "docs/deployment/deployment.md", "line": 181, "end_line": 203, "label": "network contract" }
+      ],
+      "pos": [1090, 530],
+      "size": [195, 78]
+    },
+    {
+      "id": "local-repository",
+      "type": "external",
+      "label": "本地 .music-room",
+      "sublabel": "原始音频 + Opus 分片",
+      "tag": "Browser-owned",
+      "sources": [
+        { "path": "docs/architecture/local-storage.md", "line": 9, "end_line": 11, "label": "ownership" },
+        { "path": "docs/architecture/local-storage.md", "line": 27, "end_line": 43, "label": "storage layers" }
+      ],
+      "pos": [530, 590],
+      "size": [215, 82]
+    },
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "音乐 Provider",
+      "sublabel": "网易云 / QQ 音乐 · 导入代理",
+      "tag": "Import only",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 17, "label": "import boundary" },
+        { "path": "packages/shared/src/providers/netease.ts", "label": "Netease provider" },
+        { "path": "packages/shared/src/providers/qqmusic.ts", "label": "QQ Music provider" }
+      ],
+      "pos": [790, 590],
+      "size": [215, 82]
+    },
+    {
+      "id": "media",
+      "type": "cloud",
+      "label": "WebRTC 媒体链路",
+      "sublabel": "RTP Opus · owner → listener",
+      "tag": "Audio only",
+      "sources": [
+        { "path": "docs/architecture/overview.md", "line": 24, "end_line": 37, "label": "playback flow" },
+        { "path": "docs/architecture/realtime.md", "line": 23, "end_line": 26, "label": "media connection" }
+      ],
+      "pos": [290, 150],
+      "size": [210, 82]
+    }
+  ],
+  "connections": [
+    { "id": "clients-to-edge", "from": "clients", "to": "edge", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "edge-to-web", "from": "edge", "to": "web", "label": "Next.js UI" },
+    { "id": "edge-to-server", "from": "edge", "to": "server", "label": "API / Socket.IO", "variant": "dashed", "fromSide": "top", "toSide": "top", "labelDy": -28 },
+    { "id": "web-to-server", "from": "web", "to": "server", "label": "房间快照 / playback patch", "labelDy": -35 },
+    { "id": "web-to-local", "from": "web", "to": "local-repository", "label": "读写本地资产", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "server-to-postgres", "from": "server", "to": "postgres", "label": "SQL" },
+    { "id": "server-to-redis", "from": "server", "to": "redis", "label": "patch / presence", "labelAt": [960, 450] },
+    { "id": "server-to-turn", "from": "server", "to": "turn", "label": "ICE 配置", "variant": "dashed" },
+    { "id": "server-to-providers", "from": "server", "to": "providers", "label": "导入代理", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "clients-to-media", "from": "clients", "to": "media", "label": "控制 + 媒体协商", "fromSide": "top", "toSide": "bottom" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "入口与运行时",
+      "items": [
+        "Nginx 统一反代 Web、API 和 WebSocket",
+        "Next.js 负责房间 UI、Socket.IO 与 WebRTC 运行时"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "权威状态",
+      "items": [
+        "NestJS 保存房间与播放权威状态",
+        "PostgreSQL 持久化核心数据，Redis 支撑 patch、presence 与协作"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "媒体与资产边界",
+      "items": [
+        "音频资产留在浏览器本地仓库，不上传到服务端",
+        "WebRTC 只传 RTP Opus 媒体；provider 仅在导入阶段代理"
+      ]
+    }
+  ]
+}

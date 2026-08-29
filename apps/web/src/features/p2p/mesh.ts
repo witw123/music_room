@@ -75,6 +75,12 @@ type MeshCallbacks = {
   }) => void;
 };
 
+export type RemoteAudioTrackListener = (payload: {
+  peerId: string;
+  stream: MediaStream;
+  track: MediaStreamTrack;
+}) => void;
+
 type MeshOptions = {
   autoReconnect?: boolean;
   resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;

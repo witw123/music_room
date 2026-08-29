@@ -18,6 +18,7 @@ function createAudioContextMock() {
   };
   const track = {
     id: "broadcast-track",
+    readyState: "live" as MediaStreamTrackState,
     stop: vi.fn()
   };
   const broadcastDestination = {
@@ -136,5 +137,38 @@ describe("room audio output", () => {
     expect(roomAudioOutput.hasLocalAudioElementSource(audio)).toBe(true);
     roomAudioOutput.bindLocalAudioElement(audio, { broadcast: false });
     expect(roomAudioOutput.hasLocalAudioElementSource(audio)).toBe(true);
+  });
+
+  it("notifies subscribers when the broadcast stream is created and released", () => {
+    const { context, broadcastDestination } = createAudioContextMock();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(context as unknown as AudioContext);
+    const listener = vi.fn();
+    const unsubscribe = roomAudioOutput.subscribeBroadcastStream(listener);
+
+    expect(roomAudioOutput.getBroadcastStream()).toBeNull();
+    roomAudioOutput.getBroadcastDestination();
+    expect(listener).toHaveBeenNthCalledWith(1, broadcastDestination.stream);
+
+    roomAudioOutput.releaseRoomAudioSession();
+    expect(listener).toHaveBeenNthCalledWith(2, null);
+
+    unsubscribe();
+    roomAudioOutput.getBroadcastDestination();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("recreates a broadcast destination after its audio track ends", () => {
+    const { context, broadcastDestination, track } = createAudioContextMock();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext")
+      .mockReturnValue(context as unknown as AudioContext);
+    roomAudioOutput.getBroadcastDestination();
+    track.readyState = "ended";
+
+    const nextDestination = roomAudioOutput.getBroadcastDestination();
+
+    expect(nextDestination).toBe(broadcastDestination);
+    expect(context.createMediaStreamDestination).toHaveBeenCalledTimes(2);
+    expect(track.stop).toHaveBeenCalled();
   });
 });

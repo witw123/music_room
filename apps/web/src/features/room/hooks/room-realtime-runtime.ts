@@ -14,6 +14,7 @@ import type {
 } from "@music-room/shared";
 import { createRoomSocket, type RoomSocket } from "@/lib/network/ws-client";
 import { getWebRTCIceServers, P2PMesh } from "@/features/p2p";
+import type { RemoteAudioTrackListener } from "@/features/p2p";
 import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -202,6 +203,7 @@ type RoomRealtimeRuntimeInput = {
     payloadRecoveryGeneration: number | null | undefined;
     currentRecoveryGeneration: number | null;
   }) => boolean;
+  onRemoteAudioTrack?: RemoteAudioTrackListener;
 } & RoomDataMeshDiagnosticsRefs;
 
 type RoomSocketHandlersInput = RoomRealtimeRuntimeInput & {
@@ -241,6 +243,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     currentTrackId: input.currentTrackId,
     bufferHealth: input.bufferHealth,
     queuePlaybackRecoveryRecommendation: input.queuePlaybackRecoveryRecommendation,
+    onRemoteAudioTrack: input.onRemoteAudioTrack,
     reportMeshResyncFailure: (error) => {
       input.recordPeerDiagnosticRef.current({
         peerId: "system",

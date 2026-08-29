@@ -90,6 +90,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     remoteStream: MediaStream | null;
     remoteTrackId?: string | null;
   } | null;
+  subscribeRemoteAudioTrack?: (listener: (payload: {
+    peerId: string;
+    stream: MediaStream;
+    track: MediaStreamTrack;
+  }) => void) => () => void;
   restartMediaPeer: (peerId: string, options?: { forceRecreate?: boolean }) => Promise<unknown>;
   onPlaybackEnded: () => void | Promise<void>;
   setMediaConnectionState: Dispatch<SetStateAction<"idle" | "connecting" | "live" | "buffering" | "reconnecting" | "failed">>;
@@ -113,6 +118,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const setSourceStartState = input.setSourceStartState;
   const setAudioUnlocked = input.setAudioUnlocked;
   const playbackReadiness = input.playbackReadiness;
+  const subscribeRemoteAudioTrack = input.subscribeRemoteAudioTrack;
   const [playbackPreferences, setPlaybackPreferences] = useState(
     () => getAppSettings().playback
   );
@@ -1889,10 +1895,20 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
     void syncMedia();
     const interval = window.setInterval(() => void syncMedia(), 250);
+    const unsubscribeRemoteAudioTrack = subscribeRemoteAudioTrack?.(() => {
+      void syncMedia();
+    });
+    const unsubscribeBroadcastStream = runtimeInputRef.current.isCurrentSource
+      ? roomAudioOutput.subscribeBroadcastStream(() => {
+        void syncMedia();
+      })
+      : undefined;
     const mountedAudio = audioRef.current;
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      unsubscribeRemoteAudioTrack?.();
+      unsubscribeBroadcastStream?.();
       runtimeInputRef.current.setLocalAudioStream(null, null, null, false);
       runtimeInputRef.current.audibleRef.current = false;
       const audio = mountedAudio;
@@ -1922,7 +1938,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     roomId,
     input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.mediaEpoch,
-    ensureListenerMediaConnection
+    ensureListenerMediaConnection,
+    subscribeRemoteAudioTrack
   ]);
 
   useEffect(() => {

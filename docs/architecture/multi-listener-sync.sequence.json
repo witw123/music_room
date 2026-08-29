@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "多人一起听歌（小白版）",
+    "locale": "zh-CN",
+    "output": "outputs/multi-listener-sync-sequence.html",
+    "viewBox": [1000, 560],
+    "quality_profile": "showcase",
+    "column_fit": "spread"
+  },
+  "participants": [
+    {
+      "id": "host",
+      "type": "frontend",
+      "label": "房主设备",
+      "sublabel": "选歌 + 播放"
+    },
+    {
+      "id": "server",
+      "type": "backend",
+      "label": "音乐房服务器",
+      "sublabel": "统一时间和操作"
+    },
+    {
+      "id": "listeners",
+      "type": "frontend",
+      "label": "其他听众",
+      "sublabel": "多人一起听"
+    }
+  ],
+  "segments": [
+    { "from": 160, "to": 315, "label": "加入并对齐" },
+    { "from": 330, "to": 405, "label": "实时听歌" },
+    { "from": 420, "to": 477, "label": "操作同步" }
+  ],
+  "messages": [
+    {
+      "id": "start-room",
+      "from": "host",
+      "to": "server",
+      "y": 180,
+      "label": "房主开始播放一首歌",
+      "variant": "emphasis"
+    },
+    {
+      "id": "join-room",
+      "from": "listeners",
+      "to": "server",
+      "y": 220,
+      "label": "听众加入房间",
+      "variant": "default"
+    },
+    {
+      "id": "confirm-time",
+      "from": "server",
+      "to": "host",
+      "y": 260,
+      "label": "确定统一开始时间",
+      "variant": "return"
+    },
+    {
+      "id": "share-timeline",
+      "from": "server",
+      "to": "listeners",
+      "y": 300,
+      "label": "告诉大家歌曲和开始时间",
+      "variant": "emphasis"
+    },
+    {
+      "id": "send-sound",
+      "from": "host",
+      "to": "listeners",
+      "y": 350,
+      "label": "实时传出正在播放的声音",
+      "variant": "emphasis"
+    },
+    {
+      "id": "change-playback",
+      "from": "host",
+      "to": "server",
+      "y": 430,
+      "label": "播放 / 暂停 / 拖动进度",
+      "variant": "emphasis"
+    },
+    {
+      "id": "keep-together",
+      "from": "server",
+      "to": "listeners",
+      "y": 460,
+      "label": "通知大家按同一时间播放",
+      "variant": "dashed"
+    }
+  ],
+  "activations": [
+    { "participant": "host", "from": 180, "to": 440, "type": "frontend" },
+    { "participant": "server", "from": 180, "to": 525, "type": "backend" },
+    { "participant": "listeners", "from": 220, "to": 525, "type": "frontend" }
+  ]
+}

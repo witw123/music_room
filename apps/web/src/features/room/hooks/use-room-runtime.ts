@@ -16,7 +16,7 @@ import type {
 } from "@music-room/shared";
 import type { Route } from "next";
 import type { RoomSocket } from "@/lib/network/ws-client";
-import type { P2PMesh } from "@/features/p2p";
+import type { P2PMesh, RemoteAudioTrackListener } from "@/features/p2p";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
@@ -131,6 +131,7 @@ type UseRoomRuntimeResult = {
   getPeerMediaState: (peerId: string) => ReturnType<P2PMesh["getPeerMediaState"]>;
   setMediaPlaybackEnabled: (enabled: boolean) => Promise<void>;
   restartMediaPeer: (peerId: string, options?: { forceRecreate?: boolean }) => Promise<unknown>;
+  subscribeRemoteAudioTrack: (listener: RemoteAudioTrackListener) => () => void;
 };
 
 export function shouldStartRoomRealtimeRuntime(input: {
@@ -251,6 +252,12 @@ export function useRoomRuntime({
     resetPlayerSurface,
     recordPeerDiagnostic,
   });
+  const remoteAudioTrackListenersRef = useRef(new Set<RemoteAudioTrackListener>());
+  const onRemoteAudioTrack = useCallback<RemoteAudioTrackListener>((payload) => {
+    for (const listener of remoteAudioTrackListenersRef.current) {
+      listener(payload);
+    }
+  }, []);
 
   const {
     connectionSupervisorStatesRef,
@@ -587,7 +594,8 @@ export function useRoomRuntime({
       emitPresence,
       startPresenceHeartbeat,
       exitCurrentRoom,
-      shouldAcceptIncomingPeerSignalRecoveryGeneration
+      shouldAcceptIncomingPeerSignalRecoveryGeneration,
+      onRemoteAudioTrack
     });
   }, [
     roomSnapshot?.room.id,
@@ -615,6 +623,7 @@ export function useRoomRuntime({
     socketRef,
     stopPresenceHeartbeat,
     clearSocketDisconnectGrace,
+    onRemoteAudioTrack,
     setConnectedPeers,
     setMediaConnectedPeers,
     setPlaybackReadiness,
@@ -681,11 +690,21 @@ export function useRoomRuntime({
       meshRef.current?.restartMediaPeer(remotePeerId, options) ?? Promise.resolve(null),
     [meshRef]
   );
+  const subscribeRemoteAudioTrack = useCallback(
+    (listener: RemoteAudioTrackListener) => {
+      remoteAudioTrackListenersRef.current.add(listener);
+      return () => {
+        remoteAudioTrackListenersRef.current.delete(listener);
+      };
+    },
+    []
+  );
 
   return {
     setLocalAudioStream,
     getPeerMediaState,
     setMediaPlaybackEnabled,
-    restartMediaPeer
+    restartMediaPeer,
+    subscribeRemoteAudioTrack
   };
 }

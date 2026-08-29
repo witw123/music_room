@@ -32,8 +32,11 @@ type LocalAudioElementGraph = {
   broadcastDestination: MediaStreamAudioDestinationNode | null;
 };
 
+export type BroadcastStreamListener = (stream: MediaStream | null) => void;
+
 export class RoomAudioOutput {
   private broadcastDestination: MediaStreamAudioDestinationNode | null = null;
+  private readonly broadcastStreamListeners = new Set<BroadcastStreamListener>();
   private localAudioElementGraph: LocalAudioElementGraph | null = null;
   private readonly localAudioElementSources = new WeakMap<
     HTMLAudioElement,
@@ -222,12 +225,22 @@ export class RoomAudioOutput {
     return roomAudioActivationManager.getSharedAudioContext();
   }
 
+  subscribeBroadcastStream(listener: BroadcastStreamListener) {
+    this.broadcastStreamListeners.add(listener);
+    return () => {
+      this.broadcastStreamListeners.delete(listener);
+    };
+  }
+
   getBroadcastDestination(context = this.getSharedAudioContext()) {
     if (!context) {
       return null;
     }
     if (this.broadcastDestination && this.broadcastDestination.context === context) {
-      return this.broadcastDestination;
+      const track = this.broadcastDestination.stream.getAudioTracks()[0];
+      if (!track || track.readyState !== "ended") {
+        return this.broadcastDestination;
+      }
     }
     this.disposeLocalAudioElementGraph();
     if (typeof context.createMediaStreamDestination !== "function") {
@@ -235,6 +248,7 @@ export class RoomAudioOutput {
     }
     this.disposeBroadcastDestination();
     this.broadcastDestination = context.createMediaStreamDestination();
+    this.notifyBroadcastStreamChanged();
     return this.broadcastDestination;
   }
 
@@ -295,11 +309,26 @@ export class RoomAudioOutput {
   }
 
   private disposeBroadcastDestination() {
+    const hadDestination = this.broadcastDestination !== null;
     this.broadcastDestination?.disconnect();
     for (const track of this.broadcastDestination?.stream.getTracks() ?? []) {
       track.stop();
     }
     this.broadcastDestination = null;
+    if (hadDestination) {
+      this.notifyBroadcastStreamChanged();
+    }
+  }
+
+  private notifyBroadcastStreamChanged() {
+    const stream = this.broadcastDestination?.stream ?? null;
+    for (const listener of this.broadcastStreamListeners) {
+      try {
+        listener(stream);
+      } catch {
+        // A subscriber must not break the audio graph lifecycle.
+      }
+    }
   }
 }
 

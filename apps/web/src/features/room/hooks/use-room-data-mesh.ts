@@ -9,6 +9,7 @@ import {
   markMediaRecoveryAttempt,
   resolvePreferredIceTransportPolicy
 } from "@/features/p2p";
+import type { RemoteAudioTrackListener } from "@/features/p2p";
 import { createPeerTelemetryReport, sumFiniteRates } from "@/features/p2p/peer-telemetry";
 import { playbackBandwidthMonitor } from "@/lib/network/import-bandwidth-governor";
 import type {
@@ -121,6 +122,7 @@ export function createRoomDataMeshRuntime(input: {
   bufferHealth: "healthy" | "low" | "critical";
   queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
   reportMeshResyncFailure: (error: unknown) => void;
+  onRemoteAudioTrack?: RemoteAudioTrackListener;
 } & RoomDataMeshDiagnosticsRefs) {
   playbackBandwidthMonitor.clear();
   const peerBufferedAmountBytes = new Map<string, number>();
@@ -430,7 +432,8 @@ export function createRoomDataMeshRuntime(input: {
           })
         });
       },
-      onRemoteAudioTrack: ({ peerId, track }) => {
+      onRemoteAudioTrack: ({ peerId, stream, track }) => {
+        input.onRemoteAudioTrack?.({ peerId, stream, track });
         input.recordPeerDiagnosticRef.current({
           peerId,
           channelKind: "media",
