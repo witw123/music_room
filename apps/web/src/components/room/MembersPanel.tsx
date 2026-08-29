@@ -466,7 +466,7 @@ function MembersPanelBase({
                       {canManageMember ? (
                         <Button
                           aria-label={`移除 ${member.nickname}`}
-                          className="h-8 px-2 text-xs text-red-300 hover:text-red-200"
+                          className="min-h-10 px-3 text-xs text-red-300 hover:text-red-200"
                           data-testid={`member-remove-${member.id}`}
                           onClick={() => setRemoveTarget(member)}
                           title="移除成员"

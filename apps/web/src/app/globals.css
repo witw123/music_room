@@ -1267,3 +1267,16 @@
 }
 
 
+
+/* iOS Safari auto-zooms the page when focusing an input whose font-size is
+   below 16px. Individual inputs carry Tailwind font-size utilities, which
+   out-specificity a plain element rule, so this is scoped to phone widths and
+   uses !important deliberately. Textual controls only — sliders/checkboxes do
+   not trigger the zoom. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

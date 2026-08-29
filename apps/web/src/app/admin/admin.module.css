@@ -290,6 +290,25 @@
   .loginPanel { padding: calc(28px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
 }
 
+@media (max-width: 640px) {
+  /* Phone-width directory tables: drop the two least critical columns and
+     pin the action column so 详情 stays reachable without horizontal
+     scrolling. Column 6/7 are 可见性+更新时间 on the room table and
+     有效会话+最近登录 on the user table — same positions in both. */
+  .directoryTable { min-width: 640px; }
+  .directoryTable th:nth-child(6),
+  .directoryTable td:nth-child(6),
+  .directoryTable th:nth-child(7),
+  .directoryTable td:nth-child(7) { display: none; }
+  .directoryTable th:last-child,
+  .directoryTable td:last-child {
+    position: sticky;
+    right: 0;
+    background: var(--admin-panel-strong);
+    box-shadow: -10px 0 14px -10px rgba(0, 0, 0, 0.55);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .navButton, .topButton { transition: none; }
 }

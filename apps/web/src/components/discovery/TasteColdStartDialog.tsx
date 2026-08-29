@@ -92,8 +92,19 @@ export function TasteColdStartDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl p-4 sm:p-6 md:p-8 rounded-3xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col">
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md"
+      onMouseDown={onClose}
+      role="presentation"
+    >
+      {/* z-[80] matches the app's modal convention (RoomsHomePage dialogs,
+          AnchoredDialog): at z-50 the fixed bottom player (z-60/80) and the
+          mobile bottom navigation (z-70) paint over the dialog footer and the
+          primary CTA becomes untappable on phones. */}
+      <div
+        className="relative w-full max-w-xl p-4 sm:p-6 md:p-8 rounded-3xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4 mb-4 sm:mb-6 shrink-0">
           <div className="flex items-center gap-3 sm:gap-3.5">
             <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] shrink-0">
@@ -127,7 +138,7 @@ export function TasteColdStartDialog({
                     key={label}
                     type="button"
                     onClick={() => toggleLabel(label)}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
                         ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold border-transparent"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
@@ -155,7 +166,7 @@ export function TasteColdStartDialog({
                     key={label}
                     type="button"
                     onClick={() => toggleLabel(label)}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
                         ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold border-transparent"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
@@ -183,7 +194,7 @@ export function TasteColdStartDialog({
                     key={artist}
                     type="button"
                     onClick={() => toggleArtist(artist)}
-                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1 px-3 py-2 sm:py-1 rounded-lg text-xs font-medium transition-all ${
                       active
                         ? "bg-accent/15 text-accent border border-accent/30 font-semibold"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
@@ -198,8 +209,10 @@ export function TasteColdStartDialog({
           </div>
         </div>
 
-        {/* Footer actions */}
-        <div className="flex items-center justify-between gap-3 pt-6 mt-6 border-t border-surface-border">
+        {/* Footer actions. Stacked full-width on phones so the primary CTA
+            stays reachable; the shrink-0 keeps the footer pinned while the
+            pill list scrolls above it. */}
+        <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-surface-border pt-4 mt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-6 sm:mt-6">
           <Button
             type="button"
             variant="ghost"

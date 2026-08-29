@@ -31,7 +31,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#09090b"
+  themeColor: "#09090b",
+  // Cover mode is what makes env(safe-area-inset-*) report real values; the
+  // Capacitor shell loads this page as a remote URL, so the shell's own
+  // viewport meta never applies. Without it every inset padding in
+  // globals.css (bottom navigation, floating player, room bottom inset) is
+  // inert and content sits under the status bar / gesture bar.
+  viewportFit: "cover"
 };
 
 export const metadata: Metadata = {

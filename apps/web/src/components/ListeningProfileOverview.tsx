@@ -286,7 +286,7 @@ export function ListeningProfileOverview({
                     <button
                       type="button"
                       onClick={() => handlePlayTrack(item)}
-                      className="p-1.5 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.12] transition-colors"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full p-0 text-foreground-muted hover:text-white hover:bg-white/[0.12] transition-colors"
                       title="立即播放"
                     >
                       <PlayIcon className="w-3.5 h-3.5" />
@@ -295,7 +295,7 @@ export function ListeningProfileOverview({
                       type="button"
                       disabled={isRadioRunning}
                       onClick={() => handleStartTrackRadio(item)}
-                      className="p-1.5 rounded-full text-foreground-muted hover:text-accent hover:bg-accent/15 transition-colors"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full p-0 text-foreground-muted hover:text-accent hover:bg-accent/15 transition-colors"
                       title="开启单曲漫游"
                     >
                       <RadioIcon className="w-3.5 h-3.5" />

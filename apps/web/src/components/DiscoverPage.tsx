@@ -552,7 +552,7 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
                 src={playlist.artworkUrl}
               />
               <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
-              <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-0 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 group-hover:opacity-100 scale-95 group-hover:scale-100">
+              <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-100 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-95 sm:group-hover:scale-100">
                 {loading ? <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <PlayIcon className="w-4 h-4" />}
               </span>
             </div>
@@ -625,7 +625,7 @@ function DiscoverTrackCard({ track, actions }: { track: Track; actions: Discover
       >
         <Artwork alt="" className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
         <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
-        <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-0 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 group-hover:opacity-100 scale-95 group-hover:scale-100">
+        <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-100 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 scale-100 sm:opacity-0 sm:group-hover:opacity-100 sm:scale-95 sm:group-hover:scale-100">
           <PlayIcon className="w-4 h-4" />
         </span>
       </button>
@@ -663,7 +663,7 @@ function TrackMoreActions({ track, actions, compact = false }: { track: Track; a
           <FavoriteTrackButton isFavorite={actions.isFavorite(track)} onToggle={() => actions.onToggleFavorite(track)} pending={actions.isFavoritePending(track)} size="compact" track={track} />
         </div>
       ) : null}
-      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-7 w-7 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08]" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
+      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-9 w-9 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08] sm:h-7 sm:w-7" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
         <MoreIcon />
       </Button>
       {menuAnchor ? (

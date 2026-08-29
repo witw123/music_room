@@ -251,13 +251,18 @@ export function SettingsPage({
             <SettingRow label="自定义界面" description="在桌面画布中调整页面区域的位置和大小。">
               <button
                 aria-label="进入自定义界面编辑器"
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-accent transition hover:bg-accent/10 hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="hidden min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-accent transition hover:bg-accent/10 hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:inline-flex"
                 onClick={() => setIsCustomLayoutEditorOpen(true)}
                 type="button"
               >
                 <span>进入</span>
                 <ChevronRightIcon />
               </button>
+              {/* The editor canvas is authored for a 1440x900 desktop viewport
+                  (min-w-[720px], pointer drag). On phones the entry would only
+                  lead to a horizontally scrolling surface, so offer guidance
+                  instead of a dead end. */}
+              <span className="text-xs text-foreground-muted md:hidden">请使用桌面浏览器调整</span>
             </SettingRow>
           </SettingsSection>
 
