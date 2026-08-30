@@ -88,9 +88,8 @@ export function RoomsHomePage({
   const [roomTypeFilter, setRoomTypeFilter] = useState<"all" | RoomType>("all");
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<CreateRoomForm>(emptyCreateRoomForm);
+  const [createFormVisibility, setCreateFormVisibility] = useState<"public" | "private">("public");
   const [selectedRoom, setSelectedRoom] = useState<RoomDirectoryItem | null>(null);
-  const [joinPassword, setJoinPassword] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -182,28 +181,27 @@ export function RoomsHomePage({
   }, [activeSession, refreshAvailableRooms]);
 
   function openCreateRoom(visibility: "public" | "private") {
-    setCreateForm({ ...emptyCreateRoomForm, visibility });
+    setCreateFormVisibility(visibility);
     setDialogError(null);
     setCreateDialogOpen(true);
   }
 
   function openJoinDialog() {
-    setJoinCode("");
     setDialogError(null);
     setJoinDialogOpen(true);
   }
 
-  async function handleCreateRoom() {
+  async function handleCreateRoom(form: CreateRoomForm) {
     primeRoomAudioFromUserGesture();
     try {
       const snapshot = await musicRoomApi.createRoom({
-        visibility: createForm.visibility,
-        name: createForm.name.trim() || undefined,
-        description: createForm.description.trim() || undefined,
-        password: createForm.password.trim() || undefined,
-        roomType: createForm.roomType,
-        ...(createForm.roomType === "interactive"
-          ? { newMemberPermissions: createForm.newMemberPermissions }
+        visibility: form.visibility,
+        name: form.name.trim() || undefined,
+        description: form.description.trim() || undefined,
+        password: form.password.trim() || undefined,
+        roomType: form.roomType,
+        ...(form.roomType === "interactive"
+          ? { newMemberPermissions: form.newMemberPermissions }
           : {})
       });
       storeRoomSnapshotHandoff(snapshot);
@@ -247,7 +245,6 @@ export function RoomsHomePage({
       return;
     }
     setSelectedRoom(room);
-    setJoinPassword("");
     setDialogError(null);
   }
 
@@ -262,16 +259,6 @@ export function RoomsHomePage({
     }
     if (isPending || joinInFlightRef.current) return;
     startTransition(() => void handleJoinRoom(joinCode));
-  }
-
-  async function confirmRoomEntry() {
-    if (!selectedRoom) return;
-    setDialogError(null);
-    try {
-      await handleJoinRoom(selectedRoom.room.joinCode, joinPassword || undefined);
-    } catch (error) {
-      setDialogError(toUserFacingError(error));
-    }
   }
 
   async function handleLogout() {
@@ -499,185 +486,328 @@ export function RoomsHomePage({
       </section>
 
       {createDialogOpen ? (
-        <RoomDialog
-          title="创建房间"
-          description="设置房间信息后再进入协作空间。名称必填，简介和密码可以留空。"
+        <CreateRoomDialogModal
+          dialogError={dialogError}
+          initialVisibility={createFormVisibility}
+          isPending={isPending}
           onClose={() => setCreateDialogOpen(false)}
-        >
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              startTransition(() => void handleCreateRoom());
-            }}
-          >
-            <div className="flex gap-2 rounded-xl border border-surface-border bg-background/60 p-1" role="tablist" aria-label="房间可见性">
-              {(["public", "private"] as const).map((visibility) => (
-                <button
-                  key={visibility}
-                  aria-selected={createForm.visibility === visibility}
-                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${createForm.visibility === visibility ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover"}`}
-                  onClick={() => setCreateForm((current) => ({ ...current, visibility }))}
-                  role="tab"
-                  type="button"
-                >
-                  {visibility === "public" ? "公开房间" : "私密房间"}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-col gap-2" role="group" aria-label="选择房间用途">
-              {(["interactive", "request", "radio"] as const).map((roomType) => (
-                <button
-                  key={roomType}
-                  aria-pressed={createForm.roomType === roomType}
-                  className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border px-4 py-3 text-left transition ${createForm.roomType === roomType ? "border-accent bg-accent/10 shadow-[0_10px_30px_rgba(0,112,243,0.12)]" : "border-surface-border bg-surface/20 hover:border-white/20 hover:bg-surface-hover"}`}
-                  onClick={() => setCreateForm((current) => ({ ...current, roomType }))}
-                  type="button"
-                >
-                  <span>
-                    <span className="block text-sm font-semibold text-foreground">{roomTypeLabel(roomType)}</span>
-                    <span className="mt-1 block text-xs leading-5 text-foreground-muted">{roomTypeDescription(roomType)}</span>
-                  </span>
-                  {createForm.roomType === roomType ? <span className="text-xs font-semibold text-accent">已选择</span> : null}
-                </button>
-              ))}
-            </div>
-            <label className="flex flex-col gap-2 text-sm text-foreground">
-              房间名称
-              <input
-                className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
-                maxLength={120}
-                onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="例如：周五夜听"
-                required
-                value={createForm.name}
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-sm text-foreground">
-              房间简介 <span className="text-xs text-foreground-muted">可选</span>
-              <textarea
-                className="min-h-20 resize-y rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
-                maxLength={500}
-                onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="告诉大家这个房间适合做什么"
-                value={createForm.description}
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-sm text-foreground">
-              房间密码 <span className="text-xs text-foreground-muted">可选，至少 4 位</span>
-              <input
-                className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
-                maxLength={128}
-                minLength={4}
-                onChange={(event) => setCreateForm((current) => ({ ...current, password: event.target.value }))}
-                placeholder="留空表示无需密码"
-                type="password"
-                value={createForm.password}
-              />
-            </label>
-            {createForm.roomType === "interactive" ? <div className="flex flex-col gap-2">
-              <div>
-                <span className="block text-sm text-foreground">新成员默认权限</span>
-                <span className="mt-1 block text-xs text-foreground-muted">控制新成员首次进入房间时可以使用的功能。</span>
-              </div>
-              <MemberPermissionControls
-                disabled={isPending}
-                onChange={(permission, checked) => setCreateForm((current) => ({
-                  ...current,
-                  newMemberPermissions: {
-                    ...current.newMemberPermissions,
-                    [permission]: checked
-                  }
-                }))}
-                permissions={createForm.newMemberPermissions}
-              />
-            </div> : <div className="border border-surface-border bg-surface/20 px-3 py-2.5 text-xs leading-5 text-foreground-muted">
-              {createForm.roomType === "request"
-                ? "成员可提交点歌，只有房主能够导入、审核与控制播放。"
-                : "房主负责节目单和播放控制，听众以收听、查看节目预告和发送反应为主。"}
-            </div>}
-            {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button disabled={isPending} onClick={() => setCreateDialogOpen(false)} type="button" variant="ghost">取消</Button>
-              <Button data-testid="create-room-submit" disabled={isPending || !createForm.name.trim() || (createForm.password.trim().length > 0 && createForm.password.trim().length < 4)} type="submit">
-                {isPending ? "创建中…" : "创建并进入"}
-              </Button>
-            </div>
-          </form>
-        </RoomDialog>
+          onSubmit={(form) => {
+            startTransition(() => void handleCreateRoom(form));
+          }}
+        />
       ) : null}
 
       {joinDialogOpen ? (
-        <RoomDialog
-          title="输入房间码加入"
-          description="输入 6 位房间码，加入公开或私密房间。"
+        <JoinCodeDialogModal
+          isPending={isPending}
           onClose={() => setJoinDialogOpen(false)}
-        >
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleJoinCodeSubmit();
-            }}
-          >
-            <label className="flex flex-col gap-2 text-sm text-foreground" htmlFor="join-code-input">
-              房间码
-              <input
-                data-testid="join-code-input"
-                id="join-code-input"
-                className="w-full rounded-xl border border-surface-border bg-background px-3 py-2.5 font-mono uppercase text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-                value={joinCode}
-                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                placeholder="输入 6 位房间码"
-              />
-            </label>
-            {statusMessage ? <p data-testid="room-home-status" className="animate-fade-in rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{statusMessage}</p> : null}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button onClick={() => setJoinDialogOpen(false)} type="button" variant="ghost">取消</Button>
-              <Button data-testid="join-code-submit" disabled={!joinCode.trim() || isPending} type="submit">
-                {isPending ? "进入中…" : "进入房间"}
-              </Button>
-            </div>
-          </form>
-        </RoomDialog>
+          onSubmit={(code) => {
+            const room = availableRooms.find(
+              (item) => item.room.joinCode.toUpperCase() === code.trim().toUpperCase()
+            );
+            if (room) {
+              setJoinDialogOpen(false);
+              openRoomDetails(room);
+              return;
+            }
+            if (isPending || joinInFlightRef.current) return;
+            startTransition(() => void handleJoinRoom(code));
+          }}
+          statusMessage={statusMessage}
+        />
       ) : null}
 
       {selectedRoom ? (
-        <RoomDialog
-          title={selectedRoom.room.name ?? "未命名房间"}
-          description={selectedRoom.room.description?.trim() || roomTypeDescription(selectedRoom.room.roomType)}
+        <SelectedRoomDialogModal
+          dialogError={dialogError}
+          isPending={isPending}
           onClose={() => setSelectedRoom(null)}
-        >
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 rounded-xl border border-surface-border bg-background/50 p-3 text-sm">
-              <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryHostNickname || "未知"}</span></div>
-              <div><span className="block text-xs text-foreground-muted">房间码</span><span className="mt-1 block font-mono text-foreground">{selectedRoom.room.joinCode}</span></div>
-              <div><span className="block text-xs text-foreground-muted">状态</span><span className="mt-1 block text-foreground">{selectedRoom.room.visibility === "private" ? "私密" : "公开"}</span></div>
-              <div><span className="block text-xs text-foreground-muted">在线成员</span><span className="mt-1 block text-foreground">{selectedRoom.room.directoryOnlineMemberCount} 人</span></div>
-            </div>
-            {selectedRoom.room.hasPassword ? (
-              <label className="flex flex-col gap-2 text-sm text-foreground">
-                房间密码
-                <input
-                  className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
-                  onChange={(event) => setJoinPassword(event.target.value)}
-                  placeholder="请输入房间密码"
-                  type="password"
-                  value={joinPassword}
-                />
-              </label>
-            ) : null}
-            {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button disabled={isPending} onClick={() => setSelectedRoom(null)} type="button" variant="ghost">暂不进入</Button>
-              <Button data-testid="room-entry-confirm" disabled={isPending || (selectedRoom.room.hasPassword === true && !joinPassword)} onClick={() => startTransition(() => void confirmRoomEntry())} type="button">
-                {isPending ? "进入中…" : "进入房间"}
-              </Button>
-            </div>
-          </div>
-        </RoomDialog>
+          onConfirm={(password) => {
+            setDialogError(null);
+            startTransition(async () => {
+              try {
+                await handleJoinRoom(selectedRoom.room.joinCode, password || undefined);
+              } catch (error) {
+                setDialogError(toUserFacingError(error));
+              }
+            });
+          }}
+          room={selectedRoom}
+        />
       ) : null}
     </main>
+  );
+}
+
+function CreateRoomDialogModal({
+  initialVisibility,
+  onClose,
+  onSubmit,
+  isPending,
+  dialogError
+}: {
+  initialVisibility: "public" | "private";
+  onClose: () => void;
+  onSubmit: (form: CreateRoomForm) => void;
+  isPending: boolean;
+  dialogError: string | null;
+}) {
+  const [form, setForm] = useState<CreateRoomForm>(() => ({
+    ...emptyCreateRoomForm,
+    visibility: initialVisibility
+  }));
+
+  const canSubmit = !isPending && form.name.trim().length > 0 && (form.password.trim().length === 0 || form.password.trim().length >= 4);
+
+  return (
+    <RoomDialog
+      title="创建房间"
+      description="设置房间信息后再进入协作空间。名称必填，简介和密码可以留空。"
+      onClose={onClose}
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canSubmit) return;
+          onSubmit(form);
+        }}
+      >
+        <div className="flex gap-2 rounded-xl border border-surface-border bg-background/60 p-1" role="tablist" aria-label="房间可见性">
+          {(["public", "private"] as const).map((visibility) => (
+            <button
+              key={visibility}
+              aria-selected={form.visibility === visibility}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${form.visibility === visibility ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover"}`}
+              onClick={() => setForm((current) => ({ ...current, visibility }))}
+              role="tab"
+              type="button"
+            >
+              {visibility === "public" ? "公开房间" : "私密房间"}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2" role="group" aria-label="选择房间用途">
+          {(["interactive", "request", "radio"] as const).map((roomType) => (
+            <button
+              key={roomType}
+              aria-pressed={form.roomType === roomType}
+              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border px-4 py-3 text-left transition ${form.roomType === roomType ? "border-accent bg-accent/10 shadow-[0_10px_30px_rgba(0,112,243,0.12)]" : "border-surface-border bg-surface/20 hover:border-white/20 hover:bg-surface-hover"}`}
+              onClick={() => setForm((current) => ({ ...current, roomType }))}
+              type="button"
+            >
+              <span>
+                <span className="block text-sm font-semibold text-foreground">{roomTypeLabel(roomType)}</span>
+                <span className="mt-1 block text-xs leading-5 text-foreground-muted">{roomTypeDescription(roomType)}</span>
+              </span>
+              {form.roomType === roomType ? <span className="text-xs font-semibold text-accent">已选择</span> : null}
+            </button>
+          ))}
+        </div>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          房间名称
+          <input
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+            maxLength={120}
+            onChange={(event) => {
+              const val = event.target.value;
+              setForm((current) => ({ ...current, name: val }));
+            }}
+            placeholder="例如：周五夜听"
+            required
+            spellCheck="false"
+            value={form.name}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          房间简介 <span className="text-xs text-foreground-muted">可选</span>
+          <textarea
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="min-h-20 resize-y rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+            maxLength={500}
+            onChange={(event) => {
+              const val = event.target.value;
+              setForm((current) => ({ ...current, description: val }));
+            }}
+            placeholder="告诉大家这个房间适合做什么"
+            spellCheck="false"
+            value={form.description}
+          />
+        </label>
+        <label className="flex flex-col gap-2 text-sm text-foreground">
+          房间密码 <span className="text-xs text-foreground-muted">可选，至少 4 位</span>
+          <input
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+            maxLength={128}
+            minLength={4}
+            onChange={(event) => {
+              const val = event.target.value;
+              setForm((current) => ({ ...current, password: val }));
+            }}
+            placeholder="留空表示无需密码"
+            spellCheck="false"
+            type="password"
+            value={form.password}
+          />
+        </label>
+        {form.roomType === "interactive" ? (
+          <div className="flex flex-col gap-2">
+            <div>
+              <span className="block text-sm text-foreground">新成员默认权限</span>
+              <span className="mt-1 block text-xs text-foreground-muted">控制新成员首次进入房间时可以使用的功能。</span>
+            </div>
+            <MemberPermissionControls
+              disabled={isPending}
+              onChange={(permission, checked) => setForm((current) => ({
+                ...current,
+                newMemberPermissions: {
+                  ...current.newMemberPermissions,
+                  [permission]: checked
+                }
+              }))}
+              permissions={form.newMemberPermissions}
+            />
+          </div>
+        ) : (
+          <div className="border border-surface-border bg-surface/20 px-3 py-2.5 text-xs leading-5 text-foreground-muted">
+            {form.roomType === "request"
+              ? "成员可提交点歌，只有房主能够导入、审核与控制播放。"
+              : "房主负责节目单和播放控制，听众以收听、查看节目预告和发送反应为主。"}
+          </div>
+        )}
+        {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">取消</Button>
+          <Button data-testid="create-room-submit" disabled={!canSubmit} type="submit">
+            {isPending ? "创建中…" : "创建并进入"}
+          </Button>
+        </div>
+      </form>
+    </RoomDialog>
+  );
+}
+
+function JoinCodeDialogModal({
+  onClose,
+  onSubmit,
+  isPending,
+  statusMessage
+}: {
+  onClose: () => void;
+  onSubmit: (code: string) => void;
+  isPending: boolean;
+  statusMessage: string;
+}) {
+  const [code, setCode] = useState("");
+
+  return (
+    <RoomDialog
+      title="输入房间码加入"
+      description="输入 6 位房间码，加入公开或私密房间。"
+      onClose={onClose}
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!code.trim() || isPending) return;
+          onSubmit(code);
+        }}
+      >
+        <label className="flex flex-col gap-2 text-sm text-foreground" htmlFor="join-code-input">
+          房间码
+          <input
+            autoCapitalize="characters"
+            autoCorrect="off"
+            className="w-full rounded-xl border border-surface-border bg-background px-3 py-2.5 font-mono uppercase text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            data-testid="join-code-input"
+            id="join-code-input"
+            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            placeholder="输入 6 位房间码"
+            spellCheck="false"
+            value={code}
+          />
+        </label>
+        {statusMessage ? <p data-testid="room-home-status" className="animate-fade-in rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{statusMessage}</p> : null}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button onClick={onClose} type="button" variant="ghost">取消</Button>
+          <Button data-testid="join-code-submit" disabled={!code.trim() || isPending} type="submit">
+            {isPending ? "进入中…" : "进入房间"}
+          </Button>
+        </div>
+      </form>
+    </RoomDialog>
+  );
+}
+
+function SelectedRoomDialogModal({
+  room,
+  onClose,
+  onConfirm,
+  isPending,
+  dialogError
+}: {
+  room: RoomDirectoryItem;
+  onClose: () => void;
+  onConfirm: (password: string) => void;
+  isPending: boolean;
+  dialogError: string | null;
+}) {
+  const [password, setPassword] = useState("");
+
+  return (
+    <RoomDialog
+      title={room.room.name ?? "未命名房间"}
+      description={room.room.description?.trim() || roomTypeDescription(room.room.roomType)}
+      onClose={onClose}
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (isPending || (room.room.hasPassword === true && !password)) return;
+          onConfirm(password);
+        }}
+      >
+        <div className="grid grid-cols-2 gap-3 rounded-xl border border-surface-border bg-background/50 p-3 text-sm">
+          <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{room.room.directoryHostNickname || "未知"}</span></div>
+          <div><span className="block text-xs text-foreground-muted">房间码</span><span className="mt-1 block font-mono text-foreground">{room.room.joinCode}</span></div>
+          <div><span className="block text-xs text-foreground-muted">状态</span><span className="mt-1 block text-foreground">{room.room.visibility === "private" ? "私密" : "公开"}</span></div>
+          <div><span className="block text-xs text-foreground-muted">在线成员</span><span className="mt-1 block text-foreground">{room.room.directoryOnlineMemberCount} 人</span></div>
+        </div>
+        {room.room.hasPassword ? (
+          <label className="flex flex-col gap-2 text-sm text-foreground">
+            房间密码
+            <input
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="请输入房间密码"
+              spellCheck="false"
+              type="password"
+              value={password}
+            />
+          </label>
+        ) : null}
+        {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">暂不进入</Button>
+          <Button
+            data-testid="room-entry-confirm"
+            disabled={isPending || (room.room.hasPassword === true && !password)}
+            type="submit"
+          >
+            {isPending ? "进入中…" : "进入房间"}
+          </Button>
+        </div>
+      </form>
+    </RoomDialog>
   );
 }
 
@@ -707,11 +837,15 @@ function RoomDialog({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(() =>
+    typeof document !== "undefined" ? document.body : null
+  );
 
   useEffect(() => {
-    setPortalRoot(document.body);
-  }, []);
+    if (!portalRoot && typeof document !== "undefined") {
+      setPortalRoot(document.body);
+    }
+  }, [portalRoot]);
 
   if (!portalRoot) return null;
 
