@@ -10,28 +10,77 @@ function resolveNotificationArtworkUrl(value?: string | null): string | undefine
 export type NotificationPermissionState = "granted" | "denied" | "default" | "unsupported";
 
 /**
- * Checks current system notification permission.
+ * Queries current system notification permission (supporting Tauri native OS notifications and web).
  */
-export function getNotificationPermissionState(): NotificationPermissionState {
-  if (typeof window === "undefined" || typeof Notification === "undefined") {
+export async function queryNotificationPermissionState(): Promise<NotificationPermissionState> {
+  if (typeof window === "undefined") {
     return "unsupported";
   }
+
+  if (isTauriRuntime()) {
+    try {
+      const isGranted = await invokeTauri<boolean>("plugin:notification|is_permission_granted");
+      return isGranted ? "granted" : "default";
+    } catch {
+      return "granted";
+    }
+  }
+
+  if (typeof Notification === "undefined") {
+    return "unsupported";
+  }
+
   return Notification.permission;
 }
 
 /**
- * Requests notification permission from user.
+ * Synchronously checks current system notification permission state.
+ */
+export function getNotificationPermissionState(): NotificationPermissionState {
+  if (typeof window === "undefined") {
+    return "unsupported";
+  }
+
+  if (isTauriRuntime()) {
+    return "granted";
+  }
+
+  if (typeof Notification === "undefined") {
+    return "unsupported";
+  }
+
+  return Notification.permission;
+}
+
+/**
+ * Requests notification permission from user (supporting Tauri native OS prompts and Web API).
  */
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (typeof window === "undefined" || typeof Notification === "undefined") {
+  if (typeof window === "undefined") {
     return false;
   }
+
+  if (isTauriRuntime()) {
+    try {
+      const permission = await invokeTauri<string>("plugin:notification|request_permission");
+      return permission === "granted";
+    } catch {
+      return true;
+    }
+  }
+
+  if (typeof Notification === "undefined") {
+    return false;
+  }
+
   if (Notification.permission === "granted") {
     return true;
   }
+
   if (Notification.permission === "denied") {
     return false;
   }
+
   try {
     const permission = await Notification.requestPermission();
     return permission === "granted";

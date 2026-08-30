@@ -27,6 +27,7 @@ import {
 } from "@/features/settings/settings-store";
 import {
   getNotificationPermissionState,
+  queryNotificationPermissionState,
   requestNotificationPermission,
   notifyTrackChange,
   type NotificationPermissionState
@@ -72,10 +73,12 @@ export function SettingsPage({
   const [isCustomLayoutEditorOpen, setIsCustomLayoutEditorOpen] = useState(false);
   const [recommendationExclusions, setRecommendationExclusions] = useState<PersonalizationExclusion[]>([]);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("default");
+  const [showNotificationHelp, setShowNotificationHelp] = useState(false);
   const [directoryState, setDirectoryState] = useState<LocalAudioStorageState | null>(null);
 
   const refreshPermissions = async () => {
-    setNotificationPermission(getNotificationPermissionState());
+    const state = await queryNotificationPermissionState();
+    setNotificationPermission(state);
     try {
       const storageState = await getLocalAudioStorageState();
       setDirectoryState(storageState);
@@ -86,6 +89,19 @@ export function SettingsPage({
 
   useEffect(() => {
     void refreshPermissions();
+    if (typeof navigator !== "undefined" && "permissions" in navigator) {
+      try {
+        navigator.permissions.query({ name: "notifications" as PermissionName }).then((permissionStatus) => {
+          permissionStatus.onchange = () => {
+            setNotificationPermission(permissionStatus.state as NotificationPermissionState);
+          };
+        }).catch(() => {
+          // Ignored
+        });
+      } catch {
+        // Ignored
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -370,49 +386,83 @@ export function SettingsPage({
 
           <SettingsSection title="通知与推送">
             <SettingRow label="系统通知权限" description="接收切歌、点歌、曲库更新和聊天消息的系统 Toast 通知。">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
-                  notificationPermission === "granted"
-                    ? "bg-green-500/10 text-green-400 border-green-500/20"
-                    : notificationPermission === "denied"
-                      ? "bg-red-500/10 text-red-400 border-red-500/20"
-                      : "bg-amber-500/10 text-amber-300 border-amber-500/20"
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    notificationPermission === "granted" ? "bg-green-400" : notificationPermission === "denied" ? "bg-red-400" : "bg-amber-400"
-                  }`} />
-                  {notificationPermission === "granted" ? "已授权" : notificationPermission === "denied" ? "已禁用" : "未授权"}
-                </span>
-                {notificationPermission !== "granted" ? (
+              <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
+                    notificationPermission === "granted"
+                      ? "bg-green-500/10 text-green-400 border-green-500/20"
+                      : notificationPermission === "denied"
+                        ? "bg-red-500/10 text-red-400 border-red-500/20"
+                        : "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      notificationPermission === "granted" ? "bg-green-400" : notificationPermission === "denied" ? "bg-red-400" : "bg-amber-400"
+                    }`} />
+                    {notificationPermission === "granted" ? "已授权" : notificationPermission === "denied" ? "已禁用 (被拦截)" : "未授权"}
+                  </span>
+                  {notificationPermission === "default" ? (
+                    <Button
+                      onClick={async () => {
+                        const granted = await requestNotificationPermission();
+                        setNotificationPermission(granted ? "granted" : await queryNotificationPermissionState());
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      立即授权
+                    </Button>
+                  ) : null}
+                  {notificationPermission === "denied" ? (
+                    <>
+                      <Button
+                        onClick={() => setShowNotificationHelp((prev) => !prev)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {showNotificationHelp ? "收起指引" : "解除拦截教程"}
+                      </Button>
+                      <Button
+                        onClick={() => void refreshPermissions()}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        重新检测
+                      </Button>
+                    </>
+                  ) : null}
                   <Button
-                    onClick={async () => {
-                      const granted = await requestNotificationPermission();
-                      setNotificationPermission(granted ? "granted" : getNotificationPermissionState());
+                    onClick={() => {
+                      notifyTrackChange(
+                        {
+                          title: "Music Room 测试通知",
+                          artist: "系统通知与推送工作正常 🎵",
+                          artworkUrl: "/icons/icon-192.png"
+                        },
+                        { force: true }
+                      );
                     }}
                     size="sm"
                     type="button"
                     variant="outline"
                   >
-                    立即授权
+                    测试通知
                   </Button>
+                </div>
+                {notificationPermission === "denied" && showNotificationHelp ? (
+                  <div className="mt-2 w-full max-w-md rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-left text-xs text-amber-200 backdrop-blur-md">
+                    <div className="flex items-center justify-between font-semibold text-amber-100 mb-1.5">
+                      <span>📌 浏览器通知已被拦截，解除步骤：</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1 text-amber-200/90 text-[11px] leading-relaxed">
+                      <li>点击浏览器地址栏左侧的 <strong>🔒 锁头</strong> 或 <strong>⚙️ 网站设置</strong> 图标</li>
+                      <li>在权限列表中找到 <strong>「通知」</strong>，由「禁止」改为 <strong>「允许」</strong></li>
+                      <li>修改完成后，点击右上角 <strong>「重新检测」</strong> 按钮即可激活</li>
+                    </ol>
+                  </div>
                 ) : null}
-                <Button
-                  onClick={() => {
-                    notifyTrackChange(
-                      {
-                        title: "Music Room 测试通知",
-                        artist: "系统通知与推送工作正常 🎵",
-                        artworkUrl: "/icons/icon-192.png"
-                      },
-                      { force: true }
-                    );
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  测试通知
-                </Button>
               </div>
             </SettingRow>
             {directoryState?.directoryName ? (
