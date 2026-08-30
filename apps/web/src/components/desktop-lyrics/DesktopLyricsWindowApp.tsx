@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";
 import { invokeTauri } from "@/lib/desktop/tauri";
+import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 /**
@@ -90,6 +91,24 @@ export function DesktopLyricsWindowApp() {
   const resizeGestureRef = useRef<ResizeGesture | null>(null);
   const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
   const sizeRafRef = useRef(0);
+  // The settings slider resizes the native window proportionally; the lyrics
+  // font then follows the window height (see DesktopLyricsBar).
+  useEffect(() => {
+    const syncScale = () => {
+      const scale = getAppSettings().playback.desktopLyricScale;
+      void invokeTauri("set_desktop_lyrics_size", {
+        width: Math.round(860 * scale),
+        height: Math.round(96 * scale)
+      });
+    };
+    syncScale();
+    window.addEventListener(appSettingsChangeEvent, syncScale);
+    window.addEventListener("storage", syncScale);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncScale);
+      window.removeEventListener("storage", syncScale);
+    };
+  }, []);
 
   useEffect(() => {
     // The native lyrics window is transparent on Windows/Linux; macOS builds

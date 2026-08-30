@@ -14,6 +14,7 @@ import {
   parseRoomLyrics
 } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 
 export type DesktopLyricsBarLyrics = {
   plainLyric: string | null;
@@ -61,6 +62,23 @@ export function DesktopLyricsBar({
 }: DesktopLyricsBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [surfaceHeight, setSurfaceHeight] = useState(72);
+  // Cover + transport stay hidden until the lyrics line is clicked; clicking
+  // it again hides them. Clicking never seeks.
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const [lyricScale, setLyricScale] = useState(
+    () => getAppSettings().playback.desktopLyricScale
+  );
+
+  useEffect(() => {
+    const syncScale = () => setLyricScale(getAppSettings().playback.desktopLyricScale);
+    syncScale();
+    window.addEventListener(appSettingsChangeEvent, syncScale);
+    window.addEventListener("storage", syncScale);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncScale);
+      window.removeEventListener("storage", syncScale);
+    };
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -73,8 +91,8 @@ export function DesktopLyricsBar({
     return () => observer.disconnect();
   }, []);
 
-  const fontSize = Math.round(Math.min(48, Math.max(16, surfaceHeight * 0.34)));
-  const outlineWidth = `${Math.max(2, fontSize * 0.09).toFixed(1)}px`;
+  const fontSize = Math.round(Math.min(120, Math.max(12, surfaceHeight * 0.34 * lyricScale)));
+  const outlineWidth = `${Math.max(1.5, fontSize * 0.09).toFixed(1)}px`;
 
   const lines = useMemo(() => parseRoomLyrics(plainLyric), [plainLyric]);
 
@@ -136,16 +154,31 @@ export function DesktopLyricsBar({
       data-testid="desktop-lyrics-bar"
       onPointerDown={onPointerDown}
     >
+      {controlsVisible ? (
+        <div
+          aria-hidden="true"
+          className="aspect-square shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] bg-cover bg-center"
+          style={{
+            backgroundImage: artworkUrl ? `url("${getArtworkSourceUrl(artworkUrl)}")` : undefined,
+            height: `${Math.min(surfaceHeight - 16, 72)}px`,
+            width: `${Math.min(surfaceHeight - 16, 72)}px`
+          }}
+        />
+      ) : null}
       <div
-        aria-hidden="true"
-        className="h-full max-h-full aspect-square shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] bg-cover bg-center"
-        style={{
-          backgroundImage: artworkUrl ? `url("${getArtworkSourceUrl(artworkUrl)}")` : undefined,
-          height: `${Math.min(surfaceHeight - 16, 72)}px`,
-          width: `${Math.min(surfaceHeight - 16, 72)}px`
+        aria-label="切换播放控件"
+        className="relative h-full min-w-0 flex-1 cursor-pointer select-none"
+        data-testid="desktop-lyrics-line"
+        onClick={() => setControlsVisible((current) => !current)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setControlsVisible((current) => !current);
+          }
         }}
-      />
-      <div className="relative h-full min-w-0 flex-1" data-testid="desktop-lyrics-line">
+      >
         {/* Dark outline under-layer keeps the floating text readable over any
             wallpaper now that the card background is gone. */}
         <span
@@ -189,17 +222,19 @@ export function DesktopLyricsBar({
           </span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-1 pl-1">
-        <TransportButton disabled={!canControl} label="上一首" onClick={onPrev}>
-          <PrevIcon />
-        </TransportButton>
-        <TransportButton disabled={!canControl} label={isPlaying ? "暂停" : "播放"} onClick={onTogglePlay} primary>
-          {isPlaying ? <PauseIcon /> : <PlayIcon />}
-        </TransportButton>
-        <TransportButton disabled={!canControl} label="下一首" onClick={onNext}>
-          <NextIcon />
-        </TransportButton>
-      </div>
+      {controlsVisible ? (
+        <div className="flex shrink-0 items-center gap-1 pl-1">
+          <TransportButton disabled={!canControl} label="上一首" onClick={onPrev}>
+            <PrevIcon />
+          </TransportButton>
+          <TransportButton disabled={!canControl} label={isPlaying ? "暂停" : "播放"} onClick={onTogglePlay} primary>
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </TransportButton>
+          <TransportButton disabled={!canControl} label="下一首" onClick={onNext}>
+            <NextIcon />
+          </TransportButton>
+        </div>
+      ) : null}
       <button
         aria-label="关闭桌面歌词"
         className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white/55 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"

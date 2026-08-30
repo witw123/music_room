@@ -284,6 +284,23 @@ export function SettingsPage({
                 </span>
               </div>
             </SettingRow>
+            <SettingRow label="桌面歌词大小" description="缩放悬浮桌面歌词的字号与窗口尺寸。">
+              <div className="flex w-44 items-center gap-3">
+                <input
+                  aria-label="桌面歌词大小"
+                  className="min-w-0 flex-1 accent-accent"
+                  max="2"
+                  min="0.6"
+                  onChange={(event) => patchSettings({ playback: { desktopLyricScale: Number(event.target.value) } })}
+                  step="0.1"
+                  type="range"
+                  value={settings.playback.desktopLyricScale}
+                />
+                <span className="w-10 text-right text-xs tabular-nums text-foreground-muted">
+                  {Math.round(settings.playback.desktopLyricScale * 100)}%
+                </span>
+              </div>
+            </SettingRow>
             <SettingRow label="响度均衡" description="自动平衡不同歌曲的主观响度，仅影响当前设备。">
               <Toggle
                 checked={settings.playback.loudnessNormalization}

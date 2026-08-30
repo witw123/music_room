@@ -103,6 +103,7 @@ export type AppSettings = {
     fullyCachedPlayback: boolean;
     showLyricTranslation: boolean;
     showLyricRomanized: boolean;
+    desktopLyricScale: number;
   };
 };
 
@@ -125,7 +126,8 @@ const defaultSettings: AppSettings = {
     streamingOnlyPlayback: false,
     fullyCachedPlayback: false,
     showLyricTranslation: true,
-    showLyricRomanized: false
+    showLyricRomanized: false,
+    desktopLyricScale: 1
   }
 };
 
@@ -195,6 +197,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   const playerStyle: PlayerStyle = playback.playerStyle === "square-cover" ? "square-cover" : "vinyl";
   const streamingOnlyPlayback = playback.streamingOnlyPlayback === true;
   const fullyCachedPlayback = !streamingOnlyPlayback && playback.fullyCachedPlayback === true;
+  const desktopLyricScale = typeof playback.desktopLyricScale === "number" && Number.isFinite(playback.desktopLyricScale)
+    ? Math.min(2.5, Math.max(0.5, playback.desktopLyricScale))
+    : defaultSettings.playback.desktopLyricScale;
 
   return {
     version: 1,
@@ -215,7 +220,8 @@ export function normalizeSettings(value: unknown): AppSettings {
       streamingOnlyPlayback,
       fullyCachedPlayback,
       showLyricTranslation: playback.showLyricTranslation !== false,
-      showLyricRomanized: playback.showLyricRomanized === true
+      showLyricRomanized: playback.showLyricRomanized === true,
+      desktopLyricScale
     }
   };
 }
