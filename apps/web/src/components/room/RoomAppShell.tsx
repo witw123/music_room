@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
@@ -8,7 +8,10 @@ import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { RoomsHomePage } from "@/components/RoomsHomePage";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
+import { CachePlaybackPromptModal } from "@/components/room/CachePlaybackPromptModal";
 import { getNextPlaybackMode } from "@/components/bottom-player/playback-mode";
+import { isProviderTrack } from "@/features/room/playback/room-audio-path";
+import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";
 import type { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
 import type { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
@@ -73,6 +76,27 @@ export function RoomAppShell({
   workspaceViewModel
 }: RoomAppShellProps) {
   const requestRoomSeekRef = useRef<(positionMs: number) => void>(() => undefined);
+  const [dismissedTrackId, setDismissedTrackId] = useState<string | null>(null);
+  const [settings, setSettings] = useState(() => getAppSettings());
+
+  useEffect(() => {
+    const sync = () => setSettings(getAppSettings());
+    window.addEventListener(appSettingsChangeEvent, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const isMissingOpsAsset = Boolean(
+    currentTrack &&
+    isProviderTrack(currentTrack) &&
+    !currentTrack.playbackAsset &&
+    !settings.playback.fullyCachedPlayback &&
+    dismissedTrackId !== currentTrack.id
+  );
+
   const roomType = roomSnapshot?.room.roomType;
   const isHostControlledRoom = roomType === "request" || roomType === "radio";
   const isRoomHost = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
@@ -191,6 +215,17 @@ export function RoomAppShell({
         onPlayNextQueueItem={roomActions.setNextQueueItem}
         onRemoveQueueItem={roomActions.removeQueueItem}
         onReorderQueue={roomActions.reorderQueue}
+      />
+      <CachePlaybackPromptModal
+        isOpen={isMissingOpsAsset}
+        track={currentTrack}
+        isSourceOwner={isSourceOwner}
+        onClose={() => {
+          if (currentTrack) setDismissedTrackId(currentTrack.id);
+        }}
+        onEnabled={() => {
+          setSettings(getAppSettings());
+        }}
       />
     </>
   );

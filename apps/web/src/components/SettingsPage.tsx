@@ -38,6 +38,7 @@ import {
   requestLocalAudioDirectoryPermission,
   type LocalAudioStorageState
 } from "@/features/library/local-audio-storage";
+import { checkAnyProviderAccountBound } from "@/features/playback/provider-account-guard";
 
 const playbackModeLabels: Record<PlaybackMode, string> = {
   sequence: "列表循环",
@@ -382,6 +383,27 @@ export function SettingsPage({
                   <option key={mode} value={mode}>{label}</option>
                 ))}
               </select>
+            </SettingRow>
+            <SettingRow
+              label="缓存播放 (第三方歌曲)"
+              description="播放未预置 OPS 资产的歌曲时，自动通过已绑定的网易云/QQ音乐账号获取并在本地缓存播放。必须至少绑定一个平台账号。"
+            >
+              <Toggle
+                checked={settings.playback.fullyCachedPlayback}
+                label="缓存播放"
+                onChange={async (checked) => {
+                  if (checked) {
+                    const status = await checkAnyProviderAccountBound();
+                    if (!status.bound) {
+                      window.alert("开启缓存播放必须先绑定网易云音乐或 QQ 音乐账号。请在上方「音乐平台账号」中完成绑定。");
+                      return;
+                    }
+                    patchSettings({ playback: { fullyCachedPlayback: true } });
+                  } else {
+                    patchSettings({ playback: { fullyCachedPlayback: false } });
+                  }
+                }}
+              />
             </SettingRow>
           </SettingsSection>
 
