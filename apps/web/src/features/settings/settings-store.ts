@@ -103,6 +103,7 @@ export type AppSettings = {
     fullyCachedPlayback: boolean;
     showLyricTranslation: boolean;
     showLyricRomanized: boolean;
+    desktopLyricScale: number;
     trackChangeNotification: boolean;
     roomQueueNotification: boolean;
     roomLibraryNotification: boolean;
