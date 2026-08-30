@@ -474,10 +474,13 @@ export function DiscoverPage() {
     ? [...data.forYou, ...data.deepCuts, ...data.moodDiscovery, ...data.familiarArtists]
     : [];
   const filteredTopTracks = filterTrackList(allRecommendedTracks).map((item) => item.candidate).slice(0, 10);
+  const familiarArtists = data ? extractDiscoverArtists(data) : [];
   
   const hasContent = Boolean(data?.forYou.length || data?.familiarArtists.length || data?.moodDiscovery.length || data?.deepCuts.length || data?.playlists.length);
   const noProfile = Boolean(data && !hasContent);
   const noAccounts = Boolean(data && data.providers.length === 0);
+
+  const timeContext = getTimeContext();
 
   return (
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
@@ -531,13 +534,13 @@ export function DiscoverPage() {
               <div className="space-y-2.5 max-w-2xl">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold text-accent bg-accent/15 border border-accent/20 uppercase tracking-wider">
                   <SparklesIcon className="w-3.5 h-3.5" />
-                  <span>今日精选聚焦 · {data.dailyRadar.date}</span>
+                  <span>{timeContext.greeting} · 今日精选聚焦 ({data.dailyRadar.date})</span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
                   {data.dailyRadar.title}
                 </h1>
                 <p className="text-xs sm:text-sm text-foreground-muted/90 leading-relaxed">
-                  {data.dailyRadar.subtitle}
+                  {data.dailyRadar.subtitle || timeContext.subtitle}
                 </p>
                 {data.dailyRadar.summaryGenres.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-1.5">
@@ -622,6 +625,15 @@ export function DiscoverPage() {
         {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="开始探索你的专属推荐" description="在 Music Room 播放或收藏歌曲，或通过偏好设置快速定制你的专属雷达。" actionLabel="定制音乐偏好" onAction={() => setShowColdStartDialog(true)} /> : null}
         {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="暂无新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
 
+        {/* Familiar Artists & Radios (Circle Avatar Rail) */}
+        {familiarArtists.length && activeFilterId === "all" ? (
+          <DiscoverArtistRail
+            artists={familiarArtists}
+            onStartRadio={async (track) => trackActions.onStartRadio(track)}
+            pending={pending}
+          />
+        ) : null}
+
         {/* Featured / Recommended Playlists Area (Sole Recommendation Area) */}
         {filteredPlaylists.length ? (
           <DiscoverSection title={activeFilterId === "all" ? "推荐歌单" : `${activeFilter?.label ?? ""}风格歌单`}>
@@ -671,16 +683,139 @@ type DiscoverTrackActions = {
   onFeedback: (track: Track, action: "not-interested" | "exclude-from-profile") => void;
 };
 
-function DiscoverSection({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+type DiscoverArtistItem = {
+  artistName: string;
+  representativeTrack: Track;
+  artworkUrl: string | null;
+  trackCount: number;
+  reason: string;
+};
+
+function extractDiscoverArtists(data: ProfileProviderRecommendations): DiscoverArtistItem[] {
+  const map = new Map<string, DiscoverArtistItem>();
+  const candidates = [...data.familiarArtists, ...data.forYou];
+  for (const item of candidates) {
+    const artist = item.candidate.artist?.trim();
+    if (!artist) continue;
+    if (!map.has(artist)) {
+      map.set(artist, {
+        artistName: artist,
+        representativeTrack: item.candidate,
+        artworkUrl: item.candidate.artworkUrl ?? null,
+        trackCount: 1,
+        reason: item.reasons[0] ?? "常听歌手"
+      });
+    } else {
+      map.get(artist)!.trackCount += 1;
+    }
+  }
+  return Array.from(map.values()).slice(0, 8);
+}
+
+function DiscoverArtistRail({
+  artists,
+  onStartRadio,
+  pending
+}: {
+  artists: DiscoverArtistItem[];
+  onStartRadio: (track: Track) => Promise<void>;
+  pending: string | null;
+}) {
+  if (!artists.length) return null;
+  return (
+    <DiscoverSection
+      title="常听歌手与单曲漫游"
+      subtitle="基于你的听歌画像，一键开启专属风格电台漫游"
+      icon={<MicIcon className="w-5 h-5 text-accent" />}
+    >
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+        {artists.map((item) => {
+          return (
+            <button
+              key={item.artistName}
+              type="button"
+              disabled={pending !== null}
+              onClick={() => void onStartRadio(item.representativeTrack)}
+              className="group flex flex-col items-center text-center p-3 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 hover:border-white/[0.14] hover:bg-[#181a26]/90 transition-all hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent shadow-sm"
+              title={`开启 ${item.artistName} 专属漫游`}
+            >
+              <div className="relative aspect-square w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden bg-surface-elevated border-2 border-white/10 shadow-md group-hover:border-accent transition-all">
+                <Artwork
+                  alt={item.artistName}
+                  className="h-full w-full object-cover block transition duration-300 group-hover:scale-110"
+                  src={item.artworkUrl}
+                />
+                <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/35" />
+                <span className="absolute inset-0 flex items-center justify-center text-white opacity-0 transition group-hover:opacity-100 scale-90 group-hover:scale-100">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-[0_2px_10px_var(--accent-glow)]">
+                    <PlayIcon className="w-3.5 h-3.5 ml-0.5" />
+                  </span>
+                </span>
+              </div>
+              <p className="mt-2.5 truncate w-full text-xs font-semibold text-white group-hover:text-accent transition-colors">
+                {item.artistName}
+              </p>
+              <p className="mt-0.5 truncate w-full text-[10px] text-foreground-muted">
+                {item.reason}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </DiscoverSection>
+  );
+}
+
+function DiscoverSection({ title, subtitle, icon, children }: { title: string; subtitle?: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="mt-10 sm:mt-12">
-      <div className="mb-4 flex items-center gap-2">
-        {icon}
-        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{title}</h2>
+      <div className="mb-4">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{title}</h2>
+        </div>
+        {subtitle ? <p className="mt-1 text-xs text-foreground-muted">{subtitle}</p> : null}
       </div>
       {children}
     </section>
   );
+}
+
+function getTimeContext() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 11) {
+    return {
+      greeting: "清晨时光",
+      badge: "晨光清醒",
+      subtitle: "用元气旋律唤醒灵感，开启清爽充沛的一天。"
+    };
+  }
+  if (hour >= 11 && hour < 14) {
+    return {
+      greeting: "正午小憩",
+      badge: "午后放松",
+      subtitle: "轻快旋律伴你舒缓身心，享受片刻惬意闲适。"
+    };
+  }
+  if (hour >= 14 && hour < 18) {
+    return {
+      greeting: "午后专注",
+      badge: "工作专注",
+      subtitle: "沉浸式器乐与流动节拍，提升思考与专注效率。"
+    };
+  }
+  if (hour >= 18 && hour < 22) {
+    return {
+      greeting: "傍晚微醺",
+      badge: "晚间放松",
+      subtitle: "卸下一天的疲惫，在律动与温润声线中归于平静。"
+    };
+  }
+  return {
+    greeting: "深夜私享",
+    badge: "夜听疗愈",
+    subtitle: "漫漫长夜，用温柔纯净的声响陪伴静谧思绪。"
+  };
 }
 
 function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPlaylistCard[]; onOpen: (card: DiscoverPlaylistCard) => Promise<void>; loadingKey: string | null }) {
@@ -689,6 +824,8 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
       {items.map((item) => {
         const { playlist } = item;
         const loading = !item.tracks && loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+        const isDailyMix = playlist.providerPlaylistId.startsWith("music-room-curated:daily-mix-");
+        const mixNumber = isDailyMix ? playlist.providerPlaylistId.replace("music-room-curated:daily-mix-", "") : null;
         return (
           <button
             aria-label={`打开歌单《${playlist.title}》`}
@@ -705,6 +842,11 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
                 src={playlist.artworkUrl}
               />
               <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
+              {isDailyMix && mixNumber ? (
+                <div className="absolute top-2 left-2 z-10 rounded-md bg-black/70 backdrop-blur-md px-2 py-0.5 text-[9px] font-black tracking-widest uppercase text-white border border-white/20 shadow-md">
+                  MIX {mixNumber}
+                </div>
+              ) : null}
               <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-100 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-95 sm:group-hover:scale-100">
                 {loading ? <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <PlayIcon className="w-4 h-4" />}
               </span>
@@ -712,10 +854,8 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
             <p className="mt-2.5 line-clamp-2 text-xs sm:text-sm font-semibold leading-tight text-white group-hover:text-accent transition-colors" title={playlist.title}>
               {playlist.title}
             </p>
-            <p className="mt-1 truncate text-[11px] text-foreground-muted" title={playlist.creatorName ?? ""}>
-              {playlist.providerPlaylistId.startsWith("music-room-curated:")
-                ? "Music Room 精选"
-                : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`}
+            <p className="mt-1 truncate text-[11px] text-foreground-muted" title={playlist.description ?? playlist.creatorName ?? ""}>
+              {playlist.description || (playlist.providerPlaylistId.startsWith("music-room-curated:") ? "Music Room 精选" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`)}
             </p>
           </button>
         );
@@ -814,47 +954,62 @@ const genreCategoryPresets = [
 ];
 
 function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): DiscoverPlaylistCard[] {
-  const baseGroups = [
-    {
-      id: "for-you",
-      title: "新歌与精选",
-      description: "结合最新个人听歌画像，为你精选整理的代表作与新发好歌。",
-      tags: ["精选", "新歌", "为你推荐", "流行"],
-      tracks: data.forYou.map((item) => item.candidate)
-    },
-    {
-      id: "familiar-artists",
-      title: "常听艺人精选",
-      description: "常听歌手的代表作延展与经典曲目集结。",
-      tags: ["艺人", "代表作", "熟悉", "经典"],
-      tracks: data.familiarArtists.map((item) => item.candidate)
-    },
-    {
-      id: "mood-discovery",
-      title: "多元风味探索",
-      description: "跨越曲风边界，扩展你的音乐味蕾与探索地图。",
-      tags: ["探索", "小众", "新风格", "发现"],
-      tracks: data.moodDiscovery.map((item) => item.candidate)
-    },
-    {
-      id: "deep-cuts",
-      title: "深度宝藏挖掘",
-      description: "低热度高契合度的小众佳作与冷门好歌。",
-      tags: ["深度", "宝藏", "冷门好歌", "私藏"],
-      tracks: data.deepCuts.map((item) => item.candidate)
-    }
-  ];
+  const getArtistsExcerpt = (tracks: Track[]) => {
+    const artists = Array.from(new Set(tracks.map((t) => t.artist).filter(Boolean))).slice(0, 3);
+    return artists.length ? `包含 ${artists.join(" · ")} 等` : "为您量身定制的专属精选";
+  };
+
+  const familiarTracks = data.familiarArtists.map((i) => i.candidate);
+  const deepTracks = data.deepCuts.map((i) => i.candidate);
+  const moodTracks = data.moodDiscovery.map((i) => i.candidate);
+  const forYouTracks = data.forYou.map((i) => i.candidate);
 
   const allPool = [
     ...(data.dailyRadar?.tracks ?? []),
-    ...data.forYou.map((i) => i.candidate),
-    ...data.moodDiscovery.map((i) => i.candidate),
-    ...data.deepCuts.map((i) => i.candidate),
-    ...data.familiarArtists.map((i) => i.candidate)
+    ...forYouTracks,
+    ...moodTracks,
+    ...deepTracks,
+    ...familiarTracks
   ];
   const uniquePool = Array.from(
     new Map(allPool.map((t) => [providerTrackKey(t), t])).values()
   );
+
+  const slowTracks = uniquePool.filter((track) => {
+    const text = `${track.title} ${track.artist} ${track.album ?? ""} ${(track.tags ?? []).join(" ")}`.toLowerCase();
+    return ["夜听", "深夜", "纯音乐", "轻音乐", "治愈", "r&b", "soul", "民谣", "lo-fi", "chill"].some((kw) => text.includes(kw));
+  });
+
+  const dailyMixes = [
+    {
+      id: "daily-mix-1",
+      title: "Daily Mix 1 · 核心偏好",
+      description: `精选最契合你听歌画像的常听歌手与代表作。${getArtistsExcerpt(familiarTracks.length ? familiarTracks : forYouTracks)}`,
+      tags: ["Daily Mix", "常听", "精选", "偏好"],
+      tracks: familiarTracks.length ? familiarTracks : forYouTracks
+    },
+    {
+      id: "daily-mix-2",
+      title: "Daily Mix 2 · 深度宝藏",
+      description: `挖掘符合你品味但低热度的小众私藏曲目。${getArtistsExcerpt(deepTracks)}`,
+      tags: ["Daily Mix", "深度", "宝藏", "小众"],
+      tracks: deepTracks.length ? deepTracks : forYouTracks
+    },
+    {
+      id: "daily-mix-3",
+      title: "Daily Mix 3 · 探索律动",
+      description: `跳出舒适圈，发现令人耳目一新的探索风味。${getArtistsExcerpt(moodTracks)}`,
+      tags: ["Daily Mix", "探索", "新歌", "律动"],
+      tracks: moodTracks.length ? moodTracks : forYouTracks
+    },
+    {
+      id: "daily-mix-4",
+      title: "Daily Mix 4 · 慢调私享",
+      description: `舒缓慢调与治愈陪伴旋律，抚平思绪。${getArtistsExcerpt(slowTracks)}`,
+      tags: ["Daily Mix", "夜听", "疗愈", "慢调"],
+      tracks: slowTracks.length ? slowTracks : forYouTracks
+    }
+  ];
 
   const dynamicGroups = genreCategoryPresets.flatMap((preset) => {
     const matched = uniquePool.filter((track) => {
@@ -871,7 +1026,7 @@ function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): Discov
     }];
   });
 
-  const allGroups = [...baseGroups, ...dynamicGroups];
+  const allGroups = [...dailyMixes, ...dynamicGroups];
 
   return allGroups.flatMap(({ id, title, description, tags, tracks }) => {
     if (!tracks.length) return [];
