@@ -487,6 +487,7 @@ export function RoomsHomePage({
 
       {createDialogOpen ? (
         <CreateRoomDialogModal
+          defaultRoomName={activeSession?.nickname ? `${activeSession.nickname}的音乐房间` : "音乐房间"}
           dialogError={dialogError}
           initialVisibility={createFormVisibility}
           isPending={isPending}
@@ -544,41 +545,59 @@ function CreateRoomDialogModal({
   onClose,
   onSubmit,
   isPending,
-  dialogError
+  dialogError: initialDialogError,
+  defaultRoomName
 }: {
   initialVisibility: "public" | "private";
   onClose: () => void;
   onSubmit: (form: CreateRoomForm) => void;
   isPending: boolean;
   dialogError: string | null;
+  defaultRoomName?: string;
 }) {
   const [form, setForm] = useState<CreateRoomForm>(() => ({
     ...emptyCreateRoomForm,
     visibility: initialVisibility
   }));
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  const canSubmit = !isPending && form.name.trim().length > 0 && (form.password.trim().length === 0 || form.password.trim().length >= 4);
+  const displayedError = localError || initialDialogError;
+
+  const handleSubmit = (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
+    if (isPending) return;
+
+    const trimmedPassword = form.password.trim();
+    if (trimmedPassword.length > 0 && trimmedPassword.length < 4) {
+      setLocalError("房间密码至少需要 4 位字符。");
+      return;
+    }
+
+    setLocalError(null);
+    const finalName = form.name.trim() || defaultRoomName || "音乐房间";
+    onSubmit({
+      ...form,
+      name: finalName,
+      password: trimmedPassword
+    });
+  };
 
   return (
     <RoomDialog
       title="创建房间"
-      description="设置房间信息后再进入协作空间。名称必填，简介和密码可以留空。"
+      description="设置房间信息后再进入协作空间。名称留空将使用默认名称，简介和密码可以留空。"
       onClose={onClose}
     >
       <form
         className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!canSubmit) return;
-          onSubmit(form);
-        }}
+        onSubmit={handleSubmit}
       >
         <div className="flex gap-2 rounded-xl border border-surface-border bg-background/60 p-1" role="tablist" aria-label="房间可见性">
           {(["public", "private"] as const).map((visibility) => (
             <button
               key={visibility}
               aria-selected={form.visibility === visibility}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${form.visibility === visibility ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover"}`}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition cursor-pointer ${form.visibility === visibility ? "bg-accent text-white" : "text-foreground-muted hover:bg-surface-hover"}`}
               onClick={() => setForm((current) => ({ ...current, visibility }))}
               role="tab"
               type="button"
@@ -592,7 +611,7 @@ function CreateRoomDialogModal({
             <button
               key={roomType}
               aria-pressed={form.roomType === roomType}
-              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border px-4 py-3 text-left transition ${form.roomType === roomType ? "border-accent bg-accent/10 shadow-[0_10px_30px_rgba(0,112,243,0.12)]" : "border-surface-border bg-surface/20 hover:border-white/20 hover:bg-surface-hover"}`}
+              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border px-4 py-3 text-left transition cursor-pointer ${form.roomType === roomType ? "border-accent bg-accent/10 shadow-[0_10px_30px_rgba(0,112,243,0.12)]" : "border-surface-border bg-surface/20 hover:border-white/20 hover:bg-surface-hover"}`}
               onClick={() => setForm((current) => ({ ...current, roomType }))}
               type="button"
             >
@@ -605,18 +624,18 @@ function CreateRoomDialogModal({
           ))}
         </div>
         <label className="flex flex-col gap-2 text-sm text-foreground">
-          房间名称
+          房间名称 <span className="text-xs text-foreground-muted">留空使用“{defaultRoomName || "音乐房间"}”</span>
           <input
             autoCapitalize="none"
             autoCorrect="off"
             className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
             maxLength={120}
             onChange={(event) => {
+              setLocalError(null);
               const val = event.target.value;
               setForm((current) => ({ ...current, name: val }));
             }}
-            placeholder="例如：周五夜听"
-            required
+            placeholder={defaultRoomName || "例如：周五夜听"}
             spellCheck="false"
             value={form.name}
           />
@@ -646,6 +665,7 @@ function CreateRoomDialogModal({
             maxLength={128}
             minLength={4}
             onChange={(event) => {
+              setLocalError(null);
               const val = event.target.value;
               setForm((current) => ({ ...current, password: val }));
             }}
@@ -680,10 +700,10 @@ function CreateRoomDialogModal({
               : "房主负责节目单和播放控制，听众以收听、查看节目预告和发送反应为主。"}
           </div>
         )}
-        {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
+        {displayedError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300 animate-fade-in" role="alert">{displayedError}</p> : null}
         <div className="flex justify-end gap-2 pt-2">
           <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">取消</Button>
-          <Button data-testid="create-room-submit" disabled={!canSubmit} type="submit">
+          <Button data-testid="create-room-submit" disabled={isPending} type="submit">
             {isPending ? "创建中…" : "创建并进入"}
           </Button>
         </div>
@@ -704,6 +724,21 @@ function JoinCodeDialogModal({
   statusMessage: string;
 }) {
   const [code, setCode] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const displayedError = localError || statusMessage;
+
+  const handleSubmit = (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
+    if (isPending) return;
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setLocalError("请输入 6 位房间码。");
+      return;
+    }
+    setLocalError(null);
+    onSubmit(trimmed);
+  };
 
   return (
     <RoomDialog
@@ -713,11 +748,7 @@ function JoinCodeDialogModal({
     >
       <form
         className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!code.trim() || isPending) return;
-          onSubmit(code);
-        }}
+        onSubmit={handleSubmit}
       >
         <label className="flex flex-col gap-2 text-sm text-foreground" htmlFor="join-code-input">
           房间码
@@ -727,16 +758,19 @@ function JoinCodeDialogModal({
             className="w-full rounded-xl border border-surface-border bg-background px-3 py-2.5 font-mono uppercase text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             data-testid="join-code-input"
             id="join-code-input"
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            onChange={(event) => {
+              setLocalError(null);
+              setCode(event.target.value.toUpperCase());
+            }}
             placeholder="输入 6 位房间码"
             spellCheck="false"
             value={code}
           />
         </label>
-        {statusMessage ? <p data-testid="room-home-status" className="animate-fade-in rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{statusMessage}</p> : null}
+        {displayedError ? <p data-testid="room-home-status" className="animate-fade-in rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{displayedError}</p> : null}
         <div className="flex justify-end gap-2 pt-2">
           <Button onClick={onClose} type="button" variant="ghost">取消</Button>
-          <Button data-testid="join-code-submit" disabled={!code.trim() || isPending} type="submit">
+          <Button data-testid="join-code-submit" disabled={isPending} type="submit">
             {isPending ? "进入中…" : "进入房间"}
           </Button>
         </div>
@@ -750,7 +784,7 @@ function SelectedRoomDialogModal({
   onClose,
   onConfirm,
   isPending,
-  dialogError
+  dialogError: initialDialogError
 }: {
   room: RoomDirectoryItem;
   onClose: () => void;
@@ -759,6 +793,20 @@ function SelectedRoomDialogModal({
   dialogError: string | null;
 }) {
   const [password, setPassword] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const displayedError = localError || initialDialogError;
+
+  const handleSubmit = (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
+    if (isPending) return;
+    if (room.room.hasPassword && !password.trim()) {
+      setLocalError("请输入房间密码。");
+      return;
+    }
+    setLocalError(null);
+    onConfirm(password.trim());
+  };
 
   return (
     <RoomDialog
@@ -768,11 +816,7 @@ function SelectedRoomDialogModal({
     >
       <form
         className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (isPending || (room.room.hasPassword === true && !password)) return;
-          onConfirm(password);
-        }}
+        onSubmit={handleSubmit}
       >
         <div className="grid grid-cols-2 gap-3 rounded-xl border border-surface-border bg-background/50 p-3 text-sm">
           <div><span className="block text-xs text-foreground-muted">房主</span><span className="mt-1 block text-foreground">{room.room.directoryHostNickname || "未知"}</span></div>
@@ -787,7 +831,10 @@ function SelectedRoomDialogModal({
               autoCapitalize="none"
               autoCorrect="off"
               className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setLocalError(null);
+                setPassword(event.target.value);
+              }}
               placeholder="请输入房间密码"
               spellCheck="false"
               type="password"
@@ -795,12 +842,12 @@ function SelectedRoomDialogModal({
             />
           </label>
         ) : null}
-        {dialogError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">{dialogError}</p> : null}
+        {displayedError ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300 animate-fade-in" role="alert">{displayedError}</p> : null}
         <div className="flex justify-end gap-2 pt-2">
           <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">暂不进入</Button>
           <Button
             data-testid="room-entry-confirm"
-            disabled={isPending || (room.room.hasPassword === true && !password)}
+            disabled={isPending}
             type="submit"
           >
             {isPending ? "进入中…" : "进入房间"}
