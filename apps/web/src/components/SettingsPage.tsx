@@ -26,7 +26,6 @@ import {
   type ThemePreference
 } from "@/features/settings/settings-store";
 import {
-  getNotificationPermissionState,
   queryNotificationPermissionState,
   requestNotificationPermission,
   notifyTrackChange,
