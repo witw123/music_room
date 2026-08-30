@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -92,6 +93,38 @@ export function DesktopLyricsBar({
     () => getAppSettings().playback.desktopLyricScale
   );
   const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const autoCollapseTimerRef = useRef<number | null>(null);
+
+  const resetAutoCollapseTimer = useCallback(() => {
+    if (autoCollapseTimerRef.current) {
+      window.clearTimeout(autoCollapseTimerRef.current);
+      autoCollapseTimerRef.current = null;
+    }
+    autoCollapseTimerRef.current = window.setTimeout(() => {
+      setIsExpanded(false);
+    }, 5000);
+  }, []);
+
+  const toggleExpanded = useCallback(() => {
+    setIsExpanded((prev) => {
+      const next = !prev;
+      if (next) {
+        resetAutoCollapseTimer();
+      } else if (autoCollapseTimerRef.current) {
+        window.clearTimeout(autoCollapseTimerRef.current);
+        autoCollapseTimerRef.current = null;
+      }
+      return next;
+    });
+  }, [resetAutoCollapseTimer]);
+
+  useEffect(() => {
+    return () => {
+      if (autoCollapseTimerRef.current) {
+        window.clearTimeout(autoCollapseTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const syncScale = () => setLyricScale(getAppSettings().playback.desktopLyricScale);
@@ -226,7 +259,7 @@ export function DesktopLyricsBar({
       const dx = Math.abs(event.clientX - dragStartPosRef.current.x);
       const dy = Math.abs(event.clientY - dragStartPosRef.current.y);
       if (dx < 6 && dy < 6) {
-        setIsExpanded((prev) => !prev);
+        toggleExpanded();
       }
     }
     dragStartPosRef.current = null;
@@ -237,31 +270,31 @@ export function DesktopLyricsBar({
       ref={rootRef}
       aria-label={`桌面歌词：${title}${artist ? ` - ${artist}` : ""}`}
       className="group relative flex h-full w-full min-w-0 items-center justify-between gap-2 bg-transparent px-2 md:px-4 py-1 text-white select-none cursor-grab active:cursor-grabbing transition-all duration-300"
-      data-tauri-drag-region="true"
       data-testid="desktop-lyrics-bar"
       onPointerDown={handlePointerDownInternal}
       onPointerUp={handlePointerUpInternal}
+      onPointerMove={() => {
+        if (isExpanded) resetAutoCollapseTimer();
+      }}
     >
       {/* Left: Album Cover Thumbnail + Song Name, Artist, and Duration Time (Only visible when clicked) */}
       <div
         className={`flex shrink-0 items-center overflow-hidden transition-all duration-300 ${
           isExpanded ? "opacity-100 max-w-[20rem] mr-2" : "opacity-0 max-w-0 mr-0 pointer-events-none"
         }`}
-        data-tauri-drag-region="true"
       >
         <div
           aria-hidden="true"
           className={`relative h-10 w-10 md:h-11 md:w-11 shrink-0 overflow-hidden rounded-xl border border-white/20 bg-black/40 bg-cover bg-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transition-transform duration-300 ${
             isPlaying ? "scale-100" : "scale-95 opacity-80"
           }`}
-          data-tauri-drag-region="true"
           style={{
             backgroundImage: artworkUrl ? `url("${getArtworkSourceUrl(artworkUrl)}")` : undefined
           }}
           title={artist ? `${title} - ${artist}` : title}
         >
           {!artworkUrl ? (
-            <div className="grid h-full w-full place-items-center text-white/50" data-tauri-drag-region="true">
+            <div className="grid h-full w-full place-items-center text-white/50">
               <MusicNoteIcon />
             </div>
           ) : null}
@@ -269,10 +302,10 @@ export function DesktopLyricsBar({
 
         {/* Track Title, Artist, and Playback Time */}
         <div className="ml-2.5 flex min-w-0 flex-col justify-center text-left leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]">
-          <span className="truncate text-xs md:text-sm font-bold text-white max-w-[8.5rem] md:max-w-[11rem]" data-tauri-drag-region="true">
+          <span className="truncate text-xs md:text-sm font-bold text-white max-w-[8.5rem] md:max-w-[11rem]">
             {title || "等待选择歌曲"}
           </span>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] md:text-[11px] text-white/75 truncate max-w-[8.5rem] md:max-w-[11rem]" data-tauri-drag-region="true">
+          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] md:text-[11px] text-white/75 truncate max-w-[8.5rem] md:max-w-[11rem]">
             {artist ? <span className="truncate">{artist}</span> : null}
             <span className="shrink-0 tabular-nums text-white/50 font-medium">
               {formatDuration(smoothPositionMs)}{durationMs ? ` / ${formatDuration(durationMs)}` : ""}
@@ -285,7 +318,6 @@ export function DesktopLyricsBar({
       <div
         ref={containerRef}
         className="relative flex h-full min-w-0 flex-1 flex-col justify-center items-center overflow-hidden px-1 text-center select-none"
-        data-tauri-drag-region="true"
         data-testid="desktop-lyrics-line"
       >
         {/* Main Lyric Line Wrapper (auto-scrolls horizontally if text is longer than viewport) */}
@@ -294,7 +326,6 @@ export function DesktopLyricsBar({
           className={`whitespace-nowrap transition-transform drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] ${
             overflowPx > 0 ? "duration-200 ease-linear self-start text-left" : "self-center text-center"
           } font-bold tracking-tight text-white leading-tight`}
-          data-tauri-drag-region="true"
           style={{
             fontSize: `${baseFontSize}px`,
             transform: overflowPx > 0 ? `translateX(${scrollOffset}px)` : "none"
@@ -307,7 +338,6 @@ export function DesktopLyricsBar({
                 return (
                   <span
                     className="inline text-white font-bold"
-                    data-tauri-drag-region="true"
                     key={wordIndex}
                   >
                     {word.text}
@@ -318,7 +348,6 @@ export function DesktopLyricsBar({
                 return (
                   <span
                     className="inline text-white/65 font-bold transition-colors duration-150"
-                    data-tauri-drag-region="true"
                     key={wordIndex}
                   >
                     {word.text}
@@ -329,7 +358,6 @@ export function DesktopLyricsBar({
               return (
                 <span
                   className="inline text-transparent font-bold will-change-[background-image]"
-                  data-tauri-drag-region="true"
                   key={wordIndex}
                   style={{
                     backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.65) ${filled}%, rgb(255 255 255 / 0.65) 100%)`,
@@ -346,7 +374,6 @@ export function DesktopLyricsBar({
               className={`block truncate ${
                 status === "loading" ? "animate-pulse text-white/70" : "text-white/85"
               }`}
-              data-tauri-drag-region="true"
             >
               {message}
             </span>
@@ -357,7 +384,6 @@ export function DesktopLyricsBar({
         {hasSubLine ? (
           <div
             className="mt-1 max-w-full truncate text-white/75 font-medium tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] transition-opacity duration-200"
-            data-tauri-drag-region="true"
             style={{ fontSize: `${subFontSize}px` }}
           >
             {subLineText}

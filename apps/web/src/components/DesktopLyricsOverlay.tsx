@@ -94,7 +94,6 @@ export function DesktopLyricsOverlay() {
       initialTop: rect.top,
       moved: false
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -105,7 +104,14 @@ export function DesktopLyricsOverlay() {
     const dy = event.clientY - drag.startY;
 
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-      drag.moved = true;
+      if (!drag.moved) {
+        drag.moved = true;
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // Ignored
+        }
+      }
     }
     if (!drag.moved) return;
 

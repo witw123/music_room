@@ -156,6 +156,8 @@ export function DesktopLyricsWindowApp() {
     channelRef.current?.postMessage({ type: "command", action, ...extra });
   }, []);
 
+  const dragDetectionRef = useRef<{ startX: number; startY: number } | null>(null);
+
   const handleBarPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     const edge = pickResizeEdge(event);
@@ -170,7 +172,24 @@ export function DesktopLyricsWindowApp() {
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
-    void invokeTauri("drag_desktop_lyrics_window");
+    dragDetectionRef.current = {
+      startX: event.screenX,
+      startY: event.screenY
+    };
+  }, []);
+
+  const handleBarPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragDetectionRef.current) return;
+    const dx = event.screenX - dragDetectionRef.current.startX;
+    const dy = event.screenY - dragDetectionRef.current.startY;
+    if (Math.hypot(dx, dy) > 5) {
+      dragDetectionRef.current = null;
+      void invokeTauri("drag_desktop_lyrics_window");
+    }
+  }, []);
+
+  const handleBarPointerUp = useCallback(() => {
+    dragDetectionRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -224,10 +243,13 @@ export function DesktopLyricsWindowApp() {
   return (
     <main
       className="flex h-[100dvh] w-full items-center p-1.5 overflow-hidden"
-      data-tauri-drag-region="true"
       data-testid="desktop-lyrics-window"
+      onPointerDown={handleBarPointerDown}
+      onPointerMove={handleBarPointerMove}
+      onPointerUp={handleBarPointerUp}
+      onPointerCancel={handleBarPointerUp}
     >
-      <div className="h-full w-full" data-tauri-drag-region="true">
+      <div className="h-full w-full">
         <DesktopLyricsBar
           title={track?.title ?? "等待选择歌曲"}
           artist={track?.artist}
