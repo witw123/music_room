@@ -64,7 +64,7 @@ public class DesktopLyricsPlugin extends Plugin {
         }
 
         final DesktopLyricsPlugin plugin = this;
-        bridge.executeOnMain(new Runnable() {
+        bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
                 boolean visible = plugin.ensureOverlay().toggle();
@@ -75,7 +75,7 @@ public class DesktopLyricsPlugin extends Plugin {
 
     @PluginMethod
     public void hide(PluginCall call) {
-        bridge.executeOnMain(new Runnable() {
+        bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
                 if (overlayView != null) {
@@ -91,7 +91,7 @@ public class DesktopLyricsPlugin extends Plugin {
         final String words = call.getString("words") != null ? call.getString("words") : "[]";
         final String translation = call.getString("translation");
         final String romanized = call.getString("romanized");
-        bridge.executeOnMain(new Runnable() {
+        bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
                 ensureOverlay().setLine(words, translation, romanized);
@@ -105,7 +105,7 @@ public class DesktopLyricsPlugin extends Plugin {
         final boolean isPlaying = call.getBoolean("isPlaying", false);
         final double progressMs = call.getDouble("progressMs") != null ? call.getDouble("progressMs") : 0.0;
         final double at = call.getDouble("at") != null ? call.getDouble("at") : System.currentTimeMillis();
-        bridge.executeOnMain(new Runnable() {
+        bridge.executeOnMainThread(new Runnable() {
             @Override
             public void run() {
                 ensureOverlay().updatePlayback(isPlaying, progressMs, at);
