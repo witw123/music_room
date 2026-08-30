@@ -39,18 +39,22 @@ fn toggle_desktop_lyrics(app: AppHandle) {
     url.set_query(Some("window=desktop-lyrics"));
     url.set_fragment(None);
 
-    let Ok(window) = WebviewWindowBuilder::new(&app, LYRICS_LABEL, WebviewUrl::External(url))
+    let builder = WebviewWindowBuilder::new(&app, LYRICS_LABEL, WebviewUrl::External(url))
         .title("桌面歌词")
         .decorations(false)
-        .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
         .shadow(false)
         .focused(false)
-        .inner_size(LYRICS_WIDTH, LYRICS_HEIGHT)
-        .build()
-    else {
+        .inner_size(LYRICS_WIDTH, LYRICS_HEIGHT);
+    // `transparent` is unavailable on macOS builds of tauri 2.11 (the builder
+    // method is cfg'd out regardless of the macos-private-api feature), so the
+    // lyrics page paints its own opaque dark surface there. Windows and Linux
+    // get a true see-through bar.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.transparent(true);
+    let Ok(window) = builder.build() else {
         return;
     };
     position_lyrics_window(&window);

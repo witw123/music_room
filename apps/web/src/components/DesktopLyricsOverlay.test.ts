@@ -60,7 +60,7 @@ describe("desktop lyrics integration", () => {
     const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
     const tauriHelperSource = readFileSync(new URL("../lib/desktop/tauri.ts", import.meta.url), "utf8");
     const pluginSource = readFileSync(
-      new URL("../../../mobile/android/app/src/main/java/com/musicroom/app/DesktopLyricsPlugin.kt", import.meta.url),
+      new URL("../../../mobile/android/app/src/main/java/com/musicroom/app/DesktopLyricsPlugin.java", import.meta.url),
       "utf8"
     );
     const manifestSource = readFileSync(

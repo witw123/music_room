@@ -59,9 +59,13 @@ export function DesktopLyricsWindowApp() {
   const channelRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
-    // The native lyrics window is transparent; strip every opaque page layer.
-    document.documentElement.style.background = "transparent";
-    document.body.style.background = "transparent";
+    // The native lyrics window is transparent on Windows/Linux; macOS builds
+    // of tauri 2.11 cannot create transparent windows, so fall back to an
+    // opaque dark surface there instead of a white flash.
+    const isMacintosh = /Macintosh|Mac OS X/.test(navigator.userAgent);
+    const background = isMacintosh ? "#0c0e13" : "transparent";
+    document.documentElement.style.background = background;
+    document.body.style.background = background;
     document.body.style.overflow = "hidden";
 
     const channel = new BroadcastChannel(bridgeChannelName);

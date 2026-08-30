@@ -88,11 +88,37 @@ const rooms = [
 ];
 
 async function mockDirectoryApi(page: Page) {
-  await page.route("**/v1/auth/me", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(session) });
-  });
-  await page.route("**/v1/rooms", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(rooms) });
+  // Single catch-all handler for every /v1 request. Stray authenticated calls
+  // (personalization, activities, …) must NOT reach the real server: a live
+  // 401 dispatches the auth-expired event, which wipes the mocked session and
+  // redirects the page to the login screen mid-test.
+  await page.route("**/v1/**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith("/v1/auth/me")) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(session) });
+      return;
+    }
+    if (pathname.endsWith("/v1/rooms")) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(rooms) });
+      return;
+    }
+    if (pathname.endsWith("/v1/auth/config")) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ enabled: false, siteKey: "" }) });
+      return;
+    }
+    if (pathname.endsWith("/v1/playlists")) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+      return;
+    }
+    if (pathname.includes("/v1/rooms/recent")) {
+      await route.fulfill({ contentType: "application/json", body: "null" });
+      return;
+    }
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "not_found", message: "Not mocked in this e2e scenario." } })
+    });
   });
 }
 
