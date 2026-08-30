@@ -11,12 +11,12 @@ describe("PersonalizationController", () => {
     removeExclusion: jest.fn().mockResolvedValue({ ok: true }),
     clearProfile: jest.fn().mockResolvedValue({ ok: true })
   };
-  const controller = new PersonalizationController(personalization as never, auth as never);
+  const controller = new PersonalizationController(personalization as never, auth as never, undefined);
 
   beforeEach(() => jest.clearAllMocks());
 
   it("records typed playback feedback for the current account", async () => {
-    await controller.recordEvent("token", {
+    await controller.recordEvent("token", {}, {
       id: "event_1",
       type: "playback",
       track: {
@@ -37,7 +37,7 @@ describe("PersonalizationController", () => {
   });
 
   it("passes radio exclusions through the recommendation query", async () => {
-    await controller.getRecommendations("token", {
+    await controller.getRecommendations("token", {}, {
       surface: "radio",
       provider: "netease",
       excludedTrackKeys: "netease:a,netease:b"

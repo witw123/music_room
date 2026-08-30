@@ -29,9 +29,13 @@ import {
 import { buildTasteGroups, extractTasteEvidence } from "./taste-taxonomy";
 
 const recallCacheSeconds = 30 * 60;
+const recallEpochSeconds = 30 * 24 * 60 * 60;
+const recommendedRememberSeconds = 7 * 24 * 60 * 60;
 const longTermHalfLifeMs = 120 * 24 * 60 * 60 * 1_000;
 const sessionWindowMs = 2 * 60 * 60 * 1_000;
 const maxTracksPerSection = 16;
+const compactionCutoffDays = 30;
+const compactionTriggerProbability = 0.05;
 
 type Provider = "netease" | "qqmusic";
 type Candidate = RecommendationCandidate;
@@ -60,6 +64,8 @@ type PlaylistTasteRecord = { title: string; description: string | null; tags: un
 
 @Injectable()
 export class PersonalizationService {
+  private readonly recallEpochFallback = new Map<string, number>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -108,7 +114,18 @@ export class PersonalizationService {
       if (delta === 0 && existing) return;
       await this.projectTrack(transaction, userId, input.track, delta, occurredAt, !existing);
     });
-    await this.clearRecallCache(userId);
+    // Plain playback heartbeats only nudge entity scores by tiny increments;
+    // invalidating the recall cache on every one of them kept the cache
+    // permanently cold during playback. Substantive events (favorite, skip,
+    // manual selection, …) still refresh recommendations immediately.
+    if (input.type !== "playback") {
+      await this.bumpRecallEpoch(userId);
+    }
+    // Opportunistic maintenance: merge aged duplicate playback rows so the
+    // event table stays proportional to distinct listening history.
+    if (Math.random() < compactionTriggerProbability) {
+      void this.compactPlaybackEvents(userId).catch(() => undefined);
+    }
     return { ok: true };
   }
 
@@ -132,7 +149,7 @@ export class PersonalizationService {
         this.prisma.userTasteEvent.deleteMany({ where: { userId, entityKind: input.target.kind, entityKey: input.target.key } })
       ]);
     }
-    await this.clearRecallCache(userId);
+    await this.bumpRecallEpoch(userId);
     return { ok: true };
   }
 
@@ -151,7 +168,7 @@ export class PersonalizationService {
   async removeExclusion(userId: string, kind: "track" | "artist", key: string) {
     this.assertDatabaseAvailable();
     await this.prisma.userRecommendationExclusion.deleteMany({ where: { userId, targetKind: kind, targetKey: key } });
-    await this.clearRecallCache(userId);
+    await this.bumpRecallEpoch(userId);
     return { ok: true };
   }
 
@@ -228,8 +245,8 @@ export class PersonalizationService {
           : Promise.resolve([])
     ]);
     const providers = await this.getBoundProviders(userId);
-    const version = profileVersion(entities, events);
-    const cacheKey = `personalization:recall:v3:${userId}:${version}:${query.surface}:${query.provider ?? "all"}`;
+    const epoch = await this.getRecallEpoch(userId);
+    const cacheKey = `personalization:recall:v4:${userId}:${epoch}:${query.surface}:${query.provider ?? "all"}`;
     const cached = this.redis.isAvailable()
       ? await this.redis.getJson<{ candidates: Candidate[]; playlists: ProviderPlaylistSummary[] }>(cacheKey).catch(() => null)
       : null;
@@ -244,6 +261,9 @@ export class PersonalizationService {
     ]);
     const excludedIdentities = new Set(listenedTracks.flatMap((item) => item.title && item.artist ? [trackIdentity({ title: item.title, artist: item.artist })] : []));
     const excludedArtists = new Set(exclusions.filter((item) => item.targetKind === "artist").map((item) => item.targetKey));
+    const recentlyRecommendedKeys = this.redis.isAvailable()
+      ? new Set(await this.redis.client.smembers(`personalization:recommended:${userId}`).catch(() => []))
+      : new Set<string>();
     const ranked = rankRecommendationCandidates({
       candidates: recalled.candidates,
       entities,
@@ -251,6 +271,7 @@ export class PersonalizationService {
       excludedTracks,
       excludedIdentities,
       excludedArtists,
+      recentlyRecommendedKeys,
       surface: query.surface,
       scoreEntity: entityScore
     });
@@ -331,7 +352,7 @@ export class PersonalizationService {
       });
     }
 
-    return { profileVersion: version, providers, forYou, familiarArtists, moodDiscovery, deepCuts, playlists, dailyRadar, liveRooms };
+    return { profileVersion: profileVersion(entities, events), providers, forYou, familiarArtists, moodDiscovery, deepCuts, playlists, dailyRadar, liveRooms };
   }
 
   async getTrackRadio(
@@ -473,7 +494,7 @@ export class PersonalizationService {
     }
 
     await this.prisma.$transaction(ops);
-    await this.clearRecallCache(userId);
+    await this.bumpRecallEpoch(userId);
     return { ok: true };
   }
 
@@ -484,7 +505,7 @@ export class PersonalizationService {
       this.prisma.userTasteEntity.deleteMany({ where: { userId } }),
       this.prisma.userRecommendationExclusion.deleteMany({ where: { userId } })
     ]);
-    await this.clearRecallCache(userId);
+    await this.bumpRecallEpoch(userId);
     return { ok: true };
   }
 
@@ -604,43 +625,137 @@ export class PersonalizationService {
       artworkUrl: typeof input.artworkUrl === "string" ? input.artworkUrl : null,
       lastOccurredAt: input.occurredAt
     };
-    await transaction.userTasteEntity.upsert({
-      where: { userId_entityKind_entityKey: { userId, entityKind: kind, entityKey: key } },
-      create: {
-        id: `taste_entity_${randomUUID()}`,
-        userId,
-        entityKind: kind,
-        entityKey: key,
-        ...data,
-        positiveScore,
-        negativeScore,
-        confidence: Math.min(1, input.confidence ?? Math.abs(input.score) / 7),
-        interactionCount: 1
-      },
-      update: {
+    const existing = await transaction.userTasteEntity.findUnique({
+      where: { userId_entityKind_entityKey: { userId, entityKind: kind, entityKey: key } }
+    });
+    if (!existing) {
+      await transaction.userTasteEntity.create({
+        data: {
+          id: `taste_entity_${randomUUID()}`,
+          userId,
+          entityKind: kind,
+          entityKey: key,
+          ...data,
+          positiveScore,
+          negativeScore,
+          confidence: Math.min(1, input.confidence ?? Math.abs(input.score) / 7),
+          interactionCount: 1
+        }
+      });
+      return;
+    }
+    // Incremental half-life decay: stored scores are aged down to the new
+    // event time before the fresh weight is added. Without this, long-term
+    // scores grew unbounded and crowded out all exploration.
+    const elapsedMs = Math.max(0, input.occurredAt.getTime() - (existing.lastOccurredAt?.getTime() ?? input.occurredAt.getTime()));
+    const decay = Math.pow(0.5, elapsedMs / longTermHalfLifeMs);
+    await transaction.userTasteEntity.update({
+      where: { id: existing.id },
+      data: {
         ...data,
         ...(input.retainScore
           ? { positiveScore: Math.max(0, positiveScore), negativeScore: Math.max(0, negativeScore) }
-          : { positiveScore: { increment: positiveScore }, negativeScore: { increment: negativeScore } }),
-        confidence: { increment: Math.min(0.1, input.confidence ?? Math.abs(input.score) * 0.04) },
+          : {
+              positiveScore: existing.positiveScore * decay + positiveScore,
+              negativeScore: existing.negativeScore * decay + negativeScore
+            }),
+        confidence: Math.min(1, existing.confidence + Math.min(0.1, input.confidence ?? Math.abs(input.score) * 0.04)),
         interactionCount: { increment: input.retainScore || input.incrementInteraction === false ? 0 : 1 }
       }
     });
   }
 
+  /**
+   * Recent recommendations live in Redis only: creating taste entities for
+   * tracks the user never played polluted the profile table and grew it with
+   * every discover request. The ranking engine applies the repetition penalty
+   * through the key set below.
+   */
   private async markRecommended(userId: string, tracks: ProviderTrackCandidate[]) {
-    const now = new Date();
-    await Promise.all(tracks.map((candidate) => this.prisma.userTasteEntity.upsert({
-      where: { userId_entityKind_entityKey: { userId, entityKind: "track", entityKey: trackKey(candidate) } },
-      update: { lastRecommendedAt: now },
-      create: { id: `taste_entity_${randomUUID()}`, userId, entityKind: "track", entityKey: trackKey(candidate), provider: candidate.provider, providerItemId: candidate.providerTrackId, providerAlbumId: candidate.providerAlbumId ?? null, access: candidate.access, quality: candidate.quality, title: candidate.title, artist: candidate.artist, album: candidate.album, durationMs: candidate.durationMs, artworkUrl: candidate.artworkUrl, lastRecommendedAt: now }
-    })));
+    if (tracks.length === 0 || !this.redis.isAvailable()) return;
+    const key = `personalization:recommended:${userId}`;
+    try {
+      await this.redis.client.sadd(key, ...tracks.map((candidate) => trackKey(candidate)));
+      await this.redis.client.expire(key, recommendedRememberSeconds);
+    } catch {
+      // Forgetting a repetition penalty is harmless; never block the response.
+    }
   }
 
-  private async clearRecallCache(userId: string) {
-    if (!this.redis.isAvailable()) return;
-    const keys = await this.redis.client.keys(`personalization:recall:v3:${userId}:*`).catch(() => []);
-    if (keys.length) await this.redis.client.del(...keys).catch(() => undefined);
+  /**
+   * Recall results are cached under a per-user epoch that only advances on
+   * substantive taste changes. This keeps the cache warm during plain
+   * listening (heartbeats never invalidate) and avoids KEYS scans entirely —
+   * superseded epoch keys simply expire by TTL.
+   */
+  private async bumpRecallEpoch(userId: string) {
+    const key = `personalization:recall-epoch:${userId}`;
+    if (!this.redis.isAvailable()) {
+      this.recallEpochFallback.set(userId, (this.recallEpochFallback.get(userId) ?? 0) + 1);
+      return;
+    }
+    try {
+      await this.redis.client.incr(key);
+      await this.redis.client.expire(key, recallEpochSeconds);
+    } catch {
+      this.recallEpochFallback.set(userId, (this.recallEpochFallback.get(userId) ?? 0) + 1);
+    }
+  }
+
+  private async getRecallEpoch(userId: string): Promise<number> {
+    if (!this.redis.isAvailable()) {
+      return this.recallEpochFallback.get(userId) ?? 0;
+    }
+    try {
+      const value = await this.redis.client.get(`personalization:recall-epoch:${userId}`);
+      const parsed = value ? Number(value) : 0;
+      return Number.isFinite(parsed) ? parsed : this.recallEpochFallback.get(userId) ?? 0;
+    } catch {
+      return this.recallEpochFallback.get(userId) ?? 0;
+    }
+  }
+
+  /**
+   * Merge aged duplicate playback rows of the same track into their oldest
+   * row (listening time and weight accumulate), keeping the event table
+   * proportional to distinct listening history instead of raw sessions.
+   * Completion/quick-skip rows are left untouched: the behavior tag ratios
+   * depend on them staying separate.
+   */
+  private async compactPlaybackEvents(userId: string) {
+    const cutoff = new Date(Date.now() - compactionCutoffDays * 24 * 60 * 60 * 1_000);
+    const rows = await this.prisma.userTasteEvent.findMany({
+      where: { userId, eventType: "playback", occurredAt: { lt: cutoff } },
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }]
+    });
+    if (rows.length < 2) return;
+
+    const groups = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const group = groups.get(row.entityKey) ?? [];
+      group.push(row);
+      groups.set(row.entityKey, group);
+    }
+
+    const operations: Prisma.PrismaPromise<unknown>[] = [];
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const keeper = group[0]!;
+      const mergedListenedMs = group.reduce((total, row) => total + row.listenedMs, BigInt(0));
+      const mergedWeight = group.reduce((total, row) => total + row.weight, 0);
+      operations.push(
+        this.prisma.userTasteEvent.update({
+          where: { id: keeper.id },
+          data: { listenedMs: mergedListenedMs, weight: mergedWeight }
+        }),
+        this.prisma.userTasteEvent.deleteMany({
+          where: { id: { in: group.slice(1).map((row) => row.id) } }
+        })
+      );
+    }
+    if (operations.length > 0) {
+      await this.prisma.$transaction(operations);
+    }
   }
 
   private assertDatabaseAvailable() {

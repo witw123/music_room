@@ -53,6 +53,8 @@ export function rankRecommendationCandidates(input: {
   excludedArtists: ReadonlySet<string>;
   surface: PersonalizationRecommendationsQuery["surface"];
   scoreEntity: (entity: RecommendationTasteEntity) => number;
+  /** Keys recommended recently (external memory); they receive a repetition penalty. */
+  recentlyRecommendedKeys?: ReadonlySet<string>;
 }) {
   const trackEntities = new Map(input.entities.filter((item) => item.entityKind === "track").map((item) => [item.entityKey, item]));
   const artistEntities = new Map(input.entities.filter((item) => item.entityKind === "artist").map((item) => [item.entityKey, item]));
@@ -79,7 +81,9 @@ export function rankRecommendationCandidates(input: {
     const novelty = trackEntity?.lastOccurredAt ? 0 : 1;
     const freshness = releaseFreshness(item.candidate.releaseTime);
     const seenAt = trackEntity?.lastRecommendedAt ?? null;
-    const seenPenalty = seenAt && seenAt.getTime() > seenThreshold ? 0.14 : 0;
+    const seenRecently = (seenAt && seenAt.getTime() > seenThreshold) ||
+      input.recentlyRecommendedKeys?.has(key) === true;
+    const seenPenalty = seenRecently ? 0.14 : 0;
     const sourceTrust = sourceTrustScore(item.source);
     const score = item.baseScore * 0.28
       + trackAffinity * 0.18
