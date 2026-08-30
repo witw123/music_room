@@ -73,8 +73,8 @@ export function DesktopLyricsBar({
     return () => observer.disconnect();
   }, []);
 
-  const fontSize = Math.round(Math.min(72, Math.max(18, surfaceHeight * 0.52)));
-  const outlineWidth = `${Math.max(2, fontSize * 0.16).toFixed(1)}px`;
+  const fontSize = Math.round(Math.min(48, Math.max(16, surfaceHeight * 0.34)));
+  const outlineWidth = `${Math.max(2, fontSize * 0.09).toFixed(1)}px`;
 
   const lines = useMemo(() => parseRoomLyrics(plainLyric), [plainLyric]);
 
@@ -154,7 +154,7 @@ export function DesktopLyricsBar({
         >
           <span
             className="block truncate whitespace-nowrap font-bold text-transparent"
-            style={{ fontSize, WebkitTextStroke: `${outlineWidth} rgba(0, 0, 0, 0.6)` }}
+            style={{ fontSize, WebkitTextStroke: `${outlineWidth} rgba(0, 0, 0, 0.5)` }}
           >
             {message}
           </span>
@@ -168,7 +168,7 @@ export function DesktopLyricsBar({
                     return <span key={wordIndex} className="text-white">{word.text}</span>;
                   }
                   if (progress <= 0) {
-                    return <span key={wordIndex} className="text-white/45">{word.text}</span>;
+                    return <span key={wordIndex} className="text-white/55">{word.text}</span>;
                   }
                   const filled = (progress * 100).toFixed(1);
                   return (
@@ -176,7 +176,7 @@ export function DesktopLyricsBar({
                       className="inline text-transparent will-change-[background-image]"
                       key={wordIndex}
                       style={{
-                        backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.45) ${filled}%, rgb(255 255 255 / 0.45) 100%)`,
+                        backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.55) ${filled}%, rgb(255 255 255 / 0.55) 100%)`,
                         backgroundClip: "text",
                         WebkitBackgroundClip: "text"
                       }}

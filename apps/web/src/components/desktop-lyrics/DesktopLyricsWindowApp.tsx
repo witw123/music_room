@@ -35,8 +35,10 @@ const emptyState: BridgeState = {
 
 type ResizeGesture = {
   edge: "west" | "east" | "north" | "south" | "northwest" | "northeast" | "southwest" | "southeast";
-  startX: number;
-  startY: number;
+  // Screen coordinates stay stable while the window itself is being resized,
+  // unlike viewport coordinates which shift with every size change.
+  startScreenX: number;
+  startScreenY: number;
   startWidth: number;
   startHeight: number;
 };
@@ -86,6 +88,8 @@ export function DesktopLyricsWindowApp() {
   const [state, setState] = useState<BridgeState>(readSnapshot);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const resizeGestureRef = useRef<ResizeGesture | null>(null);
+  const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const sizeRafRef = useRef(0);
 
   useEffect(() => {
     // The native lyrics window is transparent on Windows/Linux; macOS builds
@@ -129,35 +133,53 @@ export function DesktopLyricsWindowApp() {
     if (edge) {
       resizeGestureRef.current = {
         edge,
-        startX: event.clientX,
-        startY: event.clientY,
+        startScreenX: event.screenX,
+        startScreenY: event.screenY,
         startWidth: window.innerWidth,
         startHeight: window.innerHeight
       };
+      // Capture the pointer so moves outside the window bounds (which every
+      // west/north resize requires) keep streaming into this element.
+      event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
     void invokeTauri("drag_desktop_lyrics_window");
   }, []);
 
   useEffect(() => {
+    const flushPendingSize = () => {
+      const pending = pendingSizeRef.current;
+      if (!pending) return;
+      pendingSizeRef.current = null;
+      sizeRafRef.current = 0;
+      void invokeTauri("set_desktop_lyrics_size", pending);
+    };
     const handlePointerMove = (event: PointerEvent) => {
       const gesture = resizeGestureRef.current;
       if (!gesture) return;
       let width = gesture.startWidth;
       let height = gesture.startHeight;
-      const dx = event.clientX - gesture.startX;
-      const dy = event.clientY - gesture.startY;
+      const dx = event.screenX - gesture.startScreenX;
+      const dy = event.screenY - gesture.startScreenY;
       if (gesture.edge.includes("east")) width = gesture.startWidth + dx;
       if (gesture.edge.includes("west")) width = gesture.startWidth - dx;
       if (gesture.edge.includes("south")) height = gesture.startHeight + dy;
       if (gesture.edge.includes("north")) height = gesture.startHeight - dy;
-      void invokeTauri("set_desktop_lyrics_size", {
+      pendingSizeRef.current = {
         width: Math.min(maxWidth, Math.max(minWidth, width)),
         height: Math.min(maxHeight, Math.max(minHeight, height))
-      });
+      };
+      if (!sizeRafRef.current) {
+        sizeRafRef.current = window.requestAnimationFrame(flushPendingSize);
+      }
     };
     const handlePointerUp = () => {
       resizeGestureRef.current = null;
+      if (sizeRafRef.current) {
+        window.cancelAnimationFrame(sizeRafRef.current);
+        sizeRafRef.current = 0;
+      }
+      flushPendingSize();
     };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
