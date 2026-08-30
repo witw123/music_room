@@ -112,7 +112,7 @@ function MobileNavIcon({ name }: { name: MobileNavIconName }) {
 
 function isActivePath(pathname: string | null, href: Route) {
   if (href === "/app") {
-    return pathname === "/app" || pathname === "/rooms";
+    return pathname === "/app" || pathname === "/rooms" || (pathname?.startsWith("/room") ?? false);
   }
   return pathname?.startsWith(href) ?? false;
 }

@@ -8,6 +8,7 @@ import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { RoomsHomePage } from "@/components/RoomsHomePage";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
+import { MobileAppNavigation } from "@/components/MobileAppNavigation";
 import { CachePlaybackPromptModal } from "@/components/room/CachePlaybackPromptModal";
 import { getNextPlaybackMode } from "@/components/bottom-player/playback-mode";
 import { isProviderTrack } from "@/features/room/playback/room-audio-path";
@@ -181,6 +182,7 @@ export function RoomAppShell({
           playerSlot={null}
             />
           )}
+          <MobileAppNavigation onNavigateAway={isRoomAway ? undefined : onAwayRoom} />
         </>
       ) : null}
       <BottomPlayerController

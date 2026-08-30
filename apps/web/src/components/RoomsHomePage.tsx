@@ -545,7 +545,6 @@ export function RoomsHomePage({
             <label className="flex flex-col gap-2 text-sm text-foreground">
               房间名称
               <input
-                autoFocus
                 className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
                 maxLength={120}
                 onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
@@ -624,7 +623,6 @@ export function RoomsHomePage({
             <label className="flex flex-col gap-2 text-sm text-foreground" htmlFor="join-code-input">
               房间码
               <input
-                autoFocus
                 data-testid="join-code-input"
                 id="join-code-input"
                 className="w-full rounded-xl border border-surface-border bg-background px-3 py-2.5 font-mono uppercase text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
@@ -661,7 +659,6 @@ export function RoomsHomePage({
               <label className="flex flex-col gap-2 text-sm text-foreground">
                 房间密码
                 <input
-                  autoFocus
                   className="rounded-xl border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
                   onChange={(event) => setJoinPassword(event.target.value)}
                   placeholder="请输入房间密码"
@@ -719,11 +716,18 @@ function RoomDialog({
   if (!portalRoot) return null;
 
   return createPortal(
-    <div className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" onMouseDown={onClose} role="presentation">
+    <div
+      className="light-overlay-scrim fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+      role="presentation"
+    >
       <div
         aria-modal="true"
         className="light-dialog-surface hide-scrollbar max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
-        onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >
         <div className="mb-5 flex items-start justify-between gap-4">

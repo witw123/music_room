@@ -22,7 +22,6 @@ import { RadioRoomView } from "@/components/room/RadioRoomView";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { AppSidebar } from "@/components/AppSidebar";
-import { MobileAppNavigation } from "@/components/MobileAppNavigation";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
@@ -292,7 +291,6 @@ function RoomWorkspaceBase({
       </div>
 
       {playerSlot}
-      <MobileAppNavigation onNavigateAway={onAwayRoom} />
     </main>
   );
 }

@@ -390,14 +390,17 @@ export function RoomEditDialog({
   return createPortal(
     <div
       className="light-overlay-scrim fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
-      onMouseDown={() => !pending && onClose()}
+      onClick={(event) => {
+        if (!pending && event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
       role="presentation"
     >
       <div
         aria-labelledby="edit-room-dialog-title"
         aria-modal="true"
         className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
-        onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -456,7 +459,6 @@ export function RoomEditDialog({
           <label className="flex flex-col gap-2 text-sm text-foreground">
             房间名称
             <input
-              autoFocus
               className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
               maxLength={120}
               onChange={(event) =>
