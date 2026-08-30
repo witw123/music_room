@@ -15,7 +15,7 @@ import {
   parseRoomLyrics
 } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
-import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
+import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 
 export type DesktopLyricsBarLyrics = {
   plainLyric: string | null;
@@ -51,9 +51,9 @@ export type DesktopLyricsBarProps = {
 };
 
 /**
- * Modern floating desktop lyrics capsule bar (Apple Music / NetEase style).
- * Features rich frosted glassmorphism, word-by-word illuminated karaoke fill,
- * optional synchronized translation/romanization sub-line, and sleek interactive controls.
+ * Pure floating desktop lyrics bar (Apple Music / Spotify style).
+ * No background box, no borders, no drag grip key — entire bar is smoothly draggable.
+ * High-contrast glowing lyrics with hover-revealed glass pill playback controls.
  */
 export function DesktopLyricsBar({
   title,
@@ -75,13 +75,11 @@ export function DesktopLyricsBar({
   onTogglePlay,
   onNext,
   onClose,
-  onPointerDown,
-  onScaleChange
+  onPointerDown
 }: DesktopLyricsBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [surfaceHeight, setSurfaceHeight] = useState(76);
   const [isHovered, setIsHovered] = useState(false);
-  const [controlsPinned, setControlsPinned] = useState(false);
   const [lyricScale, setLyricScale] = useState(
     () => getAppSettings().playback.desktopLyricScale
   );
@@ -168,18 +166,11 @@ export function DesktopLyricsBar({
   const subLineText = alignedTranslatedLine || alignedRomanizedLine || null;
   const hasSubLine = Boolean(subLineText);
 
-  // Dynamic font sizing
+  // Dynamic font sizing based on scale setting
   const baseFontSize = hasSubLine
-    ? Math.round(Math.min(90, Math.max(14, surfaceHeight * 0.28 * lyricScale)))
-    : Math.round(Math.min(110, Math.max(15, surfaceHeight * 0.36 * lyricScale)));
-  const subFontSize = Math.round(Math.max(11, baseFontSize * 0.58));
-
-  const changeScale = (delta: number) => {
-    const next = Math.min(2.5, Math.max(0.6, Math.round((lyricScale + delta) * 10) / 10));
-    setLyricScale(next);
-    updateAppSettings({ playback: { desktopLyricScale: next } });
-    onScaleChange?.(next);
-  };
+    ? Math.round(Math.min(90, Math.max(16, surfaceHeight * 0.30 * lyricScale)))
+    : Math.round(Math.min(110, Math.max(18, surfaceHeight * 0.40 * lyricScale)));
+  const subFontSize = Math.round(Math.max(12, baseFontSize * 0.56));
 
   const message = status === "loading" && !hasLyrics
     ? "正在获取歌词…"
@@ -189,72 +180,53 @@ export function DesktopLyricsBar({
         ? "歌词暂时不可用"
         : "等待选择歌曲";
 
-  const showToolbar = isHovered || controlsPinned;
-
   return (
     <div
       ref={rootRef}
       aria-label={`桌面歌词：${title}${artist ? ` - ${artist}` : ""}`}
-      className="group relative flex h-full w-full min-w-0 items-center justify-between gap-2.5 rounded-2xl md:rounded-full border border-white/15 bg-zinc-950/85 px-3.5 md:px-5 py-2 text-white backdrop-blur-2xl shadow-[0_16px_48px_rgba(0,0,0,0.7)] transition-all duration-300 hover:border-white/25 hover:bg-zinc-950/92"
+      className="group relative flex h-full w-full min-w-0 items-center justify-between gap-3 bg-transparent px-3 md:px-5 py-1 text-white select-none cursor-grab active:cursor-grabbing transition-all duration-300"
+      data-tauri-drag-region="true"
       data-testid="desktop-lyrics-bar"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onPointerDown={onPointerDown}
     >
-      {/* Subtle glowing ambient accent in background */}
+      {/* Left: Album Cover Thumbnail */}
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -inset-0.5 -z-10 rounded-2xl md:rounded-full bg-gradient-to-r from-blue-600/20 via-cyan-500/15 to-purple-600/20 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100"
-      />
-
-      {/* Left: Drag Handle + Cover + Track Info */}
-      <div className="flex shrink-0 items-center gap-2">
-        {/* Visual Drag Handle */}
+        className={`flex shrink-0 items-center transition-opacity duration-200 ${
+          isHovered ? "opacity-100" : "opacity-40"
+        }`}
+        data-tauri-drag-region="true"
+      >
         <div
           aria-hidden="true"
-          className="grid h-8 w-5 shrink-0 place-items-center cursor-grab text-white/30 transition hover:text-white/70 active:cursor-grabbing"
-          title="拖动调整位置"
-        >
-          <DragGripIcon />
-        </div>
-
-        {/* Album Artwork thumbnail */}
-        <div
-          aria-hidden="true"
-          className={`relative h-10 w-10 md:h-11 md:w-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] bg-cover bg-center shadow-md transition-transform duration-300 ${
+          className={`relative h-10 w-10 md:h-11 md:w-11 shrink-0 overflow-hidden rounded-xl border border-white/20 bg-black/40 bg-cover bg-center shadow-[0_4px_16px_rgba(0,0,0,0.6)] transition-transform duration-300 ${
             isPlaying ? "scale-100" : "scale-95 opacity-80"
           }`}
+          data-tauri-drag-region="true"
           style={{
             backgroundImage: artworkUrl ? `url("${getArtworkSourceUrl(artworkUrl)}")` : undefined
           }}
           title={artist ? `${title} - ${artist}` : title}
         >
           {!artworkUrl ? (
-            <div className="grid h-full w-full place-items-center text-white/40">
+            <div className="grid h-full w-full place-items-center text-white/50" data-tauri-drag-region="true">
               <MusicNoteIcon />
             </div>
           ) : null}
         </div>
       </div>
 
-      {/* Center: Karaoke Lyric Line + Translation Sub-line */}
+      {/* Center: Pure Karaoke Lyric Text Line + Subtitle Translation */}
       <div
-        aria-label="点击固定控制栏"
-        className="relative flex h-full min-w-0 flex-1 flex-col justify-center items-center overflow-hidden px-2 text-center cursor-pointer select-none"
+        className="relative flex h-full min-w-0 flex-1 flex-col justify-center items-center overflow-hidden px-2 text-center select-none"
+        data-tauri-drag-region="true"
         data-testid="desktop-lyrics-line"
-        onClick={() => setControlsPinned((current) => !current)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setControlsPinned((current) => !current);
-          }
-        }}
       >
         {/* Main Karaoke Lyric Line */}
         <div
-          className="relative max-w-full overflow-hidden truncate font-bold tracking-tight text-white leading-tight"
+          className="relative max-w-full overflow-hidden truncate font-bold tracking-tight text-white leading-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+          data-tauri-drag-region="true"
           style={{ fontSize: `${baseFontSize}px` }}
         >
           {hasLyrics && displayWords.length > 0 ? (
@@ -263,7 +235,8 @@ export function DesktopLyricsBar({
               if (progress >= 1) {
                 return (
                   <span
-                    className="inline text-white [text-shadow:0_0_12px_rgba(255,255,255,0.7)]"
+                    className="inline text-white [text-shadow:0_0_18px_rgba(255,255,255,0.9),0_2px_10px_rgba(0,0,0,0.95)]"
+                    data-tauri-drag-region="true"
                     key={wordIndex}
                   >
                     {word.text}
@@ -272,7 +245,11 @@ export function DesktopLyricsBar({
               }
               if (progress <= 0) {
                 return (
-                  <span className="inline text-white/40 transition-colors duration-150" key={wordIndex}>
+                  <span
+                    className="inline text-white/55 [text-shadow:0_2px_8px_rgba(0,0,0,0.95)] transition-colors duration-150"
+                    data-tauri-drag-region="true"
+                    key={wordIndex}
+                  >
                     {word.text}
                   </span>
                 );
@@ -280,10 +257,11 @@ export function DesktopLyricsBar({
               const filled = (progress * 100).toFixed(1);
               return (
                 <span
-                  className="inline text-transparent will-change-[background-image] [text-shadow:0_0_16px_rgba(0,122,255,0.6)]"
+                  className="inline text-transparent will-change-[background-image] [text-shadow:0_0_20px_rgba(0,122,255,0.7),0_2px_10px_rgba(0,0,0,0.95)]"
+                  data-tauri-drag-region="true"
                   key={wordIndex}
                   style={{
-                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.4) ${filled}%, rgb(255 255 255 / 0.4) 100%)`,
+                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.55) ${filled}%, rgb(255 255 255 / 0.55) 100%)`,
                     backgroundClip: "text",
                     WebkitBackgroundClip: "text"
                   }}
@@ -294,9 +272,10 @@ export function DesktopLyricsBar({
             })
           ) : (
             <span
-              className={`block truncate ${
-                status === "loading" ? "animate-pulse text-white/70" : "text-white/80"
+              className={`block truncate [text-shadow:0_2px_10px_rgba(0,0,0,0.95)] ${
+                status === "loading" ? "animate-pulse text-white/70" : "text-white/85"
               }`}
+              data-tauri-drag-region="true"
             >
               {message}
             </span>
@@ -306,7 +285,8 @@ export function DesktopLyricsBar({
         {/* Translation / Romanization Sub-line */}
         {hasSubLine ? (
           <div
-            className="mt-0.5 max-w-full truncate text-white/65 font-medium tracking-wide transition-opacity duration-200"
+            className="mt-1 max-w-full truncate text-white/75 font-medium tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-opacity duration-200"
+            data-tauri-drag-region="true"
             style={{ fontSize: `${subFontSize}px` }}
           >
             {subLineText}
@@ -314,14 +294,14 @@ export function DesktopLyricsBar({
         ) : null}
       </div>
 
-      {/* Right: Quick Interactive Controls Toolbar */}
+      {/* Right: Minimal Hover-Revealed Glass Pill Controls (Apple Music / Spotify style) */}
       <div
-        className={`flex shrink-0 items-center gap-1 transition-all duration-200 ${
-          showToolbar ? "opacity-100 translate-x-0" : "opacity-0 md:opacity-40 translate-x-1 hover:opacity-100"
+        className={`flex shrink-0 items-center gap-1.5 cursor-default transition-all duration-200 ${
+          isHovered ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-2"
         }`}
       >
-        {/* Playback Transport: Prev, Play/Pause, Next */}
-        <div className="flex items-center gap-0.5 rounded-full bg-white/[0.07] p-0.5 border border-white/10">
+        <div className="flex items-center gap-1 rounded-full bg-zinc-950/80 backdrop-blur-xl border border-white/15 px-2 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.7)]">
+          {/* Playback Transport: Prev, Play/Pause, Next */}
           <TransportButton disabled={!canControl} label="上一首" onClick={onPrev}>
             <PrevIcon />
           </TransportButton>
@@ -336,77 +316,52 @@ export function DesktopLyricsBar({
           <TransportButton disabled={!canControl} label="下一首" onClick={onNext}>
             <NextIcon />
           </TransportButton>
-        </div>
 
-        {/* Translation toggle (译) */}
-        {translatedLines.length > 0 && onToggleTranslation ? (
-          <button
-            aria-label="切换翻译"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold border transition ${
-              showTranslation
-                ? "border-blue-500/50 bg-blue-500/20 text-blue-400 shadow-[0_0_10px_rgba(0,122,255,0.3)]"
-                : "border-transparent bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white"
-            }`}
-            onClick={onToggleTranslation}
-            title={showTranslation ? "隐藏歌词翻译" : "显示歌词翻译"}
-            type="button"
-          >
-            译
-          </button>
-        ) : null}
+          {/* Translation toggle (译) */}
+          {translatedLines.length > 0 && onToggleTranslation ? (
+            <button
+              aria-label="切换翻译"
+              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold border transition cursor-pointer ${
+                showTranslation
+                  ? "border-blue-500/60 bg-blue-500/25 text-blue-300 shadow-[0_0_10px_rgba(0,122,255,0.4)]"
+                  : "border-transparent bg-white/[0.08] text-white/60 hover:bg-white/[0.15] hover:text-white"
+              }`}
+              onClick={onToggleTranslation}
+              title={showTranslation ? "隐藏歌词翻译" : "显示歌词翻译"}
+              type="button"
+            >
+              译
+            </button>
+          ) : null}
 
-        {/* Romanization toggle (音) */}
-        {romanizedLines.length > 0 && onToggleRomanized ? (
-          <button
-            aria-label="切换罗马音"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold border transition ${
-              showRomanized
-                ? "border-purple-500/50 bg-purple-500/20 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.3)]"
-                : "border-transparent bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white"
-            }`}
-            onClick={onToggleRomanized}
-            title={showRomanized ? "隐藏罗马音" : "显示罗马音"}
-            type="button"
-          >
-            音
-          </button>
-        ) : null}
+          {/* Romanization toggle (音) */}
+          {romanizedLines.length > 0 && onToggleRomanized ? (
+            <button
+              aria-label="切换罗马音"
+              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold border transition cursor-pointer ${
+                showRomanized
+                  ? "border-purple-500/60 bg-purple-500/25 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+                  : "border-transparent bg-white/[0.08] text-white/60 hover:bg-white/[0.15] hover:text-white"
+              }`}
+              onClick={onToggleRomanized}
+              title={showRomanized ? "隐藏罗马音" : "显示罗马音"}
+              type="button"
+            >
+              音
+            </button>
+          ) : null}
 
-        {/* Font Scale Adjuster */}
-        <div className="hidden sm:flex items-center rounded-full bg-white/[0.06] border border-white/10 p-0.5">
+          {/* Close Button */}
           <button
-            aria-label="缩小歌词字体"
-            className="grid h-7 w-6 place-items-center rounded-full text-[11px] font-bold text-white/60 transition hover:bg-white/10 hover:text-white"
-            onClick={() => changeScale(-0.1)}
-            title="缩小字体"
+            aria-label="关闭桌面歌词"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.08] text-white/60 transition hover:bg-red-500/30 hover:text-red-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            onClick={onClose}
+            title="关闭桌面歌词"
             type="button"
           >
-            A-
-          </button>
-          <span className="px-1 text-[10px] font-semibold text-white/40 select-none">
-            {Math.round(lyricScale * 100)}%
-          </span>
-          <button
-            aria-label="放大歌词字体"
-            className="grid h-7 w-6 place-items-center rounded-full text-[11px] font-bold text-white/60 transition hover:bg-white/10 hover:text-white"
-            onClick={() => changeScale(0.1)}
-            title="放大字体"
-            type="button"
-          >
-            A+
+            <CloseIcon />
           </button>
         </div>
-
-        {/* Close Button */}
-        <button
-          aria-label="关闭桌面歌词"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[0.06] text-white/50 transition hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          onClick={onClose}
-          title="关闭桌面歌词"
-          type="button"
-        >
-          <CloseIcon />
-        </button>
       </div>
     </div>
   );
@@ -428,12 +383,12 @@ function TransportButton({
   return (
     <button
       aria-label={label}
-      className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+      className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer ${
         disabled
           ? "cursor-not-allowed opacity-30 text-white/30"
           : primary
             ? "bg-white text-zinc-950 shadow-md hover:bg-white/90 hover:scale-105 active:scale-95"
-            : "text-white/70 hover:bg-white/10 hover:text-white active:scale-95"
+            : "text-white/75 hover:bg-white/15 hover:text-white active:scale-95"
       }`}
       disabled={disabled}
       onClick={onClick}
@@ -442,19 +397,6 @@ function TransportButton({
     >
       {children}
     </button>
-  );
-}
-
-function DragGripIcon() {
-  return (
-    <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 24 24" width="16">
-      <circle cx="9" cy="6" r="1.5" />
-      <circle cx="15" cy="6" r="1.5" />
-      <circle cx="9" cy="12" r="1.5" />
-      <circle cx="15" cy="12" r="1.5" />
-      <circle cx="9" cy="18" r="1.5" />
-      <circle cx="15" cy="18" r="1.5" />
-    </svg>
   );
 }
 
