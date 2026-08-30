@@ -24,6 +24,7 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { clearAwayRoomId } from "@/lib/domain/away-room";
+import { closeDesktopLyricsNative } from "@/features/playback/desktop-lyrics-context";
 import { useRoomRuntimeObservability } from "./use-room-runtime-observability";
 import {
   useRoomConnectionSupervisor,
@@ -368,6 +369,7 @@ export function useRoomRuntime({
       clearAwayRoomId();
       resetPlayerSurfaceRef.current();
       roomAudioOutput.releaseRoomAudioSession();
+      closeDesktopLyricsNative();
       dispatchRoomStateEvent({ type: "local-reset" });
       router.replace(
         buildRoomExitHref({

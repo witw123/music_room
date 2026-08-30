@@ -15,6 +15,7 @@ import { LibraryTabPanel } from "./LibraryTabPanel";
 import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
 import { MembersPanel } from "./MembersPanel";
 import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
+import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomStage } from "./RoomStage";
 import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
@@ -170,12 +171,30 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-6 lg:pb-0" data-room-view="request">
-      <section className="mx-auto grid w-full max-w-[1600px] gap-2 px-2.5 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
+      {/* Mobile Top Room Control Header */}
+      <div className="px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
+        <RoomControlHeader
+          roomSnapshot={props.roomSnapshot}
+          mediaConnectionState={props.mediaConnectionState}
+          currentTrack={props.currentTrack}
+          host={props.host}
+          canDeleteRoom={props.canDeleteRoom}
+          canDisbandRoom={props.canDisbandRoom}
+          onCopyJoinCode={props.onCopyJoinCode}
+          onShareRoom={props.onShareRoom}
+          onAwayRoom={props.onAwayRoom}
+          onLeaveRoom={props.onLeaveRoom}
+          onDeleteRoom={props.onDeleteRoom}
+          onUpdateRoom={props.onUpdateRoom}
+        />
+      </div>
+
+      <section className="mx-auto grid w-full max-w-[1600px] gap-2 px-2.5 pt-0 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
         <div className="relative z-10 hidden lg:block min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-white/[0.06] lg:bg-surface/[0.12]">
           <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
         </div>
         <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl sm:rounded-3xl border border-white/[0.06] bg-[#0c0e15]/90 lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
-          <header className="flex shrink-0 items-center justify-between px-3.5 pb-2 pt-2.5 sm:px-5 sm:pt-4 lg:px-6 border-b border-white/[0.06]">
+          <header className="hidden lg:flex shrink-0 items-center justify-between px-3.5 pb-2 pt-2.5 sm:px-5 sm:pt-4 lg:px-6 border-b border-white/[0.06]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-accent/20 text-accent border border-accent/25 shrink-0">
                 <MusicIcon className="w-3.5 h-3.5" />
@@ -184,30 +203,16 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 <h1 className="text-sm sm:text-lg font-bold text-white tracking-tight truncate">
                   {props.roomSnapshot.room.name || "点歌台"}
                 </h1>
-                <span className="text-[10px] text-foreground-muted lg:hidden">
+                <span className="text-[10px] text-foreground-muted">
                   口令 {props.roomSnapshot.room.joinCode} · 队列 {queueCount} 首
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-foreground-muted">
-              <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px]">
                 <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
                 <span>当前队列 {queueCount} 首</span>
               </span>
-              <button
-                data-testid="mobile-leave-room-button"
-                onClick={() => props.onLeaveRoom?.()}
-                className="inline-flex h-6.5 items-center justify-center gap-1 rounded-md border border-red-500/25 bg-red-500/10 px-2 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all lg:hidden"
-                type="button"
-                title="退出房间"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-                <span>退出房间</span>
-              </button>
             </div>
           </header>
           <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">

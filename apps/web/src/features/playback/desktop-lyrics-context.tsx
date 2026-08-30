@@ -92,6 +92,19 @@ function getNativeDesktopLyricsPlugin(): NativeDesktopLyricsPlugin | undefined {
   return capacitorPlugin("DesktopLyrics") as NativeDesktopLyricsPlugin | undefined;
 }
 
+export const musicRoomCloseDesktopLyricsEvent = "music-room:close-desktop-lyrics";
+
+export function closeDesktopLyricsNative() {
+  if (isTauriRuntime()) {
+    void invokeTauri("hide_desktop_lyrics_window");
+  } else if (isCapacitorRuntime()) {
+    void getNativeDesktopLyricsPlugin()?.hide?.({});
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(musicRoomCloseDesktopLyricsEvent));
+  }
+}
+
 const emptyLyrics: DesktopLyricsState = {
   status: "idle",
   plainLyric: null,
@@ -116,6 +129,21 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   const lastBridgeSnapshotWriteAtRef = useRef(0);
   activePlayerRef.current = activePlayer;
   const hasActivePlayer = activePlayer !== null;
+
+  const close = useCallback(() => {
+    if (isTauriRuntime()) {
+      void invokeTauri("hide_desktop_lyrics_window");
+    } else if (isCapacitorRuntime()) {
+      void getNativeDesktopLyricsPlugin()?.hide?.({});
+    }
+    setIsOpen(false);
+  }, []);
+
+  useEffect(() => {
+    const handleClose = () => close();
+    window.addEventListener(musicRoomCloseDesktopLyricsEvent, handleClose);
+    return () => window.removeEventListener(musicRoomCloseDesktopLyricsEvent, handleClose);
+  }, [close]);
 
   const selectActivePlayer = useCallback(() => {
     const roomPlayer = playersRef.current.get("room");
@@ -144,10 +172,13 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
         if (current === player || current?.source === source) {
           playersRef.current.delete(source);
           selectActivePlayer();
+          if (source === "room") {
+            close();
+          }
         }
       }
     };
-  }, [selectActivePlayer]);
+  }, [close, selectActivePlayer]);
 
   useEffect(() => {
     const syncSettings = () => {
@@ -384,15 +415,6 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
       return;
     }
     setIsOpen((current) => !current);
-  }, []);
-
-  const close = useCallback(() => {
-    if (isTauriRuntime()) {
-      void invokeTauri("hide_desktop_lyrics_window");
-    } else if (isCapacitorRuntime()) {
-      void getNativeDesktopLyricsPlugin()?.hide?.({});
-    }
-    setIsOpen(false);
   }, []);
 
   const value = useMemo<DesktopLyricsContextValue>(() => ({

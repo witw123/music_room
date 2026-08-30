@@ -130,7 +130,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
 
   return (
     <section
-      className="flex h-full min-h-[16rem] min-w-0 flex-1 flex-col bg-surface/25 lg:min-h-0"
+      className="flex h-full min-h-[24rem] min-w-0 flex-1 flex-col bg-surface/25 lg:min-h-0"
       data-testid="radio-chat-panel"
       data-scroll-enabled={scrollEnabled ? "true" : "false"}
       onFocusCapture={onActivateScroll}
@@ -155,11 +155,11 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
                 {!isCurrentUser ? <ChatAvatar name={message.senderName} /> : null}
                 <div className={`min-w-0 max-w-[min(82%,32rem)] ${isCurrentUser ? "text-right" : "text-left"}`}>
                   <div className={`mb-1 flex min-w-0 items-baseline gap-1.5 px-0.5 ${isCurrentUser ? "justify-end" : "justify-start"}`}>
-                    {!isCurrentUser ? <strong className="min-w-0 truncate text-xs font-medium text-accent/75">{message.senderName}</strong> : null}
+                    {!isCurrentUser ? <strong className="min-w-0 truncate text-xs font-medium text-accent/65">{message.senderName}</strong> : null}
                     <time className="shrink-0 text-[10px] sm:text-xs tabular-nums text-foreground-muted/55" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
                     {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="shrink-0 text-[10px] text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
                   </div>
-                  <div className={`inline-block max-w-full rounded-2xl px-3 py-2 text-left shadow-sm ${isCurrentUser ? "bg-accent text-white" : "bg-white/[0.1] text-foreground"}`}><p className="break-words text-xs sm:text-sm leading-5">{message.content}</p></div>
+                  <div className={`inline-block max-w-full rounded-[0.875rem] px-3 py-2 text-left shadow-sm ${isCurrentUser ? "bg-accent text-white" : "bg-white/[0.1] text-foreground"}`}><p className="break-words text-xs sm:text-sm leading-5">{message.content}</p></div>
                 </div>
                 {isCurrentUser ? <ChatAvatar currentUser name={message.senderName} /> : null}
               </article>
@@ -186,7 +186,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
 }
 
 function ChatAvatar({ name, currentUser = false }: { name: string; currentUser?: boolean }) {
-  return <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-inner border border-white/10 ${currentUser ? "bg-accent/15 text-accent" : "bg-white/[0.1] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
+  return <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-inner border border-white/10 ${currentUser ? "bg-accent/15 text-accent" : "bg-white/[0.1] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function mergeMessages(

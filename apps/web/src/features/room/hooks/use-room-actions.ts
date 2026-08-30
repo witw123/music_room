@@ -16,6 +16,7 @@ import { toUserFacingError } from "@/lib/domain/music-room-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { hasRoomPermission } from "@/features/room/room-permissions";
+import { closeDesktopLyricsNative } from "@/features/playback/desktop-lyrics-context";
 
 type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
@@ -395,6 +396,7 @@ export function useRoomActions({
           dispatchRoomStateEvent({ type: "local-reset" });
           resetPlayerSurface();
           roomAudioOutput.releaseRoomAudioSession();
+          closeDesktopLyricsNative();
           resetRealtimePeer();
           window.localStorage.removeItem(lastRoomStorageKey);
           void refreshAvailableRooms().catch(() => undefined);
@@ -436,6 +438,7 @@ export function useRoomActions({
       dispatchRoomStateEvent({ type: "local-reset" });
       resetPlayerSurface();
       roomAudioOutput.releaseRoomAudioSession();
+      closeDesktopLyricsNative();
       resetRealtimePeer();
       window.localStorage.removeItem(lastRoomStorageKey);
       try {

@@ -8,6 +8,7 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { clearAwayRoomId } from "@/lib/domain/away-room";
+import { closeDesktopLyricsNative } from "@/features/playback/desktop-lyrics-context";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -49,6 +50,7 @@ export function useRoomLifecycleActions({
     setSuppressRoomRecovery(true);
     resetPlayerSurface();
     roomAudioOutput.releaseRoomAudioSession();
+    closeDesktopLyricsNative();
     resetRealtimePeer();
     clearIdentity();
     clearAwayRoomId();
@@ -66,6 +68,7 @@ export function useRoomLifecycleActions({
 
   const handleLeaveRoomAction = useCallback(async () => {
     setIsNavigatingRoomExit(true);
+    closeDesktopLyricsNative();
     const didLeave = await leaveRoom();
     if (!didLeave) {
       setIsNavigatingRoomExit(false);
@@ -95,6 +98,7 @@ export function useRoomLifecycleActions({
 
   const handleDeleteRoomAction = useCallback(async () => {
     setIsNavigatingRoomExit(true);
+    closeDesktopLyricsNative();
     const didDelete = await deleteRoom();
     if (!didDelete) {
       setIsNavigatingRoomExit(false);
