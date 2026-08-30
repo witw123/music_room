@@ -7,13 +7,11 @@ import type {
   ProviderTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
-import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { ProviderSearchPage } from "@/components/ProviderSearchPage";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
-import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
@@ -36,10 +34,7 @@ import {
   saveAudioFileToLocalDirectory
 } from "@/features/library/local-audio-storage";
 import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
-import {
-  ProviderAlbumTrackTable,
-  type ProviderAlbumTrackActions
-} from "@/components/ProviderAlbumDetailView";
+import { ProviderAlbumTrackTable } from "@/components/ProviderAlbumDetailView";
 import {
   getCachedDiscoverData,
   setCachedDiscoverData,
@@ -97,7 +92,7 @@ export function DiscoverPage() {
     activeSession ? getCachedDiscoverData(activeSession.userId) ?? null : null
   );
   const [loading, setLoading] = useState(() =>
-    !Boolean(activeSession && getCachedDiscoverData(activeSession.userId))
+    !(activeSession && getCachedDiscoverData(activeSession.userId))
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -767,108 +762,6 @@ function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPl
   );
 }
 
-function DiscoverCompactTrackGrid({ tracks, actions }: { tracks: DiscoverTrackRecommendation[]; actions: DiscoverTrackActions }) {
-  return (
-    <div className="grid gap-x-4 gap-y-2 sm:gap-x-6 md:grid-cols-2 xl:grid-cols-3">
-      {tracks.map((item) => (
-        <div
-          className="flex min-w-0 items-center gap-3 py-2 px-3 rounded-2xl border border-transparent hover:border-white/[0.06] transition-all hover:bg-white/[0.06] group"
-          key={providerTrackKey(item.candidate)}
-        >
-          <button
-            aria-label={`播放《${item.candidate.title}》`}
-            className="group/art relative h-11 w-11 min-w-[2.75rem] min-h-[2.75rem] max-w-[2.75rem] max-h-[2.75rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            disabled={actions.pending !== null}
-            onClick={() => actions.onPlay(item.candidate)}
-            type="button"
-          >
-            <Artwork alt="" className="h-full w-full object-cover block" src={item.candidate.artworkUrl} />
-            <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition group-hover/art:opacity-100">
-              <PlayIcon className="w-3.5 h-3.5 text-white" />
-            </span>
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">{item.candidate.title}</p>
-            <p className="truncate text-xs text-foreground-muted mt-0.5">{item.candidate.artist}{item.candidate.album ? ` · ${item.candidate.album}` : ""}</p>
-          </div>
-          <TrackMoreActions actions={actions} compact track={item.candidate} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DiscoverTrackRail({ tracks, actions }: { tracks: DiscoverTrackRecommendation[]; actions: DiscoverTrackActions }) {
-  return (
-    <div className="grid min-w-0 grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-      {tracks.map((item) => (
-        <DiscoverTrackCard actions={actions} key={providerTrackKey(item.candidate)} track={item.candidate} />
-      ))}
-    </div>
-  );
-}
-
-function DiscoverTrackCard({ track, actions }: { track: Track; actions: DiscoverTrackActions }) {
-  const preparing = actions.pending === `play:${track.provider}:${track.providerTrackId}` || actions.pending === `queue:${track.provider}:${track.providerTrackId}`;
-  return (
-    <article className="group relative flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 p-2.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.14] hover:bg-[#181a26]/90 sm:p-3 shadow-md">
-      <button
-        aria-label={`播放《${track.title}》`}
-        className="group/btn relative block aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated text-left border border-white/10 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        disabled={actions.pending !== null}
-        onClick={() => actions.onPlay(track)}
-        type="button"
-      >
-        <Artwork alt="" className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105" src={track.artworkUrl} />
-        <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
-        <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-100 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 scale-100 sm:opacity-0 sm:group-hover:opacity-100 sm:scale-95 sm:group-hover:scale-100">
-          <PlayIcon className="w-4 h-4" />
-        </span>
-      </button>
-      <div className="mt-2.5 flex min-w-0 items-start justify-between gap-1.5">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs sm:text-sm font-semibold text-white group-hover:text-accent transition-colors" title={track.title}>{track.title}</p>
-          <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={track.artist}>{track.artist}</p>
-        </div>
-        <TrackMoreActions actions={actions} track={track} />
-      </div>
-      <p className="mt-1 truncate text-[10px] text-foreground-muted/70">{providerLabel(track.provider)}{preparing ? " · 准备中" : ""}</p>
-    </article>
-  );
-}
-
-function TrackMoreActions({ track, actions, compact = false }: { track: Track; actions: DiscoverTrackActions; compact?: boolean }) {
-  const [menuAnchor, setMenuAnchor] = useState<AnchoredDialogAnchor | null>(null);
-  const downloaded = actions.isDownloaded(track);
-  const queued = actions.isQueued(track);
-  const loading = actions.pending !== null;
-  const menuItems: MobileTrackAction[] = [
-    { id: "play", label: "播放", icon: "play", disabled: loading, onSelect: () => actions.onPlay(track) },
-    { id: "radio", label: "开启单曲漫游", icon: "play", disabled: loading, onSelect: () => actions.onStartRadio(track) },
-    { id: "queue", label: queued ? "已在队列中" : "加入队列", icon: "queue", disabled: loading || queued, onSelect: () => actions.onQueue(track) },
-    { id: "download", label: downloaded ? "已下载" : "下载到本地", icon: "download", disabled: loading || downloaded, onSelect: () => actions.onDownload(track) },
-    { id: "playlist", label: "加入歌单", icon: "plus", disabled: loading, onSelect: () => { if (menuAnchor) actions.onAddToPlaylist(track, menuAnchor); } },
-    { id: "favorite", label: actions.isFavorite(track) ? "取消收藏" : "收藏歌曲", icon: "heart", disabled: actions.isFavoritePending(track), onSelect: () => actions.onToggleFavorite(track) },
-    { id: "not-interested", label: "不再推荐这首", icon: "trash", destructive: true, disabled: loading, onSelect: () => actions.onFeedback(track, "not-interested") },
-    { id: "exclude-profile", label: "不计入我的品味", icon: "move", disabled: loading, onSelect: () => actions.onFeedback(track, "exclude-from-profile") }
-  ];
-  return (
-    <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
-      {!compact ? (
-        <div className="hidden sm:block">
-          <FavoriteTrackButton isFavorite={actions.isFavorite(track)} onToggle={() => actions.onToggleFavorite(track)} pending={actions.isFavoritePending(track)} size="compact" track={track} />
-        </div>
-      ) : null}
-      <Button aria-label={`打开《${track.title}》的更多操作`} className="h-9 w-9 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08] sm:h-7 sm:w-7" disabled={loading} onClick={(event) => setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="更多操作" type="button" variant="ghost">
-        <MoreIcon />
-      </Button>
-      {menuAnchor ? (
-        <MobileTrackActionsMenu anchor={menuAnchor} items={menuItems} onClose={() => setMenuAnchor(null)} subtitle={`${track.artist}${track.album ? ` · ${track.album}` : ""}`} title={track.title} />
-      ) : null}
-    </div>
-  );
-}
-
 function PlaylistPicker({ track, anchor, options, loading, pending, onClose, onSelect }: { track: Track | null; anchor: AnchoredDialogAnchor | null; options: ProviderPlaylistPickerOption[]; loading: boolean; pending: string | null; onClose: () => void; onSelect: (option: ProviderPlaylistPickerOption) => Promise<void> }) {
   if (!track || !anchor) return null;
   return <ProviderPlaylistPickerDialog anchor={anchor} loading={loading} options={options} pending={pending !== null} subjectLabel={`《${track.title}》 · ${track.artist}`} onClose={onClose} onSelect={(option) => void onSelect(option)} />;
@@ -1011,8 +904,6 @@ function toErrorMessage(error: unknown) {
   }
   return error instanceof Error ? error.message : "内容加载失败，请稍后重试。";
 }
-
-function MoreIcon() { return <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 24 24" width="16"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>; }
 
 function AppPageBackground() {
   return <div aria-hidden="true" className="workspace-page-background" />;
