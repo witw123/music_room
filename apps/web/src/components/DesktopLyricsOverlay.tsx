@@ -5,12 +5,11 @@ import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";
 import { isCapacitorRuntime, isTauriRuntime } from "@/lib/desktop/tauri";
 import { useDesktopLyrics, getDesktopLyricsPositionStorageKey } from "@/features/playback/desktop-lyrics-context";
 
-type Position = { left: number; top: number };
+type Position = { x: number; y: number };
 
 /**
- * In-app floating desktop lyrics bar (web + Capacitor mobile). The Tauri
- * desktop shell renders the same bar inside its own always-on-top native
- * window instead, so this overlay stays out of the way there.
+ * In-app floating desktop lyrics bar (web + Capacitor mobile).
+ * Supports pixel-perfect free dragging across screen with boundary clamping and position memory.
  */
 export function DesktopLyricsOverlay() {
   const {
@@ -25,48 +24,48 @@ export function DesktopLyricsOverlay() {
   } = useDesktopLyrics();
   const [position, setPosition] = useState<Position | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ offsetX: number; offsetY: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    moved: boolean;
+  } | null>(null);
   const positionRef = useRef<Position | null>(null);
 
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
 
+  // Load saved position from localStorage
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(getDesktopLyricsPositionStorageKey());
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<Position>;
-      if (typeof parsed.left === "number" && typeof parsed.top === "number") {
-        const nextPosition = clampPosition({ left: parsed.left, top: parsed.top }, null);
-        positionRef.current = nextPosition;
-        setPosition(nextPosition);
+      if (typeof parsed.x === "number" && typeof parsed.y === "number" && Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+        const clamped = clampPixelPosition({ x: parsed.x, y: parsed.y }, panelRef.current);
+        positionRef.current = clamped;
+        setPosition(clamped);
       }
     } catch {
-      // Ignore malformed local UI state and use the default bottom-center position.
+      // Ignore malformed storage and use default bottom-center position.
     }
   }, []);
 
+  // Adjust position if viewport resizes
   useEffect(() => {
-    const handleResize = () => setPosition((current) => current ? clampPosition(current, panelRef.current) : current);
+    const handleResize = () => {
+      setPosition((current) => (current ? clampPixelPosition(current, panelRef.current) : current));
+    };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // The Tauri desktop shell hosts lyrics in a native always-on-top window and
-  // the Capacitor mobile shell in a system overlay — both replace this in-page
-  // bar (see /desktop-lyrics and DesktopLyricsPlugin.kt).
   if (isTauriRuntime() || isCapacitorRuntime()) return null;
   if (!isOpen || !activePlayer) return null;
 
   const canControl = activePlayer.canControlPlayback && Boolean(activePlayer.playbackTrackId);
-  const panelPositionStyle = position
-    ? {
-        left: `${position.left * 100}%`,
-        top: `${position.top * 100}%`,
-        transform: "translate(-50%, -50%)"
-      }
-    : undefined;
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
@@ -74,8 +73,10 @@ export function DesktopLyricsOverlay() {
     if (!panel) return;
     const rect = panel.getBoundingClientRect();
     dragRef.current = {
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
       moved: false
     };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -85,16 +86,20 @@ export function DesktopLyricsOverlay() {
     const drag = dragRef.current;
     const panel = panelRef.current;
     if (!drag || !panel) return;
-    const rect = panel.getBoundingClientRect();
-    if (Math.abs(event.clientX - (rect.left + drag.offsetX)) > 5 || Math.abs(event.clientY - (rect.top + drag.offsetY)) > 5) {
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
       drag.moved = true;
     }
     if (!drag.moved) return;
-    const left = event.clientX - drag.offsetX + rect.width / 2;
-    const top = event.clientY - drag.offsetY + rect.height / 2;
-    const next = clampPosition({ left: left / window.innerWidth, top: top / window.innerHeight }, panel);
-    positionRef.current = next;
-    setPosition(next);
+
+    const nextX = drag.startLeft + dx;
+    const nextY = drag.startTop + dy;
+    const clamped = clampPixelPosition({ x: nextX, y: nextY }, panel);
+    positionRef.current = clamped;
+    setPosition(clamped);
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -104,15 +109,33 @@ export function DesktopLyricsOverlay() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     if (moved && positionRef.current) {
-      window.localStorage.setItem(getDesktopLyricsPositionStorageKey(), JSON.stringify(positionRef.current));
+      try {
+        window.localStorage.setItem(getDesktopLyricsPositionStorageKey(), JSON.stringify(positionRef.current));
+      } catch {
+        // Storage write may fail in sandboxes
+      }
     }
   };
+
+  const panelPositionStyle = position
+    ? {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        transform: "none",
+        bottom: "auto",
+        right: "auto"
+      }
+    : undefined;
 
   return (
     <div
       ref={panelRef}
       aria-label="桌面歌词"
-      className={`fixed z-[120] select-none touch-none ${position ? "" : "inset-x-3 bottom-[calc(11.5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:right-auto md:bottom-[5.75rem] md:w-[min(92vw,48rem)] md:-translate-x-1/2"}`}
+      className={`fixed z-[120] select-none touch-none ${
+        position
+          ? "w-[min(92vw,48rem)]"
+          : "inset-x-3 bottom-[calc(11.5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:right-auto md:bottom-[5.75rem] md:w-[min(92vw,48rem)] md:-translate-x-1/2"
+      }`}
       data-testid="desktop-lyrics-overlay"
       onPointerCancel={handlePointerUp}
       onPointerDown={handlePointerDown}
@@ -147,13 +170,14 @@ export function DesktopLyricsOverlay() {
   );
 }
 
-function clampPosition(position: Position, panel: HTMLDivElement | null): Position {
-  const width = panel?.offsetWidth ?? 360;
+function clampPixelPosition(pos: Position, panel: HTMLDivElement | null): Position {
+  if (typeof window === "undefined") return pos;
+  const width = panel?.offsetWidth ?? 380;
   const height = panel?.offsetHeight ?? 68;
-  const horizontalInset = Math.min(0.5, (width / 2 + 12) / Math.max(window.innerWidth, 1));
-  const verticalInset = Math.min(0.5, (height / 2 + 12) / Math.max(window.innerHeight, 1));
+  const maxX = Math.max(10, window.innerWidth - width - 10);
+  const maxY = Math.max(10, window.innerHeight - height - 10);
   return {
-    left: Math.min(1 - horizontalInset, Math.max(horizontalInset, position.left)),
-    top: Math.min(1 - verticalInset, Math.max(verticalInset, position.top))
+    x: Math.max(10, Math.min(maxX, pos.x)),
+    y: Math.max(10, Math.min(maxY, pos.y))
   };
 }

@@ -52,8 +52,10 @@ export type DesktopLyricsBarProps = {
 
 /**
  * Pure floating desktop lyrics bar (Apple Music / Spotify style).
- * No background box, no borders, no drag grip key — entire bar is smoothly draggable.
- * High-contrast glowing lyrics with hover-revealed glass pill playback controls.
+ * - No background box or borders.
+ * - Cover art only appears on hover.
+ * - Automatically scrolls long lines smoothly so words are never truncated.
+ * - Word-by-word karaoke styling matches the main room/player lyrics.
  */
 export function DesktopLyricsBar({
   title,
@@ -78,8 +80,11 @@ export function DesktopLyricsBar({
   onPointerDown
 }: DesktopLyricsBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const textContentRef = useRef<HTMLDivElement | null>(null);
   const [surfaceHeight, setSurfaceHeight] = useState(76);
   const [isHovered, setIsHovered] = useState(false);
+  const [overflowPx, setOverflowPx] = useState(0);
   const [lyricScale, setLyricScale] = useState(
     () => getAppSettings().playback.desktopLyricScale
   );
@@ -172,6 +177,30 @@ export function DesktopLyricsBar({
     : Math.round(Math.min(110, Math.max(18, surfaceHeight * 0.40 * lyricScale)));
   const subFontSize = Math.round(Math.max(12, baseFontSize * 0.56));
 
+  // Check text overflow for horizontal auto-scrolling
+  useEffect(() => {
+    const container = containerRef.current;
+    const text = textContentRef.current;
+    if (!container || !text) {
+      setOverflowPx(0);
+      return;
+    }
+    const diff = text.scrollWidth - container.clientWidth;
+    setOverflowPx(diff > 4 ? diff : 0);
+  }, [activeIndex, lineText, baseFontSize, subLineText, isHovered]);
+
+  // Calculate auto-scroll translation offset as current line progresses
+  const scrollOffset = useMemo(() => {
+    if (overflowPx <= 0) return 0;
+    if (displayWords.length === 0) return 0;
+    const startMs = displayWords[0]?.timeMs ?? 0;
+    const lastWord = displayWords[displayWords.length - 1];
+    const endMs = (lastWord?.timeMs ?? 0) + (lastWord?.durationMs ?? 1000);
+    const duration = Math.max(800, endMs - startMs);
+    const progress = Math.min(1, Math.max(0, (smoothPositionMs - startMs) / duration));
+    return -Math.min(overflowPx, Math.round(progress * (overflowPx + 24)));
+  }, [overflowPx, displayWords, smoothPositionMs]);
+
   const message = status === "loading" && !hasLyrics
     ? "正在获取歌词…"
     : hasLyrics
@@ -184,17 +213,17 @@ export function DesktopLyricsBar({
     <div
       ref={rootRef}
       aria-label={`桌面歌词：${title}${artist ? ` - ${artist}` : ""}`}
-      className="group relative flex h-full w-full min-w-0 items-center justify-between gap-3 bg-transparent px-3 md:px-5 py-1 text-white select-none cursor-grab active:cursor-grabbing transition-all duration-300"
+      className="group relative flex h-full w-full min-w-0 items-center justify-between gap-2 bg-transparent px-2 md:px-4 py-1 text-white select-none cursor-grab active:cursor-grabbing transition-all duration-300"
       data-tauri-drag-region="true"
       data-testid="desktop-lyrics-bar"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onPointerDown={onPointerDown}
     >
-      {/* Left: Album Cover Thumbnail */}
+      {/* Left: Album Cover Thumbnail (Only visible on hover) */}
       <div
-        className={`flex shrink-0 items-center transition-opacity duration-200 ${
-          isHovered ? "opacity-100" : "opacity-40"
+        className={`flex shrink-0 items-center overflow-hidden transition-all duration-300 ${
+          isHovered ? "opacity-100 max-w-[3.5rem] mr-1" : "opacity-0 max-w-0 mr-0 pointer-events-none"
         }`}
         data-tauri-drag-region="true"
       >
@@ -217,17 +246,24 @@ export function DesktopLyricsBar({
         </div>
       </div>
 
-      {/* Center: Pure Karaoke Lyric Text Line + Subtitle Translation */}
+      {/* Center: Pure Karaoke Lyric Line with Smooth Horizontal Auto-Scrolling */}
       <div
-        className="relative flex h-full min-w-0 flex-1 flex-col justify-center items-center overflow-hidden px-2 text-center select-none"
+        ref={containerRef}
+        className="relative flex h-full min-w-0 flex-1 flex-col justify-center items-center overflow-hidden px-1 text-center select-none"
         data-tauri-drag-region="true"
         data-testid="desktop-lyrics-line"
       >
-        {/* Main Karaoke Lyric Line */}
+        {/* Main Lyric Line Wrapper (auto-scrolls horizontally if text is longer than viewport) */}
         <div
-          className="relative max-w-full overflow-hidden truncate font-bold tracking-tight text-white leading-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+          ref={textContentRef}
+          className={`whitespace-nowrap transition-transform ${
+            overflowPx > 0 ? "duration-200 ease-linear self-start text-left" : "self-center text-center"
+          } font-bold tracking-tight text-white leading-tight`}
           data-tauri-drag-region="true"
-          style={{ fontSize: `${baseFontSize}px` }}
+          style={{
+            fontSize: `${baseFontSize}px`,
+            transform: overflowPx > 0 ? `translateX(${scrollOffset}px)` : "none"
+          }}
         >
           {hasLyrics && displayWords.length > 0 ? (
             displayWords.map((word, wordIndex) => {
@@ -235,7 +271,7 @@ export function DesktopLyricsBar({
               if (progress >= 1) {
                 return (
                   <span
-                    className="inline text-white [text-shadow:0_0_18px_rgba(255,255,255,0.9),0_2px_10px_rgba(0,0,0,0.95)]"
+                    className="inline text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.85)]"
                     data-tauri-drag-region="true"
                     key={wordIndex}
                   >
@@ -246,7 +282,7 @@ export function DesktopLyricsBar({
               if (progress <= 0) {
                 return (
                   <span
-                    className="inline text-white/55 [text-shadow:0_2px_8px_rgba(0,0,0,0.95)] transition-colors duration-150"
+                    className="inline text-white/45 [text-shadow:0_2px_8px_rgba(0,0,0,0.85)] transition-colors duration-150"
                     data-tauri-drag-region="true"
                     key={wordIndex}
                   >
@@ -257,11 +293,11 @@ export function DesktopLyricsBar({
               const filled = (progress * 100).toFixed(1);
               return (
                 <span
-                  className="inline text-transparent will-change-[background-image] [text-shadow:0_0_20px_rgba(0,122,255,0.7),0_2px_10px_rgba(0,0,0,0.95)]"
+                  className="inline text-transparent will-change-[background-image] [text-shadow:0_2px_8px_rgba(0,0,0,0.85)]"
                   data-tauri-drag-region="true"
                   key={wordIndex}
                   style={{
-                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.55) ${filled}%, rgb(255 255 255 / 0.55) 100%)`,
+                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.45) ${filled}%, rgb(255 255 255 / 0.45) 100%)`,
                     backgroundClip: "text",
                     WebkitBackgroundClip: "text"
                   }}
@@ -272,7 +308,7 @@ export function DesktopLyricsBar({
             })
           ) : (
             <span
-              className={`block truncate [text-shadow:0_2px_10px_rgba(0,0,0,0.95)] ${
+              className={`block truncate [text-shadow:0_2px_8px_rgba(0,0,0,0.85)] ${
                 status === "loading" ? "animate-pulse text-white/70" : "text-white/85"
               }`}
               data-tauri-drag-region="true"
@@ -285,7 +321,7 @@ export function DesktopLyricsBar({
         {/* Translation / Romanization Sub-line */}
         {hasSubLine ? (
           <div
-            className="mt-1 max-w-full truncate text-white/75 font-medium tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-opacity duration-200"
+            className="mt-1 max-w-full truncate text-white/70 font-medium tracking-wide [text-shadow:0_2px_6px_rgba(0,0,0,0.85)] transition-opacity duration-200"
             data-tauri-drag-region="true"
             style={{ fontSize: `${subFontSize}px` }}
           >
@@ -294,7 +330,7 @@ export function DesktopLyricsBar({
         ) : null}
       </div>
 
-      {/* Right: Minimal Hover-Revealed Glass Pill Controls (Apple Music / Spotify style) */}
+      {/* Right: Minimal Hover-Revealed Glass Pill Controls */}
       <div
         className={`flex shrink-0 items-center gap-1.5 cursor-default transition-all duration-200 ${
           isHovered ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-2"
