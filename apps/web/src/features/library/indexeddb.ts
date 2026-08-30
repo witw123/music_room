@@ -10,6 +10,7 @@ import {
   type TrackLoudness
 } from "@music-room/shared";
 import { LocalRepository } from "./local-repository";
+import { invokeTauri } from "@/lib/desktop/tauri";
 
 export type CachedLibraryTrackRecord = {
   fileHash: string;
@@ -1014,10 +1015,13 @@ export async function getLocalAudioDirectory(): Promise<LocalAudioDirectoryRecor
     try {
       const opfsRoot = await navigator.storage.getDirectory();
       const appDir = await opfsRoot.getDirectoryHandle("music_room", { create: true });
+      // The Tauri shell guarantees a visible storage root inside its install
+      // directory; show that real path as the directory name.
+      const storageRoot = await invokeTauri<string>("ensure_default_storage_root").catch(() => undefined);
       const record: LocalAudioDirectoryRecord = {
         id: "default",
         handle: appDir,
-        name: "应用安装数据目录 (自动创建)",
+        name: storageRoot ?? "应用安装数据目录 (自动创建)",
         updatedAt: new Date().toISOString()
       };
       await musicRoomDatabase.localAudioDirectory.put(record);

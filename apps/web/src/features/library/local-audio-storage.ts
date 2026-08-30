@@ -41,6 +41,7 @@ export {
 import { enqueueLocalRepositoryWrite } from "./local-repository-queue";
 import { resolveLocalArtworkUrl } from "./audio-metadata";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { isTauriRuntime } from "@/lib/desktop/tauri";
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {
@@ -226,10 +227,7 @@ export async function getLocalAudioFile(
   if (sourceDirectoryId) {
     const sourceDirectory = await getLocalPlaylistDirectory(sourceDirectoryId);
     if (!sourceDirectory) return null;
-    const permission = await asPermissionedHandle(sourceDirectory.handle)
-      .queryPermission({ mode: "read" })
-      .catch(() => "denied" as PermissionState);
-    if (permission !== "granted") return null;
+    if (!(await hasDirectoryReadPermission(sourceDirectory.handle))) return null;
     const fileName = sourceFileName ?? fileRecord?.fileName;
     return fileName
       ? getFileByPath(sourceDirectory.handle, fileName).catch(() => null)
@@ -243,20 +241,14 @@ export async function getLocalAudioFile(
   if (fileRecord.sourceDirectoryId) {
     const rootDirectory = await getLocalAudioDirectory();
     if (!rootDirectory) return null;
-    const permission = await asPermissionedHandle(rootDirectory.handle)
-      .queryPermission({ mode: "read" })
-      .catch(() => "denied" as PermissionState);
-    if (permission !== "granted") return null;
+    if (!(await hasDirectoryReadPermission(rootDirectory.handle))) return null;
     return getFileByPath(rootDirectory.handle, sourceFileName ?? fileRecord.fileName).catch(() => null);
   }
 
   const directory = await getLocalAudioDirectory();
   if (!directory) return null;
 
-  const permission = await asPermissionedHandle(directory.handle)
-    .queryPermission({ mode: "read" })
-    .catch(() => "denied" as PermissionState);
-  if (permission !== "granted") {
+  if (!(await hasDirectoryReadPermission(directory.handle))) {
     return null;
   }
 
@@ -393,10 +385,7 @@ export async function getLocalAudioCacheFile(fileHash: string) {
     return null;
   }
 
-  const permission = await asPermissionedHandle(directory.handle)
-    .queryPermission({ mode: "read" })
-    .catch(() => "denied" as PermissionState);
-  if (permission !== "granted") {
+  if (!(await hasDirectoryReadPermission(directory.handle))) {
     return null;
   }
 
@@ -999,6 +988,19 @@ async function getWritableLocalAudioDirectory() {
     throw new Error("没有获得 Music Room 本地存储文件夹写入权限，请重新选择根文件夹。 ");
   }
   return directory;
+}
+
+/**
+ * The software client (Tauri) reads the app-owned OPFS root, where no user
+ * permission prompt applies — but WebView2 may still report "prompt" for
+ * those handles, which silently nulled every cache read and broke cached
+ * playback. Browsers keep the standard queryPermission behavior.
+ */
+async function hasDirectoryReadPermission(handle: FileSystemDirectoryHandle) {
+  if (isTauriRuntime()) return true;
+  return await asPermissionedHandle(handle)
+    .queryPermission({ mode: "read" })
+    .catch(() => "denied" as PermissionState) === "granted";
 }
 
 function asPermissionedHandle(handle: FileSystemDirectoryHandle): PermissionedDirectoryHandle {

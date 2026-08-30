@@ -26,6 +26,35 @@ const LYRICS_BOTTOM_INSET_LOGICAL: f64 = 96.0;
 // the event loop it is blocking — the whole app deadlocks (no window, frozen
 // UI, no quit). Async commands run on the async runtime, which is the
 // supported path for cross-thread window creation.
+/// Guarantee a visible storage root for the client: prefer a real folder
+/// inside the installation directory; fall back to the per-user app data
+/// directory when the install location is not writable (e.g. Program Files).
+fn resolve_default_storage_root(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(install_dir) = exe.parent() {
+            let root = install_dir.join("MusicRoomStorage");
+            if std::fs::create_dir_all(&root).is_ok() {
+                let probe = root.join(".write-probe");
+                if std::fs::write(&probe, b"ok").is_ok() {
+                    let _ = std::fs::remove_file(&probe);
+                    return Ok(root);
+                }
+            }
+        }
+    }
+
+    let data_dir = app.path().app_local_data_dir().map_err(|error| error.to_string())?;
+    let root = data_dir.join("storage");
+    std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    Ok(root)
+}
+
+#[command]
+async fn ensure_default_storage_root(app: AppHandle) -> Result<String, String> {
+    let root = resolve_default_storage_root(&app)?;
+    Ok(root.to_string_lossy().into_owned())
+}
+
 #[command]
 async fn toggle_desktop_lyrics(app: AppHandle) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window(LYRICS_LABEL) {
@@ -132,7 +161,8 @@ pub fn run() {
             toggle_desktop_lyrics,
             hide_desktop_lyrics_window,
             drag_desktop_lyrics_window,
-            set_desktop_lyrics_size
+            set_desktop_lyrics_size,
+            ensure_default_storage_root
         ])
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "退出 Music Room", true, None::<&str>)?;
@@ -174,6 +204,12 @@ pub fn run() {
             }
 
             let _tray = builder.build(app)?;
+
+            // The storage root must exist by default so cached playback works
+            // on first launch without any manual directory selection.
+            if let Err(error) = resolve_default_storage_root(app.handle()) {
+                eprintln!("failed to initialize default storage root: {error}");
+            }
 
             Ok(())
         })
