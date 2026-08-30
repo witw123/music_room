@@ -9,21 +9,31 @@ import {
 } from "react";
 import {
   getActiveRoomLyricIndex,
+  alignRoomLyricLines,
   getRoomLyricDisplayWords,
   getRoomLyricWordProgress,
   parseRoomLyrics
 } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
-import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
+import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
 
 export type DesktopLyricsBarLyrics = {
   plainLyric: string | null;
+  translatedLyric?: string | null;
+  romanizedLyric?: string | null;
 };
 
-type DesktopLyricsBarProps = {
+export type DesktopLyricsBarProps = {
   title: string;
+  artist?: string | null;
   artworkUrl: string | null;
   plainLyric: string | null;
+  translatedLyric?: string | null;
+  romanizedLyric?: string | null;
+  showTranslation?: boolean;
+  showRomanized?: boolean;
+  onToggleTranslation?: () => void;
+  onToggleRomanized?: () => void;
   /** Latest playback position reported by the host; interpolated with rAF. */
   progressMs: number;
   /** Host wall-clock time (Date.now()) when progressMs was sampled. */
@@ -37,18 +47,25 @@ type DesktopLyricsBarProps = {
   onClose: () => void;
   /** Optional host drag hook (Tauri native window dragging). */
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onScaleChange?: (scale: number) => void;
 };
 
 /**
- * The combined desktop-lyrics surface: artwork, transport controls and a
- * single word-by-word karaoke line floating directly over the desktop (no
- * background card). The karaoke font scales with the surface height so the
- * bar adapts when the window is resized.
+ * Modern floating desktop lyrics capsule bar (Apple Music / NetEase style).
+ * Features rich frosted glassmorphism, word-by-word illuminated karaoke fill,
+ * optional synchronized translation/romanization sub-line, and sleek interactive controls.
  */
 export function DesktopLyricsBar({
   title,
+  artist,
   artworkUrl,
   plainLyric,
+  translatedLyric = null,
+  romanizedLyric = null,
+  showTranslation = true,
+  showRomanized = false,
+  onToggleTranslation,
+  onToggleRomanized,
   progressMs,
   anchorAt,
   isPlaying,
@@ -58,13 +75,13 @@ export function DesktopLyricsBar({
   onTogglePlay,
   onNext,
   onClose,
-  onPointerDown
+  onPointerDown,
+  onScaleChange
 }: DesktopLyricsBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [surfaceHeight, setSurfaceHeight] = useState(72);
-  // Cover + transport stay hidden until the lyrics line is clicked; clicking
-  // it again hides them. Clicking never seeks.
-  const [controlsVisible, setControlsVisible] = useState(false);
+  const [surfaceHeight, setSurfaceHeight] = useState(76);
+  const [isHovered, setIsHovered] = useState(false);
+  const [controlsPinned, setControlsPinned] = useState(false);
   const [lyricScale, setLyricScale] = useState(
     () => getAppSettings().playback.desktopLyricScale
   );
@@ -91,13 +108,12 @@ export function DesktopLyricsBar({
     return () => observer.disconnect();
   }, []);
 
-  const fontSize = Math.round(Math.min(120, Math.max(12, surfaceHeight * 0.34 * lyricScale)));
-  const outlineWidth = `${Math.max(1.5, fontSize * 0.09).toFixed(1)}px`;
-
+  // Parse lyrics
   const lines = useMemo(() => parseRoomLyrics(plainLyric), [plainLyric]);
+  const translatedLines = useMemo(() => parseRoomLyrics(translatedLyric), [translatedLyric]);
+  const romanizedLines = useMemo(() => parseRoomLyrics(romanizedLyric), [romanizedLyric]);
 
-  // Interpolate the coarse host progress clock so per-character karaoke fills
-  // advance at display refresh rate instead of the host's render interval.
+  // Interpolate progress smoothly with rAF for 60/120fps word fill animation
   const [smoothPositionMs, setSmoothPositionMs] = useState(progressMs);
   const anchorRef = useRef({
     baseMs: progressMs,
@@ -138,122 +154,286 @@ export function DesktopLyricsBar({
       : lines[activeIndex >= 0 ? activeIndex : 0]?.text ?? null;
   const hasLyrics = lines.length > 0;
 
+  // Sub-line: translation or romanization
+  const alignedTranslatedLine = useMemo(() => {
+    if (!showTranslation || translatedLines.length === 0 || activeIndex < 0) return null;
+    return alignRoomLyricLines(lines, translatedLines)[activeIndex]?.text ?? null;
+  }, [activeIndex, lines, showTranslation, translatedLines]);
+
+  const alignedRomanizedLine = useMemo(() => {
+    if (!showRomanized || romanizedLines.length === 0 || activeIndex < 0) return null;
+    return alignRoomLyricLines(lines, romanizedLines)[activeIndex]?.text ?? null;
+  }, [activeIndex, lines, romanizedLines, showRomanized]);
+
+  const subLineText = alignedTranslatedLine || alignedRomanizedLine || null;
+  const hasSubLine = Boolean(subLineText);
+
+  // Dynamic font sizing
+  const baseFontSize = hasSubLine
+    ? Math.round(Math.min(90, Math.max(14, surfaceHeight * 0.28 * lyricScale)))
+    : Math.round(Math.min(110, Math.max(15, surfaceHeight * 0.36 * lyricScale)));
+  const subFontSize = Math.round(Math.max(11, baseFontSize * 0.58));
+
+  const changeScale = (delta: number) => {
+    const next = Math.min(2.5, Math.max(0.6, Math.round((lyricScale + delta) * 10) / 10));
+    setLyricScale(next);
+    updateAppSettings({ playback: { desktopLyricScale: next } });
+    onScaleChange?.(next);
+  };
+
   const message = status === "loading" && !hasLyrics
     ? "正在获取歌词…"
     : hasLyrics
       ? lineText ?? "暂无歌词"
       : status === "error"
         ? "歌词暂时不可用"
-        : "暂无歌词";
+        : "等待选择歌曲";
+
+  const showToolbar = isHovered || controlsPinned;
 
   return (
     <div
       ref={rootRef}
-      aria-label={`桌面歌词：${title}`}
-      className="flex h-full w-full min-w-0 items-center gap-3 px-4"
+      aria-label={`桌面歌词：${title}${artist ? ` - ${artist}` : ""}`}
+      className="group relative flex h-full w-full min-w-0 items-center justify-between gap-2.5 rounded-2xl md:rounded-full border border-white/15 bg-zinc-950/85 px-3.5 md:px-5 py-2 text-white backdrop-blur-2xl shadow-[0_16px_48px_rgba(0,0,0,0.7)] transition-all duration-300 hover:border-white/25 hover:bg-zinc-950/92"
       data-testid="desktop-lyrics-bar"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onPointerDown={onPointerDown}
     >
-      {controlsVisible ? (
+      {/* Subtle glowing ambient accent in background */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-0.5 -z-10 rounded-2xl md:rounded-full bg-gradient-to-r from-blue-600/20 via-cyan-500/15 to-purple-600/20 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100"
+      />
+
+      {/* Left: Drag Handle + Cover + Track Info */}
+      <div className="flex shrink-0 items-center gap-2">
+        {/* Visual Drag Handle */}
         <div
           aria-hidden="true"
-          className="aspect-square shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] bg-cover bg-center"
+          className="grid h-8 w-5 shrink-0 place-items-center cursor-grab text-white/30 transition hover:text-white/70 active:cursor-grabbing"
+          title="拖动调整位置"
+        >
+          <DragGripIcon />
+        </div>
+
+        {/* Album Artwork thumbnail */}
+        <div
+          aria-hidden="true"
+          className={`relative h-10 w-10 md:h-11 md:w-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] bg-cover bg-center shadow-md transition-transform duration-300 ${
+            isPlaying ? "scale-100" : "scale-95 opacity-80"
+          }`}
           style={{
-            backgroundImage: artworkUrl ? `url("${getArtworkSourceUrl(artworkUrl)}")` : undefined,
-            height: `${Math.min(surfaceHeight - 16, 72)}px`,
-            width: `${Math.min(surfaceHeight - 16, 72)}px`
+            backgroundImage: artworkUrl ? `url("${getArtworkSourceUrl(artworkUrl)}")` : undefined
           }}
-        />
-      ) : null}
+          title={artist ? `${title} - ${artist}` : title}
+        >
+          {!artworkUrl ? (
+            <div className="grid h-full w-full place-items-center text-white/40">
+              <MusicNoteIcon />
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Center: Karaoke Lyric Line + Translation Sub-line */}
       <div
-        aria-label="切换播放控件"
-        className="relative h-full min-w-0 flex-1 cursor-pointer select-none"
+        aria-label="点击固定控制栏"
+        className="relative flex h-full min-w-0 flex-1 flex-col justify-center items-center overflow-hidden px-2 text-center cursor-pointer select-none"
         data-testid="desktop-lyrics-line"
-        onClick={() => setControlsVisible((current) => !current)}
+        onClick={() => setControlsPinned((current) => !current)}
         role="button"
         tabIndex={0}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setControlsVisible((current) => !current);
+            setControlsPinned((current) => !current);
           }
         }}
       >
-        {/* Dark outline under-layer keeps the floating text readable over any
-            wallpaper now that the card background is gone. */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 flex items-center overflow-hidden"
+        {/* Main Karaoke Lyric Line */}
+        <div
+          className="relative max-w-full overflow-hidden truncate font-bold tracking-tight text-white leading-tight"
+          style={{ fontSize: `${baseFontSize}px` }}
         >
-          <span
-            className="block truncate whitespace-nowrap font-bold text-transparent"
-            style={{ fontSize, WebkitTextStroke: `${outlineWidth} rgba(0, 0, 0, 0.5)` }}
+          {hasLyrics && displayWords.length > 0 ? (
+            displayWords.map((word, wordIndex) => {
+              const progress = getRoomLyricWordProgress(word, smoothPositionMs);
+              if (progress >= 1) {
+                return (
+                  <span
+                    className="inline text-white [text-shadow:0_0_12px_rgba(255,255,255,0.7)]"
+                    key={wordIndex}
+                  >
+                    {word.text}
+                  </span>
+                );
+              }
+              if (progress <= 0) {
+                return (
+                  <span className="inline text-white/40 transition-colors duration-150" key={wordIndex}>
+                    {word.text}
+                  </span>
+                );
+              }
+              const filled = (progress * 100).toFixed(1);
+              return (
+                <span
+                  className="inline text-transparent will-change-[background-image] [text-shadow:0_0_16px_rgba(0,122,255,0.6)]"
+                  key={wordIndex}
+                  style={{
+                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.4) ${filled}%, rgb(255 255 255 / 0.4) 100%)`,
+                    backgroundClip: "text",
+                    WebkitBackgroundClip: "text"
+                  }}
+                >
+                  {word.text}
+                </span>
+              );
+            })
+          ) : (
+            <span
+              className={`block truncate ${
+                status === "loading" ? "animate-pulse text-white/70" : "text-white/80"
+              }`}
+            >
+              {message}
+            </span>
+          )}
+        </div>
+
+        {/* Translation / Romanization Sub-line */}
+        {hasSubLine ? (
+          <div
+            className="mt-0.5 max-w-full truncate text-white/65 font-medium tracking-wide transition-opacity duration-200"
+            style={{ fontSize: `${subFontSize}px` }}
           >
-            {message}
-          </span>
-        </span>
-        <span className="flex h-full items-center overflow-hidden">
-          <span className="block truncate whitespace-nowrap font-bold text-white" style={{ fontSize }}>
-            {hasLyrics && displayWords.length > 0
-              ? displayWords.map((word, wordIndex) => {
-                  const progress = getRoomLyricWordProgress(word, smoothPositionMs);
-                  if (progress >= 1) {
-                    return <span key={wordIndex} className="text-white">{word.text}</span>;
-                  }
-                  if (progress <= 0) {
-                    return <span key={wordIndex} className="text-white/55">{word.text}</span>;
-                  }
-                  const filled = (progress * 100).toFixed(1);
-                  return (
-                    <span
-                      className="inline text-transparent will-change-[background-image]"
-                      key={wordIndex}
-                      style={{
-                        backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.55) ${filled}%, rgb(255 255 255 / 0.55) 100%)`,
-                        backgroundClip: "text",
-                        WebkitBackgroundClip: "text"
-                      }}
-                    >
-                      {word.text}
-                    </span>
-                  );
-                })
-              : message}
-          </span>
-        </span>
+            {subLineText}
+          </div>
+        ) : null}
       </div>
-      {controlsVisible ? (
-        <div className="flex shrink-0 items-center gap-1 pl-1">
+
+      {/* Right: Quick Interactive Controls Toolbar */}
+      <div
+        className={`flex shrink-0 items-center gap-1 transition-all duration-200 ${
+          showToolbar ? "opacity-100 translate-x-0" : "opacity-0 md:opacity-40 translate-x-1 hover:opacity-100"
+        }`}
+      >
+        {/* Playback Transport: Prev, Play/Pause, Next */}
+        <div className="flex items-center gap-0.5 rounded-full bg-white/[0.07] p-0.5 border border-white/10">
           <TransportButton disabled={!canControl} label="上一首" onClick={onPrev}>
             <PrevIcon />
           </TransportButton>
-          <TransportButton disabled={!canControl} label={isPlaying ? "暂停" : "播放"} onClick={onTogglePlay} primary>
+          <TransportButton
+            disabled={!canControl}
+            label={isPlaying ? "暂停" : "播放"}
+            onClick={onTogglePlay}
+            primary
+          >
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
           </TransportButton>
           <TransportButton disabled={!canControl} label="下一首" onClick={onNext}>
             <NextIcon />
           </TransportButton>
         </div>
-      ) : null}
-      <button
-        aria-label="关闭桌面歌词"
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white/55 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        onClick={onClose}
-        title="关闭桌面歌词"
-        type="button"
-      >
-        <CloseIcon />
-      </button>
+
+        {/* Translation toggle (译) */}
+        {translatedLines.length > 0 && onToggleTranslation ? (
+          <button
+            aria-label="切换翻译"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold border transition ${
+              showTranslation
+                ? "border-blue-500/50 bg-blue-500/20 text-blue-400 shadow-[0_0_10px_rgba(0,122,255,0.3)]"
+                : "border-transparent bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white"
+            }`}
+            onClick={onToggleTranslation}
+            title={showTranslation ? "隐藏歌词翻译" : "显示歌词翻译"}
+            type="button"
+          >
+            译
+          </button>
+        ) : null}
+
+        {/* Romanization toggle (音) */}
+        {romanizedLines.length > 0 && onToggleRomanized ? (
+          <button
+            aria-label="切换罗马音"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold border transition ${
+              showRomanized
+                ? "border-purple-500/50 bg-purple-500/20 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.3)]"
+                : "border-transparent bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white"
+            }`}
+            onClick={onToggleRomanized}
+            title={showRomanized ? "隐藏罗马音" : "显示罗马音"}
+            type="button"
+          >
+            音
+          </button>
+        ) : null}
+
+        {/* Font Scale Adjuster */}
+        <div className="hidden sm:flex items-center rounded-full bg-white/[0.06] border border-white/10 p-0.5">
+          <button
+            aria-label="缩小歌词字体"
+            className="grid h-7 w-6 place-items-center rounded-full text-[11px] font-bold text-white/60 transition hover:bg-white/10 hover:text-white"
+            onClick={() => changeScale(-0.1)}
+            title="缩小字体"
+            type="button"
+          >
+            A-
+          </button>
+          <span className="px-1 text-[10px] font-semibold text-white/40 select-none">
+            {Math.round(lyricScale * 100)}%
+          </span>
+          <button
+            aria-label="放大歌词字体"
+            className="grid h-7 w-6 place-items-center rounded-full text-[11px] font-bold text-white/60 transition hover:bg-white/10 hover:text-white"
+            onClick={() => changeScale(0.1)}
+            title="放大字体"
+            type="button"
+          >
+            A+
+          </button>
+        </div>
+
+        {/* Close Button */}
+        <button
+          aria-label="关闭桌面歌词"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[0.06] text-white/50 transition hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          onClick={onClose}
+          title="关闭桌面歌词"
+          type="button"
+        >
+          <CloseIcon />
+        </button>
+      </div>
     </div>
   );
 }
 
-function TransportButton({ children, disabled, label, onClick, primary = false }: { children: React.ReactNode; disabled: boolean; label: string; onClick: () => void; primary?: boolean }) {
+function TransportButton({
+  children,
+  disabled,
+  label,
+  onClick,
+  primary = false
+}: {
+  children: React.ReactNode;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}) {
   return (
     <button
       aria-label={label}
-      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-        disabled ? "cursor-not-allowed text-white/25" : primary ? "bg-white text-black hover:bg-white/90" : "text-white/70 hover:bg-white/10 hover:text-white"
+      className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+        disabled
+          ? "cursor-not-allowed opacity-30 text-white/30"
+          : primary
+            ? "bg-white text-zinc-950 shadow-md hover:bg-white/90 hover:scale-105 active:scale-95"
+            : "text-white/70 hover:bg-white/10 hover:text-white active:scale-95"
       }`}
       disabled={disabled}
       onClick={onClick}
@@ -265,8 +445,63 @@ function TransportButton({ children, disabled, label, onClick, primary = false }
   );
 }
 
-function PlayIcon() { return <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>; }
-function PauseIcon() { return <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M7 5h4v14H7zm6 0h4v14h-4z" /></svg>; }
-function PrevIcon() { return <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>; }
-function NextIcon() { return <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg>; }
-function CloseIcon() { return <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" /></svg>; }
+function DragGripIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 24 24" width="16">
+      <circle cx="9" cy="6" r="1.5" />
+      <circle cx="15" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" />
+      <circle cx="15" cy="18" r="1.5" />
+    </svg>
+  );
+}
+
+function MusicNoteIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18">
+      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" height="12" viewBox="0 0 24 24" width="12">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" height="12" viewBox="0 0 24 24" width="12">
+      <path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+    </svg>
+  );
+}
+
+function PrevIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" height="12" viewBox="0 0 24 24" width="12">
+      <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+    </svg>
+  );
+}
+
+function NextIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" height="12" viewBox="0 0 24 24" width="12">
+      <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14">
+      <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}

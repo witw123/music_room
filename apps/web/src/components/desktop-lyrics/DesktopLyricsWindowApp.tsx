@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";
 import { invokeTauri } from "@/lib/desktop/tauri";
-import { appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
+import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 /**
@@ -17,11 +17,15 @@ type BridgeState = {
     artist: string;
     artworkUrl: string | null;
     plainLyric: string | null;
+    translatedLyric?: string | null;
+    romanizedLyric?: string | null;
   } | null;
   progressMs: number;
   anchorAt: number;
   isPlaying: boolean;
   canControl: boolean;
+  showTranslation?: boolean;
+  showRomanized?: boolean;
 };
 
 const bridgeChannelName = "music-room-desktop-lyrics";
@@ -31,13 +35,13 @@ const emptyState: BridgeState = {
   progressMs: 0,
   anchorAt: Date.now(),
   isPlaying: false,
-  canControl: false
+  canControl: false,
+  showTranslation: true,
+  showRomanized: false
 };
 
 type ResizeGesture = {
   edge: "west" | "east" | "north" | "south" | "northwest" | "northeast" | "southwest" | "southeast";
-  // Screen coordinates stay stable while the window itself is being resized,
-  // unlike viewport coordinates which shift with every size change.
   startScreenX: number;
   startScreenY: number;
   startWidth: number;
@@ -45,10 +49,10 @@ type ResizeGesture = {
 };
 
 const resizeEdgePx = 14;
-const minWidth = 320;
-const minHeight = 64;
+const minWidth = 360;
+const minHeight = 68;
 const maxWidth = 2400;
-const maxHeight = 600;
+const maxHeight = 500;
 
 function readSnapshot(): BridgeState {
   if (typeof window === "undefined") return emptyState;
@@ -62,7 +66,9 @@ function readSnapshot(): BridgeState {
       progressMs: typeof parsed.progressMs === "number" ? parsed.progressMs : 0,
       anchorAt: typeof parsed.anchorAt === "number" ? parsed.anchorAt : Date.now(),
       isPlaying: parsed.isPlaying === true,
-      canControl: parsed.canControl === true
+      canControl: parsed.canControl === true,
+      showTranslation: parsed.showTranslation !== false,
+      showRomanized: parsed.showRomanized === true
     };
   } catch {
     return emptyState;
@@ -91,8 +97,8 @@ export function DesktopLyricsWindowApp() {
   const resizeGestureRef = useRef<ResizeGesture | null>(null);
   const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
   const sizeRafRef = useRef(0);
-  // The settings slider resizes the native window proportionally; the lyrics
-  // font then follows the window height (see DesktopLyricsBar).
+
+  // Sync window size with desktopLyricScale setting
   useEffect(() => {
     const syncScale = () => {
       const scale = getAppSettings().playback.desktopLyricScale;
@@ -111,9 +117,6 @@ export function DesktopLyricsWindowApp() {
   }, []);
 
   useEffect(() => {
-    // The native lyrics window is transparent on Windows/Linux; macOS builds
-    // of tauri 2.11 cannot create transparent windows, so fall back to an
-    // opaque dark surface there instead of a white flash.
     const isMacintosh = /Macintosh|Mac OS X/.test(navigator.userAgent);
     const background = isMacintosh ? "#0c0e13" : "transparent";
     document.documentElement.style.background = background;
@@ -124,13 +127,15 @@ export function DesktopLyricsWindowApp() {
     channel.onmessage = (event) => {
       const data = event.data as Partial<BridgeState> & { type?: string } | null;
       if (!data || data.type !== "state") return;
-      setState({
-        track: data.track ?? null,
-        progressMs: typeof data.progressMs === "number" ? data.progressMs : 0,
+      setState((prev) => ({
+        track: data.track !== undefined ? data.track : prev.track,
+        progressMs: typeof data.progressMs === "number" ? data.progressMs : prev.progressMs,
         anchorAt: typeof data.anchorAt === "number" ? data.anchorAt : Date.now(),
-        isPlaying: data.isPlaying === true,
-        canControl: data.canControl === true
-      });
+        isPlaying: data.isPlaying !== undefined ? data.isPlaying === true : prev.isPlaying,
+        canControl: data.canControl !== undefined ? data.canControl === true : prev.canControl,
+        showTranslation: data.showTranslation !== undefined ? data.showTranslation : prev.showTranslation,
+        showRomanized: data.showRomanized !== undefined ? data.showRomanized : prev.showRomanized
+      }));
     };
     channelRef.current = channel;
     return () => {
@@ -140,12 +145,10 @@ export function DesktopLyricsWindowApp() {
     };
   }, []);
 
-  const postCommand = useCallback((action: "prev" | "toggle" | "next") => {
-    channelRef.current?.postMessage({ type: "command", action });
+  const postCommand = useCallback((action: "prev" | "toggle" | "next" | "toggleTranslation" | "toggleRomanized", extra?: Record<string, unknown>) => {
+    channelRef.current?.postMessage({ type: "command", action, ...extra });
   }, []);
 
-  // Bar interactions: near the window edges a pointer drag resizes the
-  // window; anywhere else it moves the window (native start_dragging).
   const handleBarPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     const edge = pickResizeEdge(event);
@@ -157,8 +160,6 @@ export function DesktopLyricsWindowApp() {
         startWidth: window.innerWidth,
         startHeight: window.innerHeight
       };
-      // Capture the pointer so moves outside the window bounds (which every
-      // west/north resize requires) keep streaming into this element.
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
@@ -211,20 +212,39 @@ export function DesktopLyricsWindowApp() {
   }, []);
 
   const canControl = state.canControl;
-  const plainLyric = state.track?.plainLyric ?? null;
+  const track = state.track;
 
   return (
     <main
-      className="flex h-[100dvh] w-full items-center overflow-hidden"
+      className="flex h-[100dvh] w-full items-center p-1.5 overflow-hidden"
       data-testid="desktop-lyrics-window"
     >
       <div className="h-full w-full">
         <DesktopLyricsBar
-          title={state.track?.title ?? "等待选择歌曲"}
-          artworkUrl={state.track?.artworkUrl ?? null}
+          title={track?.title ?? "等待选择歌曲"}
+          artist={track?.artist}
+          artworkUrl={track?.artworkUrl ?? null}
           canControl={canControl}
           isPlaying={state.isPlaying}
-          plainLyric={plainLyric}
+          plainLyric={track?.plainLyric ?? null}
+          translatedLyric={track?.translatedLyric ?? null}
+          romanizedLyric={track?.romanizedLyric ?? null}
+          showTranslation={state.showTranslation}
+          showRomanized={state.showRomanized}
+          onToggleTranslation={() => {
+            const next = !state.showTranslation;
+            setState((prev) => ({ ...prev, showTranslation: next }));
+            postCommand("toggleTranslation");
+          }}
+          onToggleRomanized={() => {
+            const next = !state.showRomanized;
+            setState((prev) => ({ ...prev, showRomanized: next }));
+            postCommand("toggleRomanized");
+          }}
+          onScaleChange={(scale) => {
+            updateAppSettings({ playback: { desktopLyricScale: scale } });
+            channelRef.current?.postMessage({ type: "command", action: "setScale", scale });
+          }}
           anchorAt={state.anchorAt}
           onClose={() => void invokeTauri("hide_desktop_lyrics_window")}
           onPointerDown={handleBarPointerDown}
@@ -232,7 +252,7 @@ export function DesktopLyricsWindowApp() {
           onPrev={() => postCommand("prev")}
           onTogglePlay={() => postCommand("toggle")}
           progressMs={state.progressMs}
-          status={state.track ? "ready" : "idle"}
+          status={track ? "ready" : "idle"}
         />
       </div>
     </main>

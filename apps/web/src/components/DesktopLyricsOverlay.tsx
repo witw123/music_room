@@ -17,7 +17,11 @@ export function DesktopLyricsOverlay() {
     isOpen,
     close,
     activePlayer,
-    lyrics
+    lyrics,
+    showTranslation,
+    showRomanized,
+    toggleTranslation,
+    toggleRomanized
   } = useDesktopLyrics();
   const [position, setPosition] = useState<Position | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -108,7 +112,7 @@ export function DesktopLyricsOverlay() {
     <div
       ref={panelRef}
       aria-label="桌面歌词"
-      className={`fixed z-[120] select-none ${position ? "" : "inset-x-3 bottom-[calc(11.5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:right-auto md:bottom-[5.75rem] md:w-[min(92vw,44rem)] md:-translate-x-1/2"}`}
+      className={`fixed z-[120] select-none ${position ? "" : "inset-x-3 bottom-[calc(11.5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:right-auto md:bottom-[5.75rem] md:w-[min(92vw,48rem)] md:-translate-x-1/2"}`}
       data-testid="desktop-lyrics-overlay"
       onPointerCancel={handlePointerUp}
       onPointerDown={handlePointerDown}
@@ -119,10 +123,17 @@ export function DesktopLyricsOverlay() {
       <div className="h-16 md:h-20">
         <DesktopLyricsBar
           title={activePlayer.currentTrack?.title ?? "等待选择歌曲"}
+          artist={activePlayer.currentTrack?.artist}
           artworkUrl={activePlayer.artworkUrl ?? (activePlayer.currentTrack?.artworkUrl ?? null)}
           canControl={canControl}
           isPlaying={activePlayer.isPlaying}
           plainLyric={lyrics.plainLyric}
+          translatedLyric={lyrics.translatedLyric}
+          romanizedLyric={lyrics.romanizedLyric}
+          showTranslation={showTranslation}
+          showRomanized={showRomanized}
+          onToggleTranslation={toggleTranslation}
+          onToggleRomanized={toggleRomanized}
           anchorAt={Date.now()}
           onClose={close}
           onPointerDown={handlePointerDown}
@@ -138,8 +149,8 @@ export function DesktopLyricsOverlay() {
 }
 
 function clampPosition(position: Position, panel: HTMLDivElement | null): Position {
-  const width = panel?.offsetWidth ?? 320;
-  const height = panel?.offsetHeight ?? 64;
+  const width = panel?.offsetWidth ?? 360;
+  const height = panel?.offsetHeight ?? 68;
   const horizontalInset = Math.min(0.5, (width / 2 + 12) / Math.max(window.innerWidth, 1));
   const verticalInset = Math.min(0.5, (height / 2 + 12) / Math.max(window.innerHeight, 1));
   return {

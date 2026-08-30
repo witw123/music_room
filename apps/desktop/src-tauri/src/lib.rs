@@ -97,7 +97,6 @@ async fn set_desktop_lyrics_size(app: AppHandle, width: f64, height: f64) -> Res
     window
         .set_size(tauri::LogicalSize::new(width, height))
         .map_err(|error| error.to_string())?;
-    position_lyrics_window(&window);
     Ok(())
 }
 

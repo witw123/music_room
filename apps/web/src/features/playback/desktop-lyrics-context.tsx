@@ -14,7 +14,8 @@ import type { TrackMeta } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   appSettingsChangeEvent,
-  getAppSettings
+  getAppSettings,
+  updateAppSettings
 } from "@/features/settings/settings-store";
 import {
   getActiveRoomLyricIndex,
@@ -58,6 +59,8 @@ type DesktopLyricsContextValue = {
   lyrics: DesktopLyricsState;
   showTranslation: boolean;
   showRomanized: boolean;
+  toggleTranslation: () => void;
+  toggleRomanized: () => void;
   registerPlayer: (source: DesktopLyricsSource, player: DesktopLyricsPlayer) => DesktopLyricsRegistration;
 };
 
@@ -245,6 +248,22 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     }));
   }, [activePlayer, activePlayer?.progressMs, lyricLines, romanizedLines, translatedLines]);
 
+  const toggleTranslation = useCallback(() => {
+    setShowTranslation((current) => {
+      const next = !current;
+      updateAppSettings({ playback: { showLyricTranslation: next } });
+      return next;
+    });
+  }, []);
+
+  const toggleRomanized = useCallback(() => {
+    setShowRomanized((current) => {
+      const next = !current;
+      updateAppSettings({ playback: { showLyricRomanized: next } });
+      return next;
+    });
+  }, []);
+
   // ── Tauri desktop shell: bridge playback state to the native lyrics window
   // over BroadcastChannel; the window posts transport commands back. ──
   useEffect(() => {
@@ -253,13 +272,17 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     if (!isTauriRuntime() || !hasActivePlayer) return;
     const channel = new BroadcastChannel(desktopLyricsBridgeChannelName);
     channel.onmessage = (event) => {
-      const data = event.data as { type?: string; action?: string } | null;
+      const data = event.data as { type?: string; action?: string; scale?: number } | null;
       if (!data || data.type !== "command") return;
       const player = activePlayerRef.current;
-      if (!player || !player.canControlPlayback) return;
-      if (data.action === "prev") player.onPrev();
-      if (data.action === "toggle") player.onTogglePlay();
-      if (data.action === "next") player.onNext();
+      if (data.action === "prev" && player?.canControlPlayback) player.onPrev();
+      if (data.action === "toggle" && player?.canControlPlayback) player.onTogglePlay();
+      if (data.action === "next" && player?.canControlPlayback) player.onNext();
+      if (data.action === "toggleTranslation") toggleTranslation();
+      if (data.action === "toggleRomanized") toggleRomanized();
+      if (data.action === "setScale" && typeof data.scale === "number") {
+        updateAppSettings({ playback: { desktopLyricScale: data.scale } });
+      }
     };
     bridgeChannelRef.current = channel;
     return () => {
@@ -269,7 +292,7 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
         bridgeChannelRef.current = null;
       }
     };
-  }, [hasActivePlayer]);
+  }, [hasActivePlayer, toggleRomanized, toggleTranslation]);
 
   const bridgeTrackPayload = useMemo(() => {
     if (!activeTrack) return null;
@@ -293,6 +316,8 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
       progressMs: activeProgressMs,
       isPlaying: activeIsPlaying,
       canControl: activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId),
+      showTranslation,
+      showRomanized,
       track: bridgeTrackPayload
     };
     try {
@@ -309,7 +334,7 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
         // Storage may be unavailable; the channel still keeps the window live.
       }
     }
-  }, [activeIsPlaying, hasActivePlayer, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeTrackPayload]);
+  }, [activeIsPlaying, hasActivePlayer, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeTrackPayload, showRomanized, showTranslation]);
 
   // ── Capacitor mobile shell: push anchors and char-level word timings to the
   // native SYSTEM_ALERT_WINDOW overlay; it interpolates and draws per frame. ──
@@ -377,8 +402,10 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     lyrics,
     showTranslation,
     showRomanized,
+    toggleTranslation,
+    toggleRomanized,
     registerPlayer
-  }), [activePlayer, close, isOpen, lyrics, registerPlayer, showRomanized, showTranslation, toggle]);
+  }), [activePlayer, close, isOpen, lyrics, registerPlayer, showRomanized, showTranslation, toggle, toggleRomanized, toggleTranslation]);
 
   return <DesktopLyricsContext.Provider value={value}>{children}</DesktopLyricsContext.Provider>;
 }

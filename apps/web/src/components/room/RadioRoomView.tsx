@@ -43,7 +43,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
       <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="relative z-10 flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]">
+        <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]">
           <div className="min-h-0 flex-1">
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
           </div>

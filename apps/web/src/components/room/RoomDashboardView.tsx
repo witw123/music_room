@@ -158,7 +158,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" /> : null}
       </div>
-      <div className="relative z-40 flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:min-h-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
+      <div className="relative z-40 hidden lg:flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:min-h-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
         <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
           <RoomStage {...buildRoomStageProps(props)} />
         </div>

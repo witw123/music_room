@@ -403,6 +403,16 @@ export function MobileBottomPlayerLayout({
             </span>
           </button>
 
+          {onToggleLyrics ? (
+            <LyricsToggleButton
+              accentColor={artworkAccent}
+              accentSoft={artworkAccentSoft}
+              disabled={!playbackTrackId}
+              isOpen={isLyricsOpen}
+              onToggle={onToggleLyrics}
+            />
+          ) : null}
+
           <button
             aria-label={isPlaying ? "暂停" : "播放"}
             className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-[transform,background-color,box-shadow] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
@@ -507,8 +517,16 @@ export function MobileBottomPlayerLayout({
         </div>
 
         <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 sm:min-h-[2.5rem] sm:gap-3">
-          <div className="flex shrink-0 justify-start">
-            {onToggleLyrics ? <span className="max-[420px]:hidden"><LyricsToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} disabled={!playbackTrackId} isOpen={isLyricsOpen} onToggle={onToggleLyrics} /></span> : null}
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1 justify-start">
+            {onToggleLyrics ? (
+              <LyricsToggleButton
+                accentColor={artworkAccent}
+                accentSoft={artworkAccentSoft}
+                disabled={!playbackTrackId}
+                isOpen={isLyricsOpen}
+                onToggle={onToggleLyrics}
+              />
+            ) : null}
             <PlaybackModeButton
               mode={playbackMode}
               onCycle={onCyclePlaybackMode}
