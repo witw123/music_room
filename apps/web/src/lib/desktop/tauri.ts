@@ -46,8 +46,10 @@ export async function invokeTauri<T = void>(
   }
   try {
     return (await invoke(command, args)) as T;
-  } catch {
-    // Desktop-shell commands are best-effort affordances; never break the page.
+  } catch (error) {
+    // Surface shell failures in the console; silent failures made toggle
+    // buttons look dead during real-device testing.
+    console.warn(`[tauri] invoke "${command}" failed:`, error);
     return undefined;
   }
 }

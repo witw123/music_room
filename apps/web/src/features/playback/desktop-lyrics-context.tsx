@@ -112,6 +112,7 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   const bridgeChannelRef = useRef<BroadcastChannel | null>(null);
   const lastBridgeSnapshotWriteAtRef = useRef(0);
   activePlayerRef.current = activePlayer;
+  const hasActivePlayer = activePlayer !== null;
 
   const selectActivePlayer = useCallback(() => {
     const roomPlayer = playersRef.current.get("room");
@@ -247,7 +248,9 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   // ── Tauri desktop shell: bridge playback state to the native lyrics window
   // over BroadcastChannel; the window posts transport commands back. ──
   useEffect(() => {
-    if (!isTauriRuntime()) return;
+    // Skip inside the lyrics window itself: it has no registered player and
+    // must not echo empty state back at the main window.
+    if (!isTauriRuntime() || !hasActivePlayer) return;
     const channel = new BroadcastChannel(desktopLyricsBridgeChannelName);
     channel.onmessage = (event) => {
       const data = event.data as { type?: string; action?: string } | null;
@@ -266,7 +269,7 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
         bridgeChannelRef.current = null;
       }
     };
-  }, []);
+  }, [hasActivePlayer]);
 
   const bridgeTrackPayload = useMemo(() => {
     if (!activeTrack) return null;
@@ -281,8 +284,9 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   }, [activeTrack, activePlayer?.artworkUrl, lyrics.plainLyric, lyrics.translatedLyric, lyrics.romanizedLyric]);
 
   useEffect(() => {
+    if (!isTauriRuntime() || !hasActivePlayer) return;
     const channel = bridgeChannelRef.current;
-    if (!isTauriRuntime() || !channel) return;
+    if (!channel) return;
     const payload = {
       type: "state" as const,
       at: Date.now(),
@@ -305,21 +309,21 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
         // Storage may be unavailable; the channel still keeps the window live.
       }
     }
-  }, [activeIsPlaying, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeTrackPayload]);
+  }, [activeIsPlaying, hasActivePlayer, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeTrackPayload]);
 
   // ── Capacitor mobile shell: push anchors and char-level word timings to the
   // native SYSTEM_ALERT_WINDOW overlay; it interpolates and draws per frame. ──
   useEffect(() => {
-    if (!isCapacitorRuntime()) return;
+    if (!isCapacitorRuntime() || !hasActivePlayer) return;
     getNativeDesktopLyricsPlugin()?.updatePlayback?.({
       isPlaying: activeIsPlaying,
       progressMs: activeProgressMs,
       at: Date.now()
     });
-  }, [activeIsPlaying, activeProgressMs]);
+  }, [activeIsPlaying, hasActivePlayer, activeProgressMs]);
 
   useEffect(() => {
-    if (!isCapacitorRuntime() || lyricLines.length === 0) return;
+    if (!isCapacitorRuntime() || !hasActivePlayer || lyricLines.length === 0) return;
     const plugin = getNativeDesktopLyricsPlugin();
     if (!plugin?.updateLine) return;
     const activeIndex = Math.max(0, getActiveRoomLyricIndex(lyricLines, activeProgressMs));
@@ -335,12 +339,15 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
       ? alignRoomLyricLines(lyricLines, romanizedLines)[activeIndex]?.text ?? null
       : null;
     plugin.updateLine({ words: JSON.stringify(words), translation, romanized });
-  }, [activeProgressMs, lyricLines, romanizedLines, showRomanized, showTranslation, translatedLines]);
+  }, [activeProgressMs, hasActivePlayer, lyricLines, romanizedLines, showRomanized, showTranslation, translatedLines]);
 
   const toggle = useCallback(() => {
     if (isTauriRuntime()) {
-      void invokeTauri("toggle_desktop_lyrics");
-      setIsOpen((current) => !current);
+      // The async shell command reports the real post-toggle visibility;
+      // optimistic state would drift when window creation fails.
+      void invokeTauri<boolean>("toggle_desktop_lyrics").then((visible) => {
+        setIsOpen(visible === true);
+      });
       return;
     }
     if (isCapacitorRuntime()) {

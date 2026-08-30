@@ -17,23 +17,28 @@ const LYRICS_HEIGHT: f64 = 148.0;
 // Keep the bar clear of the Windows taskbar / macOS dock.
 const LYRICS_BOTTOM_INSET_LOGICAL: f64 = 96.0;
 
+// NOTE: every command below is `async` on purpose. Sync commands execute on
+// the main thread, and creating a webview window there dispatches back into
+// the event loop it is blocking — the whole app deadlocks (no window, frozen
+// UI, no quit). Async commands run on the async runtime, which is the
+// supported path for cross-thread window creation.
 #[command]
-fn toggle_desktop_lyrics(app: AppHandle) {
+async fn toggle_desktop_lyrics(app: AppHandle) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window(LYRICS_LABEL) {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
-        } else {
-            position_lyrics_window(&window);
-            let _ = window.show();
+            window.hide().map_err(|error| error.to_string())?;
+            return Ok(false);
         }
-        return;
+        position_lyrics_window(&window);
+        window.show().map_err(|error| error.to_string())?;
+        return Ok(true);
     }
 
     let Some(main) = app.get_webview_window("main") else {
-        return;
+        return Ok(false);
     };
     let Ok(mut url) = main.url() else {
-        return;
+        return Ok(false);
     };
     url.set_path("/desktop-lyrics");
     url.set_query(Some("window=desktop-lyrics"));
@@ -54,25 +59,26 @@ fn toggle_desktop_lyrics(app: AppHandle) {
     // get a true see-through bar.
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
-    let Ok(window) = builder.build() else {
-        return;
-    };
+    let window = builder.build().map_err(|error| error.to_string())?;
     position_lyrics_window(&window);
-    let _ = window.show();
+    window.show().map_err(|error| error.to_string())?;
+    Ok(true)
 }
 
 #[command]
-fn hide_desktop_lyrics_window(app: AppHandle) {
+async fn hide_desktop_lyrics_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LYRICS_LABEL) {
-        let _ = window.hide();
+        window.hide().map_err(|error| error.to_string())?;
     }
+    Ok(())
 }
 
 #[command]
-fn drag_desktop_lyrics_window(app: AppHandle) {
+async fn drag_desktop_lyrics_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LYRICS_LABEL) {
-        let _ = window.start_dragging();
+        window.start_dragging().map_err(|error| error.to_string())?;
     }
+    Ok(())
 }
 
 fn position_lyrics_window(window: &tauri::WebviewWindow) {
