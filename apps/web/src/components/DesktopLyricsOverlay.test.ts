@@ -19,7 +19,6 @@ describe("desktop lyrics integration", () => {
     const shellSource = readFileSync(new URL("./room/RoomAppShell.tsx", import.meta.url), "utf8");
     const stageSource = readFileSync(new URL("./room/RoomStage.tsx", import.meta.url), "utf8");
     const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
-    const overlaySource = readFileSync(new URL("./DesktopLyricsOverlay.tsx", import.meta.url), "utf8");
 
     expect(shellSource).not.toContain("isLyricsOpen");
     expect(shellSource).not.toContain("onToggleLyrics");
@@ -27,9 +26,60 @@ describe("desktop lyrics integration", () => {
     expect(contextSource).toContain("lyricRequestCache");
     expect(contextSource).toContain("getNeteaseLyrics");
     expect(contextSource).toContain("getQqMusicLyrics");
-    expect(overlaySource).toContain("上一首");
-    expect(overlaySource).toContain("下一首");
-    expect(overlaySource).toContain("关闭桌面歌词");
-    expect(overlaySource).toContain("safe-area-inset-bottom");
+  });
+
+  it("renders the combined karaoke bar with transport and word-by-word fill", () => {
+    const barSource = readFileSync(new URL("./desktop-lyrics/DesktopLyricsBar.tsx", import.meta.url), "utf8");
+
+    expect(barSource).toContain("上一首");
+    expect(barSource).toContain("下一首");
+    expect(barSource).toContain("关闭桌面歌词");
+    expect(barSource).toContain("getRoomLyricWordProgress");
+    expect(barSource).toContain("backgroundClip");
+  });
+
+  it("hosts the lyrics window for the Tauri shell and hides the in-page overlay there", () => {
+    const overlaySource = readFileSync(new URL("./DesktopLyricsOverlay.tsx", import.meta.url), "utf8");
+    const windowAppSource = readFileSync(new URL("./desktop-lyrics/DesktopLyricsWindowApp.tsx", import.meta.url), "utf8");
+    const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
+    const pageSource = readFileSync(new URL("../app/desktop-lyrics/page.tsx", import.meta.url), "utf8");
+    const libSource = readFileSync(new URL("../../../desktop/src-tauri/src/lib.rs", import.meta.url), "utf8");
+
+    expect(overlaySource).toContain("isTauriRuntime()");
+    expect(windowAppSource).toContain("DesktopLyricsBar");
+    expect(windowAppSource).toContain("drag_desktop_lyrics_window");
+    expect(pageSource).toContain("DesktopLyricsWindowApp");
+    expect(contextSource).toContain("toggle_desktop_lyrics");
+    expect(contextSource).toContain("music-room-desktop-lyrics");
+    expect(libSource).toContain("toggle_desktop_lyrics");
+    expect(libSource).toContain("always_on_top(true)");
+  });
+
+  it("uses the Android system overlay for real on-screen lyrics on mobile", () => {
+    const overlaySource = readFileSync(new URL("./DesktopLyricsOverlay.tsx", import.meta.url), "utf8");
+    const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
+    const tauriHelperSource = readFileSync(new URL("../lib/desktop/tauri.ts", import.meta.url), "utf8");
+    const pluginSource = readFileSync(
+      new URL("../../../mobile/android/app/src/main/java/com/musicroom/app/DesktopLyricsPlugin.kt", import.meta.url),
+      "utf8"
+    );
+    const manifestSource = readFileSync(
+      new URL("../../../mobile/android/app/src/main/AndroidManifest.xml", import.meta.url),
+      "utf8"
+    );
+    const mainActivitySource = readFileSync(
+      new URL("../../../mobile/android/app/src/main/java/com/musicroom/app/MainActivity.java", import.meta.url),
+      "utf8"
+    );
+
+    expect(overlaySource).toContain("isCapacitorRuntime()");
+    expect(contextSource).toContain("updatePlayback");
+    expect(contextSource).toContain("updateLine");
+    expect(tauriHelperSource).toContain("isCapacitorRuntime");
+    expect(pluginSource).toContain("TYPE_APPLICATION_OVERLAY");
+    expect(pluginSource).toContain("updateLine");
+    expect(pluginSource).toContain("updatePlayback");
+    expect(manifestSource).toContain("SYSTEM_ALERT_WINDOW");
+    expect(mainActivitySource).toContain("registerPlugin(DesktopLyricsPlugin.class)");
   });
 });

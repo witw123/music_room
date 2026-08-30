@@ -54,5 +54,5 @@ function PanelLoading({ label }: { label: string }) {
   return <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">{label}</div>;
 }
 
-const activeTabClass = "flex-1 rounded-md bg-white/10 px-2.5 py-2 text-xs font-semibold text-white";
-const inactiveTabClass = "flex-1 rounded-md px-2.5 py-2 text-xs font-semibold text-white/50 hover:bg-white/5 hover:text-white/80";
+const activeTabClass = "flex-1 whitespace-nowrap rounded-md bg-white/10 px-2.5 py-2 text-xs font-semibold text-white";
+const inactiveTabClass = "flex-1 whitespace-nowrap rounded-md px-2.5 py-2 text-xs font-semibold text-white/50 hover:bg-white/5 hover:text-white/80";

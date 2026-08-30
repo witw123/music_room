@@ -115,7 +115,7 @@ function TrackListSectionBase({
               key={option.value}
               aria-pressed={trackFilter === option.value}
               data-testid={`library-filter-${option.value}`}
-              className={`flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-2.5 ${
+              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-2.5 ${
                 trackFilter === option.value
                   ? "bg-accent text-white shadow-sm"
                   : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"

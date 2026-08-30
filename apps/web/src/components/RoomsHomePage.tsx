@@ -371,7 +371,7 @@ export function RoomsHomePage({
               return (
                 <button
                   aria-selected={isSelected}
-                  className={`flex min-h-9 items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                  className={`flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
                     isSelected
                       ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
                       : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
@@ -437,7 +437,7 @@ export function RoomsHomePage({
                 return (
                   <button
                     aria-selected={isSelected}
-                    className={`flex-1 flex min-h-9 items-center justify-center rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                    className={`flex-1 flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
                       isSelected
                         ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)]"
                         : "text-foreground-muted hover:text-white"

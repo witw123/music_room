@@ -139,7 +139,7 @@ export function TasteColdStartDialog({
                     key={label}
                     type="button"
                     onClick={() => toggleLabel(label)}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
                         ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold border-transparent"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
@@ -167,7 +167,7 @@ export function TasteColdStartDialog({
                     key={label}
                     type="button"
                     onClick={() => toggleLabel(label)}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
                         ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold border-transparent"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
@@ -195,7 +195,7 @@ export function TasteColdStartDialog({
                     key={artist}
                     type="button"
                     onClick={() => toggleArtist(artist)}
-                    className={`inline-flex items-center gap-1 px-3 py-2 sm:py-1 rounded-lg text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1 whitespace-nowrap px-3 py-2 sm:py-1 rounded-lg text-xs font-medium transition-all ${
                       active
                         ? "bg-accent/15 text-accent border border-accent/30 font-semibold"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"

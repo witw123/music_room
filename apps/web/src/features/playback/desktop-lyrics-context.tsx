@@ -19,9 +19,16 @@ import {
 import {
   getActiveRoomLyricIndex,
   alignRoomLyricLines,
+  getRoomLyricDisplayWords,
   parseRoomLyrics,
   selectRoomLyrics
 } from "@/features/playback/lyrics";
+import {
+  capacitorPlugin,
+  invokeTauri,
+  isCapacitorRuntime,
+  isTauriRuntime
+} from "@/lib/desktop/tauri";
 
 export type DesktopLyricsSource = "room" | "local";
 
@@ -67,7 +74,20 @@ type DesktopLyricsState = {
 type CachedLyrics = Omit<DesktopLyricsState, "status" | "currentLine" | "translatedLine" | "romanizedLine">;
 
 const desktopLyricsPositionStorageKey = "music-room-desktop-lyrics-position-v1";
+const desktopLyricsBridgeChannelName = "music-room-desktop-lyrics";
+const desktopLyricsBridgeSnapshotKey = "music-room-desktop-lyrics-snapshot";
 const lyricRequestCache = new Map<string, Promise<CachedLyrics>>();
+
+type NativeDesktopLyricsPlugin = {
+  toggle?: (args?: Record<string, unknown>) => Promise<{ granted?: boolean; visible?: boolean } | undefined>;
+  hide?: (args?: Record<string, unknown>) => Promise<unknown>;
+  updateLine?: (args: Record<string, unknown>) => Promise<unknown>;
+  updatePlayback?: (args: Record<string, unknown>) => Promise<unknown>;
+};
+
+function getNativeDesktopLyricsPlugin(): NativeDesktopLyricsPlugin | undefined {
+  return capacitorPlugin("DesktopLyrics") as NativeDesktopLyricsPlugin | undefined;
+}
 
 const emptyLyrics: DesktopLyricsState = {
   status: "idle",
@@ -88,6 +108,10 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   const [lyrics, setLyrics] = useState<DesktopLyricsState>(emptyLyrics);
   const [showTranslation, setShowTranslation] = useState(true);
   const [showRomanized, setShowRomanized] = useState(false);
+  const activePlayerRef = useRef<DesktopLyricsPlayer | null>(null);
+  const bridgeChannelRef = useRef<BroadcastChannel | null>(null);
+  const lastBridgeSnapshotWriteAtRef = useRef(0);
+  activePlayerRef.current = activePlayer;
 
   const selectActivePlayer = useCallback(() => {
     const roomPlayer = playersRef.current.get("room");
@@ -140,6 +164,8 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     ? `${activePlayer.currentTrack.sourceType}:${activePlayer.currentTrack.sourceRef?.trackId ?? activePlayer.currentTrack.id}:${activePlayer.currentTrack.lyrics ?? ""}:${activePlayer.currentTrack.translatedLyrics ?? ""}:${activePlayer.currentTrack.romanizedLyrics ?? ""}`
     : null;
   const activeTrack = activePlayer?.currentTrack ?? null;
+  const activeProgressMs = activePlayer?.progressMs ?? 0;
+  const activeIsPlaying = activePlayer?.isPlaying === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -218,16 +244,134 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     }));
   }, [activePlayer, activePlayer?.progressMs, lyricLines, romanizedLines, translatedLines]);
 
+  // ── Tauri desktop shell: bridge playback state to the native lyrics window
+  // over BroadcastChannel; the window posts transport commands back. ──
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const channel = new BroadcastChannel(desktopLyricsBridgeChannelName);
+    channel.onmessage = (event) => {
+      const data = event.data as { type?: string; action?: string } | null;
+      if (!data || data.type !== "command") return;
+      const player = activePlayerRef.current;
+      if (!player || !player.canControlPlayback) return;
+      if (data.action === "prev") player.onPrev();
+      if (data.action === "toggle") player.onTogglePlay();
+      if (data.action === "next") player.onNext();
+    };
+    bridgeChannelRef.current = channel;
+    return () => {
+      channel.onmessage = null;
+      channel.close();
+      if (bridgeChannelRef.current === channel) {
+        bridgeChannelRef.current = null;
+      }
+    };
+  }, []);
+
+  const bridgeTrackPayload = useMemo(() => {
+    if (!activeTrack) return null;
+    return {
+      title: activeTrack.title,
+      artist: activeTrack.artist,
+      artworkUrl: activePlayer?.artworkUrl ?? activeTrack.artworkUrl ?? null,
+      plainLyric: lyrics.plainLyric,
+      translatedLyric: lyrics.translatedLyric,
+      romanizedLyric: lyrics.romanizedLyric
+    };
+  }, [activeTrack, activePlayer?.artworkUrl, lyrics.plainLyric, lyrics.translatedLyric, lyrics.romanizedLyric]);
+
+  useEffect(() => {
+    const channel = bridgeChannelRef.current;
+    if (!isTauriRuntime() || !channel) return;
+    const payload = {
+      type: "state" as const,
+      at: Date.now(),
+      progressMs: activeProgressMs,
+      isPlaying: activeIsPlaying,
+      canControl: activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId),
+      track: bridgeTrackPayload
+    };
+    try {
+      channel.postMessage(payload);
+    } catch {
+      // Bridge traffic is best-effort; the window re-syncs on the next tick.
+    }
+    const now = Date.now();
+    if (now - lastBridgeSnapshotWriteAtRef.current >= 500) {
+      lastBridgeSnapshotWriteAtRef.current = now;
+      try {
+        window.localStorage.setItem(desktopLyricsBridgeSnapshotKey, JSON.stringify(payload));
+      } catch {
+        // Storage may be unavailable; the channel still keeps the window live.
+      }
+    }
+  }, [activeIsPlaying, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeTrackPayload]);
+
+  // ── Capacitor mobile shell: push anchors and char-level word timings to the
+  // native SYSTEM_ALERT_WINDOW overlay; it interpolates and draws per frame. ──
+  useEffect(() => {
+    if (!isCapacitorRuntime()) return;
+    getNativeDesktopLyricsPlugin()?.updatePlayback?.({
+      isPlaying: activeIsPlaying,
+      progressMs: activeProgressMs,
+      at: Date.now()
+    });
+  }, [activeIsPlaying, activeProgressMs]);
+
+  useEffect(() => {
+    if (!isCapacitorRuntime() || lyricLines.length === 0) return;
+    const plugin = getNativeDesktopLyricsPlugin();
+    if (!plugin?.updateLine) return;
+    const activeIndex = Math.max(0, getActiveRoomLyricIndex(lyricLines, activeProgressMs));
+    const words = getRoomLyricDisplayWords(lyricLines, activeIndex).map((word) => ({
+      t: word.text,
+      s: word.timeMs,
+      d: word.durationMs
+    }));
+    const translation = showTranslation
+      ? alignRoomLyricLines(lyricLines, translatedLines)[activeIndex]?.text ?? null
+      : null;
+    const romanized = showRomanized
+      ? alignRoomLyricLines(lyricLines, romanizedLines)[activeIndex]?.text ?? null
+      : null;
+    plugin.updateLine({ words: JSON.stringify(words), translation, romanized });
+  }, [activeProgressMs, lyricLines, romanizedLines, showRomanized, showTranslation, translatedLines]);
+
+  const toggle = useCallback(() => {
+    if (isTauriRuntime()) {
+      void invokeTauri("toggle_desktop_lyrics");
+      setIsOpen((current) => !current);
+      return;
+    }
+    if (isCapacitorRuntime()) {
+      // Without the overlay permission this opens the system settings page;
+      // toggling again after granting shows the lyrics.
+      void getNativeDesktopLyricsPlugin()?.toggle?.({});
+      setIsOpen((current) => !current);
+      return;
+    }
+    setIsOpen((current) => !current);
+  }, []);
+
+  const close = useCallback(() => {
+    if (isTauriRuntime()) {
+      void invokeTauri("hide_desktop_lyrics_window");
+    } else if (isCapacitorRuntime()) {
+      void getNativeDesktopLyricsPlugin()?.hide?.({});
+    }
+    setIsOpen(false);
+  }, []);
+
   const value = useMemo<DesktopLyricsContextValue>(() => ({
     isOpen,
-    toggle: () => setIsOpen((current) => !current),
-    close: () => setIsOpen(false),
+    toggle,
+    close,
     activePlayer,
     lyrics,
     showTranslation,
     showRomanized,
     registerPlayer
-  }), [activePlayer, isOpen, lyrics, registerPlayer, showRomanized, showTranslation]);
+  }), [activePlayer, close, isOpen, lyrics, registerPlayer, showRomanized, showTranslation, toggle]);
 
   return <DesktopLyricsContext.Provider value={value}>{children}</DesktopLyricsContext.Provider>;
 }
