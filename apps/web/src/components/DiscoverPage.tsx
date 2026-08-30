@@ -45,7 +45,6 @@ import {
   SparklesIcon,
   CompassIcon as DiscoverCompassIcon,
   SlidersIcon,
-  UsersIcon,
   MicIcon,
   VolumeIcon,
   ZapIcon,
@@ -575,11 +574,13 @@ export function DiscoverPage() {
 
             {/* Top Recommended Radar Tracklist */}
             <div className="relative z-10 mt-6 pt-5 border-t border-white/[0.08]">
-              <ProviderAlbumTrackTable
-                actions={toPlaylistTrackActions(trackActions)}
-                showToolbar={false}
-                tracks={data.dailyRadar.tracks}
-              />
+              <div className="max-h-[560px] overflow-y-auto hide-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-0.5">
+                <ProviderAlbumTrackTable
+                  actions={toPlaylistTrackActions(trackActions)}
+                  showToolbar={false}
+                  tracks={data.dailyRadar.tracks}
+                />
+              </div>
             </div>
           </section>
         ) : null}
@@ -606,50 +607,15 @@ export function DiscoverPage() {
               </Button>
             </div>
             <div className="relative z-10 pt-2 border-t border-white/[0.08]">
-              <ProviderAlbumTrackTable
-                actions={toPlaylistTrackActions(trackActions)}
-                showToolbar={false}
-                tracks={filteredTopTracks}
-              />
+              <div className="max-h-[560px] overflow-y-auto hide-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-0.5">
+                <ProviderAlbumTrackTable
+                  actions={toPlaylistTrackActions(trackActions)}
+                  showToolbar={false}
+                  tracks={filteredTopTracks}
+                />
+              </div>
             </div>
           </section>
-        ) : null}
-
-        {/* Live Interactive Rooms (Resonance Room Capsules) */}
-        {data?.liveRooms && data.liveRooms.length > 0 ? (
-          <DiscoverSection title="热门房间" icon={<UsersIcon className="w-5 h-5 text-accent" />}>
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-              {data.liveRooms.map((room) => (
-                <a
-                  key={room.roomId}
-                  href={`/room/${room.roomId}`}
-                  className="group relative flex items-center gap-3.5 p-3.5 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 hover:border-white/[0.14] hover:bg-[#181a26]/90 transition-all hover:-translate-y-0.5 shadow-md"
-                >
-                  <div className="relative h-12 w-12 min-w-[3rem] min-h-[3rem] max-w-[3rem] max-h-[3rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-sm">
-                    <Artwork alt="" className="h-full w-full object-cover block" src={room.currentTrack?.artworkUrl ?? null} />
-                    <span className="absolute top-1.5 left-1.5 flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
-                        {room.roomTitle}
-                      </span>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground-muted shrink-0 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.06]">
-                        <UsersIcon className="w-3 h-3 text-accent" />
-                        {room.listenerCount > 0 ? `${room.listenerCount} 人` : "空闲"}
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-foreground-muted">
-                      {room.currentTrack ? `正在播放: ${room.currentTrack.title} · ${room.currentTrack.artist}` : `主理人: ${room.hostName}`}
-                    </p>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </DiscoverSection>
         ) : null}
 
         {!loading && noAccounts ? <DiscoverEmptyState title="连接音乐平台后开始发现" description="绑定网易云音乐或 QQ 音乐后，发现页会从你的听歌画像召回新的歌曲和歌单。" actionHref="/app/settings" actionLabel="前往绑定" /> : null}
