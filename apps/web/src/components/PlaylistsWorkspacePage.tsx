@@ -851,7 +851,7 @@ function LocalTrackRow({
 
   return (
     <article
-      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-surface-border px-4 py-3 last:border-b-0 hover:bg-surface-hover/50 ${isPlayable ? "cursor-pointer sm:cursor-default" : ""} sm:grid-cols-[3rem_minmax(0,1.4fr)_minmax(0,0.8fr)_7rem_auto] sm:items-center sm:gap-3 ${isCurrent ? "bg-accent/10" : ""} ${isDragTarget ? "border-accent/60 bg-accent/10" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${isPlayable ? "cursor-pointer" : ""} ${isCurrent ? "bg-accent/10 border-accent/20" : ""} ${isDragTarget ? "border-accent/60 bg-accent/10" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
       draggable={draggable}
       onDragEnd={onDragEnd}
       onDragOver={(event: DragEvent<HTMLElement>) => {
@@ -870,38 +870,164 @@ function LocalTrackRow({
         onDrop();
       }}
       onClick={() => {
-        if (!isPlayable || isPreparingPlayback || isDownloading || window.matchMedia("(min-width: 640px)").matches) return;
+        if (!isPlayable || isPreparingPlayback || isDownloading) return;
         onPlay();
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
-        if (!isPlayable || isPreparingPlayback || isDownloading || window.matchMedia("(min-width: 640px)").matches) return;
+        if (!isPlayable || isPreparingPlayback || isDownloading) return;
         event.preventDefault();
         onPlay();
       }}
       tabIndex={isPlayable ? 0 : undefined}
     >
-      <span aria-label={draggable ? "拖动调整顺序" : undefined} className="hidden items-center gap-1 text-xs text-foreground-muted sm:flex" title={draggable ? "拖动调整顺序" : undefined}>
-        {draggable ? <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01" /></svg> : null}
-        {String(index + 1).padStart(2, "0")}
-      </span>
-      <div className="flex min-w-0 items-center gap-3">
-        <Artwork artworkUrl={track.artworkUrl} title={track.title} />
-        <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{track.title}</p><p className="mt-1 truncate text-xs text-foreground-muted">{track.artist}{track.lyrics ? " · 有歌词" : ""}{track.availableOffline ? " · 已下载" : track.provider === "netease" || track.provider === "qqmusic" ? " · 可直接播放" : " · 需下载"}</p></div>
-      </div>
-      <span className="hidden truncate text-xs text-foreground-muted sm:block">{track.album ?? "未知专辑"}</span>
-      <span className="hidden text-right text-xs tabular-nums text-foreground-muted sm:block">{formatDuration(track.durationMs)}</span>
-      <div className="col-start-2 row-start-1 row-span-2 flex min-w-0 items-center justify-end gap-1 sm:col-auto sm:row-auto sm:flex-nowrap" onClick={(event) => event.stopPropagation()}>
-        <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 sm:flex sm:flex-nowrap">
-          {onDownload ? <Button aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={track.availableOffline || isDownloading || isPreparingPlayback} onClick={onDownload} size="icon" title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"} type="button" variant="ghost">{isDownloading ? <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3a9 9 0 1 0 9 9" /></svg> : <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}</Button> : null}
-          {canFavorite ? <FavoriteTrackButton isFavorite={isFavorite} onToggle={onToggleFavorite!} pending={isTogglingFavorite} track={toCachedProviderTrack(track)} /> : null}
-          <Button aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={isQueued || !isQueueable || isPreparingPlayback} onClick={onAddToQueue} size="icon" title={isQueued ? "已在队列中" : isQueueable ? "加入队列" : "需要下载后加入队列"} type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg></Button>
-          <Button aria-label={isPlayable ? `播放《${track.title}》` : `《${track.title}》需要下载后播放`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={!isPlayable || isPreparingPlayback || isDownloading} onClick={onPlay} size="icon" title={isPreparingPlayback ? "准备播放中" : isPlayable ? "播放" : "需要下载后播放"} type="button" variant={isCurrent ? "default" : "ghost"}>{isCurrent ? <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg> : <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>}</Button>
-          {onMove ? <Button aria-label={`移动《${track.title}》到其他歌单`} className="h-10 w-10 sm:h-8 sm:w-8" disabled={!track.providerTrackId && track.provider !== "local_upload"} onClick={(event) => onMove(getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="移动到其他歌单" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M5 7h10M11 3l4 4-4 4M19 17H9m4-4-4 4 4 4" /></svg></Button> : null}
-          {onRemove ? <Button aria-label={`从歌单移除《${track.title}》`} className="h-10 w-10 text-red-300 hover:bg-red-500/10 hover:text-red-200 sm:h-8 sm:w-8" onClick={onRemove} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg></Button> : null}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="w-6 shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
+          {draggable ? (
+            <span aria-label="拖动调整顺序" className="flex items-center gap-1 cursor-grab" title="拖动调整顺序">
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01" /></svg>
+            </span>
+          ) : (
+            <>
+              <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
+              <svg aria-hidden="true" className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
+            </>
+          )}
         </div>
-        <Button aria-label={`打开《${track.title}》的操作菜单`} className="h-10 w-10 sm:hidden" onClick={(event) => { event.stopPropagation(); setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget)); }} size="icon" title="更多操作" type="button" variant="ghost"><MoreIcon /></Button>
-        {menuAnchor ? <MobileTrackActionsMenu anchor={menuAnchor} items={menuItems} onClose={() => setMenuAnchor(null)} subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`} title={track.title} /> : null}
+        <Artwork artworkUrl={track.artworkUrl} title={track.title} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
+            {track.title}
+          </p>
+          <p className="truncate text-xs text-foreground-muted mt-0.5">
+            {track.artist}
+            {track.lyrics ? " · 有歌词" : ""}
+            {track.availableOffline ? " · 已下载" : track.provider === "netease" || track.provider === "qqmusic" ? " · 可直接播放" : " · 需下载"}
+          </p>
+        </div>
+      </div>
+      <span className="hidden lg:block min-w-0 max-w-[200px] truncate text-xs text-foreground-muted/70">
+        {track.album ?? "未知专辑"}
+      </span>
+      <span className="shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
+        {formatDuration(track.durationMs)}
+      </span>
+      <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
+        <div className="hidden items-center gap-1 sm:flex">
+          {onDownload ? (
+            <Button
+              aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
+              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+              disabled={track.availableOffline || isDownloading || isPreparingPlayback}
+              onClick={onDownload}
+              size="icon"
+              title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"}
+              type="button"
+              variant="ghost"
+            >
+              {isDownloading ? (
+                <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                  <path d="M12 3a9 9 0 1 0 9 9" />
+                </svg>
+              ) : (
+                <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                  <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+                </svg>
+              )}
+            </Button>
+          ) : null}
+          {canFavorite ? <FavoriteTrackButton isFavorite={isFavorite} onToggle={onToggleFavorite!} pending={isTogglingFavorite} size="compact" track={toCachedProviderTrack(track)} /> : null}
+          <Button
+            aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            disabled={isQueued || !isQueueable || isPreparingPlayback}
+            onClick={onAddToQueue}
+            size="icon"
+            title={isQueued ? "已在队列中" : isQueueable ? "加入队列" : "需要下载后加入队列"}
+            type="button"
+            variant="ghost"
+          >
+            <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </Button>
+          {onMove ? (
+            <Button
+              aria-label={`移动《${track.title}》到其他歌单`}
+              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+              disabled={!track.providerTrackId && track.provider !== "local_upload"}
+              onClick={(event) => onMove(getAnchoredDialogAnchor(event.currentTarget))}
+              size="icon"
+              title="移动到其他歌单"
+              type="button"
+              variant="ghost"
+            >
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                <path d="M5 7h10M11 3l4 4-4 4M19 17H9m4-4-4 4 4 4" />
+              </svg>
+            </Button>
+          ) : null}
+          {onRemove ? (
+            <Button
+              aria-label={`从歌单移除《${track.title}》`}
+              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-red-400 hover:bg-red-500/10"
+              onClick={onRemove}
+              size="icon"
+              title="从歌单移除"
+              type="button"
+              variant="ghost"
+            >
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                <path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" />
+              </svg>
+            </Button>
+          ) : null}
+        </div>
+        {onDownload ? (
+          <Button
+            aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white sm:hidden"
+            disabled={track.availableOffline || isDownloading || isPreparingPlayback}
+            onClick={onDownload}
+            size="icon"
+            title={track.availableOffline ? "已下载" : isDownloading ? "下载中" : "下载到本地"}
+            type="button"
+            variant="ghost"
+          >
+            {isDownloading ? (
+              <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                <path d="M12 3a9 9 0 1 0 9 9" />
+              </svg>
+            ) : (
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+              </svg>
+            )}
+          </Button>
+        ) : null}
+        <Button
+          aria-label={`打开《${track.title}》的操作菜单`}
+          className="h-8 w-8 sm:hidden text-foreground-muted hover:text-white"
+          onClick={(event) => {
+            event.stopPropagation();
+            setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget));
+          }}
+          size="icon"
+          title="更多操作"
+          type="button"
+          variant="ghost"
+        >
+          <MoreIcon />
+        </Button>
+        {menuAnchor ? (
+          <MobileTrackActionsMenu
+            anchor={menuAnchor}
+            items={menuItems}
+            onClose={() => setMenuAnchor(null)}
+            subtitle={`${track.artist} · ${track.album ?? "未知专辑"}`}
+            title={track.title}
+          />
+        ) : null}
       </div>
     </article>
   );
@@ -1366,12 +1492,12 @@ function PlaylistDetailView({
 
       {downloadMessage ? <p className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{downloadMessage}</p> : null}
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-surface-border bg-surface/25">
+      <div className="mt-6 space-y-1">
         {rows.length ? rows.map(({ track, index, trackId }) => {
           if (!track) {
             return (
               <article
-                className={`flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-b-0 ${dragOverTrackId === trackId ? "bg-accent/10" : ""} ${canEditTracks ? "cursor-grab active:cursor-grabbing" : ""}`}
+                className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${dragOverTrackId === trackId ? "bg-accent/10 border-accent/60" : ""} ${canEditTracks ? "cursor-grab active:cursor-grabbing" : ""}`}
                 draggable={canEditTracks}
                 key={`${selection.kind}:${trackId}`}
                 onDragEnd={() => {
@@ -1393,10 +1519,19 @@ function PlaylistDetailView({
                   reorderTracks(trackId);
                 }}
               >
-                <span className="hidden w-8 shrink-0 text-xs text-foreground-muted sm:block">{String(index + 1).padStart(2, "0")}</span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm text-foreground">{trackId}</p><p className="mt-1 text-xs text-foreground-muted">曲目信息不可用</p></div>
-                {canEditTracks ? <PlaylistOrderButtons index={index} onMove={(direction) => moveTrackByOffset(trackId, direction)} title={trackId} total={currentTrackIds.length} /> : null}
-                {canEditTracks ? <Button aria-label="从歌单移除歌曲" className="h-10 w-10 text-red-300 hover:bg-red-500/10 hover:text-red-200 sm:h-8 sm:w-8" onClick={() => onUpdateTracks(currentTrackIds.filter((id) => id !== trackId))} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l-1-13M10 10v7m4-7v7" /></svg></Button> : null}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-6 shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
+                    {String(index + 1).padStart(2, "0")}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-white/80">{trackId}</p>
+                    <p className="mt-0.5 text-xs text-foreground-muted">曲目信息不可用</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {canEditTracks ? <PlaylistOrderButtons index={index} onMove={(direction) => moveTrackByOffset(trackId, direction)} title={trackId} total={currentTrackIds.length} /> : null}
+                  {canEditTracks ? <Button aria-label="从歌单移除歌曲" className="h-8 w-8 rounded-lg text-foreground-muted hover:text-red-400 hover:bg-red-500/10" onClick={() => onUpdateTracks(currentTrackIds.filter((id) => id !== trackId))} size="icon" title="从歌单移除" type="button" variant="ghost"><svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg></Button> : null}
+                </div>
               </article>
             );
           }

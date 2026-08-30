@@ -281,6 +281,26 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
   return (
     <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
       <div className="hidden items-center gap-1 sm:flex">
+        {actions.onDownload ? (
+          <Button
+            aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            disabled={disabled || downloaded}
+            onClick={() => actions.onDownload?.(track)}
+            size="icon"
+            title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地"}
+            type="button"
+            variant="ghost"
+          >
+            {downloading ? (
+              <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+                <path d="M12 3a9 9 0 1 0 9 9" />
+              </svg>
+            ) : (
+              <TrackActionIcon name="download" />
+            )}
+          </Button>
+        ) : null}
         {actions.onAddToQueue ? (
           <Button
             aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
@@ -319,6 +339,26 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
           />
         ) : null}
       </div>
+      {actions.onDownload ? (
+        <Button
+          aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
+          className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white sm:hidden"
+          disabled={disabled || downloaded}
+          onClick={() => actions.onDownload?.(track)}
+          size="icon"
+          title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地"}
+          type="button"
+          variant="ghost"
+        >
+          {downloading ? (
+            <svg aria-hidden="true" className="animate-spin" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14">
+              <path d="M12 3a9 9 0 1 0 9 9" />
+            </svg>
+          ) : (
+            <TrackActionIcon name="download" />
+          )}
+        </Button>
+      ) : null}
       <Button
         aria-label={`打开《${track.title}》的操作菜单`}
         className="h-8 w-8 sm:hidden text-foreground-muted hover:text-white"

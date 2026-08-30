@@ -7,6 +7,7 @@ import type {
 } from "@music-room/shared";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
+import type { ProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 
 type Provider = "netease" | "qqmusic";
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
@@ -25,6 +26,7 @@ const roomsByUser = new Map<string, RoomDirectoryItem[]>();
 const playlistsByUser = new Map<string, PlaylistPageData>();
 const favoritesByUser = new Map<string, ProviderAlbumFavorite[]>();
 const providerAccountsByUser = new Map<string, ProviderAccount>();
+const discoverByUser = new Map<string, { data: ProfileProviderRecommendations; cachedAt: number }>();
 
 export function getCachedRooms(userId: string) {
   return roomsByUser.get(userId);
@@ -68,4 +70,26 @@ export function getCachedProviderAccount(userId: string, provider: Provider) {
 
 export function setCachedProviderAccount(userId: string, provider: Provider, account: ProviderAccount) {
   providerAccountsByUser.set(`${userId}:${provider}`, account);
+}
+
+export function getCachedDiscoverData(userId: string, maxAgeMs = 15 * 60 * 1000): ProfileProviderRecommendations | undefined {
+  const entry = discoverByUser.get(userId);
+  if (!entry) return undefined;
+  if (Date.now() - entry.cachedAt > maxAgeMs) {
+    discoverByUser.delete(userId);
+    return undefined;
+  }
+  return entry.data;
+}
+
+export function setCachedDiscoverData(userId: string, data: ProfileProviderRecommendations) {
+  discoverByUser.set(userId, { data, cachedAt: Date.now() });
+}
+
+export function invalidateDiscoverDataCache(userId?: string) {
+  if (userId) {
+    discoverByUser.delete(userId);
+  } else {
+    discoverByUser.clear();
+  }
 }

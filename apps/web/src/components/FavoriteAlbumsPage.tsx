@@ -213,9 +213,10 @@ export function FavoriteAlbumsPage({
     }
   }
 
-  async function downloadTrack(track: Track) {
+  async function downloadTrack(track: Track): Promise<boolean> {
     const existing = localTracks.find((item) => item.id === localPlaylistTrackId(track));
-    if (existing?.availableOffline || pending) return;
+    if (existing?.availableOffline) return true;
+    if (pending) return false;
     setPending(`download:${track.provider}:${track.providerTrackId}`);
     setErrorMessage(null);
     setStatusMessage(null);
@@ -270,8 +271,62 @@ export function FavoriteAlbumsPage({
       await upsertLocalPlaylistTrack(updatedTrack);
       setLocalTracks((current) => [...current.filter((item) => item.id !== updatedTrack.id), updatedTrack]);
       setStatusMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+      return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "歌曲下载失败，请稍后重试。");
+      return false;
+    } finally {
+      setPending(null);
+    }
+  }
+
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ completed: 0, total: 0 });
+
+  async function downloadAllFavoriteTracks() {
+    const candidateTracks = favoriteTracks.map(favoriteTrackToCandidate);
+    const downloadable = candidateTracks.filter((track) => !getLocalRecord(track).availableOffline);
+    if (isDownloadingAll || pending || downloadable.length === 0) return;
+    setIsDownloadingAll(true);
+    setDownloadProgress({ completed: 0, total: downloadable.length });
+    setErrorMessage(null);
+    setStatusMessage(null);
+    let downloadedCount = 0;
+    let failedCount = 0;
+    try {
+      for (let index = 0; index < downloadable.length; index += 1) {
+        const item = downloadable[index];
+        const success = await downloadTrack(item);
+        if (success) downloadedCount += 1;
+        else failedCount += 1;
+        setDownloadProgress({ completed: index + 1, total: downloadable.length });
+      }
+      setStatusMessage(
+        failedCount > 0
+          ? `已下载 ${downloadedCount} 首，${failedCount} 首下载失败。`
+          : `已成功下载 ${downloadedCount} 首歌曲到本地。`
+      );
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  }
+
+  async function playAllFavoriteTracks() {
+    const candidateTracks = favoriteTracks.map(favoriteTrackToCandidate);
+    if (candidateTracks.length === 0 || pending) return;
+    try {
+      setPending("playAllFavorites");
+      setErrorMessage(null);
+      setStatusMessage(null);
+      const first = candidateTracks[0];
+      const record = await cacheTrackForPlayback(first);
+      await player.playTrack(record);
+      for (const next of candidateTracks.slice(1)) {
+        player.addToQueue(getLocalRecord(next));
+      }
+      setStatusMessage(`已开启收藏全部 ${candidateTracks.length} 首歌曲播放`);
+    } catch (error) {
+      setErrorMessage(toErrorMessage(error));
     } finally {
       setPending(null);
     }
@@ -374,13 +429,21 @@ export function FavoriteAlbumsPage({
     }
   }
 
+  const favoriteCandidateTracks = favoriteTracks.map(favoriteTrackToCandidate);
+  const favoriteDownloadedCount = favoriteCandidateTracks.filter((track) => getLocalRecord(track).availableOffline).length;
+
   const favoriteBody = (
     <div className={embedded ? "min-w-0 pb-1" : ""}>
       {favoriteView === "tracks" ? (
         <FavoriteTracksSection
+          downloadProgress={downloadProgress}
+          downloadedCount={favoriteDownloadedCount}
+          isDownloadingAll={isDownloadingAll}
           loading={favoriteTracksLoading}
-          tracks={favoriteTracks.map(favoriteTrackToCandidate)}
+          onDownloadAll={downloadAllFavoriteTracks}
+          onPlayAll={playAllFavoriteTracks}
           trackActions={favoriteTrackActions()}
+          tracks={favoriteCandidateTracks}
         />
       ) : favoriteView === "artists" ? (
         <FavoriteArtistsSection artists={artists} pending={pending} onRemove={removeArtist} />
@@ -511,11 +574,21 @@ function FavoriteArtistsSection({
 function FavoriteTracksSection({
   loading,
   tracks,
-  trackActions
+  trackActions,
+  downloadedCount,
+  onDownloadAll,
+  onPlayAll,
+  isDownloadingAll,
+  downloadProgress
 }: {
   loading: boolean;
   tracks: Track[];
   trackActions: ProviderAlbumTrackActions;
+  downloadedCount: number;
+  onDownloadAll?: () => void;
+  onPlayAll?: () => void;
+  isDownloadingAll?: boolean;
+  downloadProgress?: { completed: number; total: number };
 }) {
   if (loading && tracks.length === 0) {
     return <div className="mt-6 flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-surface-border text-sm text-foreground-muted">正在加载收藏歌曲…</div>;
@@ -523,7 +596,39 @@ function FavoriteTracksSection({
   if (tracks.length === 0) {
     return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-surface-border px-6 text-center"><HeartIcon /><p className="mt-4 text-sm font-medium text-foreground-muted">还没有收藏歌曲</p><p className="mt-2 text-xs text-foreground-muted">在发现、歌单或播放器中点击心形按钮收藏歌曲。</p></div>;
   }
-  return <section className="mt-5"><ProviderAlbumTrackTable actions={trackActions} showToolbar={false} tracks={tracks} /></section>;
+  const downloadableCount = tracks.length - downloadedCount;
+  return (
+    <section className="mt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
+        <span className="text-xs font-medium text-foreground-muted">
+          {tracks.length} 首歌曲 · 已下载 {downloadedCount} 首
+        </span>
+        <div className="flex items-center gap-2">
+          {onDownloadAll && downloadableCount > 0 ? (
+            <Button
+              disabled={isDownloadingAll}
+              onClick={onDownloadAll}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+              {isDownloadingAll ? `下载中 ${downloadProgress?.completed ?? 0}/${downloadProgress?.total ?? downloadableCount}` : "一键下载全部"}
+            </Button>
+          ) : null}
+          {onPlayAll ? (
+            <Button onClick={onPlayAll} size="sm" type="button">
+              <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M8 5v14l11-7z" /></svg>
+              播放全部
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-4">
+        <ProviderAlbumTrackTable actions={trackActions} showToolbar={false} tracks={tracks} />
+      </div>
+    </section>
+  );
 }
 
 function AlbumArtwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {

@@ -21,7 +21,30 @@ import { getProfileProviderRecommendations, type DiscoverPlaylistRecommendation,
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
-import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
+import {
+  hashAudioBlob,
+  listMergedLocalPlaylistTracks,
+  localPlaylistTrackId,
+  toProviderTrackRecord,
+  upsertLocalPlaylistTrack,
+  type LocalPlaylistTrackRecord
+} from "@/features/playlist/local-playlist";
+import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
+import {
+  ensureLocalAudioDirectoryWriteAccess,
+  normalizeLocalAudioMimeType,
+  saveAudioFileToLocalDirectory
+} from "@/features/library/local-audio-storage";
+import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
+import {
+  ProviderAlbumTrackTable,
+  type ProviderAlbumTrackActions
+} from "@/components/ProviderAlbumDetailView";
+import {
+  getCachedDiscoverData,
+  setCachedDiscoverData,
+  invalidateDiscoverDataCache
+} from "@/features/workspace/page-data-cache";
 
 import {
   SparklesIcon,
@@ -70,8 +93,12 @@ export function DiscoverPage() {
     pendingFavoriteKey,
     toggleFavorite: toggleFavoriteTrack
   } = useFavoriteTracks(activeSession?.userId);
-  const [data, setData] = useState<DiscoverData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<DiscoverData | null>(() =>
+    activeSession ? getCachedDiscoverData(activeSession.userId) ?? null : null
+  );
+  const [loading, setLoading] = useState(() =>
+    !Boolean(activeSession && getCachedDiscoverData(activeSession.userId))
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -80,18 +107,37 @@ export function DiscoverPage() {
   const [favoritePlaylistKeys] = useState<Set<string>>(new Set());
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
-  const [playlistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
-  const [playlistPickerLoading] = useState(false);
+  const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
+  const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const [activeFilterId, setActiveFilterId] = useState<string>("all");
   const [showColdStartDialog, setShowColdStartDialog] = useState(false);
+  const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listMergedLocalPlaylistTracks().then((tracks) => {
+      if (!cancelled) setLocalTracks(tracks);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession]);
 
   const requestVersionRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
   const lastProfileRefreshAtRef = useRef(0);
   const profileRefreshTimerRef = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!activeSession) return;
+    if (!force) {
+      const cached = getCachedDiscoverData(activeSession.userId);
+      if (cached) {
+        setData(cached);
+        setLoading(false);
+        return;
+      }
+    }
     const version = ++requestVersionRef.current;
     requestAbortRef.current?.abort();
     const controller = new AbortController();
@@ -104,6 +150,7 @@ export function DiscoverPage() {
         signal: controller.signal
       });
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
+      setCachedDiscoverData(activeSession.userId, recommendations);
       setData(recommendations);
     } catch (error) {
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
@@ -119,6 +166,12 @@ export function DiscoverPage() {
 
   useEffect(() => {
     if (!activeSession) return;
+    const cached = getCachedDiscoverData(activeSession.userId);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      return;
+    }
     void load();
   }, [activeSession, load]);
 
@@ -132,7 +185,8 @@ export function DiscoverPage() {
         window.clearTimeout(profileRefreshTimerRef.current);
       }
       profileRefreshTimerRef.current = window.setTimeout(() => {
-        void load();
+        invalidateDiscoverDataCache(activeSession.userId);
+        void load(true);
       }, 500);
     };
 
@@ -144,6 +198,135 @@ export function DiscoverPage() {
       }
     };
   }, [activeSession, load]);
+
+  async function resolveTrackArtwork(track: Track) {
+    if (track.artworkUrl) return track;
+    try {
+      return track.provider === "netease"
+        ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
+        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    } catch {
+      return track;
+    }
+  }
+
+  async function downloadTrack(track: Track): Promise<boolean> {
+    const existing = localTracks.find((item) => item.id === localPlaylistTrackId(track));
+    if (existing?.availableOffline) return true;
+    if (pending) return false;
+    setPending(`download:${track.provider}:${track.providerTrackId}`);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      const resolvedTrack = await resolveTrackArtwork(track);
+      await ensureLocalAudioDirectoryWriteAccess();
+      const response = resolvedTrack.provider === "netease"
+        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
+        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
+      const fileHash = await hashAudioBlob(response.blob);
+      const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
+      const loudness = await analyzeAudioBlobLoudness(response.blob);
+      const lyricPayload = existing?.lyrics
+        ? null
+        : await (resolvedTrack.provider === "netease"
+          ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
+          : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
+        ).catch(() => null);
+      const lyrics = existing?.lyrics ?? lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
+      const saved = await saveAudioFileToLocalDirectory({
+        file: response.blob,
+        fileHash,
+        title: resolvedTrack.title,
+        mimeType,
+        track: {
+          artist: resolvedTrack.artist,
+          album: resolvedTrack.album,
+          artworkUrl: resolvedTrack.artworkUrl,
+          lyrics,
+          translatedLyrics: lyricPayload?.translatedLyric ?? null,
+          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
+          provider: resolvedTrack.provider,
+          providerTrackId: resolvedTrack.providerTrackId,
+          durationMs: resolvedTrack.durationMs,
+          sizeBytes: response.blob.size
+        }
+      });
+      const updatedTrack: LocalPlaylistTrackRecord = {
+        ...toProviderTrackRecord(resolvedTrack, existing),
+        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
+        fileHash,
+        fileName: saved.fileName,
+        sizeBytes: response.blob.size,
+        mimeType,
+        lyrics,
+        translatedLyrics: lyricPayload?.translatedLyric ?? null,
+        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
+        ...(loudness ? { loudness } : {}),
+        availableOffline: true,
+        updatedAt: new Date().toISOString()
+      };
+      await upsertLocalPlaylistTrack(updatedTrack);
+      setLocalTracks((current) => [...current.filter((item) => item.id !== updatedTrack.id), updatedTrack]);
+      setStatusMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "歌曲下载失败，请稍后重试。");
+      return false;
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function openPlaylistPicker(track: Track, anchor: AnchoredDialogAnchor) {
+    if (pending) return;
+    setPlaylistPickerTrack(track);
+    setPlaylistPickerAnchor(anchor);
+    setPlaylistPickerLoading(true);
+    setPlaylistPickerOptions([]);
+    setErrorMessage(null);
+    setPending(`playlist-picker:${track.providerTrackId}`);
+    try {
+      const networkPlaylists = await musicRoomApi.listMyPlaylists();
+      setPlaylistPickerOptions(
+        networkPlaylists
+          .filter((item) => !isLocalPlaylistMirror(item))
+          .map((item) => ({ kind: "network" as const, playlist: item }))
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? `歌单加载失败：${error.message}` : "歌单加载失败，请稍后重试。");
+    } finally {
+      setPlaylistPickerLoading(false);
+      setPending(null);
+    }
+  }
+
+  async function addTrackToPlaylist(option: ProviderPlaylistPickerOption) {
+    const track = playlistPickerTrack;
+    if (!track || pending) return;
+    setPending(`add-playlist:${option.kind}:${option.playlist.id}:${track.providerTrackId}`);
+    setErrorMessage(null);
+    try {
+      const resolvedTrack = await resolveTrackArtwork(track);
+      const trackId = localPlaylistTrackId(resolvedTrack);
+      try {
+        await upsertLocalPlaylistTrack(toProviderTrackRecord(resolvedTrack));
+      } catch {
+        // The network playlist remains authoritative when local metadata storage is unavailable.
+      }
+      if (option.playlist.trackIds.includes(trackId)) {
+        setStatusMessage(`《${resolvedTrack.title}》已在“${option.playlist.title}”中。`);
+      } else {
+        await musicRoomApi.updatePlaylist(option.playlist.id, { trackIds: [...option.playlist.trackIds, trackId] });
+        setStatusMessage(`《${resolvedTrack.title}》已加入“${option.playlist.title}”。`);
+      }
+      setPlaylistPickerTrack(null);
+      setPlaylistPickerAnchor(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "加入歌单失败，请稍后重试。");
+    } finally {
+      setPending(null);
+    }
+  }
 
   const playDailyRadarAll = async (tracks: Track[]) => {
     if (!tracks.length) return;
@@ -166,8 +349,8 @@ export function DiscoverPage() {
     pending,
     isFavorite: (track) => isFavoriteTrack(track),
     isFavoritePending: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
-    isDownloaded: (_track) => false,
-    isQueued: (_track) => false,
+    isDownloaded: (track) => localTracks.some((item) => item.id === localPlaylistTrackId(track) && item.availableOffline),
+    isQueued: (track) => player.queue.some((item) => item.trackId === localPlaylistTrackId(track)),
     onPlay: async (track) => {
       const record = toProviderTrackRecord(track);
       await player.playTrack(record);
@@ -178,9 +361,11 @@ export function DiscoverPage() {
       player.addToQueue(record);
       setStatusMessage(`已将《${track.title}》加入播放队列`);
     },
-    onDownload: () => {},
-    onAddToPlaylist: (_track, anchor) => {
-      setPlaylistPickerAnchor(anchor);
+    onDownload: (track) => {
+      void downloadTrack(track);
+    },
+    onAddToPlaylist: (track, anchor) => {
+      void openPlaylistPicker(track, anchor);
     },
     onStartRadio: async (track) => {
       try {
@@ -199,11 +384,6 @@ export function DiscoverPage() {
       await toggleFavoriteTrack(track as ProviderTrackCandidate);
     },
     onFeedback: () => {}
-  };
-
-  const addTrackToPlaylist = async (_option: ProviderPlaylistPickerOption) => {
-    setPlaylistPickerTrack(null);
-    setPlaylistPickerAnchor(null);
   };
 
   const toggleFavoritePlaylist = async (_playlist: ProviderPlaylistDetail) => {};
@@ -451,28 +631,44 @@ export function DiscoverPage() {
         {/* New Releases / For You */}
         {filteredForYou.length ? (
           <DiscoverSection title={activeFilterId === "all" ? "新歌速递" : `${activeFilter?.label ?? ""}精选`}>
-            <DiscoverTrackRail actions={trackActions} tracks={filteredForYou} />
+            <ProviderAlbumTrackTable
+              actions={toPlaylistTrackActions(trackActions)}
+              showToolbar={false}
+              tracks={filteredForYou.map((item) => item.candidate)}
+            />
           </DiscoverSection>
         ) : null}
 
         {/* Deep Cuts / Featured Tracks */}
         {filteredDeepCuts.length ? (
           <DiscoverSection title="深度精选">
-            <DiscoverTrackRail actions={trackActions} tracks={filteredDeepCuts} />
+            <ProviderAlbumTrackTable
+              actions={toPlaylistTrackActions(trackActions)}
+              showToolbar={false}
+              tracks={filteredDeepCuts.map((item) => item.candidate)}
+            />
           </DiscoverSection>
         ) : null}
 
         {/* Artist Essentials */}
         {filteredFamiliar.length && activeFilterId === "all" ? (
           <DiscoverSection title="艺人代表作">
-            <DiscoverTrackRail actions={trackActions} tracks={filteredFamiliar} />
+            <ProviderAlbumTrackTable
+              actions={toPlaylistTrackActions(trackActions)}
+              showToolbar={false}
+              tracks={filteredFamiliar.map((item) => item.candidate)}
+            />
           </DiscoverSection>
         ) : null}
 
-        {/* Compact Grid (Guess You Like 3x3) */}
+        {/* Compact Grid (Guess You Like) */}
         {compactRecommendations.length && activeFilterId === "all" ? (
           <DiscoverSection title="猜你喜欢">
-            <DiscoverCompactTrackGrid tracks={compactRecommendations} actions={trackActions} />
+            <ProviderAlbumTrackTable
+              actions={toPlaylistTrackActions(trackActions)}
+              showToolbar={false}
+              tracks={compactRecommendations.map((item) => item.candidate)}
+            />
           </DiscoverSection>
         ) : null}
 
