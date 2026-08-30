@@ -471,10 +471,10 @@ export function DiscoverPage() {
     ? recommendedPlaylists
     : recommendedPlaylists.filter((p) => matchesFilter(p.playlist.title) || matchesFilter(p.playlist.description ?? "") || (p.playlist.tags ?? []).some(matchesFilter));
 
-  const filteredForYou = data ? filterTrackList(data.forYou) : [];
-  const filteredDeepCuts = data ? filterTrackList(data.deepCuts) : [];
-  const filteredFamiliar = data ? filterTrackList(data.familiarArtists) : [];
-  const compactRecommendations = data ? uniqueRecommendations(filteredDeepCuts.length ? filteredDeepCuts : data.deepCuts).slice(0, 9) : [];
+  const allRecommendedTracks = data
+    ? [...data.forYou, ...data.deepCuts, ...data.moodDiscovery, ...data.familiarArtists]
+    : [];
+  const filteredTopTracks = filterTrackList(allRecommendedTracks).map((item) => item.candidate).slice(0, 10);
   
   const hasContent = Boolean(data?.forYou.length || data?.familiarArtists.length || data?.moodDiscovery.length || data?.deepCuts.length || data?.playlists.length);
   const noProfile = Boolean(data && !hasContent);
@@ -572,6 +572,46 @@ export function DiscoverPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Top Recommended Radar Tracklist */}
+            <div className="relative z-10 mt-6 pt-5 border-t border-white/[0.08]">
+              <ProviderAlbumTrackTable
+                actions={toPlaylistTrackActions(trackActions)}
+                showToolbar={false}
+                tracks={data.dailyRadar.tracks}
+              />
+            </div>
+          </section>
+        ) : null}
+
+        {/* Filtered Genre Radar Spotlight */}
+        {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
+          <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#161a29]/90 via-[#0f121d]/95 to-[#090b11] p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold text-accent bg-accent/15 border border-accent/20">
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <span>{activeFilter?.label}精选雷达</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{activeFilter?.label}精选推荐单曲</h2>
+              </div>
+              <Button
+                type="button"
+                disabled={pending !== null}
+                onClick={() => playDailyRadarAll(filteredTopTracks)}
+                className="rounded-xl px-5 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+              >
+                <PlayIcon className="w-4 h-4 mr-2" />
+                <span>一键播放全部</span>
+              </Button>
+            </div>
+            <div className="relative z-10 pt-2 border-t border-white/[0.08]">
+              <ProviderAlbumTrackTable
+                actions={toPlaylistTrackActions(trackActions)}
+                showToolbar={false}
+                tracks={filteredTopTracks}
+              />
+            </div>
           </section>
         ) : null}
 
@@ -616,54 +656,10 @@ export function DiscoverPage() {
         {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="开始探索你的专属推荐" description="在 Music Room 播放或收藏歌曲，或通过偏好设置快速定制你的专属雷达。" actionLabel="定制音乐偏好" onAction={() => setShowColdStartDialog(true)} /> : null}
         {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="暂无新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
 
-        {/* Featured Playlists (Vinyl Disc Hover Extraction) */}
+        {/* Featured / Recommended Playlists Area (Sole Recommendation Area) */}
         {filteredPlaylists.length ? (
           <DiscoverSection title={activeFilterId === "all" ? "推荐歌单" : `${activeFilter?.label ?? ""}风格歌单`}>
             <DiscoverPlaylistRail items={filteredPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} />
-          </DiscoverSection>
-        ) : null}
-
-        {/* New Releases / For You */}
-        {filteredForYou.length ? (
-          <DiscoverSection title={activeFilterId === "all" ? "新歌速递" : `${activeFilter?.label ?? ""}精选`}>
-            <ProviderAlbumTrackTable
-              actions={toPlaylistTrackActions(trackActions)}
-              showToolbar={false}
-              tracks={filteredForYou.map((item) => item.candidate)}
-            />
-          </DiscoverSection>
-        ) : null}
-
-        {/* Deep Cuts / Featured Tracks */}
-        {filteredDeepCuts.length ? (
-          <DiscoverSection title="深度精选">
-            <ProviderAlbumTrackTable
-              actions={toPlaylistTrackActions(trackActions)}
-              showToolbar={false}
-              tracks={filteredDeepCuts.map((item) => item.candidate)}
-            />
-          </DiscoverSection>
-        ) : null}
-
-        {/* Artist Essentials */}
-        {filteredFamiliar.length && activeFilterId === "all" ? (
-          <DiscoverSection title="艺人代表作">
-            <ProviderAlbumTrackTable
-              actions={toPlaylistTrackActions(trackActions)}
-              showToolbar={false}
-              tracks={filteredFamiliar.map((item) => item.candidate)}
-            />
-          </DiscoverSection>
-        ) : null}
-
-        {/* Compact Grid (Guess You Like) */}
-        {compactRecommendations.length && activeFilterId === "all" ? (
-          <DiscoverSection title="猜你喜欢">
-            <ProviderAlbumTrackTable
-              actions={toPlaylistTrackActions(trackActions)}
-              showToolbar={false}
-              tracks={compactRecommendations.map((item) => item.candidate)}
-            />
           </DiscoverSection>
         ) : null}
 
@@ -840,61 +836,100 @@ function providerPlaylistKey(provider: Provider, playlistId: string) {
   return `${provider}:${playlistId}`;
 }
 
+const genreCategoryPresets = [
+  { id: "rock", title: "摇滚与能量专栏", description: "充满张力与力量感的摇滚、朋克与独立之声。", tags: ["摇滚", "独立", "能量", "朋克"], keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk", "硬核"] },
+  { id: "electronic", title: "电子律动空间", description: "跳跃节奏与合成器声场，沉浸式电音精选。", tags: ["电子", "EDM", "电音", "律动"], keywords: ["电子", "edm", "house", "techno", "电音", "synth", "dance", "舞曲"] },
+  { id: "focus", title: "专注与纯音小憩", description: "清透静谧的器乐与氛围音乐，伴你沉浸思考。", tags: ["专注", "纯音", "学习", "轻音乐"], keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音", "钢琴", "古典"] },
+  { id: "night", title: "夜听与疗愈私享", description: "深夜温暖陪伴，抚平情绪的治愈与慢调旋律。", tags: ["夜听", "深夜", "治愈", "R&B"], keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul", "放空", "疗愈"] },
+  { id: "acg", title: "ACG 与二次元幻想", description: "动漫游戏原声与日系旋律，开启异次元共鸣。", tags: ["ACG", "动漫", "二次元", "J-pop"], keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop", "日语"] },
+  { id: "guofeng", title: "新国风与古韵雅集", description: "丝竹戏腔与现代编曲交织的华夏音韵。", tags: ["国风", "古风", "新中式", "仙侠"], keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式", "武侠"] },
+  { id: "rnb", title: "R&B 与都市律动", description: "丝滑转音与慵懒节奏，都市夜色中的随性律动。", tags: ["R&B", "都市", "律动", "Soul"], keywords: ["r&b", "rnb", "soul", "嘻哈", "说唱", "hip-hop", "rap", "都市"] },
+  { id: "folk", title: "民谣与温暖叙事", description: "一把木吉他与质朴故事，诉说人间烟火与诗意。", tags: ["民谣", "木吉他", "温暖", "故事"], keywords: ["民谣", "folk", "吉他", "不插电", "民乐"] }
+];
+
 function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): DiscoverPlaylistCard[] {
-  const groups = [
+  const baseGroups = [
     {
       id: "for-you",
       title: "新歌与精选",
-      description: "根据听歌风格为你精选整理的代表作。",
-      tracks: data.forYou
+      description: "结合最新个人听歌画像，为你精选整理的代表作与新发好歌。",
+      tags: ["精选", "新歌", "为你推荐", "流行"],
+      tracks: data.forYou.map((item) => item.candidate)
     },
     {
       id: "familiar-artists",
       title: "常听艺人精选",
-      description: "常听歌手的延展与精选曲目。",
-      tracks: data.familiarArtists
+      description: "常听歌手的代表作延展与经典曲目集结。",
+      tags: ["艺人", "代表作", "熟悉", "经典"],
+      tracks: data.familiarArtists.map((item) => item.candidate)
     },
     {
       id: "mood-discovery",
-      title: "风味探索",
-      description: "换个口味的探索歌曲推荐。",
-      tracks: data.moodDiscovery
+      title: "多元风味探索",
+      description: "跨越曲风边界，扩展你的音乐味蕾与探索地图。",
+      tags: ["探索", "小众", "新风格", "发现"],
+      tracks: data.moodDiscovery.map((item) => item.candidate)
+    },
+    {
+      id: "deep-cuts",
+      title: "深度宝藏挖掘",
+      description: "低热度高契合度的小众佳作与冷门好歌。",
+      tags: ["深度", "宝藏", "冷门好歌", "私藏"],
+      tracks: data.deepCuts.map((item) => item.candidate)
     }
   ];
 
-  return groups.flatMap(({ id, title, description, tracks }) => {
+  const allPool = [
+    ...(data.dailyRadar?.tracks ?? []),
+    ...data.forYou.map((i) => i.candidate),
+    ...data.moodDiscovery.map((i) => i.candidate),
+    ...data.deepCuts.map((i) => i.candidate),
+    ...data.familiarArtists.map((i) => i.candidate)
+  ];
+  const uniquePool = Array.from(
+    new Map(allPool.map((t) => [providerTrackKey(t), t])).values()
+  );
+
+  const dynamicGroups = genreCategoryPresets.flatMap((preset) => {
+    const matched = uniquePool.filter((track) => {
+      const text = `${track.title} ${track.artist} ${track.album ?? ""} ${(track.tags ?? []).join(" ")}`.toLowerCase();
+      return preset.keywords.some((kw) => text.includes(kw.toLowerCase()));
+    });
+    if (matched.length < 2) return [];
+    return [{
+      id: `genre-${preset.id}`,
+      title: preset.title,
+      description: preset.description,
+      tags: preset.tags,
+      tracks: matched
+    }];
+  });
+
+  const allGroups = [...baseGroups, ...dynamicGroups];
+
+  return allGroups.flatMap(({ id, title, description, tags, tracks }) => {
     if (!tracks.length) return [];
-    const firstTrack = tracks[0]!.candidate;
+    const firstTrack = tracks[0]!;
     return [{
       playlist: {
         provider: firstTrack.provider,
         providerPlaylistId: `music-room-curated:${id}`,
         title,
         description,
-        tags: ["Music Room", "精选"],
+        tags,
         artworkUrl: firstTrack.artworkUrl ?? null,
         creatorName: "Music Room",
         trackCount: tracks.length
       },
-      tracks: tracks.map((item) => item.candidate),
-      score: Math.max(...tracks.map((item) => item.score)),
-      reasons: ["精选推荐"]
+      tracks,
+      score: 100,
+      reasons: ["画像推荐"]
     } satisfies DiscoverPlaylistCard];
   });
 }
 
 function providerLabel(provider: Provider) {
   return provider === "netease" ? "网易云音乐" : "QQ 音乐";
-}
-
-function uniqueRecommendations(items: DiscoverTrackRecommendation[]) {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = providerTrackKey(item.candidate);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function toErrorMessage(error: unknown) {
