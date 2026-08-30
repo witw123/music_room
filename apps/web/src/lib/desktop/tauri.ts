@@ -53,3 +53,36 @@ export async function invokeTauri<T = void>(
     return undefined;
   }
 }
+
+export async function listenTauri<T = unknown>(
+  event: string,
+  handler: (payload: T) => void
+): Promise<(() => void) | undefined> {
+  if (!isTauriRuntime()) {
+    return undefined;
+  }
+  const tauri = (
+    window as unknown as {
+      __TAURI__?: {
+        event?: {
+          listen?: (
+            event: string,
+            handler: (e: { payload: T }) => void
+          ) => Promise<() => void>;
+        };
+      };
+    }
+  ).__TAURI__;
+  const listen = tauri?.event?.listen;
+  if (!listen) {
+    return undefined;
+  }
+  try {
+    const unlisten = await listen(event, (e) => handler(e.payload));
+    return unlisten;
+  } catch (error) {
+    console.warn(`[tauri] listen "${event}" failed:`, error);
+    return undefined;
+  }
+}
+

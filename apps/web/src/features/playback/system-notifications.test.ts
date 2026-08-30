@@ -1,0 +1,182 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  getNotificationPermissionState,
+  notifyRoomQueueTrackAdded,
+  notifyTrackChange,
+  requestNotificationPermission
+} from "./system-notifications";
+import { updateAppSettings } from "@/features/settings/settings-store";
+
+describe("system notifications", () => {
+  const createMockDocument = (visibilityState = "hidden") => ({
+    visibilityState,
+    documentElement: {
+      dataset: {},
+      style: {
+        setProperty: vi.fn(),
+        removeProperty: vi.fn()
+      },
+      classList: {
+        add: vi.fn(),
+        remove: vi.fn(),
+        toggle: vi.fn()
+      }
+    }
+  });
+
+  const createMockWindow = (mockNotification?: unknown) => {
+    const storage = new Map<string, string>();
+    return {
+      Notification: mockNotification,
+      localStorage: {
+        getItem: (k: string) => storage.get(k) ?? null,
+        setItem: (k: string, v: string) => storage.set(k, v),
+        removeItem: (k: string) => storage.delete(k),
+        clear: () => storage.clear()
+      },
+      dispatchEvent: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    };
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("returns unsupported when window.Notification is missing", () => {
+    vi.stubGlobal("window", createMockWindow(undefined));
+    vi.stubGlobal("Notification", undefined);
+    expect(getNotificationPermissionState()).toBe("unsupported");
+  });
+
+  it("requests notification permission when supported", async () => {
+    const requestPermission = vi.fn().mockResolvedValue("granted");
+    class MockNotification {
+      static permission = "default";
+      static requestPermission = requestPermission;
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+
+    const granted = await requestNotificationPermission();
+    expect(granted).toBe(true);
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it("dispatches Toast notification in background when enabled", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { trackChangeNotification: true } });
+
+    notifyTrackChange(
+      {
+        title: "晴天",
+        artist: "周杰伦",
+        artworkUrl: "/covers/jay.jpg"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).toHaveBeenCalledWith("晴天", expect.objectContaining({
+      body: "周杰伦",
+      silent: true,
+      tag: "music-room-now-playing"
+    }));
+  });
+
+  it("does not dispatch notification when trackChangeNotification is disabled", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { trackChangeNotification: false } });
+
+    notifyTrackChange(
+      {
+        title: "晴天",
+        artist: "周杰伦"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).not.toHaveBeenCalled();
+  });
+
+  it("dispatches room queue notification when requested by another member", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { roomQueueNotification: true } });
+
+    notifyRoomQueueTrackAdded(
+      {
+        title: "七里香",
+        artist: "周杰伦",
+        requestedBy: "Alice",
+        requestedById: "user_alice",
+        currentUserId: "user_me"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).toHaveBeenCalledWith("🎵 Alice 点播了新歌曲", expect.objectContaining({
+      body: "《七里香》 - 周杰伦",
+      silent: true
+    }));
+  });
+
+  it("suppresses room queue notification when requested by current user", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { roomQueueNotification: true } });
+
+    notifyRoomQueueTrackAdded(
+      {
+        title: "七里香",
+        artist: "周杰伦",
+        requestedBy: "Me",
+        requestedById: "user_me",
+        currentUserId: "user_me"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).not.toHaveBeenCalled();
+  });
+});
+

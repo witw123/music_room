@@ -19,6 +19,7 @@ import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { calibrateRoomPlaybackClock } from "@/features/playback/room-playback-clock";
+import { notifyRoomQueueTrackAdded } from "@/features/playback/system-notifications";
 import type {
   PlaybackRecoveryRecommendation,
   RoomDataMeshDiagnosticsRefs,
@@ -483,11 +484,43 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }
   });
 
+function notifyNewlyAddedQueueItems(input: {
+  incomingQueue: RoomSnapshot["queue"];
+  currentSnapshot: RoomSnapshot | null;
+  tracksPool?: RoomSnapshot["tracks"];
+  currentUserId?: string | null;
+}) {
+  const { currentSnapshot, incomingQueue, tracksPool, currentUserId } = input;
+  if (!currentSnapshot || incomingQueue.length === 0) return;
+  const existingIds = new Set(currentSnapshot.queue.map((item) => item.id));
+  const newItems = incomingQueue.filter((item) => !existingIds.has(item.id));
+  if (newItems.length === 0) return;
+
+  const tracks = tracksPool ?? currentSnapshot.tracks;
+  for (const item of newItems) {
+    const track = tracks.find((t) => t.id === item.trackId);
+    notifyRoomQueueTrackAdded({
+      title: track?.title ?? "新歌曲",
+      artist: track?.artist ?? null,
+      artworkUrl: track?.artworkUrl ?? null,
+      requestedBy: item.requestedBy,
+      requestedById: item.requestedById,
+      currentUserId,
+      roomTitle: currentSnapshot.room.name ?? null
+    });
+  }
+}
+
   socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
     const currentSnapshot = input.currentRoomRef.current;
+    notifyNewlyAddedQueueItems({
+      incomingQueue: queue,
+      currentSnapshot,
+      currentUserId: input.activeSessionRef.current?.userId
+    });
     input.dispatchRoomStateEvent({
       type: "server-queue-patch",
       roomId: input.roomId,
@@ -551,6 +584,12 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     const currentSnapshot = input.currentRoomRef.current;
+    notifyNewlyAddedQueueItems({
+      incomingQueue: queue,
+      currentSnapshot,
+      tracksPool: tracks,
+      currentUserId: input.activeSessionRef.current?.userId
+    });
     if (currentSnapshot?.room.id === input.roomId) {
       const nextTrackIds = new Set(tracks.map((track) => track.id));
       const removedTrackIds = currentSnapshot.tracks

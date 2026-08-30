@@ -104,6 +104,9 @@ export type AppSettings = {
     showLyricTranslation: boolean;
     showLyricRomanized: boolean;
     desktopLyricScale: number;
+    trackChangeNotification: boolean;
+    roomQueueNotification: boolean;
+    onlyNotifyInBackground: boolean;
   };
 };
 
@@ -127,7 +130,10 @@ const defaultSettings: AppSettings = {
     fullyCachedPlayback: false,
     showLyricTranslation: true,
     showLyricRomanized: false,
-    desktopLyricScale: 1
+    desktopLyricScale: 1,
+    trackChangeNotification: true,
+    roomQueueNotification: true,
+    onlyNotifyInBackground: true
   }
 };
 
@@ -221,7 +227,10 @@ export function normalizeSettings(value: unknown): AppSettings {
       fullyCachedPlayback,
       showLyricTranslation: playback.showLyricTranslation !== false,
       showLyricRomanized: playback.showLyricRomanized === true,
-      desktopLyricScale
+      desktopLyricScale,
+      trackChangeNotification: playback.trackChangeNotification !== false,
+      roomQueueNotification: playback.roomQueueNotification !== false,
+      onlyNotifyInBackground: playback.onlyNotifyInBackground !== false
     }
   };
 }

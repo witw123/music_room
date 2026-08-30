@@ -25,6 +25,7 @@ import {
   type PlayerStyle,
   type ThemePreference
 } from "@/features/settings/settings-store";
+import { requestNotificationPermission } from "@/features/playback/system-notifications";
 
 const playbackModeLabels: Record<PlaybackMode, string> = {
   sequence: "列表循环",
@@ -300,6 +301,37 @@ export function SettingsPage({
                   {Math.round(settings.playback.desktopLyricScale * 100)}%
                 </span>
               </div>
+            </SettingRow>
+            <SettingRow label="切歌桌面通知" description="后台播放或窗口最小化切歌时，弹出系统级 Toast 歌曲通知。">
+              <Toggle
+                checked={settings.playback.trackChangeNotification}
+                label="切歌桌面通知"
+                onChange={(checked) => {
+                  patchSettings({ playback: { trackChangeNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="房间点歌系统通知" description="点歌房其他成员点播新歌曲时，弹出系统级 Toast 提醒。">
+              <Toggle
+                checked={settings.playback.roomQueueNotification}
+                label="房间点歌系统通知"
+                onChange={(checked) => {
+                  patchSettings({ playback: { roomQueueNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="仅在后台时通知" description="在前台使用时免打扰，仅在窗口最小化或处于后台时弹出系统通知。">
+              <Toggle
+                checked={settings.playback.onlyNotifyInBackground}
+                label="仅在后台时通知"
+                onChange={(checked) => patchSettings({ playback: { onlyNotifyInBackground: checked } })}
+              />
             </SettingRow>
             <SettingRow label="响度均衡" description="自动平衡不同歌曲的主观响度，仅影响当前设备。">
               <Toggle

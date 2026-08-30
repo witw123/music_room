@@ -99,6 +99,16 @@ async fn set_desktop_lyrics_size(app: AppHandle, width: f64, height: f64) -> Res
     Ok(())
 }
 
+#[command]
+async fn focus_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
 fn position_lyrics_window(window: &tauri::WebviewWindow) {
     let Some(main) = window.app_handle().get_webview_window("main") else {
         return;
@@ -123,16 +133,43 @@ fn position_lyrics_window(window: &tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let shortcut_str = shortcut.into_string();
+                        let key = match shortcut_str.as_str() {
+                            "MediaPlayPause" => "play-pause",
+                            "MediaTrackNext" => "next-track",
+                            "MediaTrackPrevious" => "previous-track",
+                            "MediaStop" => "stop",
+                            _ => "",
+                        };
+                        if !key.is_empty() {
+                            let _ = tauri::Emitter::emit(app, "media-key", key);
+                        }
+                    }
+                })
+                .build(),
+        )
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             toggle_desktop_lyrics,
             hide_desktop_lyrics_window,
             drag_desktop_lyrics_window,
-            set_desktop_lyrics_size
+            set_desktop_lyrics_size,
+            focus_main_window
         ])
         .setup(|app| {
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            for key in ["MediaPlayPause", "MediaTrackNext", "MediaTrackPrevious", "MediaStop"] {
+                if let Ok(shortcut) = key.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+                    let _ = app.global_shortcut().register(shortcut);
+                }
+            }
+
             let quit_i = MenuItem::with_id(app, "quit", "退出 Music Room", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;

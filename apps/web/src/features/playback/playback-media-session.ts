@@ -1,4 +1,6 @@
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import { notifyTrackChange } from "@/features/playback/system-notifications";
+import { listenTauri } from "@/lib/desktop/tauri";
 
 export type PlaybackMediaSession = {
   sessionKey: string;
@@ -60,8 +62,31 @@ export function installBrowserMediaSessionActionHandlers(
   input: BrowserMediaSessionActionHandlers
 ) {
   const mediaSession = getBrowserMediaSession();
+
+  let unlistenTauriMediaKeys: (() => void) | undefined;
+  void listenTauri<string>("media-key", (key) => {
+    switch (key) {
+      case "play-pause":
+        invokeMediaSessionAction(input.onPlay);
+        break;
+      case "next-track":
+        invokeMediaSessionAction(input.onNextTrack);
+        break;
+      case "previous-track":
+        invokeMediaSessionAction(input.onPreviousTrack);
+        break;
+      case "stop":
+        invokeMediaSessionAction(input.onStop ?? input.onPause);
+        break;
+    }
+  }).then((unlisten) => {
+    unlistenTauriMediaKeys = unlisten;
+  });
+
   if (!mediaSession || typeof mediaSession.setActionHandler !== "function") {
-    return () => undefined;
+    return () => {
+      unlistenTauriMediaKeys?.();
+    };
   }
 
   const handlers: Partial<Record<MediaSessionAction, MediaSessionActionHandler>> = {
@@ -98,6 +123,7 @@ export function installBrowserMediaSessionActionHandlers(
   }
 
   return () => {
+    unlistenTauriMediaKeys?.();
     for (const action of mediaSessionActions) {
       try {
         mediaSession.setActionHandler(action, null);
@@ -108,16 +134,30 @@ export function installBrowserMediaSessionActionHandlers(
   };
 }
 
+let lastTrackNotifiedId = "";
+
 export function syncBrowserMediaSession(input: {
   track: TrackMeta | null | undefined;
   playback: Pick<PlaybackSnapshot, "currentTrackId" | "status" | "positionMs"> | null | undefined;
   positionMs?: number | null;
 }) {
   const mediaSession = getBrowserMediaSession();
-  if (!mediaSession) return;
-
   const track = input.track;
   const playback = input.playback;
+
+  if (track && playback?.status === "playing" && playback.currentTrackId === track.id) {
+    if (lastTrackNotifiedId !== track.id) {
+      lastTrackNotifiedId = track.id;
+      notifyTrackChange({
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: track.artworkUrl
+      });
+    }
+  }
+
+  if (!mediaSession) return;
+
   if (!track || !playback?.currentTrackId || playback.currentTrackId !== track.id) {
     mediaSession.metadata = null;
     mediaSession.playbackState = "none";
