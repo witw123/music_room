@@ -576,7 +576,7 @@ function PlaylistDetail({
 function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return createPortal(
     <div
-      className="light-overlay-scrim fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center"
+      className="light-overlay-scrim fixed inset-0 z-[500] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onCancel();

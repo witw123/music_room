@@ -389,7 +389,7 @@ export function RoomEditDialog({
 
   return createPortal(
     <div
-      className="light-overlay-scrim fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
+      className="light-overlay-scrim fixed inset-0 z-[500] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
       onClick={(event) => {
         if (!pending && event.target === event.currentTarget) {
           onClose();

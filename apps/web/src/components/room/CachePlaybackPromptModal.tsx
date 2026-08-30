@@ -62,7 +62,7 @@ export function CachePlaybackPromptModal({
     <div
       aria-labelledby="cache-playback-prompt-title"
       aria-modal="true"
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in"
       role="dialog"
     >
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#12141e]/95 p-6 shadow-2xl backdrop-blur-xl">

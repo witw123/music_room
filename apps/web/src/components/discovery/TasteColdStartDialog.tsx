@@ -94,7 +94,7 @@ export function TasteColdStartDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md"
+      className="fixed inset-0 z-[500] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
