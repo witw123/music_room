@@ -300,6 +300,7 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
       title: activeTrack.title,
       artist: activeTrack.artist,
       artworkUrl: activePlayer?.artworkUrl ?? activeTrack.artworkUrl ?? null,
+      durationMs: activeTrack.durationMs ?? null,
       plainLyric: lyrics.plainLyric,
       translatedLyric: lyrics.translatedLyric,
       romanizedLyric: lyrics.romanizedLyric

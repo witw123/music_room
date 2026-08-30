@@ -16,6 +16,7 @@ type BridgeState = {
     title: string;
     artist: string;
     artworkUrl: string | null;
+    durationMs?: number | null;
     plainLyric: string | null;
     translatedLyric?: string | null;
     romanizedLyric?: string | null;
@@ -231,6 +232,7 @@ export function DesktopLyricsWindowApp() {
           title={track?.title ?? "等待选择歌曲"}
           artist={track?.artist}
           artworkUrl={track?.artworkUrl ?? null}
+          durationMs={track?.durationMs}
           canControl={canControl}
           isPlaying={state.isPlaying}
           plainLyric={track?.plainLyric ?? null}

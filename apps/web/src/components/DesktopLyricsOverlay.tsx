@@ -169,6 +169,7 @@ export function DesktopLyricsOverlay() {
           title={activePlayer.currentTrack?.title ?? "等待选择歌曲"}
           artist={activePlayer.currentTrack?.artist}
           artworkUrl={activePlayer.artworkUrl ?? (activePlayer.currentTrack?.artworkUrl ?? null)}
+          durationMs={activePlayer.currentTrack?.durationMs}
           canControl={canControl}
           isPlaying={activePlayer.isPlaying}
           plainLyric={lyrics.plainLyric}
