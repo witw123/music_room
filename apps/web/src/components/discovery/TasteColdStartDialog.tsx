@@ -95,7 +95,11 @@ export function TasteColdStartDialog({
   return createPortal(
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md"
-      onMouseDown={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
       role="presentation"
     >
       {/* z-[80] matches the app's modal convention (RoomsHomePage dialogs,
@@ -104,7 +108,6 @@ export function TasteColdStartDialog({
           primary CTA becomes untappable on phones. */}
       <div
         className="relative w-full max-w-xl p-4 sm:p-6 md:p-8 rounded-3xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col"
-        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 mb-4 sm:mb-6 shrink-0">
           <div className="flex items-center gap-3 sm:gap-3.5">

@@ -188,6 +188,25 @@ export type RoomMemberPresenceNotificationPayload = {
 let lastNotifiedTrackKey = "";
 let lastNotifiedAtMs = 0;
 
+export const NOTIFICATION_ICONS = {
+  track: "/icons/notification-track.svg",
+  queue: "/icons/notification-queue.svg",
+  library: "/icons/notification-library.svg",
+  chat: "/icons/notification-chat.svg",
+  presence: "/icons/notification-user.svg"
+} as const;
+
+const recentNotificationMap = new Map<string, number>();
+
+/**
+ * Resets notification deduplication cache (useful for testing).
+ */
+export function resetNotificationDeduplicationCache() {
+  lastNotifiedTrackKey = "";
+  lastNotifiedAtMs = 0;
+  recentNotificationMap.clear();
+}
+
 /**
  * Focuses the main window, restoring it from minimized / background state.
  */
@@ -209,6 +228,7 @@ export async function focusMainWindow(): Promise<void> {
 
 /**
  * Low-level unified notification dispatcher that targets Android Capacitor, Tauri, or Web.
+ * Includes global deduplication to prevent duplicate notifications from being fired.
  */
 function dispatchSystemToastNotification(
   title: string,
@@ -217,6 +237,21 @@ function dispatchSystemToastNotification(
   tag = "music-room-toast"
 ) {
   if (typeof window === "undefined") return;
+
+  const dedupKey = `${title}:::${body}`;
+  const now = Date.now();
+  const lastTime = recentNotificationMap.get(dedupKey) ?? 0;
+  if (now - lastTime < 2500) {
+    return;
+  }
+  recentNotificationMap.set(dedupKey, now);
+  if (recentNotificationMap.size > 100) {
+    for (const [k, time] of recentNotificationMap.entries()) {
+      if (now - time > 10000) {
+        recentNotificationMap.delete(k);
+      }
+    }
+  }
 
   // 1. Android Capacitor Native Notification
   if (isCapacitorRuntime()) {
@@ -280,7 +315,7 @@ export function notifyTrackChange(payload: TrackNotificationPayload, options?: {
   lastNotifiedAtMs = now;
 
   const body = payload.artist ? `${payload.artist}` : "Music Room";
-  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
+  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? NOTIFICATION_ICONS.track;
 
   dispatchSystemToastNotification(payload.title, body, icon, "music-room-now-playing");
 }
@@ -309,11 +344,11 @@ export function notifyRoomQueueTrackAdded(
   }
 
   const requester = payload.requestedBy || "房间成员";
-  const title = `🎵 ${requester} 点播了新歌曲`;
+  const title = `${requester} 点播了新歌曲`;
   const body = payload.artist
     ? `《${payload.title}》 - ${payload.artist}`
     : `《${payload.title}》`;
-  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
+  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? NOTIFICATION_ICONS.queue;
   const tag = `music-room-queue-${payload.title}-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
@@ -342,11 +377,11 @@ export function notifyRoomTrackAddedToLibrary(
   }
 
   const adder = payload.addedBy || "房间成员";
-  const title = `📂 ${adder} 向曲库添加了新歌曲`;
+  const title = `${adder} 向曲库添加了新歌曲`;
   const body = payload.artist
     ? `《${payload.title}》 - ${payload.artist}`
     : `《${payload.title}》`;
-  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
+  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? NOTIFICATION_ICONS.library;
   const tag = `music-room-library-${payload.title}-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
@@ -375,10 +410,10 @@ export function notifyRoomChatMessage(
   }
 
   const title = payload.roomTitle
-    ? `💬 ${payload.senderName} (${payload.roomTitle})`
-    : `💬 ${payload.senderName}`;
+    ? `${payload.senderName} (${payload.roomTitle})`
+    : payload.senderName;
   const body = payload.content;
-  const icon = "/icons/icon-192.png";
+  const icon = NOTIFICATION_ICONS.chat;
   const tag = `music-room-chat-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);
@@ -409,12 +444,11 @@ export function notifyRoomMemberPresence(
   const actionText = payload.action === "joined" || payload.action === "online"
     ? "加入了房间"
     : "离开了房间";
-  const emoji = payload.action === "joined" || payload.action === "online" ? "👋" : "🚪";
-  const title = `${emoji} 成员动态`;
+  const title = "成员动态";
   const body = payload.roomTitle
     ? `${payload.nickname} ${actionText} (${payload.roomTitle})`
     : `${payload.nickname} ${actionText}`;
-  const icon = "/icons/icon-192.png";
+  const icon = NOTIFICATION_ICONS.presence;
   const tag = `music-room-presence-${payload.nickname}-${payload.action}-${Date.now()}`;
 
   dispatchSystemToastNotification(title, body, icon, tag);

@@ -63,10 +63,21 @@ export function LobbyView({
                 </p>
               </div>
 
-              <div className="flex flex-col gap-4">
+              <form
+                className="flex flex-col gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (nickname.trim()) {
+                    startTransition(() => void onConfirmIdentity());
+                  }
+                }}
+              >
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-foreground-muted">昵称</span>
                   <input
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck="false"
                     className="w-full bg-black/40 border border-surface-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-foreground-muted/50 focus:outline-none focus:ring-2 focus:ring-accent transition-all"
                     value={nickname}
                     onChange={(event) => setNickname(event.target.value)}
@@ -77,12 +88,12 @@ export function LobbyView({
                 <Button
                   size="lg"
                   disabled={!nickname.trim()}
-                  onClick={() => startTransition(() => void onConfirmIdentity())}
+                  type="submit"
                   className="w-full mt-2"
                 >
                   确认昵称
                 </Button>
-              </div>
+              </form>
             </section>
           ) : (
             <section className="glass-panel p-8 rounded-3xl flex flex-col gap-8 shadow-2xl relative overflow-hidden group hover:border-accent/30 transition-colors">
@@ -115,8 +126,19 @@ export function LobbyView({
                   <span className="absolute left-1/2 -translate-x-1/2 bg-surface text-xs text-foreground-muted px-2 rounded-md border border-surface-border">OR</span>
                 </div>
 
-                <div className="flex gap-2 w-full">
+                <form
+                  className="flex gap-2 w-full"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (joinCode.trim()) {
+                      onJoinRoom(joinCode);
+                    }
+                  }}
+                >
                   <input
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck="false"
                     className="flex-1 w-0 bg-black/40 border border-surface-border rounded-xl px-4 py-3 text-sm text-foreground uppercase placeholder:text-foreground-muted/50 placeholder:normal-case focus:outline-none focus:ring-2 focus:ring-accent transition-all"
                     value={joinCode}
                     onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
@@ -126,11 +148,11 @@ export function LobbyView({
                     variant="outline"
                     className="h-auto shrink-0"
                     disabled={!joinCode.trim()}
-                    onClick={() => onJoinRoom(joinCode)}
+                    type="submit"
                   >
                     加入
                   </Button>
-                </div>
+                </form>
               </div>
             </section>
           )}

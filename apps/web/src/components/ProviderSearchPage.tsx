@@ -782,7 +782,6 @@ export function ProviderSearchPage({
           id="provider-search-input"
           className="h-full w-full min-w-0 bg-transparent px-1 text-base text-white outline-none placeholder:text-white/30"
           disabled={!isConnected}
-          autoFocus={Boolean(onClose)}
           maxLength={100}
           onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 120)}
           onChange={(event) => { updateKeywords(event.target.value); if (isConnected) setSearchSuggestionsOpen(true); }}

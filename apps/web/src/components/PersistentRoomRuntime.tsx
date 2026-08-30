@@ -13,7 +13,10 @@ import { requestNotificationPermission } from "@/features/playback/system-notifi
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const routeRoomId = resolveRoomRouteId(pathname);
+  const isLyricsWindow =
+    pathname === "/desktop-lyrics" ||
+    (typeof window !== "undefined" && window.location.search.includes("window=desktop-lyrics"));
+  const routeRoomId = isLyricsWindow ? null : resolveRoomRouteId(pathname);
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,6 +26,7 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (isLyricsWindow) return;
     const syncAwayRoom = () => setAwayRoomId(readAwayRoomId());
     syncAwayRoom();
     window.addEventListener(awayRoomChangeEvent, syncAwayRoom);
@@ -31,9 +35,9 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
       window.removeEventListener(awayRoomChangeEvent, syncAwayRoom);
       window.removeEventListener("storage", syncAwayRoom);
     };
-  }, []);
+  }, [isLyricsWindow]);
 
-  const runtimeRoomId = routeRoomId ?? awayRoomId;
+  const runtimeRoomId = isLyricsWindow ? null : (routeRoomId ?? awayRoomId);
 
   return (
     <DesktopLyricsProvider>

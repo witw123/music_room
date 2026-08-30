@@ -148,7 +148,7 @@ describe("system notifications", () => {
       { force: true }
     );
 
-    expect(mockConstructor).toHaveBeenCalledWith("🎵 Alice 点播了新歌曲", expect.objectContaining({
+    expect(mockConstructor).toHaveBeenCalledWith("Alice 点播了新歌曲", expect.objectContaining({
       body: "《七里香》 - 周杰伦",
       silent: true
     }));
@@ -207,7 +207,7 @@ describe("system notifications", () => {
       { force: true }
     );
 
-    expect(mockConstructor).toHaveBeenCalledWith("📂 Bob 向曲库添加了新歌曲", expect.objectContaining({
+    expect(mockConstructor).toHaveBeenCalledWith("Bob 向曲库添加了新歌曲", expect.objectContaining({
       body: "《夜曲》 - 周杰伦",
       silent: true
     }));
@@ -238,7 +238,7 @@ describe("system notifications", () => {
       { force: true }
     );
 
-    expect(mockConstructor).toHaveBeenCalledWith("💬 Charlie (深夜放映室)", expect.objectContaining({
+    expect(mockConstructor).toHaveBeenCalledWith("Charlie (深夜放映室)", expect.objectContaining({
       body: "大家好！这首歌太好听了"
     }));
   });
@@ -268,9 +268,41 @@ describe("system notifications", () => {
       { force: true }
     );
 
-    expect(mockConstructor).toHaveBeenCalledWith("👋 成员动态", expect.objectContaining({
+    expect(mockConstructor).toHaveBeenCalledWith("成员动态", expect.objectContaining({
       body: "David 加入了房间 (音乐小憩)"
     }));
+  });
+
+  it("deduplicates identical notification events fired in rapid succession", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { roomChatNotification: true } });
+
+    // Fire duplicate chat message twice
+    notifyRoomChatMessage({
+      senderName: "Eve",
+      senderId: "user_eve",
+      content: "测试消息",
+      currentUserId: "user_me"
+    });
+
+    notifyRoomChatMessage({
+      senderName: "Eve",
+      senderId: "user_eve",
+      content: "测试消息",
+      currentUserId: "user_me"
+    });
+
+    expect(mockConstructor).toHaveBeenCalledTimes(1);
   });
 });
 

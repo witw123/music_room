@@ -40,13 +40,20 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return createPortal(
-    <div className="light-overlay-scrim fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center" role="presentation" onMouseDown={() => !pending && onCancel()}>
+    <div
+      className="light-overlay-scrim fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
+      role="presentation"
+      onClick={(event) => {
+        if (!pending && event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
       <div
         aria-describedby="confirm-dialog-description"
         aria-labelledby="confirm-dialog-title"
         aria-modal="true"
         className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-white/10 bg-surface p-5 shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
         role="alertdialog"
       >
         <h2 id="confirm-dialog-title" className="text-lg font-semibold text-foreground">{title}</h2>

@@ -272,11 +272,23 @@ export function AuthPage() {
               </div>
 
               {mode === "login" ? (
-                <div className="flex flex-col gap-5">
+                <form
+                  className="flex flex-col gap-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!authSubmitDisabled && !isPending && loginUsername.trim() && loginPassword) {
+                      startTransition(() => void handleLogin());
+                    }
+                  }}
+                >
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">账号</span>
                     <input
                       data-testid="auth-login-username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="username"
+                      spellCheck="false"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       value={loginUsername}
                       onChange={(event) => setLoginUsername(event.target.value)}
@@ -288,16 +300,15 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
                       data-testid="auth-login-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="current-password"
+                      spellCheck="false"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       type="password"
                       value={loginPassword}
                       onChange={(event) => setLoginPassword(event.target.value)}
                       placeholder="输入密码"
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && loginUsername.trim() && loginPassword) {
-                          startTransition(() => void handleLogin());
-                        }
-                      }}
                     />
                   </label>
 
@@ -320,18 +331,29 @@ export function AuthPage() {
                       authSubmitDisabled ||
                       isPending
                     }
-                    onClick={() => startTransition(() => void handleLogin())}
-                    type="button"
+                    type="submit"
                   >
                     {isPending ? "处理中..." : "登录并进入"}
                   </Button>
-                </div>
+                </form>
               ) : (
-                <div className="flex flex-col gap-5">
+                <form
+                  className="flex flex-col gap-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!authSubmitDisabled && !isPending && registerUsername.trim() && registerPassword && registerNickname.trim()) {
+                      startTransition(() => void handleRegister());
+                    }
+                  }}
+                >
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">账号</span>
                     <input
                       data-testid="auth-register-username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="username"
+                      spellCheck="false"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       value={registerUsername}
                       onChange={(event) => setRegisterUsername(event.target.value)}
@@ -343,6 +365,10 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
                       data-testid="auth-register-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="new-password"
+                      spellCheck="false"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       type="password"
                       value={registerPassword}
@@ -355,20 +381,13 @@ export function AuthPage() {
                     <span className="text-xs font-medium text-white/50">昵称</span>
                     <input
                       data-testid="auth-register-nickname"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck="false"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white shadow-none outline-none ring-0 placeholder:text-white/20 focus:border-white/10 focus:outline-none focus:ring-0 focus-visible:border-white/10 focus-visible:outline-none focus-visible:ring-0"
                       value={registerNickname}
                       onChange={(event) => setRegisterNickname(event.target.value)}
                       placeholder="房间内显示的名字"
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "Enter" &&
-                          registerUsername.trim() &&
-                          registerPassword &&
-                          registerNickname.trim()
-                        ) {
-                          startTransition(() => void handleRegister());
-                        }
-                      }}
                     />
                   </label>
 
@@ -392,12 +411,11 @@ export function AuthPage() {
                       authSubmitDisabled ||
                       isPending
                     }
-                    onClick={() => startTransition(() => void handleRegister())}
-                    type="button"
+                    type="submit"
                   >
                     {isPending ? "处理中..." : "注册并进入"}
                   </Button>
-                </div>
+                </form>
               )}
 
               <div className="mt-8 border-t border-white/5 pt-8 text-center flex flex-col gap-4">

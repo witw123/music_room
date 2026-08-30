@@ -575,7 +575,15 @@ function PlaylistDetail({
 
 function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
   return createPortal(
-    <div className="light-overlay-scrim fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center" role="presentation">
+    <div
+      className="light-overlay-scrim fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+      role="presentation"
+    >
       <form
         aria-labelledby="room-save-playlist-title"
         className="light-dialog-surface my-auto max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:p-5"
@@ -597,7 +605,6 @@ function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCance
         </div>
         <label className="mt-5 block text-xs font-medium text-foreground-muted" htmlFor="room-new-playlist-title">歌单名称</label>
         <input
-          autoFocus
           className="mt-2 w-full rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
           id="room-new-playlist-title"
           maxLength={160}

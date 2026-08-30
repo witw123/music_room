@@ -101,13 +101,16 @@ export function AnchoredDialog({
   return createPortal(
     <div
       className="light-overlay-scrim fixed inset-0 z-[80] overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm"
-      onMouseDown={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
       role="presentation"
     >
       <div
         aria-labelledby={ariaLabelledBy}
         className={`light-dialog-surface fixed z-[81] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] ${compact ? "w-[min(18rem,calc(100vw-1.5rem))] p-2" : "w-[min(28rem,calc(100vw-1.5rem))] p-5 sm:p-6"} ${className ?? ""}`}
-        onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         ref={dialogRef}
