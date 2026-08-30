@@ -17,9 +17,7 @@ export function DesktopLyricsOverlay() {
     isOpen,
     close,
     activePlayer,
-    lyrics,
-    showTranslation,
-    showRomanized
+    lyrics
   } = useDesktopLyrics();
   const [position, setPosition] = useState<Position | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -118,27 +116,23 @@ export function DesktopLyricsOverlay() {
       onPointerUp={handlePointerUp}
       style={panelPositionStyle}
     >
-      <DesktopLyricsBar
-        artist={activePlayer.currentTrack?.artist ?? "暂无艺人信息"}
-        artworkUrl={activePlayer.artworkUrl ?? (activePlayer.currentTrack?.artworkUrl ?? null)}
-        canControl={canControl}
-        isPlaying={activePlayer.isPlaying}
-        lyrics={{
-          plainLyric: lyrics.plainLyric,
-          translatedLyric: lyrics.translatedLyric,
-          romanizedLyric: lyrics.romanizedLyric
-        }}
-        anchorAt={Date.now()}
-        onClose={close}
-        onNext={activePlayer.onNext}
-        onPrev={activePlayer.onPrev}
-        onTogglePlay={activePlayer.onTogglePlay}
-        progressMs={activePlayer.progressMs}
-        showRomanized={showRomanized}
-        showTranslation={showTranslation}
-        status={lyrics.status}
-        title={activePlayer.currentTrack?.title ?? "等待选择歌曲"}
-      />
+      <div className="h-16 md:h-20">
+        <DesktopLyricsBar
+          title={activePlayer.currentTrack?.title ?? "等待选择歌曲"}
+          artworkUrl={activePlayer.artworkUrl ?? (activePlayer.currentTrack?.artworkUrl ?? null)}
+          canControl={canControl}
+          isPlaying={activePlayer.isPlaying}
+          plainLyric={lyrics.plainLyric}
+          anchorAt={Date.now()}
+          onClose={close}
+          onPointerDown={handlePointerDown}
+          onNext={activePlayer.onNext}
+          onPrev={activePlayer.onPrev}
+          onTogglePlay={activePlayer.onTogglePlay}
+          progressMs={activePlayer.progressMs}
+          status={lyrics.status}
+        />
+      </div>
     </div>
   );
 }

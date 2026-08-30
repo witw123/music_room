@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";
 import { invokeTauri } from "@/lib/desktop/tauri";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -16,8 +16,6 @@ type BridgeState = {
     artist: string;
     artworkUrl: string | null;
     plainLyric: string | null;
-    translatedLyric: string | null;
-    romanizedLyric: string | null;
   } | null;
   progressMs: number;
   anchorAt: number;
@@ -34,6 +32,20 @@ const emptyState: BridgeState = {
   isPlaying: false,
   canControl: false
 };
+
+type ResizeGesture = {
+  edge: "west" | "east" | "north" | "south" | "northwest" | "northeast" | "southwest" | "southeast";
+  startX: number;
+  startY: number;
+  startWidth: number;
+  startHeight: number;
+};
+
+const resizeEdgePx = 14;
+const minWidth = 320;
+const minHeight = 64;
+const maxWidth = 2400;
+const maxHeight = 600;
 
 function readSnapshot(): BridgeState {
   if (typeof window === "undefined") return emptyState;
@@ -54,9 +66,26 @@ function readSnapshot(): BridgeState {
   }
 }
 
+function pickResizeEdge(event: { clientX: number; clientY: number }): ResizeGesture["edge"] | null {
+  const nearLeft = event.clientX <= resizeEdgePx;
+  const nearRight = event.clientX >= window.innerWidth - resizeEdgePx;
+  const nearTop = event.clientY <= resizeEdgePx;
+  const nearBottom = event.clientY >= window.innerHeight - resizeEdgePx;
+  if (nearLeft && nearTop) return "northwest";
+  if (nearRight && nearTop) return "northeast";
+  if (nearLeft && nearBottom) return "southwest";
+  if (nearRight && nearBottom) return "southeast";
+  if (nearLeft) return "west";
+  if (nearRight) return "east";
+  if (nearTop) return "north";
+  if (nearBottom) return "south";
+  return null;
+}
+
 export function DesktopLyricsWindowApp() {
   const [state, setState] = useState<BridgeState>(readSnapshot);
   const channelRef = useRef<BroadcastChannel | null>(null);
+  const resizeGestureRef = useRef<ResizeGesture | null>(null);
 
   useEffect(() => {
     // The native lyrics window is transparent on Windows/Linux; macOS builds
@@ -92,44 +121,77 @@ export function DesktopLyricsWindowApp() {
     channelRef.current?.postMessage({ type: "command", action });
   }, []);
 
-  const handleDragStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+  // Bar interactions: near the window edges a pointer drag resizes the
+  // window; anywhere else it moves the window (native start_dragging).
+  const handleBarPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
+    const edge = pickResizeEdge(event);
+    if (edge) {
+      resizeGestureRef.current = {
+        edge,
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: window.innerWidth,
+        startHeight: window.innerHeight
+      };
+      return;
+    }
     void invokeTauri("drag_desktop_lyrics_window");
   }, []);
 
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const gesture = resizeGestureRef.current;
+      if (!gesture) return;
+      let width = gesture.startWidth;
+      let height = gesture.startHeight;
+      const dx = event.clientX - gesture.startX;
+      const dy = event.clientY - gesture.startY;
+      if (gesture.edge.includes("east")) width = gesture.startWidth + dx;
+      if (gesture.edge.includes("west")) width = gesture.startWidth - dx;
+      if (gesture.edge.includes("south")) height = gesture.startHeight + dy;
+      if (gesture.edge.includes("north")) height = gesture.startHeight - dy;
+      void invokeTauri("set_desktop_lyrics_size", {
+        width: Math.min(maxWidth, Math.max(minWidth, width)),
+        height: Math.min(maxHeight, Math.max(minHeight, height))
+      });
+    };
+    const handlePointerUp = () => {
+      resizeGestureRef.current = null;
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, []);
+
   const canControl = state.canControl;
-  const lyrics = useMemo(
-    () => ({
-      plainLyric: state.track?.plainLyric ?? null,
-      translatedLyric: state.track?.translatedLyric ?? null,
-      romanizedLyric: state.track?.romanizedLyric ?? null
-    }),
-    [state.track]
-  );
+  const plainLyric = state.track?.plainLyric ?? null;
 
   return (
     <main
-      className="flex h-[100dvh] w-full items-center justify-center overflow-hidden p-2"
+      className="flex h-[100dvh] w-full items-center overflow-hidden"
       data-testid="desktop-lyrics-window"
     >
-      <div className="w-full">
+      <div className="h-full w-full">
         <DesktopLyricsBar
-          artist={state.track?.artist ?? "暂无艺人信息"}
+          title={state.track?.title ?? "等待选择歌曲"}
           artworkUrl={state.track?.artworkUrl ?? null}
           canControl={canControl}
           isPlaying={state.isPlaying}
-          lyrics={lyrics}
+          plainLyric={plainLyric}
           anchorAt={state.anchorAt}
           onClose={() => void invokeTauri("hide_desktop_lyrics_window")}
-          onDragStart={handleDragStart}
+          onPointerDown={handleBarPointerDown}
           onNext={() => postCommand("next")}
           onPrev={() => postCommand("prev")}
           onTogglePlay={() => postCommand("toggle")}
           progressMs={state.progressMs}
-          showRomanized
-          showTranslation
           status={state.track ? "ready" : "idle"}
-          title={state.track?.title ?? "等待选择歌曲"}
         />
       </div>
     </main>

@@ -12,8 +12,12 @@ use tauri::{
 // dedicated route so BroadcastChannel can bridge playback state between the
 // two windows without any extra permissions.
 const LYRICS_LABEL: &str = "lyrics";
-const LYRICS_WIDTH: f64 = 760.0;
-const LYRICS_HEIGHT: f64 = 148.0;
+const LYRICS_WIDTH: f64 = 860.0;
+const LYRICS_HEIGHT: f64 = 96.0;
+const LYRICS_MIN_WIDTH: f64 = 320.0;
+const LYRICS_MIN_HEIGHT: f64 = 64.0;
+const LYRICS_MAX_WIDTH: f64 = 2400.0;
+const LYRICS_MAX_HEIGHT: f64 = 600.0;
 // Keep the bar clear of the Windows taskbar / macOS dock.
 const LYRICS_BOTTOM_INSET_LOGICAL: f64 = 96.0;
 
@@ -49,7 +53,9 @@ async fn toggle_desktop_lyrics(app: AppHandle) -> Result<bool, String> {
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .resizable(false)
+        // Freely resizable: the window host exposes edge dragging and the
+        // content adapts its font to the window size.
+        .resizable(true)
         .shadow(false)
         .focused(false)
         .inner_size(LYRICS_WIDTH, LYRICS_HEIGHT);
@@ -78,6 +84,20 @@ async fn drag_desktop_lyrics_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LYRICS_LABEL) {
         window.start_dragging().map_err(|error| error.to_string())?;
     }
+    Ok(())
+}
+
+#[command]
+async fn set_desktop_lyrics_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(LYRICS_LABEL) else {
+        return Ok(());
+    };
+    let width = width.clamp(LYRICS_MIN_WIDTH, LYRICS_MAX_WIDTH);
+    let height = height.clamp(LYRICS_MIN_HEIGHT, LYRICS_MAX_HEIGHT);
+    window
+        .set_size(tauri::LogicalSize::new(width, height))
+        .map_err(|error| error.to_string())?;
+    position_lyrics_window(&window);
     Ok(())
 }
 
@@ -111,7 +131,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             toggle_desktop_lyrics,
             hide_desktop_lyrics_window,
-            drag_desktop_lyrics_window
+            drag_desktop_lyrics_window,
+            set_desktop_lyrics_size
         ])
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "退出 Music Room", true, None::<&str>)?;
