@@ -141,7 +141,7 @@ describe("buildRoomSubscribePayload", () => {
       sessionId: "user_1",
       protocolVersion: 4,
       capabilities: ["webrtc-opus-v1"],
-      buildId: "0.3.0"
+      buildId: "0.3.1"
     });
   });
 });
