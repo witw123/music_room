@@ -1,6 +1,11 @@
 import { getAppSettings } from "@/features/settings/settings-store";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
+
+function resolveNotificationArtworkUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith("//")) return `https:${value}`;
+  return value.replace(/^http:\/\//i, "https://");
+}
 
 export type NotificationPermissionState = "granted" | "denied" | "default" | "unsupported";
 
@@ -104,7 +109,7 @@ export function notifyTrackChange(payload: TrackNotificationPayload, options?: {
   lastNotifiedAtMs = now;
 
   const body = payload.artist ? `${payload.artist}` : "Music Room";
-  const icon = payload.artworkUrl ? getArtworkSourceUrl(payload.artworkUrl) : "/icons/icon-192.png";
+  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
 
   // If in Tauri desktop shell, try native notification
   if (isTauriRuntime()) {
@@ -112,7 +117,7 @@ export function notifyTrackChange(payload: TrackNotificationPayload, options?: {
       options: {
         title: payload.title,
         body,
-        icon: payload.artworkUrl ? getArtworkSourceUrl(payload.artworkUrl) : undefined
+        icon: resolveNotificationArtworkUrl(payload.artworkUrl)
       }
     }).catch(() => {
       // Fallback to standard Web Notification API if Tauri plugin is not available
@@ -154,7 +159,7 @@ export function notifyRoomQueueTrackAdded(
   const body = payload.artist
     ? `《${payload.title}》 - ${payload.artist}`
     : `《${payload.title}》`;
-  const icon = payload.artworkUrl ? getArtworkSourceUrl(payload.artworkUrl) : "/icons/icon-192.png";
+  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
   const tag = `music-room-queue-${payload.title}-${Date.now()}`;
 
   if (isTauriRuntime()) {
@@ -162,7 +167,7 @@ export function notifyRoomQueueTrackAdded(
       options: {
         title,
         body,
-        icon: payload.artworkUrl ? getArtworkSourceUrl(payload.artworkUrl) : undefined
+        icon: resolveNotificationArtworkUrl(payload.artworkUrl)
       }
     }).catch(() => {
       sendWebNotification(title, body, icon, tag);
