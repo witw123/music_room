@@ -41,11 +41,11 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   }, []);
 
   return (
-    <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
+    <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-6 lg:pb-0" data-room-view="radio">
       {/* Mobile Top Bar with Exit Button */}
-      <div className="flex items-center justify-between gap-2 px-4 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+      <div className="flex items-center justify-between gap-2 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-1.5 lg:hidden">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-accent border border-accent/25">
             <RadioIcon className="w-3.5 h-3.5" />
           </span>
           <div className="flex flex-col min-w-0">
@@ -61,7 +61,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           {props.onCopyJoinCode ? (
             <button
               onClick={props.onCopyJoinCode}
-              className="inline-flex h-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-foreground-muted hover:text-white hover:bg-white/10 active:scale-95 transition-all"
+              className="inline-flex h-6.5 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-foreground-muted hover:text-white hover:bg-white/10 active:scale-95 transition-all"
               type="button"
             >
               分享
@@ -70,11 +70,11 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           <button
             data-testid="mobile-leave-room-button"
             onClick={() => props.onLeaveRoom?.()}
-            className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
+            className="inline-flex h-6.5 items-center justify-center gap-1 rounded-md border border-red-500/25 bg-red-500/10 px-2 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
             type="button"
             title="退出房间"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
               <line x1="21" y1="12" x2="9" y2="12" />
@@ -84,13 +84,13 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         </div>
       </div>
 
-      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-1 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-2 px-2.5 pt-0 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
         <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]">
           <div className="min-h-0 flex-1">
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
           </div>
         </div>
-        <div className="relative z-0 flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:h-full lg:min-h-0 lg:rounded-none">
+        <div className="relative z-0 flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:rounded-none">
           <RadioWorkspaceTabs
             activeTab={rightTab}
             ariaLabel="房间信息"
@@ -113,7 +113,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           </div>
 
           {/* Radio Dedicated Member Interaction Bar */}
-          <div className="p-3 border-t border-white/[0.06] bg-[#0c0e15]/80 backdrop-blur-xl">
+          <div className="p-2 sm:p-3 border-t border-white/[0.06] bg-[#0c0e15]/80 backdrop-blur-xl">
             <RoomReactionToolbar
               roomId={props.roomSnapshot.room.id}
               socket={props.socket}
@@ -185,7 +185,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-3 pb-2.5 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] sm:px-5 lg:pt-2.5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0 sm:px-5 lg:pt-2.5 lg:pb-2.5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div
         aria-label={ariaLabel}
         className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl"
@@ -200,7 +200,7 @@ function RadioWorkspaceTabs<T extends string>({
               id={`${panelPrefix}-tab-${tab.id}`}
               aria-controls={`${panelPrefix}-panel-${tab.id}`}
               aria-selected={isActive}
-              className={`flex-1 flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+              className={`flex-1 flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-semibold transition-all duration-150 ${
                 isActive
                   ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
                   : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"

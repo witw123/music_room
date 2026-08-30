@@ -164,11 +164,11 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
         </div>
       </div>
       <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2.5 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-4 lg:pt-3 lg:rounded-none">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-1.5 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 lg:pt-2.5 lg:rounded-none">
           {/* Mobile Room Header with Exit Button */}
-          <div className="flex items-center justify-between gap-2 pb-2.5 lg:hidden">
+          <div className="flex items-center justify-between gap-2 pb-1.5 lg:hidden">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+              <span className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-accent border border-accent/25">
                 <MusicIcon className="w-3.5 h-3.5" />
               </span>
               <div className="flex flex-col min-w-0">
@@ -184,7 +184,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
               {props.onCopyJoinCode ? (
                 <button
                   onClick={props.onCopyJoinCode}
-                  className="inline-flex h-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-foreground-muted hover:text-white hover:bg-white/10 active:scale-95 transition-all"
+                  className="inline-flex h-6.5 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-foreground-muted hover:text-white hover:bg-white/10 active:scale-95 transition-all"
                   type="button"
                   title="复制房间口令"
                 >
@@ -194,11 +194,11 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
               <button
                 data-testid="mobile-leave-room-button"
                 onClick={() => props.onLeaveRoom?.()}
-                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
+                className="inline-flex h-6.5 items-center justify-center gap-1 rounded-md border border-red-500/25 bg-red-500/10 px-2 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
                 type="button"
                 title="退出房间"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                   <polyline points="16 17 21 12 16 7" />
                   <line x1="21" y1="12" x2="9" y2="12" />
@@ -222,7 +222,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`flex-1 flex min-h-11 whitespace-nowrap items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                  className={`flex-1 flex min-h-9 whitespace-nowrap items-center justify-center gap-1.5 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-semibold transition-all duration-150 ${
                     isActive
                       ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
                       : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
@@ -236,7 +236,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             })}
           </div>
         </div>
-        <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-[var(--room-mobile-bottom-inset)] pt-3 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
+        <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
           <RoomManagementContent {...props} activeTab={activeTab} />
         </div>
       </section>
