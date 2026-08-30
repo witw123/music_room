@@ -176,17 +176,38 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         </div>
         <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-3xl border border-white/[0.06] bg-[#0c0e15]/90 lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
           <header className="flex shrink-0 items-center justify-between px-4 pb-3.5 pt-4 sm:px-5 sm:pt-5 lg:px-6 border-b border-white/[0.06]">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25 shrink-0">
                 <MusicIcon className="w-4 h-4" />
               </span>
-              <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">点歌台</h1>
+              <div className="flex flex-col min-w-0">
+                <h1 className="text-base sm:text-lg font-bold text-white tracking-tight truncate">
+                  {props.roomSnapshot.room.name || "点歌台"}
+                </h1>
+                <span className="text-[10px] text-foreground-muted lg:hidden">
+                  口令 {props.roomSnapshot.room.joinCode} · 队列 {queueCount} 首
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-foreground-muted">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px]">
+              <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px]">
                 <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
                 <span>当前队列 {queueCount} 首</span>
               </span>
+              <button
+                data-testid="mobile-leave-room-button"
+                onClick={() => props.onLeaveRoom?.()}
+                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all lg:hidden"
+                type="button"
+                title="退出房间"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>退出房间</span>
+              </button>
             </div>
           </header>
           <div className="hide-scrollbar min-h-0 flex-1 px-4 pb-5 sm:px-5 lg:overflow-y-auto lg:px-6">

@@ -165,6 +165,49 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
       </div>
       <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
         <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2.5 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-4 lg:pt-3 lg:rounded-none">
+          {/* Mobile Room Header with Exit Button */}
+          <div className="flex items-center justify-between gap-2 pb-2.5 lg:hidden">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+                <MusicIcon className="w-3.5 h-3.5" />
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="truncate text-xs sm:text-sm font-semibold text-white">
+                  {props.roomSnapshot.room.name || "音乐房间"}
+                </span>
+                <span className="text-[10px] text-foreground-muted">
+                  口令 {props.roomSnapshot.room.joinCode} · 在线 {props.roomSnapshot.room.members.length} 人
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {props.onCopyJoinCode ? (
+                <button
+                  onClick={props.onCopyJoinCode}
+                  className="inline-flex h-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-foreground-muted hover:text-white hover:bg-white/10 active:scale-95 transition-all"
+                  type="button"
+                  title="复制房间口令"
+                >
+                  分享
+                </button>
+              ) : null}
+              <button
+                data-testid="mobile-leave-room-button"
+                onClick={() => props.onLeaveRoom?.()}
+                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
+                type="button"
+                title="退出房间"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>退出房间</span>
+              </button>
+            </div>
+          </div>
+
           <div aria-label="房间视图" className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;

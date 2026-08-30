@@ -42,7 +42,49 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+      {/* Mobile Top Bar with Exit Button */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+            <RadioIcon className="w-3.5 h-3.5" />
+          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="truncate text-xs sm:text-sm font-semibold text-white">
+              {props.roomSnapshot.room.name || "电台直播"}
+            </span>
+            <span className="text-[10px] text-foreground-muted">
+              口令 {props.roomSnapshot.room.joinCode} · 在线 {props.roomSnapshot.room.members.length} 人
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {props.onCopyJoinCode ? (
+            <button
+              onClick={props.onCopyJoinCode}
+              className="inline-flex h-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-foreground-muted hover:text-white hover:bg-white/10 active:scale-95 transition-all"
+              type="button"
+            >
+              分享
+            </button>
+          ) : null}
+          <button
+            data-testid="mobile-leave-room-button"
+            onClick={() => props.onLeaveRoom?.()}
+            className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
+            type="button"
+            title="退出房间"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>退出房间</span>
+          </button>
+        </div>
+      </div>
+
+      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-1 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
         <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]">
           <div className="min-h-0 flex-1">
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
