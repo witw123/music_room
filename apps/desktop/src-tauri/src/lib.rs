@@ -33,7 +33,6 @@ async fn toggle_desktop_lyrics(app: AppHandle) -> Result<bool, String> {
             window.hide().map_err(|error| error.to_string())?;
             return Ok(false);
         }
-        position_lyrics_window(&window);
         window.show().map_err(|error| error.to_string())?;
         return Ok(true);
     }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";
 import { invokeTauri } from "@/lib/desktop/tauri";
-import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
+import { appSettingsChangeEvent, appSettingsStorageKey, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 /**
@@ -97,11 +97,17 @@ export function DesktopLyricsWindowApp() {
   const resizeGestureRef = useRef<ResizeGesture | null>(null);
   const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
   const sizeRafRef = useRef(0);
+  const lastScaleRef = useRef<number | null>(null);
 
-  // Sync window size with desktopLyricScale setting
+  // Sync window size with desktopLyricScale setting ONLY when scale actually changes
   useEffect(() => {
-    const syncScale = () => {
+    const syncScale = (event?: StorageEvent | Event) => {
+      if (event && "key" in event && event.key && event.key !== appSettingsStorageKey) {
+        return; // Ignore bridge snapshot writes, only react to real settings changes
+      }
       const scale = getAppSettings().playback.desktopLyricScale;
+      if (lastScaleRef.current === scale) return;
+      lastScaleRef.current = scale;
       void invokeTauri("set_desktop_lyrics_size", {
         width: Math.round(860 * scale),
         height: Math.round(96 * scale)
@@ -217,9 +223,10 @@ export function DesktopLyricsWindowApp() {
   return (
     <main
       className="flex h-[100dvh] w-full items-center p-1.5 overflow-hidden"
+      data-tauri-drag-region="true"
       data-testid="desktop-lyrics-window"
     >
-      <div className="h-full w-full">
+      <div className="h-full w-full" data-tauri-drag-region="true">
         <DesktopLyricsBar
           title={track?.title ?? "等待选择歌曲"}
           artist={track?.artist}

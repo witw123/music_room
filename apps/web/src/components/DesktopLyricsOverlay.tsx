@@ -9,7 +9,7 @@ type Position = { x: number; y: number };
 
 /**
  * In-app floating desktop lyrics bar (web + Capacitor mobile).
- * Supports pixel-perfect free dragging across screen with boundary clamping and position memory.
+ * Pixel-perfect drag positioning with boundary protection and position persistence.
  */
 export function DesktopLyricsOverlay() {
   const {
@@ -27,8 +27,8 @@ export function DesktopLyricsOverlay() {
   const dragRef = useRef<{
     startX: number;
     startY: number;
-    startLeft: number;
-    startTop: number;
+    initialLeft: number;
+    initialTop: number;
     moved: boolean;
   } | null>(null);
   const positionRef = useRef<Position | null>(null);
@@ -37,26 +37,41 @@ export function DesktopLyricsOverlay() {
     positionRef.current = position;
   }, [position]);
 
-  // Load saved position from localStorage
+  // Load saved position from localStorage on mount
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(getDesktopLyricsPositionStorageKey());
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<Position>;
-      if (typeof parsed.x === "number" && typeof parsed.y === "number" && Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
-        const clamped = clampPixelPosition({ x: parsed.x, y: parsed.y }, panelRef.current);
-        positionRef.current = clamped;
-        setPosition(clamped);
+      if (
+        typeof parsed.x === "number" &&
+        typeof parsed.y === "number" &&
+        Number.isFinite(parsed.x) &&
+        Number.isFinite(parsed.y)
+      ) {
+        const clampedX = Math.max(8, Math.min(window.innerWidth - 120, parsed.x));
+        const clampedY = Math.max(8, Math.min(window.innerHeight - 60, parsed.y));
+        const validPos = { x: clampedX, y: clampedY };
+        positionRef.current = validPos;
+        setPosition(validPos);
       }
     } catch {
-      // Ignore malformed storage and use default bottom-center position.
+      // Ignore malformed storage
     }
   }, []);
 
-  // Adjust position if viewport resizes
+  // Window resize handler: keep bar within viewport
   useEffect(() => {
     const handleResize = () => {
-      setPosition((current) => (current ? clampPixelPosition(current, panelRef.current) : current));
+      setPosition((current) => {
+        if (!current) return null;
+        const panel = panelRef.current;
+        const width = panel?.offsetWidth ?? 320;
+        const height = panel?.offsetHeight ?? 60;
+        const clampedX = Math.max(8, Math.min(window.innerWidth - width - 8, current.x));
+        const clampedY = Math.max(8, Math.min(window.innerHeight - height - 8, current.y));
+        return { x: clampedX, y: clampedY };
+      });
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -75,8 +90,8 @@ export function DesktopLyricsOverlay() {
     dragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
-      startLeft: rect.left,
-      startTop: rect.top,
+      initialLeft: rect.left,
+      initialTop: rect.top,
       moved: false
     };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -84,8 +99,7 @@ export function DesktopLyricsOverlay() {
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    const panel = panelRef.current;
-    if (!drag || !panel) return;
+    if (!drag) return;
 
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
@@ -95,25 +109,32 @@ export function DesktopLyricsOverlay() {
     }
     if (!drag.moved) return;
 
-    const nextX = drag.startLeft + dx;
-    const nextY = drag.startTop + dy;
-    const clamped = clampPixelPosition({ x: nextX, y: nextY }, panel);
-    positionRef.current = clamped;
-    setPosition(clamped);
+    const newLeft = drag.initialLeft + dx;
+    const newTop = drag.initialTop + dy;
+
+    const panel = panelRef.current;
+    const width = panel?.offsetWidth ?? 320;
+    const height = panel?.offsetHeight ?? 60;
+    const clampedX = Math.max(8, Math.min(window.innerWidth - width - 8, newLeft));
+    const clampedY = Math.max(8, Math.min(window.innerHeight - height - 8, newTop));
+
+    const next = { x: clampedX, y: clampedY };
+    positionRef.current = next;
+    setPosition(next);
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const moved = dragRef.current?.moved ?? false;
-    dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    if (moved && positionRef.current) {
+    const drag = dragRef.current;
+    if (drag?.moved && positionRef.current) {
       try {
         window.localStorage.setItem(getDesktopLyricsPositionStorageKey(), JSON.stringify(positionRef.current));
       } catch {
-        // Storage write may fail in sandboxes
+        // Storage may be restricted
       }
+    }
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
 
@@ -121,9 +142,9 @@ export function DesktopLyricsOverlay() {
     ? {
         left: `${position.x}px`,
         top: `${position.y}px`,
-        transform: "none",
         bottom: "auto",
-        right: "auto"
+        right: "auto",
+        transform: "none"
       }
     : undefined;
 
@@ -131,10 +152,10 @@ export function DesktopLyricsOverlay() {
     <div
       ref={panelRef}
       aria-label="桌面歌词"
-      className={`fixed z-[120] select-none touch-none ${
+      className={`fixed z-[120] select-none touch-none w-[min(92vw,48rem)] ${
         position
-          ? "w-[min(92vw,48rem)]"
-          : "inset-x-3 bottom-[calc(11.5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:right-auto md:bottom-[5.75rem] md:w-[min(92vw,48rem)] md:-translate-x-1/2"
+          ? ""
+          : "left-1/2 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] md:bottom-[5.75rem] -translate-x-1/2"
       }`}
       data-testid="desktop-lyrics-overlay"
       onPointerCancel={handlePointerUp}
@@ -168,16 +189,4 @@ export function DesktopLyricsOverlay() {
       </div>
     </div>
   );
-}
-
-function clampPixelPosition(pos: Position, panel: HTMLDivElement | null): Position {
-  if (typeof window === "undefined") return pos;
-  const width = panel?.offsetWidth ?? 380;
-  const height = panel?.offsetHeight ?? 68;
-  const maxX = Math.max(10, window.innerWidth - width - 10);
-  const maxY = Math.max(10, window.innerHeight - height - 10);
-  return {
-    x: Math.max(10, Math.min(maxX, pos.x)),
-    y: Math.max(10, Math.min(maxY, pos.y))
-  };
 }
