@@ -164,7 +164,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
         </div>
       </div>
       <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2 pt-2 sm:px-5 sm:pt-4 lg:rounded-none">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2.5 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-4 lg:pt-3 lg:rounded-none">
           <div aria-label="房间视图" className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;

@@ -25,7 +25,17 @@ import {
   type PlayerStyle,
   type ThemePreference
 } from "@/features/settings/settings-store";
-import { requestNotificationPermission } from "@/features/playback/system-notifications";
+import {
+  getNotificationPermissionState,
+  requestNotificationPermission,
+  notifyTrackChange,
+  type NotificationPermissionState
+} from "@/features/playback/system-notifications";
+import {
+  getLocalAudioStorageState,
+  requestLocalAudioDirectoryPermission,
+  type LocalAudioStorageState
+} from "@/features/library/local-audio-storage";
 
 const playbackModeLabels: Record<PlaybackMode, string> = {
   sequence: "列表循环",
@@ -61,6 +71,22 @@ export function SettingsPage({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isCustomLayoutEditorOpen, setIsCustomLayoutEditorOpen] = useState(false);
   const [recommendationExclusions, setRecommendationExclusions] = useState<PersonalizationExclusion[]>([]);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("default");
+  const [directoryState, setDirectoryState] = useState<LocalAudioStorageState | null>(null);
+
+  const refreshPermissions = async () => {
+    setNotificationPermission(getNotificationPermissionState());
+    try {
+      const storageState = await getLocalAudioStorageState();
+      setDirectoryState(storageState);
+    } catch {
+      // Ignored
+    }
+  };
+
+  useEffect(() => {
+    void refreshPermissions();
+  }, []);
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -302,37 +328,6 @@ export function SettingsPage({
                 </span>
               </div>
             </SettingRow>
-            <SettingRow label="切歌桌面通知" description="后台播放或窗口最小化切歌时，弹出系统级 Toast 歌曲通知。">
-              <Toggle
-                checked={settings.playback.trackChangeNotification}
-                label="切歌桌面通知"
-                onChange={(checked) => {
-                  patchSettings({ playback: { trackChangeNotification: checked } });
-                  if (checked) {
-                    void requestNotificationPermission();
-                  }
-                }}
-              />
-            </SettingRow>
-            <SettingRow label="房间点歌系统通知" description="点歌房其他成员点播新歌曲时，弹出系统级 Toast 提醒。">
-              <Toggle
-                checked={settings.playback.roomQueueNotification}
-                label="房间点歌系统通知"
-                onChange={(checked) => {
-                  patchSettings({ playback: { roomQueueNotification: checked } });
-                  if (checked) {
-                    void requestNotificationPermission();
-                  }
-                }}
-              />
-            </SettingRow>
-            <SettingRow label="仅在后台时通知" description="在前台使用时免打扰，仅在窗口最小化或处于后台时弹出系统通知。">
-              <Toggle
-                checked={settings.playback.onlyNotifyInBackground}
-                label="仅在后台时通知"
-                onChange={(checked) => patchSettings({ playback: { onlyNotifyInBackground: checked } })}
-              />
-            </SettingRow>
             <SettingRow label="响度均衡" description="自动平衡不同歌曲的主观响度，仅影响当前设备。">
               <Toggle
                 checked={settings.playback.loudnessNormalization}
@@ -370,6 +365,149 @@ export function SettingsPage({
                   <option key={mode} value={mode}>{label}</option>
                 ))}
               </select>
+            </SettingRow>
+          </SettingsSection>
+
+          <SettingsSection title="通知与推送">
+            <SettingRow label="系统通知权限" description="接收切歌、点歌、曲库更新和聊天消息的系统 Toast 通知。">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
+                  notificationPermission === "granted"
+                    ? "bg-green-500/10 text-green-400 border-green-500/20"
+                    : notificationPermission === "denied"
+                      ? "bg-red-500/10 text-red-400 border-red-500/20"
+                      : "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    notificationPermission === "granted" ? "bg-green-400" : notificationPermission === "denied" ? "bg-red-400" : "bg-amber-400"
+                  }`} />
+                  {notificationPermission === "granted" ? "已授权" : notificationPermission === "denied" ? "已禁用" : "未授权"}
+                </span>
+                {notificationPermission !== "granted" ? (
+                  <Button
+                    onClick={async () => {
+                      const granted = await requestNotificationPermission();
+                      setNotificationPermission(granted ? "granted" : getNotificationPermissionState());
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    立即授权
+                  </Button>
+                ) : null}
+                <Button
+                  onClick={() => {
+                    notifyTrackChange(
+                      {
+                        title: "Music Room 测试通知",
+                        artist: "系统通知与推送工作正常 🎵",
+                        artworkUrl: "/icons/icon-192.png"
+                      },
+                      { force: true }
+                    );
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  测试通知
+                </Button>
+              </div>
+            </SettingRow>
+            {directoryState?.directoryName ? (
+              <SettingRow label="本地曲库目录权限" description={`已选目录 “${directoryState.directoryName}” 的浏览器读写授权。`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
+                    directoryState.permission === "granted"
+                      ? "bg-green-500/10 text-green-400 border-green-500/20"
+                      : "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${directoryState.permission === "granted" ? "bg-green-400" : "bg-amber-400"}`} />
+                    {directoryState.permission === "granted" ? "正常读写" : "待确认恢复"}
+                  </span>
+                  {directoryState.permission !== "granted" ? (
+                    <Button
+                      onClick={async () => {
+                        await requestLocalAudioDirectoryPermission();
+                        await refreshPermissions();
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      恢复授权
+                    </Button>
+                  ) : null}
+                </div>
+              </SettingRow>
+            ) : null}
+            <SettingRow label="切歌桌面通知" description="后台播放或窗口最小化切歌时，弹出系统级 Toast 歌曲通知。">
+              <Toggle
+                checked={settings.playback.trackChangeNotification}
+                label="切歌桌面通知"
+                onChange={(checked) => {
+                  patchSettings({ playback: { trackChangeNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="房间点歌系统通知" description="点歌房其他成员点播新歌曲时，弹出系统级 Toast 提醒。">
+              <Toggle
+                checked={settings.playback.roomQueueNotification}
+                label="房间点歌系统通知"
+                onChange={(checked) => {
+                  patchSettings({ playback: { roomQueueNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="房间曲库更新通知" description="房间内其他成员上传或添加新歌曲到共享曲库时，弹出系统 Toast 提醒。">
+              <Toggle
+                checked={settings.playback.roomLibraryNotification}
+                label="房间曲库更新通知"
+                onChange={(checked) => {
+                  patchSettings({ playback: { roomLibraryNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="房间聊天消息推送" description="房间内其他成员发送聊天消息时，弹出系统级 Toast 提醒。">
+              <Toggle
+                checked={settings.playback.roomChatNotification}
+                label="房间聊天消息推送"
+                onChange={(checked) => {
+                  patchSettings({ playback: { roomChatNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="成员动态通知" description="房间内成员加入、离开或上下线状态变更时，弹出系统 Toast 提醒。">
+              <Toggle
+                checked={settings.playback.roomPresenceNotification}
+                label="成员动态通知"
+                onChange={(checked) => {
+                  patchSettings({ playback: { roomPresenceNotification: checked } });
+                  if (checked) {
+                    void requestNotificationPermission();
+                  }
+                }}
+              />
+            </SettingRow>
+            <SettingRow label="仅在后台时通知" description="在前台使用时免打扰，仅在窗口最小化或处于后台时弹出系统通知。">
+              <Toggle
+                checked={settings.playback.onlyNotifyInBackground}
+                label="仅在后台时通知"
+                onChange={(checked) => patchSettings({ playback: { onlyNotifyInBackground: checked } })}
+              />
             </SettingRow>
           </SettingsSection>
 

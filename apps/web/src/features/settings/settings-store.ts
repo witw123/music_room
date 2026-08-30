@@ -103,9 +103,11 @@ export type AppSettings = {
     fullyCachedPlayback: boolean;
     showLyricTranslation: boolean;
     showLyricRomanized: boolean;
-    desktopLyricScale: number;
     trackChangeNotification: boolean;
     roomQueueNotification: boolean;
+    roomLibraryNotification: boolean;
+    roomChatNotification: boolean;
+    roomPresenceNotification: boolean;
     onlyNotifyInBackground: boolean;
   };
 };
@@ -133,6 +135,9 @@ const defaultSettings: AppSettings = {
     desktopLyricScale: 1,
     trackChangeNotification: true,
     roomQueueNotification: true,
+    roomLibraryNotification: true,
+    roomChatNotification: true,
+    roomPresenceNotification: true,
     onlyNotifyInBackground: true
   }
 };
@@ -230,6 +235,9 @@ export function normalizeSettings(value: unknown): AppSettings {
       desktopLyricScale,
       trackChangeNotification: playback.trackChangeNotification !== false,
       roomQueueNotification: playback.roomQueueNotification !== false,
+      roomLibraryNotification: playback.roomLibraryNotification !== false,
+      roomChatNotification: playback.roomChatNotification !== false,
+      roomPresenceNotification: playback.roomPresenceNotification !== false,
       onlyNotifyInBackground: playback.onlyNotifyInBackground !== false
     }
   };

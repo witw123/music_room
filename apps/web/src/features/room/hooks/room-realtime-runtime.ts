@@ -10,7 +10,8 @@ import type {
   RoomPlaybackReadinessPayload,
   RoomTrackDeletedPayload,
   RoomSnapshotMissingPayload,
-  RoomSnapshot
+  RoomSnapshot,
+  RoomChatMessage
 } from "@music-room/shared";
 import { createRoomSocket, type RoomSocket } from "@/lib/network/ws-client";
 import { getWebRTCIceServers, P2PMesh } from "@/features/p2p";
@@ -19,7 +20,12 @@ import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { calibrateRoomPlaybackClock } from "@/features/playback/room-playback-clock";
-import { notifyRoomQueueTrackAdded } from "@/features/playback/system-notifications";
+import {
+  notifyRoomQueueTrackAdded,
+  notifyRoomTrackAddedToLibrary,
+  notifyRoomChatMessage,
+  notifyRoomMemberPresence
+} from "@/features/playback/system-notifications";
 import type {
   PlaybackRecoveryRecommendation,
   RoomDataMeshDiagnosticsRefs,
@@ -511,6 +517,80 @@ function notifyNewlyAddedQueueItems(input: {
   }
 }
 
+function notifyNewlyAddedLibraryTracks(input: {
+  incomingTracks: RoomSnapshot["tracks"];
+  currentSnapshot: RoomSnapshot | null;
+  currentUserId?: string | null;
+}) {
+  const { currentSnapshot, incomingTracks, currentUserId } = input;
+  if (!currentSnapshot || incomingTracks.length === 0) return;
+  const existingIds = new Set(currentSnapshot.tracks.map((t) => t.id));
+  const newTracks = incomingTracks.filter((t) => !existingIds.has(t.id));
+  if (newTracks.length === 0) return;
+
+  for (const track of newTracks) {
+    notifyRoomTrackAddedToLibrary({
+      title: track.title,
+      artist: track.artist ?? null,
+      artworkUrl: track.artworkUrl ?? null,
+      addedBy: track.ownerNickname ?? "房间成员",
+      addedById: track.ownerSessionId ?? null,
+      currentUserId,
+      roomTitle: currentSnapshot.room.name ?? null
+    });
+  }
+}
+
+function notifyMemberPresenceChanges(input: {
+  incomingMembers: RoomSnapshot["room"]["members"];
+  currentSnapshot: RoomSnapshot | null;
+  currentUserId?: string | null;
+}) {
+  const { currentSnapshot, incomingMembers, currentUserId } = input;
+  if (!currentSnapshot) return;
+  const currentMembers = currentSnapshot.room.members;
+  const currentMemberMap = new Map(currentMembers.map((m) => [m.id, m]));
+  const incomingMemberMap = new Map(incomingMembers.map((m) => [m.id, m]));
+
+  for (const member of incomingMembers) {
+    if (!currentMemberMap.has(member.id)) {
+      notifyRoomMemberPresence({
+        nickname: member.nickname,
+        action: "joined",
+        isHost: member.role === "host",
+        memberId: member.id,
+        currentUserId,
+        roomTitle: currentSnapshot.room.name ?? null
+      });
+    } else {
+      const prev = currentMemberMap.get(member.id);
+      if (prev && prev.presenceState !== member.presenceState) {
+        notifyRoomMemberPresence({
+          nickname: member.nickname,
+          action: member.presenceState === "online" ? "online" : "offline",
+          isHost: member.role === "host",
+          memberId: member.id,
+          currentUserId,
+          roomTitle: currentSnapshot.room.name ?? null
+        });
+      }
+    }
+  }
+
+  for (const member of currentMembers) {
+    if (!incomingMemberMap.has(member.id)) {
+      notifyRoomMemberPresence({
+        nickname: member.nickname,
+        action: "left",
+        isHost: member.role === "host",
+        memberId: member.id,
+        currentUserId,
+        roomTitle: currentSnapshot.room.name ?? null
+      });
+    }
+  }
+}
+
   socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
@@ -548,6 +628,11 @@ function notifyNewlyAddedQueueItems(input: {
       return;
     }
     const currentSnapshot = input.currentRoomRef.current;
+    notifyMemberPresenceChanges({
+      incomingMembers: members,
+      currentSnapshot,
+      currentUserId: input.activeSessionRef.current?.userId
+    });
     if (!currentSnapshot) {
       void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
       return;
@@ -590,6 +675,11 @@ function notifyNewlyAddedQueueItems(input: {
       tracksPool: tracks,
       currentUserId: input.activeSessionRef.current?.userId
     });
+    notifyNewlyAddedLibraryTracks({
+      incomingTracks: tracks,
+      currentSnapshot,
+      currentUserId: input.activeSessionRef.current?.userId
+    });
     if (currentSnapshot?.room.id === input.roomId) {
       const nextTrackIds = new Set(tracks.map((track) => track.id));
       const removedTrackIds = currentSnapshot.tracks
@@ -620,6 +710,19 @@ function notifyNewlyAddedQueueItems(input: {
       return;
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
+  });
+
+  socket.on("room.chat", (message: RoomChatMessage) => {
+    if (input.activeRouteRoomIdRef.current !== input.roomId) {
+      return;
+    }
+    notifyRoomChatMessage({
+      senderName: message.senderName,
+      senderId: message.senderId,
+      content: message.content,
+      currentUserId: input.activeSessionRef.current?.userId,
+      roomTitle: input.currentRoomRef.current?.room.name ?? null
+    });
   });
 
   socket.on("room.playback.readiness", (payload) => {

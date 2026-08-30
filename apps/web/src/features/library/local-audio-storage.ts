@@ -165,6 +165,18 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   };
 }
 
+export async function requestLocalAudioDirectoryPermission(mode: "read" | "readwrite" = "readwrite"): Promise<boolean> {
+  const directory = await getLocalAudioDirectory();
+  if (!directory) return false;
+  try {
+    const handle = asPermissionedHandle(directory.handle);
+    const result = await handle.requestPermission({ mode });
+    return result === "granted";
+  } catch {
+    return false;
+  }
+}
+
 export async function listSelectedLocalAudioFiles(options?: { signal?: AbortSignal }): Promise<SelectedLocalAudioFile[] | null> {
   const directory = await getLocalAudioDirectory();
   if (!directory) return [];

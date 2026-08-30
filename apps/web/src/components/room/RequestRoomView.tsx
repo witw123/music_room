@@ -170,7 +170,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="request">
-      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-3 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
+      <section className="mx-auto grid w-full max-w-[1600px] gap-3 px-3 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
         <div className="relative z-10 hidden lg:block min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-white/[0.06] lg:bg-surface/[0.12]">
           <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
         </div>
@@ -275,7 +275,7 @@ function RequestRoomWorkspace(
 
   return (
     <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-white/[0.06] lg:px-0" data-testid="request-room-workspace">
-      <div className="material-surface-header sticky top-0 z-30 mb-3 px-1 lg:hidden" role="tablist" aria-label="点歌房管理">
+      <div className="material-surface-header sticky top-0 z-30 mb-3 px-1 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:pt-0 lg:hidden" role="tablist" aria-label="点歌房管理">
         <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl">
           {requestWorkspaceTabs.map((tab) => {
             const isActive = props.mobileTab === tab.id;

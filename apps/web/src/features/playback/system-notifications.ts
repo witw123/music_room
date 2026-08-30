@@ -56,6 +56,33 @@ export type RoomQueueNotificationPayload = {
   roomTitle?: string | null;
 };
 
+export type RoomLibraryNotificationPayload = {
+  title: string;
+  artist?: string | null;
+  artworkUrl?: string | null;
+  addedBy?: string | null;
+  addedById?: string | null;
+  currentUserId?: string | null;
+  roomTitle?: string | null;
+};
+
+export type RoomChatMessageNotificationPayload = {
+  senderName: string;
+  senderId?: string | null;
+  content: string;
+  currentUserId?: string | null;
+  roomTitle?: string | null;
+};
+
+export type RoomMemberPresenceNotificationPayload = {
+  nickname: string;
+  action: "joined" | "left" | "online" | "offline";
+  isHost?: boolean;
+  memberId?: string | null;
+  currentUserId?: string | null;
+  roomTitle?: string | null;
+};
+
 let lastNotifiedTrackKey = "";
 let lastNotifiedAtMs = 0;
 
@@ -168,6 +195,146 @@ export function notifyRoomQueueTrackAdded(
         title,
         body,
         icon: resolveNotificationArtworkUrl(payload.artworkUrl)
+      }
+    }).catch(() => {
+      sendWebNotification(title, body, icon, tag);
+    });
+    return;
+  }
+
+  sendWebNotification(title, body, icon, tag);
+}
+
+/**
+ * Dispatches a system Toast notification when a member adds a track to the room library.
+ */
+export function notifyRoomTrackAddedToLibrary(
+  payload: RoomLibraryNotificationPayload,
+  options?: { force?: boolean }
+) {
+  if (typeof window === "undefined") return;
+
+  const settings = getAppSettings();
+  if (!settings.playback.roomLibraryNotification) return;
+  if (!payload.title || payload.title.trim().length === 0) return;
+
+  if (payload.currentUserId && payload.addedById && payload.currentUserId === payload.addedById) {
+    return;
+  }
+
+  const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+    return;
+  }
+
+  const adder = payload.addedBy || "房间成员";
+  const title = `📂 ${adder} 向曲库添加了新歌曲`;
+  const body = payload.artist
+    ? `《${payload.title}》 - ${payload.artist}`
+    : `《${payload.title}》`;
+  const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
+  const tag = `music-room-library-${payload.title}-${Date.now()}`;
+
+  if (isTauriRuntime()) {
+    void invokeTauri("plugin:notification|notify", {
+      options: {
+        title,
+        body,
+        icon: resolveNotificationArtworkUrl(payload.artworkUrl)
+      }
+    }).catch(() => {
+      sendWebNotification(title, body, icon, tag);
+    });
+    return;
+  }
+
+  sendWebNotification(title, body, icon, tag);
+}
+
+/**
+ * Dispatches a system Toast notification when a member sends a chat message in the room.
+ */
+export function notifyRoomChatMessage(
+  payload: RoomChatMessageNotificationPayload,
+  options?: { force?: boolean }
+) {
+  if (typeof window === "undefined") return;
+
+  const settings = getAppSettings();
+  if (!settings.playback.roomChatNotification) return;
+  if (!payload.content || payload.content.trim().length === 0) return;
+
+  if (payload.currentUserId && payload.senderId && payload.currentUserId === payload.senderId) {
+    return;
+  }
+
+  const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+    return;
+  }
+
+  const title = payload.roomTitle
+    ? `💬 ${payload.senderName} (${payload.roomTitle})`
+    : `💬 ${payload.senderName}`;
+  const body = payload.content;
+  const icon = "/icons/icon-192.png";
+  const tag = `music-room-chat-${Date.now()}`;
+
+  if (isTauriRuntime()) {
+    void invokeTauri("plugin:notification|notify", {
+      options: {
+        title,
+        body,
+        icon
+      }
+    }).catch(() => {
+      sendWebNotification(title, body, icon, tag);
+    });
+    return;
+  }
+
+  sendWebNotification(title, body, icon, tag);
+}
+
+/**
+ * Dispatches a system Toast notification when a member joins/leaves or changes online presence.
+ */
+export function notifyRoomMemberPresence(
+  payload: RoomMemberPresenceNotificationPayload,
+  options?: { force?: boolean }
+) {
+  if (typeof window === "undefined") return;
+
+  const settings = getAppSettings();
+  if (!settings.playback.roomPresenceNotification) return;
+  if (!payload.nickname) return;
+
+  if (payload.currentUserId && payload.memberId && payload.currentUserId === payload.memberId) {
+    return;
+  }
+
+  const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+    return;
+  }
+
+  const actionText = payload.action === "joined" || payload.action === "online"
+    ? "加入了房间"
+    : "离开了房间";
+  const emoji = payload.action === "joined" || payload.action === "online" ? "👋" : "🚪";
+  const title = `${emoji} 成员动态`;
+  const body = payload.roomTitle
+    ? `${payload.nickname} ${actionText} (${payload.roomTitle})`
+    : `${payload.nickname} ${actionText}`;
+  const icon = "/icons/icon-192.png";
+  const tag = `music-room-presence-${payload.nickname}-${payload.action}-${Date.now()}`;
+
+  if (isTauriRuntime()) {
+    void invokeTauri("plugin:notification|notify", {
+      options: {
+        title,
+        body,
+        icon
       }
     }).catch(() => {
       sendWebNotification(title, body, icon, tag);

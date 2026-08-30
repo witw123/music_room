@@ -42,7 +42,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
 
   return (
     <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-[var(--room-mobile-bottom-inset)] lg:pb-0" data-room-view="radio">
-      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-3 px-3 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
         <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]">
           <div className="min-h-0 flex-1">
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
@@ -143,7 +143,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-3 py-2.5 sm:px-5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="material-surface-header shrink-0 px-3 pb-2.5 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] sm:px-5 lg:pt-2.5 border-b border-white/[0.06]" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div
         aria-label={ariaLabel}
         className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl"

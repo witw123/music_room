@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getNotificationPermissionState,
   notifyRoomQueueTrackAdded,
+  notifyRoomTrackAddedToLibrary,
+  notifyRoomChatMessage,
+  notifyRoomMemberPresence,
   notifyTrackChange,
   requestNotificationPermission
 } from "./system-notifications";
@@ -177,6 +180,97 @@ describe("system notifications", () => {
     );
 
     expect(mockConstructor).not.toHaveBeenCalled();
+  });
+
+  it("dispatches room library notification when a track is added by another member", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { roomLibraryNotification: true } });
+
+    notifyRoomTrackAddedToLibrary(
+      {
+        title: "夜曲",
+        artist: "周杰伦",
+        addedBy: "Bob",
+        addedById: "user_bob",
+        currentUserId: "user_me"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).toHaveBeenCalledWith("📂 Bob 向曲库添加了新歌曲", expect.objectContaining({
+      body: "《夜曲》 - 周杰伦",
+      silent: true
+    }));
+  });
+
+  it("dispatches room chat notification when a message is received from another member", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { roomChatNotification: true } });
+
+    notifyRoomChatMessage(
+      {
+        senderName: "Charlie",
+        senderId: "user_charlie",
+        content: "大家好！这首歌太好听了",
+        currentUserId: "user_me",
+        roomTitle: "深夜放映室"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).toHaveBeenCalledWith("💬 Charlie (深夜放映室)", expect.objectContaining({
+      body: "大家好！这首歌太好听了"
+    }));
+  });
+
+  it("dispatches room member presence notification when a member joins", () => {
+    const mockConstructor = vi.fn();
+    class MockNotification {
+      static permission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        mockConstructor(title, options);
+      }
+    }
+    vi.stubGlobal("window", createMockWindow(MockNotification));
+    vi.stubGlobal("Notification", MockNotification);
+    vi.stubGlobal("document", createMockDocument("hidden"));
+
+    updateAppSettings({ playback: { roomPresenceNotification: true } });
+
+    notifyRoomMemberPresence(
+      {
+        nickname: "David",
+        action: "joined",
+        memberId: "user_david",
+        currentUserId: "user_me",
+        roomTitle: "音乐小憩"
+      },
+      { force: true }
+    );
+
+    expect(mockConstructor).toHaveBeenCalledWith("👋 成员动态", expect.objectContaining({
+      body: "David 加入了房间 (音乐小憩)"
+    }));
   });
 });
 
