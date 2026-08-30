@@ -1,5 +1,10 @@
 import { getAppSettings } from "@/features/settings/settings-store";
-import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
+import {
+  capacitorPlugin,
+  invokeTauri,
+  isCapacitorRuntime,
+  isTauriRuntime
+} from "@/lib/desktop/tauri";
 
 function resolveNotificationArtworkUrl(value?: string | null): string | undefined {
   if (!value) return undefined;
@@ -10,11 +15,30 @@ function resolveNotificationArtworkUrl(value?: string | null): string | undefine
 export type NotificationPermissionState = "granted" | "denied" | "default" | "unsupported";
 
 /**
- * Queries current system notification permission (supporting Tauri native OS notifications and web).
+ * Queries current system notification permission (supporting Android Capacitor native, Tauri OS notifications, and Web).
  */
 export async function queryNotificationPermissionState(): Promise<NotificationPermissionState> {
   if (typeof window === "undefined") {
     return "unsupported";
+  }
+
+  if (isCapacitorRuntime()) {
+    try {
+      const plugin = capacitorPlugin("SystemNotification");
+      if (plugin?.checkPermissions) {
+        const res = (await plugin.checkPermissions()) as { granted?: boolean; permission?: string };
+        if (res.granted === true || res.permission === "granted") {
+          return "granted";
+        }
+        if (res.permission === "denied") {
+          return "denied";
+        }
+        return "default";
+      }
+      return "granted";
+    } catch {
+      return "granted";
+    }
   }
 
   if (isTauriRuntime()) {
@@ -41,7 +65,7 @@ export function getNotificationPermissionState(): NotificationPermissionState {
     return "unsupported";
   }
 
-  if (isTauriRuntime()) {
+  if (isCapacitorRuntime() || isTauriRuntime()) {
     return "granted";
   }
 
@@ -53,11 +77,24 @@ export function getNotificationPermissionState(): NotificationPermissionState {
 }
 
 /**
- * Requests notification permission from user (supporting Tauri native OS prompts and Web API).
+ * Requests notification permission from user (supporting Android Capacitor native prompt, Tauri OS prompts, and Web API).
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === "undefined") {
     return false;
+  }
+
+  if (isCapacitorRuntime()) {
+    try {
+      const plugin = capacitorPlugin("SystemNotification");
+      if (plugin?.requestPermissions) {
+        const res = (await plugin.requestPermissions()) as { granted?: boolean; permission?: string };
+        return res.granted === true || res.permission === "granted";
+      }
+      return true;
+    } catch {
+      return true;
+    }
   }
 
   if (isTauriRuntime()) {
@@ -86,6 +123,22 @@ export async function requestNotificationPermission(): Promise<boolean> {
     return permission === "granted";
   } catch {
     return false;
+  }
+}
+
+/**
+ * Opens system notification settings on mobile devices.
+ */
+export async function openMobileNotificationSettings(): Promise<void> {
+  if (isCapacitorRuntime()) {
+    try {
+      const plugin = capacitorPlugin("SystemNotification");
+      if (plugin?.openSettings) {
+        await plugin.openSettings();
+      }
+    } catch {
+      // Ignored
+    }
   }
 }
 
@@ -155,10 +208,53 @@ export async function focusMainWindow(): Promise<void> {
 }
 
 /**
+ * Low-level unified notification dispatcher that targets Android Capacitor, Tauri, or Web.
+ */
+function dispatchSystemToastNotification(
+  title: string,
+  body: string,
+  icon?: string,
+  tag = "music-room-toast"
+) {
+  if (typeof window === "undefined") return;
+
+  // 1. Android Capacitor Native Notification
+  if (isCapacitorRuntime()) {
+    try {
+      const plugin = capacitorPlugin("SystemNotification");
+      if (plugin?.show) {
+        void plugin.show({
+          title,
+          body,
+          artworkUrl: icon
+        });
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // 2. Tauri Desktop Native Notification
+  if (isTauriRuntime()) {
+    void invokeTauri("plugin:notification|notify", {
+      options: {
+        title,
+        body,
+        icon
+      }
+    }).catch(() => {
+      sendWebNotification(title, body, icon, tag);
+    });
+    return;
+  }
+
+  // 3. Web Browser / PWA Notification
+  sendWebNotification(title, body, icon, tag);
+}
+
+/**
  * Dispatches a system Toast notification when a track starts playing.
- * - Respects the user's `trackChangeNotification` and `onlyNotifyInBackground` settings.
- * - Dispatches when app is in the background or minimized.
- * - Uses notification tags so successive track switches replace the prior toast.
  */
 export function notifyTrackChange(payload: TrackNotificationPayload, options?: { force?: boolean }) {
   if (typeof window === "undefined") return;
@@ -175,9 +271,8 @@ export function notifyTrackChange(payload: TrackNotificationPayload, options?: {
     return;
   }
 
-  // Check visibility: only notify if document is hidden / in background unless disabled or forced
   const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime() && !isCapacitorRuntime()) {
     return;
   }
 
@@ -187,23 +282,7 @@ export function notifyTrackChange(payload: TrackNotificationPayload, options?: {
   const body = payload.artist ? `${payload.artist}` : "Music Room";
   const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
 
-  // If in Tauri desktop shell, try native notification
-  if (isTauriRuntime()) {
-    void invokeTauri("plugin:notification|notify", {
-      options: {
-        title: payload.title,
-        body,
-        icon: resolveNotificationArtworkUrl(payload.artworkUrl)
-      }
-    }).catch(() => {
-      // Fallback to standard Web Notification API if Tauri plugin is not available
-      sendWebNotification(payload.title, body, icon, "music-room-now-playing");
-    });
-    return;
-  }
-
-  // Web Browser / PWA
-  sendWebNotification(payload.title, body, icon, "music-room-now-playing");
+  dispatchSystemToastNotification(payload.title, body, icon, "music-room-now-playing");
 }
 
 /**
@@ -224,9 +303,8 @@ export function notifyRoomQueueTrackAdded(
     return;
   }
 
-  // Check background visibility requirement
   const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime() && !isCapacitorRuntime()) {
     return;
   }
 
@@ -238,20 +316,7 @@ export function notifyRoomQueueTrackAdded(
   const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
   const tag = `music-room-queue-${payload.title}-${Date.now()}`;
 
-  if (isTauriRuntime()) {
-    void invokeTauri("plugin:notification|notify", {
-      options: {
-        title,
-        body,
-        icon: resolveNotificationArtworkUrl(payload.artworkUrl)
-      }
-    }).catch(() => {
-      sendWebNotification(title, body, icon, tag);
-    });
-    return;
-  }
-
-  sendWebNotification(title, body, icon, tag);
+  dispatchSystemToastNotification(title, body, icon, tag);
 }
 
 /**
@@ -272,7 +337,7 @@ export function notifyRoomTrackAddedToLibrary(
   }
 
   const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime() && !isCapacitorRuntime()) {
     return;
   }
 
@@ -284,20 +349,7 @@ export function notifyRoomTrackAddedToLibrary(
   const icon = resolveNotificationArtworkUrl(payload.artworkUrl) ?? "/icons/icon-192.png";
   const tag = `music-room-library-${payload.title}-${Date.now()}`;
 
-  if (isTauriRuntime()) {
-    void invokeTauri("plugin:notification|notify", {
-      options: {
-        title,
-        body,
-        icon: resolveNotificationArtworkUrl(payload.artworkUrl)
-      }
-    }).catch(() => {
-      sendWebNotification(title, body, icon, tag);
-    });
-    return;
-  }
-
-  sendWebNotification(title, body, icon, tag);
+  dispatchSystemToastNotification(title, body, icon, tag);
 }
 
 /**
@@ -318,7 +370,7 @@ export function notifyRoomChatMessage(
   }
 
   const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime() && !isCapacitorRuntime()) {
     return;
   }
 
@@ -329,20 +381,7 @@ export function notifyRoomChatMessage(
   const icon = "/icons/icon-192.png";
   const tag = `music-room-chat-${Date.now()}`;
 
-  if (isTauriRuntime()) {
-    void invokeTauri("plugin:notification|notify", {
-      options: {
-        title,
-        body,
-        icon
-      }
-    }).catch(() => {
-      sendWebNotification(title, body, icon, tag);
-    });
-    return;
-  }
-
-  sendWebNotification(title, body, icon, tag);
+  dispatchSystemToastNotification(title, body, icon, tag);
 }
 
 /**
@@ -363,7 +402,7 @@ export function notifyRoomMemberPresence(
   }
 
   const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime()) {
+  if (settings.playback.onlyNotifyInBackground && !options?.force && !isHidden && !isTauriRuntime() && !isCapacitorRuntime()) {
     return;
   }
 
@@ -378,20 +417,7 @@ export function notifyRoomMemberPresence(
   const icon = "/icons/icon-192.png";
   const tag = `music-room-presence-${payload.nickname}-${payload.action}-${Date.now()}`;
 
-  if (isTauriRuntime()) {
-    void invokeTauri("plugin:notification|notify", {
-      options: {
-        title,
-        body,
-        icon
-      }
-    }).catch(() => {
-      sendWebNotification(title, body, icon, tag);
-    });
-    return;
-  }
-
-  sendWebNotification(title, body, icon, tag);
+  dispatchSystemToastNotification(title, body, icon, tag);
 }
 
 function sendWebNotification(title: string, body: string, icon?: string, tag = "music-room-now-playing") {
@@ -420,4 +446,3 @@ function sendWebNotification(title: string, body: string, icon?: string, tag = "
     // Some browsers require ServiceWorker registration for notifications
   }
 }
-

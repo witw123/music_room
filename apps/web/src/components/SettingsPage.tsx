@@ -28,9 +28,11 @@ import {
 import {
   queryNotificationPermissionState,
   requestNotificationPermission,
+  openMobileNotificationSettings,
   notifyTrackChange,
   type NotificationPermissionState
 } from "@/features/playback/system-notifications";
+import { isCapacitorRuntime } from "@/lib/desktop/tauri";
 import {
   getLocalAudioStorageState,
   requestLocalAudioDirectoryPermission,
@@ -414,14 +416,25 @@ export function SettingsPage({
                   ) : null}
                   {notificationPermission === "denied" ? (
                     <>
-                      <Button
-                        onClick={() => setShowNotificationHelp((prev) => !prev)}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        {showNotificationHelp ? "收起指引" : "解除拦截教程"}
-                      </Button>
+                      {isCapacitorRuntime() ? (
+                        <Button
+                          onClick={() => void openMobileNotificationSettings()}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          打开系统设置
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => setShowNotificationHelp((prev) => !prev)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          {showNotificationHelp ? "收起指引" : "解除拦截教程"}
+                        </Button>
+                      )}
                       <Button
                         onClick={() => void refreshPermissions()}
                         size="sm"

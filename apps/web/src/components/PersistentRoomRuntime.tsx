@@ -8,10 +8,19 @@ import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/domain/away-room";
 import { DesktopLyricsOverlay } from "@/components/DesktopLyricsOverlay";
 import { DesktopLyricsProvider } from "@/features/playback/desktop-lyrics-context";
 
+import { isCapacitorRuntime } from "@/lib/desktop/tauri";
+import { requestNotificationPermission } from "@/features/playback/system-notifications";
+
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const routeRoomId = resolveRoomRouteId(pathname);
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isCapacitorRuntime()) {
+      void requestNotificationPermission();
+    }
+  }, []);
 
   useEffect(() => {
     const syncAwayRoom = () => setAwayRoomId(readAwayRoomId());
