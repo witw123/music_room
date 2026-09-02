@@ -18,7 +18,7 @@ export const adminCsrfCookie = "music_room_admin_csrf";
 const adminAbsoluteTtlMs = 8 * 60 * 60 * 1000;
 const adminIdleTtlMs = 30 * 60 * 1000;
 
-type AdminPrincipal = { userId: string; username: string; nickname: string; role: "ADMIN"; csrfToken: string; expiresAt: Date };
+export type AdminPrincipal = { userId: string; username: string; nickname: string; role: "ADMIN"; csrfToken: string; expiresAt: Date };
 
 @Injectable()
 export class AdminService implements OnModuleInit, OnModuleDestroy {

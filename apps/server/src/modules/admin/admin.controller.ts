@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { AdminGuard } from "./admin.guard";
-import { AdminService, adminCsrfCookie, adminSessionCookie } from "./admin.service";
+import { AdminService, adminCsrfCookie, adminSessionCookie, type AdminPrincipal } from "./admin.service";
 
 @Controller("v1/admin")
 export class AdminController {
@@ -26,7 +26,7 @@ export class AdminController {
 
   @UseGuards(AdminGuard)
   @Get("session")
-  session(@Req() request: Request & { admin?: any }) { const admin = request.admin; return { userId: admin.userId, username: admin.username, nickname: admin.nickname, role: admin.role, expiresAt: admin.expiresAt.toISOString(), csrfToken: admin.csrfToken }; }
+  session(@Req() request: Request & { admin?: AdminPrincipal }) { const admin = request.admin!; return { userId: admin.userId, username: admin.username, nickname: admin.nickname, role: admin.role, expiresAt: admin.expiresAt.toISOString(), csrfToken: admin.csrfToken }; }
 
   @UseGuards(AdminGuard)
   @Get("overview") overview() { return this.admin.overview(); }
@@ -35,15 +35,15 @@ export class AdminController {
   @UseGuards(AdminGuard)
   @Get("rooms/:roomId") room(@Param("roomId") roomId: string) { return this.admin.roomDetail(roomId); }
   @UseGuards(AdminGuard)
-  @Post("rooms/:roomId/terminate") terminate(@Param("roomId") roomId: string, @Body() body: { reason: string; expectedJoinCode: string }, @Req() request: Request & { admin?: any }) { return this.admin.terminateRoom(request.admin, roomId, body, request); }
+  @Post("rooms/:roomId/terminate") terminate(@Param("roomId") roomId: string, @Body() body: { reason: string; expectedJoinCode: string }, @Req() request: Request & { admin?: AdminPrincipal }) { return this.admin.terminateRoom(request.admin!, roomId, body, request); }
   @UseGuards(AdminGuard)
   @Get("users") users(@Query() query: { q?: string; limit?: string }) { return this.admin.listUsers({ q: query.q, limit: Number(query.limit) || 50 }); }
   @UseGuards(AdminGuard)
   @Get("users/:userId") user(@Param("userId") userId: string) { return this.admin.userDetail(userId); }
   @UseGuards(AdminGuard)
-  @Patch("users/:userId/status") status(@Param("userId") userId: string, @Body() body: unknown, @Req() request: Request & { admin?: any }) { return this.admin.setUserStatus(request.admin, userId, body, request); }
+  @Patch("users/:userId/status") status(@Param("userId") userId: string, @Body() body: unknown, @Req() request: Request & { admin?: AdminPrincipal }) { return this.admin.setUserStatus(request.admin!, userId, body, request); }
   @UseGuards(AdminGuard)
-  @Post("users/:userId/sessions/revoke") revoke(@Param("userId") userId: string, @Body() body: { reason: string }, @Req() request: Request & { admin?: any }) { return this.admin.revokeUserSessions(request.admin, userId, body.reason, request); }
+  @Post("users/:userId/sessions/revoke") revoke(@Param("userId") userId: string, @Body() body: { reason: string }, @Req() request: Request & { admin?: AdminPrincipal }) { return this.admin.revokeUserSessions(request.admin!, userId, body.reason, request); }
   @UseGuards(AdminGuard)
   @Get("incidents") incidents(@Query("limit") limit?: string) { return this.admin.listIncidents(Number(limit) || 50); }
   @UseGuards(AdminGuard)
