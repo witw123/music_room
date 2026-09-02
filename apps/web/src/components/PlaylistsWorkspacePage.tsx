@@ -1748,7 +1748,7 @@ function PlaylistEditorDialog({
   const titleId = `create-${kind}-playlist-title`;
   return createPortal(
     <div
-      className="light-overlay-scrim fixed inset-0 z-[var(--z-modal)] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
+      className="light-modal-scrim z-[var(--z-modal)]"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onCancel();
@@ -1887,7 +1887,7 @@ function DeletePlaylistDialog({ kind, playlist, pending, onConfirm, onCancel }: 
   const label = kind === "local" ? "本地歌单" : "网络歌单";
   return createPortal(
     <div
-      className="light-overlay-scrim fixed inset-0 z-[var(--z-modal)] flex items-start justify-center overflow-y-auto bg-black/75 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
+      className="light-modal-scrim z-[var(--z-modal)]"
       onClick={(event) => {
         if (!pending && event.target === event.currentTarget) {
           onCancel();

@@ -1298,3 +1298,27 @@
   --z-modal-high: 501;
   --z-max: 9999;
 }
+
+/* Modal scrim + dialog surfaces: one class instead of seven copies of the
+   same long safe-area utility chain. */
+.light-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  background: rgb(0 0 0 / 0.75);
+  backdrop-filter: blur(4px);
+  padding-top: calc(1rem + env(safe-area-inset-top));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  padding-inline: 1rem;
+}
+
+@media (min-width: 640px) {
+  .light-modal-scrim {
+    align-items: center;
+    padding: 1.5rem;
+  }
+}

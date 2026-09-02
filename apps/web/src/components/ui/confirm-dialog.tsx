@@ -41,7 +41,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="light-overlay-scrim fixed inset-0 z-[500] flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
+      className="light-modal-scrim z-[var(--z-modal)]"
       role="presentation"
       onClick={(event) => {
         if (!pending && event.target === event.currentTarget) {
