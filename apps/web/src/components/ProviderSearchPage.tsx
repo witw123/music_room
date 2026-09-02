@@ -4,22 +4,18 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   NeteaseAccountStatus,
-  NeteaseTrackCandidate,
   ProviderAlbumDetail,
   ProviderAlbumSummary,
   ProviderPlaylistDetail,
   ProviderPlaylistSummary,
-  QqMusicAccountStatus,
-  QqMusicTrackCandidate
+  QqMusicAccountStatus
 } from "@music-room/shared";
-import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   isLocalPlaylistMirror
 } from "@/features/playlist/local-playlist-database";
-import { formatDuration } from "@/lib/domain/music-room-ui";
 import {
   ensureDefaultLocalPlaylist,
   getDefaultLocalPlaylistTrackIds,
@@ -41,13 +37,10 @@ import { cacheProviderTrackForPlayback } from "@/features/playback/provider-trac
 import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import { ProviderAlbumDetailView, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
+import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
+import type { ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
-import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
-import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   getCachedFavorites,
@@ -57,9 +50,18 @@ import {
 } from "@/features/workspace/page-data-cache";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { rankSearchResultsWithPersonalization } from "@/features/personalization/rank-search-results";
+import {
+  SongsResults,
+  PlaylistsContent,
+  AlbumsContent,
+  SearchTab,
+  Icon,
+  albumKey,
+  toProviderErrorMessage,
+  type Provider,
+  type Track
+} from "@/components/provider-search";
 
-type Provider = "netease" | "qqmusic";
-type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
 
@@ -894,257 +896,4 @@ export function ProviderSearchPage({
       {playlistPicker}
     </main>
   );
-}
-
-function SongsResults({
-  results,
-  pending,
-  localTracks,
-  onAlbum,
-  onDownload,
-  onImportPlaylist,
-  isFavorite,
-  isTogglingFavorite,
-  onToggleFavorite
-}: {
-  results: Track[];
-  pending: string | null;
-  localTracks: LocalPlaylistTrackRecord[];
-  onAlbum: (track: Track) => Promise<void>;
-  onDownload: (track: Track) => Promise<void>;
-  onImportPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => Promise<void>;
-  isFavorite: (track: Track) => boolean;
-  isTogglingFavorite: (track: Track) => boolean;
-  onToggleFavorite: (track: Track) => void;
-}) {
-  return (
-    <section className="mt-7">
-      {results.length ? <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
-        <div className="hidden grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_64px] gap-3 border-b border-white/[0.08] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 md:grid">
-          <span>#</span><span>单曲</span><span>歌手</span><span>专辑</span><span>时长</span><span className="text-right">操作</span>
-        </div>
-        {results.map((track, index) => (
-          <article className="grid gap-3 border-b border-white/[0.07] px-4 py-4 last:border-0 md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_64px] md:items-center md:gap-3 md:px-5" key={`${track.provider}-${track.providerTrackId}`}>
-            <span className="hidden text-sm tabular-nums text-white/25 md:block">{String(index + 1).padStart(2, "0")}</span>
-            <div className="flex min-w-0 items-center gap-3">
-              <Artwork alt={track.album ?? track.title} src={track.artworkUrl} size="sm" />
-              <div className="min-w-0">
-                <h3 className="truncate text-sm font-medium text-white/90">{track.title}</h3>
-                <p className="mt-1 flex min-w-0 items-center gap-1 truncate text-xs text-white/40 md:hidden">{track.artist}<span aria-hidden="true">·</span><TrackAlbumLink pending={pending} track={track} onAlbum={onAlbum} /></p>
-              </div>
-            </div>
-            <span className="hidden truncate text-xs text-white/55 md:block">{track.artist}</span>
-            <TrackAlbumLink className="hidden truncate text-xs md:block" pending={pending} track={track} onAlbum={onAlbum} />
-            <span className="hidden text-xs tabular-nums text-white/35 md:block">{formatDuration(track.durationMs)}</span>
-            <div className="flex items-center justify-start md:justify-end">
-              {(() => {
-                const downloaded = localTracks.some((item) =>
-                  item.provider === track.provider &&
-                  item.providerTrackId === track.providerTrackId &&
-                  item.availableOffline
-                );
-                const downloading = pending === `download:${track.provider}:${track.providerTrackId}`;
-                return (
-                  <Button
-                    aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
-                    className="h-10 w-10"
-                    disabled={pending !== null || downloaded || downloading}
-                    onClick={() => void onDownload(track)}
-                    size="icon"
-                    title={downloaded ? "已下载" : downloading ? "下载中" : "下载到本地歌单"}
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Icon name={downloading ? "loading" : "download"} />
-                  </Button>
-                );
-              })()}
-              <Button aria-label={`加入歌单 ${track.title}`} disabled={pending !== null} onClick={(event) => void onImportPlaylist(track, getAnchoredDialogAnchor(event.currentTarget))} size="icon" title="加入歌单" variant="ghost" type="button"><Icon name="playlist-add" /></Button>
-              <FavoriteTrackButton isFavorite={isFavorite(track)} onToggle={() => onToggleFavorite(track)} pending={isTogglingFavorite(track)} track={track} />
-            </div>
-          </article>
-        ))}
-      </div> : <SearchEmptyState title="还没有搜索结果" description="输入关键词后按回车开始搜索。" />}
-    </section>
-  );
-}
-
-function TrackAlbumLink({ track, pending, onAlbum, className = "" }: { track: Track; pending: string | null; onAlbum: (track: Track) => Promise<void>; className?: string }) {
-  if (!track.album) return <span className={`${className} text-white/30`}>未知专辑</span>;
-  return <button className={`${className} truncate text-left text-accent/80 transition hover:text-accent`} disabled={pending !== null} onClick={() => void onAlbum(track)} title={`查看专辑 ${track.album}`} type="button">{track.album}</button>;
-}
-
-function PlaylistsContent({
-  playlists,
-  playlist,
-  pending,
-  onBack,
-  onOpen,
-  onSave,
-  trackActions
-}: {
-  playlists: ProviderPlaylistSummary[];
-  playlist: ProviderPlaylistDetail | null;
-  pending: string | null;
-  onBack: () => void;
-  onOpen: (item: ProviderPlaylistSummary) => Promise<void>;
-  onSave: (playlist: ProviderPlaylistDetail) => Promise<void>;
-  trackActions: ProviderAlbumTrackActions;
-}) {
-  if (playlist) {
-    return (
-      <ProviderPlaylistDetailView
-        isFavorite={false}
-        onBack={onBack}
-        onToggleFavorite={() => onSave(playlist)}
-        pending={pending}
-        playlist={playlist}
-        trackActions={trackActions}
-      />
-    );
-  }
-
-  return (
-    <section className="mt-7">
-      {playlists.length ? (
-        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {playlists.map((item) => (
-            <button
-              className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 p-2 sm:p-2.5 text-left transition duration-200 hover:border-accent/40 hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              key={`${item.provider}-${item.providerPlaylistId}`}
-              onClick={() => void onOpen(item)}
-              type="button"
-            >
-              <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface">
-                <Artwork alt={item.title} src={item.artworkUrl} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" size="lg" />
-              </div>
-              <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-white/85 group-hover:text-accent transition-colors" title={item.title}>
-                {item.title}
-              </span>
-              <span className="mt-0.5 block truncate text-[11px] text-white/40">
-                {item.creatorName ?? "网络歌单"} · {item.trackCount} 首
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <SearchEmptyState title="还没有歌单结果" description="在搜索框输入关键词，再打开歌单标签。" />
-      )}
-    </section>
-  );
-}
-
-function AlbumsContent({
-  albums,
-  album,
-  pending,
-  favoriteAlbumIds,
-  onOpen,
-  onBack,
-  onToggleFavorite,
-  onAddAlbumToPlaylist,
-  trackActions
-}: {
-  albums: ProviderAlbumSummary[];
-  album: ProviderAlbumDetail | null;
-  pending: string | null;
-  favoriteAlbumIds: Set<string>;
-  onOpen: (item: ProviderAlbumSummary) => Promise<void>;
-  onBack: () => void;
-  onToggleFavorite: (album: ProviderAlbumSummary | ProviderAlbumDetail) => Promise<void>;
-  onAddAlbumToPlaylist: (album: ProviderAlbumDetail, anchor: AnchoredDialogAnchor) => void;
-  trackActions: ProviderAlbumTrackActions;
-}) {
-  if (album) {
-    const favoriteId = albumKey(album.provider, album.providerAlbumId);
-    return (
-      <ProviderAlbumDetailView
-        album={album}
-        isFavorite={favoriteAlbumIds.has(favoriteId)}
-        onBack={onBack}
-        onToggleFavorite={() => onToggleFavorite(album)}
-        pending={pending}
-        onAddAlbumToPlaylist={(anchor) => onAddAlbumToPlaylist(album, anchor)}
-        trackActions={trackActions}
-      />
-    );
-  }
-
-  return (
-    <section className="mt-7">
-      {albums.length ? (
-        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {albums.map((item) => {
-            const favoriteId = albumKey(item.provider, item.providerAlbumId);
-            return (
-              <article className="group flex flex-col min-w-0 rounded-2xl border border-white/[0.08] bg-black/40 p-2 sm:p-2.5 transition duration-200 hover:border-accent/40 hover:bg-white/[0.05]" key={`${item.provider}-${item.providerAlbumId}`}>
-                <button className="block w-full overflow-hidden text-left focus-visible:outline-none" onClick={() => void onOpen(item)} type="button">
-                  <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface">
-                    <Artwork alt={item.title} src={item.artworkUrl} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" size="lg" />
-                  </div>
-                  <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-white/85 group-hover:text-accent transition-colors" title={item.title}>{item.title}</span>
-                  <span className="mt-0.5 block truncate text-[11px] text-white/40">{item.artist}</span>
-                </button>
-                <button
-                  aria-label={favoriteAlbumIds.has(favoriteId) ? `取消收藏${item.title}` : `收藏${item.title}`}
-                  className={`mt-2 flex items-center gap-1.5 px-1 text-xs transition ${favoriteAlbumIds.has(favoriteId) ? "text-accent" : "text-white/40 hover:text-white/70"}`}
-                  disabled={pending !== null}
-                  onClick={() => void onToggleFavorite(item)}
-                  type="button"
-                >
-                  <Icon name="heart" filled={favoriteAlbumIds.has(favoriteId)} />
-                  {favoriteAlbumIds.has(favoriteId) ? "已收藏" : "收藏"}
-                </button>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <SearchEmptyState title="还没有专辑结果" description="在搜索框输入关键词，再打开专辑标签。" />
-      )}
-    </section>
-  );
-}
-
-function albumKey(provider: Provider, providerAlbumId: string) {
-  return `${provider}:${providerAlbumId}`;
-}
-
-function SearchTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
-  return <button aria-selected={active} className={`relative min-h-11 px-1 pb-3 text-sm font-semibold transition ${active ? "text-white" : "text-white/40 hover:text-white/70"}`} onClick={onClick} role="tab" type="button">{children}{active ? <span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /> : null}</button>;
-}
-
-function Artwork({ alt, src, size, className = "" }: { alt: string; src: string | null | undefined; size: "sm" | "md" | "lg"; className?: string }) {
-  const sizes = { sm: "h-10 w-10 rounded-lg", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
-  // External provider artwork is intentionally rendered without Next image optimization.
-  // eslint-disable-next-line @next/next/no-img-element
-  return src ? <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={getArtworkSourceUrl(src)} /> : <span aria-label={alt} className={`flex items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-white/25 ${sizes[size]} ${className}`}><Icon name="music" /></span>;
-}
-
-function SearchEmptyState({ title, description }: { title: string; description: string }) {
-  return <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center"><Icon name="search" /><p className="mt-4 text-sm font-medium text-white/60">{title}</p><p className="mt-2 text-xs text-white/30">{description}</p></div>;
-}
-
-function Icon({ name, filled = false }: { name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add" | "download" | "loading"; filled?: boolean }) {
-  const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: filled ? "currentColor" : "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  if (name === "search") return <svg {...common}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>;
-  if (name === "heart") return <svg {...common}><path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" /></svg>;
-  if (name === "playlist-add") return <svg {...common}><path d="M4 5.5h10M4 9.5h10M4 13.5h6" /><path d="M17 13v7M13.5 16.5h7" /></svg>;
-  if (name === "download") return <svg {...common}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>;
-  if (name === "loading") return <svg {...common} className="animate-spin"><path d="M12 3a9 9 0 1 0 9 9" /></svg>;
-  if (name === "arrow-left") return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></svg>;
-  if (name === "close") return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
-  if (name === "chevron-right") return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
-  return <svg {...common}><path d="M4 19.5V5.8a1.8 1.8 0 0 1 2.4-1.7l12 4.5a1.8 1.8 0 0 1 1.2 1.7v8.2" /><circle cx="8" cy="19" r="2.5" /><circle cx="18" cy="17" r="2.5" /></svg>;
-}
-
-function toProviderErrorMessage(error: unknown, provider: Provider) {
-  if (error instanceof MusicRoomApiError) {
-    if (error.code === "NETEASE_ACCOUNT_REQUIRED" || error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "请先在我的页面绑定对应平台账号。";
-    if (error.code === "NETEASE_AUTH_EXPIRED" || error.code === "QQMUSIC_AUTH_EXPIRED") return "平台登录已失效，请回我的页面重新绑定。";
-    if (error.code === "NETEASE_DISABLED" || error.code === "QQMUSIC_DISABLED") return "该音乐平台当前未启用。";
-    if (error.code === "QQMUSIC_TRACK_NOT_FOUND") return "该歌曲没有可用的公开音频，可能受到 VIP 或版权限制；免费歌曲也无法播放时请重新绑定 QQ 音乐。";
-    return error.message;
-  }
-  return error instanceof Error ? error.message : `${provider === "netease" ? "网易云" : "QQ 音乐"}操作失败，请稍后重试。`;
 }
