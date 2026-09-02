@@ -1,5 +1,4 @@
-import * as qqMusicServices from "@sansenjian/qq-music-api/services";
-import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getLyric, getMusicPlay, getQQLoginQr, getSearchByKey, getUserPlaylists, songListDetail } from "@sansenjian/qq-music-api/services";
+import { checkQQLoginQr, getAlbumInfo, getAlbumSongs, getMusicPlay, getQQLoginQr, getSearchByKey, getUserDetail, getUserPlaylists, songListDetail } from "@sansenjian/qq-music-api/services";
 import { QqMusicApiClient } from "./qqmusic-api.client";
 import { fetchProviderUrl } from "../provider-fetch";
 
@@ -23,12 +22,11 @@ const mockedGetQQLoginQr = getQQLoginQr as jest.MockedFunction<typeof getQQLogin
 const mockedCheckQQLoginQr = checkQQLoginQr as jest.MockedFunction<typeof checkQQLoginQr>;
 const mockedGetSearchByKey = getSearchByKey as jest.MockedFunction<typeof getSearchByKey>;
 const mockedGetMusicPlay = getMusicPlay as jest.MockedFunction<typeof getMusicPlay>;
-const _mockedGetLyric = getLyric as jest.MockedFunction<typeof getLyric>;
 const mockedGetUserPlaylists = getUserPlaylists as jest.MockedFunction<typeof getUserPlaylists>;
 const mockedSongListDetail = songListDetail as jest.MockedFunction<typeof songListDetail>;
 const mockedGetAlbumInfo = getAlbumInfo as jest.MockedFunction<typeof getAlbumInfo>;
 const mockedGetAlbumSongs = getAlbumSongs as jest.MockedFunction<typeof getAlbumSongs>;
-const mockedGetUserDetail = (qqMusicServices as unknown as { getUserDetail: jest.Mock }).getUserDetail;
+const mockedGetUserDetail = getUserDetail as unknown as jest.Mock;
 const mockedFetchProviderUrl = fetchProviderUrl as jest.MockedFunction<typeof fetchProviderUrl>;
 
 describe("QqMusicApiClient", () => {

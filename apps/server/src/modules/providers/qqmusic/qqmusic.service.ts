@@ -251,15 +251,15 @@ export class QqMusicService {
     }
     const body = await this.callProvider(() => this.api.getUserPlaylists({ userId: account.qqMusicUserId!, ...query, cookie }));
     const data = asRecord(body.data);
-    const records = Array.isArray(data?.playlists)
-      ? data.playlists
-      : Array.isArray(data?.list)
-        ? data.list
-      : Array.isArray(body.playlists)
-        ? body.playlists
-        : Array.isArray(asRecord(data?.mydiss)?.list)
-          ? asRecord(data?.mydiss)?.list
-          : [];
+    const candidateLists: unknown[] = [
+      data?.playlists,
+      data?.list,
+      body.playlists,
+      asRecord(data?.mydiss)?.list
+    ];
+    const records = candidateLists.find(
+      (candidate): candidate is unknown[] => Array.isArray(candidate)
+    ) ?? [];
     return {
       items: records
         .map((item: unknown) => this.toPlaylistSummary(item))
@@ -578,10 +578,10 @@ export class QqMusicService {
   private maxImportBytes() { const value = Number(process.env.QQMUSIC_MAX_IMPORT_BYTES ?? 209_715_200); return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 209_715_200; }
   private maxArtworkBytes() { const value = Number(process.env.QQMUSIC_MAX_ARTWORK_BYTES ?? 10_485_760); return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 10_485_760; }
 }
-function asRecord(value: unknown): Record<string, any> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null; }
+function asRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function readString(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" && value.trim() ? value.trim() : null; }
 
-function readProviderTags(playlist: Record<string, any>) {
+function readProviderTags(playlist: Record<string, unknown>) {
   const values = [
     playlist.tags,
     playlist.tag,
@@ -607,7 +607,7 @@ function readProviderTags(playlist: Record<string, any>) {
   }).filter((value): value is string => !!value);
   return [...new Set(tags)].slice(0, 20);
 }
-function readQqTrackId(record: Record<string, any>) {
+function readQqTrackId(record: Record<string, unknown>) {
   const mid = readString(record.songmid ?? record.songMid ?? record.song_mid ?? record.mid);
   if (mid) return mid;
   const legacyId = readString(record.songId ?? record.songid ?? record.id);
@@ -615,7 +615,7 @@ function readQqTrackId(record: Record<string, any>) {
 }
 function findFirstArray(value: unknown, keys: string[]) {
   const queue = [value];
-  const visited = new Set<Record<string, any>>();
+  const visited = new Set<Record<string, unknown>>();
   while (queue.length > 0) {
     const record = asRecord(queue.shift());
     if (!record || visited.has(record)) continue;
@@ -634,7 +634,7 @@ function findFirstArray(value: unknown, keys: string[]) {
 }
 function readTrackArray(value: unknown): unknown[] {
   const queue = [value];
-  const visited = new Set<Record<string, any>>();
+  const visited = new Set<Record<string, unknown>>();
   let emptyList: unknown[] = [];
   while (queue.length > 0) {
     const current = queue.shift();
@@ -658,9 +658,9 @@ function readTrackArray(value: unknown): unknown[] {
   }
   return emptyList;
 }
-function readFirstRecord(value: unknown, keys: string[]): Record<string, any> | null {
+function readFirstRecord(value: unknown, keys: string[]): Record<string, unknown> | null {
   const queue = [value];
-  const visited = new Set<Record<string, any>>();
+  const visited = new Set<Record<string, unknown>>();
   while (queue.length > 0) {
     const current = queue.shift();
     const record = asRecord(current);
@@ -669,7 +669,7 @@ function readFirstRecord(value: unknown, keys: string[]): Record<string, any> | 
     for (const key of keys) {
       const candidate = record[key];
       if (Array.isArray(candidate)) {
-        const item = candidate.map(asRecord).find((entry): entry is Record<string, any> => !!entry);
+        const item = candidate.map(asRecord).find((entry): entry is Record<string, unknown> => !!entry);
         if (item) return item;
       } else if (asRecord(candidate)) {
         const candidateRecord = asRecord(candidate);
@@ -686,7 +686,7 @@ function readFirstRecord(value: unknown, keys: string[]): Record<string, any> | 
   }
   return null;
 }
-function hasPlaylistIdentity(value: Record<string, any>) {
+function hasPlaylistIdentity(value: Record<string, unknown>) {
   return ["dissid", "disstid", "dissId", "dissID", "playlistId", "tid", "id", "dissname", "name", "title"]
     .some((key) => readString(value[key]) !== null);
 }
@@ -704,7 +704,7 @@ function readHttpUrl(...values: unknown[]) {
   }
   return null;
 }
-function unwrapData(value: unknown): Record<string, any> | null {
+function unwrapData(value: unknown): Record<string, unknown> | null {
   const record = asRecord(value);
   if (!record) return null;
   const data = asRecord(record.data);
