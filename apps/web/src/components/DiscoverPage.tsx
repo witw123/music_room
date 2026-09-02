@@ -3,20 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ProviderPlaylistDetail,
-  ProviderPlaylistSummary,
   ProviderTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
-import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
+import { type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
 import { ProviderSearchPage } from "@/components/ProviderSearchPage";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
-import { providerDisplayName } from "@/lib/domain/provider-labels";
-import { getProfileProviderRecommendations, type DiscoverPlaylistRecommendation, type DiscoverTrackRecommendation, type ProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+import { getProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
@@ -41,40 +38,39 @@ import {
   setCachedDiscoverData,
   invalidateDiscoverDataCache
 } from "@/features/workspace/page-data-cache";
-
 import {
   SparklesIcon,
   CompassIcon as DiscoverCompassIcon,
   SlidersIcon,
   MicIcon,
-  VolumeIcon,
-  ZapIcon,
-  SakuraIcon,
-  LaptopIcon,
-  MoonIcon,
-  LandmarkIcon,
   PlayIcon
 } from "@/components/icons/DiscoverIcons";
-import { TasteColdStartDialog } from "@/components/discovery/TasteColdStartDialog";
-
-type Provider = "netease" | "qqmusic";
-type Track = ProviderTrackCandidate;
-type DiscoverData = ProfileProviderRecommendations;
-type Detail = { summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail };
-type DiscoverPlaylistCard = DiscoverPlaylistRecommendation & {
-  tracks?: Track[];
-};
-
-const genreFilterPills = [
-  { id: "all", label: "全部", icon: SparklesIcon },
-  { id: "pop", label: "流行", icon: MicIcon, keywords: ["流行", "pop", "主打"] },
-  { id: "rock", label: "摇滚", icon: VolumeIcon, keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk"] },
-  { id: "electronic", label: "电子", icon: ZapIcon, keywords: ["电子", "edm", "house", "techno", "电音", "synth"] },
-  { id: "acg", label: "ACG", icon: SakuraIcon, keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop"] },
-  { id: "focus", label: "专注", icon: LaptopIcon, keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音"] },
-  { id: "night", label: "夜听", icon: MoonIcon, keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul"] },
-  { id: "guofeng", label: "国风", icon: LandmarkIcon, keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式"] }
-];
+import {
+  TasteColdStartDialog,
+  DiscoverSection,
+  DiscoverArtistRail,
+  DiscoverPlaylistRail,
+  MoodStationRail,
+  PlaylistPicker,
+  Feedback,
+  DiscoverEmptyState,
+  DiscoverSkeleton,
+  AppPageBackground,
+  genreFilterPills,
+  buildCuratedPlaylistCards,
+  extractDiscoverArtists,
+  getTimeContext,
+  providerTrackKey,
+  providerPlaylistKey,
+  toPlaylistTrackActions,
+  toErrorMessage,
+  moodStations,
+  type Track,
+  type DiscoverData,
+  type Detail,
+  type DiscoverPlaylistCard,
+  type DiscoverTrackActions
+} from "@/components/discovery";
 
 export function DiscoverPage() {
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/discover" });
@@ -395,8 +391,6 @@ export function DiscoverPage() {
       const full = playlist.provider === "netease"
         ? await musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
         : await musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId);
-      // A slower earlier request must not overwrite the detail the user asked
-      // for last; the version check mirrors the list loader above.
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
       setDetail({
         summary: playlist,
@@ -445,14 +439,14 @@ export function DiscoverPage() {
     );
   }
 
-  const activeFilter = genreFilterPills.find((p) => p.id === activeFilterId);
+  const activeFilter = genreFilterPills.find((pill) => pill.id === activeFilterId);
   const matchesFilter = (text: string) => {
-    if (!activeFilter || activeFilter.id === "all" || !activeFilter.keywords) return true;
+    if (!activeFilter || activeFilter.id === "all") return true;
     const lower = text.toLowerCase();
-    return activeFilter.keywords.some((kw) => lower.includes(kw.toLowerCase()));
+    return (activeFilter.keywords ?? []).some((kw) => lower.includes(kw.toLowerCase()));
   };
 
-  const filterTrackList = (list: DiscoverTrackRecommendation[]) => {
+  const filterTrackList = (list: { candidate: Track; reasons: string[] }[]) => {
     if (activeFilterId === "all") return list;
     return list.filter((item) =>
       matchesFilter(item.candidate.title) ||
@@ -517,7 +511,7 @@ export function DiscoverPage() {
       );
       const matched = uniquePool.filter((track) => {
         const text = `${track.title} ${track.artist} ${track.album ?? ""} ${(track.tags ?? []).join(" ")}`.toLowerCase();
-        return station.keywords.some((kw) => text.includes(kw.toLowerCase()));
+        return (station.keywords ?? []).some((kw) => text.includes(kw.toLowerCase()));
       });
       const tracksToPlay = matched.length > 0 ? matched : uniquePool;
       if (tracksToPlay.length > 0) {
@@ -772,520 +766,4 @@ export function DiscoverPage() {
       />
     </main>
   );
-}
-
-type DiscoverTrackActions = {
-  pending: string | null;
-  isFavorite: (track: Track) => boolean;
-  isFavoritePending: (track: Track) => boolean;
-  isDownloaded: (track: Track) => boolean;
-  isQueued: (track: Track) => boolean;
-  onPlay: (track: Track) => void;
-  onQueue: (track: Track) => void;
-  onDownload: (track: Track) => void;
-  onAddToPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => void;
-  onStartRadio: (track: Track) => void;
-  onToggleFavorite: (track: Track) => void;
-  onFeedback: (track: Track, action: "not-interested" | "exclude-from-profile") => void;
-};
-
-type DiscoverArtistItem = {
-  artistName: string;
-  representativeTrack: Track;
-  artworkUrl: string | null;
-  trackCount: number;
-  reason: string;
-};
-
-function extractDiscoverArtists(data: ProfileProviderRecommendations): DiscoverArtistItem[] {
-  const map = new Map<string, DiscoverArtistItem>();
-  const candidates = [...data.familiarArtists, ...data.forYou];
-  for (const item of candidates) {
-    const artist = item.candidate.artist?.trim();
-    if (!artist) continue;
-    if (!map.has(artist)) {
-      map.set(artist, {
-        artistName: artist,
-        representativeTrack: item.candidate,
-        artworkUrl: item.candidate.artworkUrl ?? null,
-        trackCount: 1,
-        reason: item.reasons[0] ?? "常听歌手"
-      });
-    } else {
-      map.get(artist)!.trackCount += 1;
-    }
-  }
-  return Array.from(map.values()).slice(0, 8);
-}
-
-function DiscoverArtistRail({
-  artists,
-  onStartRadio,
-  pending
-}: {
-  artists: DiscoverArtistItem[];
-  onStartRadio: (track: Track) => Promise<void>;
-  pending: string | null;
-}) {
-  if (!artists.length) return null;
-  return (
-    <DiscoverSection
-      title="常听歌手与单曲漫游"
-      subtitle="基于你的听歌画像，一键开启专属风格电台漫游"
-      icon={<MicIcon className="w-5 h-5 text-accent" />}
-    >
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        {artists.map((item) => {
-          return (
-            <button
-              key={item.artistName}
-              type="button"
-              disabled={pending !== null}
-              onClick={() => void onStartRadio(item.representativeTrack)}
-              className="group flex flex-col items-center text-center p-3 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 hover:border-white/[0.14] hover:bg-[#181a26]/90 transition-all hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent shadow-sm"
-              title={`开启 ${item.artistName} 专属漫游`}
-            >
-              <div className="relative aspect-square w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden bg-surface-elevated border-2 border-white/10 shadow-md group-hover:border-accent transition-all">
-                <Artwork
-                  alt={item.artistName}
-                  className="h-full w-full object-cover block transition duration-300 group-hover:scale-110"
-                  src={item.artworkUrl}
-                />
-                <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/35" />
-                <span className="absolute inset-0 flex items-center justify-center text-white opacity-0 transition group-hover:opacity-100 scale-90 group-hover:scale-100">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-[0_2px_10px_var(--accent-glow)]">
-                    <PlayIcon className="w-3.5 h-3.5 ml-0.5" />
-                  </span>
-                </span>
-              </div>
-              <p className="mt-2.5 truncate w-full text-xs font-semibold text-white group-hover:text-accent transition-colors">
-                {item.artistName}
-              </p>
-              <p className="mt-0.5 truncate w-full text-[10px] text-foreground-muted">
-                {item.reason}
-              </p>
-            </button>
-          );
-        })}
-      </div>
-    </DiscoverSection>
-  );
-}
-
-const moodStations = [
-  {
-    id: "night",
-    title: "深夜私享",
-    subtitle: "慢调 R&B · 治愈微醺",
-    keywords: ["夜听", "深夜", "治愈", "r&b", "soul", "放空"],
-    gradient: "from-indigo-950/70 via-purple-950/80 to-[#0b0c14]",
-    border: "border-purple-500/20",
-    badge: "#a855f7",
-    icon: MoonIcon
-  },
-  {
-    id: "focus",
-    title: "深度专注",
-    subtitle: "Lo-Fi 器乐 · 静谧流淌",
-    keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "钢琴"],
-    gradient: "from-blue-950/70 via-slate-900/80 to-[#0b0c14]",
-    border: "border-sky-500/20",
-    badge: "#38bdf8",
-    icon: LaptopIcon
-  },
-  {
-    id: "energy",
-    title: "律动充能",
-    subtitle: "电子节拍 · 摇滚能量",
-    keywords: ["电子", "edm", "摇滚", "rock", "舞曲", "能量"],
-    gradient: "from-rose-950/70 via-orange-950/80 to-[#0b0c14]",
-    border: "border-rose-500/20",
-    badge: "#f43f5e",
-    icon: ZapIcon
-  },
-  {
-    id: "morning",
-    title: "清新晨光",
-    subtitle: "不插电民谣 · 元气苏醒",
-    keywords: ["民谣", "清新", "吉他", "流行", "晨光"],
-    gradient: "from-emerald-950/70 via-teal-950/80 to-[#0b0c14]",
-    border: "border-emerald-500/20",
-    badge: "#10b981",
-    icon: MicIcon
-  },
-  {
-    id: "acg",
-    title: "次元幻想",
-    subtitle: "ACG 燃曲 · 异次元羁绊",
-    keywords: ["acg", "anime", "二次元", "动漫", "游戏", "j-pop"],
-    gradient: "from-fuchsia-950/70 via-pink-950/80 to-[#0b0c14]",
-    border: "border-fuchsia-500/20",
-    badge: "#ec4899",
-    icon: SakuraIcon
-  },
-  {
-    id: "guofeng",
-    title: "华夏国韵",
-    subtitle: "丝竹戏腔 · 仙侠古意",
-    keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式"],
-    gradient: "from-amber-950/70 via-red-950/80 to-[#0b0c14]",
-    border: "border-amber-500/20",
-    badge: "#f59e0b",
-    icon: LandmarkIcon
-  }
-];
-
-function MoodStationRail({
-  onPlayStation,
-  pending
-}: {
-  onPlayStation: (station: (typeof moodStations)[0]) => Promise<void>;
-  pending: string | null;
-}) {
-  return (
-    <DiscoverSection
-      title="全天候情境与情绪电台"
-      subtitle="随时随刻，一键切入当前心情与氛围的最佳节拍"
-      icon={<ZapIcon className="w-5 h-5 text-accent" />}
-    >
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
-        {moodStations.map((station) => {
-          const IconComp = station.icon;
-          const isPending = pending === `mood:${station.id}`;
-          return (
-            <button
-              key={station.id}
-              type="button"
-              disabled={pending !== null}
-              onClick={() => void onPlayStation(station)}
-              className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border ${station.border} bg-gradient-to-br ${station.gradient} p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent min-h-[110px] shadow-sm`}
-            >
-              <div className="flex items-center justify-between">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.08] backdrop-blur-md border border-white/10"
-                  style={{ color: station.badge }}
-                >
-                  <IconComp className="w-4 h-4" />
-                </div>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white opacity-80 group-hover:bg-accent group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
-                  {isPending ? (
-                    <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <PlayIcon className="w-3.5 h-3.5 ml-0.5" />
-                  )}
-                </span>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm font-bold text-white group-hover:text-accent transition-colors">
-                  {station.title}
-                </p>
-                <p className="mt-0.5 text-[11px] text-foreground-muted truncate">
-                  {station.subtitle}
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </DiscoverSection>
-  );
-}
-
-function DiscoverSection({ title, subtitle, icon, children }: { title: string; subtitle?: string; icon?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="mt-10 sm:mt-12">
-      <div className="mb-4">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">{title}</h2>
-        </div>
-        {subtitle ? <p className="mt-1 text-xs text-foreground-muted">{subtitle}</p> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function getTimeContext() {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 11) {
-    return {
-      greeting: "清晨时光",
-      badge: "晨光清醒",
-      subtitle: "用元气旋律唤醒灵感，开启清爽充沛的一天。"
-    };
-  }
-  if (hour >= 11 && hour < 14) {
-    return {
-      greeting: "正午小憩",
-      badge: "午后放松",
-      subtitle: "轻快旋律伴你舒缓身心，享受片刻惬意闲适。"
-    };
-  }
-  if (hour >= 14 && hour < 18) {
-    return {
-      greeting: "午后专注",
-      badge: "工作专注",
-      subtitle: "沉浸式器乐与流动节拍，提升思考与专注效率。"
-    };
-  }
-  if (hour >= 18 && hour < 22) {
-    return {
-      greeting: "傍晚微醺",
-      badge: "晚间放松",
-      subtitle: "卸下一天的疲惫，在律动与温润声线中归于平静。"
-    };
-  }
-  return {
-    greeting: "深夜私享",
-    badge: "夜听疗愈",
-    subtitle: "漫漫长夜，用温柔纯净的声响陪伴静谧思绪。"
-  };
-}
-
-function DiscoverPlaylistRail({ items, onOpen, loadingKey }: { items: DiscoverPlaylistCard[]; onOpen: (card: DiscoverPlaylistCard) => Promise<void>; loadingKey: string | null }) {
-  return (
-    <div className="grid min-w-0 grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-      {items.map((item) => {
-        const { playlist } = item;
-        const loading = !item.tracks && loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
-        const isDailyMix = playlist.providerPlaylistId.startsWith("music-room-curated:daily-mix-");
-        const mixNumber = isDailyMix ? playlist.providerPlaylistId.replace("music-room-curated:daily-mix-", "") : null;
-        return (
-          <button
-            aria-label={`打开歌单《${playlist.title}》`}
-            className="group flex min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 p-2.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.14] hover:bg-[#181a26]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            disabled={loading}
-            key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)}
-            onClick={() => void onOpen(item)}
-            type="button"
-          >
-            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-md">
-              <Artwork
-                alt={playlist.title}
-                className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105"
-                src={playlist.artworkUrl}
-              />
-              <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
-              {isDailyMix && mixNumber ? (
-                <div className="absolute top-2 left-2 z-10 rounded-md bg-black/70 backdrop-blur-md px-2 py-0.5 text-[9px] font-black tracking-widest uppercase text-white border border-white/20 shadow-md">
-                  MIX {mixNumber}
-                </div>
-              ) : null}
-              <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-100 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-95 sm:group-hover:scale-100">
-                {loading ? <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <PlayIcon className="w-4 h-4" />}
-              </span>
-            </div>
-            <p className="mt-2.5 line-clamp-2 text-xs sm:text-sm font-semibold leading-tight text-white group-hover:text-accent transition-colors" title={playlist.title}>
-              {playlist.title}
-            </p>
-            <p className="mt-1 truncate text-[11px] text-foreground-muted" title={playlist.description ?? playlist.creatorName ?? ""}>
-              {playlist.description || (playlist.providerPlaylistId.startsWith("music-room-curated:") ? "Music Room 精选" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`)}
-            </p>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PlaylistPicker({ track, anchor, options, loading, pending, onClose, onSelect }: { track: Track | null; anchor: AnchoredDialogAnchor | null; options: ProviderPlaylistPickerOption[]; loading: boolean; pending: string | null; onClose: () => void; onSelect: (option: ProviderPlaylistPickerOption) => Promise<void> }) {
-  if (!track || !anchor) return null;
-  return <ProviderPlaylistPickerDialog anchor={anchor} loading={loading} options={options} pending={pending !== null} subjectLabel={`《${track.title}》 · ${track.artist}`} onClose={onClose} onSelect={(option) => void onSelect(option)} />;
-}
-
-function Feedback({ statusMessage, errorMessage }: { statusMessage: string | null; errorMessage: string | null }) {
-  return <>{statusMessage ? <p className="mt-5 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-4 py-3 text-xs text-white" role="status">{statusMessage}</p> : null}{errorMessage ? <p className="mt-5 rounded-2xl bg-red-950/30 border border-red-500/20 px-4 py-3 text-xs text-red-300" role="alert">{errorMessage}</p> : null}</>;
-}
-
-function DiscoverEmptyState({ title, description, actionHref, actionLabel, onAction }: { title: string; description: string; actionHref?: string; actionLabel: string; onAction?: () => void }) {
-  return (
-    <section className="mt-10 flex min-h-64 flex-col items-center justify-center rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 px-6 py-12 text-center shadow-xl">
-      <div className="p-3.5 rounded-2xl bg-accent/15 border border-accent/25 text-accent mb-4">
-        <DiscoverCompassIcon className="w-8 h-8" />
-      </div>
-      <h2 className="text-base font-bold text-white">{title}</h2>
-      <p className="mt-1.5 max-w-sm text-xs text-foreground-muted leading-relaxed">{description}</p>
-      {actionHref ? (
-        <a className="mt-5 rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)]" href={actionHref}>
-          {actionLabel}
-        </a>
-      ) : (
-        <button className="mt-5 rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)] active:scale-95" onClick={onAction} type="button">
-          {actionLabel}
-        </button>
-      )}
-    </section>
-  );
-}
-
-function DiscoverSkeleton() {
-  return (
-    <div aria-label="正在加载个性化发现内容" className="mt-7 grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-      {Array.from({ length: 6 }, (_, index) => (
-        <div className="animate-pulse p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.04]" key={index}>
-          <div className="aspect-square rounded-xl bg-white/[0.06]" />
-          <div className="mt-3 h-3 w-4/5 rounded bg-white/[0.06]" />
-          <div className="mt-2 h-2 w-1/2 rounded bg-white/[0.06]" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-white/[0.06] text-xl text-foreground-muted ${className}`}>♪</span>;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} className={`block min-w-0 max-w-full object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} style={{ display: "block", height: "100%", maxHeight: "100%", maxWidth: "100%", width: "100%" }} />;
-}
-
-function toPlaylistTrackActions(actions: DiscoverTrackActions) {
-  return {
-    isDownloaded: actions.isDownloaded,
-    isPlayable: () => true,
-    isQueueable: () => true,
-    isQueued: actions.isQueued,
-    isDownloading: (track: Track) => actions.pending === `download:${track.provider}:${track.providerTrackId}`,
-    isPreparingPlayback: (track: Track) => actions.pending === `play:${track.provider}:${track.providerTrackId}` || actions.pending === `queue:${track.provider}:${track.providerTrackId}`,
-    onDownload: actions.onDownload,
-    onAddToQueue: actions.onQueue,
-    onPlay: actions.onPlay,
-    onAddToPlaylist: actions.onAddToPlaylist,
-    isFavorite: actions.isFavorite,
-    isTogglingFavorite: actions.isFavoritePending,
-    onToggleFavorite: actions.onToggleFavorite
-  };
-}
-
-function providerTrackKey(track: Pick<Track, "provider" | "providerTrackId">) {
-  return `${track.provider}:${track.providerTrackId}`;
-}
-
-function providerPlaylistKey(provider: Provider, playlistId: string) {
-  return `${provider}:${playlistId}`;
-}
-
-const genreCategoryPresets = [
-  { id: "rock", title: "摇滚与能量专栏", description: "充满张力与力量感的摇滚、朋克与独立之声。", tags: ["摇滚", "独立", "能量", "朋克"], keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk", "硬核"] },
-  { id: "electronic", title: "电子律动空间", description: "跳跃节奏与合成器声场，沉浸式电音精选。", tags: ["电子", "EDM", "电音", "律动"], keywords: ["电子", "edm", "house", "techno", "电音", "synth", "dance", "舞曲"] },
-  { id: "focus", title: "专注与纯音小憩", description: "清透静谧的器乐与氛围音乐，伴你沉浸思考。", tags: ["专注", "纯音", "学习", "轻音乐"], keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音", "钢琴", "古典"] },
-  { id: "night", title: "夜听与疗愈私享", description: "深夜温暖陪伴，抚平情绪的治愈与慢调旋律。", tags: ["夜听", "深夜", "治愈", "R&B"], keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul", "放空", "疗愈"] },
-  { id: "acg", title: "ACG 与二次元幻想", description: "动漫游戏原声与日系旋律，开启异次元共鸣。", tags: ["ACG", "动漫", "二次元", "J-pop"], keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop", "日语"] },
-  { id: "guofeng", title: "新国风与古韵雅集", description: "丝竹戏腔与现代编曲交织的华夏音韵。", tags: ["国风", "古风", "新中式", "仙侠"], keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式", "武侠"] },
-  { id: "rnb", title: "R&B 与都市律动", description: "丝滑转音与慵懒节奏，都市夜色中的随性律动。", tags: ["R&B", "都市", "律动", "Soul"], keywords: ["r&b", "rnb", "soul", "嘻哈", "说唱", "hip-hop", "rap", "都市"] },
-  { id: "folk", title: "民谣与温暖叙事", description: "一把木吉他与质朴故事，诉说人间烟火与诗意。", tags: ["民谣", "木吉他", "温暖", "故事"], keywords: ["民谣", "folk", "吉他", "不插电", "民乐"] }
-];
-
-function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): DiscoverPlaylistCard[] {
-  const getArtistsExcerpt = (tracks: Track[]) => {
-    const artists = Array.from(new Set(tracks.map((t) => t.artist).filter(Boolean))).slice(0, 3);
-    return artists.length ? `包含 ${artists.join(" · ")} 等` : "为您量身定制的专属精选";
-  };
-
-  const familiarTracks = data.familiarArtists.map((i) => i.candidate);
-  const deepTracks = data.deepCuts.map((i) => i.candidate);
-  const moodTracks = data.moodDiscovery.map((i) => i.candidate);
-  const forYouTracks = data.forYou.map((i) => i.candidate);
-
-  const allPool = [
-    ...(data.dailyRadar?.tracks ?? []),
-    ...forYouTracks,
-    ...moodTracks,
-    ...deepTracks,
-    ...familiarTracks
-  ];
-  const uniquePool = Array.from(
-    new Map(allPool.map((t) => [providerTrackKey(t), t])).values()
-  );
-
-  const slowTracks = uniquePool.filter((track) => {
-    const text = `${track.title} ${track.artist} ${track.album ?? ""} ${(track.tags ?? []).join(" ")}`.toLowerCase();
-    return ["夜听", "深夜", "纯音乐", "轻音乐", "治愈", "r&b", "soul", "民谣", "lo-fi", "chill"].some((kw) => text.includes(kw));
-  });
-
-  const dailyMixes = [
-    {
-      id: "daily-mix-1",
-      title: "Daily Mix 1 · 核心偏好",
-      description: `精选最契合你听歌画像的常听歌手与代表作。${getArtistsExcerpt(familiarTracks.length ? familiarTracks : forYouTracks)}`,
-      tags: ["Daily Mix", "常听", "精选", "偏好"],
-      tracks: familiarTracks.length ? familiarTracks : forYouTracks
-    },
-    {
-      id: "daily-mix-2",
-      title: "Daily Mix 2 · 深度宝藏",
-      description: `挖掘符合你品味但低热度的小众私藏曲目。${getArtistsExcerpt(deepTracks)}`,
-      tags: ["Daily Mix", "深度", "宝藏", "小众"],
-      tracks: deepTracks.length ? deepTracks : forYouTracks
-    },
-    {
-      id: "daily-mix-3",
-      title: "Daily Mix 3 · 探索律动",
-      description: `跳出舒适圈，发现令人耳目一新的探索风味。${getArtistsExcerpt(moodTracks)}`,
-      tags: ["Daily Mix", "探索", "新歌", "律动"],
-      tracks: moodTracks.length ? moodTracks : forYouTracks
-    },
-    {
-      id: "daily-mix-4",
-      title: "Daily Mix 4 · 慢调私享",
-      description: `舒缓慢调与治愈陪伴旋律，抚平思绪。${getArtistsExcerpt(slowTracks)}`,
-      tags: ["Daily Mix", "夜听", "疗愈", "慢调"],
-      tracks: slowTracks.length ? slowTracks : forYouTracks
-    }
-  ];
-
-  const dynamicGroups = genreCategoryPresets.flatMap((preset) => {
-    const matched = uniquePool.filter((track) => {
-      const text = `${track.title} ${track.artist} ${track.album ?? ""} ${(track.tags ?? []).join(" ")}`.toLowerCase();
-      return preset.keywords.some((kw) => text.includes(kw.toLowerCase()));
-    });
-    if (matched.length < 2) return [];
-    return [{
-      id: `genre-${preset.id}`,
-      title: preset.title,
-      description: preset.description,
-      tags: preset.tags,
-      tracks: matched
-    }];
-  });
-
-  const allGroups = [...dailyMixes, ...dynamicGroups];
-
-  return allGroups.flatMap(({ id, title, description, tags, tracks }) => {
-    if (!tracks.length) return [];
-    const firstTrack = tracks[0]!;
-    return [{
-      playlist: {
-        provider: firstTrack.provider,
-        providerPlaylistId: `music-room-curated:${id}`,
-        title,
-        description,
-        tags,
-        artworkUrl: firstTrack.artworkUrl ?? null,
-        creatorName: "Music Room",
-        trackCount: tracks.length
-      },
-      tracks,
-      score: 100,
-      reasons: ["画像推荐"]
-    } satisfies DiscoverPlaylistCard];
-  });
-}
-
-function providerLabel(provider: Provider) {
-  return providerDisplayName(provider);
-}
-
-function toErrorMessage(error: unknown) {
-  if (error instanceof MusicRoomApiError) {
-    if (error.code === "NETEASE_ACCOUNT_REQUIRED" || error.code === "QQMUSIC_ACCOUNT_REQUIRED") return "部分推荐需要先绑定对应音乐平台账号。";
-    return error.message;
-  }
-  return error instanceof Error ? error.message : "内容加载失败，请稍后重试。";
-}
-
-function AppPageBackground() {
-  return <div aria-hidden="true" className="workspace-page-background" />;
 }
