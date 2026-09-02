@@ -15,6 +15,7 @@ import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";
+import { providerDisplayName } from "@/lib/domain/provider-labels";
 import { getProfileProviderRecommendations, type DiscoverPlaylistRecommendation, type DiscoverTrackRecommendation, type ProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
@@ -1274,7 +1275,7 @@ function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): Discov
 }
 
 function providerLabel(provider: Provider) {
-  return provider === "netease" ? "网易云音乐" : "QQ 音乐";
+  return providerDisplayName(provider);
 }
 
 function toErrorMessage(error: unknown) {
