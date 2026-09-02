@@ -24,6 +24,7 @@ import { parseRequestBody } from "../../common/validation/zod-validation";
 import { userSessionCookieName } from "./auth.cookies";
 import { AuthService } from "./auth.service";
 import { TurnstileService } from "./turnstile.service";
+import { resolveClientIp } from "../../common/security/client-ip";
 
 type AuthRateLimitBucket = {
   timestamps: number[];
@@ -453,13 +454,3 @@ function toPublicAuthSession(session: AuthSession): AuthSession {
   return { ...session, token: "" };
 }
 
-function resolveClientIp(
-  request: {
-    ip?: string;
-    headers?: Record<string, string | string[] | undefined>;
-    socket?: { remoteAddress?: string };
-  },
-  ipAddress?: string
-) {
-  return ipAddress?.trim() || request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown";
-}

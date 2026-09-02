@@ -8,6 +8,7 @@ import {
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
+import { resolveClientIp } from "../../common/security/client-ip";
 import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { PersonalizationService } from "./personalization.service";
 
@@ -30,7 +31,7 @@ export class PersonalizationController {
       `personalization:${scope}`,
       [
         { name: "user", value: userId },
-        { name: "ip", value: request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown" }
+        { name: "ip", value: resolveClientIp(request) }
       ],
       limits
     );

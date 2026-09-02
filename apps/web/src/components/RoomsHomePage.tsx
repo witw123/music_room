@@ -898,7 +898,7 @@ function RoomDialog({
 
   return createPortal(
     <div
-      className="light-overlay-scrim fixed inset-0 z-[500] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:p-6"
+      className="light-overlay-scrim fixed inset-0 z-[var(--z-modal)] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm sm:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();

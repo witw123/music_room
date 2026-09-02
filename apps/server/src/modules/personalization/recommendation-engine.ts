@@ -410,7 +410,7 @@ function releaseFreshness(value: string | null | undefined) {
   return Math.max(0, 1 - age / 10);
 }
 
-function dedupeCandidates(items: RecommendationCandidate[]) {
+export function dedupeCandidates(items: RecommendationCandidate[]) {
   const byIdentity = new Map<string, RecommendationCandidate>();
   for (const item of items) {
     const key = trackIdentity(item.candidate);
@@ -420,7 +420,7 @@ function dedupeCandidates(items: RecommendationCandidate[]) {
   return [...byIdentity.values()];
 }
 
-function dedupePlaylists(items: ProviderPlaylistSummary[]) {
+export function dedupePlaylists(items: ProviderPlaylistSummary[]) {
   const seen = new Set<string>();
   return items.filter((item) => {
     const key = `${item.provider}:${item.providerPlaylistId}`;
@@ -430,7 +430,7 @@ function dedupePlaylists(items: ProviderPlaylistSummary[]) {
   });
 }
 
-function accessScore(track: ProviderTrackCandidate) {
+export function accessScore(track: ProviderTrackCandidate) {
   return track.access === "free" ? 3 : track.access === "unknown" ? 2 : 1;
 }
 

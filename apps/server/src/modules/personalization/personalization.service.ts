@@ -19,6 +19,9 @@ import { NeteaseService } from "../providers/netease/netease.service";
 import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
 import { RoomService } from "../room/room.service";
 import {
+  accessScore,
+  dedupeCandidates,
+  dedupePlaylists,
   partitionDiscoveryRecommendations,
   rankRecommendationCandidates,
   rerankRecommendationCandidates,
@@ -898,29 +901,6 @@ function entityToCandidate(entity: TasteEntityRecord): ProviderTrackCandidate | 
   } as ProviderTrackCandidate;
 }
 
-function dedupeCandidates(items: Candidate[]) {
-  const byIdentity = new Map<string, Candidate>();
-  for (const item of items) {
-    const key = `${normalizeText(item.candidate.title)}:${normalizeText(item.candidate.artist)}`;
-    const existing = byIdentity.get(key);
-    if (!existing || item.baseScore > existing.baseScore || accessScore(item.candidate) > accessScore(existing.candidate)) byIdentity.set(key, item);
-  }
-  return [...byIdentity.values()];
-}
-
-function dedupePlaylists(items: ProviderPlaylistSummary[]) {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = `${item.provider}:${item.providerPlaylistId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function accessScore(track: ProviderTrackCandidate) {
-  return track.access === "free" ? 3 : track.access === "unknown" ? 2 : 1;
-}
 
 function profileVersion(entities: TasteEntityRecord[], events: TasteEventRecord[]) {
   const tasteEntities = entities.filter((item) => item.lastOccurredAt !== null);

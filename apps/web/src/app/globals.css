@@ -1285,3 +1285,16 @@
     font-size: 16px !important;
   }
 }
+
+/* ── Z-index scale ─────────────────────────────────────────────────────────
+   Single source of truth for stacking order. Bars/overlays opt in with
+   var(--z-*); ad-hoc z-[N] magic numbers caused drift (modals painting under
+   the floating player, navigation over dialogs). Keep new surfaces on this
+   ladder and never invent a number between rungs. */
+:root {
+  --z-scrim-raised: 55;
+  /* fallback fixed layers (60/70/80) keep their literal values below */
+  --z-modal: 500;
+  --z-modal-high: 501;
+  --z-max: 9999;
+}
