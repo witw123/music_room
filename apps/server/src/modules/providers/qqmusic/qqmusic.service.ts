@@ -18,6 +18,7 @@ import type {
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
 import { fetchProviderUrl } from "../provider-fetch";
+import { ProviderRateLimiter } from "../provider-rate-limiter";
 import { QqMusicAccountService } from "./qqmusic-account.service";
 import { QqMusicApiClient, QqMusicApiError } from "./qqmusic-api.client";
 import {
@@ -37,7 +38,7 @@ const accountValidationTtlMs = 5 * 60_000;
 const qrKeyPrefix = "music-room:qqmusic:qr:";
 @Injectable()
 export class QqMusicService {
-  private readonly rateLimits = new Map<string, number[]>();
+  private readonly rateLimiter = new ProviderRateLimiter({ providerLabel: "QQ Music" });
   private readonly searchSuggestionCache = new Map<string, SearchTermCache>();
   private readonly accountValidation = new Map<string, Promise<void>>();
   private searchHotCache: SearchTermCache | null = null;
@@ -564,7 +565,7 @@ export class QqMusicService {
     return validation;
   }
   private assertEnabled() { if (process.env.QQMUSIC_ENABLED !== "true") throw new HttpException(createApiErrorResponse(errorCodes.qqMusicDisabled, "QQ Music integration is disabled."), HttpStatus.SERVICE_UNAVAILABLE); }
-  private assertRateLimit(key: string, limit: number) { const now = Date.now(); const values = (this.rateLimits.get(key) ?? []).filter((time) => now - time < 60_000); if (values.length >= limit) throw new HttpException(createApiErrorResponse(errorCodes.rateLimited, "QQ Music request rate limit exceeded."), HttpStatus.TOO_MANY_REQUESTS); values.push(now); this.rateLimits.set(key, values); }
+  private assertRateLimit(key: string, limit: number) { this.rateLimiter.assert(key, limit); }
   private async callProvider<T>(operation: () => Promise<T>) { try { return await operation(); } catch (error) { if (error instanceof HttpException) throw error; if (error instanceof QqMusicApiError && error.kind === "auth-expired") throw new HttpException(createApiErrorResponse(errorCodes.qqMusicAuthExpired, "The QQ Music account needs to be bound again."), HttpStatus.CONFLICT); throw this.unavailableError(); } }
   private unavailableError() { return new HttpException(createApiErrorResponse(errorCodes.qqMusicUnavailable, "QQ Music is temporarily unavailable."), HttpStatus.BAD_GATEWAY); }
   private defaultQuality(): QqMusicQuality { return qqMusicQualitySchema.safeParse(process.env.QQMUSIC_DEFAULT_QUALITY).success ? process.env.QQMUSIC_DEFAULT_QUALITY as QqMusicQuality : "exhigh"; }

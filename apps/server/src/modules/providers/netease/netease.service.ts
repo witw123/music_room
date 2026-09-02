@@ -25,6 +25,7 @@ import {
 } from "@music-room/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
 import { fetchProviderUrl } from "../provider-fetch";
+import { ProviderRateLimiter } from "../provider-rate-limiter";
 import { NeteaseAccountService } from "./netease-account.service";
 import { NeteaseApiClient, NeteaseApiError } from "./netease-api.client";
 import {
@@ -55,7 +56,6 @@ type SongRecord = {
   privilege?: unknown;
 };
 
-type RateBucket = { timestamps: number[] };
 type SearchTermCache = { expiresAt: number; items: ProviderSearchSuggestion[] };
 type QrAttempt = { userId: string; key: string };
 const qrTtlSeconds = 180;
@@ -63,9 +63,10 @@ const qrKeyPrefix = "music-room:netease:qr:";
 
 @Injectable()
 export class NeteaseService {
-  private readonly userRateLimits = new Map<string, RateBucket>();
   private readonly searchSuggestionCache = new Map<string, SearchTermCache>();
   private searchHotCache: SearchTermCache | null = null;
+
+  private readonly rateLimiter = new ProviderRateLimiter({ providerLabel: "NetEase" });
 
   constructor(
     private readonly api: NeteaseApiClient,
@@ -664,17 +665,7 @@ export class NeteaseService {
   }
 
   private assertRateLimit(key: string, limit: number, windowMs: number) {
-    const now = Date.now();
-    const bucket = this.userRateLimits.get(key) ?? { timestamps: [] };
-    bucket.timestamps = bucket.timestamps.filter((timestamp) => now - timestamp < windowMs);
-    if (bucket.timestamps.length >= limit) {
-      throw new HttpException(
-        createApiErrorResponse(errorCodes.rateLimited, "NetEase request rate limit exceeded."),
-        HttpStatus.TOO_MANY_REQUESTS
-      );
-    }
-    bucket.timestamps.push(now);
-    this.userRateLimits.set(key, bucket);
+    this.rateLimiter.assert(key, limit, windowMs);
   }
 
   private unavailableError() {
