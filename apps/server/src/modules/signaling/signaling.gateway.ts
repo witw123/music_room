@@ -21,10 +21,9 @@ import type {
   RoomPresencePayload,
   RoomSubscribePayload,
   RoomSnapshot,
-  RoomUnsubscribePayload
-  , RoomReactionInputPayload
+  RoomUnsubscribePayload,
+  RoomReactionInputPayload
 } from "@music-room/shared";
-import { readUserSessionCookie } from "../auth/auth.cookies";
 import {
   errorCodes,
   diagnosticsReportPayloadSchema,
@@ -34,14 +33,13 @@ import {
   roomPlaybackReadinessInputPayloadSchema,
   roomPresencePayloadSchema,
   roomSubscribePayloadSchema,
-  roomUnsubscribePayloadSchema
-  , roomReactionInputPayloadSchema
+  roomUnsubscribePayloadSchema,
+  roomReactionInputPayloadSchema
 } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { AbuseProtectionService } from "../../common/security/abuse-protection.service";
 import { getCorsOrigins } from "../../common/cors/get-cors-origins";
-import { isPrivateAddress } from "../providers/provider-fetch";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
@@ -57,19 +55,13 @@ import { RealtimeRedisSubscriber } from "./realtime-redis-subscriber.service";
 import { RoomPlaybackReadinessService } from "./room-playback-readiness.service";
 import { RoomSessionLeaseService } from "./room-session-lease.service";
 import { RoomSessionRegistryService } from "./room-session-registry.service";
-
-type RealtimeRateLimitBucket = {
-  windowStartedAt: number;
-  count: number;
-};
-
-// ICE trickle produces many small messages during a room join. Keep that
-// burst separate from SDP so candidates cannot consume the quota needed for
-// the offer/answer that actually establishes the connection.
-const peerSignalRateLimits = {
-  candidate: 1_200,
-  description: 180
-} as const;
+import {
+  buildSubscribeAck,
+  getSocketIp,
+  getSocketSessionToken,
+  peerSignalRateLimits,
+  type RealtimeRateLimitBucket
+} from "./signaling.helpers";
 
 @WebSocketGateway({
   path: "/ws/socket.io",
@@ -113,7 +105,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
   }
 
   async handleConnection(client: Socket) {
-    const connectionIp = this.getSocketIp(client);
+    const connectionIp = getSocketIp(client);
     const socketIds = this.socketIdsByIp.get(connectionIp) ?? new Set<string>();
     if (socketIds.size >= this.maxSocketsPerIp) {
       client.disconnect(true);
@@ -135,7 +127,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
       return;
     }
 
-    const sessionToken = this.getSocketSessionToken(client);
+    const sessionToken = getSocketSessionToken(client);
     if (sessionToken) {
       try {
         const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
@@ -402,7 +394,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
       throw new WsException("Missing session identity.");
     }
 
-    const sessionToken = this.getSocketSessionToken(client);
+    const sessionToken = getSocketSessionToken(client);
     try {
       await this.authService.assertSessionToken(message.sessionId, sessionToken);
     } catch (error) {
@@ -556,7 +548,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
           client.emit("room.playback.readiness", item);
         }
       });
-      return this.buildSubscribeAck(snapshot, recoveryGeneration);
+      return buildSubscribeAck(snapshot, recoveryGeneration);
     } catch (error) {
       await this.cleanupFailedRoomSubscribe(
         client,
@@ -704,39 +696,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     }
   }
 
-  private getSocketSessionToken(client: Socket) {
-    const authToken =
-      typeof client.handshake.auth?.sessionToken === "string"
-        ? client.handshake.auth.sessionToken
-        : undefined;
 
-    if (authToken) {
-      return authToken;
-    }
-
-    const headerToken = client.handshake.headers["x-session-token"];
-    if (typeof headerToken === "string") {
-      return headerToken;
-    }
-
-    return readUserSessionCookie(client.handshake.headers.cookie);
-  }
-
-  private getSocketIp(client: Socket) {
-    const directAddress =
-      client.handshake.address || client.conn.remoteAddress || "unknown";
-    // x-real-ip is only meaningful when the TCP peer is our own reverse proxy,
-    // which terminates on a private/loopback address and overwrites the header.
-    // A direct public peer that supplies the header itself is spoofing it to
-    // evade the per-IP socket cap and connect rate limit.
-    if (isPrivateAddress(directAddress)) {
-      const realIp = client.handshake.headers["x-real-ip"];
-      if (typeof realIp === "string" && realIp.trim()) {
-        return realIp.trim();
-      }
-    }
-    return directAddress;
-  }
 
   private releaseSocketIp(client: Socket) {
     const ip = client.data.connectionIp as string | undefined;
@@ -773,27 +733,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     })();
   }
 
-  private buildSubscribeAck(snapshot: RoomSnapshot, recoveryGeneration: number): RoomSubscribeAckPayload {
-    return {
-      ok: true,
-      protocolVersion: 4,
-      capability: "webrtc-opus-v1",
-      serverNow: new Date().toISOString(),
-      recoveryGeneration,
-      bootstrap: {
-        roomId: snapshot.room.id,
-        roomRevision: snapshot.room.roomRevision ?? 0,
-        presenceRevision: snapshot.room.presenceRevision ?? 0,
-        playback: snapshot.room.playback,
-        members: snapshot.room.members.map((member) => ({
-          id: member.id,
-          peerId: member.peerId ?? null,
-          presenceState: member.presenceState,
-          role: member.role
-        }))
-      }
-    };
-  }
+
 
   private assertRealtimeRateLimit(client: Socket, action: string, limit: number) {
     const now = Date.now();
