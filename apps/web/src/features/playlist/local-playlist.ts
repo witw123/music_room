@@ -1,71 +1,66 @@
-import { createSHA256 } from "hash-wasm";
-import type { NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@music-room/shared";
 import {
-  deleteLocalAudioFileRecord,
-  deleteLocalPlaylistTrack,
   listCachedLibraryTrackHashes,
   listCachedLibraryTrackSummaries,
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
   listLocalPlaylistTracks,
-  saveLocalAudioFileRecord,
-  saveLocalPlaylistDirectory,
-  upsertLocalPlaylistTrack,
-  type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
 } from "@/features/library/indexeddb";
-import {
-  chooseLocalAudioSourceDirectory,
-  listLocalAudioFilesInDirectory,
-  listSelectedLocalAudioFiles,
-  yieldToBrowser
-} from "@/features/library/local-audio-storage";
-import { readEmbeddedAudioMetadata } from "@/features/library/audio-metadata";
 import { getConfiguredLocalRepository } from "@/features/library/local-audio-storage";
 import {
-  createRepositoryTrackRecord,
-  type LocalRepositoryPlaylistRecord
-} from "@/features/library/local-repository";
+  createLocalPlaylistId,
+  fromCachedSummary,
+  fromRepositoryPlaylist,
+  reconcileTrackAvailability,
+  sameStringArray,
+  sortLocalPlaylists,
+  toRepositoryPlaylist,
+  type LocalPlaylistRecord
+} from "./local-playlist-mappers";
 
 // Surface the raw local-playlist track persistence for view code without
 // exposing the low-level IndexedDB storage module directly.
 export { upsertLocalPlaylistTrack, type LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 
-export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+// Re-export mapper types and utilities for existing callers
+export {
+  createLocalPlaylistId,
+  createLocalPlaylistSourceId,
+  fromCachedSummary,
+  fromRepositoryPlaylist,
+  localPlaylistTrackId,
+  providerTrackKey,
+  reconcileTrackAvailability,
+  sameStringArray,
+  sortLocalPlaylists,
+  toCachedProviderTrack,
+  toLocalPlaylistTrackInput,
+  toProviderTrackRecord,
+  toRepositoryPlaylist,
+  type LocalPlaylistRecord,
+  type ProviderTrack
+} from "./local-playlist-mappers";
 
-export type LocalPlaylistRecord = {
-  id: string;
-  title: string;
-  description: string | null;
-  trackIds: string[];
-  sourceDirectoryId?: string | null;
-  sourceDirectoryName?: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
+// Re-export directory sync utilities for existing callers
+export {
+  cancelSelectedLocalDirectorySync,
+  directoryScanSource,
+  hashAudioBlob,
+  importLocalPlaylistDirectoryTracks,
+  inferAudioMimeType,
+  performSelectedLocalDirectorySync,
+  readDirectoryTrackMetadata,
+  syncSelectedLocalDirectoryTracks,
+  throwIfAborted
+} from "./local-playlist-directory-sync";
 
 export const defaultLocalPlaylistId = "local-default";
 const defaultLocalPlaylistTitle = "项目根目录";
-const directoryScanSource = "directory-scan" as const;
 let localPlaylistPersistencePromise: Promise<void> = Promise.resolve();
 let localPlaylists: LocalPlaylistRecord[] = [];
-let selectedDirectorySyncPromise: Promise<number> | null = null;
-let selectedDirectorySyncController: AbortController | null = null;
 
 export function listLocalPlaylists(): LocalPlaylistRecord[] {
   return localPlaylists;
-}
-
-/** Keep playlist cards stable across repository restores and both playlist views. */
-export function sortLocalPlaylists(playlists: readonly LocalPlaylistRecord[]) {
-  return [...playlists].sort((left, right) => {
-    const createdOrder = left.createdAt.localeCompare(right.createdAt);
-    if (createdOrder !== 0) return createdOrder;
-
-    const updatedOrder = left.updatedAt.localeCompare(right.updatedAt);
-    if (updatedOrder !== 0) return updatedOrder;
-    return left.id.localeCompare(right.id);
-  });
 }
 
 export function mergeLocalPlaylists(records: LocalPlaylistRecord[]) {
@@ -210,93 +205,6 @@ export function updateLocalPlaylist(playlistId: string, input: {
   return updated;
 }
 
-export async function hashAudioBlob(blob: Blob) {
-  const hasher = await createSHA256();
-  hasher.init();
-  const chunkSize = 4 * 1024 * 1024;
-  for (let offset = 0; offset < blob.size; offset += chunkSize) {
-    hasher.update(new Uint8Array(await blob.slice(offset, offset + chunkSize).arrayBuffer()));
-  }
-  return hasher.digest("hex");
-}
-
-export function localPlaylistTrackId(track: ProviderTrack) {
-  return providerTrackKey(track.provider, track.providerTrackId);
-}
-
-export function providerTrackKey(provider: ProviderTrack["provider"], providerTrackId: string) {
-  return `provider:${provider}:${providerTrackId}`;
-}
-
-export function toLocalPlaylistTrackInput(input: {
-  track: ProviderTrack;
-  lyrics?: ProviderLyrics | null;
-  fileHash?: string | null;
-  fileName?: string | null;
-  sizeBytes?: number;
-  mimeType?: string;
-  availableOffline?: boolean;
-}) {
-  const { track, lyrics } = input;
-  return {
-    id: localPlaylistTrackId(track),
-    title: track.title,
-    artist: track.artist,
-    album: track.album,
-    durationMs: track.durationMs,
-    mimeType: input.mimeType ?? "audio/mpeg",
-    sizeBytes: input.sizeBytes ?? 0,
-    artworkUrl: track.artworkUrl,
-    lyrics: lyrics?.wordSyncedLyric ?? lyrics?.plainLyric ?? null,
-    translatedLyrics: lyrics?.translatedLyric ?? null,
-    romanizedLyrics: lyrics?.romanizedLyric ?? null,
-    provider: track.provider,
-    providerTrackId: track.providerTrackId,
-    fileHash: input.fileHash ?? null,
-    fileName: input.fileName ?? null,
-    availableOffline: input.availableOffline ?? false
-  } satisfies Omit<LocalPlaylistTrackRecord, "createdAt" | "updatedAt">;
-}
-
-export function toProviderTrackRecord(
-  track: ProviderTrack,
-  existing?: LocalPlaylistTrackRecord
-): LocalPlaylistTrackRecord {
-  const now = new Date().toISOString();
-  const metadata = toLocalPlaylistTrackInput({ track, availableOffline: false });
-  return {
-    ...(existing ?? metadata),
-    id: metadata.id,
-    title: metadata.title,
-    artist: metadata.artist,
-    album: metadata.album,
-    durationMs: metadata.durationMs,
-    artworkUrl: track.artworkUrl ?? existing?.artworkUrl ?? null,
-    provider: metadata.provider,
-    providerTrackId: metadata.providerTrackId,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now
-  };
-}
-
-export function toCachedProviderTrack(record: LocalPlaylistTrackRecord): ProviderTrack | null {
-  if ((record.provider !== "netease" && record.provider !== "qqmusic") || !record.providerTrackId) {
-    return null;
-  }
-
-  return {
-    provider: record.provider,
-    providerTrackId: record.providerTrackId,
-    access: "unknown",
-    quality: null,
-    title: record.title,
-    artist: record.artist,
-    album: record.album,
-    durationMs: record.durationMs,
-    artworkUrl: record.artworkUrl
-  };
-}
-
 export async function listMergedLocalPlaylistTracks() {
   const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
     listLocalPlaylistTracks(),
@@ -320,282 +228,6 @@ export async function listMergedLocalPlaylistTracks() {
     .filter((summary) => availableHashes.has(summary.fileHash) && !explicitByHash.has(summary.fileHash))
     .map((summary) => fromCachedSummary(summary, fileNames.get(summary.fileHash) ?? null, true));
   return [...reconciledExplicit, ...derived];
-}
-
-export function syncSelectedLocalDirectoryTracks(options?: { signal?: AbortSignal }) {
-  if (selectedDirectorySyncPromise) return selectedDirectorySyncPromise;
-
-  const controller = new AbortController();
-  selectedDirectorySyncController = controller;
-  const abortFromCaller = () => controller.abort();
-  if (options?.signal) {
-    if (options.signal.aborted) controller.abort();
-    else options.signal.addEventListener("abort", abortFromCaller, { once: true });
-  }
-  const syncPromise = performSelectedLocalDirectorySync({ signal: controller.signal });
-  const settledPromise = syncPromise.finally(() => {
-    options?.signal?.removeEventListener("abort", abortFromCaller);
-    if (selectedDirectorySyncPromise === settledPromise) {
-      selectedDirectorySyncPromise = null;
-      selectedDirectorySyncController = null;
-    }
-  });
-  selectedDirectorySyncPromise = settledPromise;
-  return settledPromise;
-}
-
-export function cancelSelectedLocalDirectorySync() {
-  selectedDirectorySyncController?.abort();
-  selectedDirectorySyncController = null;
-  selectedDirectorySyncPromise = null;
-}
-
-async function performSelectedLocalDirectorySync(options?: { signal?: AbortSignal }) {
-  const selectedFiles = await listSelectedLocalAudioFiles(options);
-  if (!selectedFiles) {
-    throw new Error("无法读取所选本地目录，请重新授权后重试。");
-  }
-
-  const [existingTracks, existingFiles] = await Promise.all([
-    listLocalPlaylistTracks(),
-    listLocalAudioFiles("saved")
-  ]);
-  const existingByHash = new Map(
-    existingTracks
-      .filter((track) => !!track.fileHash)
-      .map((track) => [track.fileHash!, track])
-  );
-  const existingByFileName = new Map(
-    existingTracks
-      .filter((track) => track.source === directoryScanSource && !!track.fileName && !!track.fileHash)
-      .map((track) => [track.fileName!, track])
-  );
-  const scanTimestamp = Date.now();
-
-  const scannedTracks: Array<{ track: LocalPlaylistTrackRecord; fileHash: string; fileName: string }> = [];
-  for (const [index, { file, fileName, lastModified }] of selectedFiles.entries()) {
-    throwIfAborted(options?.signal);
-    const previous = existingByFileName.get(fileName);
-    const previousLastModified = previous?.lastModified ?? null;
-    const canReuse = !!previous?.fileHash &&
-      previous.sizeBytes === file.size &&
-      previousLastModified !== null &&
-      previousLastModified === lastModified;
-    const fileHash = canReuse ? previous.fileHash! : await hashAudioBlob(file);
-    const existing = existingByHash.get(fileHash) ?? previous;
-    const metadata = canReuse
-      ? {
-          title: previous.title,
-          artist: previous.artist,
-          album: previous.album,
-          durationMs: previous.durationMs,
-          artworkUrl: previous.artworkUrl,
-          lyrics: previous.lyrics
-        }
-      : await readDirectoryTrackMetadata(file);
-    // IndexedDB returns tracks by updatedAt descending, so earlier scan entries get later timestamps.
-    const now = existing?.updatedAt ?? new Date(scanTimestamp - index).toISOString();
-    scannedTracks.push({
-      track: {
-        id: `local-file:${fileHash}`,
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        durationMs: metadata.durationMs,
-        mimeType: file.type || inferAudioMimeType(file.name),
-        sizeBytes: file.size,
-        artworkUrl: metadata.artworkUrl,
-        lyrics: metadata.lyrics,
-        provider: "local_upload" as const,
-        providerTrackId: null,
-        fileHash,
-        fileName,
-        lastModified,
-        availableOffline: true,
-        source: directoryScanSource,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now
-      } satisfies LocalPlaylistTrackRecord,
-      fileHash,
-      fileName
-    });
-    await yieldToBrowser();
-  }
-
-  const currentHashes = new Set(scannedTracks.map((item) => item.fileHash));
-  const staleTracks = existingTracks.filter((track) =>
-    track.source === directoryScanSource && !!track.fileHash && !currentHashes.has(track.fileHash)
-  );
-  const staleFiles = existingFiles.filter((file) =>
-    file.source === directoryScanSource && !currentHashes.has(file.fileHash)
-  );
-
-  await Promise.all([
-    ...staleTracks.map((track) => deleteLocalPlaylistTrack(track.id)),
-    ...staleFiles.map((file) => deleteLocalAudioFileRecord(file.fileHash, "saved"))
-  ]);
-  for (const { track, fileHash, fileName } of scannedTracks) {
-    throwIfAborted(options?.signal);
-    await Promise.all([
-      upsertLocalPlaylistTrack(track, { persistRepository: false }),
-      saveLocalAudioFileRecord({
-        fileHash,
-        fileName,
-        lastModified: track.lastModified,
-        storageKind: "saved",
-        source: directoryScanSource
-      })
-    ]);
-    await yieldToBrowser();
-  }
-
-  const repository = await getConfiguredLocalRepository();
-  if (repository) {
-    const repositoryTracks = await repository.listTracks();
-    const staleRepositoryTracks = repositoryTracks.filter((track) =>
-      track.retention === "library" &&
-      track.source.kind === "external" &&
-      !!track.source.relativePath &&
-      !currentHashes.has(track.fileHash)
-    );
-    for (const track of staleRepositoryTracks) {
-      throwIfAborted(options?.signal);
-      await repository.deleteTrack(track.fileHash, { updateCatalog: false });
-    }
-    for (const { track, fileName } of scannedTracks) {
-      throwIfAborted(options?.signal);
-      await repository.writeTrack(createRepositoryTrackRecord({
-        fileHash: track.fileHash!,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        artworkUrl: track.artworkUrl,
-        lyrics: track.lyrics,
-        provider: track.provider,
-        mimeType: track.mimeType,
-        durationMs: track.durationMs,
-        sizeBytes: track.sizeBytes,
-        source: {
-          kind: "external",
-          relativePath: fileName,
-          sizeBytes: track.sizeBytes,
-          lastModified: track.lastModified
-        },
-        retention: "library"
-      }), { updateCatalog: false });
-    }
-    await repository.commitCatalogChanges();
-  }
-
-  return scannedTracks.length;
-}
-
-function throwIfAborted(signal?: AbortSignal) {
-  if (signal?.aborted) {
-    throw new DOMException("Local directory scan was cancelled.", "AbortError");
-  }
-}
-
-export async function importLocalPlaylistDirectoryTracks(existingSourceDirectoryId?: string | null) {
-  const directory = await chooseLocalAudioSourceDirectory();
-  const selectedFiles = await listLocalAudioFilesInDirectory(directory);
-  if (!selectedFiles) {
-    throw new Error("无法读取所选本地目录，请重新授权后重试。 ");
-  }
-
-  const sourceDirectoryId = existingSourceDirectoryId || createLocalPlaylistSourceId();
-  await saveLocalPlaylistDirectory({
-    id: sourceDirectoryId,
-    handle: directory,
-    name: directory.name
-  });
-
-  const selectedFilesWithHashes: Array<(typeof selectedFiles)[number] & { fileHash: string }> = [];
-  for (const entry of selectedFiles) {
-    const fileHash = await hashAudioBlob(entry.file);
-    selectedFilesWithHashes.push({ ...entry, fileHash });
-    await yieldToBrowser();
-  }
-  const currentHashes = new Set(selectedFilesWithHashes.map((entry) => entry.fileHash));
-  const [existingTracks, existingFiles] = await Promise.all([
-    listLocalPlaylistTracks(),
-    listLocalAudioFiles("saved")
-  ]);
-  const staleFileHashes = new Set(
-    existingFiles
-      .filter((file) =>
-        file.sourceDirectoryId === sourceDirectoryId &&
-        !currentHashes.has(file.fileHash)
-      )
-      .map((file) => file.fileHash)
-  );
-  const sharedStaleFileHashes = new Set(
-    existingTracks
-      .filter((track) =>
-        !!track.fileHash &&
-        staleFileHashes.has(track.fileHash) &&
-        track.sourceDirectoryId !== sourceDirectoryId
-      )
-      .map((track) => track.fileHash!)
-  );
-  await Promise.all([
-    ...existingTracks
-      .filter((track) =>
-        track.sourceDirectoryId === sourceDirectoryId &&
-        !!track.fileHash &&
-        !currentHashes.has(track.fileHash)
-      )
-      .map((track) => deleteLocalPlaylistTrack(track.id)),
-    ...existingFiles
-      .filter((file) =>
-        file.sourceDirectoryId === sourceDirectoryId &&
-        !currentHashes.has(file.fileHash) &&
-        !sharedStaleFileHashes.has(file.fileHash)
-      )
-      .map((file) => deleteLocalAudioFileRecord(file.fileHash, "saved"))
-  ]);
-
-  const importedTracks: LocalPlaylistTrackRecord[] = [];
-  for (const { file, fileName, fileHash, lastModified } of selectedFilesWithHashes) {
-    const metadata = await readDirectoryTrackMetadata(file);
-    const mimeType = file.type || inferAudioMimeType(file.name);
-    const now = new Date().toISOString();
-    const track: LocalPlaylistTrackRecord = {
-      id: `local-file:${sourceDirectoryId}:${fileHash}`,
-      title: metadata.title,
-      artist: metadata.artist,
-      album: metadata.album,
-      durationMs: metadata.durationMs,
-      mimeType,
-      sizeBytes: file.size,
-      artworkUrl: metadata.artworkUrl,
-      lyrics: metadata.lyrics,
-      provider: "local_upload",
-      providerTrackId: null,
-      fileHash,
-      fileName,
-      lastModified,
-      sourceDirectoryId,
-      availableOffline: true,
-      createdAt: now,
-      updatedAt: now
-    };
-    await saveLocalAudioFileRecord({
-      fileHash,
-      fileName,
-      lastModified,
-      storageKind: "saved",
-      sourceDirectoryId
-    });
-    await upsertLocalPlaylistTrack(track);
-    importedTracks.push(track);
-    await yieldToBrowser();
-  }
-  return {
-    sourceDirectoryId,
-    directoryName: directory.name,
-    tracks: importedTracks
-  };
 }
 
 export async function listRoomPlaylistTrackIndex() {
@@ -634,91 +266,6 @@ export async function listRoomPlaylistTrackIndex() {
   return byTrackId;
 }
 
-function reconcileTrackAvailability(
-  track: LocalPlaylistTrackRecord,
-  fileNames: ReadonlyMap<string, string>,
-  availableHashes: ReadonlySet<string>
-) {
-  if (!track.fileHash) {
-    return track.availableOffline ? { ...track, availableOffline: false } : track;
-  }
-
-  const hasAvailableFile = availableHashes.has(track.fileHash);
-  return {
-    ...track,
-    fileName: hasAvailableFile ? fileNames.get(track.fileHash) ?? track.fileName : null,
-    availableOffline: hasAvailableFile
-  };
-}
-
-function fromCachedSummary(
-  summary: CachedLibraryTrackSummaryRecord,
-  fileName: string | null,
-  availableOffline: boolean
-): LocalPlaylistTrackRecord {
-  return {
-    id: `local:${summary.fileHash}`,
-    title: summary.title,
-    artist: summary.artist,
-    album: summary.album ?? null,
-    durationMs: summary.durationMs,
-    mimeType: summary.mimeType,
-    sizeBytes: summary.sizeBytes,
-    artworkUrl: summary.artworkUrl ?? null,
-    lyrics: summary.lyrics ?? null,
-    translatedLyrics: summary.translatedLyrics ?? null,
-    romanizedLyrics: summary.romanizedLyrics ?? null,
-    ...(summary.loudness ? { loudness: summary.loudness } : {}),
-    provider: summary.provider ?? "local_upload",
-    providerTrackId: summary.providerTrackId ?? null,
-    fileHash: summary.fileHash,
-    fileName,
-    availableOffline,
-    createdAt: summary.cachedAt,
-    updatedAt: summary.cachedAt
-  };
-}
-
-async function readDirectoryTrackMetadata(file: File) {
-  const fallback = {
-    title: file.name.replace(/\.[^/.]+$/, ""),
-    artist: "本地歌曲",
-    album: null as string | null,
-    durationMs: 0,
-    artworkUrl: null as string | null,
-    lyrics: null as string | null
-  };
-
-  const metadata = await readEmbeddedAudioMetadata(file);
-  return {
-    title: metadata.title ?? fallback.title,
-    artist: metadata.artist ?? fallback.artist,
-    album: metadata.album ?? fallback.album,
-    durationMs: metadata.durationMs ?? fallback.durationMs,
-    artworkUrl: metadata.artworkUrl ?? fallback.artworkUrl,
-    lyrics: metadata.lyrics ?? fallback.lyrics
-  };
-}
-
-function inferAudioMimeType(fileName: string) {
-  const extension = fileName.split(".").pop()?.toLowerCase();
-  if (extension === "flac") return "audio/flac";
-  if (extension === "wav") return "audio/wav";
-  if (extension === "m4a" || extension === "aac") return "audio/mp4";
-  if (extension === "ogg" || extension === "opus") return "audio/ogg";
-  return "audio/mpeg";
-}
-
-function createLocalPlaylistId() {
-  const randomId = globalThis.crypto?.randomUUID?.();
-  return `local-playlist-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-}
-
-function createLocalPlaylistSourceId() {
-  const randomId = globalThis.crypto?.randomUUID?.();
-  return `local-playlist-source-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-}
-
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
   const nextPlaylists = sortLocalPlaylists(playlists);
   localPlaylists = nextPlaylists;
@@ -741,53 +288,4 @@ async function mirrorLocalPlaylistsToRepository(playlists: LocalPlaylistRecord[]
   for (const playlist of playlists) {
     await repository.writePlaylist(toRepositoryPlaylist(playlist));
   }
-}
-
-function toRepositoryPlaylist(playlist: LocalPlaylistRecord): LocalRepositoryPlaylistRecord {
-  return {
-    schemaVersion: 1,
-    id: playlist.id,
-    title: playlist.title,
-    description: playlist.description,
-    sourceDirectoryId: playlist.sourceDirectoryId ?? null,
-    sourceDirectoryName: playlist.sourceDirectoryName ?? null,
-    trackRefs: playlist.trackIds.map((trackId) => {
-      const providerMatch = /^provider:(netease|qqmusic):(.+)$/.exec(trackId);
-      if (providerMatch) {
-        return {
-          kind: "provider" as const,
-          provider: providerMatch[1] as "netease" | "qqmusic",
-          trackId: providerMatch[2]!
-        };
-      }
-      return {
-        kind: "content" as const,
-        fileHash: trackId.startsWith("local:") ? trackId.slice("local:".length) : trackId,
-        trackId
-      };
-    }),
-    createdAt: playlist.createdAt,
-    updatedAt: playlist.updatedAt
-  };
-}
-
-function fromRepositoryPlaylist(record: LocalRepositoryPlaylistRecord): LocalPlaylistRecord {
-  return {
-    id: record.id,
-    title: record.title,
-    description: record.description,
-    sourceDirectoryId: record.sourceDirectoryId ?? null,
-    sourceDirectoryName: record.sourceDirectoryName ?? null,
-    trackIds: record.trackRefs.map((trackRef) =>
-      trackRef.kind === "provider"
-        ? providerTrackKey(trackRef.provider, trackRef.trackId)
-        : trackRef.trackId ?? `local:${trackRef.fileHash}`
-    ),
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt
-  };
-}
-
-function sameStringArray(left: readonly string[], right: readonly string[]) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
