@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 
 describe("desktop lyrics integration", () => {
   it("connects both player sources to the shared lyrics provider", () => {
-    const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
-    const controllerSource = readFileSync(new URL("./BottomPlayerController.tsx", import.meta.url), "utf8");
-    const localPlayerSource = readFileSync(new URL("./AppPersistentPlayer.tsx", import.meta.url), "utf8");
-    const runtimeSource = readFileSync(new URL("./PersistentRoomRuntime.tsx", import.meta.url), "utf8");
+    const playerSource = readFileSync(new URL("../bottom-player/BottomPlayer.tsx", import.meta.url), "utf8");
+    const controllerSource = readFileSync(new URL("../bottom-player/BottomPlayerController.tsx", import.meta.url), "utf8");
+    const localPlayerSource = readFileSync(new URL("../bottom-player/AppPersistentPlayer.tsx", import.meta.url), "utf8");
+    const runtimeSource = readFileSync(new URL("../shell/PersistentRoomRuntime.tsx", import.meta.url), "utf8");
 
     expect(playerSource).toContain("useDesktopLyricsRegistration");
     expect(controllerSource).toContain('desktopLyricsSource="room"');
@@ -16,9 +16,9 @@ describe("desktop lyrics integration", () => {
   });
 
   it("keeps lyrics controls outside the room stage and reuses provider lyric APIs", () => {
-    const shellSource = readFileSync(new URL("./room/RoomAppShell.tsx", import.meta.url), "utf8");
-    const stageSource = readFileSync(new URL("./room/RoomStage.tsx", import.meta.url), "utf8");
-    const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
+    const shellSource = readFileSync(new URL("../room/RoomAppShell.tsx", import.meta.url), "utf8");
+    const stageSource = readFileSync(new URL("../room/RoomStage.tsx", import.meta.url), "utf8");
+    const contextSource = readFileSync(new URL("../../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
 
     expect(shellSource).not.toContain("isLyricsOpen");
     expect(shellSource).not.toContain("onToggleLyrics");
@@ -29,7 +29,7 @@ describe("desktop lyrics integration", () => {
   });
 
   it("renders the combined karaoke bar with transport and word-by-word fill", () => {
-    const barSource = readFileSync(new URL("./desktop-lyrics/DesktopLyricsBar.tsx", import.meta.url), "utf8");
+    const barSource = readFileSync(new URL("./DesktopLyricsBar.tsx", import.meta.url), "utf8");
 
     expect(barSource).toContain("上一首");
     expect(barSource).toContain("下一首");
@@ -40,10 +40,10 @@ describe("desktop lyrics integration", () => {
 
   it("hosts the lyrics window for the Tauri shell and hides the in-page overlay there", () => {
     const overlaySource = readFileSync(new URL("./DesktopLyricsOverlay.tsx", import.meta.url), "utf8");
-    const windowAppSource = readFileSync(new URL("./desktop-lyrics/DesktopLyricsWindowApp.tsx", import.meta.url), "utf8");
-    const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
-    const pageSource = readFileSync(new URL("../app/desktop-lyrics/page.tsx", import.meta.url), "utf8");
-    const libSource = readFileSync(new URL("../../../desktop/src-tauri/src/lib.rs", import.meta.url), "utf8");
+    const windowAppSource = readFileSync(new URL("./DesktopLyricsWindowApp.tsx", import.meta.url), "utf8");
+    const contextSource = readFileSync(new URL("../../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
+    const pageSource = readFileSync(new URL("../../app/desktop-lyrics/page.tsx", import.meta.url), "utf8");
+    const libSource = readFileSync(new URL("../../../../desktop/src-tauri/src/lib.rs", import.meta.url), "utf8");
 
     expect(overlaySource).toContain("isTauriRuntime()");
     expect(windowAppSource).toContain("DesktopLyricsBar");
@@ -57,18 +57,18 @@ describe("desktop lyrics integration", () => {
 
   it("uses the Android system overlay for real on-screen lyrics on mobile", () => {
     const overlaySource = readFileSync(new URL("./DesktopLyricsOverlay.tsx", import.meta.url), "utf8");
-    const contextSource = readFileSync(new URL("../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
-    const tauriHelperSource = readFileSync(new URL("../lib/desktop/tauri.ts", import.meta.url), "utf8");
+    const contextSource = readFileSync(new URL("../../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
+    const tauriHelperSource = readFileSync(new URL("../../lib/desktop/tauri.ts", import.meta.url), "utf8");
     const pluginSource = readFileSync(
-      new URL("../../../mobile/android/app/src/main/java/com/musicroom/app/DesktopLyricsPlugin.java", import.meta.url),
+      new URL("../../../../mobile/android/app/src/main/java/com/musicroom/app/DesktopLyricsPlugin.java", import.meta.url),
       "utf8"
     );
     const manifestSource = readFileSync(
-      new URL("../../../mobile/android/app/src/main/AndroidManifest.xml", import.meta.url),
+      new URL("../../../../mobile/android/app/src/main/AndroidManifest.xml", import.meta.url),
       "utf8"
     );
     const mainActivitySource = readFileSync(
-      new URL("../../../mobile/android/app/src/main/java/com/musicroom/app/MainActivity.java", import.meta.url),
+      new URL("../../../../mobile/android/app/src/main/java/com/musicroom/app/MainActivity.java", import.meta.url),
       "utf8"
     );
 

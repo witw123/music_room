@@ -5,7 +5,7 @@ import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, TrackMeta } f
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
-} from "@/components/bottom-player/bottom-player-layout";
+} from "./bottom-player-layout";
 import {
   resolveAnchoredProgressMs,
   resolveProgressRenderIntervalMs
@@ -14,14 +14,14 @@ import {
   isPendingSeekTargetReached,
   shouldResolvePendingSeek,
   type PendingSeek
-} from "@/components/bottom-player/seek-state";
-import { ImmersivePlayerOverlay } from "@/components/bottom-player/ImmersivePlayerOverlay";
+} from "./seek-state";
+import { ImmersivePlayerOverlay } from "./ImmersivePlayerOverlay";
 import {
   MiniPlayerOverlay,
   requestMiniPlayerWindow
-} from "@/components/bottom-player/MiniPlayerOverlay";
-import { useArtworkPalette } from "@/components/bottom-player/artwork-colors";
-import { usePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
+} from "./MiniPlayerOverlay";
+import { useArtworkPalette } from "./artwork-colors";
+import { usePreferredArtworkUrl } from "./preferred-artwork";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";

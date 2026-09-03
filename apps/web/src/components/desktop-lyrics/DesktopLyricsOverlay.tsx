@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { DesktopLyricsBar } from "@/components/desktop-lyrics/DesktopLyricsBar";
+import { DesktopLyricsBar } from "./DesktopLyricsBar";
 import { isCapacitorRuntime, isTauriRuntime } from "@/lib/desktop/tauri";
 import { useDesktopLyrics, getDesktopLyricsPositionStorageKey } from "@/features/playback/desktop-lyrics-context";
 

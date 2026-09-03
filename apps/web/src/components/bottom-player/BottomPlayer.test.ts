@@ -14,7 +14,7 @@ describe("BottomPlayer source", () => {
   it("keeps the mobile footer height stable", () => {
     const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
     const layoutSource = readFileSync(
-      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      new URL("./bottom-player-layout.tsx", import.meta.url),
       "utf8"
     );
 
@@ -26,11 +26,11 @@ describe("BottomPlayer source", () => {
 
   it("restores the bottom-player volume action without adding it to the mini player", () => {
     const layoutSource = readFileSync(
-      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      new URL("./bottom-player-layout.tsx", import.meta.url),
       "utf8"
     );
     const miniPlayerSource = readFileSync(
-      new URL("./bottom-player/MiniPlayerOverlay.tsx", import.meta.url),
+      new URL("./MiniPlayerOverlay.tsx", import.meta.url),
       "utf8"
     );
 
@@ -45,11 +45,11 @@ describe("BottomPlayer source", () => {
 
   it("does not let unrelated settings events overwrite the active volume", () => {
     const roomPlaybackSource = readFileSync(
-      new URL("../features/playback/use-room-playback.ts", import.meta.url),
+      new URL("../../features/playback/use-room-playback.ts", import.meta.url),
       "utf8"
     );
     const localPlaybackSource = readFileSync(
-      new URL("../features/playback/local-player-context.tsx", import.meta.url),
+      new URL("../../features/playback/local-player-context.tsx", import.meta.url),
       "utf8"
     );
 
@@ -78,10 +78,10 @@ describe("BottomPlayer source", () => {
       "utf8"
     );
     const layoutSource = readFileSync(
-      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      new URL("./bottom-player-layout.tsx", import.meta.url),
       "utf8"
     );
-    const shellSource = readFileSync(new URL("./room/RoomAppShell.tsx", import.meta.url), "utf8");
+    const shellSource = readFileSync(new URL("../room/RoomAppShell.tsx", import.meta.url), "utf8");
 
     expect(shellSource).toContain("canSeekPlayback={!isHostControlledRoom || isRoomHost}");
     expect(shellSource).not.toContain("activePlaybackSource");
@@ -114,7 +114,7 @@ describe("BottomPlayer source", () => {
 
   it("commits range seeking for pointer and keyboard interaction", () => {
     const layoutSource = readFileSync(
-      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      new URL("./bottom-player-layout.tsx", import.meta.url),
       "utf8"
     );
 
@@ -127,11 +127,11 @@ describe("BottomPlayer source", () => {
   it("exposes the mini player from both responsive player layouts", () => {
     const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
     const layoutSource = readFileSync(
-      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      new URL("./bottom-player-layout.tsx", import.meta.url),
       "utf8"
     );
     const miniPlayerSource = readFileSync(
-      new URL("./bottom-player/MiniPlayerOverlay.tsx", import.meta.url),
+      new URL("./MiniPlayerOverlay.tsx", import.meta.url),
       "utf8"
     );
     const queueSource = readFileSync(new URL("./PlayerQueueDrawer.tsx", import.meta.url), "utf8");
@@ -183,7 +183,7 @@ describe("BottomPlayer source", () => {
 
   it("hydrates the persistent player from local playlist metadata", () => {
     const localPlayerSource = readFileSync(
-      new URL("../features/playback/local-player-context.tsx", import.meta.url),
+      new URL("../../features/playback/local-player-context.tsx", import.meta.url),
       "utf8"
     );
 

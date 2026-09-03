@@ -3,3 +3,4 @@ export * from "./AppSidebar";
 export * from "./MobileAppNavigation";
 export * from "./AudioUnlockOverlay";
 export * from "./AppRouteShell";
+export * from "./PersistentRoomRuntime";

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { getArtworkSourceUrl } from "./artwork-colors";
 
 type SquareAlbumCoverProps = {
   artworkUrl: string | null;

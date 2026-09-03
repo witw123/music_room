@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
-import { AppPersistentPlayer } from "@/components/AppPersistentPlayer";
+import { AppPersistentPlayer } from "@/components/bottom-player";
 import { AppSidebar } from "./AppSidebar";
 import { AwayRoomReturnButton } from "@/components/room-home";
 import { MobileAppNavigation } from "./MobileAppNavigation";

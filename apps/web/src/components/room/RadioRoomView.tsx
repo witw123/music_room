@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { PlayerQueueList } from "@/components/PlayerQueueDrawer";
+import { PlayerQueueList } from "@/components/bottom-player";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { MembersPanel } from "./MembersPanel";

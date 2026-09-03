@@ -8,8 +8,8 @@ import type {
   QqMusicTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
-import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/MobileTrackActionsMenu";
+import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
+import { MobileTrackActionsMenu, type MobileTrackAction } from "@/components/ui/MobileTrackActionsMenu";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { getAnchoredDialogAnchor, type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";

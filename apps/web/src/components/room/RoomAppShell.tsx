@@ -5,7 +5,7 @@ import type { RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import { AudioUnlockOverlay, MobileAppNavigation } from "@/components/shell";
-import { BottomPlayerController } from "@/components/BottomPlayerController";
+import { BottomPlayerController } from "@/components/bottom-player";
 import { RoomsHomePage } from "@/components/room-home";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { CachePlaybackPromptModal } from "@/components/room/CachePlaybackPromptModal";

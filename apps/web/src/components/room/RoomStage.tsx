@@ -18,7 +18,7 @@ import { RoomLyricsPanel } from "./RoomLyricsPanel";
 import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { resolvePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
-import { SquareAlbumCover } from "@/components/PlayerArtwork";
+import { SquareAlbumCover } from "@/components/bottom-player";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 import { RoomReactionOverlay } from "./RoomReactionOverlay";

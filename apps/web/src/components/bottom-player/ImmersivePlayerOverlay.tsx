@@ -7,15 +7,15 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
-import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
+import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
-import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "@/components/bottom-player/artwork-colors";
-import { type PlaybackMode } from "@/components/bottom-player/playback-mode";
-import { SquareAlbumCover } from "@/components/PlayerArtwork";
+import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "./artwork-colors";
+import { type PlaybackMode } from "./playback-mode";
+import { SquareAlbumCover } from "./PlayerArtwork";
 import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
 import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
-import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
+import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;

@@ -5,10 +5,10 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
-import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
-import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
+import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
+import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
-import { SquareAlbumCover } from "@/components/PlayerArtwork";
+import { SquareAlbumCover } from "./PlayerArtwork";
 import { getArtworkSourceUrl, withAlpha } from "./artwork-colors";
 import type { PlayerStyle } from "@/features/settings/settings-store";
 

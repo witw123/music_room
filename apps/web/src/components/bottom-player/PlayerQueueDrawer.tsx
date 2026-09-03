@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent 
 import type { QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
-import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { getArtworkSourceUrl } from "./artwork-colors";
 
 export type PlayerQueueListProps = {
   queue: QueueItem[];

@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import Script from "next/script";
-import { PersistentRoomRuntime } from "@/components/PersistentRoomRuntime";
+import { PersistentRoomRuntime } from "@/components/shell";
 import "./globals.css";
 
 const themeInitScript = `(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomPlayer } from "@/components/BottomPlayer";
+import { BottomPlayer } from "./BottomPlayer";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 
 export function AppPersistentPlayer() {

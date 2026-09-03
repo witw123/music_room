@@ -2,7 +2,7 @@
 
 import { memo, useEffect } from "react";
 import type { AuthSession, PlaybackSnapshot, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import { BottomPlayer } from "@/components/BottomPlayer";
+import { BottomPlayer } from "./BottomPlayer";
 import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-visualizer";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";

@@ -3,7 +3,7 @@ import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlis
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getAnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import { FavoriteTrackButton } from "@/components/FavoriteTrackButton";
+import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { Button } from "@/components/ui/button";
 import {
   Artwork,
