@@ -124,7 +124,7 @@ export function CreateRoomDialogModal({
               const val = event.target.value;
               setForm((current) => ({ ...current, name: val }));
             }}
-            placeholder={defaultRoomName || "例如：周五夜听"}
+            placeholder="例如：周五夜听"
             spellCheck="false"
             value={form.name}
           />
