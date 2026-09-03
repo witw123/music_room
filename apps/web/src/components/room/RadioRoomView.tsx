@@ -46,6 +46,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       {/* Mobile Top Room Control Header */}
       <div className="px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
         <RoomControlHeader
+          isMobile
           roomSnapshot={props.roomSnapshot}
           mediaConnectionState={props.mediaConnectionState}
           currentTrack={props.currentTrack}

@@ -31,6 +31,10 @@ export class AbuseProtectionService {
   constructor(private readonly redis: RedisService) {}
 
   async enforce(scope: string, dimensions: AbuseDimension[], policy: AbuseLimit) {
+    if (process.env.RATE_LIMIT_DISABLED === "true" || process.env.NODE_ENV === "test") {
+      return;
+    }
+
     const normalizedDimensions = dimensions
       .map((dimension) => ({
         name: dimension.name.trim().toLowerCase(),

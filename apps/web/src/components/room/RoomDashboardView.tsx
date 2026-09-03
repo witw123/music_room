@@ -169,6 +169,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
           {/* Mobile Room Header matching desktop control bar */}
           <div className="pb-2.5 lg:hidden">
             <RoomControlHeader
+              isMobile
               roomSnapshot={props.roomSnapshot}
               mediaConnectionState={props.mediaConnectionState}
               currentTrack={props.currentTrack}

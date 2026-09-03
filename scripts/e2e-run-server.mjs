@@ -28,6 +28,7 @@ const env =
         AUTH_FAKE_PERSISTENCE: "true",
         AUTH_FAKE_PERSIST_PATH: resolve(repoRoot, ".tmp/e2e/auth-store.json"),
         AUTH_RATE_LIMIT_DISABLED: "true",
+        RATE_LIMIT_DISABLED: "true",
         DATABASE_URL:
           process.env.DATABASE_URL ??
           "postgresql://music_room:music_room@127.0.0.1:65432/music_room?schema=public&connect_timeout=1",
