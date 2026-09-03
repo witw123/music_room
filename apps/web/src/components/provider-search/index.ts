@@ -2,3 +2,4 @@ export * from "./search-ui-primitives";
 export * from "./SongsResults";
 export * from "./PlaylistsContent";
 export * from "./AlbumsContent";
+export * from "./use-provider-track-actions";
