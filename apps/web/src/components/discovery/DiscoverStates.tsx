@@ -4,7 +4,7 @@ import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import {
   ProviderPlaylistPickerDialog,
   type ProviderPlaylistPickerOption
-} from "@/components/ProviderPlaylistPickerDialog";
+} from "@/components/provider-search";
 import { CompassIcon as DiscoverCompassIcon } from "@/components/icons/DiscoverIcons";
 
 export function PlaylistPicker({

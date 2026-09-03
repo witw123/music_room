@@ -1,4 +1,4 @@
-import { DiscoverPage } from "@/components/DiscoverPage";
+import { DiscoverPage } from "@/components/discovery";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

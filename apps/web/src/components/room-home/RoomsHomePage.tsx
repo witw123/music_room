@@ -14,9 +14,9 @@ import {
   storeRoomSnapshotHandoff
 } from "@/lib/domain/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
-import { AppSidebar } from "@/components/AppSidebar";
-import { AwayRoomReturnButton } from "@/components/AwayRoomReturnButton";
-import { RoomDirectoryCard } from "@/components/RoomDirectoryCard";
+import { AppSidebar } from "@/components/shell";
+import { AwayRoomReturnButton } from "./AwayRoomReturnButton";
+import { RoomDirectoryCard } from "@/components/room-card";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
@@ -26,7 +26,7 @@ import {
   SelectedRoomDialogModal,
   roomTypeLabel,
   type CreateRoomForm
-} from "@/components/room-home";
+} from "./index";
 import {
   clearAwayRoomId,
   readAwayRoomId,

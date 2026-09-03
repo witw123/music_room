@@ -6,9 +6,12 @@ import type {
   ProviderTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { ProviderPlaylistDetailView } from "@/components/ProviderPlaylistDetailView";
-import { type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
-import { ProviderSearchPage } from "@/components/ProviderSearchPage";
+import {
+  ProviderAlbumTrackTable,
+  ProviderPlaylistDetailView,
+  ProviderSearchPage,
+  type ProviderPlaylistPickerOption
+} from "@/components/provider-search";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
@@ -32,7 +35,6 @@ import {
   saveAudioFileToLocalDirectory
 } from "@/features/library/local-audio-storage";
 import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
-import { ProviderAlbumTrackTable } from "@/components/ProviderAlbumDetailView";
 import {
   getCachedDiscoverData,
   setCachedDiscoverData,
@@ -70,7 +72,7 @@ import {
   type Detail,
   type DiscoverPlaylistCard,
   type DiscoverTrackActions
-} from "@/components/discovery";
+} from "./index";
 
 export function DiscoverPage() {
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/discover" });

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { AuthPage } from "@/components/AuthPage";
+import { AuthPage } from "@/components/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

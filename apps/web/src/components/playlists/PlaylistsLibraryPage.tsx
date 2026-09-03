@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FavoriteAlbumsPage } from "@/components/FavoriteAlbumsPage";
-import { PlaylistsWorkspacePage } from "@/components/PlaylistsWorkspacePage";
+import { FavoriteAlbumsPage } from "@/components/discovery";
+import { PlaylistsWorkspacePage } from "./PlaylistsWorkspacePage";
 import { MusicIcon, RadioIcon, HeartIcon } from "@/components/icons/DiscoverIcons";
 
 type PlaylistLibraryTab = "local" | "network" | "favorites";

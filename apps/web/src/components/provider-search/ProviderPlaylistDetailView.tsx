@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   ProviderAlbumTrackTable,
   type ProviderAlbumTrackActions
-} from "@/components/ProviderAlbumDetailView";
+} from "./ProviderAlbumDetailView";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
   PlayIcon,

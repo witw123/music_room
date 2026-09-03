@@ -10,7 +10,7 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
-import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
+import { SearchSuggestions, type SearchSuggestionItem } from "@/components/provider-search";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 

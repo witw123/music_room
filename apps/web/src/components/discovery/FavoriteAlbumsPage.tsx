@@ -5,8 +5,13 @@ import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite,
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
-import { ProviderAlbumDetailView, ProviderAlbumTrackTable, type ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
-import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
+import {
+  ProviderAlbumDetailView,
+  ProviderAlbumTrackTable,
+  ProviderPlaylistPickerDialog,
+  type ProviderAlbumTrackActions,
+  type ProviderPlaylistPickerOption
+} from "@/components/provider-search";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { MusicRoomApiError, musicRoomApi } from "@/lib/network/music-room-api";

@@ -1,4 +1,4 @@
-import { PlaylistsWorkspacePage } from "@/components/PlaylistsWorkspacePage";
+import { PlaylistsWorkspacePage } from "@/components/playlists";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

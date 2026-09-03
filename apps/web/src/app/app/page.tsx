@@ -1,4 +1,4 @@
-import { RoomsHomePage } from "@/components/RoomsHomePage";
+import { RoomsHomePage } from "@/components/room-home";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

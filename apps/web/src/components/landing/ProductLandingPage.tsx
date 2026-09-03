@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 
-import { TopBar } from "@/components/TopBar";
+import { TopBar } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { buildAppEntryHref } from "@/lib/domain/client-shell";
 import {

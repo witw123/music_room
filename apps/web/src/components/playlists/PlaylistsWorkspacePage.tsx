@@ -19,7 +19,7 @@ import {
   getNetworkPlaylistSource,
   resolveProviderArtwork,
   type PlaylistSelection
-} from "@/components/playlists";
+} from "./index";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import {

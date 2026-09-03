@@ -21,7 +21,7 @@ import { RequestRoomView } from "@/components/room/RequestRoomView";
 import { RadioRoomView } from "@/components/room/RadioRoomView";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
-import { AppSidebar } from "@/components/AppSidebar";
+import { AppSidebar } from "@/components/shell";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";

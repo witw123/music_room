@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
-import { PersonalOverview } from "@/components/PersonalOverview";
-import { ListeningProfileOverview } from "@/components/ListeningProfileOverview";
-import { RoomCenterOverview } from "@/components/RoomCenterOverview";
+import { PersonalOverview } from "./PersonalOverview";
+import { ListeningProfileOverview } from "./ListeningProfileOverview";
+import { RoomCenterOverview } from "@/components/room-home";
 import { TasteExclusionsManager } from "@/components/discovery/TasteExclusionsManager";
 import { TasteColdStartDialog } from "@/components/discovery/TasteColdStartDialog";
-import { SettingsPage } from "@/components/SettingsPage";
+import { SettingsPage } from "./SettingsPage";
 import {
   BarChartIcon,
   ShieldCheckIcon,

@@ -1,5 +1,5 @@
-import { RoomsHomePage } from "@/components/RoomsHomePage";
-import { AppRouteShell } from "@/components/AppRouteShell";
+import { RoomsHomePage } from "@/components/room-home";
+import { AppRouteShell } from "@/components/shell";
 
 export default function RoomsPage() {
   return (

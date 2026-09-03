@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import type { RoomDirectoryItem, RoomType } from "@music-room/shared";
-import { ArtisticRoomStageScene } from "./room-card/ArtisticRoomStageScene";
+import { ArtisticRoomStageScene } from "./ArtisticRoomStageScene";
 
 type RoomDirectoryCardProps = {
   room: RoomDirectoryItem;

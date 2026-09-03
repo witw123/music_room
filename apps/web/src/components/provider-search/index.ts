@@ -3,3 +3,8 @@ export * from "./SongsResults";
 export * from "./PlaylistsContent";
 export * from "./AlbumsContent";
 export * from "./use-provider-track-actions";
+export * from "./ProviderAlbumDetailView";
+export * from "./ProviderPlaylistDetailView";
+export * from "./ProviderPlaylistPickerDialog";
+export * from "./ProviderSearchSuggestions";
+export * from "./ProviderSearchPage";

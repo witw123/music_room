@@ -7,3 +7,5 @@ export * from "./MoodStationRail";
 export * from "./DiscoverStates";
 export * from "./TasteColdStartDialog";
 export * from "./TasteExclusionsManager";
+export * from "./DiscoverPage";
+export * from "./FavoriteAlbumsPage";

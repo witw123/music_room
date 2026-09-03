@@ -27,9 +27,9 @@ import {
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import type { ProviderAlbumTrackActions } from "@/components/ProviderAlbumDetailView";
-import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "@/components/ProviderPlaylistPickerDialog";
-import { SearchSuggestions, type SearchSuggestionItem } from "@/components/ProviderSearchSuggestions";
+import type { ProviderAlbumTrackActions } from "./ProviderAlbumDetailView";
+import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "./ProviderPlaylistPickerDialog";
+import { SearchSuggestions, type SearchSuggestionItem } from "./ProviderSearchSuggestions";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   getCachedFavorites,
@@ -51,7 +51,7 @@ import {
   resolveTrackArtwork,
   type Provider,
   type Track
-} from "@/components/provider-search";
+} from "./index";
 
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
