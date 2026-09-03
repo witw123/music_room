@@ -18,20 +18,11 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { takeNextShuffleTrack } from "@music-room/shared";
-import {
-  getCachedLibraryTrack,
-  upsertLocalPlaylistTrack,
-  type LocalPlaylistTrackRecord
-} from "@/features/library/indexeddb";
+import { type LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import {
   releaseProviderTrackPlaybackCache
 } from "@/features/playback/provider-track-cache";
-import {
-  getLocalAudioCacheFile,
-  getLocalAudioFile
-} from "@/features/library/local-audio-storage";
 import { synchronizeShuffleBagTrackIds } from "@music-room/shared";
-import { readEmbeddedAudioMetadata } from "@/features/library/audio-metadata";
 import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
@@ -39,10 +30,12 @@ import {
   getAppSettings,
   updateAppSettings
 } from "@/features/settings/settings-store";
-import { analyzeAudioBlobLoudness, resolveLoudnessGainDb } from "./loudness";
+import { resolveLoudnessGainDb } from "./loudness";
 import {
+  buildLocalPlaybackSnapshot,
   buildLocalQueueItemId,
-  firstMetadataText,
+  enrichTrackMetadata,
+  loadLocalAudioFile,
   localQueueOwnerId,
   mergeLocalTrackRecord,
   toTrackMeta
@@ -213,136 +206,28 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       if (!input.record) return null;
 
       revisionRef.current += 1;
-      return {
-        status: input.status,
-        currentTrackId: input.record.id,
-        currentQueueItemId: queueRef.current.some((track) => track.id === input.record?.id)
-          ? buildLocalQueueItemId(input.record.id)
-          : null,
-        playbackAssetId: null,
-        startAt: null,
-        sourceSessionId: null,
-        sourcePeerId: null,
-        sourceTrackId: input.record.id,
-        positionMs: Math.max(0, Math.round(input.positionMs)),
-        startedAt: input.startedAt ?? null,
-        queueVersion: 1,
+      return buildLocalPlaybackSnapshot({
+        ...input,
+        playbackMode,
         playbackRevision: revisionRef.current,
         mediaEpoch: mediaEpochRef.current,
-        playbackMode,
-        nextQueueItemId: nextQueueItemIdRef.current
-      };
+        nextQueueItemId: nextQueueItemIdRef.current,
+        queue: queueRef.current
+      });
     },
     [playbackMode]
   );
 
-  const loadAudioFile = useCallback(async (track: LocalPlaylistTrackRecord) => {
-    if (!track.fileHash) return null;
+  const loadAudioFile = useCallback(
+    (track: LocalPlaylistTrackRecord) => loadLocalAudioFile(track),
+    []
+  );
 
-    const localFile = await getLocalAudioFile(
-      track.fileHash,
-      track.sourceDirectoryId,
-      track.fileName
-    );
-    if (localFile) return localFile;
-
-    const cachedFile = await getLocalAudioCacheFile(track.fileHash);
-    if (cachedFile) return cachedFile;
-
-    const cachedRecord = await getCachedLibraryTrack(track.fileHash);
-    return cachedRecord?.file ?? null;
-  }, []);
-
-  const enrichTrackMetadata = useCallback(async (
-    track: LocalPlaylistTrackRecord,
-    file: Blob
-  ): Promise<LocalPlaylistTrackRecord> => {
-    // Directory imports already persist metadata, but older records and cached files
-    // can contain only a filename. Parse each local file at most once per session.
-    const needsMetadata = !track.title?.trim()
-      || !track.artist?.trim()
-      || !track.album
-      || !Number.isFinite(track.durationMs)
-      || track.durationMs <= 0
-      || !track.artworkUrl
-      || !track.lyrics
-      || !track.loudness;
-    if (!needsMetadata || (track.fileHash && metadataEnrichedHashesRef.current.has(track.fileHash))) {
-      return track;
-    }
-
-    const [embedded, cached] = await Promise.all([
-      readEmbeddedAudioMetadata(file),
-      track.fileHash ? getCachedLibraryTrack(track.fileHash).catch(() => null) : Promise.resolve(null)
-    ]);
-    const loudness = track.loudness ?? cached?.loudness ?? await analyzeAudioBlobLoudness(file);
-    if (track.fileHash) metadataEnrichedHashesRef.current.add(track.fileHash);
-    const preferEmbedded = track.provider === "local_upload";
-    const nextTrack: LocalPlaylistTrackRecord = {
-      ...track,
-      title: firstMetadataText(
-        preferEmbedded ? embedded.title : null,
-        cached?.title,
-        track.title,
-        embedded.title
-      ) ?? "未命名歌曲",
-      artist: firstMetadataText(
-        preferEmbedded ? embedded.artist : null,
-        cached?.artist,
-        track.artist,
-        embedded.artist
-      ) ?? "本地歌曲",
-      album: firstMetadataText(
-        preferEmbedded ? embedded.album : null,
-        cached?.album,
-        track.album,
-        embedded.album
-      ),
-      durationMs: (preferEmbedded ? embedded.durationMs : null)
-        ?? cached?.durationMs
-        ?? (track.durationMs > 0 ? track.durationMs : null)
-        ?? embedded.durationMs
-        ?? 0,
-      artworkUrl: firstMetadataText(
-        preferEmbedded ? embedded.artworkUrl : null,
-        cached?.artworkUrl,
-        track.artworkUrl,
-        embedded.artworkUrl
-      ),
-      lyrics: firstMetadataText(
-        preferEmbedded ? embedded.lyrics : null,
-        cached?.lyrics,
-        track.lyrics,
-        embedded.lyrics
-      ),
-      ...(loudness
-        ? { loudness }
-        : {}),
-      mimeType: track.mimeType || file.type || cached?.mimeType || track.mimeType,
-      sizeBytes: track.sizeBytes || file.size || cached?.sizeBytes || track.sizeBytes
-    };
-
-    const changed = nextTrack.title !== track.title
-      || nextTrack.artist !== track.artist
-      || nextTrack.album !== track.album
-      || nextTrack.durationMs !== track.durationMs
-      || nextTrack.artworkUrl !== track.artworkUrl
-      || nextTrack.lyrics !== track.lyrics
-      || nextTrack.mimeType !== track.mimeType
-      || nextTrack.sizeBytes !== track.sizeBytes;
-    const loudnessChanged = nextTrack.loudness?.gainDb !== track.loudness?.gainDb;
-    if (!changed && !loudnessChanged) return nextTrack;
-
-    const persistedTrack = {
-      ...nextTrack,
-      updatedAt: new Date().toISOString()
-    };
-    void upsertLocalPlaylistTrack(persistedTrack).catch(() => {
-      // Keep retrying on a later play when IndexedDB or the selected directory is unavailable.
-      if (track.fileHash) metadataEnrichedHashesRef.current.delete(track.fileHash);
-    });
-    return persistedTrack;
-  }, []);
+  const enrichTrack = useCallback(
+    (track: LocalPlaylistTrackRecord, file: Blob) =>
+      enrichTrackMetadata(track, file, metadataEnrichedHashesRef.current),
+    []
+  );
 
   const playRecords = useCallback(async (
     records: LocalPlaylistTrackRecord[],
@@ -373,7 +258,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       const candidateFile = await loadAudioFile(candidate).catch(() => null);
       if (requestId !== playRequestRef.current) return;
       if (candidateFile) {
-        const enrichedCandidate = await enrichTrackMetadata(candidate, candidateFile).catch(() => candidate);
+        const enrichedCandidate = await enrichTrack(candidate, candidateFile).catch(() => candidate);
         if (requestId !== playRequestRef.current) return;
         nextRecords = nextRecords.map((item, index) => index === candidateIndex ? enrichedCandidate : item);
         selectedIndex = candidateIndex;
@@ -448,7 +333,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [
     createPlaybackSnapshot,
-    enrichTrackMetadata,
+    enrichTrack,
     loadAudioFile,
     loudnessNormalization,
     playbackMode,
