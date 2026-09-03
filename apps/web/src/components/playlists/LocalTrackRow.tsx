@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, type DragEvent } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { toCachedProviderTrack } from "@/features/playlist/local-playlist";

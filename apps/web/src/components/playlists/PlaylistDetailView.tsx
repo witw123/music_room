@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import {

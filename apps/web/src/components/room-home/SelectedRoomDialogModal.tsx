@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import type { RoomDirectoryItem } from "@music-room/shared";
 import { Button } from "@/components/ui/button";

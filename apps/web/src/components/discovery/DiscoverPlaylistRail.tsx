@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import type { DiscoverPlaylistCard } from "./discover-types";
 import { providerPlaylistKey } from "./discover-types";
