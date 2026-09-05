@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type {
   GuestSession,
   QqMusicTrackCandidate,
@@ -122,16 +122,9 @@ export function useTrackUploads(options: {
   const roomTrackIdsKey = [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])]
     .sort()
     .join("|");
-  const roomCatalogKey = useMemo(() => {
-    if (!roomSnapshot) return "";
-    return `${roomSnapshot.room.id}:${roomSnapshot.room.roomRevision ?? 0}:${roomSnapshot.tracks.length}:${roomSnapshot.queue.length}:${roomSnapshot.playlists.length}`;
-  }, [
-    roomSnapshot?.room.id,
-    roomSnapshot?.room.roomRevision,
-    roomSnapshot?.tracks.length,
-    roomSnapshot?.queue.length,
-    roomSnapshot?.playlists.length
-  ]);
+  const roomCatalogKey = roomSnapshot
+    ? `${roomSnapshot.room.id}:${roomSnapshot.room.roomRevision ?? 0}:${roomSnapshot.tracks.length}:${roomSnapshot.queue.length}:${roomSnapshot.playlists.length}`
+    : "";
 
   const refreshCacheLibrary = useCallback(async () => {
     const activeRefresh = refreshCacheLibraryPromiseRef.current;
