@@ -120,4 +120,35 @@ describe("room lyrics", () => {
     expect(getActiveRoomLyricIndex(lines, 0)).toBe(-1);
     expect(getActiveRoomLyricIndex(lines, 3_000)).toBe(1);
   });
+
+  it("parses NetEase YRC JSON format metadata and song lines and discards raw JSON noise", () => {
+    const yrc = `{"t":0,"c":[{"tx":"作词: "},{"tx":"娃娃","li":"http://example.com/artist.jpg"}]}
+{"t":1000,"c":[{"tx":"作曲: "},{"tx":"陶喆"}]}
+{"t":2000,"c":[{"tx":"编曲: "},{"tx":"吴庆隆"}]}
+[10000,2000](10000,1000,0)歌(11000,1000,0)词
+{"invalid":true}`;
+
+    const lines = parseRoomLyrics(yrc);
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toEqual({
+      id: "0:yrc-json",
+      text: "作词: 娃娃",
+      timeMs: 0,
+      words: []
+    });
+    expect(lines[1]).toEqual({
+      id: "1:yrc-json",
+      text: "作曲: 陶喆",
+      timeMs: 1_000,
+      words: []
+    });
+    expect(lines[2]).toEqual({
+      id: "2:yrc-json",
+      text: "编曲: 吴庆隆",
+      timeMs: 2_000,
+      words: []
+    });
+    expect(lines[3]?.text).toBe("歌词");
+    expect(lines.some((l) => l.text.includes("{"))).toBe(false);
+  });
 });

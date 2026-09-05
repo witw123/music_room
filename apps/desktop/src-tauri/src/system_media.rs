@@ -19,10 +19,19 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct SystemMediaState(Mutex<Option<MediaControls>>);
 
 pub fn init(app: &AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let hwnd = app
+        .get_webview_window("main")
+        .and_then(|w| w.hwnd().ok())
+        .map(|h| h.0 as isize as *mut std::ffi::c_void);
+
+    #[cfg(not(target_os = "windows"))]
+    let hwnd = None;
+
     let config = PlatformConfig {
         dbus_name: "musicroom",
         display_name: "Music Room",
-        hwnd: None,
+        hwnd,
     };
     let mut controls = MediaControls::new(config).map_err(|error| error.to_string())?;
     let handle = app.clone();

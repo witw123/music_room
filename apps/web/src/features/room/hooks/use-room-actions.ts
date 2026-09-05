@@ -298,6 +298,7 @@ export function useRoomActions({
       const result = await runBestEffortRoomLeave({
         roomId: roomSnapshot.room.id,
         leaveRemote: musicRoomApi.leaveRoom,
+        remoteWaitMs: 150,
         completeLocalExit: async () => {
           setSuppressRoomRecovery(true);
           dispatchRoomStateEvent({ type: "local-reset" });

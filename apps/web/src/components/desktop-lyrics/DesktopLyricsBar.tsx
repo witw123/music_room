@@ -174,9 +174,13 @@ export function DesktopLyricsBar({
       return;
     }
     let animationFrameId = 0;
+    let lastUpdateAt = 0;
     const tick = () => {
       const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-      setSmoothPositionMs(anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs));
+      if (now - lastUpdateAt >= 32) {
+        lastUpdateAt = now;
+        setSmoothPositionMs(anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs));
+      }
       animationFrameId = window.requestAnimationFrame(tick);
     };
     animationFrameId = window.requestAnimationFrame(tick);

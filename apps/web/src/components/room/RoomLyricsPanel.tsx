@@ -89,10 +89,14 @@ export function RoomLyricsPanel({
     }
 
     let animationFrameId: number;
+    let lastUpdateAt = 0;
     const tick = () => {
       const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-      const elapsed = Math.max(0, now - anchorRef.current.receivedAt);
-      setSmoothPositionMs(anchorRef.current.baseMs + elapsed);
+      if (now - lastUpdateAt >= 32) {
+        lastUpdateAt = now;
+        const elapsed = Math.max(0, now - anchorRef.current.receivedAt);
+        setSmoothPositionMs(anchorRef.current.baseMs + elapsed);
+      }
       animationFrameId = window.requestAnimationFrame(tick);
     };
 

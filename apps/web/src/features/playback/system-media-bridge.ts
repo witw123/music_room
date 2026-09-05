@@ -66,20 +66,11 @@ function applyCommand(
   }
 }
 
-// Windows Tauri deliberately stays passive: WebView2 forwards the page's
-// Media Session API to SMTC itself, and the shell-side commands are only
-// implemented for macOS/Linux, so pushing across the bridge would just be
-// no-op IPC on a 1 Hz cadence.
-function isWindowsDesktopShell() {
-  return typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
-}
-
 /**
  * Bridges playback state to the OS system media player of each shell:
  *
- * - Tauri desktop: macOS (Now Playing) and Linux (MPRIS) go through the
- *   `system_media_*` shell commands; Windows is covered by WebView2's own
- *   SMTC integration driven by the page's Media Session API.
+ * - Tauri desktop: Windows (SMTC via WinRT), macOS (Now Playing), Linux (MPRIS)
+ *   via `system_media_*` shell commands.
  * - Capacitor Android: the SystemMediaControls plugin owns a system media
  *   session + MediaStyle notification.
  * - Plain browsers: covered by the existing Media Session API wiring, so this
@@ -98,7 +89,7 @@ export function useSystemMediaTransport(input: {
   const lastMetaKeyRef = useRef("");
   const lastPositionPushAtRef = useRef(0);
   const lastIsPlayingRef = useRef(false);
-  const isNative = isCapacitorRuntime() || (isTauriRuntime() && !isWindowsDesktopShell());
+  const isNative = isCapacitorRuntime() || isTauriRuntime();
 
   // System commands (hardware keys handled separately via "media-key").
   useEffect(() => {

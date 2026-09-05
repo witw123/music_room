@@ -1,4 +1,3 @@
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod system_media;
 
 use tauri::{
@@ -38,10 +37,6 @@ async fn system_media_update_meta(
     artwork_url: Option<String>,
     duration_secs: Option<f64>,
 ) -> Result<(), String> {
-    // macOS/Linux: forward to the native Now Playing / MPRIS controls.
-    // Windows: no-op — the page's Media Session API already drives SMTC
-    // through WebView2, and a second registration would duplicate the entry.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     system_media::update_metadata(
         &app,
         &title,
@@ -50,8 +45,6 @@ async fn system_media_update_meta(
         artwork_url.as_deref(),
         duration_secs,
     );
-    #[cfg(target_os = "windows")]
-    let _ = (&app, &title, &artist, &album, &artwork_url, &duration_secs);
     Ok(())
 }
 
@@ -61,19 +54,13 @@ async fn system_media_update_playback(
     is_playing: bool,
     position_ms: f64,
 ) -> Result<(), String> {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     system_media::update_playback(&app, is_playing, position_ms);
-    #[cfg(target_os = "windows")]
-    let _ = (&app, is_playing, position_ms);
     Ok(())
 }
 
 #[command]
 async fn system_media_clear(app: AppHandle) -> Result<(), String> {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     system_media::clear(&app);
-    #[cfg(target_os = "windows")]
-    let _ = &app;
     Ok(())
 }
 
@@ -264,7 +251,6 @@ pub fn run() {
 
             let _tray = builder.build(app)?;
 
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
             if let Err(error) = system_media::init(&app.handle()) {
                 eprintln!("system media controls init failed: {error}");
             }

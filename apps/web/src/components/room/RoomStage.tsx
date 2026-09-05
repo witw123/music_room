@@ -194,7 +194,7 @@ function RoomStageBase({
       (!playbackRef.current.startedAt && !playbackRef.current.startAt && playbackBarrierRef.current?.holdPositionMs === null)
     ) return;
 
-    const timer = window.setInterval(updatePosition, 50);
+    const timer = window.setInterval(updatePosition, 500);
     return () => window.clearInterval(timer);
   }, [
     currentTrackDuration,

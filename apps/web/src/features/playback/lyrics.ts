@@ -25,6 +25,38 @@ export function parseRoomLyrics(value: string | null | undefined): RoomLyricLine
     const line = rawLine.trim();
     if (!line || metadataPattern.test(line)) return;
 
+    if (line.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(line) as {
+          t?: number;
+          c?: Array<{ tx?: string; t?: number; d?: number; dur?: number }>;
+        };
+        if (typeof parsed === "object" && parsed !== null && Array.isArray(parsed.c)) {
+          const lineTimeMs = typeof parsed.t === "number" ? parsed.t : 0;
+          const timedWords: RoomLyricWord[] = [];
+          for (const item of parsed.c) {
+            if (typeof item?.tx === "string" && item.tx) {
+              const wordTime = typeof item.t === "number" ? item.t : lineTimeMs;
+              const wordDur = typeof item.d === "number" ? item.d : (typeof item.dur === "number" ? item.dur : 0);
+              timedWords.push({ text: item.tx, timeMs: wordTime, durationMs: wordDur });
+            }
+          }
+          const text = parsed.c.map((item) => item?.tx ?? "").join("").trim();
+          if (text) {
+            const words = timedWords.some((w) => w.durationMs > 0)
+              ? expandTimedWords(timedWords, lineTimeMs)
+              : [];
+            lines.push({ id: `${lineIndex}:yrc-json`, text, timeMs: lineTimeMs, words });
+          }
+          return;
+        }
+      } catch {
+        // Not valid JSON
+      }
+      // Never allow unparsed JSON to leak into plain lyrics display
+      return;
+    }
+
     const yrcLine = line.match(yrcLinePattern);
     if (yrcLine) {
       const lineTimeMs = Number(yrcLine[1]);
