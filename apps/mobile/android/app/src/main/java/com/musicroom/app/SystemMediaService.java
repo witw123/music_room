@@ -103,16 +103,6 @@ public class SystemMediaService extends Service {
             public void onSeekTo(long pos) {
                 emit("seekTo", pos, null);
             }
-
-            @Override
-            public void onSeekForward(long time) {
-                emit("seekBy", null, time);
-            }
-
-            @Override
-            public void onSeekBackward(long time) {
-                emit("seekBy", null, -time);
-            }
         });
         session.setActive(true);
         registerCommandReceiver();
@@ -190,8 +180,8 @@ public class SystemMediaService extends Service {
                         | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
                         | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
                         | PlaybackStateCompat.ACTION_SEEK_TO
-                        | PlaybackStateCompat.ACTION_SEEK_FORWARD
-                        | PlaybackStateCompat.ACTION_SEEK_BACKWARD)
+                        | PlaybackStateCompat.ACTION_FAST_FORWARD
+                        | PlaybackStateCompat.ACTION_REWIND)
                 .setState(isPlaying
                                 ? PlaybackStateCompat.STATE_PLAYING
                                 : PlaybackStateCompat.STATE_PAUSED,

@@ -70,7 +70,8 @@ public class SystemMediaControlsPlugin extends Plugin {
         intent.putExtra("artist", call.getString("artist", ""));
         intent.putExtra("album", call.getString("album", ""));
         intent.putExtra("artworkUrl", call.getString("artworkUrl", ""));
-        intent.putExtra("durationMs", (long) call.getDouble("durationMs", 0.0));
+        double durationMs = call.getDouble("durationMs", 0.0);
+        intent.putExtra("durationMs", (long) durationMs);
         startService(intent);
         call.resolve();
     }
@@ -83,7 +84,8 @@ public class SystemMediaControlsPlugin extends Plugin {
             return;
         }
         intent.putExtra("isPlaying", call.getBoolean("isPlaying", false));
-        intent.putExtra("positionMs", (long) call.getDouble("positionMs", 0.0));
+        double positionMs = call.getDouble("positionMs", 0.0);
+        intent.putExtra("positionMs", (long) positionMs);
         startService(intent);
         call.resolve();
     }
