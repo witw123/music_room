@@ -2,6 +2,28 @@
 
 本文档记录项目对外发布的重要变更。
 
+## [0.3.2] - 2026-09-05
+
+### 新增
+
+- **系统媒体控制三端打通（Windows SMTC / macOS 正在播放 / Linux MPRIS / Android 媒体通知）**：
+  - 桌面端（Tauri）：新增 `system_media` 原生模块（souvlaki），macOS「正在播放」与 Linux MPRIS 展示曲名、歌手、专辑、封面与播放时间轴；Windows 由 WebView2 将页面 Media Session API 直通 SMTC，避免重复条目；
+  - 移动端（Android/Capacitor）：新增 `SystemMediaControlsPlugin` 与 `mediaPlayback` 前台服务 `SystemMediaService`（MediaSessionCompat + MediaStyle 媒体通知），锁屏控件、通知抽屉与蓝牙/有线耳机线控均可播放/暂停/切歌/进度 seek；
+  - 播放状态与进度 1Hz 节流推送进系统时间轴（浏览器 `setPositionState` / Tauri `MediaPosition` / Android `PlaybackStateCompat`），系统侧按播放速率自动推进，seek 后自动校准；
+  - 系统命令统一回流底部播放器现有处理器，与屏幕按钮、全局媒体键同源同权限门；
+  - 浏览器媒体通知封面补充 96/256/512 多档尺寸声明；Android 存在原生媒体控制插件时浏览器侧自动让位，避免重复条目。
+- **真正的逐字歌词（卡拉OK 逐字时间轴）**：
+  - NetEase 切换 `lyric_new` 接口获取 YRC 逐字歌词（旧 `lyric` 接口恒无 `yrc` 字段）；
+  - QQ Music QRC base64 解码透传；逐字歌词在房间与本地播放器全面生效，无逐字数据时保持 LRC 逐字匀速降级。
+
+### 优化与修复
+
+- 修复系统媒体命令 `seekBy` 增量（`deltaMs`）在前端断链，导致相对快进/快退无效的问题；
+- Windows 桌面壳跳过系统媒体桥的无效 IPC 推送（该路径为 macOS/Linux 专用）；
+- QQ Music SDK 类型声明重写，消除模块内全部 22 处 `any`；
+- 播放器、歌词、曲库、信令网关与两家 provider 等模块大规模结构化拆分（含 `indexeddb`、`PlaylistsWorkspacePage`、provider 页面组件化、mappers/helpers 提取），行为无变化；
+- e2e 测试环境隔离移动端 header 测试 ID、关闭接口限流；修复创建房间名称占位文案与客户端组件 `use client` 指令缺失。
+
 ## [0.3.1] - 2026-08-30
 
 ### 新增
