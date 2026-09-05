@@ -5,3 +5,4 @@ export * from "./PersonalOverview";
 export * from "./CustomLayoutEditor";
 export * from "./ProviderDataImportSection";
 export * from "./ProviderAccountsPage";
+export * from "./AboutSettingsSection";

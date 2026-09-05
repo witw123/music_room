@@ -16,3 +16,4 @@ export * from "./providers/qqmusic";
 export * from "./providers/catalog";
 export * from "./personalization";
 export * from "./room/models";
+export * from "./version";

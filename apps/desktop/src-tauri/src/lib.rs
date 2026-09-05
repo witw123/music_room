@@ -147,6 +147,13 @@ async fn focus_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[command]
+#[allow(deprecated)]
+async fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+    app.shell().open(&url, None).map_err(|error| error.to_string())
+}
+
 fn position_lyrics_window(window: &tauri::WebviewWindow) {
     let Some(main) = window.app_handle().get_webview_window("main") else {
         return;
@@ -201,7 +208,8 @@ pub fn run() {
             hide_desktop_lyrics_window,
             drag_desktop_lyrics_window,
             set_desktop_lyrics_size,
-            focus_main_window
+            focus_main_window,
+            open_external_url
         ])
         .setup(|app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;

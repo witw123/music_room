@@ -10,6 +10,8 @@ import { DesktopLyricsProvider } from "@/features/playback/desktop-lyrics-contex
 
 import { isCapacitorRuntime } from "@/lib/desktop/tauri";
 import { requestNotificationPermission } from "@/features/playback/system-notifications";
+import { useAppUpdate } from "@/features/update/use-app-update";
+import { UpdatePromptDialog } from "@/components/update/UpdatePromptDialog";
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -38,6 +40,9 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   }, [isLyricsWindow]);
 
   const runtimeRoomId = isLyricsWindow ? null : (routeRoomId ?? awayRoomId);
+  const { result: updateResult, isPromptOpen: isUpdatePromptOpen, dismissPrompt: dismissUpdatePrompt } = useAppUpdate({
+    autoCheck: !isLyricsWindow
+  });
 
   return (
     <DesktopLyricsProvider>
@@ -52,6 +57,11 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
         </LocalPlayerProvider>
       ) : null}
       <DesktopLyricsOverlay />
+      <UpdatePromptDialog
+        onDismiss={dismissUpdatePrompt}
+        open={isUpdatePromptOpen}
+        result={updateResult}
+      />
     </DesktopLyricsProvider>
   );
 }

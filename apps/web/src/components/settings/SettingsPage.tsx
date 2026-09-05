@@ -11,6 +11,7 @@ import { LocalStorageManagementCard } from "./LocalStorageSettingsSection";
 import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
 import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
 import { ProviderDataImportSection } from "./ProviderDataImportSection";
+import { AboutSettingsSection } from "./AboutSettingsSection";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -608,6 +609,8 @@ export function SettingsPage({
               </div>
             </SettingRow> : null}
           </SettingsSection>
+
+          <AboutSettingsSection />
 
           <SettingsSection title="账号">
             <SettingRow label="退出登录" description="退出当前账号并返回登录页面。">
