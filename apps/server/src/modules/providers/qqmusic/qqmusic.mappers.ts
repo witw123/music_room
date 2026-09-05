@@ -156,6 +156,23 @@ export function readLyricText(value: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+/**
+ * QQ 的 qrc 字段是 base64 编码的逐字歌词(与 NetEase YRC 同为
+ * `[start,dur](start,dur,0)字` 行格式)。上游只对 lyric 字段解码,
+ * qrc 需要在这里补一次 base64 解码;解码失败按缺失处理。
+ */
+export function readWordSyncedLyric(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const direct = readLyricText(value);
+  if (direct?.includes("[")) return direct;
+  try {
+    const decoded = Buffer.from(value, "base64").toString("utf-8");
+    return decoded.includes("[") && decoded.trim() ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readHttpUrl(...values: unknown[]) {
   for (const value of values) {
     const result = readString(value);

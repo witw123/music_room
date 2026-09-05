@@ -6,7 +6,7 @@ import {
   login_qr_create,
   login_qr_key,
   login_status,
-  lyric,
+  lyric_new,
   likelist,
   related_playlist,
   playlist_detail,
@@ -231,7 +231,9 @@ export class NeteaseApiClient {
 
   async getLyrics(input: { trackId: string; cookie: string }) {
     return this.call(async () => {
-      const response = (await lyric(withProviderOptions({ id: input.trackId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
+      // lyric_new (/api/song/lyric/v1) is the only endpoint that returns the
+      // word-by-word `yrc` field; the legacy /api/song/lyric never includes it.
+      const response = (await lyric_new(withProviderOptions({ id: input.trackId, cookie: input.cookie }, this.requestTimeoutMs()))) as NeteaseApiResponse;
       const body = parseCatalogBody(response.body);
       assertSuccessfulCode(readCatalogCode(body));
       return body;

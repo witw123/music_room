@@ -34,6 +34,7 @@ import {
   qrTtlSeconds,
   readFirstRecord,
   readHttpUrl,
+  readWordSyncedLyric,
   readLyricText,
   readNumber,
   readSearchTerms,
@@ -204,7 +205,7 @@ export class QqMusicService {
       provider: "qqmusic",
       providerTrackId: trackId,
       plainLyric: readLyricText(body.lyric),
-      wordSyncedLyric: readLyricText(body.qrc),
+      wordSyncedLyric: readWordSyncedLyric(body.qrc),
       translatedLyric: readLyricText(body.trans),
       romanizedLyric: readLyricText(body.roma)
     };
