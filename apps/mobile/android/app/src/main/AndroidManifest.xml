@@ -34,6 +34,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- System media session + MediaStyle notification (lock screen,
+             Bluetooth/headset transport). FOREGROUND_SERVICE and
+             FOREGROUND_SERVICE_MEDIA_PLAYBACK permissions are declared below. -->
+        <service
+            android:name=".SystemMediaService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
     <!-- Permissions -->

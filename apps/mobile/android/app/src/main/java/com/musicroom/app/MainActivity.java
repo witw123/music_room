@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(DesktopLyricsPlugin.class);
         registerPlugin(SystemNotificationPlugin.class);
+        registerPlugin(SystemMediaControlsPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Proactively request notification permission on Android 13+ (API 33+)
