@@ -1,3 +1,6 @@
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod system_media;
+
 use tauri::{
     command,
     menu::{Menu, MenuItem},
@@ -26,6 +29,54 @@ const LYRICS_BOTTOM_INSET_LOGICAL: f64 = 96.0;
 // the event loop it is blocking — the whole app deadlocks (no window, frozen
 // UI, no quit). Async commands run on the async runtime, which is the
 // supported path for cross-thread window creation.
+#[command]
+async fn system_media_update_meta(
+    app: AppHandle,
+    title: String,
+    artist: Option<String>,
+    album: Option<String>,
+    artwork_url: Option<String>,
+    duration_secs: Option<f64>,
+) -> Result<(), String> {
+    // macOS/Linux: forward to the native Now Playing / MPRIS controls.
+    // Windows: no-op — the page's Media Session API already drives SMTC
+    // through WebView2, and a second registration would duplicate the entry.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    system_media::update_metadata(
+        &app,
+        &title,
+        artist.as_deref(),
+        album.as_deref(),
+        artwork_url.as_deref(),
+        duration_secs,
+    );
+    #[cfg(target_os = "windows")]
+    let _ = (&app, &title, &artist, &album, &artwork_url, &duration_secs);
+    Ok(())
+}
+
+#[command]
+async fn system_media_update_playback(
+    app: AppHandle,
+    is_playing: bool,
+    position_ms: f64,
+) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    system_media::update_playback(&app, is_playing, position_ms);
+    #[cfg(target_os = "windows")]
+    let _ = (&app, is_playing, position_ms);
+    Ok(())
+}
+
+#[command]
+async fn system_media_clear(app: AppHandle) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    system_media::clear(&app);
+    #[cfg(target_os = "windows")]
+    let _ = &app;
+    Ok(())
+}
+
 #[command]
 async fn toggle_desktop_lyrics(app: AppHandle) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window(LYRICS_LABEL) {
@@ -156,6 +207,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            system_media_update_meta,
+            system_media_update_playback,
+            system_media_clear,
             toggle_desktop_lyrics,
             hide_desktop_lyrics_window,
             drag_desktop_lyrics_window,
@@ -209,6 +263,11 @@ pub fn run() {
             }
 
             let _tray = builder.build(app)?;
+
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            if let Err(error) = system_media::init(&app.handle()) {
+                eprintln!("system media controls init failed: {error}");
+            }
 
             Ok(())
         })

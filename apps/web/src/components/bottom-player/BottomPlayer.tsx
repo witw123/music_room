@@ -16,6 +16,7 @@ import {
   type PendingSeek
 } from "./seek-state";
 import { ImmersivePlayerOverlay } from "./ImmersivePlayerOverlay";
+import { useSystemMediaTransport } from "@/features/playback/system-media-bridge";
 import {
   MiniPlayerOverlay,
   requestMiniPlayerWindow
@@ -448,6 +449,38 @@ function BottomPlayerBase({
     onNext: playNext
   }), [artworkUrl, boundedProgressMs, currentTrack, desktopLyricsSource, isPlaying, playback?.currentTrackId, playerControlsEnabled, playNext, playPrev, togglePlayback]);
   useDesktopLyricsRegistration(desktopLyricsPlayer);
+
+  // System media surfaces (macOS Now Playing / Linux MPRIS / Android media
+  // notification) mirror the active track; commands reuse the same handlers
+  // as the on-screen transport and the media-key bridge.
+  useSystemMediaTransport({
+    snapshot: currentTrack
+      ? {
+        title: currentTrack.title,
+        artist: currentTrack.artist,
+        album: currentTrack.album ?? null,
+        artworkUrl,
+        durationMs: currentTrackDuration,
+        positionMs: boundedProgressMs,
+        isPlaying: isPlaying === true
+      }
+      : null,
+    handlers: {
+      onPlay: () => {
+        void onPlay();
+      },
+      onPause: () => {
+        void onPause(getLiveProgressMs());
+      },
+      onToggle: togglePlayback,
+      onPrev: playPrev,
+      onNext: playNext,
+      onSeekTo: requestSeek,
+      onSeekBy: (deltaMs) => {
+        requestSeek(getLiveProgressMs() + deltaMs);
+      }
+    }
+  });
 
   const applyVolume = useCallback(
     (nextVolume: number) => {

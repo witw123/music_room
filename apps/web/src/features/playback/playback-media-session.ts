@@ -1,6 +1,6 @@
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { notifyTrackChange } from "@/features/playback/system-notifications";
-import { listenTauri } from "@/lib/desktop/tauri";
+import { capacitorPlugin, isCapacitorRuntime, listenTauri } from "@/lib/desktop/tauri";
 
 export type PlaybackMediaSession = {
   sessionKey: string;
@@ -53,6 +53,14 @@ function getBrowserMediaSession(): BrowserMediaSession | null {
   return navigator.mediaSession as BrowserMediaSession;
 }
 
+// Android Capacitor: once the native SystemMediaControls plugin exists it
+// owns the system media session, and the WebView's own MediaSession
+// passthrough is unreliable — running both would surface duplicate entries.
+// Tauri keeps the browser path because Windows SMTC is driven by it.
+function nativeSystemMediaOwnsSession() {
+  return isCapacitorRuntime() && Boolean(capacitorPlugin("SystemMediaControls"));
+}
+
 function invokeMediaSessionAction(action: (() => void | Promise<unknown>) | undefined) {
   if (!action) return;
   void Promise.resolve(action()).catch(() => undefined);
@@ -83,7 +91,7 @@ export function installBrowserMediaSessionActionHandlers(
     unlistenTauriMediaKeys = unlisten;
   });
 
-  if (!mediaSession || typeof mediaSession.setActionHandler !== "function") {
+  if (!mediaSession || typeof mediaSession.setActionHandler !== "function" || nativeSystemMediaOwnsSession()) {
     return () => {
       unlistenTauriMediaKeys?.();
     };
@@ -156,6 +164,8 @@ export function syncBrowserMediaSession(input: {
     }
   }
 
+  if (nativeSystemMediaOwnsSession()) return;
+
   if (!mediaSession) return;
 
   if (!track || !playback?.currentTrackId || playback.currentTrackId !== track.id) {
@@ -166,13 +176,22 @@ export function syncBrowserMediaSession(input: {
 
   if (typeof MediaMetadata !== "undefined") {
     try {
+      const artworkUrl = track.artworkUrl;
+      // The library exposes a single artwork URL, so each entry declares the
+      // same source at a different size hint; OS surfaces pick the one that
+      // best matches their notification artwork instead of stretching one.
+      const artwork = artworkUrl
+        ? ["96x96", "256x256", "512x512"].map((sizes) => ({
+          src: artworkUrl,
+          sizes,
+          type: "image/*"
+        }))
+        : [];
       mediaSession.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,
         album: track.album ?? "音乐房",
-        artwork: track.artworkUrl
-          ? [{ src: track.artworkUrl, sizes: "512x512", type: "image/*" }]
-          : []
+        artwork
       });
     } catch {
       mediaSession.metadata = null;

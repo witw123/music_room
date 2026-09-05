@@ -117,7 +117,11 @@ describe("browser media session", () => {
         title: "夜航",
         artist: "音乐房",
         album: "现场",
-        artwork: [{ src: "https://example.com/cover.jpg" }]
+        artwork: [
+          { src: "https://example.com/cover.jpg", sizes: "96x96" },
+          { src: "https://example.com/cover.jpg", sizes: "256x256" },
+          { src: "https://example.com/cover.jpg", sizes: "512x512" }
+        ]
       }
     });
     expect(mediaSession.setPositionState).toHaveBeenCalledWith({
@@ -125,5 +129,44 @@ describe("browser media session", () => {
       position: 15,
       playbackRate: 1
     });
+  });
+
+  it("defers the browser media session to the native plugin on Capacitor", () => {
+    const mediaSession = {
+      metadata: null as unknown,
+      playbackState: "none",
+      setActionHandler: vi.fn(),
+      setPositionState: vi.fn()
+    };
+    vi.stubGlobal("navigator", { mediaSession });
+    vi.stubGlobal("window", {
+      Capacitor: {
+        isNativePlatform: () => true,
+        Plugins: { SystemMediaControls: {} }
+      }
+    });
+
+    syncBrowserMediaSession({
+      track: {
+        id: "track_1",
+        title: "夜航",
+        artist: "音乐房",
+        album: "现场",
+        artworkUrl: "https://example.com/cover.jpg",
+        durationMs: 180_000
+      } as never,
+      playback: {
+        currentTrackId: "track_1",
+        status: "playing",
+        positionMs: 12_000
+      }
+    });
+
+    expect(mediaSession.metadata).toBeNull();
+    expect(mediaSession.playbackState).toBe("none");
+
+    const cleanup = installBrowserMediaSessionActionHandlers({ onPlay: vi.fn() });
+    expect(mediaSession.setActionHandler).not.toHaveBeenCalled();
+    cleanup();
   });
 });
