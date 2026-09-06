@@ -15,7 +15,7 @@ import { VinylTonearm } from "./VinylTonearm";
 import { RoomControlHeader, getSourceModeLabel } from "./RoomControlHeader";
 export { getSourceModeLabel };
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
-import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
+import { selectRoomLyrics } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { resolvePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
 import { SquareAlbumCover } from "@/components/bottom-player";
@@ -233,12 +233,15 @@ function RoomStageBase({
       } catch {
         // A provider request below can still supply lyrics when local storage is unavailable.
       }
-      if (localLyrics && (hasWordSyncedRoomLyrics(localLyrics) || !sourceProvider || !sourceTrackId)) {
+      // A track that already carries lyrics locally (room manifest or the
+      // room playlist index) plays with them as-is; re-fetching from the
+      // provider on every playback made already-local tracks hit the network.
+      if (localLyrics) {
         if (!cancelled) {
           setLyricsText(localLyrics);
           setLyricsStatus("ready");
         }
-        if (!sourceProvider || !sourceTrackId) return;
+        return;
       }
 
       if (!sourceProvider || !sourceTrackId) {

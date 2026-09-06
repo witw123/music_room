@@ -6,7 +6,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
-import { hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
+import { selectRoomLyrics } from "@/features/playback/lyrics";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
 import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "./artwork-colors";
@@ -683,10 +683,13 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
     setTranslatedLyric(storedTranslatedLyrics?.trim() || null);
     setRomanizedLyric(storedRomanizedLyrics?.trim() || null);
     const fallbackLyrics = roomLyrics?.trim() || null;
-    if (fallbackLyrics && (hasWordSyncedRoomLyrics(fallbackLyrics) || !sourceProvider || !sourceTrackId)) {
+    if (fallbackLyrics) {
+      // The track already carries lyrics locally, so play them as-is. The
+      // old provider re-fetch (to maybe upgrade plain lines to word-synced)
+      // made every playback of an already-local track hit the network.
       setPlainLyric(fallbackLyrics);
       setLyricsStatus("ready");
-      if (!sourceProvider || !sourceTrackId) return;
+      return;
     }
     if (!sourceProvider || !sourceTrackId) {
       setPlainLyric(fallbackLyrics);
