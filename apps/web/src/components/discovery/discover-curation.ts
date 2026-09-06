@@ -31,43 +31,6 @@ export function extractDiscoverArtists(data: ProfileProviderRecommendations): Di
   return Array.from(map.values()).slice(0, 8);
 }
 
-export function getTimeContext() {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 11) {
-    return {
-      greeting: "清晨时光",
-      badge: "晨光清醒",
-      subtitle: "用元气旋律唤醒灵感，开启清爽充沛的一天。"
-    };
-  }
-  if (hour >= 11 && hour < 14) {
-    return {
-      greeting: "正午小憩",
-      badge: "午后放松",
-      subtitle: "轻快旋律伴你舒缓身心，享受片刻惬意闲适。"
-    };
-  }
-  if (hour >= 14 && hour < 18) {
-    return {
-      greeting: "午后专注",
-      badge: "工作专注",
-      subtitle: "沉浸式器乐与流动节拍，提升思考与专注效率。"
-    };
-  }
-  if (hour >= 18 && hour < 22) {
-    return {
-      greeting: "傍晚微醺",
-      badge: "晚间放松",
-      subtitle: "卸下一天的疲惫，在律动与温润声线中归于平静。"
-    };
-  }
-  return {
-    greeting: "深夜私享",
-    badge: "夜听疗愈",
-    subtitle: "漫漫长夜，用温柔纯净的声响陪伴静谧思绪。"
-  };
-}
-
 export const genreCategoryPresets = [
   { id: "rock", title: "摇滚与能量专栏", description: "充满张力与力量感的摇滚、朋克与独立之声。", tags: ["摇滚", "独立", "能量", "朋克"], keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk", "硬核"] },
   { id: "electronic", title: "电子律动空间", description: "跳跃节奏与合成器声场，沉浸式电音精选。", tags: ["电子", "EDM", "电音", "律动"], keywords: ["电子", "edm", "house", "techno", "电音", "synth", "dance", "舞曲"] },

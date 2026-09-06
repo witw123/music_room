@@ -61,7 +61,6 @@ import {
   genreFilterPills,
   buildCuratedPlaylistCards,
   extractDiscoverArtists,
-  getTimeContext,
   providerTrackKey,
   providerPlaylistKey,
   toPlaylistTrackActions,
@@ -472,7 +471,6 @@ export function DiscoverPage() {
     : [];
   const filteredTopTracks = filterTrackList(allRecommendedTracks).map((item) => item.candidate).slice(0, 10);
   const familiarArtists = data ? extractDiscoverArtists(data) : [];
-  const timeContext = getTimeContext();
 
   const topArtistItem = data?.familiarArtists[0] || data?.forYou[0];
   const topArtist = topArtistItem?.candidate.artist ?? null;
@@ -571,71 +569,6 @@ export function DiscoverPage() {
         </div>
 
         {loading && !data ? <DiscoverSkeleton /> : null}
-
-        {/* Editorial Spotlight Hero Card (Aurora Discovery Stage) */}
-        {data?.dailyRadar && data.dailyRadar.tracks.length > 0 && activeFilterId === "all" ? (
-          <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#161a29]/90 via-[#0f121d]/95 to-[#090b11] p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
-            {/* Ambient Aurora Glow */}
-            <div className="absolute -top-16 -right-16 w-80 h-80 rounded-full bg-[radial-gradient(circle,#0070f322_0%,#38bdf80a_50%,transparent_70%)] blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-16 left-1/3 w-64 h-64 rounded-full bg-[radial-gradient(circle,#c026d318_0%,transparent_65%)] blur-2xl pointer-events-none" />
-
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="space-y-2.5 max-w-2xl">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold text-accent bg-accent/15 border border-accent/20 uppercase tracking-wider">
-                  <SparklesIcon className="w-3.5 h-3.5" />
-                  <span>{timeContext.greeting} · 今日精选聚焦 ({data.dailyRadar.date})</span>
-                </div>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
-                  {data.dailyRadar.title}
-                </h1>
-                <p className="text-xs sm:text-sm text-foreground-muted/90 leading-relaxed">
-                  {data.dailyRadar.subtitle || timeContext.subtitle}
-                </p>
-                {data.dailyRadar.summaryGenres.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-1.5">
-                    {data.dailyRadar.summaryGenres.map((g) => (
-                      <span key={g} className="px-3 py-1 rounded-xl text-xs font-medium bg-white/[0.06] text-white border border-white/[0.08]">
-                        #{g}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                <Button
-                  type="button"
-                  disabled={pending !== null}
-                  onClick={() => playDailyRadarAll(data.dailyRadar!.tracks)}
-                  className="rounded-xl px-6 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_20px_var(--accent-glow)] transition-all active:scale-95"
-                >
-                  <PlayIcon className="w-4 h-4 mr-2" />
-                  <span>一键播放全部</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowColdStartDialog(true)}
-                  className="rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white px-3.5 border-white/[0.08]"
-                  title="调整偏好"
-                >
-                  <SlidersIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Top Recommended Radar Tracklist */}
-            <div className="relative z-10 mt-6 pt-5 border-t border-white/[0.08]">
-              <div className="max-h-[560px] overflow-y-auto hide-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-0.5">
-                <ProviderAlbumTrackTable
-                  actions={toPlaylistTrackActions(trackActions)}
-                  showToolbar={false}
-                  tracks={data.dailyRadar.tracks}
-                />
-              </div>
-            </div>
-          </section>
-        ) : null}
 
         {/* Filtered Genre Radar Spotlight */}
         {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
