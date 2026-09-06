@@ -149,7 +149,11 @@ export function useSessionIdentity(options: {
   const persistSession = useCallback(
     (session: AuthSession | null) => {
       if (!session && typeof window !== "undefined") {
-        window.localStorage.removeItem(sessionStorageKey);
+        try {
+          window.localStorage.removeItem(sessionStorageKey);
+        } catch {
+          // Ignore storage errors in restricted WebView environments
+        }
       }
     },
     [sessionStorageKey]

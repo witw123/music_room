@@ -28,7 +28,11 @@ export type AdminUserDetail = AdminUserSummary & {
 
 function getCsrfToken() {
   if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(csrfStorageKey);
+  try {
+    return window.sessionStorage.getItem(csrfStorageKey);
+  } catch {
+    return null;
+  }
 }
 
 async function request<T>(path: string, init: RequestInit = {}) {
@@ -55,7 +59,13 @@ async function request<T>(path: string, init: RequestInit = {}) {
 export const adminApi = {
   login: async (username: string, password: string, turnstileToken?: string) => {
     const session = await request<AdminSession>("/v1/admin/auth/login", { method: "POST", body: JSON.stringify({ username, password, turnstileToken }) });
-    if (typeof window !== "undefined") window.sessionStorage.setItem(csrfStorageKey, session.csrfToken);
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem(csrfStorageKey, session.csrfToken);
+      } catch {
+        // Ignore
+      }
+    }
     return session;
   },
   logout: () => request<{ ok: boolean }>("/v1/admin/auth/logout", { method: "POST" }),

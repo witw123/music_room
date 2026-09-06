@@ -176,14 +176,26 @@ export function useRoomRuntimeLifecycle(input: {
   ]);
 
   useEffect(() => {
-    const storedPeerId = window.sessionStorage.getItem(peerStorageKey);
+    let storedPeerId: string | null = null;
+    try {
+      storedPeerId = window.sessionStorage.getItem(peerStorageKey);
+    } catch {
+      // Ignore storage errors in restricted WebView or private browsing
+    }
     if (storedPeerId) {
       setPeerId(storedPeerId);
       return;
     }
 
-    const nextPeerId = `peer_${crypto.randomUUID()}`;
-    window.sessionStorage.setItem(peerStorageKey, nextPeerId);
+    const randomPart = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const nextPeerId = `peer_${randomPart}`;
+    try {
+      window.sessionStorage.setItem(peerStorageKey, nextPeerId);
+    } catch {
+      // Ignore storage errors
+    }
     setPeerId(nextPeerId);
   }, [peerStorageKey, setPeerId]);
 

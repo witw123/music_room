@@ -4,24 +4,40 @@ export const awayRoomResumeStorageKey = "music-room-away-room-resume";
 
 export function readAwayRoomId() {
   if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(awayRoomStorageKey);
+  try {
+    return window.sessionStorage.getItem(awayRoomStorageKey);
+  } catch {
+    return null;
+  }
 }
 
 export function storeAwayRoomId(roomId: string) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(awayRoomStorageKey, roomId);
-  window.sessionStorage.removeItem(awayRoomResumeStorageKey);
-  window.dispatchEvent(new Event(awayRoomChangeEvent));
+  try {
+    window.sessionStorage.setItem(awayRoomStorageKey, roomId);
+    window.sessionStorage.removeItem(awayRoomResumeStorageKey);
+    window.dispatchEvent(new Event(awayRoomChangeEvent));
+  } catch {
+    // Ignore storage errors in restricted WebView or private environments
+  }
 }
 
 export function readAwayRoomResumeId() {
   if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(awayRoomResumeStorageKey);
+  try {
+    return window.sessionStorage.getItem(awayRoomResumeStorageKey);
+  } catch {
+    return null;
+  }
 }
 
 export function requestAwayRoomResume(roomId: string) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(awayRoomResumeStorageKey, roomId);
+  try {
+    window.sessionStorage.setItem(awayRoomResumeStorageKey, roomId);
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 export function shouldCommitAwayRoomResume(input: {
@@ -40,7 +56,11 @@ export function shouldCommitAwayRoomResume(input: {
 
 export function clearAwayRoomId() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(awayRoomStorageKey);
-  window.sessionStorage.removeItem(awayRoomResumeStorageKey);
-  window.dispatchEvent(new Event(awayRoomChangeEvent));
+  try {
+    window.sessionStorage.removeItem(awayRoomStorageKey);
+    window.sessionStorage.removeItem(awayRoomResumeStorageKey);
+    window.dispatchEvent(new Event(awayRoomChangeEvent));
+  } catch {
+    // Ignore storage errors
+  }
 }

@@ -94,8 +94,15 @@ export function useRoomPageRoomActions({
   workspaceOnly
 }: UseRoomPageRoomActionsInput) {
   const resetRealtimePeer = useCallback(() => {
-    const nextPeerId = `peer_${crypto.randomUUID()}`;
-    window.sessionStorage.setItem(peerStorageKey, nextPeerId);
+    const randomPart = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const nextPeerId = `peer_${randomPart}`;
+    try {
+      window.sessionStorage.setItem(peerStorageKey, nextPeerId);
+    } catch {
+      // Ignore storage errors
+    }
     setPeerId(nextPeerId);
   }, [peerStorageKey, setPeerId]);
   const getCurrentPeerId = useCallback(() => peerId || null, [peerId]);

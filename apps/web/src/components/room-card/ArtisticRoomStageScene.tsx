@@ -52,10 +52,21 @@ export function InteractiveStarfieldScene({ className = "" }: { className?: stri
           </linearGradient>
         </defs>
 
-        {/* Constellation Connection Line */}
-        <path
-          d="M 65% 15% L 82% 28% L 74% 68%"
-          fill="none"
+        {/* Constellation Connection Lines */}
+        <line
+          x1="65%"
+          y1="15%"
+          x2="82%"
+          y2="28%"
+          stroke="rgba(147, 197, 253, 0.2)"
+          strokeWidth="0.75"
+          strokeDasharray="3 3"
+        />
+        <line
+          x1="82%"
+          y1="28%"
+          x2="74%"
+          y2="68%"
           stroke="rgba(147, 197, 253, 0.2)"
           strokeWidth="0.75"
           strokeDasharray="3 3"

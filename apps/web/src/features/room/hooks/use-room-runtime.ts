@@ -364,8 +364,12 @@ export function useRoomRuntime({
       // pointer or a pending handoff snapshot after the realtime exit. The
       // away-room pointer would otherwise keep rendering a "return to room"
       // button that navigates to a room this socket can no longer reach.
-      window.localStorage.removeItem(lastRoomStorageKey);
-      window.sessionStorage.removeItem("music-room-pending-room-snapshot");
+      try {
+        window.localStorage.removeItem(lastRoomStorageKey);
+        window.sessionStorage.removeItem("music-room-pending-room-snapshot");
+      } catch {
+        // Ignore storage errors in restricted WebView environments
+      }
       clearAwayRoomId();
       resetPlayerSurfaceRef.current();
       roomAudioOutput.releaseRoomAudioSession();

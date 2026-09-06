@@ -608,7 +608,7 @@ export function PlaylistDetailView({
             const queueable =
               player.isTrackPlayable(track) ||
               playbackTracks.some((item) => item.id === track.id && !!item.fileHash) ||
-              (!!track.provider &&
+              ((track.provider === "netease" || track.provider === "qqmusic") &&
                 !!track.providerTrackId &&
                 cachedProviderTrackIds.has(providerTrackKey(track.provider, track.providerTrackId)));
             return (

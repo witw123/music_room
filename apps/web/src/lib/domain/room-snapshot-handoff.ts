@@ -31,7 +31,11 @@ export function storeRoomSnapshotHandoff(snapshot: RoomSnapshot) {
     savedAt: Date.now()
   };
 
-  window.sessionStorage.setItem(roomSnapshotHandoffStorageKey, JSON.stringify(payload));
+  try {
+    window.sessionStorage.setItem(roomSnapshotHandoffStorageKey, JSON.stringify(payload));
+  } catch {
+    // Ignore storage errors in restricted WebView environments
+  }
 }
 
 export function consumeRoomSnapshotHandoff(roomId: string) {
@@ -39,12 +43,12 @@ export function consumeRoomSnapshotHandoff(roomId: string) {
     return null;
   }
 
-  const raw = window.sessionStorage.getItem(roomSnapshotHandoffStorageKey);
-  if (!raw) {
-    return null;
-  }
-
   try {
+    const raw = window.sessionStorage.getItem(roomSnapshotHandoffStorageKey);
+    if (!raw) {
+      return null;
+    }
+
     const payload = JSON.parse(raw) as Partial<RoomSnapshotHandoffPayload>;
     const isExpired =
       typeof payload.savedAt === "number" &&
@@ -65,7 +69,11 @@ export function consumeRoomSnapshotHandoff(roomId: string) {
     window.sessionStorage.removeItem(roomSnapshotHandoffStorageKey);
     return payload.snapshot;
   } catch {
-    window.sessionStorage.removeItem(roomSnapshotHandoffStorageKey);
+    try {
+      window.sessionStorage.removeItem(roomSnapshotHandoffStorageKey);
+    } catch {
+      // Ignore storage errors
+    }
     return null;
   }
 }
