@@ -346,7 +346,20 @@ function MobileImmersivePlayer({
               </div>
             </div>
           ) : (
-            <div className="mobile-player-panel flex min-h-0 flex-1 flex-col" key="lyrics">
+            <div
+              className="mobile-player-panel flex min-h-0 flex-1 flex-col"
+              key="lyrics"
+              onClick={(event) => {
+                // Music-app convention: tapping anywhere outside the
+                // interactive lyric content collapses the lyrics back to the
+                // cover. Lyric lines (two-tap seek targets), the translation
+                // toggles, and the artwork row above keep their own actions,
+                // so interactive elements are filtered before dismissing.
+                const target = event.target as HTMLElement | null;
+                if (target?.closest('button, [data-testid="room-lyrics-line"]')) return;
+                onSetMobileView("artwork");
+              }}
+            >
               <button aria-label="显示专辑封面" className="mb-3 flex min-w-0 items-center gap-3 rounded-lg py-2 text-left outline-none transition-[background-color,transform] duration-200 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-white" onClick={() => onSetMobileView("artwork")} title="显示专辑封面" type="button">
                 <SquareAlbumCover artworkUrl={artworkUrl} className="h-11 w-11 shrink-0 rounded-md" />
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{currentTrack?.title ?? "等待选择歌曲"}</span><span className="mt-0.5 block truncate text-xs text-white/55">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span></span>
