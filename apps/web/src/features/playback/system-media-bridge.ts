@@ -114,14 +114,20 @@ export function useSystemMediaTransport(input: {
             addListener?: (
               event: string,
               callback: (payload: CommandPayload) => void
-            ) => Promise<{ remove: () => void }>;
+            ) => Promise<{ remove: () => void }> | { remove: () => void };
           }
         | undefined;
-      void plugin
-        ?.addListener?.("systemMediaCommand", (payload) => {
-          apply(payload);
-        })
+      const listener = plugin?.addListener?.("systemMediaCommand", (payload) => {
+        apply(payload);
+      });
+      // Plugins registered natively (MainActivity.registerPlugin) return a
+      // synchronous PluginListenerHandle from addListener instead of the
+      // Promise that TS-registered ones give; chaining .then on the raw
+      // value throws "is not a function" inside React's commit phase and
+      // takes the whole app down, so normalize both forms first.
+      void Promise.resolve(listener)
         .then((listenerHandle) => {
+          if (!listenerHandle) return;
           if (cancelled) listenerHandle.remove();
           else unlisten = () => listenerHandle.remove();
         })
