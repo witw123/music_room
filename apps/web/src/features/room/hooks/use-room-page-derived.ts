@@ -155,31 +155,14 @@ export function useRoomPageDerived({
   const currentSourcePeerId = resolveCurrentSourcePeerId(roomSnapshot, roomPlayback);
 
   const isCurrentSourceOwner = useMemo(
-    () => {
-      if (!currentPlaybackTrackId) {
-        return false;
-      }
-
-      // Session identity is stable during a room visit. The presence peerId
-      // may be refreshed while a browser reconnects, and must not unload the
-      // local source engine for that short transition.
-      if (activeSessionId && playbackSourceSessionId) {
-        return activeSessionId === playbackSourceSessionId;
-      }
-
-      if (peerId && currentSourcePeerId) {
-        return currentSourcePeerId === peerId;
-      }
-
-      return Boolean(activeSessionId && playbackSourceSessionId === activeSessionId);
-    },
-    [
-      activeSessionId,
-      currentPlaybackTrackId,
-      currentSourcePeerId,
-      peerId,
-      playbackSourceSessionId
-    ]
+    () =>
+      isCurrentPlaybackSourceDevice({
+        playback: roomPlayback,
+        peerId,
+        activeSessionId,
+        sourcePeerId: currentSourcePeerId
+      }),
+    [activeSessionId, currentSourcePeerId, peerId, roomPlayback]
   );
   const playbackSurfaceKey = useMemo(
     () => {
@@ -249,8 +232,11 @@ export function resolveCurrentSourcePeerId(
   roomSnapshot: RoomSnapshot | null | undefined,
   playback: RoomSnapshot["room"]["playback"] | null | undefined
 ) {
-  const presencePeerId = playback?.sourceSessionId
+  if (!playback?.sourcePeerId) {
+    return null;
+  }
+  const presencePeerId = playback.sourceSessionId
     ? roomSnapshot?.room.members.find((member) => member.id === playback.sourceSessionId)?.peerId ?? null
     : null;
-  return presencePeerId ?? playback?.sourcePeerId ?? null;
+  return presencePeerId ?? playback.sourcePeerId;
 }

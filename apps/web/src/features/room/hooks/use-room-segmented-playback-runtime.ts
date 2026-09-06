@@ -1345,6 +1345,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             return;
           }
 
+          const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
           let sourceBroadcastStream: MediaStream | null = null;
           if (activeRuntime.isCurrentSource) {
             sourceBroadcastStream = roomAudioOutput.bindLocalAudioElement(audio, {
@@ -1354,12 +1355,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             });
           } else if (
             roomAudioOutput.hasLocalAudioElementSource(audio) ||
-            activeRuntime.loudnessGainDb !== 0
+            (activeRuntime.loudnessGainDb !== 0 && audioContextState === "running")
           ) {
             // A MediaElementAudioSourceNode permanently takes over the
-            // element's output. Reuse it when normalization is active, but
-            // leave a default listener on native media output so a cache
-            // transition cannot strand the element in a disconnected graph.
+            // element's output. Reuse it when normalization is active and running,
+            // but leave a default listener on native media output so a cache
+            // transition cannot strand the element in a disconnected or suspended graph.
             roomAudioOutput.bindLocalAudioElement(audio, {
               broadcast: false,
               loudnessGainDb: activeRuntime.loudnessGainDb,
@@ -1382,10 +1383,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             activeRuntime.audibleRef.current === true
           );
 
-          const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
           if (shouldWaitForLocalAudioContext({
-            isCurrentSource: activeRuntime.isCurrentSource ||
-              roomAudioOutput.hasLocalAudioElementSource(audio),
+            isCurrentSource: activeRuntime.isCurrentSource,
             audioUnlocked: activeRuntime.audioUnlocked,
             audioContextState
           })) {
