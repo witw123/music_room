@@ -1,4 +1,10 @@
-import { hashAudioBlob, localPlaylistTrackId, toProviderTrackRecord, type ProviderTrack } from "@/features/playlist/local-playlist";
+import {
+  hashAudioBlob,
+  localPlaylistTrackId,
+  providerTrackKey,
+  toProviderTrackRecord,
+  type ProviderTrack
+} from "@/features/playlist/local-playlist";
 import {
   normalizeLocalAudioMimeType,
   saveCachedAudioFileToLocalDirectory
@@ -130,6 +136,26 @@ export async function hasProviderTrackPlaybackCache(fileHash: string | null | un
     getLocalAudioCacheFileRecord(fileHash).catch(() => null)
   ]);
   return Boolean(browserCache || localCache);
+}
+
+/**
+ * Provider+track keys (`provider:netease:123`) whose audio already sits in
+ * the playback cache. Playlist rows only carry provider identity, not a
+ * fileHash, so cache availability for their queueable/playable state has to
+ * be resolved by provider key instead.
+ */
+export async function listCachedProviderPlaybackTrackKeys() {
+  const summaries = await listCachedLibraryTrackSummaries().catch(() => []);
+  const keys = new Set<string>();
+  for (const summary of summaries) {
+    if (
+      (summary.provider === "netease" || summary.provider === "qqmusic") &&
+      summary.providerTrackId
+    ) {
+      keys.add(providerTrackKey(summary.provider, summary.providerTrackId));
+    }
+  }
+  return keys;
 }
 
 /** Remove provider playback caches left behind by a previous page session. */

@@ -17,6 +17,7 @@ import {
 import {
   cacheProviderTrackForPlayback,
   hasProviderTrackPlaybackCache,
+  listCachedProviderPlaybackTrackKeys,
   providerPlaybackCacheChangedEvent
 } from "@/features/playback/provider-track-cache";
 import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
@@ -86,6 +87,26 @@ export function PlaylistDetailView({
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ completed: 0, total: 0 });
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+  // Provider keys whose audio sits in the persistent playback cache. Rows of
+  // a network playlist only carry provider identity, so this is what makes
+  // their queueable state survive a reload instead of trusting the in-memory
+  // playbackTracks of the current session.
+  const [cachedProviderTrackIds, setCachedProviderTrackIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshCachedProviderTrackIds = () => {
+      void listCachedProviderPlaybackTrackKeys().then((keys) => {
+        if (!cancelled) setCachedProviderTrackIds(keys);
+      });
+    };
+    refreshCachedProviderTrackIds();
+    window.addEventListener(providerPlaybackCacheChangedEvent, refreshCachedProviderTrackIds);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(providerPlaybackCacheChangedEvent, refreshCachedProviderTrackIds);
+    };
+  }, []);
 
   useEffect(() => {
     const handlePlaybackCacheChange = (event: Event) => {
@@ -586,7 +607,10 @@ export function PlaylistDetailView({
             const playable = canPrepareTrack(track);
             const queueable =
               player.isTrackPlayable(track) ||
-              playbackTracks.some((item) => item.id === track.id && !!item.fileHash);
+              playbackTracks.some((item) => item.id === track.id && !!item.fileHash) ||
+              (!!track.provider &&
+                !!track.providerTrackId &&
+                cachedProviderTrackIds.has(providerTrackKey(track.provider, track.providerTrackId)));
             return (
               <LocalTrackRow
                 draggable={canEditTracks}
