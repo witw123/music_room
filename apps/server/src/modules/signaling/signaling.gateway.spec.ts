@@ -150,4 +150,77 @@ describe("SignalingGateway chat", () => {
     expect(server.to).toHaveBeenCalledWith("room_1");
     expect(emit).toHaveBeenCalledWith("room.chat", message);
   });
+
+  describe("SignalingGateway reaction", () => {
+    it("sanitizes trackId and broadcasts reaction", async () => {
+      const emit = jest.fn();
+      const server = { to: jest.fn().mockReturnValue({ emit }) };
+      const roomService = {
+        getRoomSnapshot: jest.fn().mockResolvedValue({
+          room: { playback: { currentTrackId: "track_current" } }
+        }),
+        recordRoomReaction: jest.fn().mockResolvedValue(5)
+      };
+      const gateway = Object.assign(Object.create(SignalingGateway.prototype), {
+        assertRealtimeRateLimit: jest.fn(),
+        assertRealtimeClient: jest.fn(),
+        sessionLease: { assert: jest.fn().mockResolvedValue(undefined) },
+        authService: { getUserOrThrow: jest.fn().mockResolvedValue({ id: "user_1", nickname: "Alice" }) },
+        roomService,
+        server
+      }) as {
+        handleRoomReaction: (client: { data: Record<string, unknown> }, payload: unknown) => Promise<unknown>;
+      };
+
+      const result = await gateway.handleRoomReaction({ data: { sessionId: "user_1" } }, {
+        roomId: "room_1",
+        reaction: "like",
+        trackId: "   "
+      });
+
+      expect(roomService.recordRoomReaction).toHaveBeenCalledWith({
+        roomId: "room_1",
+        userId: "user_1",
+        trackId: "track_current",
+        reactionType: "like"
+      });
+      expect(result).toMatchObject({
+        roomId: "room_1",
+        senderId: "user_1",
+        reaction: "like",
+        trackId: "track_current",
+        totalCount: 5
+      });
+      expect(emit).toHaveBeenCalledWith("room.reaction", expect.objectContaining({
+        trackId: "track_current",
+        totalCount: 5
+      }));
+    });
+
+    it("converts recording error to WsException", async () => {
+      const server = { to: jest.fn().mockReturnValue({ emit: jest.fn() }) };
+      const roomService = {
+        getRoomSnapshot: jest.fn().mockResolvedValue({
+          room: { playback: { currentTrackId: null } }
+        }),
+        recordRoomReaction: jest.fn().mockRejectedValue(new Error("曲目不属于该房间。"))
+      };
+      const gateway = Object.assign(Object.create(SignalingGateway.prototype), {
+        assertRealtimeRateLimit: jest.fn(),
+        assertRealtimeClient: jest.fn(),
+        sessionLease: { assert: jest.fn().mockResolvedValue(undefined) },
+        authService: { getUserOrThrow: jest.fn().mockResolvedValue({ id: "user_1", nickname: "Alice" }) },
+        roomService,
+        server
+      }) as {
+        handleRoomReaction: (client: { data: Record<string, unknown> }, payload: unknown) => Promise<unknown>;
+      };
+
+      await expect(gateway.handleRoomReaction({ data: { sessionId: "user_1" } }, {
+        roomId: "room_1",
+        reaction: "fire",
+        trackId: "track_invalid"
+      })).rejects.toThrow("曲目不属于该房间。");
+    });
+  });
 });

@@ -321,13 +321,21 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     if (!sessionId) throw new WsException("Unauthorized realtime request.");
     const user = await this.authService.getUserOrThrow(sessionId);
     const snapshot = await this.roomService.getRoomSnapshot(parsed.data.roomId, []);
-    const trackId = parsed.data.trackId ?? snapshot.room.playback.currentTrackId;
-    const totalCount = await this.roomService.recordRoomReaction({
-      roomId: parsed.data.roomId,
-      userId: user.id,
-      trackId,
-      reactionType: parsed.data.reaction
-    });
+    const rawTrackId = parsed.data.trackId?.trim() || null;
+    const trackId = rawTrackId ?? snapshot.room.playback.currentTrackId ?? null;
+    let totalCount = 0;
+    try {
+      totalCount = await this.roomService.recordRoomReaction({
+        roomId: parsed.data.roomId,
+        userId: user.id,
+        trackId,
+        reactionType: parsed.data.reaction
+      });
+    } catch (error) {
+      throw createWsApiException(
+        error instanceof Error ? error.message : "Reaction recording failed."
+      );
+    }
     const nextPayload = {
       roomId: parsed.data.roomId,
       senderId: user.id,

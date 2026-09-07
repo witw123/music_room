@@ -1,5 +1,4 @@
-import { Injectable } from "@nestjs/common";
-import { BadRequestException } from "@nestjs/common";
+import { Injectable, BadRequestException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Playlist } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
@@ -39,10 +38,9 @@ export class PlaylistService {
         orderBy: { updatedAt: "desc" }
       });
 
-      const playlists = (persisted as PersistedPlaylistRecord[]).map((item) =>
-        this.deserializePlaylist(item)
-      );
-      (persisted as PersistedPlaylistRecord[]).forEach((item) => {
+      const records = (persisted ?? []) as PersistedPlaylistRecord[];
+      const playlists = records.map((item) => this.deserializePlaylist(item));
+      records.forEach((item) => {
         this.playlistRoomIds.set(item.id, item.roomId ?? null);
       });
       playlists.forEach((playlist: Playlist) => this.playlists.set(playlist.id, playlist));
@@ -57,11 +55,25 @@ export class PlaylistService {
   }
 
   async listPlaylistsForRoom(roomId: string) {
-    const roomTrackIds = new Set((await this.roomService.getTracks(roomId)).map((track) => track.id));
-    const playlists = await this.listPlaylists();
-    return playlists.filter((playlist: Playlist) =>
-      playlist.trackIds.some((trackId: string) => roomTrackIds.has(trackId))
+    if (this.prisma.isAvailable()) {
+      const persisted = await this.prisma.playlist.findMany({
+        where: { roomId },
+        orderBy: { updatedAt: "desc" }
+      });
+
+      const records = (persisted ?? []) as PersistedPlaylistRecord[];
+      const playlists = records.map((item) => this.deserializePlaylist(item));
+      records.forEach((item) => {
+        this.playlistRoomIds.set(item.id, item.roomId ?? null);
+      });
+      playlists.forEach((playlist: Playlist) => this.playlists.set(playlist.id, playlist));
+      return playlists;
+    }
+
+    const playlists = [...this.playlists.values()].sort((left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt)
     );
+    return playlists.filter((playlist) => this.playlistRoomIds.get(playlist.id) === roomId);
   }
 
   async createPlaylist(input: {
@@ -98,9 +110,6 @@ export class PlaylistService {
       updatedAt: new Date().toISOString()
     };
 
-    this.playlists.set(playlist.id, playlist);
-    this.playlistRoomIds.set(playlist.id, input.roomId ?? null);
-
     if (this.prisma.isAvailable()) {
       await this.prisma.playlist.upsert({
         where: { id: playlist.id },
@@ -129,6 +138,9 @@ export class PlaylistService {
         }
       });
     }
+
+    this.playlists.set(playlist.id, playlist);
+    this.playlistRoomIds.set(playlist.id, input.roomId ?? null);
 
     return playlist;
   }
@@ -173,15 +185,13 @@ export class PlaylistService {
 
     const updated: Playlist = {
       ...current,
-      title: input.title ?? current.title,
-      description: input.description ?? current.description,
-      coverUrl: input.coverUrl ?? current.coverUrl,
-      tags: input.tags ?? current.tags,
-      trackIds: input.trackIds ?? current.trackIds,
+      title: input.title !== undefined ? input.title : current.title,
+      description: input.description !== undefined ? input.description : current.description,
+      coverUrl: input.coverUrl !== undefined ? input.coverUrl : current.coverUrl,
+      tags: input.tags !== undefined ? input.tags : current.tags,
+      trackIds: input.trackIds !== undefined ? input.trackIds : current.trackIds,
       updatedAt: new Date().toISOString()
     };
-
-    this.playlists.set(updated.id, updated);
 
     if (this.prisma.isAvailable()) {
       await this.prisma.playlist.update({
@@ -196,6 +206,8 @@ export class PlaylistService {
       });
     }
 
+    this.playlists.set(updated.id, updated);
+
     return updated;
   }
 
@@ -206,14 +218,14 @@ export class PlaylistService {
       throw new Error("Only the playlist owner can delete this playlist.");
     }
 
-    this.playlists.delete(playlistId);
-    this.playlistRoomIds.delete(playlistId);
-
     if (this.prisma.isAvailable()) {
       await this.prisma.playlist.deleteMany({
         where: { id: playlistId, ownerId }
       });
     }
+
+    this.playlists.delete(playlistId);
+    this.playlistRoomIds.delete(playlistId);
 
     return { ok: true };
   }
@@ -230,8 +242,6 @@ export class PlaylistService {
         updatedAt: new Date().toISOString()
       };
 
-      this.playlists.set(updated.id, updated);
-
       if (this.prisma.isAvailable()) {
         await this.prisma.playlist.update({
           where: { id: updated.id },
@@ -240,22 +250,24 @@ export class PlaylistService {
           }
         });
       }
+
+      this.playlists.set(updated.id, updated);
     }
   }
 
   async deletePlaylistsForRoom(roomId: string) {
+    if (this.prisma.isAvailable()) {
+      await this.prisma.playlist.deleteMany({
+        where: { roomId }
+      });
+    }
+
     const playlists = await this.listPlaylists();
     const roomPlaylists = playlists.filter((playlist) => this.playlistRoomIds.get(playlist.id) === roomId);
 
     for (const playlist of roomPlaylists) {
       this.playlists.delete(playlist.id);
       this.playlistRoomIds.delete(playlist.id);
-    }
-
-    if (this.prisma.isAvailable()) {
-      await this.prisma.playlist.deleteMany({
-        where: { roomId }
-      });
     }
 
     return { ok: true };

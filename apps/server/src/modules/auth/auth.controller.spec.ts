@@ -145,4 +145,40 @@ describe("AuthController", () => {
     expect(turnstileService.verify).toHaveBeenCalledWith("token", "127.0.0.1");
     expect(authService.login).not.toHaveBeenCalled();
   });
+
+  it("sanitizes unexpected internal errors during register and returns 500", async () => {
+    const authService = {
+      register: jest.fn().mockRejectedValue(new Error("PrismaClientKnownRequestError: table does not exist"))
+    };
+    const controller = new AuthController(authService as never, new TurnstileService());
+
+    await expect(
+      controller.register(
+        { username: "newuser", password: "password123", nickname: "Newbie" },
+        request,
+        "127.0.0.1"
+      )
+    ).rejects.toMatchObject({
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: "注册失败，请稍后重试。"
+    });
+  });
+
+  it("maps known validation errors to BadRequestException during register", async () => {
+    const authService = {
+      register: jest.fn().mockRejectedValue(new Error("Password must be at least 8 characters."))
+    };
+    const controller = new AuthController(authService as never, new TurnstileService());
+
+    await expect(
+      controller.register(
+        { username: "newuser", password: "password123", nickname: "Newbie" },
+        request,
+        "127.0.0.1"
+      )
+    ).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+      message: "Password must be at least 8 characters."
+    });
+  });
 });

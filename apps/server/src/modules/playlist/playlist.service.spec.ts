@@ -4,11 +4,11 @@ function createPrismaMock() {
   return {
     isAvailable: jest.fn(() => false),
     playlist: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      upsert: jest.fn(),
-      update: jest.fn(),
-      deleteMany: jest.fn()
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 })
     }
   };
 }
@@ -79,5 +79,105 @@ describe("PlaylistService", () => {
         trackIds: ["track_1", "track_2"]
       })
     ]);
+  });
+
+  it("isolates room playlists and does not leak other users' playlists with common tracks", async () => {
+    const prisma = createPrismaMock();
+    const roomService = {
+      getTracks: jest.fn().mockResolvedValue([{ id: "common_track" }]),
+      getQueue: jest.fn().mockResolvedValue([])
+    };
+    const service = new PlaylistService(roomService as never, prisma as never);
+
+    // Create user A's private playlist (no roomId) containing common_track
+    const userAPlaylist = await service.createPlaylist({
+      ownerId: "user_a",
+      title: "User A Private",
+      trackIds: ["common_track"]
+    });
+
+    // Create room 1's playlist containing common_track
+    const room1Playlist = await service.createPlaylist({
+      ownerId: "user_a",
+      roomId: "room_1",
+      title: "Room 1 Playlist",
+      trackIds: ["common_track"]
+    });
+
+    // Create room 2's playlist
+    const room2Playlist = await service.createPlaylist({
+      ownerId: "user_b",
+      roomId: "room_2",
+      title: "Room 2 Playlist",
+      trackIds: ["common_track"]
+    });
+
+    // Room 1 should only see room 1's playlists
+    const room1Results = await service.listPlaylistsForRoom("room_1");
+    expect(room1Results.map((p) => p.id)).toEqual([room1Playlist.id]);
+    expect(room1Results.map((p) => p.id)).not.toContain(userAPlaylist.id);
+    expect(room1Results.map((p) => p.id)).not.toContain(room2Playlist.id);
+  });
+
+  it("allows clearing description and coverUrl to null via updatePlaylist", async () => {
+    const prisma = createPrismaMock();
+    const roomService = {
+      getTracks: jest.fn().mockResolvedValue([]),
+      getQueue: jest.fn().mockResolvedValue([])
+    };
+    const service = new PlaylistService(roomService as never, prisma as never);
+
+    const playlist = await service.createPlaylist({
+      ownerId: "owner_1",
+      title: "My List",
+      description: "Initial description",
+      coverUrl: "https://example.com/cover.png"
+    });
+
+    expect(playlist.description).toBe("Initial description");
+    expect(playlist.coverUrl).toBe("https://example.com/cover.png");
+
+    const updated = await service.updatePlaylist(playlist.id, {
+      ownerId: "owner_1",
+      description: null,
+      coverUrl: null
+    });
+
+    expect(updated.description).toBeNull();
+    expect(updated.coverUrl).toBeNull();
+
+    const fetched = await service.getPlaylist(playlist.id);
+    expect(fetched.description).toBeNull();
+    expect(fetched.coverUrl).toBeNull();
+  });
+
+  it("preserves in-memory state if database update fails", async () => {
+    const prisma = createPrismaMock();
+    prisma.isAvailable.mockReturnValue(true);
+    prisma.playlist.upsert.mockResolvedValue({});
+    prisma.playlist.update.mockRejectedValue(new Error("Database connection lost"));
+
+    const roomService = {
+      getTracks: jest.fn().mockResolvedValue([]),
+      getQueue: jest.fn().mockResolvedValue([])
+    };
+    const service = new PlaylistService(roomService as never, prisma as never);
+
+    const playlist = await service.createPlaylist({
+      ownerId: "owner_1",
+      title: "Original Title",
+      description: "Original Description"
+    });
+
+    await expect(
+      service.updatePlaylist(playlist.id, {
+        ownerId: "owner_1",
+        title: "New Title"
+      })
+    ).rejects.toThrow("Database connection lost");
+
+    // Verify in-memory state was NOT dirtied
+    const cached = await service.getPlaylist(playlist.id);
+    expect(cached.title).toBe("Original Title");
   });
 });

@@ -7,6 +7,7 @@ import {
   Headers,
   HttpException,
   HttpStatus,
+  InternalServerErrorException,
   Ip,
   Optional,
   Post,
@@ -86,17 +87,41 @@ export class AuthController {
       setUserSessionCookie(response, session.token);
       return toPublicAuthSession(session);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Invalid payload.";
-      this.logger.warn(
-        this.buildAuthLog("register.rejected", clientIp, username, HttpStatus.BAD_REQUEST, message)
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      const rawMessage = error instanceof Error ? error.message : "";
+      if (rawMessage.includes("Username already exists")) {
+        this.logger.warn(
+          this.buildAuthLog("register.rejected", clientIp, username, HttpStatus.CONFLICT, rawMessage)
+        );
+        throw new ConflictException(rawMessage);
+      }
+      if (rawMessage.includes("Account storage is temporarily unavailable")) {
+        this.logger.warn(
+          this.buildAuthLog("register.rejected", clientIp, username, HttpStatus.SERVICE_UNAVAILABLE, rawMessage)
+        );
+        throw new ServiceUnavailableException(rawMessage);
+      }
+      const knownValidationErrors = [
+        "Username is required",
+        "Nickname is required",
+        "Password must be at least",
+        "Invalid username",
+        "Invalid nickname",
+        "Invalid payload"
+      ];
+      if (knownValidationErrors.some((v) => rawMessage.includes(v))) {
+        this.logger.warn(
+          this.buildAuthLog("register.rejected", clientIp, username, HttpStatus.BAD_REQUEST, rawMessage)
+        );
+        throw new BadRequestException(rawMessage);
+      }
+      this.logger.error(
+        this.buildAuthLog("register.error", clientIp, username, HttpStatus.INTERNAL_SERVER_ERROR, rawMessage),
+        error instanceof Error ? error.stack : undefined
       );
-      if (message.includes("Username already exists")) {
-        throw new ConflictException(message);
-      }
-      if (message.includes("Account storage is temporarily unavailable")) {
-        throw new ServiceUnavailableException(message);
-      }
-      throw new BadRequestException(message);
+      throw new InternalServerErrorException("注册失败，请稍后重试。");
     }
   }
 

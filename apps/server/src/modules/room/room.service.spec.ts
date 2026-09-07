@@ -2674,4 +2674,62 @@ describe("RoomService", () => {
       `Room not found: ${snapshot.room.id}`
     );
   });
+
+  it("validates room membership and track belonging when recording room reaction", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const nonMember = await authService.createGuestSession("Stranger");
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
+
+    // 1. Non-member cannot react
+    await expect(
+      roomService.recordRoomReaction({
+        roomId: snapshot.room.id,
+        userId: nonMember.id,
+        trackId: null,
+        reactionType: "like"
+      })
+    ).rejects.toThrow("Only room members can perform this action.");
+
+    // 2. Member reacts with non-existent track
+    await expect(
+      roomService.recordRoomReaction({
+        roomId: snapshot.room.id,
+        userId: host.id,
+        trackId: "track_non_existent",
+        reactionType: "like"
+      })
+    ).rejects.toThrow("曲目不属于该房间。");
+
+    // 3. Register a track in the room and react to it
+    const registeredTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Test Track",
+      artist: "Test Artist",
+      album: null,
+      durationMs: 180_000,
+      bitrate: null,
+      sizeBytes: null,
+      codec: null,
+      mimeType: null,
+      fileHash: "hash_test_123",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "netease",
+      sourceRef: { provider: "netease", trackId: "123" }
+    });
+
+    await expect(
+      roomService.recordRoomReaction({
+        roomId: snapshot.room.id,
+        userId: host.id,
+        trackId: registeredTrack.id,
+        reactionType: "applause"
+      })
+    ).resolves.toBe(0); // Prisma not available in mock, returns 0
+  });
 });

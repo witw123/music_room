@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { BadRequestException, Injectable, Optional } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   PlaybackSnapshot,
@@ -156,6 +156,18 @@ export class RoomService {
     trackId: string | null;
     reactionType: "like" | "applause" | "fire" | "sparkle";
   }) {
+    const record = await this.roomRecordRepository.getRoomRecord(input.roomId);
+    assertMember(record, input.userId);
+
+    if (input.trackId) {
+      const isRoomTrack =
+        record.tracks.some((track) => track.id === input.trackId) ||
+        record.room.playback.currentTrackId === input.trackId;
+      if (!isRoomTrack) {
+        throw new BadRequestException("曲目不属于该房间。");
+      }
+    }
+
     if (!this.prisma.isAvailable()) return 0;
     const reactionModel = (this.prisma as PrismaService & { roomReaction: { create: (args: unknown) => Promise<unknown>; count: (args: unknown) => Promise<number> } }).roomReaction;
     await reactionModel.create({
