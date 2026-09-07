@@ -199,7 +199,8 @@ export function useRoomActions({
             dispatchRoomStateEvent({
               type: "server-playback-patch",
               roomId,
-              playback
+              playback,
+              roomRevision: (playback as { roomRevision?: number }).roomRevision
             });
             if (options?.refreshSnapshotOnSuccess !== false) {
               void syncRoomSnapshot(roomId).catch(() => undefined);

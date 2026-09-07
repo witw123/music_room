@@ -15,12 +15,13 @@ import {
   hasRecentLocalMediaSample
 } from "../member-data";
 import { resolveCurrentSourcePeerId } from "@/features/room/hooks/use-room-page-derived";
+import type { RoomCoarsePlaybackState } from "@/features/room/playback/room-coarse-playback";
 export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   connectedPeers: string[];
   mediaConnectedPeers: string[];
   activeDashboardTab: "library" | "local" | "members";
-  segmentedPlayback: SegmentedPlaybackSnapshot;
+  coarsePlayback: RoomCoarsePlaybackState;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   canDeleteRoom: boolean;
@@ -38,10 +39,10 @@ export type UseRoomDerivedStateInput = {
 const emptyWorkspacePeerDiagnostics: PeerDiagnosticsSnapshot[] = [];
 const emptyWorkspacePeerRecentEvents: PeerRecentEvent[] = [];
 
-export function isLocalPlaybackAudible(segmentedPlayback: SegmentedPlaybackSnapshot) {
-  return segmentedPlayback.state === "live" && (
-    segmentedPlayback.sourceHealth === undefined ||
-    segmentedPlayback.sourceHealth === "source-ready"
+export function isLocalPlaybackAudible(coarsePlayback: RoomCoarsePlaybackState) {
+  return coarsePlayback.state === "live" && (
+    coarsePlayback.sourceHealth === undefined ||
+    coarsePlayback.sourceHealth === "source-ready"
   );
 }
 
@@ -49,7 +50,7 @@ export function useRoomDerivedState({
   roomSnapshot,
   connectedPeers,
   mediaConnectedPeers,
-  segmentedPlayback,
+  coarsePlayback,
   peerDiagnostics,
   peerRecentEvents,
   canDeleteRoom,
@@ -139,13 +140,13 @@ export function useRoomDerivedState({
     const playbackStatus = getLocalPlaybackStatus({
       presenceState: localMember.presenceState,
       playbackStatus: roomSnapshot.room.playback.status,
-      segmentedPlayback
+      coarsePlayback
     });
-    const audible = isLocalPlaybackAudible(segmentedPlayback);
+    const audible = isLocalPlaybackAudible(coarsePlayback);
     return {
       memberId: localMember.id,
       audible,
-      playbackPath: segmentedPlayback.audioPath,
+      playbackPath: coarsePlayback.audioPath,
       mediaSummary: {
         receiveRateKbps: totalMediaReceiveRateKbps,
         sendRateKbps: totalMediaSendRateKbps,
@@ -159,7 +160,7 @@ export function useRoomDerivedState({
     peerDiagnostics,
     roomSnapshot,
     roomMembers,
-    segmentedPlayback
+    coarsePlayback
   ]);
 
   const statusTone =
@@ -310,7 +311,7 @@ function getLatestMetricSampleAgeMs(
 export function getLocalPlaybackStatus(input: {
   presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
-  segmentedPlayback: SegmentedPlaybackSnapshot;
+  coarsePlayback: RoomCoarsePlaybackState;
 }): LocalMemberPanelState["playbackStatus"] {
   if (input.presenceState === "offline") {
     return {
@@ -339,7 +340,7 @@ export function getLocalPlaybackStatus(input: {
     };
   }
 
-  switch (input.segmentedPlayback.state) {
+  switch (input.coarsePlayback.state) {
     case "live":
       return {
         label: "正常出声",
@@ -349,11 +350,11 @@ export function getLocalPlaybackStatus(input: {
       };
     case "buffering":
       return {
-        label: input.segmentedPlayback.lastError ? "正在自动恢复" : "等待媒体轨道",
+        label: input.coarsePlayback.lastError ? "正在自动恢复" : "等待媒体轨道",
         detail:
-          input.segmentedPlayback.lastError ??
+          input.coarsePlayback.lastError ??
           "正在等待当前播放源建立或恢复 RTP Opus 音频轨道。",
-        tone: input.segmentedPlayback.lastError ? "warning" : "accent",
+        tone: input.coarsePlayback.lastError ? "warning" : "accent",
         badgeText: "Media buffering"
       };
     case "awaiting-unlock":

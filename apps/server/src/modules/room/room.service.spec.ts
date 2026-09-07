@@ -2732,4 +2732,65 @@ describe("RoomService", () => {
       })
     ).resolves.toBe(0); // Prisma not available in mock, returns 0
   });
+
+  it("restores sourcePeerId from null and bumps media epoch when a provider track uploader reconnects", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host", "online");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member", "online");
+
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Provider Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "provider-track-recovery",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "netease",
+      sourceRef: { provider: "netease", trackId: "999888" }
+    });
+
+    const initialPlayback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+    expect(initialPlayback.status).toBe("playing");
+    expect(initialPlayback.sourcePeerId).toBe("peer-host");
+
+    // Host goes offline. For provider tracks, playback stays playing, but sourcePeerId becomes null.
+    const roomAfterDeparture = await roomService.updatePeerPresence(
+      snapshot.room.id,
+      host.id,
+      null,
+      "offline"
+    );
+    expect(roomAfterDeparture.playback.status).toBe("playing");
+    expect(roomAfterDeparture.playback.sourcePeerId).toBeNull();
+    const departureEpoch = roomAfterDeparture.playback.mediaEpoch;
+
+    // Host comes back online with new peer id.
+    const roomAfterReconnect = await roomService.updatePeerPresence(
+      snapshot.room.id,
+      host.id,
+      "peer-host-new",
+      "online"
+    );
+
+    // Verify sourcePeerId is restored to new peer and mediaEpoch is bumped!
+    expect(roomAfterReconnect.playback.status).toBe("playing");
+    expect(roomAfterReconnect.playback.sourcePeerId).toBe("peer-host-new");
+    expect(roomAfterReconnect.playback.mediaEpoch).toBe(departureEpoch + 1);
+  });
 });

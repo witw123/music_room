@@ -4,7 +4,7 @@ import type { Socket } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
 import { RoomRealtimeBroadcaster } from "../realtime/room-realtime.broadcaster";
 
-type SessionLease = {
+export type SessionLease = {
   instanceId?: string;
   roomId?: string;
   sessionId?: string;
@@ -209,6 +209,51 @@ export class RoomSessionLeaseService {
       // Ignore lease cleanup failures; the TTL limits stale ownership.
       return false;
     }
+  }
+
+  async rollback(
+    roomId: string,
+    sessionId: string,
+    previousLease: SessionLease | null,
+    currentClaim: { peerId?: string; socketId: string; fenceToken: string }
+  ) {
+    if (!previousLease) {
+      return this.delete(roomId, sessionId, currentClaim);
+    }
+
+    this.invalidateSocket(currentClaim.socketId);
+
+    return this.withRoomLock(roomId, async () => {
+      try {
+        const restored = await this.redisService.restoreJsonLeaseIfValue(
+          this.key(roomId, sessionId),
+          {
+            instanceId: this.roomRealtimeBroadcaster.instanceId,
+            roomId,
+            sessionId,
+            peerId: currentClaim.peerId ?? previousLease.peerId,
+            socketId: currentClaim.socketId,
+            fenceToken: currentClaim.fenceToken
+          },
+          previousLease,
+          this.sessionLeaseTtlMs
+        );
+        if (restored) {
+          if (previousLease.socketId && previousLease.fenceToken) {
+            this.rememberSocketLease(
+              roomId,
+              sessionId,
+              previousLease.socketId,
+              previousLease.fenceToken
+            );
+          }
+        }
+        return restored;
+      } catch (error) {
+        this.logger.warn(`Failed to rollback session lease: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    });
   }
 
   async socketOwnsLease(socket: Socket) {

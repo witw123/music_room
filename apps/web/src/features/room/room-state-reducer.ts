@@ -64,6 +64,7 @@ export type RoomStateEvent =
       type: "server-playback-patch";
       roomId: string;
       playback: PlaybackSnapshot;
+      roomRevision?: number;
     }
   | {
       // A playback mutation failed without committing on the server. The
@@ -530,13 +531,15 @@ export function roomStateReducer(
         return current;
       }
 
+      const currentRevision = getRoomRevision(snapshot);
       return {
         ...current,
         snapshot: {
           ...snapshot,
           room: {
             ...snapshot.room,
-            playback: event.playback
+            playback: event.playback,
+            roomRevision: Math.max(currentRevision, event.roomRevision ?? 0)
           }
         }
       };

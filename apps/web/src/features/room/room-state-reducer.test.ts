@@ -933,4 +933,33 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.playback.queueVersion).toBe(3);
     expect(state.snapshot?.room.playback.playbackRevision).toBe(4);
   });
+
+  it("advances roomRevision when server-playback-patch includes roomRevision", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 5,
+            playback: createPlaybackSnapshot({
+              status: "paused",
+              playbackRevision: 1
+            })
+          }
+        })
+      },
+      {
+        type: "server-playback-patch",
+        roomId: "room_1",
+        playback: createPlaybackSnapshot({
+          status: "playing",
+          playbackRevision: 2
+        }),
+        roomRevision: 8
+      }
+    );
+
+    expect(state.snapshot?.room.roomRevision).toBe(8);
+    expect(state.snapshot?.room.playback.status).toBe("playing");
+  });
 });

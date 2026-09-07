@@ -542,7 +542,7 @@ export class RoomService {
       expectedVersion?: number;
       playbackMode?: import("@music-room/shared").PlaybackMode;
     }
-  ): Promise<PlaybackSnapshot> {
+  ): Promise<PlaybackSnapshot & { roomRevision?: number }> {
     if (!this.isRealtimeAvailable()) {
       throw new Error("Realtime sync unavailable.");
     }
@@ -570,7 +570,7 @@ export class RoomService {
     const playback = await this.roomPlaybackService.updatePlayback(record, input);
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
-    return playback;
+    return { ...playback, roomRevision: record.room.roomRevision };
   }
 
   /**
@@ -578,7 +578,11 @@ export class RoomService {
    * the current track has passed durationMs without a client next call.
    */
   async advanceEndedPlaybacks(): Promise<
-    Array<{ roomId: string; playback: import("@music-room/shared").PlaybackSnapshot }>
+    Array<{
+      roomId: string;
+      playback: import("@music-room/shared").PlaybackSnapshot;
+      roomRevision: number;
+    }>
   > {
     if (!this.isRealtimeAvailable()) {
       return [];
@@ -588,6 +592,7 @@ export class RoomService {
     const advanced: Array<{
       roomId: string;
       playback: import("@music-room/shared").PlaybackSnapshot;
+      roomRevision: number;
     }> = [];
 
     for (const listed of records) {
@@ -606,7 +611,7 @@ export class RoomService {
         incrementRoomRevision(record.room);
         await this.roomRecordRepository.persistRecord(record);
         const playback = await this.roomPlaybackService.buildPlaybackForSnapshot(record);
-        advanced.push({ roomId: record.room.id, playback });
+        advanced.push({ roomId: record.room.id, playback, roomRevision: record.room.roomRevision ?? 0 });
       } catch {
         // Conflict or missing room under concurrent updates: skip this tick.
         continue;

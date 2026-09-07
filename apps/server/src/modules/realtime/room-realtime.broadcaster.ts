@@ -71,6 +71,7 @@ export class RoomRealtimeBroadcaster {
     const message: RoomPlaybackPatchPayload = {
       roomId,
       playback: payload.playback,
+      roomRevision: payload.roomRevision,
       updatedAt: new Date().toISOString()
     };
     this.server?.to(roomId).emit("room.playback.patch", message);

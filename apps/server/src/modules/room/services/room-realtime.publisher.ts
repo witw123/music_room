@@ -57,8 +57,8 @@ export class RoomRealtimePublisher {
     return snapshot;
   }
 
-  emitPlaybackPatch(roomId: string, playback: PlaybackSnapshot) {
-    this.roomRealtimeBroadcaster.emitPlaybackPatch(roomId, { playback });
+  emitPlaybackPatch(roomId: string, playback: PlaybackSnapshot, roomRevision?: number) {
+    this.roomRealtimeBroadcaster.emitPlaybackPatch(roomId, { playback, roomRevision });
   }
 
   emitRoomMissing(roomId: string) {

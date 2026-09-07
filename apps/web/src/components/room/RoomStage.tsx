@@ -8,8 +8,36 @@ import type {
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
+import { findRoomPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
+
+type CachedLyricsResponse = {
+  wordSyncedLyric?: string | null;
+  plainLyric?: string | null;
+  translatedLyric?: string | null;
+  romanizedLyric?: string | null;
+};
+
+const providerLyricsMemoryCache = new Map<string, Promise<CachedLyricsResponse>>();
+
+function fetchProviderLyricsCached(provider: string, trackId: string): Promise<CachedLyricsResponse> {
+  const cacheKey = `${provider}:${trackId}`;
+  const existing = providerLyricsMemoryCache.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    if (provider === "netease") {
+      return await musicRoomApi.getNeteaseLyrics(trackId);
+    }
+    return await musicRoomApi.getQqMusicLyrics(trackId);
+  })().catch((err) => {
+    providerLyricsMemoryCache.delete(cacheKey);
+    throw err;
+  });
+
+  providerLyricsMemoryCache.set(cacheKey, promise);
+  return promise;
+}
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { RoomControlHeader, getSourceModeLabel } from "./RoomControlHeader";
@@ -135,27 +163,7 @@ function RoomStageBase({
         ? "-translate-y-[clamp(1.5rem,5vh,4rem)]"
         : "-translate-y-[clamp(2rem,5vh,4rem)]";
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!currentTrackId) {
-      setCachedArtworkUrl(null);
-      return;
-    }
-    void listRoomPlaylistTrackIndex()
-      .then((index) => {
-        if (cancelled) return;
-        const key = sourceProvider && sourceTrackId
-          ? providerTrackKey(sourceProvider, sourceTrackId)
-          : currentTrackId;
-        setCachedArtworkUrl(index.get(key)?.artworkUrl ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setCachedArtworkUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentTrackId, sourceProvider, sourceTrackId]);
+
 
   useEffect(() => {
     const updateViewportSize = () => {
@@ -204,7 +212,9 @@ function RoomStageBase({
   ]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!currentTrackId) {
+      setCachedArtworkUrl(null);
       setLyricsText(null);
       setTranslatedLyricsText(null);
       setRomanizedLyricsText(null);
@@ -212,47 +222,44 @@ function RoomStageBase({
       return;
     }
 
-    let cancelled = false;
     setLyricsStatus("loading");
     setLyricsText(null);
     setTranslatedLyricsText(currentTrackTranslatedLyrics);
     setRomanizedLyricsText(currentTrackRomanizedLyrics);
 
-    const loadLyrics = async () => {
-      let localLyrics = currentTrackLyrics;
+    void (async () => {
+      let localRecord = null;
       try {
-        if (!localLyrics) {
-          const index = await listRoomPlaylistTrackIndex();
-          const records = [...index.values()];
-          const localRecord = index.get(currentTrackId) ?? records.find((record) =>
-            record.fileHash === currentTrackFileHash ||
-            (record.provider === sourceProvider && record.providerTrackId === sourceTrackId)
-          );
-          localLyrics = localRecord?.lyrics?.trim() || null;
-        }
+        localRecord = await findRoomPlaylistTrackRecord({
+          trackId: currentTrackId,
+          fileHash: currentTrackFileHash,
+          provider: sourceProvider,
+          providerTrackId: sourceTrackId
+        });
       } catch {
-        // A provider request below can still supply lyrics when local storage is unavailable.
+        // Storage might be unavailable
       }
-      // A track that already carries lyrics locally (room manifest or the
-      // room playlist index) plays with them as-is; re-fetching from the
-      // provider on every playback made already-local tracks hit the network.
+
+      if (cancelled) return;
+
+      // 1. Set artwork if found in local record
+      setCachedArtworkUrl(localRecord?.artworkUrl ?? null);
+
+      // 2. Resolve lyrics
+      const localLyrics = currentTrackLyrics || localRecord?.lyrics?.trim() || null;
       if (localLyrics) {
-        if (!cancelled) {
-          setLyricsText(localLyrics);
-          setLyricsStatus("ready");
-        }
+        setLyricsText(localLyrics);
+        setLyricsStatus("ready");
         return;
       }
 
       if (!sourceProvider || !sourceTrackId) {
-        if (!cancelled) setLyricsStatus("ready");
+        setLyricsStatus("ready");
         return;
       }
 
       try {
-        const response = sourceProvider === "netease"
-          ? await musicRoomApi.getNeteaseLyrics(sourceTrackId)
-          : await musicRoomApi.getQqMusicLyrics(sourceTrackId);
+        const response = await fetchProviderLyricsCached(sourceProvider, sourceTrackId);
         if (!cancelled) {
           setLyricsText(selectRoomLyrics({
             localLyrics,
@@ -263,24 +270,28 @@ function RoomStageBase({
           setRomanizedLyricsText(response.romanizedLyric?.trim() || null);
           setLyricsStatus("ready");
         }
-      } catch (error) {
-        if (localLyrics && !cancelled) {
-          setLyricsText(localLyrics);
+      } catch {
+        if (!cancelled) {
+          if (localLyrics) {
+            setLyricsText(localLyrics);
+          }
           setLyricsStatus("ready");
-          return;
         }
-        throw error;
       }
-    };
-
-    void loadLyrics().catch(() => {
-      if (!cancelled) setLyricsStatus("error");
-    });
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [currentTrackFileHash, currentTrackId, currentTrackLyrics, currentTrackRomanizedLyrics, currentTrackTranslatedLyrics, sourceProvider, sourceTrackId]);
+  }, [
+    currentTrackFileHash,
+    currentTrackId,
+    currentTrackLyrics,
+    currentTrackRomanizedLyrics,
+    currentTrackTranslatedLyrics,
+    sourceProvider,
+    sourceTrackId
+  ]);
 
   return (
     <section

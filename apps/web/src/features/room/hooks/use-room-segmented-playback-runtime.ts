@@ -13,6 +13,11 @@ import {
   useSegmentedOpusPlayback,
   type SegmentedPlaybackSnapshot
 } from "@/features/playback/use-segmented-opus-playback";
+import {
+  type RoomCoarsePlaybackState,
+  initialCoarsePlaybackState
+} from "@/features/room/playback/room-coarse-playback";
+import { roomMediaPlaybackStore } from "@/features/room/playback/room-media-playback-store";
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
@@ -380,24 +385,29 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     lastError: null
   }));
   const lastMediaPlaybackCommitAtRef = useRef(0);
+  const mediaPlaybackRef = useRef(mediaPlayback);
+  mediaPlaybackRef.current = mediaPlayback;
+
   const setMediaPlayback = useCallback((
     next: SetStateAction<SegmentedPlaybackSnapshot>
   ) => {
-    setMediaPlaybackState((current) => {
-      const resolved = typeof next === "function" ? next(current) : next;
-      const immediate = current.state !== resolved.state ||
-        current.playbackIdentity !== resolved.playbackIdentity ||
-        current.audioContextState !== resolved.audioContextState ||
-        current.sourceHealth !== resolved.sourceHealth ||
-        current.lastError !== resolved.lastError ||
-        current.lastDecodeError !== resolved.lastDecodeError;
-      const now = Date.now();
-      if (!immediate && now - lastMediaPlaybackCommitAtRef.current < mediaPlaybackCommitIntervalMs) {
-        return current;
-      }
-      lastMediaPlaybackCommitAtRef.current = now;
-      return resolved;
-    });
+    const current = mediaPlaybackRef.current;
+    const resolved = typeof next === "function" ? next(current) : next;
+    mediaPlaybackRef.current = resolved;
+    roomMediaPlaybackStore.setState(resolved);
+
+    const immediate = current.state !== resolved.state ||
+      current.playbackIdentity !== resolved.playbackIdentity ||
+      current.audioContextState !== resolved.audioContextState ||
+      current.sourceHealth !== resolved.sourceHealth ||
+      current.lastError !== resolved.lastError ||
+      current.lastDecodeError !== resolved.lastDecodeError;
+    const now = Date.now();
+    if (!immediate && now - lastMediaPlaybackCommitAtRef.current < mediaPlaybackCommitIntervalMs) {
+      return;
+    }
+    lastMediaPlaybackCommitAtRef.current = now;
+    setMediaPlaybackState(resolved);
   }, []);
 
   useEffect(() => {
@@ -851,6 +861,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const usesSegmentedPlayback = (input.isCurrentSource && !usesNativeLocalAudio) ||
     usesOfflineFallback;
   const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
+
+  useEffect(() => {
+    roomMediaPlaybackStore.setState(visiblePlayback);
+  }, [visiblePlayback]);
 
   useEffect(() => {
     if (readinessPlaybackStatus === "playing" && !playbackBarrier.blocked) {
@@ -2199,12 +2213,22 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     localFallback: !!activeLocalFallbackAsset
   });
   const effectivePlayback = visiblePlayback;
+  const coarsePlayback: RoomCoarsePlaybackState = useMemo(
+    () => ({
+      state: visiblePlayback.state,
+      audioPath,
+      sourceHealth: visiblePlayback.sourceHealth,
+      lastError: visiblePlayback.lastError
+    }),
+    [visiblePlayback.state, audioPath, visiblePlayback.sourceHealth, visiblePlayback.lastError]
+  );
   return useMemo(
-    () => ({ ...effectivePlayback, audioPath, playbackBarrier }),
+    () => ({ ...effectivePlayback, audioPath, playbackBarrier, coarsePlayback }),
     [
       audioPath,
       effectivePlayback,
-      playbackBarrier
+      playbackBarrier,
+      coarsePlayback
     ]
   );
 }

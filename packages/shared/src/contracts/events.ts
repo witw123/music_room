@@ -98,6 +98,7 @@ export const roomSessionReplacedPayloadSchema = z.object({
 export const roomPlaybackPatchPayloadSchema = z.object({
   roomId: z.string(),
   playback: playbackSnapshotSchema,
+  roomRevision: z.number().int().nonnegative().optional(),
   updatedAt: z.string().datetime()
 });
 

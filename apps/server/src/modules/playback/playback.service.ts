@@ -40,7 +40,7 @@ export class PlaybackService implements OnModuleInit, OnModuleDestroy {
     try {
       const advanced = await this.roomService.advanceEndedPlaybacks();
       for (const item of advanced) {
-        this.roomRealtimePublisher.emitPlaybackPatch(item.roomId, item.playback);
+        this.roomRealtimePublisher.emitPlaybackPatch(item.roomId, item.playback, item.roomRevision);
         this.logger.log(
           `watchdog advanced playback room=${item.roomId} revision=${item.playback.playbackRevision} status=${item.playback.status}`
         );

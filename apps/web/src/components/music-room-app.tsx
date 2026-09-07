@@ -379,7 +379,7 @@ export function MusicRoomApp({
     connectedPeers: pageState.connectedPeers,
     mediaConnectedPeers: pageState.mediaConnectedPeers,
     activeDashboardTab: pageState.activeDashboardTab,
-    segmentedPlayback,
+    coarsePlayback: segmentedPlayback.coarsePlayback,
     peerDiagnostics,
     peerRecentEvents,
     canDeleteRoom,

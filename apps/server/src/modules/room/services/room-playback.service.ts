@@ -611,7 +611,6 @@ export class RoomPlaybackService {
     if (
       playback.status !== "playing" ||
       !playback.currentTrackId ||
-      !playback.sourcePeerId ||
       playback.sourceSessionId !== sessionId ||
       playback.sourcePeerId === peerId
     ) {

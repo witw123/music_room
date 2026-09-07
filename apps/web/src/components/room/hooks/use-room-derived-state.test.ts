@@ -1,41 +1,53 @@
 import { describe, expect, it } from "vitest";
 import { isLocalPlaybackAudible } from "./use-room-derived-state";
+import { isCoarsePlaybackEqual } from "@/features/room/playback/room-coarse-playback";
 
 describe("local playback audible state", () => {
   it("keeps a quiet but source-ready segment audible", () => {
-    expect(isLocalPlaybackAudible({
-      state: "live",
-      sourceHealth: "source-ready",
-      sourceEnergy: 0,
-      bufferedMs: 2_000,
-      ownedUnitCount: 1,
-      totalUnitCount: 10,
-      audioContextState: "running",
-      lastError: null
-    })).toBe(true);
+    expect(
+      isLocalPlaybackAudible({
+        state: "live",
+        audioPath: "remote-stream",
+        sourceHealth: "source-ready",
+        lastError: null
+      })
+    ).toBe(true);
   });
 
   it("does not report an unavailable source as audible", () => {
-    expect(isLocalPlaybackAudible({
-      state: "live",
-      sourceHealth: "source-silent",
-      sourceEnergy: 0.4,
-      bufferedMs: 0,
-      ownedUnitCount: 0,
-      totalUnitCount: 10,
-      audioContextState: "running",
-      lastError: null
-    })).toBe(false);
+    expect(
+      isLocalPlaybackAudible({
+        state: "live",
+        audioPath: "remote-stream",
+        sourceHealth: "source-silent",
+        lastError: null
+      })
+    ).toBe(false);
   });
 
   it("treats native local audio snapshots without source health as audible when live", () => {
-    expect(isLocalPlaybackAudible({
-      state: "live",
-      bufferedMs: 0,
-      ownedUnitCount: 0,
-      totalUnitCount: 0,
-      audioContextState: "running",
+    expect(
+      isLocalPlaybackAudible({
+        state: "live",
+        audioPath: "local-file",
+        lastError: null
+      })
+    ).toBe(true);
+  });
+
+  it("does not consider coarse playback changed when high-frequency metrics are updated", () => {
+    const a = {
+      state: "live" as const,
+      audioPath: "remote-stream" as const,
+      sourceHealth: "source-ready" as const,
       lastError: null
-    })).toBe(true);
+    };
+    const b = {
+      state: "live" as const,
+      audioPath: "remote-stream" as const,
+      sourceHealth: "source-ready" as const,
+      lastError: null
+    };
+    expect(isCoarsePlaybackEqual(a, b)).toBe(true);
   });
 });

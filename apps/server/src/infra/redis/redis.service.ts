@@ -166,6 +166,29 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return Number(result) === 1;
   }
 
+  async restoreJsonLeaseIfValue(
+    key: string,
+    expectedPayload: unknown,
+    restorePayload: unknown,
+    ttlMs: number
+  ) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `if redis.call("GET", KEYS[1]) == ARGV[1] then
+         redis.call("SET", KEYS[1], ARGV[2], "PX", ARGV[3])
+         return 1
+       end
+       return 0`,
+      1,
+      key,
+      JSON.stringify(expectedPayload),
+      JSON.stringify(restorePayload),
+      String(Math.max(1, Math.floor(ttlMs)))
+    );
+    return Number(result) === 1;
+  }
+
   async setString(key: string, value: string, ttlSeconds?: number) {
     this.assertReady(this.client, "publisher");
 

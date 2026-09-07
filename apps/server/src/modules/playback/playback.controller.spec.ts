@@ -127,4 +127,37 @@ describe("PlaybackController", () => {
     });
     expect(roomService.updatePlayback).not.toHaveBeenCalled();
   });
+
+  it("emits playback patch with roomRevision on successful update", async () => {
+    const playback = {
+      status: "playing",
+      playbackRevision: 3,
+      roomRevision: 7
+    };
+    const roomService = {
+      isRealtimeAvailable: jest.fn().mockReturnValue(true),
+      updatePlayback: jest.fn().mockResolvedValue(playback)
+    };
+    const roomRealtimePublisher = {
+      emitPlaybackPatch: jest.fn()
+    };
+    const controller = new PlaybackController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      createAuthServiceMock() as never,
+      new MetricsService()
+    );
+
+    const result = await controller.updatePlayback("room_1", "token", {
+      action: "play",
+      expectedVersion: 2
+    });
+
+    expect(result).toBe(playback);
+    expect(roomRealtimePublisher.emitPlaybackPatch).toHaveBeenCalledWith(
+      "room_1",
+      playback,
+      7
+    );
+  });
 });

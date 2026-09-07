@@ -82,8 +82,12 @@ describe("BottomPlayer source", () => {
       "utf8"
     );
     const shellSource = readFileSync(new URL("../room/RoomAppShell.tsx", import.meta.url), "utf8");
+    const playbackSectionSource = readFileSync(
+      new URL("../room/sections/RoomPlaybackSection.tsx", import.meta.url),
+      "utf8"
+    );
 
-    expect(shellSource).toContain("canSeekPlayback={!isHostControlledRoom || isRoomHost}");
+    expect(playbackSectionSource).toContain("canSeekPlayback={!isHostControlledRoom || isRoomHost}");
     expect(shellSource).not.toContain("activePlaybackSource");
     expect(controllerSource).toContain("canSeekPlayback={canSeekPlayback}");
     expect(controllerSource).toContain("hasRoomPermission(");

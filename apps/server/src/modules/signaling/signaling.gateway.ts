@@ -53,7 +53,7 @@ import {
 import { PeerSignalRelayService } from "./peer-signal-relay.service";
 import { RealtimeRedisSubscriber } from "./realtime-redis-subscriber.service";
 import { RoomPlaybackReadinessService } from "./room-playback-readiness.service";
-import { RoomSessionLeaseService } from "./room-session-lease.service";
+import { RoomSessionLeaseService, type SessionLease } from "./room-session-lease.service";
 import { RoomSessionRegistryService } from "./room-session-registry.service";
 import {
   buildSubscribeAck,
@@ -428,7 +428,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     const previousPeerId = client.data.peerId as string | undefined;
 
     const fenceToken = randomUUID();
-    let previousLease: Awaited<ReturnType<RoomSessionLeaseService["claim"]>>;
+    let previousLease: Awaited<ReturnType<RoomSessionLeaseService["claim"]>> = null;
     try {
       // Claim the target lease before dismantling the current socket. If Redis
       // rejects the claim, the existing subscription remains usable.
@@ -439,26 +439,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
         client.id,
         fenceToken
       );
-      if (
-        previousLease?.socketId &&
-        previousLease.socketId !== client.id &&
-        previousLease.instanceId !== this.roomRealtimeBroadcaster.instanceId
-      ) {
-        this.publishRealtime(sessionReplacementChannel, {
-          sourceId: this.roomRealtimeBroadcaster.instanceId,
-          roomId: message.roomId,
-          sessionId: message.sessionId,
-          socketId: previousLease.socketId
-        });
-      }
-
-      if (
-        previousRoomId &&
-        previousSessionId &&
-        (previousRoomId !== message.roomId || previousSessionId !== message.sessionId)
-      ) {
-        await this.sessionLease.release(client);
-      }
 
       this.peerSignals.unregisterPeerSocket(
         previousRoomId,
@@ -471,25 +451,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
         client.id
       );
       this.metrics.unbindRealtimeSocket(client.id);
-      if (previousRoomId && previousRoomId !== message.roomId) {
-        client.leave(previousRoomId);
-        if (previousSessionId) {
-          void this.registry.updatePeerPresence(previousRoomId, previousSessionId, null, "offline");
-          this.readiness.clearForSession(previousRoomId, previousSessionId, previousPeerId);
-        }
-      }
       client.data ??= {};
-
-      await this.registry.replaceExistingRoomSession(
-        message.roomId,
-        message.sessionId,
-        message.peerId,
-        client.id
-      );
     } catch (error) {
-      // The delete is fenced, so it cannot remove a lease claimed by a later
-      // socket if this attempt failed after Redis accepted the claim.
-      await this.sessionLease.delete(message.roomId, message.sessionId, {
+      await this.sessionLease.rollback(message.roomId, message.sessionId, previousLease, {
         peerId: message.peerId,
         socketId: client.id,
         fenceToken
@@ -539,11 +503,45 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
           client,
           message.roomId,
           message.sessionId,
-          message.peerId
+          message.peerId,
+          previousLease
         );
         client.emit("room.snapshot.missing", { roomId: message.roomId });
         return { ok: false };
       }
+
+      // New subscription is fully established. Now commit the transition:
+      if (
+        previousRoomId &&
+        previousSessionId &&
+        (previousRoomId !== message.roomId || previousSessionId !== message.sessionId)
+      ) {
+        client.leave(previousRoomId);
+        void this.registry.updatePeerPresence(previousRoomId, previousSessionId, null, "offline");
+        this.readiness.clearForSession(previousRoomId, previousSessionId, previousPeerId);
+        await this.sessionLease.release(client);
+      }
+
+      await this.registry.replaceExistingRoomSession(
+        message.roomId,
+        message.sessionId,
+        message.peerId,
+        client.id
+      );
+
+      if (
+        previousLease?.socketId &&
+        previousLease.socketId !== client.id &&
+        previousLease.instanceId !== this.roomRealtimeBroadcaster.instanceId
+      ) {
+        this.publishRealtime(sessionReplacementChannel, {
+          sourceId: this.roomRealtimeBroadcaster.instanceId,
+          roomId: message.roomId,
+          sessionId: message.sessionId,
+          socketId: previousLease.socketId
+        });
+      }
+
       this.metrics.bindRealtimeSocket(client.id, message.roomId);
       // Flush the compact subscribe ack before the snapshot so peer negotiation can start immediately.
       setImmediate(() => {
@@ -562,7 +560,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
         client,
         message.roomId,
         message.sessionId,
-        message.peerId
+        message.peerId,
+        previousLease
       );
       throw createWsApiException(error instanceof Error ? error.message : "Unauthorized.");
     }
@@ -768,7 +767,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     client: Socket,
     roomId: string,
     sessionId: string,
-    peerId: string
+    peerId: string,
+    previousLease?: SessionLease | null
   ) {
     const wasActiveSocket = this.registry.isActiveSessionSocket(roomId, sessionId, client.id);
     const ownsLease = await this.sessionLease.belongsTo(roomId, sessionId, {
@@ -787,10 +787,21 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
 
     // Only the socket that still owns the fenced lease may transition the
     // member offline. A replaced socket must not undo the new connection.
-    if (wasActiveSocket && ownsLease) {
+    const isRestoringOtherSocket = Boolean(previousLease?.socketId && previousLease.socketId !== client.id);
+    if (wasActiveSocket && ownsLease && !isRestoringOtherSocket) {
       await this.registry.updatePeerPresence(roomId, sessionId, null, "offline");
     }
-    await this.sessionLease.release(client);
+
+    if (previousLease !== undefined) {
+      await this.sessionLease.rollback(roomId, sessionId, previousLease, {
+        peerId,
+        socketId: client.id,
+        fenceToken: client.data.sessionFenceToken as string
+      });
+    } else {
+      await this.sessionLease.release(client);
+    }
+
     client.leave(roomId);
     client.data.roomId = undefined;
     client.data.sessionId = undefined;

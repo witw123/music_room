@@ -462,7 +462,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }));
   });
 
-  socket.on("room.playback.patch", ({ playback }) => {
+  socket.on("room.playback.patch", ({ playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
@@ -470,7 +470,8 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     input.dispatchRoomStateEvent({
       type: "server-playback-patch",
       roomId: input.roomId,
-      playback
+      playback,
+      roomRevision
     });
     if (!currentSnapshot) {
       void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);

@@ -88,7 +88,11 @@ export class PlaybackController {
       this.logger.log(
         `accepted playback update room=${roomId} actor=${userId} action=${payload.action} expectedVersion=${payload.expectedVersion} nextVersion=${playback.playbackRevision}`
       );
-      this.roomRealtimePublisher.emitPlaybackPatch(roomId, playback);
+      this.roomRealtimePublisher.emitPlaybackPatch(
+        roomId,
+        playback,
+        (playback as { roomRevision?: number }).roomRevision
+      );
       return playback;
     } catch (error) {
       this.logger.warn(

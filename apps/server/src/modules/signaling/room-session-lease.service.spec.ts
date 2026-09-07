@@ -6,7 +6,8 @@ function createRedis() {
     claimJsonLease: jest.fn(),
     getJson: jest.fn(),
     renewJsonLeaseIfValue: jest.fn(),
-    deleteJsonIfValue: jest.fn()
+    deleteJsonIfValue: jest.fn(),
+    restoreJsonLeaseIfValue: jest.fn()
   };
 }
 
@@ -252,5 +253,72 @@ describe("RoomSessionLeaseService", () => {
       socketId: "socket-1",
       fenceToken: "fence-1"
     })).resolves.toBe(true);
+  });
+
+  it("rolls back the lease to previous owner when previousLease exists", async () => {
+    const redis = createRedis();
+    redis.restoreJsonLeaseIfValue.mockResolvedValue(true);
+    const lease = new RoomSessionLeaseService(redis as never, createBroadcaster() as never);
+
+    const previousLease = {
+      instanceId: "instance-a",
+      roomId: "room-1",
+      sessionId: "session-1",
+      peerId: "peer-0",
+      socketId: "socket-0",
+      fenceToken: "fence-0"
+    };
+
+    const currentClaim = {
+      peerId: "peer-1",
+      socketId: "socket-1",
+      fenceToken: "fence-1"
+    };
+
+    await expect(
+      lease.rollback("room-1", "session-1", previousLease, currentClaim)
+    ).resolves.toBe(true);
+
+    expect(redis.restoreJsonLeaseIfValue).toHaveBeenCalledWith(
+      "music-room:realtime-session:room-1:session-1",
+      {
+        instanceId: "instance-a",
+        roomId: "room-1",
+        sessionId: "session-1",
+        peerId: "peer-1",
+        socketId: "socket-1",
+        fenceToken: "fence-1"
+      },
+      previousLease,
+      lease.sessionLeaseTtlMs
+    );
+  });
+
+  it("deletes the lease on rollback if there was no previous lease", async () => {
+    const redis = createRedis();
+    redis.deleteJsonIfValue.mockResolvedValue(true);
+    const lease = new RoomSessionLeaseService(redis as never, createBroadcaster() as never);
+
+    const currentClaim = {
+      peerId: "peer-1",
+      socketId: "socket-1",
+      fenceToken: "fence-1"
+    };
+
+    await expect(
+      lease.rollback("room-1", "session-1", null, currentClaim)
+    ).resolves.toBe(true);
+
+    expect(redis.deleteJsonIfValue).toHaveBeenCalledWith(
+      "music-room:realtime-session:room-1:session-1",
+      {
+        instanceId: "instance-a",
+        roomId: "room-1",
+        sessionId: "session-1",
+        peerId: "peer-1",
+        socketId: "socket-1",
+        fenceToken: "fence-1"
+      }
+    );
   });
 });

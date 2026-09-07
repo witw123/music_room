@@ -11,7 +11,8 @@ type GatewayWithCleanup = {
     client: TestClient,
     roomId: string,
     sessionId: string,
-    peerId: string
+    peerId: string,
+    previousLease?: unknown
   ) => Promise<void>;
 };
 
@@ -109,6 +110,67 @@ describe("SignalingGateway subscription cleanup", () => {
     await gateway.cleanupFailedRoomSubscribe(client, "room-1", "session-1", "peer-1");
 
     expect(registry.updatePeerPresence).not.toHaveBeenCalled();
+  });
+
+  it("rolls back lease to previousLease and does not mark presence offline when previousLease belongs to another socket", async () => {
+    const registry = {
+      isActiveSessionSocket: jest.fn().mockReturnValue(true),
+      cancelPendingDisconnectCleanup: jest.fn(),
+      unregisterSessionSocket: jest.fn(),
+      updatePeerPresence: jest.fn().mockResolvedValue(true)
+    };
+    const sessionLease = {
+      belongsTo: jest.fn().mockResolvedValue(true),
+      rollback: jest.fn().mockResolvedValue(true),
+      release: jest.fn().mockResolvedValue(undefined),
+      invalidateSocket: jest.fn()
+    };
+    const peerSignals = {
+      unregisterPeerSocket: jest.fn(),
+      clearPendingPeerSignals: jest.fn(),
+      clearRecoveryGeneration: jest.fn()
+    };
+    const readiness = { clearForSession: jest.fn() };
+    const metrics = { unbindRealtimeSocket: jest.fn() };
+    const client: TestClient = {
+      id: "socket-new",
+      data: {
+        roomId: "room-1",
+        sessionId: "session-1",
+        peerId: "peer-new",
+        sessionFenceToken: "fence-new",
+        isRealtimeAuthenticated: true
+      },
+      leave: jest.fn()
+    };
+    const gateway = Object.assign(Object.create(SignalingGateway.prototype), {
+      registry,
+      sessionLease,
+      peerSignals,
+      readiness,
+      metrics
+    }) as GatewayWithCleanup;
+
+    const previousLease = {
+      socketId: "socket-old",
+      fenceToken: "fence-old",
+      peerId: "peer-old"
+    };
+
+    await gateway.cleanupFailedRoomSubscribe(client, "room-1", "session-1", "peer-new", previousLease);
+
+    expect(sessionLease.rollback).toHaveBeenCalledWith(
+      "room-1",
+      "session-1",
+      previousLease,
+      {
+        peerId: "peer-new",
+        socketId: "socket-new",
+        fenceToken: "fence-new"
+      }
+    );
+    expect(registry.updatePeerPresence).not.toHaveBeenCalled();
+    expect(client.leave).toHaveBeenCalledWith("room-1");
   });
 });
 

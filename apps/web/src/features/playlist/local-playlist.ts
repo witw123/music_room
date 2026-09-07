@@ -11,6 +11,7 @@ import {
   createLocalPlaylistId,
   fromCachedSummary,
   fromRepositoryPlaylist,
+  providerTrackKey,
   reconcileTrackAvailability,
   sameStringArray,
   sortLocalPlaylists,
@@ -230,43 +231,141 @@ export async function listMergedLocalPlaylistTracks() {
   return [...reconciledExplicit, ...derived];
 }
 
-export async function listRoomPlaylistTrackIndex() {
-  const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
-    listLocalPlaylistTracks(),
-    listCachedLibraryTrackSummaries(),
-    listCachedLibraryTrackHashes(),
-    listLocalAudioFiles("saved"),
-    listLocalAudioCacheFiles()
-  ]);
-  const fileNames = new Map<string, string>();
-  for (const file of [...savedFiles, ...cacheFiles]) {
-    fileNames.set(file.fileHash, file.fileName);
-  }
-  const availableHashes = new Set([
-    ...fileNames.keys(),
-    ...cachedFileHashes
-  ]);
+type RoomPlaylistTrackMultiIndex = {
+  byTrackId: Map<string, LocalPlaylistTrackRecord>;
+  byFileHash: Map<string, LocalPlaylistTrackRecord>;
+  byProviderKey: Map<string, LocalPlaylistTrackRecord>;
+  timestamp: number;
+};
 
-  const byTrackId = new Map<string, LocalPlaylistTrackRecord>();
-  for (const track of explicit.map((item) => reconcileTrackAvailability(item, fileNames, availableHashes))) {
-    byTrackId.set(track.id, track);
+let cachedTrackMultiIndex: RoomPlaylistTrackMultiIndex | null = null;
+let pendingTrackMultiIndexPromise: Promise<RoomPlaylistTrackMultiIndex> | null = null;
+const TRACK_INDEX_TTL_MS = 10_000;
+
+export function invalidateRoomPlaylistTrackIndex(): void {
+  cachedTrackMultiIndex = null;
+  pendingTrackMultiIndexPromise = null;
+}
+
+export async function getRoomPlaylistTrackMultiIndex(): Promise<RoomPlaylistTrackMultiIndex> {
+  const now = Date.now();
+  if (cachedTrackMultiIndex && now - cachedTrackMultiIndex.timestamp < TRACK_INDEX_TTL_MS) {
+    return cachedTrackMultiIndex;
   }
-  for (const summary of summaries) {
-    const record = fromCachedSummary(
-      summary,
-      fileNames.get(summary.fileHash) ?? null,
-      availableHashes.has(summary.fileHash)
-    );
-    for (const trackId of summary.sourceTrackIds) {
-      if (!byTrackId.has(trackId)) {
-        byTrackId.set(trackId, record);
+  if (pendingTrackMultiIndexPromise) {
+    return pendingTrackMultiIndexPromise;
+  }
+
+  pendingTrackMultiIndexPromise = (async () => {
+    const [explicit, summaries, cachedFileHashes, savedFiles, cacheFiles] = await Promise.all([
+      listLocalPlaylistTracks(),
+      listCachedLibraryTrackSummaries(),
+      listCachedLibraryTrackHashes(),
+      listLocalAudioFiles("saved"),
+      listLocalAudioCacheFiles()
+    ]);
+    const fileNames = new Map<string, string>();
+    for (const file of [...savedFiles, ...cacheFiles]) {
+      fileNames.set(file.fileHash, file.fileName);
+    }
+    const availableHashes = new Set([
+      ...fileNames.keys(),
+      ...cachedFileHashes
+    ]);
+
+    const byTrackId = new Map<string, LocalPlaylistTrackRecord>();
+    const byFileHash = new Map<string, LocalPlaylistTrackRecord>();
+    const byProviderKey = new Map<string, LocalPlaylistTrackRecord>();
+
+    const indexRecord = (record: LocalPlaylistTrackRecord) => {
+      if (record.id && !byTrackId.has(record.id)) {
+        byTrackId.set(record.id, record);
+      }
+      if (record.fileHash && !byFileHash.has(record.fileHash)) {
+        byFileHash.set(record.fileHash, record);
+      }
+      if (
+        (record.provider === "netease" || record.provider === "qqmusic") &&
+        record.providerTrackId
+      ) {
+        const pKey = providerTrackKey(record.provider, record.providerTrackId);
+        if (!byProviderKey.has(pKey)) {
+          byProviderKey.set(pKey, record);
+        }
+      }
+    };
+
+    for (const track of explicit.map((item) => reconcileTrackAvailability(item, fileNames, availableHashes))) {
+      indexRecord(track);
+    }
+    for (const summary of summaries) {
+      const record = fromCachedSummary(
+        summary,
+        fileNames.get(summary.fileHash) ?? null,
+        availableHashes.has(summary.fileHash)
+      );
+      indexRecord(record);
+      for (const trackId of summary.sourceTrackIds) {
+        if (!byTrackId.has(trackId)) {
+          byTrackId.set(trackId, record);
+        }
       }
     }
+
+    const multiIndex: RoomPlaylistTrackMultiIndex = {
+      byTrackId,
+      byFileHash,
+      byProviderKey,
+      timestamp: Date.now()
+    };
+    cachedTrackMultiIndex = multiIndex;
+    pendingTrackMultiIndexPromise = null;
+    return multiIndex;
+  })().catch((err) => {
+    pendingTrackMultiIndexPromise = null;
+    throw err;
+  });
+
+  return pendingTrackMultiIndexPromise;
+}
+
+export async function listRoomPlaylistTrackIndex(): Promise<Map<string, LocalPlaylistTrackRecord>> {
+  const multiIndex = await getRoomPlaylistTrackMultiIndex();
+  return multiIndex.byTrackId;
+}
+
+export type RoomPlaylistTrackQuery = {
+  trackId?: string | null;
+  fileHash?: string | null;
+  provider?: string | null;
+  providerTrackId?: string | null;
+};
+
+export async function findRoomPlaylistTrackRecord(
+  query: RoomPlaylistTrackQuery
+): Promise<LocalPlaylistTrackRecord | null> {
+  const multiIndex = await getRoomPlaylistTrackMultiIndex();
+  if (query.trackId) {
+    const byId = multiIndex.byTrackId.get(query.trackId);
+    if (byId) return byId;
   }
-  return byTrackId;
+  if (
+    (query.provider === "netease" || query.provider === "qqmusic") &&
+    query.providerTrackId
+  ) {
+    const pKey = providerTrackKey(query.provider, query.providerTrackId);
+    const byProvider = multiIndex.byProviderKey.get(pKey);
+    if (byProvider) return byProvider;
+  }
+  if (query.fileHash) {
+    const byHash = multiIndex.byFileHash.get(query.fileHash);
+    if (byHash) return byHash;
+  }
+  return null;
 }
 
 function writeLocalPlaylists(playlists: LocalPlaylistRecord[]) {
+  invalidateRoomPlaylistTrackIndex();
   const nextPlaylists = sortLocalPlaylists(playlists);
   localPlaylists = nextPlaylists;
   localPlaylistPersistencePromise = localPlaylistPersistencePromise
