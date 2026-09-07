@@ -13,10 +13,7 @@ import {
   useSegmentedOpusPlayback,
   type SegmentedPlaybackSnapshot
 } from "@/features/playback/use-segmented-opus-playback";
-import {
-  type RoomCoarsePlaybackState,
-  initialCoarsePlaybackState
-} from "@/features/room/playback/room-coarse-playback";
+import type { RoomCoarsePlaybackState } from "@/features/room/playback/room-coarse-playback";
 import { roomMediaPlaybackStore } from "@/features/room/playback/room-media-playback-store";
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";

@@ -8,7 +8,6 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
-import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
 import {
   dedupePeerDiagnostics,
   dedupeRoomMembers,
