@@ -228,37 +228,28 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 className="mb-1"
               />
 
+              <RoomProviderTrackSearch
+                mode="request"
+                roomTracks={props.roomSnapshot.tracks}
+                onRequestTrack={submitRequest}
+                testId={isHost ? "request-room-host-search" : "request-room-search"}
+              />
+
               {isHost ? (
-                <>
-                  <RoomProviderTrackSearch
-                    mode="request"
-                    roomTracks={props.roomSnapshot.tracks}
-                    onRequestTrack={submitRequest}
-                    testId="request-room-host-search"
-                  />
-                  <RequestInbox
-                    pendingRequestId={pendingRequestId}
-                    pendingRequests={pendingRequests}
-                    handledRequests={handledRequests}
-                    onDecide={decideRequest}
-                    onApproveAll={handleApproveAll}
-                  />
-                </>
+                <RequestInbox
+                  pendingRequestId={pendingRequestId}
+                  pendingRequests={pendingRequests}
+                  handledRequests={handledRequests}
+                  onDecide={decideRequest}
+                  onApproveAll={handleApproveAll}
+                />
               ) : (
-                <>
-                  <RoomProviderTrackSearch
-                    mode="request"
-                    roomTracks={props.roomSnapshot.tracks}
-                    onRequestTrack={submitRequest}
-                    testId="request-room-search"
-                  />
-                  <RequestHistory
-                    queue={props.roomSnapshot.queue}
-                    requests={myRequests}
-                    title="我的点歌"
-                    tracks={props.roomSnapshot.tracks}
-                  />
-                </>
+                <RequestHistory
+                  queue={props.roomSnapshot.queue}
+                  requests={myRequests}
+                  title="我的点歌"
+                  tracks={props.roomSnapshot.tracks}
+                />
               )}
               {message ? (
                 <p className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs sm:text-sm text-white backdrop-blur-md shadow-md" role="status">

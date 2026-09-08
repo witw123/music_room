@@ -71,12 +71,18 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const [localValue, setLocalValue] = useState(value);
   const internalInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
+  const isFocusedRef = useRef(false);
+  const prevPropValueRef = useRef(value);
   useImperativeHandle(forwardedRef, () => internalInputRef.current as HTMLInputElement);
 
   useEffect(() => {
-    if (isComposingRef.current) return;
-    setLocalValue(value);
-  }, [value]);
+    if (prevPropValueRef.current !== value) {
+      prevPropValueRef.current = value;
+      if (!isComposingRef.current && value !== localValue) {
+        setLocalValue(value);
+      }
+    }
+  }, [value, localValue]);
 
   const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -87,7 +93,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
       internalInputRef.current?.focus();
       return;
     }
-    if (domValue !== value) {
+    if (domValue && domValue !== value) {
       setLocalValue(domValue);
       onChange(domValue);
     }
@@ -97,13 +103,15 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
 
   const handleClear = () => {
     setLocalValue("");
+    prevPropValueRef.current = "";
     onChange("");
     onClear?.();
     internalInputRef.current?.focus();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter" && !event.nativeEvent.isComposing && !isComposingRef.current) {
+    const isComposing = isComposingRef.current || (event.nativeEvent as unknown as { isComposing?: boolean })?.isComposing;
+    if (event.key === "Enter" && !isComposing) {
       event.preventDefault();
       handleSubmit();
       return;
@@ -117,25 +125,34 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
 
   const handleCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
     isComposingRef.current = false;
-    const val = event.currentTarget.value;
-    setLocalValue(val);
-    onChange(val);
+    const domVal = internalInputRef.current?.value ?? event.currentTarget.value ?? "";
+    setLocalValue(domVal);
+    onChange(domVal);
+    window.queueMicrotask(() => {
+      if (internalInputRef.current && internalInputRef.current.value !== domVal) {
+        const nextDomVal = internalInputRef.current.value;
+        setLocalValue(nextDomVal);
+        onChange(nextDomVal);
+      }
+    });
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextVal = event.target.value;
     setLocalValue(nextVal);
-    const nativeEvent = event.nativeEvent as unknown as { isComposing?: boolean };
-    if (isComposingRef.current || nativeEvent.isComposing) {
-      return;
-    }
     onChange(nextVal);
   };
 
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+    onFocus?.();
+  };
+
   const handleBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+    isFocusedRef.current = false;
     isComposingRef.current = false;
-    const domVal = event.currentTarget.value;
-    if (domVal !== value) {
+    const domVal = internalInputRef.current?.value ?? event.currentTarget.value;
+    if (domVal !== undefined && domVal !== value) {
       setLocalValue(domVal);
       onChange(domVal);
     }
@@ -151,7 +168,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   return (
     <div className={`relative w-full ${className}`}>
       <form
-        action="javascript:void(0);"
+        action="#"
         className="flex w-full min-w-0 items-center gap-2"
         onSubmit={handleSubmit}
         role="search"
@@ -181,7 +198,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               onChange={handleChange}
               onCompositionStart={handleCompositionStart}
               onCompositionEnd={handleCompositionEnd}
-              onFocus={onFocus}
+              onFocus={handleFocus}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
