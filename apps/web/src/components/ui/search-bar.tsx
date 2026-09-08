@@ -73,7 +73,35 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const isComposingRef = useRef(false);
   const isFocusedRef = useRef(false);
   const lastReportedValueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   useImperativeHandle(forwardedRef, () => internalInputRef.current as HTMLInputElement);
+
+  const syncValue = useCallback((nextVal: string) => {
+    lastReportedValueRef.current = nextVal;
+    setLocalValue(nextVal);
+    onChangeRef.current(nextVal);
+  }, []);
+
+  useEffect(() => {
+    const node = internalInputRef.current;
+    if (!node) return;
+
+    const handleNativeInput = () => {
+      const currentVal = node.value;
+      syncValue(currentVal);
+    };
+
+    node.addEventListener("input", handleNativeInput);
+    node.addEventListener("compositionend", handleNativeInput);
+    node.addEventListener("change", handleNativeInput);
+
+    return () => {
+      node.removeEventListener("input", handleNativeInput);
+      node.removeEventListener("compositionend", handleNativeInput);
+      node.removeEventListener("change", handleNativeInput);
+    };
+  }, [syncValue]);
 
   useEffect(() => {
     if (value !== lastReportedValueRef.current) {
@@ -84,12 +112,6 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
       setLocalValue(value);
     }
   }, [value]);
-
-  const syncValue = (nextVal: string) => {
-    lastReportedValueRef.current = nextVal;
-    setLocalValue(nextVal);
-    onChange(nextVal);
-  };
 
   const handleInput = (event: React.FormEvent<HTMLInputElement>) => {
     const nextVal = event.currentTarget.value;
