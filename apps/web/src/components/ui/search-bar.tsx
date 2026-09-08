@@ -72,38 +72,59 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const internalInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const isFocusedRef = useRef(false);
-  const prevPropValueRef = useRef(value);
+  const lastReportedValueRef = useRef(value);
   useImperativeHandle(forwardedRef, () => internalInputRef.current as HTMLInputElement);
 
   useEffect(() => {
-    if (prevPropValueRef.current !== value) {
-      prevPropValueRef.current = value;
-      if (!isComposingRef.current && value !== localValue) {
-        setLocalValue(value);
+    if (value !== lastReportedValueRef.current) {
+      lastReportedValueRef.current = value;
+      if (internalInputRef.current && internalInputRef.current.value !== value) {
+        internalInputRef.current.value = value;
       }
+      setLocalValue(value);
     }
-  }, [value, localValue]);
+  }, [value]);
+
+  const syncValue = (nextVal: string) => {
+    lastReportedValueRef.current = nextVal;
+    setLocalValue(nextVal);
+    onChange(nextVal);
+  };
+
+  const handleInput = (event: React.FormEvent<HTMLInputElement>) => {
+    const nextVal = event.currentTarget.value;
+    syncValue(nextVal);
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextVal = event.target.value;
+    if (nextVal !== lastReportedValueRef.current) {
+      syncValue(nextVal);
+    }
+  };
 
   const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     if (disabled || loading) return;
     const domValue = internalInputRef.current?.value ?? "";
-    const rawValue = (localValue || domValue || value).trim();
+    const rawValue = (domValue || localValue || value).trim();
     if (!rawValue) {
       internalInputRef.current?.focus();
       return;
     }
-    if (domValue && domValue !== value) {
-      setLocalValue(domValue);
-      onChange(domValue);
+    if (domValue !== value) {
+      syncValue(domValue);
     }
     internalInputRef.current?.blur();
     onSubmit?.(rawValue);
   };
 
   const handleClear = () => {
+    if (internalInputRef.current) {
+      internalInputRef.current.value = "";
+    }
+    lastReportedValueRef.current = "";
     setLocalValue("");
-    prevPropValueRef.current = "";
     onChange("");
     onClear?.();
     internalInputRef.current?.focus();
@@ -126,21 +147,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const handleCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
     isComposingRef.current = false;
     const domVal = internalInputRef.current?.value ?? event.currentTarget.value ?? "";
-    setLocalValue(domVal);
-    onChange(domVal);
-    window.queueMicrotask(() => {
-      if (internalInputRef.current && internalInputRef.current.value !== domVal) {
-        const nextDomVal = internalInputRef.current.value;
-        setLocalValue(nextDomVal);
-        onChange(nextDomVal);
-      }
-    });
-  };
-
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextVal = event.target.value;
-    setLocalValue(nextVal);
-    onChange(nextVal);
+    syncValue(domVal);
   };
 
   const handleFocus = () => {
@@ -151,13 +158,14 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const handleBlur = (event: React.FocusEvent<HTMLInputElement>) => {
     isFocusedRef.current = false;
     isComposingRef.current = false;
-    const domVal = internalInputRef.current?.value ?? event.currentTarget.value;
-    if (domVal !== undefined && domVal !== value) {
-      setLocalValue(domVal);
-      onChange(domVal);
+    const domVal = internalInputRef.current?.value ?? event.currentTarget.value ?? "";
+    if (domVal !== value) {
+      syncValue(domVal);
     }
     onBlur?.();
   };
+
+  const hasContent = Boolean((localValue || internalInputRef.current?.value || value).trim());
 
   const sizeClasses = {
     sm: "h-9 text-xs",
@@ -194,7 +202,8 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               ref={internalInputRef}
               id={id}
               name={name}
-              value={localValue}
+              defaultValue={value}
+              onInput={handleInput}
               onChange={handleChange}
               onCompositionStart={handleCompositionStart}
               onCompositionEnd={handleCompositionEnd}
@@ -214,7 +223,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               className={`h-full w-full min-w-0 bg-transparent py-1 text-foreground placeholder:text-foreground-muted/40 outline-none ${inputClassName}`}
             />
 
-            {localValue.trim() && !disabled ? (
+            {hasContent && !disabled ? (
               <button
                 type="button"
                 onClick={handleClear}
@@ -235,7 +244,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
         {showSearchButton ? (
           <button
             type="submit"
-            disabled={disabled || loading}
+            disabled={disabled || loading || !hasContent}
             onPointerDown={(e) => {
               if (e.pointerType === "mouse") {
                 e.preventDefault();
@@ -246,7 +255,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               handleSubmit();
             }}
             className={`inline-flex min-h-[2.5rem] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-accent/40 bg-accent px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:border-accent active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 ${
-              !localValue.trim() && !internalInputRef.current?.value?.trim() ? "opacity-50" : ""
+              !hasContent ? "opacity-50" : ""
             }`}
           >
             {loading ? (

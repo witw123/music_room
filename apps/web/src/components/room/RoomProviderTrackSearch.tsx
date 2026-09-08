@@ -163,7 +163,7 @@ export function RoomProviderTrackSearch({
         if (query) setRemoteSuggestions([]);
         else setRemoteHotWords([]);
       }
-    }, query ? 220 : 0);
+    }, query ? 120 : 0);
     return () => {
       cancelled = true;
       window.clearTimeout(timerId);
