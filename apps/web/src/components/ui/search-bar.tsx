@@ -68,11 +68,12 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const internalInputRef = useRef<HTMLInputElement>(null);
   useImperativeHandle(forwardedRef, () => internalInputRef.current as HTMLInputElement);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     if (disabled || loading) return;
     const trimmed = value.trim();
     if (trimmed && onSubmit) {
+      internalInputRef.current?.blur();
       onSubmit(trimmed);
     }
   };
@@ -84,6 +85,11 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      handleSubmit();
+      return;
+    }
     onKeyDown?.(event);
   };
 
@@ -96,6 +102,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   return (
     <div className={`relative w-full ${className}`}>
       <form
+        action="#"
         className="flex w-full min-w-0 items-center gap-2"
         onSubmit={handleSubmit}
         role="search"
@@ -161,6 +168,15 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
           <button
             type="submit"
             disabled={disabled || !value.trim() || loading}
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse") {
+                e.preventDefault();
+              }
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
             className="inline-flex min-h-[2.5rem] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-accent/40 bg-accent px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:border-accent active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
           >
             {loading ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ProviderPlaylistDetail,
@@ -532,7 +533,22 @@ export function DiscoverPage() {
   return (
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] pt-4 sm:pt-8 md:pt-10 md:pb-28">
+      <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] pt-[calc(0.875rem+env(safe-area-inset-top))] sm:pt-8 md:pt-10 md:pb-28">
+        {/* Mobile Page Header for proper ergonomics */}
+        <header className="workspace-page__header mb-2.5 flex items-center justify-between md:hidden">
+          <div>
+            <p className="workspace-page__eyebrow">探索海量音源与精选推荐</p>
+            <h1 className="workspace-page__title">发现</h1>
+          </div>
+          <Link
+            aria-label="打开个人中心"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-foreground-muted shadow-sm transition-all hover:bg-white/10 hover:text-foreground active:scale-95"
+            href="/app/profile"
+          >
+            <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+          </Link>
+        </header>
+
         {/* Search header integration */}
         <ProviderSearchPage embedded inlineSearch />
 

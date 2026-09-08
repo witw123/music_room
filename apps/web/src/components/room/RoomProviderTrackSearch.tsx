@@ -105,6 +105,8 @@ export function RoomProviderTrackSearch({
   const [remoteHotWords, setRemoteHotWords] = useState<SearchSuggestionItem[]>([]);
   const searchRequestRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const skipKeywordResetRef = useRef(false);
+  const isInteractingWithDropdownRef = useRef(false);
 
   useEffect(() => {
     if (enabledSearchProviders.length === 0) return;
@@ -175,8 +177,9 @@ export function RoomProviderTrackSearch({
       .filter((trackId): trackId is string => !!trackId)
   );
 
-  const searchTracks = useCallback(async (query: string, requestId: number) => {
-    if (!query || searchRequestRef.current !== requestId) return;
+  const searchTracks = useCallback(async (query: string) => {
+    if (!query) return;
+    const requestId = ++searchRequestRef.current;
     setPending("search");
     setErrorMessage(null);
     setMessage(null);
@@ -198,6 +201,10 @@ export function RoomProviderTrackSearch({
   }, [provider]);
 
   useEffect(() => {
+    if (skipKeywordResetRef.current) {
+      skipKeywordResetRef.current = false;
+      return;
+    }
     searchRequestRef.current += 1;
     setResults([]);
     setMessage(null);
@@ -287,8 +294,7 @@ export function RoomProviderTrackSearch({
         }}
         onSubmit={(query) => {
           setSearchSuggestionsOpen(false);
-          const requestId = ++searchRequestRef.current;
-          void searchTracks(query, requestId);
+          void searchTracks(query);
         }}
         onClear={() => {
           setResults([]);
@@ -297,7 +303,13 @@ export function RoomProviderTrackSearch({
           setSearchSuggestionsOpen(false);
         }}
         onFocus={() => setSearchSuggestionsOpen(true)}
-        onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 180)}
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (!isInteractingWithDropdownRef.current) {
+              setSearchSuggestionsOpen(false);
+            }
+          }, 250);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") setSearchSuggestionsOpen(false);
         }}
@@ -307,12 +319,15 @@ export function RoomProviderTrackSearch({
           searchSuggestionsOpen ? (
             <SearchSuggestions
               items={keywords.trim() ? remoteSuggestions : remoteHotWords}
+              onInteractionChange={(active) => {
+                isInteractingWithDropdownRef.current = active;
+              }}
               onSelect={(value) => {
+                skipKeywordResetRef.current = true;
                 setKeywords(value);
                 setSearchSuggestionsOpen(false);
                 searchInputRef.current?.focus();
-                const reqId = ++searchRequestRef.current;
-                void searchTracks(value, reqId);
+                void searchTracks(value);
               }}
               position={mode === "request" ? "flow" : "overlay"}
             />
@@ -329,9 +344,10 @@ export function RoomProviderTrackSearch({
               key={pill.label}
               type="button"
               onClick={() => {
+                skipKeywordResetRef.current = true;
                 setKeywords(pill.label);
-                const reqId = ++searchRequestRef.current;
-                void searchTracks(pill.label, reqId);
+                setSearchSuggestionsOpen(false);
+                void searchTracks(pill.label);
               }}
               className="rounded-full border border-white/5 bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-foreground-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
             >

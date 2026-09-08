@@ -64,7 +64,7 @@ export class NeteaseController {
     @Query() query: Record<string, unknown>,
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    const userId = await this.getCurrentUserId(sessionToken);
+    const userId = await this.getOptionalUserId(sessionToken);
     const payload = parseRequestBody(neteaseSearchQuerySchema, query);
     return this.service.searchTracks(userId, payload);
   }
@@ -75,14 +75,14 @@ export class NeteaseController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     return this.service.searchSuggestions(
-      await this.getCurrentUserId(sessionToken),
+      await this.getOptionalUserId(sessionToken),
       parseRequestBody(neteaseSearchSuggestQuerySchema, query)
     );
   }
 
   @Get("search/hot")
   async searchHot(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.service.getSearchHot(await this.getCurrentUserId(sessionToken));
+    return this.service.getSearchHot(await this.getOptionalUserId(sessionToken));
   }
 
   @Get("tracks/:trackId")
@@ -90,7 +90,7 @@ export class NeteaseController {
     @Param("trackId") trackId: string,
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    const userId = await this.getCurrentUserId(sessionToken);
+    const userId = await this.getOptionalUserId(sessionToken);
     return this.service.getTrack(userId, neteaseTrackIdSchema.parse(trackId));
   }
 
@@ -100,7 +100,7 @@ export class NeteaseController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     return this.service.searchPlaylists(
-      await this.getCurrentUserId(sessionToken),
+      await this.getOptionalUserId(sessionToken),
       parseRequestBody(neteaseSearchQuerySchema, query)
     );
   }
@@ -111,7 +111,7 @@ export class NeteaseController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     return this.service.searchAlbums(
-      await this.getCurrentUserId(sessionToken),
+      await this.getOptionalUserId(sessionToken),
       parseRequestBody(neteaseSearchQuerySchema, query)
     );
   }
@@ -242,7 +242,7 @@ export class NeteaseController {
     @Param("trackId") trackId: string,
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    const userId = await this.getCurrentUserId(sessionToken);
+    const userId = await this.getOptionalUserId(sessionToken);
     const parsed = neteaseTrackIdSchema.safeParse(trackId);
     if (!parsed.success) {
       throw new HttpException(
@@ -259,7 +259,7 @@ export class NeteaseController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     return this.service.listPlaylists(
-      await this.getCurrentUserId(sessionToken),
+      await this.getOptionalUserId(sessionToken),
       parseRequestBody(neteaseCatalogPageQuerySchema, query)
     );
   }
@@ -276,7 +276,7 @@ export class NeteaseController {
         HttpStatus.BAD_REQUEST
       );
     }
-    return this.service.getPlaylist(await this.getCurrentUserId(sessionToken), parsed.data);
+    return this.service.getPlaylist(await this.getOptionalUserId(sessionToken), parsed.data);
   }
 
   @Get("albums/:albumId")
@@ -291,7 +291,17 @@ export class NeteaseController {
         HttpStatus.BAD_REQUEST
       );
     }
-    return this.service.getAlbum(await this.getCurrentUserId(sessionToken), parsed.data);
+    return this.service.getAlbum(await this.getOptionalUserId(sessionToken), parsed.data);
+  }
+
+  private async getOptionalUserId(sessionToken?: string): Promise<string> {
+    if (!sessionToken) return "anonymous";
+    try {
+      const session = await this.auth.getAuthSessionByTokenOrThrow(sessionToken);
+      return session.userId;
+    } catch {
+      return "anonymous";
+    }
   }
 
   private async getCurrentUserId(sessionToken?: string) {

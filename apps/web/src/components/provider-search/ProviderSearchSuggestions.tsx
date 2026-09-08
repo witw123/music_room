@@ -11,23 +11,37 @@ export type SearchSuggestionItem = {
 export function SearchSuggestions({
   items,
   onSelect,
-  position = "overlay"
+  position = "overlay",
+  onInteractionChange
 }: {
   items: SearchSuggestionItem[];
   onSelect: (value: string) => void;
   position?: "overlay" | "flow";
+  onInteractionChange?: (active: boolean) => void;
 }) {
   if (!items.length) return null;
   return (
-    <div className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-2" : "relative mt-2"} max-h-64 overflow-y-auto rounded-2xl border border-surface-border bg-background-secondary p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)]`} role="listbox">
+    <div
+      className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-2" : "relative mt-2"} max-h-64 overflow-y-auto rounded-2xl border border-surface-border bg-background-secondary p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)]`}
+      role="listbox"
+      onPointerDownCapture={() => onInteractionChange?.(true)}
+      onPointerUpCapture={() => {
+        window.setTimeout(() => onInteractionChange?.(false), 200);
+      }}
+    >
       {items.map((item) => (
         <button
-          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground"
+          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground active:bg-white/[0.08]"
           key={`${item.label}:${item.provider ?? "local"}:${item.hint ?? ""}`}
-          onClick={() => onSelect(item.label)}
-          onMouseDown={(event) => event.preventDefault()}
-          onPointerDown={(event) => event.preventDefault()}
-          onTouchStart={(event) => event.preventDefault()}
+          onClick={(e) => {
+            e.preventDefault();
+            onSelect(item.label);
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType === "mouse") {
+              event.preventDefault();
+            }
+          }}
           role="option"
           type="button"
         >

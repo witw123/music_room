@@ -66,7 +66,7 @@ export class QqMusicController {
     @Headers("x-session-token") token?: string
   ) {
     return this.service.searchTracks(
-      await this.user(token),
+      await this.optionalUser(token),
       parseRequestBody(qqMusicSearchQuerySchema, query)
     );
   }
@@ -77,19 +77,19 @@ export class QqMusicController {
     @Headers("x-session-token") token?: string
   ) {
     return this.service.searchSuggestions(
-      await this.user(token),
+      await this.optionalUser(token),
       parseRequestBody(qqMusicSearchSuggestQuerySchema, query)
     );
   }
 
   @Get("search/hot")
   async searchHot(@Headers("x-session-token") token?: string) {
-    return this.service.getSearchHot(await this.user(token));
+    return this.service.getSearchHot(await this.optionalUser(token));
   }
 
   @Get("tracks/:trackId")
   async track(@Param("trackId") id: string, @Headers("x-session-token") token?: string) {
-    return this.service.getTrack(await this.user(token), qqMusicTrackIdSchema.parse(id));
+    return this.service.getTrack(await this.optionalUser(token), qqMusicTrackIdSchema.parse(id));
   }
 
   @Get("search/playlists")
@@ -98,7 +98,7 @@ export class QqMusicController {
     @Headers("x-session-token") token?: string
   ) {
     return this.service.searchPlaylists(
-      await this.user(token),
+      await this.optionalUser(token),
       parseRequestBody(qqMusicSearchQuerySchema, query)
     );
   }
@@ -109,7 +109,7 @@ export class QqMusicController {
     @Headers("x-session-token") token?: string
   ) {
     return this.service.searchAlbums(
-      await this.user(token),
+      await this.optionalUser(token),
       parseRequestBody(qqMusicSearchQuerySchema, query)
     );
   }
@@ -134,7 +134,7 @@ export class QqMusicController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    const userId = await this.user(token);
+    const userId = await this.optionalUser(token);
     await this.abuseProtection?.enforce("qqmusic:artwork", [
       { name: "ip", value: request.ip },
       { name: "user", value: userId }
@@ -251,7 +251,7 @@ export class QqMusicController {
         HttpStatus.BAD_REQUEST
       );
     }
-    return this.service.getLyrics(await this.user(token), parsed.data);
+    return this.service.getLyrics(await this.optionalUser(token), parsed.data);
   }
 
   @Get("playlists")
@@ -260,7 +260,7 @@ export class QqMusicController {
     @Headers("x-session-token") token?: string
   ) {
     return this.service.listPlaylists(
-      await this.user(token),
+      await this.optionalUser(token),
       parseRequestBody(qqMusicCatalogPageQuerySchema, query)
     );
   }
@@ -274,7 +274,7 @@ export class QqMusicController {
         HttpStatus.BAD_REQUEST
       );
     }
-    return this.service.getPlaylist(await this.user(token), parsed.data);
+    return this.service.getPlaylist(await this.optionalUser(token), parsed.data);
   }
 
   @Get("albums/:albumId")
@@ -286,7 +286,7 @@ export class QqMusicController {
         HttpStatus.BAD_REQUEST
       );
     }
-    return this.service.getAlbum(await this.user(token), parsed.data);
+    return this.service.getAlbum(await this.optionalUser(token), parsed.data);
   }
 
   private async streamAudio(
@@ -338,6 +338,15 @@ export class QqMusicController {
         void upstream.body?.cancel().catch(() => undefined);
       }
     });
+  }
+
+  private async optionalUser(token?: string): Promise<string> {
+    if (!token) return "anonymous";
+    try {
+      return (await this.auth.getAuthSessionByTokenOrThrow(token)).userId;
+    } catch {
+      return "anonymous";
+    }
   }
 
   private async user(token?: string) {

@@ -133,6 +133,8 @@ export function ProviderSearchPage({
   keywordsRef.current = keywords;
   const lastSearchRequestKeyRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const skipKeywordResetRef = useRef(false);
+  const isInteractingWithDropdownRef = useRef(false);
 
   const updateKeywords = useCallback((value: string) => {
     if (onKeywordsChange) {
@@ -289,6 +291,10 @@ export function ProviderSearchPage({
   }, [provider]);
 
   useEffect(() => {
+    if (skipKeywordResetRef.current) {
+      skipKeywordResetRef.current = false;
+      return;
+    }
     searchRequestRef.current += 1;
     setResults([]);
     setPending((current) => current === "search" ? null : current);
@@ -677,10 +683,13 @@ export function ProviderSearchPage({
   const dropdownContent = searchSuggestionsOpen ? (
     <SearchSuggestions
       items={keywords.trim() ? remoteSuggestions : remoteHotWords}
+      onInteractionChange={(active) => {
+        isInteractingWithDropdownRef.current = active;
+      }}
       onSelect={(value) => {
+        skipKeywordResetRef.current = true;
         updateKeywords(value);
         setSearchSuggestionsOpen(false);
-        searchInputRef.current?.focus();
         void searchTracksForQuery(value);
       }}
     />
@@ -705,7 +714,13 @@ export function ProviderSearchPage({
           setSearchSuggestionsOpen(false);
         }}
         onFocus={() => setSearchSuggestionsOpen(true)}
-        onBlur={() => window.setTimeout(() => setSearchSuggestionsOpen(false), 180)}
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (!isInteractingWithDropdownRef.current) {
+              setSearchSuggestionsOpen(false);
+            }
+          }, 250);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") setSearchSuggestionsOpen(false);
         }}
@@ -791,7 +806,11 @@ export function ProviderSearchPage({
   if (embedded) {
     return (
       <div className="min-w-0">
-        {inlineSearch ? <header className="sticky top-0 z-10 bg-background/90 py-2 backdrop-blur-md">{searchBar}</header> : null}
+        {inlineSearch ? (
+          <header className="sticky top-[env(safe-area-inset-top,0px)] z-20 bg-background/95 pb-2 pt-1 backdrop-blur-md">
+            {searchBar}
+          </header>
+        ) : null}
         {searchContent}
         {playlistPicker}
       </div>
@@ -800,7 +819,7 @@ export function ProviderSearchPage({
 
   return (
     <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-3 sm:px-7 sm:pt-6 md:px-10 md:pt-8">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex justify-center">
           {searchBar}
         </header>
