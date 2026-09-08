@@ -97,6 +97,32 @@ export function getGaplessTransitionAt(record: RoomRecord): number | null {
   return startAtMs + Math.max(0, currentDurationMs - playback.positionMs);
 }
 
+/**
+ * Pure, mutation-free predicate for the playback watchdog: returns true when
+ * the current track has finished or a gapless transition is due. Mirrors the
+ * conditions checked by RoomPlaybackService.advanceIfTrackEnded /
+ * advanceGaplessIfDue so the watchdog can skip rooms that need no work
+ * without paying for a full record re-load.
+ */
+export function isPlaybackAdvanceDue(record: RoomRecord): boolean {
+  const playback = record.room.playback;
+  if (playback.status !== "playing" || !playback.currentTrackId) {
+    return false;
+  }
+
+  const gaplessTransitionAtMs = getGaplessTransitionAt(record);
+  if (gaplessTransitionAtMs !== null && Date.now() >= gaplessTransitionAtMs) {
+    return true;
+  }
+
+  const durationMs = getTrackDurationMs(record, playback.currentTrackId);
+  if (durationMs <= 0) {
+    return false;
+  }
+
+  return getEffectivePlaybackPositionMs(record, playback) >= durationMs;
+}
+
 export function canPreserveMediaEpoch(playback: PlaybackSnapshot, transition: GaplessTransition): boolean {
   return (
     playback.sourceSessionId === transition.sourceSessionId &&

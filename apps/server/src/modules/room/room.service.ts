@@ -16,6 +16,7 @@ import { type RoomRecord } from "./room.types";
 import { assertMember, assertPermission, incrementRoomRevision } from "./room-mutation";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { realtimePresenceTtlSeconds, RoomPresenceService } from "./services/room-presence.service";
+import { isPlaybackAdvanceDue } from "./services/room-playback.helpers";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
@@ -588,7 +589,11 @@ export class RoomService {
       return [];
     }
 
-    const records = await this.roomRecordRepository.listRecoverableRecords();
+    // Only rooms with status === "playing" are scanned here (DB-side filter
+    // + cache reuse). Rooms whose track has not finished yet are skipped via
+    // the pure isPlaybackAdvanceDue predicate, so a steady-state tick costs
+    // one cheap probe query instead of a full directory re-parse.
+    const records = await this.roomRecordRepository.listPlayingRoomRecords();
     const advanced: Array<{
       roomId: string;
       playback: import("@music-room/shared").PlaybackSnapshot;
@@ -597,6 +602,9 @@ export class RoomService {
 
     for (const listed of records) {
       if (listed.room.playback.status !== "playing" || !listed.room.playback.currentTrackId) {
+        continue;
+      }
+      if (!isPlaybackAdvanceDue(listed)) {
         continue;
       }
 

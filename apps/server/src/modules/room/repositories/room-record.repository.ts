@@ -11,6 +11,9 @@ import {
 export class RoomRecordRepository {
   private readonly terminationTtlSeconds = 30 * 24 * 60 * 60;
 
+  /** Freshness token per cached record, used to skip re-parsing unchanged DB rows. */
+  private readonly cacheMeta = new Map<string, { roomRevision: number; updatedAtMs: number }>();
+
   constructor(
     private readonly rooms: Map<string, RoomRecord>,
     private readonly prisma: PrismaService,
@@ -40,8 +43,10 @@ export class RoomRecordRepository {
           record = null;
         }
         if (record) {
+          this.trackCachedRecord(record.room.id, record.room.roomRevision ?? 0, persisted.updatedAt);
           this.rooms.set(record.room.id, cloneRoomRecord(record));
-          return cloneRoomRecord(record).room;
+          // `record` is a fresh parse owned by the caller; the cache keeps its own copy.
+          return record.room;
         }
       }
 
@@ -88,8 +93,11 @@ export class RoomRecordRepository {
           record = null;
         }
         if (record) {
+          this.trackCachedRecord(roomId, record.room.roomRevision ?? 0, persisted.updatedAt);
           this.rooms.set(roomId, cloneRoomRecord(record));
-          return cloneRoomRecord(record);
+          // `record` is a fresh parse owned by the caller (callers may mutate it
+          // before persisting); the cache keeps an isolated copy.
+          return record;
         }
       }
 
@@ -123,6 +131,10 @@ export class RoomRecordRepository {
     const databaseAvailable = this.prisma.isAvailable();
     if (databaseAvailable) {
       await this.persistRecordToDatabase(record);
+      // Prisma's @updatedAt is assigned client-side, so the persist timestamp
+      // matches what a subsequent probe will read back. A mismatch only costs
+      // one extra re-parse, never staleness.
+      this.trackCachedRecord(record.room.id, record.room.roomRevision ?? 0, new Date());
     }
 
     const supportsRedisRevisionGuard =
@@ -387,42 +399,82 @@ export class RoomRecordRepository {
     return null;
   }
 
+  /**
+   * Rooms whose playback is currently "playing" — the only rooms the playback
+   * watchdog needs. Uses a DB-side JSON filter instead of a full table scan,
+   * and reuses the process-local cache for rows whose (roomRevision, updatedAt)
+   * freshness token is unchanged.
+   */
+  async listPlayingRoomRecords() {
+    const records = new Map<string, RoomRecord>();
+    const databaseAvailable = this.prisma.isAvailable();
+
+    if (databaseAvailable) {
+      const persisted = await this.listPersistedRecords({ onlyPlaying: true });
+      if (persisted.length > 0) {
+        const terminatedRoomIds = await this.listTerminatedRoomIds();
+        for (const record of persisted) {
+          if (terminatedRoomIds.has(record.room.id)) {
+            continue;
+          }
+          records.set(record.room.id, record);
+        }
+      }
+    }
+
+    if (!databaseAvailable) {
+      for (const record of this.rooms.values()) {
+        if (record.room.playback.status !== "playing") {
+          continue;
+        }
+        if (await this.isRoomTerminated(record.room.id)) {
+          continue;
+        }
+        records.set(record.room.id, record);
+      }
+    }
+
+    if (databaseAvailable && this.isRedisAvailable()) {
+      // Redis-only fallback rooms created while PostgreSQL was unavailable.
+      const redisRoomIds = await this.redis.getSetMembers(this.roomRegistryKey);
+      for (const roomId of redisRoomIds) {
+        if (records.has(roomId)) {
+          continue;
+        }
+        const rawRecord = await this.redis.getJson<unknown>(this.roomCacheKey(roomId));
+        const record = parseRoomRecord(rawRecord);
+        if (!record || record.room.id !== roomId || record.room.playback.status !== "playing") {
+          continue;
+        }
+        if (await this.isRoomTerminated(roomId)) {
+          continue;
+        }
+        this.rooms.set(roomId, cloneRoomRecord(record));
+        records.set(roomId, record);
+      }
+    }
+
+    return [...records.values()];
+  }
+
   async listRecoverableRecords() {
     const records = new Map<string, RoomRecord>();
     const databaseAvailable = this.prisma.isAvailable();
 
     if (databaseAvailable) {
-      const tombstoneModel = this.getTombstoneModel();
-      const terminatedRoomIds = new Set<string>();
-      if (tombstoneModel) {
-        const tombstones = await tombstoneModel.findMany({
-          where: { status: { in: ["PENDING", "SUCCEEDED"] } },
-          select: { roomId: true }
-        });
-        tombstones.forEach((tombstone) => terminatedRoomIds.add(tombstone.roomId));
+      const persisted = await this.listPersistedRecords();
+      if (persisted.length > 0) {
+        const terminatedRoomIds = await this.listTerminatedRoomIds();
+        for (const record of persisted) {
+          if (terminatedRoomIds.has(record.room.id)) {
+            continue;
+          }
+          // Records are shared read-only cache entries; consumers must not
+          // mutate them (write paths re-load via getRoomRecord, which returns
+          // a caller-owned object).
+          records.set(record.room.id, record);
+        }
       }
-      const persisted = await this.prisma.roomState.findMany({
-        orderBy: { updatedAt: "desc" }
-      });
-
-      for (const item of persisted) {
-        if (terminatedRoomIds.has(item.id)) {
-          continue;
-        }
-        let record: RoomRecord | null = null;
-        try {
-          record = parseRoomRecord(deserializeRoomRecord(item));
-        } catch {
-          // One legacy row must not hide every other room from the directory.
-          record = null;
-        }
-        if (!record) {
-          continue;
-        }
-        this.rooms.set(record.room.id, cloneRoomRecord(record));
-        records.set(record.room.id, cloneRoomRecord(record));
-      }
-
     }
 
     if (!databaseAvailable) {
@@ -430,7 +482,7 @@ export class RoomRecordRepository {
         if (await this.isRoomTerminated(record.room.id)) {
           continue;
         }
-        records.set(record.room.id, cloneRoomRecord(record));
+        records.set(record.room.id, record);
       }
     }
 
@@ -457,7 +509,7 @@ export class RoomRecordRepository {
         await this.persistRecord(record).catch(() => undefined);
       }
       this.rooms.set(roomId, cloneRoomRecord(record));
-      records.set(roomId, cloneRoomRecord(record));
+      records.set(roomId, record);
     }
 
     return [...records.values()].sort(
@@ -493,6 +545,113 @@ export class RoomRecordRepository {
 
   sessionRecentRoomKey(sessionId: string) {
     return `music-room:session:${sessionId}:recent-room`;
+  }
+
+  /**
+   * Reads room rows from PostgreSQL using a two-phase freshness probe:
+   *
+   * 1. A cheap probe fetches only (id, roomRevision, updatedAt) for every row
+   *    matching the optional filter — never the heavy track/queue JSON.
+   * 2. Full rows are fetched (and zod-parsed) only for rooms whose freshness
+   *    token changed or that are not cached yet; everything else is served
+   *    from the process-local cache without re-parsing or cloning.
+   *
+   * Any DB-side change bumps @updatedAt (Prisma, client-side clock) or
+   * roomRevision, so the probe cannot miss an update. Returning shared cached
+   * records is safe because list consumers are read-only; mutation paths go
+   * through getRoomRecord(), which hands out a caller-owned object.
+   */
+  private async listPersistedRecords(options: { onlyPlaying?: boolean } = {}) {
+    const playbackFilter = options.onlyPlaying
+      ? { playback: { path: ["status"], equals: "playing" } }
+      : undefined;
+
+    const probeRows = await this.prisma.roomState.findMany({
+      ...(playbackFilter ? { where: playbackFilter } : {}),
+      select: { id: true, roomRevision: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" }
+    });
+
+    if (probeRows.length === 0) {
+      return [];
+    }
+
+    const staleIds: string[] = [];
+    for (const row of probeRows) {
+      const cached = this.rooms.get(row.id);
+      const meta = this.cacheMeta.get(row.id);
+      const isFresh =
+        !!cached &&
+        !!meta &&
+        meta.roomRevision === row.roomRevision &&
+        meta.updatedAtMs === toMillis(row.updatedAt);
+      if (!isFresh) {
+        staleIds.push(row.id);
+      }
+    }
+
+    const hydratedRows = staleIds.length
+      ? await this.prisma.roomState.findMany({
+          where: {
+            id: { in: staleIds },
+            ...(playbackFilter ? { AND: [playbackFilter] } : {})
+          },
+          orderBy: { updatedAt: "desc" }
+        })
+      : [];
+    const hydratedById = new Map(hydratedRows.map((row) => [row.id, row]));
+
+    const records = new Map<string, RoomRecord>();
+    for (const row of probeRows) {
+      const cached = this.rooms.get(row.id);
+      if (!staleIds.includes(row.id) && cached) {
+        records.set(row.id, cached);
+        continue;
+      }
+
+      const fullRow = hydratedById.get(row.id);
+      if (!fullRow) {
+        // Row vanished between probe and hydration; skip it.
+        continue;
+      }
+      let record: RoomRecord | null = null;
+      try {
+        record = parseRoomRecord(deserializeRoomRecord(fullRow));
+      } catch {
+        // One legacy row must not hide every other room from the directory.
+        record = null;
+      }
+      if (!record) {
+        continue;
+      }
+      this.trackCachedRecord(record.room.id, record.room.roomRevision ?? 0, fullRow.updatedAt);
+      this.rooms.set(record.room.id, record);
+      records.set(record.room.id, record);
+    }
+
+    return [...records.values()];
+  }
+
+  private async listTerminatedRoomIds() {
+    const terminatedRoomIds = new Set<string>();
+    const tombstoneModel = this.getTombstoneModel();
+    if (tombstoneModel) {
+      const tombstones = await tombstoneModel.findMany({
+        where: { status: { in: ["PENDING", "SUCCEEDED"] } },
+        select: { roomId: true }
+      });
+      tombstones.forEach((tombstone) => terminatedRoomIds.add(tombstone.roomId));
+    }
+    return terminatedRoomIds;
+  }
+
+  private trackCachedRecord(roomId: string, roomRevision: number, updatedAt: unknown) {
+    const updatedAtMs = toMillis(updatedAt);
+    if (updatedAtMs === null) {
+      this.cacheMeta.delete(roomId);
+      return;
+    }
+    this.cacheMeta.set(roomId, { roomRevision, updatedAtMs });
   }
 
   private roomCacheKey(roomId: string) {
@@ -659,4 +818,18 @@ function isUniqueConstraintError(error: unknown): boolean {
     "code" in error &&
     (error as { code: string }).code === "P2002"
   );
+}
+
+function toMillis(value: unknown): number | null {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
