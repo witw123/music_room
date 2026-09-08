@@ -26,6 +26,8 @@ export function SearchSuggestions({
           key={`${item.label}:${item.provider ?? "local"}:${item.hint ?? ""}`}
           onClick={() => onSelect(item.label)}
           onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.preventDefault()}
+          onTouchStart={(event) => event.preventDefault()}
           role="option"
           type="button"
         >

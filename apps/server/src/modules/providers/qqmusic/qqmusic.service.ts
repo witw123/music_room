@@ -115,7 +115,7 @@ export class QqMusicService {
   }
   async disconnectAccount(userId: string) { this.assertEnabled(); return this.accounts.disconnect(userId); }
   async searchTracks(userId: string, query: QqMusicSearchQuery): Promise<QqMusicSearchResponse> {
-    this.assertEnabled(); this.assertRateLimit(`search:${userId}`, 30); const cookie = await this.getCookie(userId);
+    this.assertEnabled(); this.assertRateLimit(`search:${userId}`, 30); const cookie = await this.getOptionalCookie(userId);
     const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie }));
     return { items: records.map((record) => toTrackCandidate(record)).filter((value): value is QqMusicTrackCandidate => !!value), limit: query.limit, offset: query.offset };
   }
@@ -123,7 +123,7 @@ export class QqMusicService {
   async searchPlaylists(userId: string, query: QqMusicSearchQuery): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`search:${userId}`, 30);
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const records = await this.callProvider(() => this.api.searchPlaylists({ ...query, cookie }));
     return {
       items: records.map((record) => toPlaylistSummary(record)).filter((value): value is ProviderPlaylistSummary => !!value),
@@ -135,7 +135,7 @@ export class QqMusicService {
   async searchAlbums(userId: string, query: QqMusicSearchQuery): Promise<ProviderAlbumListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`search:${userId}`, 30);
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const records = await this.callProvider(() => this.api.searchTracks({ ...query, cookie, kind: "album" }));
     const albumItems = records
       .map((record) => toAlbumSummary(record))
@@ -190,7 +190,7 @@ export class QqMusicService {
   }
 
   async getTrack(userId: string, trackId: string) {
-    this.assertEnabled(); const cookie = await this.getCookie(userId); const records = await this.callProvider(() => this.api.searchTracks({ keywords: trackId, limit: 20, offset: 0, cookie }));
+    this.assertEnabled(); const cookie = await this.getOptionalCookie(userId); const records = await this.callProvider(() => this.api.searchTracks({ keywords: trackId, limit: 20, offset: 0, cookie }));
     const track = records
       .map((record) => toTrackCandidate(record))
       .find((value) => value?.providerTrackId === trackId);
@@ -456,6 +456,14 @@ export class QqMusicService {
       }
     }
     throw new HttpException(createApiErrorResponse(errorCodes.qqMusicTrackNotFound, "QQ Music audio is unavailable."), HttpStatus.NOT_FOUND);
+  }
+
+  private async getOptionalCookie(userId: string): Promise<string> {
+    try {
+      return await this.accounts.getCookieOrThrow(userId);
+    } catch {
+      return "";
+    }
   }
 
   private async getCookie(userId: string) {

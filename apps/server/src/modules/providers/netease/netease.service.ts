@@ -161,7 +161,7 @@ export class NeteaseService {
   async searchTracks(userId: string, query: NeteaseSearchQuery): Promise<NeteaseSearchResponse> {
     this.assertEnabled();
     this.assertRateLimit(`search:${userId}`, 30, 60_000);
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const response = await this.callProvider(userId, () =>
       this.api.searchTracks({ ...query, cookie })
     );
@@ -186,7 +186,7 @@ export class NeteaseService {
   async searchPlaylists(userId: string, query: NeteaseSearchQuery): Promise<ProviderPlaylistListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`search:${userId}`, 30, 60_000);
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const response = await this.callProvider(userId, () => this.api.searchPlaylists({ ...query, cookie }));
     return {
       items: (response.result?.playlists ?? [])
@@ -200,7 +200,7 @@ export class NeteaseService {
   async searchAlbums(userId: string, query: NeteaseSearchQuery): Promise<ProviderAlbumListResponse> {
     this.assertEnabled();
     this.assertRateLimit(`search:${userId}`, 30, 60_000);
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const response = await this.callProvider(userId, () => this.api.searchAlbums({ ...query, cookie }));
     return {
       items: (response.result?.albums ?? [])
@@ -247,7 +247,7 @@ export class NeteaseService {
 
   async getTrack(userId: string, trackId: string) {
     this.assertEnabled();
-    const cookie = await this.getCookie(userId);
+    const cookie = await this.getOptionalCookie(userId);
     const response = await this.callProvider(userId, () =>
       this.api.getTrack({ trackId, cookie })
     );
@@ -509,6 +509,14 @@ export class NeteaseService {
       );
     }
     return { url, type: audio.type };
+  }
+
+  private async getOptionalCookie(userId: string): Promise<string> {
+    try {
+      return await this.accounts.getCookieOrThrow(userId);
+    } catch {
+      return "";
+    }
   }
 
   private async getCookie(userId: string) {

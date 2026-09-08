@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import type {
   AuthSession,
@@ -13,6 +13,7 @@ import {
   musicRoomApi
 } from "@/lib/network/music-room-api";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/ui/search-bar";
 import {
   getCachedProviderAccount,
   setCachedProviderAccount
@@ -148,10 +149,9 @@ export function QqMusicSourcePanel({
     }
   };
 
-  const searchTracks = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const query = keywords.trim();
-    if (!query || pendingAction || !displayedAccount?.connected) return;
+  const searchTracks = async (queryText?: string) => {
+    const query = (queryText ?? keywords).trim();
+    if (!query || pendingAction) return;
     setPendingAction("search");
     setErrorMessage(null);
     try {
@@ -269,23 +269,18 @@ export function QqMusicSourcePanel({
         </div>
       ) : null}
 
-      {mode !== "account" && displayedAccount?.connected ? (
+      {mode !== "account" ? (
         <>
-          <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void searchTracks(event)}>
-            <label className="sr-only" htmlFor="qqmusic-search-input">搜索 QQ 音乐歌曲</label>
-            <input
-              id="qqmusic-search-input"
-              className="min-w-0 flex-1 rounded-lg border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-              value={keywords}
-              onChange={(event) => setKeywords(event.target.value)}
-              placeholder="搜索歌曲、歌手或专辑"
-              maxLength={100}
-              type="search"
-            />
-            <Button disabled={!keywords.trim() || pendingAction !== null} size="sm" type="submit">
-              {pendingAction === "search" ? "搜索中…" : "搜索"}
-            </Button>
-          </form>
+          <SearchBar
+            id="qqmusic-search-input"
+            value={keywords}
+            onChange={setKeywords}
+            onSubmit={(query) => void searchTracks(query)}
+            onClear={() => setResults([])}
+            placeholder="搜索歌曲、歌手或专辑"
+            loading={pendingAction === "search"}
+            showSearchButton
+          />
 
           {results.length > 0 ? (
             <div className="flex items-center justify-between text-[11px] text-foreground-muted">
