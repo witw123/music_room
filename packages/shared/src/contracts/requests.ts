@@ -106,6 +106,8 @@ export const registerTrackRequestSchema = z
     artist: trimmedString(240),
     album: z.string().trim().max(240).nullable(),
     lyrics: z.string().trim().max(100_000).nullable().optional(),
+    translatedLyrics: z.string().trim().max(100_000).nullable().optional(),
+    romanizedLyrics: z.string().trim().max(100_000).nullable().optional(),
     durationMs: z.number().int().nonnegative().max(3 * 60 * 60 * 1000),
     bitrate: z.number().int().positive().max(10_000_000).nullable(),
     sizeBytes: z.number().int().nonnegative().max(1024 * 1024 * 1024).nullable().optional(),

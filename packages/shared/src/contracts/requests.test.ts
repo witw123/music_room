@@ -133,6 +133,18 @@ describe("request contracts", () => {
     };
 
     expect(registerTrackRequestSchema.parse(validTrack)).toMatchObject(validTrack);
+    expect(
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        lyrics: "  [00:01.00]Lyrics  ",
+        translatedLyrics: "  [00:01.00]Translation  ",
+        romanizedLyrics: "  [00:01.00]Romanized  "
+      })
+    ).toMatchObject({
+      lyrics: "[00:01.00]Lyrics",
+      translatedLyrics: "[00:01.00]Translation",
+      romanizedLyrics: "[00:01.00]Romanized"
+    });
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,
