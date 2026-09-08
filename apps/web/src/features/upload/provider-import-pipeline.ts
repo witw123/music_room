@@ -26,7 +26,6 @@ import {
   extensionForImportedMimeType,
   requestProviderLyricsPayload,
   resolveCachedAudioMimeType,
-  resolveImportedLyrics,
   sanitizeFileName,
   sourceTypeLabel
 } from "./upload-import-helpers";

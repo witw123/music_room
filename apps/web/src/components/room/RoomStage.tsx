@@ -7,7 +7,6 @@ import type {
   UpdateRoomRequest
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
-import { musicRoomApi } from "@/lib/network/music-room-api";
 import { findRoomPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 
