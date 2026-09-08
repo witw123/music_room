@@ -125,7 +125,8 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextVal = event.target.value;
     setLocalValue(nextVal);
-    if (isComposingRef.current || event.nativeEvent.isComposing) {
+    const nativeEvent = event.nativeEvent as unknown as { isComposing?: boolean };
+    if (isComposingRef.current || nativeEvent.isComposing) {
       return;
     }
     onChange(nextVal);
