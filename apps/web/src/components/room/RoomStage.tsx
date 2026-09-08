@@ -11,39 +11,12 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { findRoomPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 
-type CachedLyricsResponse = {
-  wordSyncedLyric?: string | null;
-  plainLyric?: string | null;
-  translatedLyric?: string | null;
-  romanizedLyric?: string | null;
-};
-
-const providerLyricsMemoryCache = new Map<string, Promise<CachedLyricsResponse>>();
-
-function fetchProviderLyricsCached(provider: string, trackId: string): Promise<CachedLyricsResponse> {
-  const cacheKey = `${provider}:${trackId}`;
-  const existing = providerLyricsMemoryCache.get(cacheKey);
-  if (existing) return existing;
-
-  const promise = (async () => {
-    if (provider === "netease") {
-      return await musicRoomApi.getNeteaseLyrics(trackId);
-    }
-    return await musicRoomApi.getQqMusicLyrics(trackId);
-  })().catch((err) => {
-    providerLyricsMemoryCache.delete(cacheKey);
-    throw err;
-  });
-
-  providerLyricsMemoryCache.set(cacheKey, promise);
-  return promise;
-}
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
 import { RoomControlHeader, getSourceModeLabel } from "./RoomControlHeader";
 export { getSourceModeLabel };
 import { RoomLyricsPanel } from "./RoomLyricsPanel";
-import { selectRoomLyrics } from "@/features/playback/lyrics";
+import { fetchProviderLyricsCached, hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 import { resolvePreferredArtworkUrl } from "@/components/bottom-player/preferred-artwork";
 import { SquareAlbumCover } from "@/components/bottom-player";
@@ -247,14 +220,26 @@ function RoomStageBase({
 
       // 2. Resolve lyrics
       const localLyrics = currentTrackLyrics || localRecord?.lyrics?.trim() || null;
+      const localTranslated = currentTrackTranslatedLyrics || localRecord?.translatedLyrics?.trim() || null;
+      const localRomanized = currentTrackRomanizedLyrics || localRecord?.romanizedLyrics?.trim() || null;
+
       if (localLyrics) {
         setLyricsText(localLyrics);
-        setLyricsStatus("ready");
-        return;
+      }
+      if (localTranslated) {
+        setTranslatedLyricsText(localTranslated);
+      }
+      if (localRomanized) {
+        setRomanizedLyricsText(localRomanized);
       }
 
-      if (!sourceProvider || !sourceTrackId) {
-        setLyricsStatus("ready");
+      const hasWordSynced = hasWordSyncedRoomLyrics(localLyrics);
+      if (
+        (sourceProvider !== "netease" && sourceProvider !== "qqmusic") ||
+        !sourceTrackId ||
+        (hasWordSynced && localTranslated && localRomanized)
+      ) {
+        setLyricsStatus(localLyrics ? "ready" : "idle");
         return;
       }
 
@@ -266,8 +251,8 @@ function RoomStageBase({
             wordSyncedLyric: response.wordSyncedLyric,
             plainLyric: response.plainLyric
           }));
-          setTranslatedLyricsText(response.translatedLyric?.trim() || null);
-          setRomanizedLyricsText(response.romanizedLyric?.trim() || null);
+          setTranslatedLyricsText(response.translatedLyric?.trim() || localTranslated || null);
+          setRomanizedLyricsText(response.romanizedLyric?.trim() || localRomanized || null);
           setLyricsStatus("ready");
         }
       } catch {
@@ -275,7 +260,7 @@ function RoomStageBase({
           if (localLyrics) {
             setLyricsText(localLyrics);
           }
-          setLyricsStatus("ready");
+          setLyricsStatus(localLyrics ? "ready" : "error");
         }
       }
     })();

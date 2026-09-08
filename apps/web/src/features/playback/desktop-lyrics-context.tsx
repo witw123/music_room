@@ -11,7 +11,6 @@ import {
   type ReactNode
 } from "react";
 import type { TrackMeta } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   appSettingsChangeEvent,
   getAppSettings,
@@ -20,7 +19,9 @@ import {
 import {
   getActiveRoomLyricIndex,
   alignRoomLyricLines,
+  fetchProviderLyricsCached,
   getRoomLyricDisplayWords,
+  hasWordSyncedRoomLyrics,
   parseRoomLyrics,
   selectRoomLyrics
 } from "@/features/playback/lyrics";
@@ -229,7 +230,12 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
       romanizedLine: null
     });
 
-    if (directLyrics || !provider || !providerTrackId) {
+    const hasWordSynced = hasWordSyncedRoomLyrics(directLyrics);
+    if (
+      (provider !== "netease" && provider !== "qqmusic") ||
+      !providerTrackId ||
+      (hasWordSynced && localTranslated && localRomanized)
+    ) {
       return () => {
         cancelled = true;
       };
@@ -244,9 +250,18 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
 
     void request.then((result) => {
       if (cancelled) return;
+      const resolvedPlain = selectRoomLyrics({
+        localLyrics: directLyrics,
+        wordSyncedLyric: result.plainLyric,
+        plainLyric: directLyrics
+      });
+      const resolvedTranslated = result.translatedLyric || localTranslated;
+      const resolvedRomanized = result.romanizedLyric || localRomanized;
       setLyrics({
-        status: result.plainLyric || result.translatedLyric || result.romanizedLyric ? "ready" : "error",
-        ...result,
+        status: resolvedPlain || resolvedTranslated || resolvedRomanized ? "ready" : "error",
+        plainLyric: resolvedPlain,
+        translatedLyric: resolvedTranslated,
+        romanizedLyric: resolvedRomanized,
         currentLine: null,
         translatedLine: null,
         romanizedLine: null
@@ -462,9 +477,7 @@ export function useDesktopLyricsRegistration(player: DesktopLyricsPlayer) {
 
 async function loadProviderLyrics(provider: "netease" | "qqmusic", trackId: string): Promise<CachedLyrics> {
   try {
-    const response = provider === "netease"
-      ? await musicRoomApi.getNeteaseLyrics(trackId)
-      : await musicRoomApi.getQqMusicLyrics(trackId);
+    const response = await fetchProviderLyricsCached(provider, trackId);
     return {
       plainLyric: selectRoomLyrics({
         wordSyncedLyric: response.wordSyncedLyric,

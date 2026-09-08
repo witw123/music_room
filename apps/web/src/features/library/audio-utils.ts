@@ -33,6 +33,8 @@ export type CachedLibraryTrack = {
   album?: string | null;
   artworkUrl?: string | null;
   lyrics?: string | null;
+  translatedLyrics?: string | null;
+  romanizedLyrics?: string | null;
   provider?: "netease" | "qqmusic" | "local_upload";
   providerTrackId?: string | null;
   sourceDirectoryId?: string | null;

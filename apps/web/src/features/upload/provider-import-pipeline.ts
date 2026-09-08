@@ -24,6 +24,7 @@ import { hasRoomPermission } from "@/features/room/room-permissions";
 import {
   buildProviderSourceRef,
   extensionForImportedMimeType,
+  requestProviderLyricsPayload,
   resolveCachedAudioMimeType,
   resolveImportedLyrics,
   sanitizeFileName,
@@ -176,12 +177,7 @@ export async function importProviderTracks(input: {
       if (!prefetched) throw new Error(`歌曲预取结果无效：${candidate.title}`);
 
       const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
-      const lyricsPromise = resolveImportedLyrics({
-        title: candidate.title,
-        artist: candidate.artist,
-        sourceType,
-        sourceTrackId: candidate.providerTrackId
-      });
+      const lyricsPayloadPromise = requestProviderLyricsPayload(sourceType, candidate.providerTrackId);
       const artworkPromise = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
         ? musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
         : Promise.resolve(undefined);
@@ -211,12 +207,21 @@ export async function importProviderTracks(input: {
         metadata: { ...candidate, artworkUrl: localArtworkUrl },
         sourceRef
       });
-      const lyrics = (await lyricsPromise)?.trim() || null;
+      const lyricsPayload = await lyricsPayloadPromise;
+      const lyrics = lyricsPayload?.lyrics?.trim() || null;
+      const translatedLyrics = lyricsPayload?.translatedLyrics?.trim() || null;
+      const romanizedLyrics = lyricsPayload?.romanizedLyrics?.trim() || null;
       prepared.push({
         candidate,
         file: prefetched.file,
         objectUrl: createdObjectUrl,
-        draft: { ...draft, lyrics, artworkUrl: candidate.artworkUrl ?? null },
+        draft: {
+          ...draft,
+          lyrics,
+          translatedLyrics,
+          romanizedLyrics,
+          artworkUrl: candidate.artworkUrl ?? null
+        },
         localArtworkUrl,
         lyrics
       });

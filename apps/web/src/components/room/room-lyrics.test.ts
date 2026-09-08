@@ -151,4 +151,33 @@ describe("room lyrics", () => {
     expect(lines[3]?.text).toBe("歌词");
     expect(lines.some((l) => l.text.includes("{"))).toBe(false);
   });
+
+  it("detects word synced lyrics correctly", () => {
+    expect(hasWordSyncedRoomLyrics("[1000,1200](1000,400,0)你(1400,600,0)好")).toBe(true);
+    expect(hasWordSyncedRoomLyrics('<Lyric_1 LyricType="1" LyricContent="[0,1000](0,500,0)逐(500,500,0)字"/>')).toBe(true);
+    expect(hasWordSyncedRoomLyrics("[00:01.00]普通歌词")).toBe(false);
+    expect(hasWordSyncedRoomLyrics(null)).toBe(false);
+  });
+
+  it("prioritizes word-synced lyrics over plain lyrics when local lyrics are only plain", () => {
+    const plainLocal = "[00:01.00]普通本地歌词";
+    const wordSynced = "[1000,1200](1000,400,0)逐(1400,600,0)字";
+    const plainRemote = "[00:01.00]远端普通歌词";
+
+    expect(selectRoomLyrics({
+      localLyrics: plainLocal,
+      wordSyncedLyric: wordSynced,
+      plainLyric: plainRemote
+    })).toBe(wordSynced);
+  });
+
+  it("keeps local word-synced lyrics if already word-synced", () => {
+    const wordSyncedLocal = "[1000,1200](1000,400,0)本(1400,600,0)地";
+    const wordSyncedRemote = "[1000,1200](1000,400,0)远(1400,600,0)端";
+
+    expect(selectRoomLyrics({
+      localLyrics: wordSyncedLocal,
+      wordSyncedLyric: wordSyncedRemote
+    })).toBe(wordSyncedLocal);
+  });
 });

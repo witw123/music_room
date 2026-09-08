@@ -24,8 +24,7 @@ describe("desktop lyrics integration", () => {
     expect(shellSource).not.toContain("onToggleLyrics");
     expect(stageSource).not.toContain("isLyricsOpen");
     expect(contextSource).toContain("lyricRequestCache");
-    expect(contextSource).toContain("getNeteaseLyrics");
-    expect(contextSource).toContain("getQqMusicLyrics");
+    expect(contextSource).toContain("fetchProviderLyricsCached");
   });
 
   it("renders the combined karaoke bar with transport and word-by-word fill", () => {

@@ -66,6 +66,8 @@ export function toCachedLibraryTrack(
     ...(record.album !== undefined ? { album: record.album } : {}),
     ...(record.artworkUrl !== undefined ? { artworkUrl: record.artworkUrl } : {}),
     ...(record.lyrics !== undefined ? { lyrics: record.lyrics } : {}),
+    ...(record.translatedLyrics !== undefined ? { translatedLyrics: record.translatedLyrics } : {}),
+    ...(record.romanizedLyrics !== undefined ? { romanizedLyrics: record.romanizedLyrics } : {}),
     ...(record.provider !== undefined ? { provider: record.provider } : {}),
     ...(record.providerTrackId !== undefined ? { providerTrackId: record.providerTrackId } : {}),
     mimeType: record.mimeType,

@@ -29,12 +29,16 @@ describe("processSelectedTrackFiles", () => {
     const payload = buildRegisterTrackPayload({
       ...buildTrack("draft", "hash"),
       lyrics: "[00:01.00]歌词",
+      translatedLyrics: "[00:01.00]Lyrics translation",
+      romanizedLyrics: "[00:01.00]Geci",
       sourceType: "qqmusic",
       sourceRef: { provider: "qqmusic", trackId: "003abc" }
     });
 
     expect(payload).toMatchObject({
       lyrics: "[00:01.00]歌词",
+      translatedLyrics: "[00:01.00]Lyrics translation",
+      romanizedLyrics: "[00:01.00]Geci",
       sourceType: "qqmusic",
       sourceRef: { provider: "qqmusic", trackId: "003abc" }
     });

@@ -94,7 +94,7 @@ export function useUploadPipelineActions({
       > & Partial<
         Pick<
           TrackMeta,
-          "album" | "artworkUrl" | "sourceType" | "sourceRef" | "loudness" | "originalAsset" | "playbackAsset"
+          "album" | "artworkUrl" | "sourceType" | "sourceRef" | "loudness" | "originalAsset" | "playbackAsset" | "translatedLyrics" | "romanizedLyrics"
         >
       >;
       roomId: string;
@@ -123,6 +123,8 @@ export function useUploadPipelineActions({
             album: input.track.album,
             artworkUrl: input.track.artworkUrl,
             lyrics: input.lyrics ?? null,
+            translatedLyrics: input.track.translatedLyrics ?? null,
+            romanizedLyrics: input.track.romanizedLyrics ?? null,
             provider: resolveProviderTrackSource(input.track)?.provider ?? "local_upload",
             providerTrackId: resolveProviderTrackSource(input.track)?.trackId ?? null,
             loudness: input.track.loudness,
@@ -228,7 +230,12 @@ export function useUploadPipelineActions({
               sourceType,
               sourceTrackId: sourceRef?.trackId
             });
-          return { ...draft, lyrics: lyrics || null };
+          return {
+            ...draft,
+            lyrics: lyrics || null,
+            translatedLyrics: resolvedCachedMetadata?.translatedLyrics ?? null,
+            romanizedLyrics: resolvedCachedMetadata?.romanizedLyrics ?? null
+          };
         },
         buildRegisterTrackPayload,
         registerTrack: (registerRoomId, payload) =>

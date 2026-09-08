@@ -6,7 +6,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
-import { selectRoomLyrics } from "@/features/playback/lyrics";
+import { fetchProviderLyricsCached, hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
 import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "./artwork-colors";
@@ -680,40 +680,46 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
       setLyricsStatus("idle");
       return;
     }
-    setTranslatedLyric(storedTranslatedLyrics?.trim() || null);
-    setRomanizedLyric(storedRomanizedLyrics?.trim() || null);
-    const fallbackLyrics = roomLyrics?.trim() || null;
-    if (fallbackLyrics) {
-      // The track already carries lyrics locally, so play them as-is. The
-      // old provider re-fetch (to maybe upgrade plain lines to word-synced)
-      // made every playback of an already-local track hit the network.
-      setPlainLyric(fallbackLyrics);
-      setLyricsStatus("ready");
+    const localLyrics = roomLyrics?.trim() || null;
+    const localTranslated = storedTranslatedLyrics?.trim() || null;
+    const localRomanized = storedRomanizedLyrics?.trim() || null;
+
+    if (localLyrics) {
+      setPlainLyric(localLyrics);
+    }
+    setTranslatedLyric(localTranslated);
+    setRomanizedLyric(localRomanized);
+
+    const hasWordSynced = hasWordSyncedRoomLyrics(localLyrics);
+    if (
+      (sourceProvider !== "netease" && sourceProvider !== "qqmusic") ||
+      !sourceTrackId ||
+      (hasWordSynced && localTranslated && localRomanized)
+    ) {
+      setLyricsStatus(localLyrics ? "ready" : "idle");
       return;
     }
-    if (!sourceProvider || !sourceTrackId) {
-      setPlainLyric(fallbackLyrics);
-      setLyricsStatus("ready");
-      return;
-    }
+
     let cancelled = false;
-    setLyricsStatus("loading");
-    const request = sourceProvider === "netease" ? musicRoomApi.getNeteaseLyrics(sourceTrackId) : musicRoomApi.getQqMusicLyrics(sourceTrackId);
+    setLyricsStatus(localLyrics ? "ready" : "loading");
+    const request = fetchProviderLyricsCached(sourceProvider, sourceTrackId);
     void request.then((lyrics) => {
       if (!cancelled) {
         setPlainLyric(selectRoomLyrics({
-          localLyrics: fallbackLyrics,
+          localLyrics,
           wordSyncedLyric: lyrics.wordSyncedLyric,
           plainLyric: lyrics.plainLyric
         }));
-        setTranslatedLyric(lyrics.translatedLyric?.trim() || null);
-        setRomanizedLyric(lyrics.romanizedLyric?.trim() || null);
+        setTranslatedLyric(lyrics.translatedLyric?.trim() || localTranslated || null);
+        setRomanizedLyric(lyrics.romanizedLyric?.trim() || localRomanized || null);
         setLyricsStatus("ready");
       }
     }).catch(() => {
       if (!cancelled) {
-        setPlainLyric(fallbackLyrics);
-        setLyricsStatus("error");
+        if (localLyrics) {
+          setPlainLyric(localLyrics);
+        }
+        setLyricsStatus(localLyrics ? "ready" : "error");
       }
     });
     return () => { cancelled = true; };

@@ -1,3 +1,6 @@
+import type { ProviderLyrics } from "@music-room/shared";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+
 export type RoomLyricLine = {
   id: string;
   text: string;
@@ -129,7 +132,7 @@ export function alignRoomLyricLines(
       }
     }
 
-    if (matchIndex < 0 || (primary.timeMs !== null && bestDistance > 250)) {
+    if (matchIndex < 0 || (primary.timeMs !== null && bestDistance > 1_500)) {
       return null;
     }
     used.add(matchIndex);
@@ -261,4 +264,30 @@ export function getActiveRoomLyricIndex(lines: RoomLyricLine[], positionMs: numb
   }
   return activeIndex;
 }
+
+const providerLyricsCache = new Map<string, Promise<ProviderLyrics>>();
+
+export function fetchProviderLyricsCached(
+  provider: "netease" | "qqmusic",
+  trackId: string
+): Promise<ProviderLyrics> {
+  const cacheKey = `${provider}:${trackId}`;
+  const cached = providerLyricsCache.get(cacheKey);
+  if (cached) return cached;
+  const promise = (
+    provider === "netease"
+      ? musicRoomApi.getNeteaseLyrics(trackId)
+      : musicRoomApi.getQqMusicLyrics(trackId)
+  ).catch((error) => {
+    providerLyricsCache.delete(cacheKey);
+    throw error;
+  });
+  providerLyricsCache.set(cacheKey, promise);
+  return promise;
+}
+
+export function clearProviderLyricsCache() {
+  providerLyricsCache.clear();
+}
+
 

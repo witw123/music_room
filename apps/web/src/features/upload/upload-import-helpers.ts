@@ -1,5 +1,6 @@
 import type { RemoteTrackSourceRef, TrackMeta, TrackSourceType } from "@music-room/shared";
 import { MusicRoomApiError, musicRoomApi, resolveDownloadedAudioMimeType } from "@/lib/network/music-room-api";
+import { fetchProviderLyricsCached } from "@/features/playback/lyrics";
 import { getAssetManifest, getAssetUnit } from "@/features/library/indexeddb";
 import { playbackProfileId } from "@/features/library/audio-asset-builder";
 
@@ -102,20 +103,35 @@ export async function resolveImportedLyrics(input: {
   );
 }
 
+export type ProviderLyricsPayload = {
+  lyrics: string | null;
+  translatedLyrics: string | null;
+  romanizedLyrics: string | null;
+};
+
+export async function requestProviderLyricsPayload(
+  provider: "netease" | "qqmusic",
+  trackId: string
+): Promise<ProviderLyricsPayload | null> {
+  try {
+    const response = await fetchProviderLyricsCached(provider, trackId);
+    const lyrics = (response.wordSyncedLyric ?? response.plainLyric)?.trim();
+    return {
+      lyrics: lyrics ? lyrics.slice(0, 100_000) : null,
+      translatedLyrics: response.translatedLyric?.trim() ? response.translatedLyric.trim().slice(0, 100_000) : null,
+      romanizedLyrics: response.romanizedLyric?.trim() ? response.romanizedLyric.trim().slice(0, 100_000) : null
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function requestProviderLyrics(
   provider: "netease" | "qqmusic",
   trackId: string
 ) {
-  try {
-    const response =
-      provider === "netease"
-        ? await musicRoomApi.getNeteaseLyrics(trackId)
-        : await musicRoomApi.getQqMusicLyrics(trackId);
-    const lyrics = (response.wordSyncedLyric ?? response.plainLyric)?.trim();
-    return lyrics ? lyrics.slice(0, 100_000) : null;
-  } catch {
-    return null;
-  }
+  const payload = await requestProviderLyricsPayload(provider, trackId);
+  return payload?.lyrics ?? null;
 }
 
 export function findMatchingProviderTrack(

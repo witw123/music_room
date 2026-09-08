@@ -19,6 +19,8 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
     artist: track.artist,
     album: track.album,
     lyrics: track.lyrics ?? null,
+    translatedLyrics: track.translatedLyrics ?? null,
+    romanizedLyrics: track.romanizedLyrics ?? null,
     durationMs: track.durationMs,
     bitrate: track.bitrate,
     sizeBytes: track.sizeBytes,
