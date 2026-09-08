@@ -2,8 +2,10 @@
 
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
+  useState,
   type CompositionEvent,
   type FormEvent,
   type KeyboardEvent,
@@ -66,39 +68,42 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   },
   forwardedRef
 ) {
+  const [localValue, setLocalValue] = useState(value);
   const internalInputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
   useImperativeHandle(forwardedRef, () => internalInputRef.current as HTMLInputElement);
 
-  const syncInputValue = (nextValue: string) => {
-    onChange(nextValue);
-  };
+  useEffect(() => {
+    if (isComposingRef.current) return;
+    setLocalValue(value);
+  }, [value]);
 
   const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     if (disabled || loading) return;
-    const rawValue = internalInputRef.current?.value ?? value;
-    const trimmed = rawValue.trim();
-    if (!trimmed) {
+    const domValue = internalInputRef.current?.value ?? "";
+    const rawValue = (localValue || domValue || value).trim();
+    if (!rawValue) {
       internalInputRef.current?.focus();
       return;
     }
-    if (onSubmit) {
-      if (rawValue !== value) {
-        syncInputValue(rawValue);
-      }
-      internalInputRef.current?.blur();
-      onSubmit(trimmed);
+    if (domValue !== value) {
+      setLocalValue(domValue);
+      onChange(domValue);
     }
+    internalInputRef.current?.blur();
+    onSubmit?.(rawValue);
   };
 
   const handleClear = () => {
+    setLocalValue("");
     onChange("");
     onClear?.();
     internalInputRef.current?.focus();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+    if (event.key === "Enter" && !event.nativeEvent.isComposing && !isComposingRef.current) {
       event.preventDefault();
       handleSubmit();
       return;
@@ -106,20 +111,32 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
     onKeyDown?.(event);
   };
 
+  const handleCompositionStart = () => {
+    isComposingRef.current = true;
+  };
+
   const handleCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
+    isComposingRef.current = false;
     const val = event.currentTarget.value;
-    syncInputValue(val);
-    window.setTimeout(() => {
-      if (internalInputRef.current && internalInputRef.current.value !== val) {
-        syncInputValue(internalInputRef.current.value);
-      }
-    }, 0);
+    setLocalValue(val);
+    onChange(val);
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextVal = event.target.value;
+    setLocalValue(nextVal);
+    if (isComposingRef.current || event.nativeEvent.isComposing) {
+      return;
+    }
+    onChange(nextVal);
   };
 
   const handleBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+    isComposingRef.current = false;
     const domVal = event.currentTarget.value;
     if (domVal !== value) {
-      syncInputValue(domVal);
+      setLocalValue(domVal);
+      onChange(domVal);
     }
     onBlur?.();
   };
@@ -133,7 +150,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   return (
     <div className={`relative w-full ${className}`}>
       <form
-        action="#"
+        action="javascript:void(0);"
         className="flex w-full min-w-0 items-center gap-2"
         onSubmit={handleSubmit}
         role="search"
@@ -159,9 +176,9 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               ref={internalInputRef}
               id={id}
               name={name}
-              value={value}
-              onInput={(e) => syncInputValue(e.currentTarget.value)}
-              onChange={(e) => syncInputValue(e.target.value)}
+              value={localValue}
+              onChange={handleChange}
+              onCompositionStart={handleCompositionStart}
               onCompositionEnd={handleCompositionEnd}
               onFocus={onFocus}
               onBlur={handleBlur}
@@ -179,7 +196,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               className={`h-full w-full min-w-0 bg-transparent py-1 text-foreground placeholder:text-foreground-muted/40 outline-none ${inputClassName}`}
             />
 
-            {value.trim() && !disabled ? (
+            {localValue.trim() && !disabled ? (
               <button
                 type="button"
                 onClick={handleClear}
@@ -211,7 +228,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               handleSubmit();
             }}
             className={`inline-flex min-h-[2.5rem] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-accent/40 bg-accent px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:border-accent active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 ${
-              !value.trim() && !internalInputRef.current?.value?.trim() ? "opacity-50" : ""
+              !localValue.trim() && !internalInputRef.current?.value?.trim() ? "opacity-50" : ""
             }`}
           >
             {loading ? (

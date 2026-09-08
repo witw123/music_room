@@ -329,7 +329,7 @@ export function RoomProviderTrackSearch({
                 searchInputRef.current?.focus();
                 void searchTracks(value);
               }}
-              position={mode === "request" ? "flow" : "overlay"}
+              position="overlay"
             />
           ) : null
         }
