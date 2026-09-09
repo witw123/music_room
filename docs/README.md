@@ -1,19 +1,23 @@
 # 文档总览
 
-最后更新：`2026-08-12`
-当前版本：`0.2.9`
+最后更新：`2026-09`
+当前版本：`0.3.2`
 
 ## 当前项目现状
 
-Music Room 是一套围绕“本地音乐多人同步播放”构建的 Web 应用：
+Music Room 是一套围绕“本地与外部音乐多人同步播放”构建的多端协作应用：
 
-- Next.js Web 前端
-- NestJS API / Socket.IO 服务端
+- Next.js 15 Web 前端（自适应桌面与移动端浏览器，支持 PWA）
+- Tauri 2 桌面端（集成 Windows SMTC 与桌面悬浮歌词）
+- Capacitor 7 移动端（集成 Android 原生 MediaSession 与后台播放服务）
+- NestJS 11 API / Socket.IO 服务端
 - PostgreSQL、Redis、coturn 生产依赖
 - 本地 IndexedDB 个人上传资源、provider 导入资源和分段 Opus 播放资产
-- 单一 Segmented Opus/WebRTC RTP 媒体链路
+- 单一 Segmented Opus/WebRTC RTP 媒体广播链路
 - 官网展示入口 `/` 与客户端入口 `/app`
 - `/app/search`、`/app/playlists`、`/app/favorites`、`/app/profile` 和 `/app/settings` 工作区
+- 房间模式支持标准协作房与点歌房（电台模式，观众搜索点歌 + 房主审批入队）
+
 
 服务端只保存账号、房间、队列、播放状态和音频元数据，不保存音频文件。房间不提供缓存下载、音频资产互传或房间级缓存同步。IndexedDB 用于恢复当前用户自己上传或 provider 导入的歌曲及其本地生成的资产。
 
