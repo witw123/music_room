@@ -22,7 +22,6 @@ import { personalizationChangedEvent } from "@/features/personalization/use-pers
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
-  hashAudioBlob,
   listMergedLocalPlaylistTracks,
   localPlaylistTrackId,
   toProviderTrackRecord,
@@ -31,11 +30,13 @@ import {
 } from "@/features/playlist/local-playlist";
 import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-database";
 import {
-  ensureLocalAudioDirectoryWriteAccess,
-  normalizeLocalAudioMimeType,
-  saveAudioFileToLocalDirectory
-} from "@/features/library/local-audio-storage";
-import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
+  buildPlaybackStatusMessage,
+  prepareTrackForImmediatePlayback,
+  preloadProviderTracksInBackground,
+  toPlaybackPreparationErrorMessage,
+  type BackgroundPreloadHandle
+} from "@/features/playback/provider-playback-preparation";
+import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
 import {
   getCachedDiscoverData,
   setCachedDiscoverData,
@@ -105,6 +106,24 @@ export function DiscoverPage() {
   const [activeFilterId, setActiveFilterId] = useState<string>("all");
   const [showColdStartDialog, setShowColdStartDialog] = useState(false);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  // Background preloader for "play all"-style flows; cancelled when a new flow
+  // starts or the page unmounts so stale downloads never keep running.
+  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
+
+  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
+
+  const startQueuePreload = useCallback((tracks: Track[]) => {
+    queuePreloadRef.current?.cancel();
+    queuePreloadRef.current = preloadProviderTracksInBackground(tracks, {
+      concurrency: 2,
+      onPrepared: (prepared) => player.updateQueueRecord(prepared.record),
+      onSettled: (summary) => {
+        if (!summary.cancelled && summary.failed > 0) {
+          setErrorMessage(`${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`);
+        }
+      }
+    });
+  }, [player]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,56 +230,9 @@ export function DiscoverPage() {
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const resolvedTrack = await resolveTrackArtwork(track);
-      await ensureLocalAudioDirectoryWriteAccess();
-      const response = resolvedTrack.provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
-        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
-      const fileHash = await hashAudioBlob(response.blob);
-      const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
-      const loudness = await analyzeAudioBlobLoudness(response.blob);
-      const lyricPayload = existing?.lyrics
-        ? null
-        : await (resolvedTrack.provider === "netease"
-          ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-          : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-        ).catch(() => null);
-      const lyrics = existing?.lyrics ?? lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
-      const saved = await saveAudioFileToLocalDirectory({
-        file: response.blob,
-        fileHash,
-        title: resolvedTrack.title,
-        mimeType,
-        track: {
-          artist: resolvedTrack.artist,
-          album: resolvedTrack.album,
-          artworkUrl: resolvedTrack.artworkUrl,
-          lyrics,
-          translatedLyrics: lyricPayload?.translatedLyric ?? null,
-          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-          provider: resolvedTrack.provider,
-          providerTrackId: resolvedTrack.providerTrackId,
-          durationMs: resolvedTrack.durationMs,
-          sizeBytes: response.blob.size
-        }
-      });
-      const updatedTrack: LocalPlaylistTrackRecord = {
-        ...toProviderTrackRecord(resolvedTrack, existing),
-        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
-        fileHash,
-        fileName: saved.fileName,
-        sizeBytes: response.blob.size,
-        mimeType,
-        lyrics,
-        translatedLyrics: lyricPayload?.translatedLyric ?? null,
-        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-        ...(loudness ? { loudness } : {}),
-        availableOffline: true,
-        updatedAt: new Date().toISOString()
-      };
-      await upsertLocalPlaylistTrack(updatedTrack);
+      const updatedTrack = await downloadProviderTrackToLibrary({ track, existing });
       setLocalTracks((current) => [...current.filter((item) => item.id !== updatedTrack.id), updatedTrack]);
-      setStatusMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+      setStatusMessage(`《${updatedTrack.title}》已下载到本地音乐目录。`);
       return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "歌曲下载失败，请稍后重试。");
@@ -325,14 +297,19 @@ export function DiscoverPage() {
     if (!tracks.length) return;
     try {
       setPending("dailyRadar");
-      const seed = toProviderTrackRecord(tracks[0]);
-      await player.playTrack(seed);
-      for (const track of tracks.slice(1)) {
+      setErrorMessage(null);
+      const first = tracks[0]!;
+      // First track first: prepare -> play -> preload the rest in background.
+      const prepared = await prepareTrackForImmediatePlayback(first);
+      await player.playTrack(prepared.record);
+      const rest = tracks.slice(1);
+      for (const track of rest) {
         player.addToQueue(toProviderTrackRecord(track));
       }
+      startQueuePreload(rest);
       setStatusMessage(`已开启今日聚焦全部 ${tracks.length} 首歌曲播放`);
-    } catch {
-      setErrorMessage("播放聚焦歌曲失败，请稍后重试。");
+    } catch (error) {
+      setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放聚焦歌曲失败，请稍后重试。"));
     } finally {
       setPending(null);
     }
@@ -345,14 +322,32 @@ export function DiscoverPage() {
     isDownloaded: (track) => localTracks.some((item) => item.id === localPlaylistTrackId(track) && item.availableOffline),
     isQueued: (track) => player.queue.some((item) => item.trackId === localPlaylistTrackId(track)),
     onPlay: async (track) => {
-      const record = toProviderTrackRecord(track);
-      await player.playTrack(record);
-      setStatusMessage(`正在播放《${track.title}》`);
+      setPending(`play:${track.provider}:${track.providerTrackId}`);
+      setErrorMessage(null);
+      try {
+        const prepared = await prepareTrackForImmediatePlayback(track);
+        await player.playTrack(prepared.record);
+        setStatusMessage(buildPlaybackStatusMessage(track.title, prepared.source));
+      } catch (error) {
+        setErrorMessage(toPlaybackPreparationErrorMessage(error, `《${track.title}》播放失败，请稍后重试。`));
+      } finally {
+        setPending(null);
+      }
     },
-    onQueue: (track) => {
-      const record = toProviderTrackRecord(track);
-      player.addToQueue(record);
-      setStatusMessage(`已将《${track.title}》加入播放队列`);
+    onQueue: async (track) => {
+      setPending(`queue:${track.provider}:${track.providerTrackId}`);
+      setErrorMessage(null);
+      try {
+        // Queueing prepares the audio too, otherwise the queued item could
+        // never start playing once its turn arrives.
+        const prepared = await prepareTrackForImmediatePlayback(track);
+        player.addToQueue(prepared.record);
+        setStatusMessage(`已将《${track.title}》加入播放队列`);
+      } catch (error) {
+        setErrorMessage(toPlaybackPreparationErrorMessage(error, `《${track.title}》加入队列失败，请稍后重试。`));
+      } finally {
+        setPending(null);
+      }
     },
     onDownload: (track) => {
       void downloadTrack(track);
@@ -363,14 +358,16 @@ export function DiscoverPage() {
     onStartRadio: async (track) => {
       try {
         const radioTracks = await musicRoomApi.getTrackRadio({ seedTrack: track, limit: 15 });
-        const seedRecord = toProviderTrackRecord(track);
-        await player.playTrack(seedRecord);
-        for (const nextTrack of radioTracks.slice(0, 10)) {
+        const prepared = await prepareTrackForImmediatePlayback(track);
+        await player.playTrack(prepared.record);
+        const queuedTracks = radioTracks.slice(0, 10);
+        for (const nextTrack of queuedTracks) {
           player.addToQueue(toProviderTrackRecord(nextTrack));
         }
+        startQueuePreload(queuedTracks);
         setStatusMessage(`已开启从《${track.title}》出发的单曲漫游`);
-      } catch {
-        setErrorMessage("开启漫游失败，请稍后重试。");
+      } catch (error) {
+        setErrorMessage(toPlaybackPreparationErrorMessage(error, "开启漫游失败，请稍后重试。"));
       }
     },
     onToggleFavorite: async (track) => {
@@ -517,14 +514,17 @@ export function DiscoverPage() {
       const tracksToPlay = matched.length > 0 ? matched : uniquePool;
       if (tracksToPlay.length > 0) {
         const first = tracksToPlay[0]!;
-        await player.playTrack(toProviderTrackRecord(first));
-        for (const t of tracksToPlay.slice(1, 10)) {
+        const prepared = await prepareTrackForImmediatePlayback(first);
+        await player.playTrack(prepared.record);
+        const queuedTracks = tracksToPlay.slice(1, 10);
+        for (const t of queuedTracks) {
           player.addToQueue(toProviderTrackRecord(t));
         }
+        startQueuePreload(queuedTracks);
         setStatusMessage(`正在播放「${station.title}」专属场景电台`);
       }
-    } catch {
-      setErrorMessage("播放电台失败，请稍后重试。");
+    } catch (error) {
+      setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放电台失败，请稍后重试。"));
     } finally {
       setPending(null);
     }

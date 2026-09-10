@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, QqMusicTrackCandidate } from "@music-room/shared";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -22,24 +22,23 @@ import {
 } from "@/features/workspace/page-data-cache";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
-  cacheProviderTrackForPlayback,
-  hasProviderTrackPlaybackCache,
   providerPlaybackCacheChangedEvent
 } from "@/features/playback/provider-track-cache";
-import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
 import {
-  hashAudioBlob,
+  buildPlaybackStatusMessage,
+  prepareTrackForImmediatePlayback,
+  preloadProviderTracksInBackground,
+  toPlaybackPreparationErrorMessage,
+  type BackgroundPreloadHandle
+} from "@/features/playback/provider-playback-preparation";
+import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
+import {
   listMergedLocalPlaylistTracks,
   localPlaylistTrackId,
   toProviderTrackRecord,
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
 } from "@/features/playlist/local-playlist";
-import {
-  ensureLocalAudioDirectoryWriteAccess,
-  normalizeLocalAudioMimeType,
-  saveAudioFileToLocalDirectory
-} from "@/features/library/local-audio-storage";
 import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
 
@@ -88,6 +87,11 @@ export function FavoriteAlbumsPage({
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
+  // Background preloader for "播放全部"; cancelled when a new run starts or the
+  // page unmounts so stale downloads never keep running.
+  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
+
+  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
 
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
@@ -141,7 +145,9 @@ export function FavoriteAlbumsPage({
 
   useEffect(() => {
     const handlePlaybackCacheChange = (event: Event) => {
-      const fileHashes = new Set((event as CustomEvent<{ fileHashes?: string[] }>).detail?.fileHashes ?? []);
+      const detail = (event as CustomEvent<{ fileHashes?: string[]; kind?: "add" | "remove" }>).detail ?? {};
+      if (detail.kind && detail.kind !== "remove") return;
+      const fileHashes = new Set(detail.fileHashes ?? []);
       setPlaybackTracks((current) => current.filter((track) => !fileHashes.has(track.fileHash ?? "")));
     };
     window.addEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
@@ -167,9 +173,9 @@ export function FavoriteAlbumsPage({
       isQueueable: (track: Track) => player.isTrackPlayable(getLocalRecord(track)) || playbackTracks.some((item) => item.id === localPlaylistTrackId(track) && !!item.fileHash),
       isQueued: (track: Track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
       isDownloading: (track: Track) => pending === `download:${track.provider}:${track.providerTrackId}`,
-      isPreparingPlayback: (track: Track) => pending === `play:${track.provider}:${track.providerTrackId}`,
+      isPreparingPlayback: (track: Track) => pending === `play:${track.provider}:${track.providerTrackId}` || pending === `queue:${track.provider}:${track.providerTrackId}`,
       onDownload: (track: Track) => void downloadTrack(track),
-      onAddToQueue: (track: Track) => player.addToQueue(getLocalRecord(track)),
+      onAddToQueue: (track: Track) => void queueFavoriteTrack(track),
       onPlay: (track: Track) => void playFavoriteTrack(track),
       onAddToPlaylist: (track: Track, anchor: AnchoredDialogAnchor) => void openPlaylistPicker(track, anchor),
       isFavorite: (track: Track) => isFavoriteTrack(track),
@@ -189,17 +195,27 @@ export function FavoriteAlbumsPage({
     }
   }
 
-  async function cacheTrackForPlayback(track: Track) {
-    const trackId = localPlaylistTrackId(track);
-    const savedTrack = localTracks.find((item) => item.id === trackId);
-    if (savedTrack?.fileHash && player.isTrackPlayable(savedTrack)) return savedTrack;
-    const cachedTrack = playbackTracks.find((item) => item.id === trackId);
-    if (cachedTrack?.fileHash && await hasProviderTrackPlaybackCache(cachedTrack.fileHash)) return cachedTrack;
-    if (cachedTrack) setPlaybackTracks((current) => current.filter((item) => item.id !== cachedTrack.id));
+  async function prepareFavoriteTrack(track: Track) {
+    const prepared = await prepareTrackForImmediatePlayback(track);
+    setPlaybackTracks((current) => [...current.filter((item) => item.id !== prepared.record.id), prepared.record]);
+    return prepared;
+  }
 
-    const record = await cacheProviderTrackForPlayback(track);
-    setPlaybackTracks((current) => [...current.filter((item) => item.id !== record.id), record]);
-    return record;
+  async function queueFavoriteTrack(track: Track) {
+    if (pending) return;
+    setPending(`queue:${track.provider}:${track.providerTrackId}`);
+    setErrorMessage(null);
+    try {
+      // Queueing prepares the audio too, otherwise the queued item could
+      // never start playing once its turn arrives.
+      const prepared = await prepareFavoriteTrack(track);
+      player.addToQueue(prepared.record);
+      setStatusMessage(`《${track.title}》已加入播放队列。`);
+    } catch (error) {
+      setErrorMessage(toPlaybackPreparationErrorMessage(error, `《${track.title}》加入队列失败，请稍后重试。`));
+    } finally {
+      setPending(null);
+    }
   }
 
   async function playFavoriteTrack(track: Track) {
@@ -208,11 +224,11 @@ export function FavoriteAlbumsPage({
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const record = await cacheTrackForPlayback(track);
-      await player.playTrack(record);
-      setStatusMessage(`正在播放《${track.title}》，歌曲已保留在本机缓存中。`);
+      const prepared = await prepareFavoriteTrack(track);
+      await player.playTrack(prepared.record);
+      setStatusMessage(buildPlaybackStatusMessage(track.title, prepared.source));
     } catch (error) {
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage(toPlaybackPreparationErrorMessage(error, `《${track.title}》播放失败，请稍后重试。`));
     } finally {
       setPending(null);
     }
@@ -226,59 +242,12 @@ export function FavoriteAlbumsPage({
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const resolvedTrack = await resolveTrackArtwork(track);
-      await ensureLocalAudioDirectoryWriteAccess();
-      const response = resolvedTrack.provider === "netease"
-        ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
-        : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
-      const fileHash = await hashAudioBlob(response.blob);
-      const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
-      const loudness = await analyzeAudioBlobLoudness(response.blob);
-      const lyricPayload = existing?.lyrics
-        ? null
-        : await (resolvedTrack.provider === "netease"
-          ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-          : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-        ).catch(() => null);
-      const lyrics = existing?.lyrics ?? lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
-      const saved = await saveAudioFileToLocalDirectory({
-        file: response.blob,
-        fileHash,
-        title: resolvedTrack.title,
-        mimeType,
-        track: {
-          artist: resolvedTrack.artist,
-          album: resolvedTrack.album,
-          artworkUrl: resolvedTrack.artworkUrl,
-          lyrics,
-          translatedLyrics: lyricPayload?.translatedLyric ?? null,
-          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-          provider: resolvedTrack.provider,
-          providerTrackId: resolvedTrack.providerTrackId,
-          durationMs: resolvedTrack.durationMs,
-          sizeBytes: response.blob.size
-        }
-      });
-      const updatedTrack: LocalPlaylistTrackRecord = {
-        ...toProviderTrackRecord(resolvedTrack, existing),
-        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
-        fileHash,
-        fileName: saved.fileName,
-        sizeBytes: response.blob.size,
-        mimeType,
-        lyrics,
-        translatedLyrics: lyricPayload?.translatedLyric ?? null,
-        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-        ...(loudness ? { loudness } : {}),
-        availableOffline: true,
-        updatedAt: new Date().toISOString()
-      };
-      await upsertLocalPlaylistTrack(updatedTrack);
+      const updatedTrack = await downloadProviderTrackToLibrary({ track, existing });
       setLocalTracks((current) => [...current.filter((item) => item.id !== updatedTrack.id), updatedTrack]);
-      setStatusMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+      setStatusMessage(`《${updatedTrack.title}》已下载到本地音乐目录。`);
       return true;
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "歌曲下载失败，请稍后重试。");
+      setErrorMessage(toErrorMessage(error));
       return false;
     } finally {
       setPending(null);
@@ -323,15 +292,28 @@ export function FavoriteAlbumsPage({
       setPending("playAllFavorites");
       setErrorMessage(null);
       setStatusMessage(null);
-      const first = candidateTracks[0];
-      const record = await cacheTrackForPlayback(first);
-      await player.playTrack(record);
-      for (const next of candidateTracks.slice(1)) {
+      // First track first: prepare -> play -> preload the rest in background.
+      const first = candidateTracks[0]!;
+      const prepared = await prepareFavoriteTrack(first);
+      await player.playTrack(prepared.record);
+      const rest = candidateTracks.slice(1);
+      for (const next of rest) {
         player.addToQueue(getLocalRecord(next));
       }
+      queuePreloadRef.current?.cancel();
+      queuePreloadRef.current = preloadProviderTracksInBackground(rest, {
+        concurrency: 2,
+        onPrepared: (result) => player.updateQueueRecord(result.record),
+        onSettled: (summary) => {
+          if (!summary.cancelled && summary.failed > 0) {
+            setErrorMessage(`${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`);
+          }
+        }
+      });
       setStatusMessage(`已开启收藏全部 ${candidateTracks.length} 首歌曲播放`);
     } catch (error) {
-      setErrorMessage(toErrorMessage(error));
+      queuePreloadRef.current?.cancel();
+      setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放收藏歌曲失败，请稍后重试。"));
     } finally {
       setPending(null);
     }
@@ -465,9 +447,9 @@ export function FavoriteAlbumsPage({
             isQueueable: (track) => player.isTrackPlayable(getLocalRecord(track)) || playbackTracks.some((item) => item.id === localPlaylistTrackId(track) && !!item.fileHash),
             isQueued: (track) => player.queue.some((item) => item.trackId === getLocalRecord(track).id),
             isDownloading: (track) => pending === `download:${track.provider}:${track.providerTrackId}`,
-            isPreparingPlayback: (track) => pending === `play:${track.provider}:${track.providerTrackId}`,
+            isPreparingPlayback: (track) => pending === `play:${track.provider}:${track.providerTrackId}` || pending === `queue:${track.provider}:${track.providerTrackId}`,
             onDownload: (track) => void downloadTrack(track),
-            onAddToQueue: (track) => player.addToQueue(getLocalRecord(track)),
+            onAddToQueue: (track) => void queueFavoriteTrack(track),
             onPlay: (track) => void playFavoriteTrack(track),
             onAddToPlaylist: (track, anchor) => void openPlaylistPicker(track, anchor),
             isFavorite: (track) => isFavoriteTrack(track),

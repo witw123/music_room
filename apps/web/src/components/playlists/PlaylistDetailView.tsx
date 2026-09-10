@@ -1,26 +1,24 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import {
-  hashAudioBlob,
   providerTrackKey,
   toCachedProviderTrack,
-  toProviderTrackRecord,
-  upsertLocalPlaylistTrack
+  toProviderTrackRecord
 } from "@/features/playlist/local-playlist";
 import {
-  ensureLocalAudioDirectoryWriteAccess,
-  normalizeLocalAudioMimeType,
-  saveAudioFileToLocalDirectory
-} from "@/features/library/local-audio-storage";
-import {
-  cacheProviderTrackForPlayback,
-  hasProviderTrackPlaybackCache,
   listCachedProviderPlaybackTrackKeys,
   providerPlaybackCacheChangedEvent
 } from "@/features/playback/provider-track-cache";
-import { analyzeAudioBlobLoudness } from "@/features/playback/loudness";
+import {
+  buildPlaybackStatusMessage,
+  prepareTrackForImmediatePlayback,
+  preloadProviderTracksInBackground,
+  toPlaybackPreparationErrorMessage,
+  type BackgroundPreloadHandle
+} from "@/features/playback/provider-playback-preparation";
+import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -31,7 +29,6 @@ import {
   getNetworkPlaylistSource,
   getPlaylistArtworkCandidates,
   getTrackArtworkUrls,
-  resolveProviderArtwork,
   tracksForLocalPlaylist,
   uniqueArtworkUrls
 } from "./playlist-artwork";
@@ -82,16 +79,20 @@ export function PlaylistDetailView({
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [downloadTrackId, setDownloadTrackId] = useState<string | null>(null);
-  const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [playbackTrackId, setPlaybackTrackId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ completed: 0, total: 0 });
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+  // Background preloader for "播放全部"; cancelled when a new run starts or the
+  // view unmounts so stale downloads never keep running.
+  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
   // Provider keys whose audio sits in the persistent playback cache. Rows of
   // a network playlist only carry provider identity, so this is what makes
   // their queueable state survive a reload instead of trusting the in-memory
-  // playbackTracks of the current session.
+  // state of the current session.
   const [cachedProviderTrackIds, setCachedProviderTrackIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,20 +102,13 @@ export function PlaylistDetailView({
       });
     };
     refreshCachedProviderTrackIds();
+    // The cache module notifies on both additions and removals, so freshly
+    // prepared tracks light up their queueable state without a reload.
     window.addEventListener(providerPlaybackCacheChangedEvent, refreshCachedProviderTrackIds);
     return () => {
       cancelled = true;
       window.removeEventListener(providerPlaybackCacheChangedEvent, refreshCachedProviderTrackIds);
     };
-  }, []);
-
-  useEffect(() => {
-    const handlePlaybackCacheChange = (event: Event) => {
-      const fileHashes = new Set((event as CustomEvent<{ fileHashes?: string[] }>).detail?.fileHashes ?? []);
-      setPlaybackTracks((current) => current.filter((track) => !fileHashes.has(track.fileHash ?? "")));
-    };
-    window.addEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
-    return () => window.removeEventListener(providerPlaybackCacheChangedEvent, handlePlaybackCacheChange);
   }, []);
 
   useEffect(() => {
@@ -236,40 +230,16 @@ export function PlaylistDetailView({
   const showBatchDownload =
     sequenceTracks.length > 0 && (!isLocal || downloadableTracks.length > 0);
 
-  async function prepareTrackForPlayback(track: LocalPlaylistTrackRecord) {
-    if (player.isTrackPlayable(track)) return track;
-    const cachedTrack = playbackTracks.find((item) => item.id === track.id);
-    if (
-      cachedTrack?.fileHash &&
-      (await hasProviderTrackPlaybackCache(cachedTrack.fileHash))
-    )
-      return cachedTrack;
-    if (cachedTrack)
-      setPlaybackTracks((current) => current.filter((item) => item.id !== cachedTrack.id));
-    const providerTrack = toCachedProviderTrack(track);
-    if (!providerTrack) return null;
-    const record = await cacheProviderTrackForPlayback(providerTrack);
-    setPlaybackTracks((current) => [
-      ...current.filter((item) => item.id !== record.id),
-      record
-    ]);
-    return record;
-  }
-
   async function playPlaylistTrack(track: LocalPlaylistTrackRecord) {
     if (downloadTrackId || playbackTrackId) return;
     setPlaybackTrackId(track.id);
     setDownloadMessage(null);
     try {
-      const record = await prepareTrackForPlayback(track);
-      if (!record) {
-        setDownloadMessage(`《${track.title}》没有可用的播放音频。`);
-        return;
-      }
-      await player.playTrack(record);
-      setDownloadMessage(`正在播放《${track.title}》，歌曲已保留在本机缓存中。`);
+      const prepared = await prepareTrackForImmediatePlayback(track);
+      await player.playTrack(prepared.record);
+      setDownloadMessage(buildPlaybackStatusMessage(track.title, prepared.source));
     } catch (error) {
-      setDownloadMessage(error instanceof Error ? error.message : "歌曲播放失败，请重试。");
+      setDownloadMessage(toPlaybackPreparationErrorMessage(error, `《${track.title}》播放失败，请重试。`));
     } finally {
       setPlaybackTrackId(null);
     }
@@ -284,19 +254,34 @@ export function PlaylistDetailView({
     )
       return;
     setDownloadMessage(null);
-    const records: LocalPlaylistTrackRecord[] = [];
+    const firstTrack = playableTracks[0]!;
+    setPlaybackTrackId(firstTrack.id);
     try {
-      for (const track of sequenceTracks) {
-        setPlaybackTrackId(track.id);
-        const record = await prepareTrackForPlayback(track);
-        if (record) records.push(record);
+      // First track first: prepare -> play -> preload the remaining tracks in
+      // the background, instead of serially downloading the whole playlist
+      // before the first sound is heard.
+      const firstPrepared = await prepareTrackForImmediatePlayback(firstTrack);
+      await player.playTrack(firstPrepared.record);
+      const remaining = playableTracks.filter((track) => track.id !== firstTrack.id);
+      for (const track of remaining) {
+        player.addToQueue(track);
       }
-      if (records.length > 0) {
-        await player.playTracks(records, 0);
-        setDownloadMessage(`正在播放“${title}”，歌曲已保留在本机缓存中。`);
-      }
+      queuePreloadRef.current?.cancel();
+      queuePreloadRef.current = preloadProviderTracksInBackground(remaining, {
+        concurrency: 2,
+        onPrepared: (prepared) => player.updateQueueRecord(prepared.record),
+        onSettled: (summary) => {
+          if (!summary.cancelled && summary.failed > 0) {
+            setDownloadMessage(
+              `正在播放“${title}”；${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`
+            );
+          }
+        }
+      });
+      setDownloadMessage(`正在播放“${title}”，其余歌曲正在后台预加载。`);
     } catch (error) {
-      setDownloadMessage(error instanceof Error ? error.message : "播放歌单失败，请重试。");
+      queuePreloadRef.current?.cancel();
+      setDownloadMessage(toPlaybackPreparationErrorMessage(error, "播放歌单失败，请重试。"));
     } finally {
       setPlaybackTrackId(null);
     }
@@ -310,70 +295,21 @@ export function PlaylistDetailView({
     setDownloadTrackId(track.id);
     setDownloadMessage(null);
     try {
-      const resolvedTrack = await resolveProviderArtwork(track, provider);
-      if (resolvedTrack.artworkUrl) {
-        onArtworkResolved?.(resolvedTrack.artworkUrl);
-        onTrackUpdated?.(resolvedTrack);
-      }
-      await ensureLocalAudioDirectoryWriteAccess();
-      const response =
-        provider === "netease"
-          ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId!)
-          : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId!);
-      const fileHash = await hashAudioBlob(response.blob);
-      const mimeType = normalizeLocalAudioMimeType(
-        response.contentType || response.blob.type
-      );
-      const loudness = await analyzeAudioBlobLoudness(response.blob);
-      const lyricPayload = resolvedTrack.lyrics
-        ? null
-        : await (provider === "netease"
-            ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId!)
-            : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId!)
-          ).catch(() => null);
-      const lyrics =
-        resolvedTrack.lyrics ??
-        lyricPayload?.wordSyncedLyric ??
-        lyricPayload?.plainLyric ??
-        null;
-      const saved = await saveAudioFileToLocalDirectory({
-        file: response.blob,
-        fileHash,
-        title: resolvedTrack.title,
-        mimeType,
-        track: {
-          artist: resolvedTrack.artist,
-          album: resolvedTrack.album,
-          artworkUrl: resolvedTrack.artworkUrl,
-          lyrics,
-          translatedLyrics: lyricPayload?.translatedLyric ?? null,
-          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-          provider,
-          providerTrackId: resolvedTrack.providerTrackId,
-          durationMs: resolvedTrack.durationMs,
-          sizeBytes: response.blob.size
+      const updatedTrack = await downloadProviderTrackToLibrary({
+        track,
+        existing: track,
+        onResolved: (resolved) => {
+          if (resolved.artworkUrl) {
+            onArtworkResolved?.(resolved.artworkUrl);
+            onTrackUpdated?.(resolved);
+          }
         }
       });
-      const updatedTrack: LocalPlaylistTrackRecord = {
-        ...resolvedTrack,
-        artworkUrl: saved.artworkUrl ?? resolvedTrack.artworkUrl,
-        fileHash,
-        fileName: saved.fileName,
-        sizeBytes: response.blob.size,
-        mimeType,
-        lyrics,
-        translatedLyrics: lyricPayload?.translatedLyric ?? null,
-        romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-        ...(loudness ? { loudness } : {}),
-        availableOffline: true,
-        updatedAt: new Date().toISOString()
-      };
-      await upsertLocalPlaylistTrack(updatedTrack);
       onTrackUpdated?.(updatedTrack);
       setRemoteTracks((current) =>
         current.map((item) => (item.id === updatedTrack.id ? updatedTrack : item))
       );
-      setDownloadMessage(`《${resolvedTrack.title}》已下载到本地目录。`);
+      setDownloadMessage(`《${updatedTrack.title}》已下载到本地音乐目录。`);
       return true;
     } catch (error) {
       setDownloadMessage(error instanceof Error ? error.message : "歌曲下载失败，请重试。");
@@ -607,7 +543,6 @@ export function PlaylistDetailView({
             const playable = canPrepareTrack(track);
             const queueable =
               player.isTrackPlayable(track) ||
-              playbackTracks.some((item) => item.id === track.id && !!item.fileHash) ||
               ((track.provider === "netease" || track.provider === "qqmusic") &&
                 !!track.providerTrackId &&
                 cachedProviderTrackIds.has(providerTrackKey(track.provider, track.providerTrackId)));

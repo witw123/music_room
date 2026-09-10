@@ -61,6 +61,8 @@ type LocalPlayerContextValue = {
   playbackMode: PlaybackMode;
   isTrackPlayable: (track: LocalPlaylistTrackRecord) => boolean;
   addToQueue: (track: LocalPlaylistTrackRecord) => void;
+  /** Swap an already-queued record for a prepared version (same track id). */
+  updateQueueRecord: (record: LocalPlaylistTrackRecord) => void;
   playTrack: (track: LocalPlaylistTrackRecord) => Promise<void>;
   playTracks: (tracks: LocalPlaylistTrackRecord[], startIndex?: number) => Promise<void>;
   onPlay: () => void;
@@ -400,6 +402,26 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
       await playRecords(nextQueue, queueIndex, "queue");
     }
   }, [libraryRecords, playbackMode, playRecords]);
+
+  const updateQueueRecord = useCallback((record: LocalPlaylistTrackRecord) => {
+    const nextQueue = queueRef.current.map((item) =>
+      item.id === record.id ? record : item
+    );
+    if (!nextQueue.some((item, index) => item !== queueRef.current[index])) return;
+    queueRef.current = nextQueue;
+    setQueueRecords(nextQueue);
+    if (playbackSequenceKindRef.current === "queue") {
+      playbackRecordsRef.current = nextQueue;
+    } else if (playbackSequenceKindRef.current === "direct" && currentRecordRef.current) {
+      playbackRecordsRef.current = [
+        currentRecordRef.current,
+        ...nextQueue.filter((candidate) => candidate.id !== currentRecordRef.current?.id)
+      ];
+    }
+    setLibraryRecords((current) => current.map((item) =>
+      item.id === record.id ? record : item
+    ));
+  }, []);
 
   const addToQueue = useCallback((inputTrack: LocalPlaylistTrackRecord) => {
     const track = mergeLocalTrackRecord(inputTrack, libraryRecords);
@@ -854,6 +876,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     playbackMode,
     isTrackPlayable,
     addToQueue,
+    updateQueueRecord,
     playTrack,
     playTracks,
     onPlay,
@@ -871,6 +894,7 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     currentRecord,
     currentTrack,
     addToQueue,
+    updateQueueRecord,
     isTrackPlayable,
     onCyclePlaybackMode,
     onNext,

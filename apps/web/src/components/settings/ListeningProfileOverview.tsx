@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { AuthSession, PersonalizationProfileResponse, ProviderTrackCandidate } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
+import {
+  buildPlaybackStatusMessage,
+  prepareTrackForImmediatePlayback,
+  preloadProviderTracksInBackground,
+  type BackgroundPreloadHandle
+} from "@/features/playback/provider-playback-preparation";
 import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
@@ -38,6 +44,11 @@ export function ListeningProfileOverview({
   const [refreshing, setRefreshing] = useState(false);
   const [activeRadioTrackKey, setActiveRadioTrackKey] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  // Background preloader for the per-track radio queue; cancelled when a new
+  // radio starts or the component unmounts.
+  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
+
+  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,9 +105,9 @@ export function ListeningProfileOverview({
 
   const handlePlayTrack = async (candidate: ProviderTrackCandidate) => {
     try {
-      const record = toProviderTrackRecord(candidate);
-      await player.playTrack(record);
-      setStatusMessage(`正在播放《${candidate.title}》`);
+      const prepared = await prepareTrackForImmediatePlayback(candidate);
+      await player.playTrack(prepared.record);
+      setStatusMessage(buildPlaybackStatusMessage(candidate.title, prepared.source));
     } catch {
       setStatusMessage(`播放《${candidate.title}》失败`);
     }
@@ -107,13 +118,26 @@ export function ListeningProfileOverview({
     setActiveRadioTrackKey(key);
     try {
       const radioTracks = await musicRoomApi.getTrackRadio({ seedTrack: candidate, limit: 15 });
-      const seedRecord = toProviderTrackRecord(candidate);
-      await player.playTrack(seedRecord);
-      for (const nextTrack of radioTracks.slice(0, 10)) {
+      // Seed first: prepare -> play -> preload the radio queue in background.
+      const prepared = await prepareTrackForImmediatePlayback(candidate);
+      await player.playTrack(prepared.record);
+      const queuedTracks = radioTracks.slice(0, 10);
+      for (const nextTrack of queuedTracks) {
         player.addToQueue(toProviderTrackRecord(nextTrack));
       }
+      queuePreloadRef.current?.cancel();
+      queuePreloadRef.current = preloadProviderTracksInBackground(queuedTracks, {
+        concurrency: 2,
+        onPrepared: (result) => player.updateQueueRecord(result.record),
+        onSettled: (summary) => {
+          if (!summary.cancelled && summary.failed > 0) {
+            setStatusMessage(`${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`);
+          }
+        }
+      });
       setStatusMessage(`已开启从《${candidate.title}》出发的单曲漫游`);
     } catch {
+      queuePreloadRef.current?.cancel();
       setStatusMessage(`开启漫游失败，请稍后重试`);
     } finally {
       setActiveRadioTrackKey(null);

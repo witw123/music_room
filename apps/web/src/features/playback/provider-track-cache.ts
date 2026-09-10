@@ -29,6 +29,8 @@ import { analyzeAudioBlobLoudness } from "./loudness";
 
 export const providerPlaybackCacheChangedEvent = "music-room-provider-playback-cache-changed";
 
+export type ProviderPlaybackCacheChangeKind = "add" | "remove";
+
 /** Download a provider track into the disposable playback cache, never the saved library. */
 export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promise<LocalPlaylistTrackRecord> {
   const resolvedTrack = await resolveProviderTrack(track);
@@ -86,6 +88,10 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     provider: resolvedTrack.provider
   });
 
+  // Broadcast the addition so views can refresh "cached" indicators without
+  // waiting for the next removal event.
+  notifyProviderPlaybackCacheChanged([fileHash], "add");
+
   return {
     ...toProviderTrackRecord({ ...resolvedTrack, artworkUrl }),
     id: localPlaylistTrackId(resolvedTrack),
@@ -100,6 +106,11 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     availableOffline: false,
     updatedAt: new Date().toISOString()
   };
+}
+
+/** Look up an existing playback-cache entry for a provider track without downloading anything. */
+export async function findCachedProviderPlaybackRecord(track: ProviderTrack): Promise<LocalPlaylistTrackRecord | null> {
+  return findReusableProviderPlaybackCache(track);
 }
 
 /** Remove one provider playback cache unless it has become a saved local file. */
@@ -123,7 +134,7 @@ export async function releaseProviderTrackPlaybackCache(fileHash: string | null 
     await deleteCachedLibraryTrack(fileHash);
   }
   if (cached || (!localCacheFile && summary)) {
-    notifyProviderPlaybackCacheChanged([fileHash]);
+    notifyProviderPlaybackCacheChanged([fileHash], "remove");
     return true;
   }
   return false;
@@ -183,7 +194,7 @@ export async function cleanupProviderTrackPlaybackCache() {
       if (!browserCache) removedBrowserHashes.push(summary.fileHash);
     }
   }));
-  notifyProviderPlaybackCacheChanged(removedBrowserHashes);
+  notifyProviderPlaybackCacheChanged(removedBrowserHashes, "remove");
   return removedBrowserHashes.length;
 }
 
@@ -233,10 +244,13 @@ function isDisposableProviderPlaybackCache(
     && record.sourceRoomIds.length === 0;
 }
 
-function notifyProviderPlaybackCacheChanged(fileHashes: string[]) {
+function notifyProviderPlaybackCacheChanged(
+  fileHashes: string[],
+  kind: ProviderPlaybackCacheChangeKind = "remove"
+) {
   if (typeof window === "undefined" || fileHashes.length === 0) return;
   window.dispatchEvent(new CustomEvent(providerPlaybackCacheChangedEvent, {
-    detail: { fileHashes }
+    detail: { fileHashes, kind }
   }));
 }
 
