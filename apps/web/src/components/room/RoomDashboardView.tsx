@@ -155,19 +155,19 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
   }, [handleTabChange]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain lg:grid lg:h-full lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)] lg:overflow-hidden lg:gap-0" data-custom-layout-room-root="true">
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain md:grid md:h-full md:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] md:overflow-hidden md:gap-0" data-custom-layout-room-root="true">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" /> : null}
+        {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] md:left-[28%] md:top-1/4" /> : null}
       </div>
-      <div className="relative z-40 hidden lg:flex h-auto w-full min-w-0 shrink-0 flex-col lg:z-10 lg:h-full lg:min-h-0 lg:overflow-hidden" data-custom-layout-item="room-stage">
-        <div className="flex h-auto min-h-0 flex-1 flex-col lg:h-full lg:flex-[2] lg:min-h-0">
+      <div className="relative z-40 hidden md:flex h-auto w-full min-w-0 shrink-0 flex-col md:z-10 md:h-full md:min-h-0 md:overflow-hidden" data-custom-layout-item="room-stage">
+        <div className="flex h-auto min-h-0 flex-1 flex-col md:h-full md:flex-[2] md:min-h-0">
           <RoomStage {...buildRoomStageProps(props)} />
         </div>
       </div>
-      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] lg:min-h-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 lg:pt-2.5 lg:rounded-none">
+      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] md:min-h-0 md:rounded-none md:border-l md:border-t-0 md:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
           {/* Mobile Room Header matching desktop control bar */}
-          <div className="pb-2.5 lg:hidden">
+          <div className="pb-2.5 md:hidden">
             <RoomControlHeader
               isMobile
               roomSnapshot={props.roomSnapshot}
@@ -199,10 +199,10 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`flex-1 flex min-h-9 whitespace-nowrap items-center justify-center gap-1.5 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                  className={`flex-1 flex min-h-9 whitespace-nowrap items-center justify-center gap-1.5 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-medium transition-all duration-150 ${
                     isActive
-                      ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                      ? "bg-white/10 text-white font-semibold shadow-sm"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
                   }`}
                   type="button"
                 >
@@ -213,7 +213,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             })}
           </div>
         </div>
-        <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 lg:pb-32" id={`room-panel-${activeTab}`} role="tabpanel">
+        <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
           <RoomManagementContent {...props} activeTab={activeTab} />
         </div>
       </section>

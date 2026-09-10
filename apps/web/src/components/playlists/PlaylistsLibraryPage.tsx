@@ -35,8 +35,8 @@ export function PlaylistsLibraryPage() {
                   aria-selected={isActive}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                     isActive
-                      ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold scale-[1.02]"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                      ? "bg-white/10 text-white font-semibold shadow-sm"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
                   }`}
                   onClick={() => setActiveTab(id)}
                   role="tab"

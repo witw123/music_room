@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
@@ -213,15 +212,12 @@ export function LyricsToggleButton({
       title={isOpen ? "关闭桌面歌词" : "打开桌面歌词"}
       onClick={onToggle}
       disabled={disabled}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
-      style={{ color: accentColor }}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold transition-colors hover:bg-white/10 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40 ${
+        isOpen ? "text-white bg-white/10" : "text-foreground-muted hover:text-white"
+      }`}
+      style={isOpen && accentColor ? { color: accentColor } : undefined}
     >
-      <svg aria-hidden="true" fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
-        <path d="M5 6h14" />
-        <path d="M5 10h10" />
-        <path d="M5 14h14" />
-        <path d="M5 18h8" />
-      </svg>
+      <span className="text-[13px] font-bold font-sans">词</span>
     </button>
   );
 }
@@ -501,28 +497,254 @@ export function DesktopBottomPlayerLayout({
   favoriteTrackIsPending = false,
   onToggleFavoriteTrack
 }: LayoutProps) {
+export function TopEdgeScrubber({
+  progressMs,
+  durationMs,
+  canSeek,
+  onSeekDraft,
+  onCommitSeek,
+  accentColor = "var(--accent)"
+}: {
+  progressMs: number;
+  durationMs: number;
+  canSeek: boolean;
+  onSeekDraft: (value: number | null) => void;
+  onCommitSeek: () => void;
+  accentColor?: string;
+}) {
+  const [isHovering, setIsHovering] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [hoverData, setHoverData] = useState<{ ratio: number; timeMs: number } | null>(null);
+  const scrubberRef = useRef<HTMLDivElement>(null);
+
+  const effectiveDuration = durationMs > 0 ? durationMs : 1;
+  const currentRatio = Math.max(0, Math.min(1, progressMs / effectiveDuration));
+  const displayRatio = isDragging && hoverData ? hoverData.ratio : currentRatio;
+
+  const calculateRatio = (clientX: number) => {
+    if (!scrubberRef.current) return 0;
+    const rect = scrubberRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canSeek || durationMs <= 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+    const ratio = calculateRatio(event.clientX);
+    const timeMs = Math.round(ratio * durationMs);
+    setHoverData({ ratio, timeMs });
+    onSeekDraft(timeMs);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (durationMs <= 0) return;
+    const ratio = calculateRatio(event.clientX);
+    const timeMs = Math.round(ratio * durationMs);
+    setHoverData({ ratio, timeMs });
+    if (isDragging) {
+      onSeekDraft(timeMs);
+    }
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {}
+      setIsDragging(false);
+      onCommitSeek();
+    }
+  };
+
+  const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {}
+      setIsDragging(false);
+      onSeekDraft(null);
+    }
+  };
+
   return (
-    <div className="mx-auto hidden w-full max-w-[1400px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:grid" data-player-layout="desktop">
-      <div className="flex min-w-0 items-center gap-3">
-        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent" onClick={onToggleImmersive} title="打开沉浸式播放" aria-label="打开沉浸式播放" type="button">
-        <VinylBadge
-          accentColor={artworkAccent}
-          accentSoft={artworkAccentSoft}
-          artworkUrl={artworkUrl}
-          isPlaying={isPlaying}
-          playerStyle={playerStyle}
-        />
+    <div
+      ref={scrubberRef}
+      role="slider"
+      data-testid="player-seek-slider"
+      aria-label="播放进度"
+      aria-valuemin={0}
+      aria-valuemax={durationMs}
+      aria-valuenow={progressMs}
+      aria-valuetext={`${formatDuration(progressMs)} / ${formatDuration(durationMs)}`}
+      tabIndex={canSeek ? 0 : -1}
+      className="group/scrubber absolute inset-x-0 -top-1.5 z-30 h-3.5 cursor-pointer select-none"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onPointerEnter={() => setIsHovering(true)}
+      onPointerLeave={() => {
+        if (!isDragging) {
+          setIsHovering(false);
+          setHoverData(null);
+        }
+      }}
+    >
+      {/* Background track line: 2px normal, 3.5px on hover/drag */}
+      <div className="absolute inset-x-0 top-1.5 h-[2px] bg-white/10 transition-[height,top] duration-150 group-hover/scrubber:top-[4.5px] group-hover/scrubber:h-[3.5px]">
+        {/* Progress Fill */}
+        <div
+          className="relative h-full transition-[width] duration-75"
+          style={{
+            width: `${displayRatio * 100}%`,
+            backgroundColor: accentColor
+          }}
+        >
+          {/* Thumb circle on hover / drag */}
+          <div
+            className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.5)] transition-all duration-150 ${
+              isHovering || isDragging
+                ? "h-3 w-3 opacity-100 scale-100"
+                : "h-2 w-2 opacity-0 scale-75 pointer-events-none"
+            }`}
+          />
+        </div>
+      </div>
+
+      {/* Floating time tooltip bubble: 00:53 / 05:00 */}
+      {(isHovering || isDragging) && hoverData !== null && durationMs > 0 && (
+        <div
+          className="pointer-events-none absolute -top-8 -translate-x-1/2 rounded-full border border-white/15 bg-white px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-zinc-900 shadow-[0_4px_12px_rgba(0,0,0,0.3)] animate-fade-in"
+          style={{
+            left: `${Math.max(0.04, Math.min(0.96, hoverData.ratio)) * 100}%`
+          }}
+        >
+          {formatDuration(hoverData.timeMs)} / {formatDuration(durationMs)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function QualityBadge({ quality }: { quality?: string | null }) {
+  const label = quality?.toUpperCase() || "极高";
+  return (
+    <span
+      className="inline-flex items-center rounded border border-white/20 px-1.5 py-0.5 text-[10px] font-medium tracking-tight text-white/70 select-none hover:border-white/40 hover:text-white transition-colors cursor-default"
+      title={`音频质量：${label}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+export function DesktopBottomPlayerLayout({
+  isPlaying,
+  canControlPlayback,
+  canSeekPlayback,
+  playbackTrackId,
+  title,
+  artist,
+  album,
+  boundedProgressMs,
+  currentTrackDuration,
+  volume,
+  setSeekDraft,
+  commitSeek,
+  applyVolume,
+  onPrev,
+  onNext,
+  onTogglePlay,
+  playbackMode,
+  onCyclePlaybackMode,
+  queue,
+  tracks,
+  currentQueueItemId,
+  nextQueueItemId,
+  canReorderQueue,
+  canRemoveQueue,
+  onPlayQueueItem,
+  onPlayNextQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue,
+  isImmersiveOpen,
+  onToggleImmersive,
+  isMiniOpen,
+  onToggleMini,
+  isLyricsOpen = false,
+  onToggleLyrics,
+  artworkAccent,
+  artworkAccentSoft,
+  artworkUrl,
+  playerStyle,
+  mobileVariant = "full",
+  favoriteTrack,
+  favoriteTrackIsFavorite = false,
+  favoriteTrackIsPending = false,
+  onToggleFavoriteTrack
+}: LayoutProps) {
+  return (
+    <div
+      className="relative hidden h-full w-full items-center justify-between px-4 sm:px-6 md:flex"
+      data-player-layout="desktop"
+    >
+      {/* Pinned Top-Edge Scrubber with hover expand, draggable thumb, and floating time bubble */}
+      <TopEdgeScrubber
+        progressMs={boundedProgressMs}
+        durationMs={currentTrackDuration}
+        canSeek={canSeekPlayback}
+        onSeekDraft={setSeekDraft}
+        onCommitSeek={commitSeek}
+        accentColor={artworkAccent}
+      />
+
+      {/* Left: Album Cover + Track Title/Artist + Favorite Button */}
+      <div className="flex min-w-0 items-center gap-3 w-[260px] lg:w-[320px] shrink-0">
+        <button
+          className="group/cover relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent shrink-0"
+          onClick={onToggleImmersive}
+          title="打开沉浸式播放"
+          aria-label="打开沉浸式播放"
+          type="button"
+        >
+          <VinylBadge
+            compact
+            accentColor={artworkAccent}
+            accentSoft={artworkAccentSoft}
+            artworkUrl={artworkUrl}
+            isPlaying={isPlaying}
+            playerStyle={playerStyle}
+          />
+          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/cover:opacity-100">
+            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </div>
         </button>
 
         <div className="min-w-0 flex-1">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.22em]" style={{ color: artworkAccent }}>
-            {isPlaying ? "正在播放" : "已暂停"}
+          <h3
+            className="truncate text-sm font-medium text-foreground hover:text-white transition-colors cursor-pointer"
+            onClick={onToggleImmersive}
+            title={title}
+          >
+            {title}
+          </h3>
+          <p
+            className="truncate text-xs text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
+            onClick={onToggleImmersive}
+            title={artist}
+          >
+            {artist}
           </p>
-          <div className="min-h-[2rem]">
-            <h3 className="truncate text-sm font-semibold text-foreground">{title}</h3>
-            <p className="truncate text-xs text-foreground-muted">{artist}</p>
-          </div>
         </div>
+
         {favoriteTrack && onToggleFavoriteTrack ? (
           <FavoriteTrackButton
             accentColor={artworkAccent}
@@ -532,6 +754,91 @@ export function DesktopBottomPlayerLayout({
             track={favoriteTrack}
           />
         ) : null}
+      </div>
+
+      {/* Center: Playback Mode + Prev + Circular Play/Pause + Next + Queue */}
+      <div className="flex items-center justify-center gap-2.5 sm:gap-3.5">
+        <PlaybackModeButton
+          mode={playbackMode}
+          onCycle={onCyclePlaybackMode}
+          disabled={!canControlPlayback}
+          accentColor={artworkAccent}
+        />
+        <Button
+          data-testid="player-prev-button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+          disabled={!canControlPlayback || !playbackTrackId}
+          onClick={onPrev}
+          title="上一首"
+          style={{ color: artworkAccent }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+          </svg>
+        </Button>
+
+        <button
+          data-testid="player-toggle-button"
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent ${
+            canControlPlayback
+              ? "hover:scale-105 active:scale-95 cursor-pointer"
+              : "cursor-not-allowed opacity-50"
+          }`}
+          style={{ backgroundColor: artworkAccent }}
+          disabled={!canControlPlayback}
+          onClick={onTogglePlay}
+          title={isPlaying ? "暂停" : "播放"}
+          type="button"
+        >
+          {isPlaying ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19h4V5H6zm8-14v14h4V5z" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="translate-x-0.5">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </button>
+
+        <Button
+          data-testid="player-next-button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+          disabled={!canControlPlayback || !playbackTrackId}
+          onClick={onNext}
+          title="下一首"
+          style={{ color: artworkAccent }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
+          </svg>
+        </Button>
+
+        <PlayerQueueDrawer
+          queue={queue}
+          tracks={tracks}
+          currentQueueItemId={currentQueueItemId}
+          nextQueueItemId={nextQueueItemId}
+          accentColor={artworkAccent}
+          accentSoft={artworkAccentSoft}
+          canControlPlayback={canControlPlayback}
+          canReorderQueue={canReorderQueue}
+          canRemoveQueue={canRemoveQueue}
+          onPlayQueueItem={onPlayQueueItem}
+          onPlayNextQueueItem={onPlayNextQueueItem}
+          onRemoveQueueItem={onRemoveQueueItem}
+          onReorderQueue={onReorderQueue}
+        />
+      </div>
+
+      {/* Right: Audio Quality Badge + Lyrics Toggle + Volume Control + Immersive + Mini */}
+      <div className="flex min-w-0 items-center justify-end gap-1.5 w-[260px] lg:w-[320px] shrink-0">
+        <QualityBadge />
+
         {onToggleLyrics ? (
           <LyricsToggleButton
             accentColor={artworkAccent}
@@ -541,114 +848,27 @@ export function DesktopBottomPlayerLayout({
             onToggle={onToggleLyrics}
           />
         ) : null}
-      </div>
 
-      <div className="relative flex items-center justify-center">
-        <div className="grid h-10 w-[13.5rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-          <PlaybackModeButton
-            mode={playbackMode}
-            onCycle={onCyclePlaybackMode}
-            disabled={!canControlPlayback}
-            accentColor={artworkAccent}
-          />
-          <Button
-            data-testid="player-prev-button"
-            variant="ghost"
-            size="icon"
-            disabled={!canControlPlayback || !playbackTrackId}
-            onClick={onPrev}
-            title="上一首"
-            style={{ color: artworkAccent }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-            </svg>
-          </Button>
-        </div>
+        <VolumeControl
+          volume={volume}
+          onChange={applyVolume}
+          accentColor={artworkAccent}
+          accentSoft={artworkAccentSoft}
+        />
 
-        <button
-          data-testid="player-toggle-button"
-          className={`inline-grid h-10 w-10 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-            canControlPlayback
-              ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
-              : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
-          }`}
-          style={canControlPlayback ? { backgroundColor: artworkAccent, color: "#fff", boxShadow: `0 0 18px ${artworkAccentSoft}` } : undefined}
-          disabled={!canControlPlayback}
-          onClick={onTogglePlay}
-          title={isPlaying ? "暂停" : "播放"}
-          type="button"
-        >
-          {isPlaying ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 19h4V5H6zm8-14v14h4V5z" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
+        <ImmersiveToggleButton
+          accentColor={artworkAccent}
+          accentSoft={artworkAccentSoft}
+          isOpen={isImmersiveOpen}
+          onToggle={onToggleImmersive}
+        />
 
-        <div className="flex min-w-0 items-center justify-start gap-1">
-          <Button
-            data-testid="player-next-button"
-            variant="ghost"
-            size="icon"
-            disabled={!canControlPlayback || !playbackTrackId}
-            onClick={onNext}
-            title="下一首"
-            style={{ color: artworkAccent }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
-            </svg>
-          </Button>
-          <PlayerQueueDrawer
-            queue={queue}
-            tracks={tracks}
-            currentQueueItemId={currentQueueItemId}
-            nextQueueItemId={nextQueueItemId}
-            accentColor={artworkAccent}
-            accentSoft={artworkAccentSoft}
-            canControlPlayback={canControlPlayback}
-            canReorderQueue={canReorderQueue}
-            canRemoveQueue={canRemoveQueue}
-            onPlayQueueItem={onPlayQueueItem}
-            onPlayNextQueueItem={onPlayNextQueueItem}
-            onRemoveQueueItem={onRemoveQueueItem}
-            onReorderQueue={onReorderQueue}
-          />
-        </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
-          <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
-            {formatDuration(boundedProgressMs)}
-          </span>
-          <div className="flex h-8 flex-1 items-center">
-            <Slider
-              data-testid="player-seek-slider"
-              value={boundedProgressMs}
-              max={currentTrackDuration || 1}
-              accentColor={artworkAccent}
-              disabled={!currentTrackDuration || !canSeekPlayback}
-              onChange={(event) => setSeekDraft(Number(event.target.value))}
-              onPointerUp={commitSeek}
-              onKeyUp={commitSeek}
-            />
-          </div>
-          <span className="min-w-[40px] text-xs tabular-nums text-foreground-muted">
-            {formatDuration(currentTrackDuration)}
-          </span>
-        </div>
-
-        <VolumeControl volume={volume} onChange={applyVolume} accentColor={artworkAccent} accentSoft={artworkAccentSoft} />
-        <ImmersiveToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isImmersiveOpen} onToggle={onToggleImmersive} />
-        <MiniPlayerToggleButton accentColor={artworkAccent} accentSoft={artworkAccentSoft} isOpen={isMiniOpen} onToggle={onToggleMini} />
+        <MiniPlayerToggleButton
+          accentColor={artworkAccent}
+          accentSoft={artworkAccentSoft}
+          isOpen={isMiniOpen}
+          onToggle={onToggleMini}
+        />
       </div>
     </div>
   );

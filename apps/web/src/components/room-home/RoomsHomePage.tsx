@@ -354,10 +354,10 @@ export function RoomsHomePage({
               return (
                 <button
                   aria-selected={isSelected}
-                  className={`flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                  className={`flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-medium transition-all duration-150 ${
                     isSelected
-                      ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                      ? "bg-white/10 text-white font-semibold shadow-sm"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
                   }`}
                   key={roomType}
                   onClick={() => setRoomTypeFilter(roomType)}
@@ -373,7 +373,7 @@ export function RoomsHomePage({
             <Button
               data-testid="create-public-room"
               size="sm"
-              className="rounded-xl px-4 text-xs sm:text-sm font-semibold bg-accent hover:bg-accent-hover text-white shadow-[0_4px_20px_var(--accent-glow)] transition-all active:scale-95"
+              className="rounded-xl px-4 text-xs sm:text-sm font-semibold bg-accent hover:bg-accent-hover text-white shadow-sm transition-all active:scale-95"
               onClick={() => openCreateRoom("public")}
               type="button"
             >

@@ -58,7 +58,7 @@ export function AppSidebar({
   const [customLayoutEnabled, setCustomLayoutEnabled] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>("dark");
   const desktopBottomOffsetClass = hasBottomPlayer
-    ? "md:bottom-[11.5rem] lg:bottom-[4.5rem]"
+    ? "md:bottom-16 lg:bottom-16"
     : "md:bottom-0";
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export function AppSidebar({
             }
           }}
         >
-          <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-[0_4px_20px_var(--accent-glow)] ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
+          <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
             <NavIcon name="home" size={17} />
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
@@ -161,13 +161,13 @@ export function AppSidebar({
                   }
                 }}
                 title={collapsed ? item.label : undefined}
-                className={`app-sidebar__nav-item group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-semibold transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3.5 md:py-2.5 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
+                className={`app-sidebar__nav-item group relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3.5 md:py-2.5 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
-                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
+                    ? "bg-white/[0.08] text-white font-semibold md:before:absolute md:before:left-1 md:before:top-2.5 md:before:bottom-2.5 md:before:w-1 md:before:rounded-full md:before:bg-accent"
                     : keepsHomeInRoom
-                      ? "cursor-default opacity-60 text-foreground-muted"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
-                } ${collapsed ? "md:justify-center md:px-2" : ""}`}
+                      ? "cursor-default opacity-50 text-foreground-muted"
+                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                } ${collapsed ? "md:justify-center md:px-2 md:before:hidden" : ""}`}
               >
                 <NavIcon name={item.icon} />
                 <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>
