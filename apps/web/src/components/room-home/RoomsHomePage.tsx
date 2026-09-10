@@ -20,13 +20,10 @@ import { RoomDirectoryCard } from "@/components/room-card";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
-import {
-  CreateRoomDialogModal,
-  JoinCodeDialogModal,
-  SelectedRoomDialogModal,
-  roomTypeLabel,
-  type CreateRoomForm
-} from "./index";
+import { CreateRoomDialogModal } from "./CreateRoomDialogModal";
+import { JoinCodeDialogModal } from "./JoinCodeDialogModal";
+import { SelectedRoomDialogModal } from "./SelectedRoomDialogModal";
+import { roomTypeLabel, type CreateRoomForm } from "./room-home-types";
 import {
   clearAwayRoomId,
   readAwayRoomId,

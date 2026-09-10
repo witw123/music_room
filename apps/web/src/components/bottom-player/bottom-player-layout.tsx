@@ -381,24 +381,10 @@ export function MobileBottomPlayerLayout({
           title="打开播放详情"
           type="button"
         >
-          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-surface border border-white/[0.08] shadow-sm">
-            {artworkUrl ? (
-              <img
-                src={artworkUrl}
-                alt=""
-                className="h-full w-full object-cover"
-                loading="eager"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-foreground-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M9 18V5l12-2v13" />
-                  <circle cx="6" cy="18" r="3" />
-                  <circle cx="18" cy="16" r="3" />
-                </svg>
-              </div>
-            )}
-          </div>
+          <SquareAlbumCover
+            artworkUrl={artworkUrl}
+            className="h-10 w-10 shrink-0 rounded-lg border border-white/[0.08] shadow-sm"
+          />
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold text-foreground leading-tight">{title}</p>

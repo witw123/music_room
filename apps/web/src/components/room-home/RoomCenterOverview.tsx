@@ -12,12 +12,7 @@ import {
   SparklesIcon,
   ExternalLinkIcon
 } from "@/components/icons/DiscoverIcons";
-
-const roomTypeLabel = {
-  interactive: "多人互动房",
-  request: "点歌房",
-  radio: "自由电台"
-} as const;
+import { roomTypeLabel } from "./room-home-types";
 
 export function RoomCenterOverview({ activeSession }: { activeSession: AuthSession }) {
   const [ownedRooms, setOwnedRooms] = useState<RoomSnapshot[]>([]);
@@ -141,7 +136,7 @@ function OwnedRoomCard({ snapshot }: { snapshot: RoomSnapshot }) {
           {room.name ?? "未命名房间"}
         </span>
         <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
-          {roomTypeLabel[room.roomType]}
+          {roomTypeLabel(room.roomType)}
         </span>
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-foreground-muted">
@@ -168,7 +163,7 @@ function RecentRoomCard({ room }: { room: RoomActivitySummary }) {
           {room.roomName}
         </span>
         <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-elevated text-foreground-muted">
-          {roomTypeLabel[room.roomType]}
+          {roomTypeLabel(room.roomType)}
         </span>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-foreground-muted">
