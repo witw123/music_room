@@ -183,7 +183,6 @@ function RoomWorkspaceBase({
         <AppSidebar
           hasBottomPlayer
           compactMobile
-          keepHomeInRoom
           roomId={roomId}
           onLogout={onLogout}
         />

@@ -240,7 +240,7 @@ function BottomPlayerBase({
     : resolveProgressRenderIntervalMs({ isPageVisible });
   const progressCommitThresholdMs = isImmersiveOpen ? 30 : 200;
   const footerClassName =
-    "fixed inset-x-2.5 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[80] box-border flex h-14 flex-col justify-center overflow-visible rounded-2xl border border-white/[0.08] bg-[#121216]/95 px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-[background-color,border-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:h-16 md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-white/[0.08] md:bg-[#101216]/95 md:px-6 md:py-0";
+    "fixed inset-x-2.5 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[80] box-border flex h-14 flex-col justify-center overflow-visible rounded-2xl border border-white/[0.08] bg-[#121216]/95 px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-[background-color,border-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:h-16 md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-white/[0.08] md:bg-[#101216]/95 md:px-0 md:py-0";
 
   useEffect(() => {
     if (typeof document === "undefined") {

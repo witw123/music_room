@@ -21,7 +21,6 @@ type AppSidebarProps = {
   activeItem?: AppNavItemId;
   hasBottomPlayer?: boolean;
   compactMobile?: boolean;
-  keepHomeInRoom?: boolean;
   roomId?: string | null;
   onLogout?: () => void;
 };
@@ -49,17 +48,21 @@ export function AppSidebar({
   activeItem,
   hasBottomPlayer = false,
   compactMobile = false,
-  keepHomeInRoom = false,
   roomId = null
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const currentItem = activeItem ?? resolveActiveItem(pathname);
+  const [pendingItemId, setPendingItemId] = useState<AppNavItemId | null>(null);
+  const currentItem = pendingItemId ?? activeItem ?? resolveActiveItem(pathname);
   const [collapsed, setCollapsed] = useState(true);
   const [customLayoutEnabled, setCustomLayoutEnabled] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>("dark");
   const desktopBottomOffsetClass = hasBottomPlayer
     ? "md:bottom-16 lg:bottom-16"
     : "md:bottom-0";
+
+  useEffect(() => {
+    setPendingItemId(null);
+  }, [pathname]);
 
   useEffect(() => {
     let themeMediaQuery: MediaQueryList | null = null;
@@ -120,11 +123,7 @@ export function AppSidebar({
           href="/app"
           className={`flex min-w-0 items-center gap-3 ${collapsed ? "md:justify-center" : ""}`}
           aria-label="返回首页"
-          onClick={(event) => {
-            if (keepHomeInRoom) {
-              event.preventDefault();
-              return;
-            }
+          onClick={() => {
             if (roomId) {
               storeAwayRoomId(roomId);
             }
@@ -144,29 +143,22 @@ export function AppSidebar({
         <nav className="hide-scrollbar flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden md:min-h-0 md:flex-col md:items-stretch md:overflow-y-auto md:overflow-x-hidden" aria-label="工作区">
           {navItems.map((item) => {
             const isActive = currentItem === item.id;
-            const keepsHomeInRoom = keepHomeInRoom && item.id === "home";
             return (
               <Link
                 key={item.id}
                 href={item.href as Route}
                 aria-current={isActive ? "page" : undefined}
-                aria-disabled={keepsHomeInRoom || undefined}
-                onClick={(event) => {
-                  if (keepsHomeInRoom) {
-                    event.preventDefault();
-                    return;
-                  }
+                onClick={() => {
                   if (roomId) {
                     storeAwayRoomId(roomId);
                   }
                 }}
+                onPointerDown={() => setPendingItemId(item.id)}
                 title={collapsed ? item.label : undefined}
                 className={`app-sidebar__nav-item group relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3.5 md:py-2.5 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
                     ? "bg-white/[0.08] text-white font-semibold md:before:absolute md:before:left-1 md:before:top-2.5 md:before:bottom-2.5 md:before:w-1 md:before:rounded-full md:before:bg-accent"
-                    : keepsHomeInRoom
-                      ? "cursor-default opacity-50 text-foreground-muted"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                    : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
                 } ${collapsed ? "md:justify-center md:px-2 md:before:hidden" : ""}`}
               >
                 <NavIcon name={item.icon} />
@@ -265,7 +257,7 @@ function resolveActiveItem(pathname: string | null): AppNavItemId | null {
   if (pathname?.startsWith("/app/profile")) {
     return "profile";
   }
-  if (pathname === "/app" || pathname === "/rooms") {
+  if (pathname === "/app" || pathname === "/rooms" || (pathname?.startsWith("/room") ?? false)) {
     return "home";
   }
   return null;
