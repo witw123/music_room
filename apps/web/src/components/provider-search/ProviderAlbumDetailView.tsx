@@ -201,7 +201,7 @@ export function ProviderAlbumTrackTable({
         {visibleTracks.length ? (
           visibleTracks.map((track, index) => (
             <div
-              className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${
+              className={`group flex items-center justify-between gap-2.5 px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${
                 actions ? "cursor-pointer" : ""
               }`}
               key={`${track.provider}:${track.providerTrackId}`}
@@ -218,8 +218,8 @@ export function ProviderAlbumTrackTable({
               tabIndex={actions?.onPlay ? 0 : undefined}
             >
               {/* Index number or Play Icon on hover */}
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-6 shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                <div className="hidden sm:flex w-6 shrink-0 items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
                   <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
                   <PlayIcon className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in" />
                 </div>
@@ -244,8 +244,8 @@ export function ProviderAlbumTrackTable({
                 {track.album ?? "未知专辑"}
               </span>
 
-              {/* Duration */}
-              <span className="shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
+              {/* Duration (Hidden on small mobile for space) */}
+              <span className="hidden sm:inline-block shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
                 {formatDuration(track.durationMs)}
               </span>
 

@@ -98,7 +98,7 @@ export function DiscoverPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
-  const [favoritePlaylistKeys] = useState<Set<string>>(new Set());
+  const [favoritePlaylistKeys, setFavoritePlaylistKeys] = useState<Set<string>>(new Set());
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
@@ -124,6 +124,29 @@ export function DiscoverPage() {
       }
     });
   }, [player]);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    let cancelled = false;
+    void musicRoomApi.listMyPlaylists().then((lists) => {
+      if (cancelled) return;
+      const keys = new Set<string>();
+      for (const pl of lists) {
+        for (const tag of pl.tags) {
+          if (tag.startsWith("network:")) {
+            const parts = tag.split(":");
+            if (parts.length >= 3) {
+              keys.add(`${parts[1]}:${parts.slice(2).join(":")}`);
+            }
+          }
+        }
+      }
+      setFavoritePlaylistKeys(keys);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -376,11 +399,101 @@ export function DiscoverPage() {
     onFeedback: () => {}
   };
 
-  const toggleFavoritePlaylist = async (_playlist: ProviderPlaylistDetail) => {};
+  const playPlaylistAll = useCallback(async (tracks: Track[], title?: string) => {
+    if (!tracks.length) return;
+    try {
+      setPending("playPlaylist");
+      setErrorMessage(null);
+      const first = tracks[0]!;
+      const prepared = await prepareTrackForImmediatePlayback(first);
+      await player.playTrack(prepared.record);
+      const rest = tracks.slice(1);
+      for (const track of rest) {
+        player.addToQueue(toProviderTrackRecord(track));
+      }
+      startQueuePreload(rest);
+      setStatusMessage(title ? `正在播放歌单《${title}》` : `已开启全部 ${tracks.length} 首歌曲播放`);
+    } catch (error) {
+      setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放歌单歌曲失败，请稍后重试。"));
+    } finally {
+      setPending(null);
+    }
+  }, [player, startQueuePreload]);
+
+  const toggleFavoritePlaylist = async (playlistDetail: ProviderPlaylistDetail) => {
+    const key = providerPlaylistKey(playlistDetail.provider, playlistDetail.providerPlaylistId);
+    if (pending) return;
+    setPending(`favorite-playlist:${key}`);
+    setErrorMessage(null);
+    try {
+      if (favoritePlaylistKeys.has(key)) {
+        const myLists = await musicRoomApi.listMyPlaylists();
+        const found = myLists.find((l) => l.tags.includes(`network:${key}`));
+        if (found) {
+          await musicRoomApi.deletePlaylist(found.id);
+        }
+        setFavoritePlaylistKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        setStatusMessage(`已取消收藏歌单《${playlistDetail.title}》。`);
+      } else {
+        await musicRoomApi.createPlaylist({
+          title: playlistDetail.title,
+          description: playlistDetail.description,
+          coverUrl: playlistDetail.artworkUrl ?? playlistDetail.tracks.find((t) => t.artworkUrl)?.artworkUrl ?? null,
+          isCollaborative: false,
+          tags: ["network", `network:${key}`, ...playlistDetail.tags].slice(0, 20),
+          trackIds: playlistDetail.tracks.map((t) => `provider:${t.provider}:${t.providerTrackId}`)
+        });
+        await Promise.all(playlistDetail.tracks.map(async (track) => {
+          try {
+            await upsertLocalPlaylistTrack(toProviderTrackRecord(track));
+          } catch {
+            // The saved network playlist remains authoritative even if local cache fails
+          }
+        }));
+        setFavoritePlaylistKeys((prev) => new Set(prev).add(key));
+        setStatusMessage(`《${playlistDetail.title}》已保存到我的歌单。`);
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "操作歌单失败，请稍后重试。");
+    } finally {
+      setPending(null);
+    }
+  };
 
   const openPlaylist = async (card: DiscoverPlaylistCard) => {
     const { playlist } = card;
     const key = `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+
+    // If tracks are already present in memory (e.g. Daily Mix or curated genre playlists):
+    if (card.tracks && card.tracks.length > 0) {
+      setDetail({
+        summary: playlist,
+        value: {
+          ...playlist,
+          tracks: card.tracks
+        }
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    // If it's a curated playlist with no tracks:
+    if (playlist.providerPlaylistId.startsWith("music-room-curated:")) {
+      setDetail({
+        summary: playlist,
+        value: {
+          ...playlist,
+          tracks: []
+        }
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     const version = ++requestVersionRef.current;
     requestAbortRef.current?.abort();
     const controller = new AbortController();
@@ -395,13 +508,40 @@ export function DiscoverPage() {
         summary: playlist,
         value: full
       });
-    } catch {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
-      setErrorMessage("打开歌单失败，请稍后重试。");
+      setErrorMessage(toErrorMessage(err));
     } finally {
       if (requestVersionRef.current === version) setDetailLoading(null);
     }
   };
+
+  const playPlaylistCard = useCallback(async (card: DiscoverPlaylistCard) => {
+    const { playlist } = card;
+    const playKey = `play:playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+    setDetailLoading(playKey);
+    try {
+      let tracks = card.tracks;
+      if (!tracks || !tracks.length) {
+        if (!playlist.providerPlaylistId.startsWith("music-room-curated:")) {
+          const full = playlist.provider === "netease"
+            ? await musicRoomApi.getNeteasePlaylist(playlist.providerPlaylistId)
+            : await musicRoomApi.getQqMusicPlaylist(playlist.providerPlaylistId);
+          tracks = full.tracks;
+        }
+      }
+      if (tracks && tracks.length > 0) {
+        await playPlaylistAll(tracks, playlist.title);
+      } else {
+        setErrorMessage(`歌单《${playlist.title}》暂无可用曲目。`);
+      }
+    } catch (err) {
+      setErrorMessage(toErrorMessage(err));
+    } finally {
+      setDetailLoading(null);
+    }
+  }, [playPlaylistAll]);
 
   if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-background" />;
 
@@ -413,6 +553,7 @@ export function DiscoverPage() {
           <ProviderPlaylistDetailView
             isFavorite={favoritePlaylistKeys.has(providerPlaylistKey(detail.value.provider, detail.value.providerPlaylistId))}
             onBack={() => setDetail(null)}
+            onPlayAll={(tracks) => playPlaylistAll(tracks, detail.value.title)}
             onToggleFavorite={() => toggleFavoritePlaylist(detail.value)}
             pending={pending}
             playlist={detail.value}
@@ -537,15 +678,14 @@ export function DiscoverPage() {
         {/* Mobile Page Header for proper ergonomics */}
         <header className="workspace-page__header mb-2.5 flex items-center justify-between md:hidden">
           <div>
-            <p className="workspace-page__eyebrow">探索海量音源与精选推荐</p>
             <h1 className="workspace-page__title">发现</h1>
           </div>
           <Link
             aria-label="打开个人中心"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-foreground-muted shadow-sm transition-all hover:bg-white/10 hover:text-foreground active:scale-95"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-foreground-muted shadow-sm transition-all hover:bg-white/10 hover:text-foreground active:scale-95"
             href="/app/profile"
           >
-            <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+            <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
           </Link>
         </header>
 
@@ -553,7 +693,7 @@ export function DiscoverPage() {
         <ProviderSearchPage embedded inlineSearch />
 
         {/* Genre & Scene Filter Pills (Artistic Capsules) */}
-        <div className="mt-4 mb-7 flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
+        <div className="mt-3 mb-6 flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
           {genreFilterPills.map((pill) => {
             const IconComp = pill.icon;
             const active = activeFilterId === pill.id;
@@ -562,10 +702,10 @@ export function DiscoverPage() {
                 key={pill.id}
                 type="button"
                 onClick={() => setActiveFilterId(pill.id)}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border ${
                   active
-                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] border-accent scale-[1.02]"
-                    : "bg-[#10121a]/80 hover:bg-white/[0.08] text-foreground-muted hover:text-white border-white/[0.06]"
+                    ? "bg-white/[0.12] text-white border-white/[0.16]"
+                    : "bg-white/[0.03] hover:bg-white/[0.06] text-foreground-muted hover:text-white border-white/[0.06]"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5 shrink-0" />
@@ -576,7 +716,7 @@ export function DiscoverPage() {
           <button
             type="button"
             onClick={() => setShowColdStartDialog(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-medium text-foreground-muted hover:text-white bg-[#10121a]/80 hover:bg-white/[0.08] border border-white/[0.06] ml-auto shrink-0 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-foreground-muted hover:text-white bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] ml-auto shrink-0 transition-colors"
             title="定制偏好"
           >
             <SlidersIcon className="w-3.5 h-3.5 text-accent" />
@@ -588,27 +728,24 @@ export function DiscoverPage() {
 
         {/* Filtered Genre Radar Spotlight */}
         {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
-          <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#161a29]/90 via-[#0f121d]/95 to-[#090b11] p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
-            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold text-accent bg-accent/15 border border-accent/20">
-                  <SparklesIcon className="w-3.5 h-3.5" />
-                  <span>{activeFilter?.label}精选雷达</span>
-                </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{activeFilter?.label}精选推荐单曲</h2>
+          <section className="relative mb-8 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#121216] p-4 sm:p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div className="space-y-0.5">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">{activeFilter?.label}精选推荐</h2>
               </div>
               <Button
                 type="button"
                 disabled={pending !== null}
                 onClick={() => playDailyRadarAll(filteredTopTracks)}
-                className="rounded-xl px-5 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+                size="sm"
+                className="rounded-lg px-4 py-2 bg-accent hover:bg-accent-hover text-white font-medium shadow-sm transition-all active:scale-95 text-xs sm:text-sm self-start sm:self-auto"
               >
-                <PlayIcon className="w-4 h-4 mr-2" />
-                <span>一键播放全部</span>
+                <PlayIcon className="w-3.5 h-3.5 mr-1.5" />
+                <span>播放全部</span>
               </Button>
             </div>
-            <div className="relative z-10 pt-2 border-t border-white/[0.08]">
-              <div className="max-h-[560px] overflow-y-auto hide-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-0.5">
+            <div className="pt-2 border-t border-white/[0.06]">
+              <div className="max-h-[560px] overflow-y-auto hide-scrollbar">
                 <ProviderAlbumTrackTable
                   actions={toPlaylistTrackActions(trackActions)}
                   showToolbar={false}
@@ -626,11 +763,10 @@ export function DiscoverPage() {
         {/* Section 1: Made For You · Daily Mix Matrix */}
         {dailyMixCards.length && activeFilterId === "all" ? (
           <DiscoverSection
-            title="专属定制 · Daily Mix"
-            subtitle="根据你的听歌风格与歌手偏好，每日动态更新的 4 张专属混合歌单"
-            icon={<SparklesIcon className="w-5 h-5 text-accent" />}
+            title="Daily Mix"
+            icon={<SparklesIcon className="w-4 h-4 text-accent" />}
           >
-            <DiscoverPlaylistRail items={dailyMixCards} loadingKey={detailLoading} onOpen={openPlaylist} />
+            <DiscoverPlaylistRail items={dailyMixCards} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
           </DiscoverSection>
         ) : null}
 
@@ -651,11 +787,10 @@ export function DiscoverPage() {
         {/* Section 4: Contextual Attribution - Inspired By Top Artist */}
         {inspiredTracks.length > 0 && topArtist && activeFilterId === "all" ? (
           <DiscoverSection
-            title={`因为你常听 ${topArtist} 推荐`}
-            subtitle="延续你喜爱的音乐质感与编曲风格，精选相似风格单曲"
-            icon={<MicIcon className="w-5 h-5 text-accent" />}
+            title={`常听歌手 · ${topArtist}`}
+            icon={<MicIcon className="w-4 h-4 text-accent" />}
           >
-            <div className="rounded-2xl border border-white/[0.06] bg-[#10121a]/80 p-3 sm:p-4 shadow-md backdrop-blur-xl">
+            <div className="rounded-xl border border-white/[0.06] bg-[#121216] p-2 sm:p-4 shadow-sm">
               <ProviderAlbumTrackTable
                 actions={toPlaylistTrackActions(trackActions)}
                 showToolbar={false}
@@ -668,11 +803,10 @@ export function DiscoverPage() {
         {/* Section 5: Deep Cuts & Hidden Gems */}
         {deepCutTracks.length > 0 && activeFilterId === "all" ? (
           <DiscoverSection
-            title="小众宝藏与深度挖掘"
-            subtitle="低热度高契合度的私藏佳作与冷门好歌"
-            icon={<DiscoverCompassIcon className="w-5 h-5 text-accent" />}
+            title="宝藏单曲"
+            icon={<DiscoverCompassIcon className="w-4 h-4 text-accent" />}
           >
-            <div className="rounded-2xl border border-white/[0.06] bg-[#10121a]/80 p-3 sm:p-4 shadow-md backdrop-blur-xl">
+            <div className="rounded-xl border border-white/[0.06] bg-[#121216] p-2 sm:p-4 shadow-sm">
               <ProviderAlbumTrackTable
                 actions={toPlaylistTrackActions(trackActions)}
                 showToolbar={false}
@@ -685,10 +819,9 @@ export function DiscoverPage() {
         {/* Section 6: Curated & Thematic Genre Playlists */}
         {otherPlaylists.length ? (
           <DiscoverSection
-            title={activeFilterId === "all" ? "精选推荐歌单" : `${activeFilter?.label ?? ""}风格歌单`}
-            subtitle={activeFilterId === "all" ? "汇聚多元曲风、场景与平台精选歌单" : `探索更多关于${activeFilter?.label ?? ""}的精选合辑`}
+            title={activeFilterId === "all" ? "精选歌单" : `${activeFilter?.label ?? ""}风格歌单`}
           >
-            <DiscoverPlaylistRail items={otherPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} />
+            <DiscoverPlaylistRail items={otherPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
           </DiscoverSection>
         ) : null}
 

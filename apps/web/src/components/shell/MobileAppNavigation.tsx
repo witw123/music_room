@@ -30,8 +30,8 @@ export function MobileAppNavigation({ onNavigateAway }: { onNavigateAway?: () =>
   }, [pathname]);
 
   return (
-    <nav className="mobile-app-navigation fixed inset-x-0 bottom-0 z-[70] isolate h-[calc(4.5rem+env(safe-area-inset-bottom))] md:hidden" data-custom-layout-item="mobile-navigation" aria-label="主导航">
-      <div className="grid h-full grid-cols-4 items-stretch px-1.5 pb-[env(safe-area-inset-bottom)] pt-1">
+    <nav className="mobile-app-navigation fixed inset-x-0 bottom-0 z-[70] isolate h-[calc(3.25rem+env(safe-area-inset-bottom))] md:hidden" data-custom-layout-item="mobile-navigation" aria-label="主导航">
+      <div className="grid h-full grid-cols-4 items-stretch px-1 pb-[env(safe-area-inset-bottom)] pt-0.5">
         {items.map((item) => {
           const active = pendingHref === item.href || isActivePath(pathname, item.href);
           return (

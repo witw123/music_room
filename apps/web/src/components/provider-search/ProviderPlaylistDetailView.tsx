@@ -22,6 +22,7 @@ type ProviderPlaylistDetailViewProps = {
   onBack: () => void;
   onToggleFavorite: () => Promise<void>;
   trackActions?: ProviderAlbumTrackActions;
+  onPlayAll?: (tracks: ProviderPlaylistDetail["tracks"]) => void | Promise<void>;
 };
 
 export function ProviderPlaylistDetailView({
@@ -30,7 +31,8 @@ export function ProviderPlaylistDetailView({
   pending,
   onBack,
   onToggleFavorite,
-  trackActions
+  trackActions,
+  onPlayAll
 }: ProviderPlaylistDetailViewProps) {
   return (
     <section className="mt-3 sm:mt-6 animate-in fade-in duration-300">
@@ -65,10 +67,16 @@ export function ProviderPlaylistDetailView({
           </p>
           <DescriptionDisclosure description={playlist.description} />
           <div className="mt-5 flex flex-wrap items-center justify-center sm:justify-start gap-3">
-            {playlist.tracks[0] && trackActions?.onPlay ? (
+            {playlist.tracks.length > 0 && (onPlayAll || trackActions?.onPlay) ? (
               <button
                 type="button"
-                onClick={() => trackActions.onPlay?.(playlist.tracks[0])}
+                onClick={() => {
+                  if (onPlayAll) {
+                    void onPlayAll(playlist.tracks);
+                  } else if (playlist.tracks[0]) {
+                    trackActions?.onPlay?.(playlist.tracks[0]);
+                  }
+                }}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
               >
                 <PlayIcon className="w-3.5 h-3.5" />

@@ -13,51 +13,74 @@ function providerLabel(provider: string) {
 export function DiscoverPlaylistRail({
   items,
   onOpen,
+  onPlay,
   loadingKey
 }: {
   items: DiscoverPlaylistCard[];
-  onOpen: (card: DiscoverPlaylistCard) => Promise<void>;
+  onOpen: (card: DiscoverPlaylistCard) => Promise<void> | void;
+  onPlay?: (card: DiscoverPlaylistCard) => Promise<void> | void;
   loadingKey: string | null;
 }) {
   return (
     <div className="grid min-w-0 grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {items.map((item) => {
         const { playlist } = item;
-        const loading = !item.tracks && loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+        const itemKey = providerPlaylistKey(playlist.provider, playlist.providerPlaylistId);
+        const isOpenLoading = loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+        const isPlayLoading = loadingKey === `play:playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
+        const loading = isOpenLoading || isPlayLoading;
         const isDailyMix = playlist.providerPlaylistId.startsWith("music-room-curated:daily-mix-");
         const mixNumber = isDailyMix ? playlist.providerPlaylistId.replace("music-room-curated:daily-mix-", "") : null;
         return (
-          <button
+          <div
             aria-label={`打开歌单《${playlist.title}》`}
-            className="group flex min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 p-2.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.14] hover:bg-[#181a26]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            disabled={loading}
-            key={providerPlaylistKey(playlist.provider, playlist.providerPlaylistId)}
+            className="group relative flex min-w-0 max-w-full cursor-pointer flex-col text-left transition-transform duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent select-none"
+            key={itemKey}
             onClick={() => void onOpen(item)}
-            type="button"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                void onOpen(item);
+              }
+            }}
+            role="button"
+            tabIndex={0}
           >
-            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface-elevated border border-white/10 shadow-md">
+            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface border border-white/[0.08] shadow-sm">
               <Artwork
                 alt={playlist.title}
                 className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105"
                 src={playlist.artworkUrl}
               />
-              <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
-              {isDailyMix && mixNumber ? (
-                <div className="absolute top-2 left-2 z-10 rounded-md bg-black/70 backdrop-blur-md px-2 py-0.5 text-[9px] font-black tracking-widest uppercase text-white border border-white/20 shadow-md">
-                  MIX {mixNumber}
-                </div>
-              ) : null}
-              <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-100 shadow-[0_4px_16px_var(--accent-glow)] transition-all duration-200 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-95 sm:group-hover:scale-100">
-                {loading ? <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <PlayIcon className="w-4 h-4" />}
-              </span>
+              <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/20" />
+              <button
+                aria-label={`播放歌单《${playlist.title}》`}
+                className="absolute bottom-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-md transition-all duration-200 hover:scale-105 active:scale-90 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                disabled={loading}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onPlay) {
+                    void onPlay(item);
+                  } else {
+                    void onOpen(item);
+                  }
+                }}
+                type="button"
+              >
+                {loading ? (
+                  <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <PlayIcon className="w-3.5 h-3.5 ml-0.5" />
+                )}
+              </button>
             </div>
-            <p className="mt-2.5 line-clamp-2 text-xs sm:text-sm font-semibold leading-tight text-white group-hover:text-accent transition-colors" title={playlist.title}>
+            <p className="mt-2 line-clamp-2 text-xs font-medium leading-tight text-foreground group-hover:text-accent transition-colors" title={playlist.title}>
               {playlist.title}
             </p>
-            <p className="mt-1 truncate text-[11px] text-foreground-muted" title={playlist.description ?? playlist.creatorName ?? ""}>
-              {playlist.description || (playlist.providerPlaylistId.startsWith("music-room-curated:") ? "Music Room 精选" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`)}
+            <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={playlist.description ?? playlist.creatorName ?? ""}>
+              {playlist.description || (playlist.providerPlaylistId.startsWith("music-room-curated:") ? "精选歌单" : `${providerLabel(playlist.provider)}${playlist.creatorName ? ` · ${playlist.creatorName}` : ""}`)}
             </p>
-          </button>
+          </div>
         );
       })}
     </div>

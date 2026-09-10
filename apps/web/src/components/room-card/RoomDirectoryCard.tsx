@@ -60,7 +60,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1.5 hover:border-[color:var(--room-border)] hover:shadow-[0_24px_60px_var(--room-shadow)] focus-within:border-[color:var(--room-accent)] focus-within:ring-2 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
+      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141418] p-3.5 sm:p-4 shadow-sm transition-all duration-200 hover:border-white/[0.14] hover:bg-[#18181e] focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -73,13 +73,13 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         onClick={onOpen}
         type="button"
       />
-      <header className="flex min-h-8 items-center justify-between gap-2.5">
-        <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-white/10 bg-[color:var(--room-soft)] px-3 text-xs font-semibold text-white backdrop-blur-md shadow-sm">
+      <header className="flex min-h-7 items-center justify-between gap-2">
+        <span className="inline-flex min-h-6 items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.04] px-2.5 text-[11px] font-medium text-foreground-muted">
           <RoomTypeGlyph roomType={room.roomType} />
           {theme.label}
         </span>
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-foreground-muted font-mono">
-          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           {room.directoryOnlineMemberCount} 人在线
         </span>
       </header>

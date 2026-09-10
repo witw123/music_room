@@ -76,6 +76,7 @@ export function RoomsHomePage({
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createFormVisibility, setCreateFormVisibility] = useState<"public" | "private">("public");
+  const [mobileActionSheetOpen, setMobileActionSheetOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomDirectoryItem | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [storedAwayRoomId, setStoredAwayRoomId] = useState<string | null>(null);
@@ -288,56 +289,64 @@ export function RoomsHomePage({
 
 
       <section className="workspace-page__inner home-centered-workspace relative flex w-full shrink-0 flex-col gap-6 pt-[calc(1rem+env(safe-area-inset-top))] md:gap-6">
+        {/* Mobile Header for clean ergonomics */}
         <header className="workspace-page__header flex items-center justify-between md:hidden">
           <div>
-            <p className="workspace-page__eyebrow">一起听见此刻</p>
-            <h1 className="workspace-page__title">主页</h1>
+            <h1 className="workspace-page__title">房间大厅</h1>
           </div>
-          <Link aria-label="打开个人中心" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-background-secondary shadow-sm transition-transform duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href="/app/profile">
-            <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
-          </Link>
-        </header>
-
-        <div className="flex flex-col gap-3 md:hidden">
           <div className="flex items-center gap-2">
-            <Button data-testid="create-public-room-mobile" size="sm" onClick={() => openCreateRoom("public")} type="button">
-              创建房间
-            </Button>
             <button
               aria-label="刷新房间列表"
-              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground-muted transition-[transform,background-color,color] duration-200 hover:bg-surface hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-foreground-muted shadow-sm transition-all hover:bg-white/10 hover:text-foreground active:scale-95"
               onClick={() => startTransition(() => void refreshAvailableRooms())}
               title="刷新房间列表"
               type="button"
             >
-              <svg aria-hidden="true" className={isPending ? "animate-spin" : ""} fill="none" height="19" viewBox="0 0 24 24" width="19" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg>
+              <svg aria-hidden="true" className={isPending ? "animate-spin" : ""} fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg>
             </button>
+            <button
+              aria-label="新建或加入房间"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-all active:scale-95"
+              onClick={() => setMobileActionSheetOpen(true)}
+              title="新建或加入"
+              type="button"
+            >
+              <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+            <Link
+              aria-label="打开个人中心"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-foreground-muted shadow-sm transition-all hover:bg-white/10 hover:text-foreground active:scale-95"
+              href="/app/profile"
+            >
+              <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+            </Link>
           </div>
+        </header>
 
-          <form
-            className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleJoinCodeSubmit();
-            }}
-          >
-            <label className="sr-only" htmlFor="mobile-join-code-input">输入房间码</label>
-            <input
-              aria-label="输入房间码"
-              className="min-w-0 rounded-xl border border-surface-border bg-background-secondary px-3 py-2.5 font-mono text-sm uppercase text-foreground outline-none placeholder:font-sans placeholder:normal-case placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
-              data-testid="mobile-join-code-input"
-              id="mobile-join-code-input"
-              maxLength={6}
-              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-              placeholder="输入 6 位房间码"
-              value={joinCode}
-            />
-            <Button data-testid="mobile-join-code-submit" disabled={!joinCode.trim() || isPending} type="submit" variant="outline">
-              {isPending ? "加入中…" : "加入"}
-            </Button>
-          </form>
+        {/* Mobile Filter Tabs directly under header */}
+        <div className="flex items-center gap-1 rounded-xl border border-white/[0.06] p-1 bg-white/[0.03] md:hidden" role="tablist" aria-label="房间类型筛选">
+          {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
+            const isSelected = roomTypeFilter === roomType;
+            return (
+              <button
+                aria-selected={isSelected}
+                className={`flex-1 flex min-h-8 whitespace-nowrap items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                  isSelected
+                    ? "bg-white/[0.12] text-white"
+                    : "text-foreground-muted hover:text-white"
+                }`}
+                key={roomType}
+                onClick={() => setRoomTypeFilter(roomType)}
+                role="tab"
+                type="button"
+              >
+                {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
+              </button>
+            );
+          })}
         </div>
 
+        {/* Desktop Filter Tabs & Action Buttons */}
         <div className="hidden items-center justify-between gap-4 md:flex">
           <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-2xl" role="tablist" aria-label="房间类型筛选">
             {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
@@ -403,32 +412,10 @@ export function RoomsHomePage({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/40 to-[#0c0e15]/60 p-4 lg:p-6 backdrop-blur-2xl min-h-[300px] shadow-2xl">
-          <div className="mb-4 flex justify-center md:hidden">
-            <div className="flex w-full items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80" role="tablist" aria-label="房间类型筛选">
-              {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
-                const isSelected = roomTypeFilter === roomType;
-                return (
-                  <button
-                    aria-selected={isSelected}
-                    className={`flex-1 flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                      isSelected
-                        ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)]"
-                        : "text-foreground-muted hover:text-white"
-                    }`}
-                    key={roomType}
-                    onClick={() => setRoomTypeFilter(roomType)}
-                    role="tab"
-                    type="button"
-                  >
-                    {roomType === "all" ? "全部" : roomTypeLabel(roomType)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="mb-4 flex items-center justify-between md:hidden">
-            <h2 className="text-base font-bold text-white tracking-tight">全部房间</h2>
+        {/* Room Cards Container */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#121216] p-3.5 sm:p-5 min-h-[260px] shadow-sm">
+          <div className="mb-3.5 flex items-center justify-between md:hidden">
+            <h2 className="text-sm font-semibold text-white tracking-tight">房间列表</h2>
             <span className="text-xs text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
@@ -522,6 +509,80 @@ export function RoomsHomePage({
           }}
           room={selectedRoom}
         />
+      ) : null}
+      {mobileActionSheetOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4"
+          onClick={() => setMobileActionSheetOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-2xl sm:rounded-2xl border border-white/[0.08] bg-[#16161a] p-4 shadow-2xl space-y-2 animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+              <h3 className="text-sm font-semibold text-white">房间操作</h3>
+              <button
+                type="button"
+                onClick={() => setMobileActionSheetOpen(false)}
+                className="text-foreground-muted hover:text-white text-xs p-1"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="space-y-1.5 pt-1">
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium text-white hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors"
+                onClick={() => {
+                  setMobileActionSheetOpen(false);
+                  openCreateRoom("public");
+                }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20 text-accent">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /></svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-white">创建公开房间</p>
+                  <p className="text-xs text-foreground-muted">任何人均可发现并加入</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium text-white hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors"
+                onClick={() => {
+                  setMobileActionSheetOpen(false);
+                  openCreateRoom("private");
+                }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-white">创建私密房间</p>
+                  <p className="text-xs text-foreground-muted">仅凭房间码或密码进入</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium text-white hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors"
+                onClick={() => {
+                  setMobileActionSheetOpen(false);
+                  openJoinDialog();
+                }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-white">输入房间码加入</p>
+                  <p className="text-xs text-foreground-muted">输入 6 位房间码直接进入</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );
