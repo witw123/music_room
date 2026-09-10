@@ -29,8 +29,6 @@ export function DiscoverPlaylistRail({
         const isOpenLoading = loadingKey === `playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
         const isPlayLoading = loadingKey === `play:playlist:${playlist.provider}:${playlist.providerPlaylistId}`;
         const loading = isOpenLoading || isPlayLoading;
-        const isDailyMix = playlist.providerPlaylistId.startsWith("music-room-curated:daily-mix-");
-        const mixNumber = isDailyMix ? playlist.providerPlaylistId.replace("music-room-curated:daily-mix-", "") : null;
         return (
           <div
             aria-label={`打开歌单《${playlist.title}》`}

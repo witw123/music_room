@@ -65,7 +65,6 @@ export function RoomsHomePage({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomDirectoryItem[]>(() =>
     activeSession ? getCachedRooms(activeSession.userId) ?? [] : []
   );
@@ -234,19 +233,6 @@ export function RoomsHomePage({
     }
     setSelectedRoom(room);
     setDialogError(null);
-  }
-
-  function handleJoinCodeSubmit() {
-    const room = availableRooms.find(
-      (item) => item.room.joinCode.toUpperCase() === joinCode.trim().toUpperCase()
-    );
-    if (room) {
-      setJoinDialogOpen(false);
-      openRoomDetails(room);
-      return;
-    }
-    if (isPending || joinInFlightRef.current) return;
-    startTransition(() => void handleJoinRoom(joinCode));
   }
 
   async function handleLogout() {
@@ -569,7 +555,7 @@ export function RoomsHomePage({
                 className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium text-white hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors"
                 onClick={() => {
                   setMobileActionSheetOpen(false);
-                  openJoinDialog();
+                  setJoinDialogOpen(true);
                 }}
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
