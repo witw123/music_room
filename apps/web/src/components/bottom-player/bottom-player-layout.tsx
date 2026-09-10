@@ -337,8 +337,6 @@ export function MobileBottomPlayerLayout({
   playbackTrackId,
   title,
   artist,
-  boundedProgressMs,
-  currentTrackDuration,
   onTogglePlay,
   queue,
   tracks,
@@ -355,24 +353,9 @@ export function MobileBottomPlayerLayout({
   artworkAccentSoft,
   artworkUrl
 }: LayoutProps) {
-  const progressRatio = currentTrackDuration > 0
-    ? Math.min(1, Math.max(0, boundedProgressMs / currentTrackDuration))
-    : 0;
-
   return (
     <div className="relative mx-auto w-full max-w-[760px] md:hidden" data-player-layout="mobile">
-      {/* Hairline progress line on top of mini-player */}
-      <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-white/[0.08]" aria-hidden="true">
-        <div
-          className="h-full rounded-full transition-[width] duration-150 ease-linear"
-          style={{
-            width: `${progressRatio * 100}%`,
-            backgroundColor: artworkAccent || "var(--accent)"
-          }}
-        />
-      </div>
-
-      <div className="flex h-12 items-center gap-2.5 px-1 pt-0.5">
+      <div className="flex h-12 items-center gap-2.5 px-1">
         {/* Click body to open full immersive sheet */}
         <button
           aria-label="打开播放详情"
@@ -700,8 +683,8 @@ export function DesktopBottomPlayerLayout({
         ) : null}
       </div>
 
-      {/* Center: Playback Mode + Prev + Circular Play/Pause + Next + Queue */}
-      <div className="flex items-center justify-center gap-2.5 sm:gap-3.5">
+      {/* Center: Playback Mode + Prev + Circular Play/Pause + Next + Queue (Viewport Dead-Center) */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-2.5 sm:gap-3.5 pointer-events-auto">
         <PlaybackModeButton
           mode={playbackMode}
           onCycle={onCyclePlaybackMode}
@@ -780,7 +763,7 @@ export function DesktopBottomPlayerLayout({
       </div>
 
       {/* Right: Audio Quality Badge + Lyrics Toggle + Volume Control + Immersive + Mini */}
-      <div className="flex min-w-0 items-center justify-end gap-1.5 w-[260px] lg:w-[320px] shrink-0">
+      <div className="flex min-w-0 items-center justify-end gap-1.5 w-[260px] lg:w-[320px] shrink-0 ml-auto">
         <QualityBadge />
 
         {onToggleLyrics ? (

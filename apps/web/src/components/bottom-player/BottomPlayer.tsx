@@ -200,8 +200,6 @@ function BottomPlayerBase({
     currentTrackDuration > 0
       ? Math.min(effectiveProgressMs, currentTrackDuration)
       : effectiveProgressMs;
-  const progressRatio =
-    currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
   const album = currentTrack?.album ?? "未知专辑";
@@ -497,19 +495,6 @@ function BottomPlayerBase({
       data-mobile-variant={mobileVariant}
       data-custom-layout-item="player"
     >
-      {mobileVariant !== "compact" ? (
-        <div className="absolute left-0 right-0 top-0 h-[2px] z-10 bg-white/5 md:hidden" aria-hidden="true">
-          <div
-            className={`h-full ${isPlaybackBarrierBlocked ? "" : "transition-[width,background-color,box-shadow] duration-150 ease-linear"}`}
-            style={{
-              width: `${progressRatio * 100}%`,
-              backgroundColor: artworkPalette.accent,
-              boxShadow: `0 0 10px ${artworkPalette.accentGlow}`
-            }}
-          />
-        </div>
-      ) : null}
-
       <div
         className="relative z-10 flex h-full min-h-0 w-full min-w-0 flex-col justify-center overflow-visible"
         data-custom-layout-player-content="true"

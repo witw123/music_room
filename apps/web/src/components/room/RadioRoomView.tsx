@@ -68,7 +68,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
           </div>
         </div>
-        <div className="relative z-0 flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:rounded-none">
+        <div className="relative z-0 flex h-[calc(100dvh-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none">
           <RadioWorkspaceTabs
             activeTab={rightTab}
             ariaLabel="房间信息"
@@ -76,7 +76,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             onChange={setRightTab}
             tabs={[{ id: "chat", label: "聊天", icon: MusicIcon }, { id: "members", label: "成员", icon: UsersIcon }]}
           />
-          <div aria-labelledby={`radio-right-tab-${rightTab}`} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto" id={`radio-right-panel-${rightTab}`} role="tabpanel">
+          <div aria-labelledby={`radio-right-tab-${rightTab}`} className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden" id={`radio-right-panel-${rightTab}`} role="tabpanel">
             {rightTab === "chat" ? (
               <RoomChatPanel
                 activeSession={props.activeSession}
@@ -232,7 +232,7 @@ function RadioLibraryList({
 
 function RadioMembersPanel(props: RoomDashboardViewProps & { membershipNow: number }) {
   return (
-    <section className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:min-h-0 lg:rounded-none" data-testid="radio-members-panel">
+    <section className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:rounded-none" data-testid="radio-members-panel">
       <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
         <MembersPanel
           activeSessionId={props.activeSession?.userId ?? null}

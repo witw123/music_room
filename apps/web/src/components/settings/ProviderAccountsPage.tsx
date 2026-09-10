@@ -51,12 +51,11 @@ export function ProviderAccountsPage() {
   return (
     <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-8 md:pt-12 md:pb-28">
-        {/* Artistic Personal Identity Hero Card */}
+      <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-8 md:pt-10 md:pb-28">
         <PersonalOverview activeSession={activeSession} />
 
-        {/* High-End Glassmorphic Segmented Control Navigation */}
-        <div className="flex items-center gap-1 sm:gap-1.5 rounded-2xl border border-white/[0.06] p-1 sm:p-1.5 bg-[#10121a]/80 backdrop-blur-2xl mb-6 overflow-x-auto hide-scrollbar touch-pan-x w-fit max-w-full shadow-lg">
+        {/* Segmented Tab Navigation */}
+        <div className="inline-flex items-center gap-1 p-1 rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md mb-6 overflow-x-auto hide-scrollbar touch-pan-x max-w-full">
           {tabList.map(({ id, label, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -64,13 +63,13 @@ export function ProviderAccountsPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                   isActive
-                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold scale-[1.02]"
-                    : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                    ? "bg-white/[0.12] text-white font-semibold shadow-sm"
+                    : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
                 }`}
               >
-                <IconComp className="w-4 h-4" />
+                <IconComp className="w-3.5 h-3.5 shrink-0" />
                 <span>{label}</span>
               </button>
             );
@@ -96,7 +95,7 @@ export function ProviderAccountsPage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-5 sm:p-7 shadow-[0_16px_36px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+          <div className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
             <SettingsPage embedded onBack={() => setActiveTab("taste")} />
           </div>
         )}

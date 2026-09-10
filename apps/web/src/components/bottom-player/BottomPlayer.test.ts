@@ -64,10 +64,12 @@ describe("BottomPlayer source", () => {
     expect(source).toContain("if (seekDraft === null)");
   });
 
-  it("keeps the progress bar pinned at the top edge of the player", () => {
-    const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+  it("keeps the desktop scrubber pinned at the top edge and removes mobile hairline", () => {
+    const layoutSource = readFileSync(new URL("./bottom-player-layout.tsx", import.meta.url), "utf8");
+    const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('top-0 h-[2px]');
+    expect(layoutSource).toContain("<TopEdgeScrubber");
+    expect(playerSource).not.toContain("top-0 h-[2px]");
   });
 
   it("allows room-timeline seeking on the segmented source", () => {

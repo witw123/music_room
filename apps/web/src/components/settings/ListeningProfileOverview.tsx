@@ -196,7 +196,7 @@ export function ListeningProfileOverview({
       </section>
 
       {/* Taste Dimensions (Musical Taste Constellation Matrix) */}
-      <section className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-5 sm:p-7 shadow-[0_16px_36px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+      <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20">
@@ -255,7 +255,7 @@ export function ListeningProfileOverview({
       {/* Top 5 Tracks & Top 5 Artists / Source Distribution */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top 5 Tracks */}
-        <section className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-5 sm:p-7 shadow-[0_16px_36px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+        <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
           <div className="flex items-center gap-2 mb-4">
             <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20">
               <BarChartIcon className="w-4 h-4" />
@@ -334,7 +334,7 @@ export function ListeningProfileOverview({
         {/* Top 5 Artists & Multi-source Bar */}
         <div className="space-y-6">
           {/* Top 5 Artists */}
-          <section className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-5 sm:p-7 shadow-[0_16px_36px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+          <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
             <div className="flex items-center gap-2 mb-4">
               <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20">
                 <LandmarkIcon className="w-4 h-4" />
@@ -370,7 +370,7 @@ export function ListeningProfileOverview({
 
           {/* Multi-source Distribution */}
           {profile.sourceDistribution.length > 0 && totalSourceTime > 0 && (
-            <section className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-5 sm:p-6 shadow-[0_16px_36px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+            <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
               <h4 className="text-xs font-semibold text-foreground-muted mb-3 uppercase tracking-wider">音源收听分布</h4>
               {/* Segmented Bar */}
               <div className="h-3 w-full rounded-full bg-white/[0.06] flex overflow-hidden p-0.5 gap-0.5 border border-white/[0.08]">
@@ -423,9 +423,7 @@ export function ListeningProfileOverview({
 function MetricCard({
   label,
   value,
-  icon,
-  glowColor,
-  accentBorder
+  icon
 }: {
   label: string;
   value: string;
@@ -434,19 +432,14 @@ function MetricCard({
   accentBorder?: string;
 }) {
   return (
-    <div
-      className={`relative overflow-hidden rounded-2xl border ${accentBorder ?? "border-white/[0.08]"} bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 p-4 sm:p-5 flex flex-col justify-between shadow-[0_12px_28px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all hover:-translate-y-0.5 group`}
-      style={{
-        boxShadow: glowColor ? `0 12px 28px rgba(0,0,0,0.4), inset 0 0 20px ${glowColor}` : undefined
-      }}
-    >
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="text-xs font-semibold text-foreground-muted tracking-tight">{label}</span>
-        <div className="p-1.5 rounded-xl bg-white/[0.06] border border-white/[0.08] group-hover:scale-110 transition-transform">
+    <div className="rounded-xl border border-white/[0.08] bg-surface/30 p-4 transition-colors hover:bg-surface/50 flex flex-col justify-between">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-xs font-medium text-foreground-muted">{label}</span>
+        <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-foreground-muted">
           {icon}
         </div>
       </div>
-      <dd className="text-xl sm:text-2xl font-bold text-white tracking-tight tabular-nums truncate">
+      <dd className="text-xl sm:text-2xl font-bold text-foreground tracking-tight tabular-nums truncate">
         {value}
       </dd>
     </div>
