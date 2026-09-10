@@ -510,7 +510,9 @@ export function TopEdgeScrubber({
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
-      } catch {}
+      } catch (_err) {
+        void _err;
+      }
       setIsDragging(false);
       onCommitSeek();
     }
@@ -522,7 +524,9 @@ export function TopEdgeScrubber({
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
-      } catch {}
+      } catch (_err) {
+        void _err;
+      }
       setIsDragging(false);
       onSeekDraft(null);
     }

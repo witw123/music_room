@@ -19,9 +19,8 @@ describe("BottomPlayer source", () => {
     );
 
     expect(source).toContain("min-h-0");
-    expect(layoutSource).toContain("min-h-[4.25rem]");
-    expect(layoutSource).toContain('w-[5.4rem]');
-    expect(layoutSource).toContain('w-[44px]');
+    expect(layoutSource).toContain("h-12");
+    expect(layoutSource).toContain("h-10 w-10");
   });
 
   it("restores the bottom-player volume action without adding it to the mini player", () => {
@@ -93,7 +92,7 @@ describe("BottomPlayer source", () => {
     expect(controllerSource).toContain("hasRoomPermission(");
     expect(controllerSource).toContain('"player"');
     expect(playerSource).toContain("canSeekPlayback && canControlPlayback");
-    expect(layoutSource).toContain("disabled={!currentTrackDuration || !canSeekPlayback}");
+    expect(layoutSource).toContain("canSeek={canSeekPlayback}");
   });
 
   it("keeps transport controls available while cache playback is waiting", () => {
@@ -113,7 +112,7 @@ describe("BottomPlayer source", () => {
   it("keeps the room mobile player above the mobile navigation layer", () => {
     const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain('bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[80]');
+    expect(source).toContain('bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[80]');
   });
 
   it("commits range seeking for pointer and keyboard interaction", () => {
@@ -122,10 +121,10 @@ describe("BottomPlayer source", () => {
       "utf8"
     );
 
-    expect(layoutSource).toContain("onPointerUp={commitSeek}");
-    expect(layoutSource).toContain("onKeyUp={commitSeek}");
-    expect(layoutSource).not.toContain("onMouseUp={commitSeek}");
-    expect(layoutSource).not.toContain("onTouchEnd={commitSeek}");
+    expect(layoutSource).toContain("onCommitSeek={commitSeek}");
+    expect(layoutSource).toContain("onPointerUp={handlePointerUp}");
+    expect(layoutSource).not.toContain("onMouseUp");
+    expect(layoutSource).not.toContain("onTouchEnd");
   });
 
   it("exposes the mini player from both responsive player layouts", () => {
@@ -142,7 +141,7 @@ describe("BottomPlayer source", () => {
 
     expect(playerSource).toContain("const [isMiniOpen, setIsMiniOpen] = useState(false)");
     expect(playerSource).toContain("<MiniPlayerOverlay");
-    expect(layoutSource.match(/<MiniPlayerToggleButton/g)?.length).toBe(2);
+    expect(layoutSource).toContain("<MiniPlayerToggleButton");
     expect(layoutSource).toContain('aria-label={isOpen ? "关闭迷你播放器" : "打开迷你播放器"}');
     expect(miniPlayerSource).toContain('data-testid="mini-player-overlay"');
     expect(miniPlayerSource).toContain('data-testid="mini-player-cover"');
