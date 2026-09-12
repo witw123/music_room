@@ -1304,7 +1304,7 @@
   inset: 0;
   z-index: var(--z-modal);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   overflow-y: auto;
   background: rgb(0 0 0 / 0.75);
@@ -1316,7 +1316,6 @@
 
 @media (min-width: 640px) {
   .light-modal-scrim {
-    align-items: center;
     padding: 1.5rem;
   }
 }

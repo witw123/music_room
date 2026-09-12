@@ -114,7 +114,7 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#090b10]/90 pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/[0.06] md:pt-0 ${desktopBottomOffsetClass}`}
+      className={`app-sidebar relative z-40 mx-3 mb-3 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141518]/95 pt-[env(safe-area-inset-top)] text-foreground shadow-2xl backdrop-blur-2xl md:flex md:flex-col md:fixed md:top-0 md:left-0 md:right-auto md:mx-0 md:mb-0 md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/[0.06] md:pt-0 ${desktopBottomOffsetClass}`}
       data-custom-layout-item="sidebar"
       aria-label="主导航"
     >
@@ -130,7 +130,11 @@ export function AppSidebar({
           }}
         >
           <span className={`flex shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm ${compactMobile ? "h-8 w-8" : "h-9 w-9"} md:h-9 md:w-9`}>
-            <NavIcon name="home" size={17} />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
           </span>
           <span className={`min-w-0 leading-none ${collapsed ? "md:hidden" : ""}`}>
             <span className="block truncate text-sm font-bold text-white tracking-tight">Music Room</span>
@@ -157,9 +161,9 @@ export function AppSidebar({
                 title={collapsed ? item.label : undefined}
                 className={`app-sidebar__nav-item group relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-xl font-medium transition-all duration-150 sm:flex-row sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-xs md:flex-none md:justify-start md:gap-3 md:px-3.5 md:py-2.5 md:text-sm ${compactMobile ? "gap-0.5 px-0.5 py-1.5 text-[9px]" : "gap-1 px-1 py-2 text-[10px]"} ${
                   isActive
-                    ? "bg-white/[0.08] text-white font-semibold md:before:absolute md:before:left-1 md:before:top-2.5 md:before:bottom-2.5 md:before:w-1 md:before:rounded-full md:before:bg-accent"
+                    ? "text-accent bg-accent/10 font-semibold"
                     : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
-                } ${collapsed ? "md:justify-center md:px-2 md:before:hidden" : ""}`}
+                } ${collapsed ? "md:justify-center md:px-2" : ""}`}
               >
                 <NavIcon name={item.icon} />
                 <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{item.label}</span>

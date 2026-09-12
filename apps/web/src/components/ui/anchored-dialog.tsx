@@ -44,8 +44,16 @@ export function AnchoredDialog({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState(() => getFallbackPosition(anchor, compact));
 
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     setPortalRoot(document.body);
+    const checkMobile = () => {
+      setIsMobile(typeof window !== "undefined" && window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   useLayoutEffect(() => {
@@ -114,7 +122,15 @@ export function AnchoredDialog({
         role="dialog"
         aria-modal="true"
         ref={dialogRef}
-        style={{ left: position.left, top: position.top }}
+        style={
+          isMobile
+            ? {
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)"
+              }
+            : { left: position.left, top: position.top }
+        }
       >
         {children}
       </div>

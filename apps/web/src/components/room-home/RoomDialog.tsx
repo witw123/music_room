@@ -38,7 +38,7 @@ export function RoomDialog({
     >
       <div
         aria-modal="true"
-        className="light-dialog-surface hide-scrollbar relative my-auto max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface hide-scrollbar relative m-auto shrink-0 max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
         role="dialog"
       >
         <div className="mb-5 flex items-start justify-between gap-4">

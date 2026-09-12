@@ -141,10 +141,10 @@ export function LocalTrackRow({
 
   return (
     <article
-      className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${
+      className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-white/[0.04] ${
         isPlayable ? "cursor-pointer" : ""
-      } ${isCurrent ? "bg-accent/10 border-accent/20" : ""} ${
-        isDragTarget ? "border-accent/60 bg-accent/10" : ""
+      } ${isCurrent ? "bg-accent/10 text-accent" : ""} ${
+        isDragTarget ? "bg-accent/15" : ""
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
       draggable={draggable}
       onDragEnd={onDragEnd}

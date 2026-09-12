@@ -16,7 +16,6 @@ import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
   PlayIcon,
   HeartIcon,
-  SparklesIcon,
   ChevronLeftIcon
 } from "@/components/icons/DiscoverIcons";
 
@@ -79,9 +78,8 @@ export function ProviderAlbumDetailView({
         </div>
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent/15 text-accent border border-accent/20">
-              <SparklesIcon className="w-3 h-3" />
-              <span>ALBUM</span>
+            <span className="inline-flex items-center rounded-md bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-foreground-muted">
+              专辑
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white">{album.title}</h1>
@@ -94,7 +92,7 @@ export function ProviderAlbumDetailView({
               <button
                 type="button"
                 onClick={() => trackActions.onPlay?.(album.tracks[0])}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-sm transition-all active:scale-95"
               >
                 <PlayIcon className="w-3.5 h-3.5" />
                 <span>播放专辑</span>

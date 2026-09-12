@@ -107,16 +107,16 @@ export function TasteColdStartDialog({
           mobile bottom navigation (z-70) paint over the dialog footer and the
           primary CTA becomes untappable on phones. */}
       <div
-        className="relative w-full max-w-xl p-4 sm:p-6 md:p-8 rounded-3xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col"
+        className="relative w-full max-w-xl p-4 sm:p-6 md:p-8 rounded-2xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col"
       >
         <div className="flex items-start justify-between gap-4 mb-4 sm:mb-6 shrink-0">
           <div className="flex items-center gap-3 sm:gap-3.5">
-            <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] shrink-0">
+            <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-accent/15 text-accent shrink-0">
               <SparklesIcon className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">打造你的专属音乐雷达</h2>
-              <p className="text-xs sm:text-sm text-foreground-muted">选择 1-5 个你常听的风格或场景，3 秒生成 Music Room 专属推荐</p>
+              <p className="text-xs sm:text-sm text-foreground-muted">选择 1-5 个你常听的风格或场景，生成专属推荐</p>
             </div>
           </div>
           <button

@@ -344,48 +344,28 @@ export function PlaylistDetailView({
   }
 
   return (
-    <section className="mt-5" data-testid="playlist-detail">
-      <Button className="mb-4 gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          viewBox="0 0 24 24"
-          width="16"
-        >
-          <path d="m15 18-6-6 6-6" />
-        </svg>
-        返回歌单
-      </Button>
-
-      <div className="flex flex-col gap-4 border-b border-surface-border pb-5 sm:flex-row sm:items-end">
-        <Artwork artworkUrls={artworkUrls} size="lg" title={title} />
-        <div className="min-w-0 flex-1">
-          <p className="workspace-page__eyebrow">
-            {isLocal ? "Local playlist" : "Network playlist"}
-          </p>
-          <h2 className="workspace-page__title truncate">{title}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-foreground-muted">{description}</p>
-          <p className="mt-3 text-xs text-foreground-muted">
-            {rows.length} 首歌曲{isLocal ? "" : " · 网络歌单"}
-          </p>
-          {remoteLoading ? (
-            <p className="mt-2 text-xs text-accent">正在同步平台歌单详情…</p>
-          ) : null}
-          {remoteError ? (
-            <p className="mt-2 text-xs text-amber-300">
-              {remoteError} 当前显示已保存的歌曲索引。
-            </p>
-          ) : null}
-        </div>
+    <section className="mt-2" data-testid="playlist-detail">
+      <div className="mb-4 flex items-center justify-between">
+        <Button className="gap-1.5 text-xs text-foreground-muted hover:text-white" onClick={onBack} size="sm" type="button" variant="ghost">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="14"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="14"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          返回歌单
+        </Button>
         {onDelete ? (
           <Button
-            aria-label="删除网络歌单"
-            className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+            aria-label="删除歌单"
+            className="text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
             onClick={onDelete}
             size="sm"
             type="button"
@@ -404,52 +384,83 @@ export function PlaylistDetailView({
             >
               <path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" />
             </svg>
-            删除
+            删除歌单
           </Button>
         ) : null}
-        {showBatchDownload ? (
-          <Button
-            disabled={
-              isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0
-            }
-            onClick={() => void downloadAllTracks()}
-            type="button"
-            variant="outline"
-          >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              height="14"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-              viewBox="0 0 24 24"
-              width="14"
+      </div>
+
+      <div className="flex flex-col gap-5 border-b border-white/[0.06] pb-6 sm:flex-row sm:items-end">
+        <div className="shrink-0 self-center sm:self-auto">
+          <Artwork artworkUrls={artworkUrls} size="lg" title={title} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center rounded-md bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-foreground-muted">
+              {isLocal ? "本地歌单" : "网络歌单"}
+            </span>
+            <span className="text-xs text-foreground-muted">{rows.length} 首歌曲</span>
+          </div>
+          <h1 className="mt-2 text-xl font-bold text-white tracking-tight sm:text-2xl truncate">{title}</h1>
+          {description ? (
+            <p className="mt-1.5 text-sm text-foreground-muted line-clamp-2 max-w-2xl">{description}</p>
+          ) : null}
+          {remoteLoading ? (
+            <p className="mt-2 text-xs text-accent">正在同步平台歌单详情…</p>
+          ) : null}
+          {remoteError ? (
+            <p className="mt-2 text-xs text-amber-300">
+              {remoteError} 当前显示已保存的歌曲索引。
+            </p>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <Button
+              className="gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-accent-hover active:scale-95"
+              disabled={
+                playableTracks.length === 0 ||
+                playbackTrackId !== null ||
+                downloadTrackId !== null
+              }
+              onClick={() => void playAllTracks()}
+              type="button"
             >
-              <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
-            </svg>
-            {isDownloadingAll
-              ? `下载中 ${downloadProgress.completed}/${downloadProgress.total}`
-              : downloadableTracks.length > 0
-                ? "一键下载"
-                : "已全部下载"}
-          </Button>
-        ) : null}
-        <Button
-          disabled={
-            playableTracks.length === 0 ||
-            playbackTrackId !== null ||
-            downloadTrackId !== null
-          }
-          onClick={() => void playAllTracks()}
-          type="button"
-        >
-          <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          播放全部
-        </Button>
+              <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              播放全部
+            </Button>
+            {showBatchDownload ? (
+              <Button
+                className="gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-2 text-xs sm:text-sm font-medium text-white hover:bg-white/[0.08]"
+                disabled={
+                  isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0
+                }
+                onClick={() => void downloadAllTracks()}
+                type="button"
+                variant="outline"
+              >
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  height="14"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.8"
+                  viewBox="0 0 24 24"
+                  width="14"
+                >
+                  <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+                </svg>
+                {isDownloadingAll
+                  ? `下载中 ${downloadProgress.completed}/${downloadProgress.total}`
+                  : downloadableTracks.length > 0
+                    ? "一键下载"
+                    : "已全部下载"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       {downloadMessage ? (
@@ -461,14 +472,25 @@ export function PlaylistDetailView({
         </p>
       ) : null}
 
-      <div className="mt-6 space-y-1">
+      <div className="mt-5 space-y-0.5">
+        {rows.length ? (
+          <div className="hidden sm:flex items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-foreground-muted/60 border-b border-white/[0.04] mb-1">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <span className="w-6 text-center tabular-nums">#</span>
+              <span>标题</span>
+            </div>
+            <span className="hidden lg:block w-44 truncate">专辑</span>
+            <span className="w-16 text-right tabular-nums pr-2">时长</span>
+            <span className="w-24 text-right pr-1">操作</span>
+          </div>
+        ) : null}
         {rows.length ? (
           rows.map(({ track, index, trackId }) => {
             if (!track) {
               return (
                 <article
-                  className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${
-                    dragOverTrackId === trackId ? "bg-accent/10 border-accent/60" : ""
+                  className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-white/[0.04] ${
+                    dragOverTrackId === trackId ? "bg-accent/10" : ""
                   } ${canEditTracks ? "cursor-grab active:cursor-grabbing" : ""}`}
                   draggable={canEditTracks}
                   key={`${selection.kind}:${trackId}`}
