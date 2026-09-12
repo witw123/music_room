@@ -64,7 +64,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141418] p-3.5 sm:p-4 shadow-sm transition-all duration-200 hover:border-white/[0.14] hover:bg-[#18181e] focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
+      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141418] p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-white/[0.14] hover:bg-[#18181e] focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -77,38 +77,58 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         onClick={onOpen}
         type="button"
       />
-      <header className="flex min-h-7 items-center justify-between gap-2">
-        <span className="inline-flex min-h-6 items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.04] px-2.5 text-[11px] font-medium text-foreground-muted">
-          <RoomTypeGlyph roomType={room.roomType} />
-          {theme.label}
-        </span>
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-foreground-muted font-mono">
-          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          {room.directoryOnlineMemberCount} 人在线
-        </span>
-      </header>
 
-      {/* Room Visual Scene: Dynamic Album Artwork with surrounding soundwave effects when playing, fallback to artistic scene */}
+      {/* Room Visual Cover: Integrates Room Type Badge and Online Status inside the cover */}
       <section
-        className="relative mt-3 aspect-[2.6/1] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07090e] shadow-inner"
+        className="relative aspect-[2.3/1] overflow-hidden rounded-xl border border-white/[0.08] bg-[#07090e] shadow-inner"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
+        {/* Floating Badges Over Cover: Room Type (Left) & Online Count (Right) */}
+        <div className="pointer-events-none absolute top-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between gap-2">
+          <span className="inline-flex min-h-5 items-center gap-1.5 rounded-md border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-white/95 backdrop-blur-md shadow-sm">
+            <RoomTypeGlyph roomType={room.roomType} />
+            {theme.label}
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] sm:text-[11px] font-mono tabular-nums text-white/95 backdrop-blur-md shadow-sm">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            {room.directoryOnlineMemberCount} 人在线
+          </span>
+        </div>
+
         {nowPlaying?.title ? (
           <RoomNowPlayingStageScene
             accentColor={theme.accent}
             nowPlaying={nowPlaying}
+            roomType={room.roomType}
           />
         ) : (
           <ArtisticRoomStageScene roomType={room.roomType} />
         )}
       </section>
 
-      <div className="pt-3.5">
+      {/* Track Playing Information Placed BELOW the cover */}
+      {nowPlaying?.title ? (
+        <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 backdrop-blur-md">
+          <div className="flex items-end gap-0.5 h-3 shrink-0 text-accent">
+            <span className="w-0.5 h-full bg-current rounded-full animate-bounce" style={{ animationDuration: "0.8s" }} />
+            <span className="w-0.5 h-2 bg-current rounded-full animate-bounce" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
+            <span className="w-0.5 h-2.5 bg-current rounded-full animate-bounce" style={{ animationDuration: "0.9s", animationDelay: "0.4s" }} />
+          </div>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate text-xs">
+            <span className="font-medium text-white truncate">{nowPlaying.title}</span>
+            {nowPlaying.artist ? (
+              <span className="text-white/40 truncate shrink-0">· {nowPlaying.artist}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className={nowPlaying?.title ? "pt-2" : "pt-2.5"}>
         <h3 className="truncate text-base sm:text-lg font-bold tracking-tight text-white group-hover:text-white transition-colors">
           {room.name}
         </h3>
-        <p className="mt-1 line-clamp-2 min-h-[2.5rem] break-words text-xs leading-relaxed text-foreground-muted/80">
+        <p className="mt-0.5 line-clamp-2 min-h-[2.25rem] break-words text-xs leading-relaxed text-foreground-muted/80">
           {room.description?.trim() || fallbackDescription(room)}
         </p>
       </div>
@@ -118,35 +138,42 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
 function RoomNowPlayingStageScene({
   nowPlaying,
-  accentColor
+  accentColor,
+  roomType
 }: {
   nowPlaying: NonNullable<RoomDirectoryItem["room"]["directoryNowPlaying"]>;
   accentColor: string;
+  roomType: RoomType;
 }) {
   const artworkSrc = nowPlaying.artworkUrl ? getArtworkSourceUrl(nowPlaying.artworkUrl) : null;
 
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden select-none">
-      {/* Blurred Album Artwork Background */}
+      {/* Background Layer: Room's Default Theme Scene elements (Starfield / Vinyl / Radar) */}
+      <div className="absolute inset-0 opacity-40">
+        <ArtisticRoomStageScene roomType={roomType} />
+      </div>
+
+      {/* Blurred Album Artwork Overlay Background */}
       {artworkSrc ? (
         <div
           aria-hidden="true"
-          className="absolute -inset-3 bg-cover bg-center opacity-30 blur-lg scale-110 transition-transform duration-700 group-hover:scale-125"
+          className="absolute -inset-3 bg-cover bg-center opacity-35 blur-xl scale-110 transition-transform duration-700 group-hover:scale-125"
           style={{ backgroundImage: `url("${artworkSrc}")` }}
         />
       ) : null}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/50 to-black/30" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#07090e]/80 via-black/20 to-black/40" />
 
-      {/* Surrounding Acoustic Rings & Breathing Halo */}
-      <div className="relative flex items-center justify-center">
+      {/* Surrounding Acoustic Rings & Breathing Halo Around Central Artwork */}
+      <div className="relative flex items-center justify-center pt-2">
         {/* Outer breathing halo */}
         <div
-          className="absolute -inset-5 rounded-full blur-xl opacity-35 animate-pulse"
+          className="absolute -inset-6 rounded-full blur-xl opacity-35 animate-pulse"
           style={{ backgroundColor: accentColor }}
         />
         {/* Expanding acoustic wave rings */}
         <div
-          className="absolute -inset-3 rounded-2xl border border-white/25 opacity-30 animate-ping"
+          className="absolute -inset-3.5 rounded-2xl border border-white/25 opacity-30 animate-ping"
           style={{ animationDuration: "2.8s" }}
         />
         <div
@@ -171,24 +198,6 @@ function RoomNowPlayingStageScene({
               </svg>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Bottom Track Meta & Equalizer Pill */}
-      <div className="absolute bottom-1.5 inset-x-2.5 z-20 flex items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-black/60 px-2 py-1 backdrop-blur-md">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
-          <div className="flex items-end gap-0.5 h-2.5 shrink-0 text-white/80">
-            <span className="w-0.5 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            <span className="w-0.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-            <span className="w-0.5 h-1 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-          </div>
-          <span className="truncate text-[10px] sm:text-[11px] font-medium text-white">
-            {nowPlaying.title}
-          </span>
-          <span className="text-white/30 text-[10px]">·</span>
-          <span className="truncate text-[10px] text-white/60">
-            {nowPlaying.artist}
-          </span>
         </div>
       </div>
     </div>

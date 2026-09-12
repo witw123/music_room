@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
@@ -44,12 +44,6 @@ export function ProviderAccountsPage() {
   const [activeTab, setActiveTab] = useState<ProfileTab>("taste");
   const [showColdStartDialog, setShowColdStartDialog] = useState(false);
 
-  useEffect(() => {
-    if (hydrated && !activeSession) {
-      router.replace(authEntryHref as Route);
-    }
-  }, [activeSession, authEntryHref, hydrated, router]);
-
   async function handleLogout() {
     try {
       await musicRoomApi.logout();
@@ -60,8 +54,46 @@ export function ProviderAccountsPage() {
     router.replace(authEntryHref as Route);
   }
 
-  if (!hydrated || !activeSession) {
+  if (!hydrated) {
     return <div className="min-h-[100dvh] bg-background" />;
+  }
+
+  if (!activeSession) {
+    return (
+      <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+        <AppPageBackground />
+        <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
+          <section className="mb-6 rounded-2xl border border-white/[0.08] bg-surface/40 p-6 backdrop-blur-xl text-center flex flex-col items-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-foreground-muted mb-4">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <circle cx="12" cy="8" r="4" strokeWidth="1.8" />
+                <path d="M4.5 21a7.5 7.5 0 0 1 15 0" strokeWidth="1.8" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-foreground mb-1">访客模式</h2>
+            <p className="text-xs text-foreground-muted max-w-sm mb-5 leading-relaxed">
+              登录账号后可同步音乐平台歌单、记录听歌画像并在房间中自由互动点歌。
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push(authEntryHref as Route)}
+                className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                立即登录 / 注册
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/app" as Route)}
+                className="px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.05] hover:bg-white/[0.10] text-foreground-muted hover:text-foreground text-xs font-medium transition-all cursor-pointer"
+              >
+                返回房间大厅
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   return (

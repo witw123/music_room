@@ -99,25 +99,16 @@ export function RoomsHomePage({
     router.push(buildRoomHref(effectiveAwayRoomId) as Route);
   }
 
-  useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-
-    if (!activeSession) {
-      router.replace(authEntryHref as Route);
-    }
-  }, [activeSession, hydrated, router, authEntryHref]);
-
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
+      const userId = activeSession?.userId ?? null;
+      const nextRooms = filterRoomsForSession(rooms, userId);
       if (activeSession) {
-        const nextRooms = filterRoomsForSession(rooms, activeSession.userId);
         setCachedRooms(activeSession.userId, nextRooms);
-        setAvailableRooms(nextRooms);
-        setRoomsLoaded(true);
       }
+      setAvailableRooms(nextRooms);
+      setRoomsLoaded(true);
     } catch (error) {
       setRoomsLoaded(true);
       setStatusMessage(toUserFacingError(error));
@@ -125,22 +116,24 @@ export function RoomsHomePage({
   }, [activeSession, setStatusMessage]);
 
   useEffect(() => {
-    if (!activeSession) {
+    if (!hydrated) {
       return;
     }
 
-    const cachedRooms = getCachedRooms(activeSession.userId);
-    if (cachedRooms) {
-      setAvailableRooms(cachedRooms);
-      setRoomsLoaded(true);
+    if (activeSession) {
+      const cachedRooms = getCachedRooms(activeSession.userId);
+      if (cachedRooms) {
+        setAvailableRooms(cachedRooms);
+        setRoomsLoaded(true);
+      }
+      void refreshSession();
     }
 
-    void refreshSession();
     void refreshAvailableRooms();
-  }, [activeSession, refreshSession, refreshAvailableRooms]);
+  }, [hydrated, activeSession, refreshSession, refreshAvailableRooms]);
 
   useEffect(() => {
-    if (!activeSession) {
+    if (!hydrated) {
       return;
     }
 
@@ -161,15 +154,25 @@ export function RoomsHomePage({
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [activeSession, refreshAvailableRooms]);
+  }, [hydrated, refreshAvailableRooms]);
 
   function openCreateRoom(visibility: "public" | "private") {
+    if (!activeSession) {
+      setStatusMessage("创建房间需要先登录账号。");
+      router.push(authEntryHref as Route);
+      return;
+    }
     setCreateFormVisibility(visibility);
     setDialogError(null);
     setCreateDialogOpen(true);
   }
 
   function openJoinDialog() {
+    if (!activeSession) {
+      setStatusMessage("加入房间需要先登录账号。");
+      router.push(authEntryHref as Route);
+      return;
+    }
     setDialogError(null);
     setJoinDialogOpen(true);
   }
@@ -227,6 +230,11 @@ export function RoomsHomePage({
       handleResumeAwayRoom();
       return;
     }
+    if (!activeSession) {
+      setStatusMessage("进入房间需要先登录账号。");
+      router.push(authEntryHref as Route);
+      return;
+    }
     setSelectedRoom(room);
     setDialogError(null);
   }
@@ -252,7 +260,7 @@ export function RoomsHomePage({
     [availableRooms, roomTypeFilter]
   );
 
-  if (!hydrated || !activeSession) {
+  if (!hydrated) {
     return <div className="min-h-[100dvh] bg-background" />;
   }
 

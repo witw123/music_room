@@ -156,7 +156,7 @@ export function ListeningProfileOverview({
   const activeTasteGroups = profile.tasteGroups.filter((group) => group.tags.length > 0);
 
   return (
-    <div className="profile-content space-y-6 animate-in fade-in duration-300" aria-busy={refreshing}>
+    <div className="profile-content space-y-6 animate-in fade-in duration-300 pb-28 sm:pb-8" aria-busy={refreshing}>
       {statusMessage && (
         <p className="text-xs text-foreground bg-[#141824]/80 border border-white/[0.08] px-4 py-2.5 rounded-2xl backdrop-blur-md">
           {statusMessage}
@@ -198,20 +198,20 @@ export function ListeningProfileOverview({
       {/* Taste Dimensions (Musical Taste Constellation Matrix) */}
       <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3 mb-5">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20 shrink-0">
               <SparklesIcon className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-foreground tracking-tight">音乐品味特征矩阵</h3>
-              <p className="text-[11px] text-foreground-muted">基于全景声学画像提炼的多维流派与风格偏好</p>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-bold text-foreground tracking-tight truncate">音乐品味特征矩阵</h3>
+              <p className="text-[11px] text-foreground-muted truncate">基于全景声学画像提炼的多维流派与风格偏好</p>
             </div>
           </div>
           {onOpenColdStart && (
             <button
               type="button"
               onClick={onOpenColdStart}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-accent hover:text-white bg-accent/10 hover:bg-accent border border-accent/20 transition-all active:scale-95"
+              className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold text-accent hover:text-white bg-accent/10 hover:bg-accent border border-accent/20 transition-all active:scale-95"
             >
               调整偏好
             </button>
@@ -253,7 +253,7 @@ export function ListeningProfileOverview({
       </section>
 
       {/* Top 5 Tracks & Top 5 Artists / Source Distribution */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 items-start">
         {/* Top 5 Tracks */}
         <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
           <div className="flex items-center gap-2 mb-4">

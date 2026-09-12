@@ -21,7 +21,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
   const authEntryHref = buildWorkspaceAuthHref({
     redirectTo: pathname || "/app"
   });
-  const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
+  const { clearIdentity } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -37,12 +37,6 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", syncAwayRoom);
     };
   }, []);
-
-  useEffect(() => {
-    if (hydrated && !activeSession) {
-      router.replace(authEntryHref as Route);
-    }
-  }, [activeSession, authEntryHref, hydrated, router]);
 
   async function handleLogout() {
     try {
