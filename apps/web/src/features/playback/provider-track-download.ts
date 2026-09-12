@@ -11,6 +11,7 @@ import {
   saveAudioFileToLocalDirectory
 } from "@/features/library/local-audio-storage";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { getAppSettings } from "@/features/settings/settings-store";
 import { analyzeAudioBlobLoudness } from "./loudness";
 import { findCachedProviderPlaybackRecord } from "./provider-track-cache";
 import { loadLocalAudioFile } from "./local-player-track-utils";
@@ -84,9 +85,10 @@ export async function downloadProviderTrackToLibrary(input: {
     translatedLyrics = cachedRecord.translatedLyrics ?? null;
     romanizedLyrics = cachedRecord.romanizedLyrics ?? null;
   } else {
+    const preferredQuality = getAppSettings().playback.preferredAudioQuality;
     const response = provider === "netease"
-      ? await musicRoomApi.downloadNeteaseTrack(providerTrackId)
-      : await musicRoomApi.downloadQqMusicTrack(providerTrackId);
+      ? await musicRoomApi.downloadNeteaseTrack(providerTrackId, preferredQuality)
+      : await musicRoomApi.downloadQqMusicTrack(providerTrackId, preferredQuality);
     blob = response.blob;
     fileHash = await hashAudioBlob(blob);
     mimeType = normalizeLocalAudioMimeType(response.contentType || blob.type);

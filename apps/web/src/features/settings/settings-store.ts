@@ -6,6 +6,7 @@ export const appSettingsChangeEvent = "music-room-settings-change";
 export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 export type PlayerStyle = "vinyl" | "square-cover";
+export type AudioQualityPreference = "standard" | "high" | "exhigh" | "lossless" | "hires";
 export type CustomLayoutPageId = "home" | "discover" | "playlists" | "favorites" | "profile" | "settings" | "room";
 export type CustomLayoutItemId = "sidebar" | "content" | "player" | "mobile-navigation" | "room-stage" | "room-panel";
 
@@ -96,6 +97,7 @@ export type AppSettings = {
     defaultVolume: number;
     loudnessNormalization: boolean;
     playerStyle: PlayerStyle;
+    preferredAudioQuality: AudioQualityPreference;
     disableArtworkColor: boolean;
     localPlaybackMode: PlaybackMode;
     preventOfflineAutoLoad: boolean;
@@ -126,6 +128,7 @@ const defaultSettings: AppSettings = {
     defaultVolume: 0.8,
     loudnessNormalization: false,
     playerStyle: "vinyl",
+    preferredAudioQuality: "exhigh",
     disableArtworkColor: false,
     localPlaybackMode: "sequence",
     preventOfflineAutoLoad: false,
@@ -212,6 +215,11 @@ export function normalizeSettings(value: unknown): AppSettings {
   const desktopLyricScale = typeof playback.desktopLyricScale === "number" && Number.isFinite(playback.desktopLyricScale)
     ? Math.min(2.5, Math.max(0.5, playback.desktopLyricScale))
     : defaultSettings.playback.desktopLyricScale;
+  const quality = playback.preferredAudioQuality;
+  const preferredAudioQuality: AudioQualityPreference =
+    quality === "standard" || quality === "high" || quality === "lossless" || quality === "hires"
+      ? quality
+      : "exhigh";
 
   return {
     version: 1,
@@ -226,6 +234,7 @@ export function normalizeSettings(value: unknown): AppSettings {
       defaultVolume: volume,
       loudnessNormalization: playback.loudnessNormalization === true,
       playerStyle,
+      preferredAudioQuality,
       disableArtworkColor: playback.disableArtworkColor === true,
       localPlaybackMode: playbackMode,
       preventOfflineAutoLoad: playback.preventOfflineAutoLoad === true,

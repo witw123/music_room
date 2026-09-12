@@ -67,6 +67,7 @@ type ProviderSearchPageProps = {
   initialProvider?: Provider;
   embedded?: boolean;
   inlineSearch?: boolean;
+  isSearchActive?: boolean;
   keywords?: string;
   onKeywordsChange?: (keywords: string) => void;
   searchRequestKey?: number | null;
@@ -79,6 +80,7 @@ export function ProviderSearchPage({
   initialProvider,
   embedded = false,
   inlineSearch = false,
+  isSearchActive = false,
   keywords: controlledKeywords,
   onKeywordsChange,
   searchRequestKey,
@@ -649,16 +651,23 @@ export function ProviderSearchPage({
 
   if (!hydrated) return <div className="min-h-[100dvh] bg-black" />;
 
-  const prefixAction = onBackToRecommendations ? (
+  const showBackToRecommendations = onBackToRecommendations && (isSearchActive || hasSearched || Boolean(keywords.trim()));
+  const prefixAction = showBackToRecommendations ? (
     <button
-      aria-label="返回推荐"
-      className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white shrink-0"
-      onClick={onBackToRecommendations}
-      title="返回推荐"
+      aria-label="返回发现"
+      className="flex h-7 sm:h-8 items-center gap-1 rounded-lg px-1.5 sm:px-2 text-xs font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white shrink-0"
+      onClick={() => {
+        setHasSearched(false);
+        setSearchSuggestionsOpen(false);
+        updateKeywords("");
+        onSearchActiveChange?.(false);
+        onBackToRecommendations?.();
+      }}
+      title="返回发现"
       type="button"
     >
       <Icon name="arrow-left" />
-      <span className="hidden sm:inline">返回推荐</span>
+      <span className="hidden sm:inline">返回发现</span>
     </button>
   ) : !embedded ? (
     onClose ? (
@@ -730,6 +739,9 @@ export function ProviderSearchPage({
         onClear={() => {
           setResults([]);
           setSearchSuggestionsOpen(false);
+          setHasSearched(false);
+          onSearchActiveChange?.(false);
+          onBackToRecommendations?.();
         }}
         onFocus={() => setSearchSuggestionsOpen(true)}
         onBlur={() => {
@@ -752,7 +764,7 @@ export function ProviderSearchPage({
     </div>
   );
 
-  const shouldShowSearchContent = !embedded || !inlineSearch || hasSearched;
+  const shouldShowSearchContent = !embedded || isSearchActive || hasSearched;
   const searchContent = (
     <>
       {shouldShowSearchContent && enabledProviders.length > 0 ? (
@@ -825,11 +837,9 @@ export function ProviderSearchPage({
   if (embedded) {
     return (
       <div className="min-w-0">
-        {inlineSearch ? (
-          <header className="sticky top-[env(safe-area-inset-top,0px)] z-20 bg-background/95 pb-2 pt-1 backdrop-blur-md">
-            {searchBar}
-          </header>
-        ) : null}
+        <header className="sticky top-[env(safe-area-inset-top,0px)] z-20 bg-background/95 pb-2 pt-1 backdrop-blur-md">
+          {searchBar}
+        </header>
         {searchContent}
         {playlistPicker}
       </div>

@@ -9,7 +9,13 @@ import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
 import { SquareAlbumCover } from "./PlayerArtwork";
 import { getArtworkSourceUrl, withAlpha } from "./artwork-colors";
-import type { PlayerStyle } from "@/features/settings/settings-store";
+import {
+  getAppSettings,
+  updateAppSettings,
+  appSettingsChangeEvent,
+  type PlayerStyle,
+  type AudioQualityPreference
+} from "@/features/settings/settings-store";
 
 type LayoutProps = {
   isPlaying: boolean;
@@ -591,15 +597,146 @@ export function TopEdgeScrubber({
   );
 }
 
+const AUDIO_QUALITY_OPTIONS: Array<{
+  value: AudioQualityPreference;
+  label: string;
+  badge: string;
+  bitrate: string;
+}> = [
+  { value: "hires", label: "Hi-Res", badge: "Hi-Res", bitrate: "高解析" },
+  { value: "lossless", label: "无损", badge: "无损", bitrate: "FLAC" },
+  { value: "exhigh", label: "极高", badge: "极高", bitrate: "320k" },
+  { value: "high", label: "较高", badge: "较高", bitrate: "192k" },
+  { value: "standard", label: "标准", badge: "标准", bitrate: "128k" }
+];
+
 export function QualityBadge({ quality }: { quality?: string | null }) {
-  const label = quality?.toUpperCase() || "极高";
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [preferredQuality, setPreferredQuality] = useState<AudioQualityPreference>(() => {
+    return getAppSettings().playback.preferredAudioQuality;
+  });
+
+  useEffect(() => {
+    const handleSettingsChange = () => {
+      setPreferredQuality(getAppSettings().playback.preferredAudioQuality);
+    };
+    window.addEventListener(appSettingsChangeEvent, handleSettingsChange);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, handleSettingsChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const activeQuality = (quality as AudioQualityPreference) || preferredQuality;
+  const currentOption =
+    AUDIO_QUALITY_OPTIONS.find((opt) => opt.value === activeQuality) ??
+    AUDIO_QUALITY_OPTIONS.find((opt) => opt.value === "exhigh")!;
+
+  const handleSelect = (val: AudioQualityPreference) => {
+    updateAppSettings({
+      playback: {
+        preferredAudioQuality: val
+      }
+    });
+    setPreferredQuality(val);
+    setIsOpen(false);
+  };
+
   return (
-    <span
-      className="inline-flex items-center rounded border border-white/20 px-1.5 py-0.5 text-[10px] font-medium tracking-tight text-white/70 select-none hover:border-white/40 hover:text-white transition-colors cursor-default"
-      title={`音频质量：${label}`}
-    >
-      {label}
-    </span>
+    <div ref={rootRef} className="relative inline-flex shrink-0 items-center">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-label={`音频音质设置：当前${currentOption.label}`}
+        aria-expanded={isOpen}
+        title="点击切换首选音质"
+        className="inline-flex items-center gap-1 rounded border border-white/20 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium tracking-tight text-white/80 select-none hover:border-white/40 hover:bg-white/[0.08] hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        <span>{currentOption.badge}</span>
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`opacity-60 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full right-0 z-[60] mb-2 w-44 rounded-xl border border-surface-border bg-background-secondary/95 p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-2 py-1 text-[10px] font-semibold text-foreground-muted tracking-wider">
+            首选音质偏好
+          </div>
+          <div className="space-y-0.5">
+            {AUDIO_QUALITY_OPTIONS.map((opt) => {
+              const isSelected = opt.value === activeQuality;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleSelect(opt.value)}
+                  className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                    isSelected
+                      ? "bg-accent/15 text-accent font-medium"
+                      : "text-foreground-secondary hover:bg-white/5 hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>{opt.label}</span>
+                    <span className="text-[10px] text-foreground-muted">({opt.bitrate})</span>
+                  </div>
+                  {isSelected && (
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-1 border-t border-surface-border/50 px-2 pt-1 text-[9px] text-foreground-muted leading-tight">
+            平台无高规格或无权限时平滑降级
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

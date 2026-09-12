@@ -25,6 +25,7 @@ import {
   type LocalPlaylistTrackRecord
 } from "@/features/library/indexeddb";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { getAppSettings } from "@/features/settings/settings-store";
 import { analyzeAudioBlobLoudness } from "./loudness";
 
 export const providerPlaybackCacheChangedEvent = "music-room-provider-playback-cache-changed";
@@ -37,9 +38,10 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
   const existingCache = await findReusableProviderPlaybackCache(resolvedTrack);
   if (existingCache) return existingCache;
 
+  const preferredQuality = getAppSettings().playback.preferredAudioQuality;
   const response = resolvedTrack.provider === "netease"
-    ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId)
-    : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId);
+    ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId, preferredQuality)
+    : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId, preferredQuality);
   const fileHash = await hashAudioBlob(response.blob);
   const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
   const artworkResponse = resolvedTrack.provider === "qqmusic" && resolvedTrack.artworkUrl && /^https?:\/\//i.test(resolvedTrack.artworkUrl)

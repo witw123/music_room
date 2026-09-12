@@ -538,9 +538,12 @@ export class QqMusicService {
   }
 
   private qualitiesForQuality(quality: QqMusicQuality): QqMusicQuality[] {
-    if (quality === "standard") return ["standard", "high"];
+    if (quality === "hires" || quality === "lossless") {
+      return [quality, "exhigh", "high", "standard"];
+    }
+    if (quality === "exhigh") return ["exhigh", "high", "standard"];
     if (quality === "high") return ["high", "standard"];
-    return ["exhigh", "high", "standard"];
+    return ["standard", "high"];
   }
 
   private requestTimeoutMs() {

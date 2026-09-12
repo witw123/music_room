@@ -17,6 +17,7 @@ import {
   songListDetail
 } from "@sansenjian/qq-music-api/services";
 import { fetchProviderUrl } from "../provider-fetch";
+import type { QqMusicQuality } from "./qqmusic.schemas";
 
 
 export type QqMusicApiErrorKind = "auth-expired" | "unavailable" | "invalid-response";
@@ -139,7 +140,7 @@ export class QqMusicApiClient {
       return data.list;
     });
   }
-  async getAudioUrl(input: { trackId: string; quality: "standard" | "high" | "exhigh"; cookie: string }) {
+  async getAudioUrl(input: { trackId: string; quality: QqMusicQuality; cookie: string }) {
     return this.call(async () => {
       const quality = input.quality === "standard" ? "128" : input.quality === "high" ? "320" : "flac";
       const response = await getMusicPlay({ params: { songmid: input.trackId, quality, resType: "play" }, option: { headers: { Cookie: input.cookie } } });

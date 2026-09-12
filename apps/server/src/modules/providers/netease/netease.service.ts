@@ -478,15 +478,13 @@ export class NeteaseService {
   ) {
     const cookie = await this.getCookie(userId);
     const bitrates = this.bitratesForQuality(quality);
-    let response = await this.callProvider(userId, () =>
-      this.api.getAudioUrl({ trackId, bitrate: bitrates[0], cookie })
-    );
-    let audio = readAudioRecord(response);
-    if (!audio?.url && bitrates.length > 1) {
-      response = await this.callProvider(userId, () =>
-        this.api.getAudioUrl({ trackId, bitrate: bitrates[1], cookie })
+    let audio: { url: string; type?: string | null } | null = null;
+    for (const candidateBitrate of bitrates) {
+      const response = await this.callProvider(userId, () =>
+        this.api.getAudioUrl({ trackId, bitrate: candidateBitrate, cookie })
       );
       audio = readAudioRecord(response);
+      if (audio?.url) break;
     }
 
     if (!audio?.url) {
@@ -508,7 +506,7 @@ export class NeteaseService {
         HttpStatus.BAD_GATEWAY
       );
     }
-    return { url, type: audio.type };
+    return { url, type: audio.type ?? null };
   }
 
   private async getOptionalCookie(userId: string): Promise<string> {
@@ -716,10 +714,17 @@ export class NeteaseService {
       : "exhigh";
   }
 
-  private bitratesForQuality(quality: NeteaseQuality) {
-    if (quality === "standard") return [128_000, 192_000];
-    if (quality === "high") return [192_000, 128_000];
-    return [320_000, 192_000];
+  private bitratesForQuality(quality: NeteaseQuality): number[] {
+    if (quality === "hires" || quality === "lossless") {
+      return [999_000, 320_000, 192_000, 128_000];
+    }
+    if (quality === "exhigh") {
+      return [320_000, 192_000, 128_000];
+    }
+    if (quality === "high") {
+      return [192_000, 128_000];
+    }
+    return [128_000, 192_000];
   }
 
   private requestTimeoutMs() {

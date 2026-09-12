@@ -61,6 +61,8 @@ import {
 
 export * from "./music-room-api.base";
 
+export type ProviderAudioQuality = "standard" | "high" | "exhigh" | "lossless" | "hires";
+
 export const musicRoomApi = {
   getAuthConfig: () => request<AuthConfig>("/v1/auth/config"),
   register: (
@@ -324,14 +326,14 @@ export const musicRoomApi = {
     request<ProviderAlbumDetail>(`/v1/providers/netease/albums/${encodeURIComponent(albumId)}`),
   resolveNeteaseAudio: (
     trackId: string,
-    quality: "standard" | "high" | "exhigh" = "exhigh"
+    quality: ProviderAudioQuality = "exhigh"
   ) =>
     request<ProviderAudioResolveResponse>(
       `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`
     ),
   downloadNeteaseTrack: (
     trackId: string,
-    quality: "standard" | "high" | "exhigh" = "exhigh",
+    quality: ProviderAudioQuality = "exhigh",
     signal?: AbortSignal
   ) =>
     downloadWithDirectFallback({
@@ -425,14 +427,14 @@ export const musicRoomApi = {
     ),
   resolveQqMusicAudio: (
     trackId: string,
-    quality: "standard" | "high" | "exhigh" = "exhigh"
+    quality: ProviderAudioQuality = "exhigh"
   ) =>
     request<ProviderAudioResolveResponse>(
       `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`
     ),
   downloadQqMusicTrack: (
     trackId: string,
-    quality: "standard" | "high" | "exhigh" = "exhigh",
+    quality: ProviderAudioQuality = "exhigh",
     signal?: AbortSignal
   ) =>
     downloadWithDirectFallback({

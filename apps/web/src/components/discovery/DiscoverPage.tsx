@@ -675,25 +675,30 @@ export function DiscoverPage() {
       <AppPageBackground />
       <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2rem)] pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-6 md:pt-8 md:pb-20">
         {/* Mobile Page Header for proper ergonomics without dividing border */}
-        <header className="mb-2.5 flex items-center justify-between md:hidden">
-          <div>
-            <h1 className="workspace-page__title text-lg font-semibold tracking-tight text-foreground">发现</h1>
-          </div>
-          <Link
-            aria-label="打开个人中心"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-border bg-surface text-foreground-muted shadow-sm transition-all hover:bg-surface-hover hover:text-foreground active:scale-95"
-            href="/app/profile"
-          >
-            <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
-          </Link>
-        </header>
+        {!isSearchActive ? (
+          <header className="mb-2.5 flex items-center justify-between md:hidden">
+            <div>
+              <h1 className="workspace-page__title text-lg font-semibold tracking-tight text-foreground">发现</h1>
+            </div>
+            <Link
+              aria-label="打开个人中心"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-border bg-surface text-foreground-muted shadow-sm transition-all hover:bg-surface-hover hover:text-foreground active:scale-95"
+              href="/app/profile"
+            >
+              <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+            </Link>
+          </header>
+        ) : null}
 
         {/* Search header integration */}
         <ProviderSearchPage
           embedded
-          inlineSearch={!isSearchActive}
+          isSearchActive={isSearchActive}
           keywords={searchKeywords}
-          onBackToRecommendations={isSearchActive ? () => setIsSearchActive(false) : undefined}
+          onBackToRecommendations={() => {
+            setIsSearchActive(false);
+            setSearchKeywords("");
+          }}
           onKeywordsChange={setSearchKeywords}
           onSearchActiveChange={setIsSearchActive}
         />

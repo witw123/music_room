@@ -148,7 +148,7 @@ export const neteaseSearchSuggestQuerySchema = z
 
 export const neteaseTrackIdSchema = z.string().trim().regex(/^\d+$/).max(32);
 
-export const neteaseQualitySchema = z.enum(["standard", "high", "exhigh"]);
+export const neteaseQualitySchema = z.enum(["standard", "high", "exhigh", "lossless", "hires"]);
 
 export const neteaseCatalogPageQuerySchema = z
   .object({

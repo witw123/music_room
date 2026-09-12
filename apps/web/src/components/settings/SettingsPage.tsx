@@ -23,6 +23,7 @@ import {
   resetAppSettings,
   updateAppSettings,
   type AppSettings,
+  type AudioQualityPreference,
   type PlayerStyle,
   type ThemePreference
 } from "@/features/settings/settings-store";
@@ -364,6 +365,20 @@ export function SettingsPage({
                 {Object.entries(playerStyleLabels).map(([style, label]) => (
                   <option key={style} value={style}>{label}</option>
                 ))}
+              </select>
+            </SettingRow>
+            <SettingRow label="首选音质" description="解析并播放平台歌曲时的音质偏好；无权限或曲目缺少高规格时自动平滑回退。">
+              <select
+                aria-label="首选音质"
+                className="h-9 min-w-40 rounded-lg border border-surface-border bg-background-secondary px-2 text-xs text-foreground outline-none focus:border-accent"
+                onChange={(event) => patchSettings({ playback: { preferredAudioQuality: event.target.value as AudioQualityPreference } })}
+                value={settings.playback.preferredAudioQuality}
+              >
+                <option value="standard">标准 (128 kbps)</option>
+                <option value="high">较高 (192 kbps)</option>
+                <option value="exhigh">极高 (320 kbps)</option>
+                <option value="lossless">无损 (FLAC)</option>
+                <option value="hires">Hi-Res (高解析)</option>
               </select>
             </SettingRow>
             <SettingRow label="播放器自动取色" description="根据专辑封面提取播放器颜色；关闭后统一使用中性默认控件颜色。">
