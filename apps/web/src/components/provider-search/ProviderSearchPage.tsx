@@ -66,7 +66,6 @@ type ProviderSearchPageProps = {
   onClose?: () => void;
   initialProvider?: Provider;
   embedded?: boolean;
-  inlineSearch?: boolean;
   isSearchActive?: boolean;
   keywords?: string;
   onKeywordsChange?: (keywords: string) => void;
@@ -79,7 +78,6 @@ export function ProviderSearchPage({
   onClose,
   initialProvider,
   embedded = false,
-  inlineSearch = false,
   isSearchActive = false,
   keywords: controlledKeywords,
   onKeywordsChange,
