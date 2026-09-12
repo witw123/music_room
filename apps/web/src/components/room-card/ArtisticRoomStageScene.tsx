@@ -38,7 +38,7 @@ export function InteractiveStarfieldScene({ className = "" }: { className?: stri
       <div className="absolute -bottom-1/3 right-1/6 w-1/2 h-3/4 rounded-full bg-[radial-gradient(circle,#6366f120_0%,transparent_65%)] blur-lg pointer-events-none" />
 
       {/* SVG Canvas for Stars and Wave Arcs */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 320 140" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="interactiveWaveGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.15" />
@@ -211,7 +211,7 @@ export function RadioAuroraPulseScene({ className = "" }: { className?: string }
       <div className="absolute -bottom-1/4 right-1/4 w-1/2 h-2/3 rounded-full bg-[radial-gradient(circle,#f59e0b18_0%,transparent_65%)] blur-lg pointer-events-none" />
 
       {/* Concentric Radial Resonance Soundwaves (Static by default, active on hover or full motion) */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 320 140" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="auroraWaveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.15" />

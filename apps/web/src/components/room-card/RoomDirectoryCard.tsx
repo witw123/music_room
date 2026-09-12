@@ -64,7 +64,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex h-fit min-w-0 self-start flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141418] p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-white/[0.14] hover:bg-[#18181e] focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
+      className="group relative flex w-full h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141418] p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-white/[0.14] hover:bg-[#18181e] focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -80,18 +80,20 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Room Visual Cover: Integrates Room Type Badge and Online Status inside the cover */}
       <section
-        className="relative aspect-[2.3/1] overflow-hidden rounded-xl border border-white/[0.08] bg-[#07090e] shadow-inner"
+        className="relative w-full aspect-[2.3/1] shrink-0 overflow-hidden rounded-xl border border-white/[0.08] bg-[#07090e] shadow-inner"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
-        {/* Floating Badges Over Cover: Room Type (Left) & Online Count (Right) */}
-        <div className="pointer-events-none absolute top-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between gap-2">
-          <span className="inline-flex min-h-5 items-center gap-1.5 rounded-md border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-white/95 backdrop-blur-md shadow-sm">
-            <RoomTypeGlyph roomType={room.roomType} />
+        {/* Seamless Badges Over Cover: Room Type (Left) & Online Count (Right) naturally integrated */}
+        <div className="pointer-events-none absolute top-2.5 left-3 right-3 z-20 flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+            <span className="opacity-80">
+              <RoomTypeGlyph roomType={room.roomType} />
+            </span>
             {theme.label}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] sm:text-[11px] font-mono tabular-nums text-white/95 backdrop-blur-md shadow-sm">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-mono tabular-nums text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
             {room.directoryOnlineMemberCount} 人在线
           </span>
         </div>
@@ -164,25 +166,16 @@ function RoomNowPlayingStageScene({
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-t from-[#07090e]/80 via-black/20 to-black/40" />
 
-      {/* Surrounding Acoustic Rings & Breathing Halo Around Central Artwork */}
+      {/* Surrounding Ambient Breathing Halo (Borderless) */}
       <div className="relative flex items-center justify-center pt-2">
-        {/* Outer breathing halo */}
+        {/* Outer breathing halo glow */}
         <div
           className="absolute -inset-6 rounded-full blur-xl opacity-35 animate-pulse"
           style={{ backgroundColor: accentColor }}
         />
-        {/* Expanding acoustic wave rings */}
-        <div
-          className="absolute -inset-3.5 rounded-2xl border border-white/25 opacity-30 animate-ping"
-          style={{ animationDuration: "2.8s" }}
-        />
-        <div
-          className="absolute -inset-1.5 rounded-xl border opacity-50"
-          style={{ borderColor: accentColor }}
-        />
 
-        {/* Central Album Artwork Cover */}
-        <div className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl border border-white/25 bg-black/60 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
+        {/* Central Album Artwork Cover - clean borderless with soft shadow */}
+        <div className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl bg-black/60 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
           {artworkSrc ? (
             <img
               alt={nowPlaying.title}

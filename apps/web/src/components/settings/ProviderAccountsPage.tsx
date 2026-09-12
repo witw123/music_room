@@ -97,9 +97,9 @@ export function ProviderAccountsPage() {
   }
 
   return (
-    <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
+    <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto overflow-x-hidden w-full max-w-full selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
+      <div className="workspace-page__inner workspace-page__inner--wide w-full max-w-full overflow-hidden relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
         <PersonalOverview activeSession={activeSession} onLogout={handleLogout} />
 
         {/* Ergonomic Responsive Segmented Tab Navigation */}

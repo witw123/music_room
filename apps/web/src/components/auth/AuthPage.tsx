@@ -281,40 +281,6 @@ export function AuthPage() {
                 </div>
               </div>
 
-              {/* Segmented Mode Switcher */}
-              <div className="mb-6 flex rounded-xl bg-white/[0.06] p-1 border border-white/[0.08]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    resetTurnstile();
-                    setStatusMessage("");
-                  }}
-                  className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
-                    mode === "login"
-                      ? "bg-accent text-white shadow-sm"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  登录
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("register");
-                    resetTurnstile();
-                    setStatusMessage("");
-                  }}
-                  className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
-                    mode === "register"
-                      ? "bg-accent text-white shadow-sm"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  创建账号
-                </button>
-              </div>
-
               <div className="mb-6">
                 <h2 className="mb-1.5 text-xl sm:text-2xl font-bold text-white">
                   {mode === "login" ? "登录音乐房" : "创建账号"}

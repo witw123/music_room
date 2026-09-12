@@ -388,13 +388,7 @@ export class RoomService {
 
   async listRoomDirectoryForSession(sessionId: string): Promise<RoomDirectoryItem[]> {
     const records = await this.roomRecordRepository.listRecoverableRecords();
-    const accessible = records
-      .filter((record) =>
-        record.room.visibility === "public" ||
-        record.room.hostId === sessionId ||
-        record.room.members.some((member) => member.id === sessionId)
-      )
-      .slice(0, 100);
+    const accessible = records.slice(0, 100);
 
     return Promise.all(accessible.map(async (record) => {
       const snapshot = await this.roomSnapshotService.buildSnapshot(record, []);

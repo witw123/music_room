@@ -18,7 +18,6 @@ import { AppSidebar } from "@/components/shell";
 import { AwayRoomReturnButton } from "./AwayRoomReturnButton";
 import { RoomDirectoryCard } from "@/components/room-card";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { filterRoomsForSession } from "@/features/room/room-list-visibility";
 import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
 import { CreateRoomDialogModal } from "./CreateRoomDialogModal";
 import { JoinCodeDialogModal } from "./JoinCodeDialogModal";
@@ -102,12 +101,10 @@ export function RoomsHomePage({
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
-      const userId = activeSession?.userId ?? null;
-      const nextRooms = filterRoomsForSession(rooms, userId);
       if (activeSession) {
-        setCachedRooms(activeSession.userId, nextRooms);
+        setCachedRooms(activeSession.userId, rooms);
       }
-      setAvailableRooms(nextRooms);
+      setAvailableRooms(rooms);
       setRoomsLoaded(true);
     } catch (error) {
       setRoomsLoaded(true);
@@ -279,8 +276,8 @@ export function RoomsHomePage({
 
 
       <section className="workspace-page__inner home-centered-workspace relative flex w-full shrink-0 flex-col gap-4 pt-[calc(0.75rem+env(safe-area-inset-top))] md:gap-5">
-        {/* Mobile Header: aligned with desktop actions, restrained & compact */}
-        <header className="workspace-page__header flex items-center justify-between gap-3 md:hidden">
+        {/* Mobile Header: aligned with desktop actions, restrained & compact without divider */}
+        <header className="flex items-center justify-between gap-3 md:hidden">
           <div>
             <h1 className="workspace-page__title text-lg font-semibold tracking-tight text-foreground">房间大厅</h1>
           </div>
@@ -320,7 +317,7 @@ export function RoomsHomePage({
         </header>
 
         {/* Mobile Filter Tabs directly under header */}
-        <div className="flex items-center gap-1 rounded-xl border border-white/[0.06] p-1 bg-white/[0.03] md:hidden" role="tablist" aria-label="房间类型筛选">
+        <div className="flex items-center gap-1 rounded-xl p-1 bg-white/[0.04] md:hidden" role="tablist" aria-label="房间类型筛选">
           {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
             const isSelected = roomTypeFilter === roomType;
             return (
@@ -415,7 +412,7 @@ export function RoomsHomePage({
             <span className="text-[11px] text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
-            <div className="grid w-full grid-cols-1 justify-center gap-3 sm:grid-cols-2 md:grid-cols-[repeat(auto-fit,18rem)] xl:gap-4">
+            <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 xl:gap-4">
               {visibleRooms.map((item) => (
                 <RoomDirectoryCard
                   key={item.room.id}

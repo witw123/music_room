@@ -15,7 +15,6 @@ import {
 } from "@/components/provider-search";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { getProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
@@ -76,7 +75,6 @@ import {
 } from "./index";
 
 export function DiscoverPage() {
-  const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/discover" });
   const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -166,8 +164,7 @@ export function DiscoverPage() {
   const profileRefreshTimerRef = useRef<number | null>(null);
 
   const load = useCallback(async (force = false) => {
-    if (!activeSession) return;
-    if (!force) {
+    if (activeSession && !force) {
       const cached = getCachedDiscoverData(activeSession.userId);
       if (cached) {
         setData(cached);
@@ -187,7 +184,9 @@ export function DiscoverPage() {
         signal: controller.signal
       });
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
-      setCachedDiscoverData(activeSession.userId, recommendations);
+      if (activeSession) {
+        setCachedDiscoverData(activeSession.userId, recommendations);
+      }
       setData(recommendations);
     } catch (error) {
       if (controller.signal.aborted || requestVersionRef.current !== version) return;
@@ -198,19 +197,17 @@ export function DiscoverPage() {
   }, [activeSession]);
 
   useEffect(() => {
-    if (hydrated && !activeSession) window.location.assign(authEntryHref);
-  }, [activeSession, authEntryHref, hydrated]);
-
-  useEffect(() => {
-    if (!activeSession) return;
-    const cached = getCachedDiscoverData(activeSession.userId);
-    if (cached) {
-      setData(cached);
-      setLoading(false);
-      return;
+    if (!hydrated) return;
+    if (activeSession) {
+      const cached = getCachedDiscoverData(activeSession.userId);
+      if (cached) {
+        setData(cached);
+        setLoading(false);
+        return;
+      }
     }
     void load();
-  }, [activeSession, load]);
+  }, [hydrated, activeSession, load]);
 
   useEffect(() => {
     if (!activeSession) return;
@@ -545,7 +542,7 @@ export function DiscoverPage() {
     }
   }, [playPlaylistAll]);
 
-  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-background" />;
+  if (!hydrated) return <div className="min-h-[100dvh] bg-background" />;
 
   if (detail) {
     return (
@@ -677,8 +674,8 @@ export function DiscoverPage() {
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2rem)] pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-6 md:pt-8 md:pb-20">
-        {/* Mobile Page Header for proper ergonomics */}
-        <header className="workspace-page__header mb-2.5 flex items-center justify-between md:hidden">
+        {/* Mobile Page Header for proper ergonomics without dividing border */}
+        <header className="mb-2.5 flex items-center justify-between md:hidden">
           <div>
             <h1 className="workspace-page__title text-lg font-semibold tracking-tight text-foreground">发现</h1>
           </div>

@@ -647,7 +647,7 @@ export function ProviderSearchPage({
     if (albumId) await loadAlbumById(albumId, track.provider);
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
+  if (!hydrated) return <div className="min-h-[100dvh] bg-black" />;
 
   const prefixAction = onBackToRecommendations ? (
     <button

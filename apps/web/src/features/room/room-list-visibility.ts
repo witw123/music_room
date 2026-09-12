@@ -7,9 +7,5 @@ export function filterOpenPublicRooms(rooms: RoomDirectoryItem[]) {
 }
 
 export function filterRoomsForSession(rooms: RoomDirectoryItem[], _sessionId?: string | null) {
-  return rooms.filter(
-    (room) =>
-      room.room.directoryIsMember === true ||
-      room.room.visibility === "public"
-  );
+  return rooms;
 }

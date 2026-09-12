@@ -156,7 +156,7 @@ export function ListeningProfileOverview({
   const activeTasteGroups = profile.tasteGroups.filter((group) => group.tags.length > 0);
 
   return (
-    <div className="profile-content space-y-6 animate-in fade-in duration-300 pb-28 sm:pb-8" aria-busy={refreshing}>
+    <div className="profile-content space-y-5 sm:space-y-6 animate-in fade-in duration-300 pb-28 sm:pb-8 w-full max-w-full overflow-hidden" aria-busy={refreshing}>
       {statusMessage && (
         <p className="text-xs text-foreground bg-[#141824]/80 border border-white/[0.08] px-4 py-2.5 rounded-2xl backdrop-blur-md">
           {statusMessage}
@@ -253,9 +253,9 @@ export function ListeningProfileOverview({
       </section>
 
       {/* Top 5 Tracks & Top 5 Artists / Source Distribution */}
-      <div className="grid gap-6 lg:grid-cols-2 items-start">
+      <div className="grid gap-6 lg:grid-cols-2 items-start w-full max-w-full overflow-hidden">
         {/* Top 5 Tracks */}
-        <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
+        <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-3.5 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden">
           <div className="flex items-center gap-2 mb-4">
             <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20">
               <BarChartIcon className="w-4 h-4" />
@@ -282,19 +282,19 @@ export function ListeningProfileOverview({
               return (
                 <div
                   key={itemKey}
-                  className="flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3 rounded-xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] group min-w-0 overflow-hidden"
+                  className="flex items-center gap-2 py-1.5 px-2 sm:px-3 sm:py-2 rounded-xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] group w-full min-w-0 overflow-hidden"
                 >
                   <span className={`w-4 sm:w-5 shrink-0 text-xs sm:text-sm tabular-nums pl-0.5 ${rankColor}`}>
                     {index + 1}
                   </span>
-                  <div className="relative h-10 w-10 sm:h-11 sm:w-11 min-w-[2.5rem] min-h-[2.5rem] max-w-[2.5rem] max-h-[2.5rem] shrink-0 overflow-hidden rounded-lg sm:rounded-xl bg-surface-elevated shadow-sm border border-white/10">
+                  <div className="relative h-9 w-9 sm:h-11 sm:w-11 min-w-[2.25rem] min-h-[2.25rem] sm:min-w-[2.75rem] sm:min-h-[2.75rem] shrink-0 overflow-hidden rounded-lg sm:rounded-xl bg-surface-elevated shadow-sm border border-white/10">
                     <Artwork alt="" className="h-full w-full object-cover block" src={item.artworkUrl} />
                   </div>
                   <div className="min-w-0 flex-1 overflow-hidden">
                     <p className="truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors" title={item.title}>
                       {item.title}
                     </p>
-                    <p className="truncate text-[11px] sm:text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
+                    <p className="truncate text-[10px] sm:text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
                       {item.artist}{item.album ? ` · ${item.album}` : ""}
                     </p>
                   </div>
@@ -302,15 +302,15 @@ export function ListeningProfileOverview({
                     <span className="block text-xs font-semibold tabular-nums text-foreground">
                       {item.playCount} 次
                     </span>
-                    <span className="block text-[10px] tabular-nums text-foreground-muted">
+                    <span className="hidden sm:block text-[10px] tabular-nums text-foreground-muted">
                       {formatDuration(item.listenedMs)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 pl-0.5">
+                  <div className="flex items-center gap-0.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => handlePlayTrack(item)}
-                      className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.12] transition-colors cursor-pointer"
+                      className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.12] transition-colors cursor-pointer"
                       title="立即播放"
                     >
                       <PlayIcon className="w-3.5 h-3.5" />
@@ -319,7 +319,7 @@ export function ListeningProfileOverview({
                       type="button"
                       disabled={isRadioRunning}
                       onClick={() => handleStartTrackRadio(item)}
-                      className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-foreground-muted hover:text-accent hover:bg-accent/15 transition-colors cursor-pointer"
+                      className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-foreground-muted hover:text-accent hover:bg-accent/15 transition-colors cursor-pointer"
                       title="开启单曲漫游"
                     >
                       <RadioIcon className="w-3.5 h-3.5" />
@@ -332,9 +332,9 @@ export function ListeningProfileOverview({
         </section>
 
         {/* Top 5 Artists & Multi-source Bar */}
-        <div className="space-y-6">
+        <div className="space-y-6 w-full max-w-full overflow-hidden">
           {/* Top 5 Artists */}
-          <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
+          <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-3.5 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden">
             <div className="flex items-center gap-2 mb-4">
               <div className="p-1.5 rounded-xl bg-accent/15 text-accent border border-accent/20">
                 <LandmarkIcon className="w-4 h-4" />
@@ -370,7 +370,7 @@ export function ListeningProfileOverview({
 
           {/* Multi-source Distribution */}
           {profile.sourceDistribution.length > 0 && totalSourceTime > 0 && (
-            <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
+            <section className="rounded-2xl border border-white/[0.08] bg-surface/30 p-3.5 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden">
               <h4 className="text-xs font-semibold text-foreground-muted mb-3 uppercase tracking-wider">音源收听分布</h4>
               {/* Segmented Bar */}
               <div className="h-3 w-full rounded-full bg-white/[0.06] flex overflow-hidden p-0.5 gap-0.5 border border-white/[0.08]">
