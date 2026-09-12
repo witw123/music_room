@@ -591,7 +591,7 @@ export function PlaylistsWorkspacePage({
       {!embedded ? <AppPageBackground /> : null}
       <div className={embedded
         ? "relative z-10 flex w-full flex-col pb-4"
-        : "workspace-page__inner relative z-10 pt-6 sm:pt-10 md:pt-20"}>
+        : "workspace-page__inner relative z-10 pt-4 sm:pt-6 md:pt-8"}>
         {selectedPlaylist ? (
           <PlaylistDetailView
             localTracks={localTracks}
@@ -637,15 +637,16 @@ export function PlaylistsWorkspacePage({
         ) : (
           <>
             {playlistView === "local" ? (
-              <section className="mt-6 flex flex-col gap-4" data-testid="local-playlists">
-                <div className="flex justify-end">
-                  <Button onClick={() => void openCreateDialog("local")} size="sm" variant="outline" type="button">
+              <section className="mt-2 flex flex-col gap-3.5" data-testid="local-playlists">
+                <div className="flex items-center justify-between gap-3">
+                  <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">本地歌单</h1>
+                  <Button onClick={() => void openCreateDialog("local")} size="sm" variant="outline" type="button" className="h-8 rounded-lg px-2.5 text-xs">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
                     新建本地歌单
                   </Button>
                 </div>
                 {localPlaylists.length ? (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-5 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                     {localPlaylists.map((playlist) => (
                       <LocalPlaylistCard
                         key={playlist.id}
@@ -661,15 +662,16 @@ export function PlaylistsWorkspacePage({
                 ) : <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center text-sm text-foreground-muted">当前没有本地歌单，可使用右上角按钮新建。</div>}
               </section>
             ) : (
-              <section className="mt-6 flex flex-col gap-4" data-testid="network-playlists">
-                <div className="flex justify-end">
-                  <Button onClick={() => void openCreateDialog("network")} size="sm" variant="outline" type="button">
+              <section className="mt-2 flex flex-col gap-3.5" data-testid="network-playlists">
+                <div className="flex items-center justify-between gap-3">
+                  <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">我的歌单</h1>
+                  <Button onClick={() => void openCreateDialog("network")} size="sm" variant="outline" type="button" className="h-8 rounded-lg px-2.5 text-xs">
                     <svg aria-hidden="true" fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="14"><path d="M12 5v14M5 12h14" /></svg>
                     新建歌单
                   </Button>
                 </div>
                 {networkPlaylists.length ? (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-5 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                     {networkPlaylists.map((playlist) => (
                       <NetworkPlaylistCard
                         key={playlist.id}

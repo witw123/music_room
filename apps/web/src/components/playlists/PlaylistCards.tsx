@@ -36,11 +36,11 @@ export function LocalPlaylistCard({
             本地
           </span>
         </div>
-        <div className="min-w-0 px-1 pt-3">
-          <strong className="block truncate text-[15px] font-semibold text-foreground">
+        <div className="min-w-0 px-0.5 pt-2">
+          <strong className="block truncate text-xs sm:text-sm font-medium text-foreground">
             {playlist.title}
           </strong>
-          <p className="mt-1 truncate text-sm text-foreground-muted">
+          <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
             {playlist.sourceDirectoryName ? `目录：${playlist.sourceDirectoryName}` : "项目根目录"} · {tracks.length} 首歌曲 · 已下载 {downloadedCount}
           </p>
         </div>
@@ -48,7 +48,7 @@ export function LocalPlaylistCard({
       {onDelete ? (
         <Button
           aria-label={`删除本地歌单 ${playlist.title}`}
-          className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute right-1.5 top-1.5 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-7 sm:w-7 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
           onClick={onDelete}
           size="icon"
           title="删除歌单"
@@ -58,13 +58,13 @@ export function LocalPlaylistCard({
           <svg
             aria-hidden="true"
             fill="none"
-            height="15"
+            height="14"
             stroke="currentColor"
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth="1.8"
             viewBox="0 0 24 24"
-            width="15"
+            width="14"
           >
             <path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" />
           </svg>
@@ -104,18 +104,18 @@ export function NetworkPlaylistCard({
         <div className="relative aspect-square overflow-hidden rounded-xl bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.18)] transition-transform duration-200 group-hover:-translate-y-1">
           <Artwork artworkUrls={artworkUrls} size="cover" title={playlist.title} />
         </div>
-        <div className="min-w-0 px-1 pt-3">
-          <strong className="block truncate text-[15px] font-semibold text-foreground">
+        <div className="min-w-0 px-0.5 pt-2">
+          <strong className="block truncate text-xs sm:text-sm font-medium text-foreground">
             {playlist.title}
           </strong>
-          <p className="mt-1 truncate text-sm text-foreground-muted">
+          <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
             {providerName} · {playlist.trackIds.length} 首歌曲
           </p>
         </div>
       </button>
       <Button
         aria-label={`删除歌单 ${playlist.title}`}
-        className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-1.5 top-1.5 h-8 w-8 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-7 sm:w-7 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onDelete}
         size="icon"
         title="删除歌单"

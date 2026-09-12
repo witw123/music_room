@@ -674,18 +674,18 @@ export function DiscoverPage() {
   return (
     <main className="workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] pt-[calc(0.875rem+env(safe-area-inset-top))] sm:pt-8 md:pt-10 md:pb-28">
+      <div className="workspace-page__inner workspace-page__inner--wide pb-[calc(var(--room-mobile-bottom-inset)+2rem)] pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-6 md:pt-8 md:pb-20">
         {/* Mobile Page Header for proper ergonomics */}
         <header className="workspace-page__header mb-2.5 flex items-center justify-between md:hidden">
           <div>
-            <h1 className="workspace-page__title">发现</h1>
+            <h1 className="workspace-page__title text-lg font-semibold tracking-tight text-foreground">发现</h1>
           </div>
           <Link
             aria-label="打开个人中心"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-foreground-muted shadow-sm transition-all hover:bg-white/10 hover:text-foreground active:scale-95"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-border bg-surface text-foreground-muted shadow-sm transition-all hover:bg-surface-hover hover:text-foreground active:scale-95"
             href="/app/profile"
           >
-            <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+            <svg aria-hidden="true" fill="none" height="14" viewBox="0 0 24 24" width="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
           </Link>
         </header>
 
@@ -693,7 +693,7 @@ export function DiscoverPage() {
         <ProviderSearchPage embedded inlineSearch />
 
         {/* Genre & Scene Filter Pills (Artistic Capsules) */}
-        <div className="mt-3 mb-6 flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
+        <div className="mt-2.5 mb-4 flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
           {genreFilterPills.map((pill) => {
             const IconComp = pill.icon;
             const active = activeFilterId === pill.id;
@@ -702,10 +702,10 @@ export function DiscoverPage() {
                 key={pill.id}
                 type="button"
                 onClick={() => setActiveFilterId(pill.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border ${
                   active
-                    ? "bg-white/[0.12] text-white border-white/[0.16]"
-                    : "bg-white/[0.03] hover:bg-white/[0.06] text-foreground-muted hover:text-white border-white/[0.06]"
+                    ? "bg-accent/15 text-accent border-accent/25 font-semibold"
+                    : "bg-surface border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5 shrink-0" />
@@ -716,7 +716,7 @@ export function DiscoverPage() {
           <button
             type="button"
             onClick={() => setShowColdStartDialog(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-foreground-muted hover:text-white bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] ml-auto shrink-0 transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-foreground-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-surface-border ml-auto shrink-0 transition-colors"
             title="定制偏好"
           >
             <SlidersIcon className="w-3.5 h-3.5 text-accent" />
@@ -728,7 +728,7 @@ export function DiscoverPage() {
 
         {/* Filtered Genre Radar Spotlight */}
         {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
-          <section className="relative mb-8 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#121216] p-4 sm:p-6 shadow-sm">
+          <section className="relative mb-6 overflow-hidden rounded-xl border border-surface-border bg-surface/40 p-3 sm:p-4 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div className="space-y-0.5">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">{activeFilter?.label}精选推荐</h2>

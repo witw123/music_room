@@ -21,12 +21,28 @@ const labels: Record<ImportKind, string> = {
 };
 
 export function ProviderDataImportSection() {
+  const neteaseEnabled = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true";
+  const qqmusicEnabled = process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true";
   const providers: Provider[] = [
-    ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
-    ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
+    ...(neteaseEnabled ? ["netease" as const] : []),
+    ...(qqmusicEnabled ? ["qqmusic" as const] : [])
   ];
-  if (providers.length === 0) return null;
-  return <div className="divide-y divide-surface-border">{providers.map((provider) => <ProviderImporter key={provider} provider={provider} />)}</div>;
+
+  if (providers.length === 0) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface/40 p-4 text-xs text-foreground-muted">
+        当前没有启用第三方音乐平台，请在配置中启用网易云音乐或 QQ 音乐后再进行导入。
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-surface-border">
+      {providers.map((provider) => (
+        <ProviderImporter key={provider} provider={provider} />
+      ))}
+    </div>
+  );
 }
 
 function ProviderImporter({ provider }: { provider: Provider }) {
@@ -46,9 +62,28 @@ function ProviderImporter({ provider }: { provider: Provider }) {
     setPending("load");
     setMessage(null);
     try {
-      setSnapshot(provider === "netease" ? await musicRoomApi.getNeteaseLibrary() : await musicRoomApi.getQqMusicLibrary());
+      const account = provider === "netease"
+        ? await musicRoomApi.getNeteaseAccount().catch(() => null)
+        : await musicRoomApi.getQqMusicAccount().catch(() => null);
+
+      if (!account?.connected) {
+        setMessage(`尚未绑定${providerName}账号，请先在上方扫码绑定后再读取资料。`);
+        return;
+      }
+
+      const res = provider === "netease"
+        ? await musicRoomApi.getNeteaseLibrary()
+        : await musicRoomApi.getQqMusicLibrary();
+
+      setSnapshot(res);
+      setMessage(`已读取${providerName}资料：${res.likedTracks.length} 首喜欢、${res.collectedPlaylists.length} 个歌单、${res.collectedAlbums.length} 张专辑、${res.followedArtists.length} 位歌手。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `读取${providerName}资料失败。`);
+      const errMsg = error instanceof Error ? error.message : `读取${providerName}资料失败。`;
+      if (errMsg.includes("bound again") || errMsg.includes("expired") || errMsg.includes("409")) {
+        setMessage(`${providerName}登录凭据已过期或未绑定，请先在上方重新绑定账号。`);
+      } else {
+        setMessage(errMsg);
+      }
     } finally {
       setPending(null);
     }
@@ -59,50 +94,102 @@ function ProviderImporter({ provider }: { provider: Provider }) {
     setPending("import");
     setMessage(null);
     try {
-      let imported = 0;
+      let importedTracks = 0;
+      let importedAlbums = 0;
+      let importedArtists = 0;
+      let importedPlaylists = 0;
+      let failedItems = 0;
+
       if (selected.likedTracks) {
         for (const track of snapshot.likedTracks) {
-          await musicRoomApi.saveFavoriteTrack(track);
-          imported += 1;
+          try {
+            await musicRoomApi.saveFavoriteTrack(track);
+            importedTracks += 1;
+          } catch {
+            failedItems += 1;
+          }
         }
       }
+
       if (selected.collectedAlbums) {
         for (const album of snapshot.collectedAlbums) {
-          await musicRoomApi.saveFavoriteAlbum(album);
-          imported += 1;
+          try {
+            await musicRoomApi.saveFavoriteAlbum(album);
+            importedAlbums += 1;
+          } catch {
+            failedItems += 1;
+          }
         }
       }
+
       if (selected.followedArtists) {
         for (const artist of snapshot.followedArtists) {
-          await musicRoomApi.saveFavoriteArtist(artist);
-          imported += 1;
-        }
-      }
-      if (selected.collectedPlaylists) {
-        const existing = await musicRoomApi.listMyPlaylists();
-        const existingKeys = new Set(existing.flatMap((playlist) => playlist.tags.filter((tag) => tag.startsWith("network:"))));
-        for (const summary of snapshot.collectedPlaylists) {
-          const key = `network:${summary.provider}:${summary.providerPlaylistId}`;
-          if (existingKeys.has(key)) continue;
-          const detail = summary.provider === "netease"
-            ? await musicRoomApi.getNeteasePlaylist(summary.providerPlaylistId)
-            : await musicRoomApi.getQqMusicPlaylist(summary.providerPlaylistId);
-          await musicRoomApi.createPlaylist({
-            title: detail.title,
-            description: detail.description,
-            coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
-            isCollaborative: false,
-            tags: ["network", key, ...detail.tags].slice(0, 20),
-            trackIds: detail.tracks.map(localPlaylistTrackId)
-          });
-          for (const track of detail.tracks) {
-            await upsertLocalPlaylistTrack(toProviderTrackRecord(track));
+          try {
+            await musicRoomApi.saveFavoriteArtist(artist);
+            importedArtists += 1;
+          } catch {
+            failedItems += 1;
           }
-          existingKeys.add(key);
-          imported += 1;
         }
       }
-      setMessage(imported > 0 ? `已导入 ${imported} 项${providerName}资料。` : "所选资料已经存在。")
+
+      if (selected.collectedPlaylists) {
+        try {
+          const existing = await musicRoomApi.listMyPlaylists().catch(() => []);
+          const existingKeys = new Set(
+            existing.flatMap((playlist) => playlist.tags.filter((tag) => tag.startsWith("network:")))
+          );
+
+          for (const summary of snapshot.collectedPlaylists) {
+            const key = `network:${summary.provider}:${summary.providerPlaylistId}`.slice(0, 40);
+            if (existingKeys.has(key)) continue;
+
+            try {
+              const detail = summary.provider === "netease"
+                ? await musicRoomApi.getNeteasePlaylist(summary.providerPlaylistId)
+                : await musicRoomApi.getQqMusicPlaylist(summary.providerPlaylistId);
+
+              const safeTags = ["network", key, ...(detail.tags ?? [])]
+                .map((t) => t.trim().slice(0, 40))
+                .filter(Boolean)
+                .slice(0, 20);
+
+              await musicRoomApi.createPlaylist({
+                title: (detail.title || "未命名歌单").trim().slice(0, 160),
+                description: detail.description ? detail.description.trim().slice(0, 1000) : null,
+                coverUrl: detail.artworkUrl ?? detail.tracks.find((track) => track.artworkUrl)?.artworkUrl ?? null,
+                isCollaborative: false,
+                tags: safeTags,
+                trackIds: detail.tracks.map(localPlaylistTrackId)
+              });
+
+              for (const track of detail.tracks) {
+                await upsertLocalPlaylistTrack(toProviderTrackRecord(track)).catch(() => undefined);
+              }
+
+              existingKeys.add(key);
+              importedPlaylists += 1;
+            } catch {
+              failedItems += 1;
+            }
+          }
+        } catch {
+          failedItems += 1;
+        }
+      }
+
+      const totalImported = importedTracks + importedAlbums + importedArtists + importedPlaylists;
+      if (totalImported > 0) {
+        const parts = [
+          importedTracks > 0 ? `${importedTracks} 首歌曲` : "",
+          importedAlbums > 0 ? `${importedAlbums} 张专辑` : "",
+          importedArtists > 0 ? `${importedArtists} 位歌手` : "",
+          importedPlaylists > 0 ? `${importedPlaylists} 个歌单` : ""
+        ].filter(Boolean);
+        setMessage(`已成功导入 ${parts.join("、")}${failedItems > 0 ? `（${failedItems} 项跳过或失败）` : ""}。`);
+      } else {
+        setMessage(failedItems > 0 ? `导入遇到错误，${failedItems} 项未能成功。` : "所选资料均已导入或已存在。");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `导入${providerName}资料失败。`);
     } finally {

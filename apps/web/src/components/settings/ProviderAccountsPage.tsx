@@ -20,11 +20,16 @@ import {
 
 type ProfileTab = "taste" | "exclusions" | "rooms" | "settings";
 
-const tabList: Array<{ id: ProfileTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: "taste", label: "听歌画像", icon: BarChartIcon },
-  { id: "exclusions", label: "偏好与屏蔽", icon: ShieldCheckIcon },
-  { id: "rooms", label: "房间足迹", icon: RadioIcon },
-  { id: "settings", label: "平台与设置", icon: SettingsIcon }
+const tabList: Array<{
+  id: ProfileTab;
+  label: string;
+  mobileLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { id: "taste", label: "听歌画像", mobileLabel: "听歌画像", icon: BarChartIcon },
+  { id: "exclusions", label: "偏好与屏蔽", mobileLabel: "偏好屏蔽", icon: ShieldCheckIcon },
+  { id: "rooms", label: "房间足迹", mobileLabel: "房间足迹", icon: RadioIcon },
+  { id: "settings", label: "平台与设置", mobileLabel: "平台设置", icon: SettingsIcon }
 ];
 
 export function ProviderAccountsPage() {
@@ -51,26 +56,27 @@ export function ProviderAccountsPage() {
   return (
     <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
-      <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2.5rem)] sm:pt-8 md:pt-10 md:pb-28">
+      <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
         <PersonalOverview activeSession={activeSession} />
 
-        {/* Segmented Tab Navigation */}
-        <div className="inline-flex items-center gap-1 p-1 rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md mb-6 overflow-x-auto hide-scrollbar touch-pan-x max-w-full">
-          {tabList.map(({ id, label, icon: IconComp }) => {
+        {/* Ergonomic Responsive Segmented Tab Navigation */}
+        <div className="grid grid-cols-4 sm:inline-flex items-center gap-1 p-1 rounded-xl border border-surface-border bg-surface/50 mb-4 sm:mb-5 w-full sm:w-auto">
+          {tabList.map(({ id, label, mobileLabel, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
               <button
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
+                className={`flex sm:inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium whitespace-nowrap transition-all duration-150 ${
                   isActive
-                    ? "bg-white/[0.12] text-white font-semibold shadow-sm"
-                    : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                    ? "bg-accent/15 text-accent font-semibold shadow-xs"
+                    : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                 }`}
               >
                 <IconComp className="w-3.5 h-3.5 shrink-0" />
-                <span>{label}</span>
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">{mobileLabel}</span>
               </button>
             );
           })}
@@ -95,7 +101,7 @@ export function ProviderAccountsPage() {
         )}
 
         {activeTab === "settings" && (
-          <div className="rounded-2xl border border-white/[0.08] bg-surface/30 p-5 sm:p-6 backdrop-blur-xl">
+          <div className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-5">
             <SettingsPage embedded onBack={() => setActiveTab("taste")} />
           </div>
         )}
