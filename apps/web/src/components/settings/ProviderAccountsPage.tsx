@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 import { PersonalOverview } from "./PersonalOverview";
 import { ListeningProfileOverview } from "./ListeningProfileOverview";
 import { RoomCenterOverview } from "@/components/room-home";
@@ -36,7 +37,7 @@ export function ProviderAccountsPage() {
   const router = useRouter();
   const redirectTo = "/app/profile";
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo });
-  const { activeSession, hydrated } = useSessionIdentity({
+  const { activeSession, clearIdentity, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
@@ -49,6 +50,16 @@ export function ProviderAccountsPage() {
     }
   }, [activeSession, authEntryHref, hydrated, router]);
 
+  async function handleLogout() {
+    try {
+      await musicRoomApi.logout();
+    } catch {
+      // Clear the local session even when the server cannot be reached.
+    }
+    clearIdentity();
+    router.replace(authEntryHref as Route);
+  }
+
   if (!hydrated || !activeSession) {
     return <div className="min-h-[100dvh] bg-background" />;
   }
@@ -57,7 +68,7 @@ export function ProviderAccountsPage() {
     <main className="profile-page workspace-page hide-scrollbar relative overflow-y-auto selection:bg-accent/30 selection:text-white md:pl-60 lg:pb-28">
       <AppPageBackground />
       <div className="workspace-page__inner workspace-page__inner--wide relative z-10 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(var(--room-mobile-bottom-inset)+2rem)] sm:pt-6 md:pt-8 md:pb-24">
-        <PersonalOverview activeSession={activeSession} />
+        <PersonalOverview activeSession={activeSession} onLogout={handleLogout} />
 
         {/* Ergonomic Responsive Segmented Tab Navigation */}
         <div className="grid grid-cols-4 sm:inline-flex items-center gap-1 p-1 rounded-xl border border-surface-border bg-surface/50 mb-4 sm:mb-5 w-full sm:w-auto">

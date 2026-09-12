@@ -18,6 +18,8 @@ import type {
 } from "@music-room/shared";
 import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomStage } from "./RoomStage";
+import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
+import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/network/ws-client";
@@ -138,6 +140,7 @@ function RoomDashboardViewBase(props: RoomDashboardViewProps) {
 }
 
 function InteractiveRoomLayout(props: RoomLayoutProps) {
+  const { stageReady, panelsReady } = useProgressiveRoomLoading();
   const [activeTab, setActiveTab] = useState<ManagementTabId>("library");
   const handleTabChange = useCallback((tab: ManagementTabId) => {
     setActiveTab(tab);
@@ -161,7 +164,11 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
       </div>
       <div className="relative z-40 hidden md:flex h-auto w-full min-w-0 shrink-0 flex-col md:z-10 md:h-full md:min-h-0 md:overflow-hidden" data-custom-layout-item="room-stage">
         <div className="flex h-auto min-h-0 flex-1 flex-col md:h-full md:flex-[2] md:min-h-0">
-          <RoomStage {...buildRoomStageProps(props)} />
+          {stageReady ? (
+            <RoomStage {...buildRoomStageProps(props)} />
+          ) : (
+            <div className="h-full min-h-[22rem] w-full rounded-2xl bg-surface/[0.04] animate-pulse" />
+          )}
         </div>
       </div>
       <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] md:min-h-0 md:rounded-none md:border-l md:border-t-0 md:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
@@ -214,7 +221,11 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
           </div>
         </div>
         <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
-          <RoomManagementContent {...props} activeTab={activeTab} />
+          {panelsReady ? (
+            <RoomManagementContent {...props} activeTab={activeTab} />
+          ) : (
+            <RoomPanelSkeleton />
+          )}
         </div>
       </section>
     </div>

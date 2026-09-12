@@ -2,27 +2,32 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import type { NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/bottom-player";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { MembersPanel } from "./MembersPanel";
-import { RoomChatPanel } from "./RoomChatOverlay";
-import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomStage } from "./RoomStage";
-import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
-import { LocalAudioImport } from "./LocalAudioImport";
-import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
 import { useRadioAutopilot, type RadioAutopilotNextTrack } from "./hooks/use-radio-autopilot";
-import { LibraryTabPanel } from "./LibraryTabPanel";
 import { RadioIcon, MusicIcon, UsersIcon } from "@/components/icons/DiscoverIcons";
+import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
+import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
+
+const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel));
+const RoomChatPanel = dynamic(() => import("./RoomChatOverlay").then((m) => m.RoomChatPanel));
+const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch));
+const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar));
+const LocalAudioImport = dynamic(() => import("./LocalAudioImport").then((m) => m.LocalAudioImport));
+const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel));
+const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel));
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
 export function RadioRoomView(props: RoomDashboardViewProps) {
+  const { stageReady, panelsReady } = useProgressiveRoomLoading();
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
@@ -65,7 +70,11 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-2 px-2.5 pt-0 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
         <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-surface/[0.12] lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]">
           <div className="min-h-0 flex-1">
-            <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
+            {stageReady ? (
+              <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
+            ) : (
+              <div className="h-full min-h-[22rem] w-full rounded-2xl bg-surface/[0.04] animate-pulse" />
+            )}
           </div>
         </div>
         <div className="relative z-0 flex h-[calc(100dvh-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none">
@@ -77,16 +86,20 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             tabs={[{ id: "chat", label: "聊天", icon: MusicIcon }, { id: "members", label: "成员", icon: UsersIcon }]}
           />
           <div aria-labelledby={`radio-right-tab-${rightTab}`} className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden" id={`radio-right-panel-${rightTab}`} role="tabpanel">
-            {rightTab === "chat" ? (
-              <RoomChatPanel
-                activeSession={props.activeSession}
-                isHost={isHost}
-                roomId={props.roomSnapshot.room.id}
-                scrollEnabled
-                socket={props.socket}
-              />
+            {panelsReady ? (
+              rightTab === "chat" ? (
+                <RoomChatPanel
+                  activeSession={props.activeSession}
+                  isHost={isHost}
+                  roomId={props.roomSnapshot.room.id}
+                  scrollEnabled
+                  socket={props.socket}
+                />
+              ) : (
+                <RadioMembersPanel {...props} membershipNow={membershipNow} />
+              )
             ) : (
-              <RadioMembersPanel {...props} membershipNow={membershipNow} />
+              <RoomPanelSkeleton />
             )}
           </div>
 
@@ -113,31 +126,39 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             tabs={[{ id: "queue", label: "队列", icon: MusicIcon }, { id: "library", label: "曲库", icon: RadioIcon }]}
           />
           <div aria-labelledby={`radio-left-tab-${leftTab}`} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto" id={`radio-left-panel-${leftTab}`} role="tabpanel">
-            {leftTab === "queue" ? (
-              <div className="flex h-full min-h-0 flex-col p-3 sm:p-5" data-testid="radio-queue-panel">
-                <PlayerQueueList
-                  canControlPlayback={props.canControlPlayback}
-                  canRemoveQueue={props.canRemoveQueue}
-                  canReorderQueue={props.canReorderQueue}
-                  currentQueueItemId={props.roomSnapshot.room.playback.currentQueueItemId}
-                  nextQueueItemId={props.roomSnapshot.room.playback.nextQueueItemId ?? null}
-                  onPlayNextQueueItem={props.onPlayNextQueueItem}
-                  onPlayQueueItem={props.onPlayQueueItem}
-                  onRemoveQueueItem={props.onRemoveQueueItem}
-                  onReorderQueue={props.onReorderQueue}
-                  queue={props.roomSnapshot.queue}
-                  tracks={props.roomSnapshot.tracks}
-                />
-              </div>
+            {panelsReady ? (
+              leftTab === "queue" ? (
+                <div className="flex h-full min-h-0 flex-col p-3 sm:p-5" data-testid="radio-queue-panel">
+                  <PlayerQueueList
+                    canControlPlayback={props.canControlPlayback}
+                    canRemoveQueue={props.canRemoveQueue}
+                    canReorderQueue={props.canReorderQueue}
+                    currentQueueItemId={props.roomSnapshot.room.playback.currentQueueItemId}
+                    nextQueueItemId={props.roomSnapshot.room.playback.nextQueueItemId ?? null}
+                    onPlayNextQueueItem={props.onPlayNextQueueItem}
+                    onPlayQueueItem={props.onPlayQueueItem}
+                    onRemoveQueueItem={props.onRemoveQueueItem}
+                    onReorderQueue={props.onReorderQueue}
+                    queue={props.roomSnapshot.queue}
+                    tracks={props.roomSnapshot.tracks}
+                  />
+                </div>
+              ) : (
+                <RadioLibraryList isHost={isHost} props={props} />
+              )
             ) : (
-              <RadioLibraryList isHost={isHost} props={props} />
+              <RoomPanelSkeleton />
             )}
           </div>
         </div>
         {isHost ? (
           <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:rounded-none">
             <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
-              <HostBroadcastDesk {...props} />
+              {panelsReady ? (
+                <HostBroadcastDesk {...props} />
+              ) : (
+                <RoomPanelSkeleton />
+              )}
             </div>
           </div>
         ) : null}

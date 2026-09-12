@@ -70,6 +70,8 @@ type ProviderSearchPageProps = {
   keywords?: string;
   onKeywordsChange?: (keywords: string) => void;
   searchRequestKey?: number | null;
+  onSearchActiveChange?: (active: boolean) => void;
+  onBackToRecommendations?: () => void;
 };
 
 export function ProviderSearchPage({
@@ -79,7 +81,9 @@ export function ProviderSearchPage({
   inlineSearch = false,
   keywords: controlledKeywords,
   onKeywordsChange,
-  searchRequestKey
+  searchRequestKey,
+  onSearchActiveChange,
+  onBackToRecommendations
 }: ProviderSearchPageProps = {}) {
   const router = useRouter();
   const player = useLocalPlayer();
@@ -267,6 +271,7 @@ export function ProviderSearchPage({
       return;
     }
     setHasSearched(true);
+    onSearchActiveChange?.(true);
     setPending("search");
     setErrorMessage(null);
     setContentTab("songs");
@@ -288,7 +293,7 @@ export function ProviderSearchPage({
         setPending(null);
       }
     }
-  }, [provider]);
+  }, [onSearchActiveChange, provider]);
 
   useEffect(() => {
     if (skipKeywordResetRef.current) {
@@ -319,6 +324,7 @@ export function ProviderSearchPage({
     setContentTab("playlists");
     if (!query || pending) return;
     setHasSearched(true);
+    onSearchActiveChange?.(true);
     setPending("search-playlists");
     setErrorMessage(null);
     try {
@@ -339,6 +345,7 @@ export function ProviderSearchPage({
     setContentTab("albums");
     if (!query || pending) return;
     setHasSearched(true);
+    onSearchActiveChange?.(true);
     setPending("search-albums");
     setErrorMessage(null);
     try {
@@ -642,7 +649,18 @@ export function ProviderSearchPage({
 
   if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-black" />;
 
-  const prefixAction = !embedded ? (
+  const prefixAction = onBackToRecommendations ? (
+    <button
+      aria-label="返回推荐"
+      className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white shrink-0"
+      onClick={onBackToRecommendations}
+      title="返回推荐"
+      type="button"
+    >
+      <Icon name="arrow-left" />
+      <span className="hidden sm:inline">返回推荐</span>
+    </button>
+  ) : !embedded ? (
     onClose ? (
       <button
         aria-label="返回发现"
@@ -767,6 +785,7 @@ export function ProviderSearchPage({
                   .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
                   .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
               }}
+              onPlay={playProviderTrack}
             />
           ) : null}
            {contentTab === "playlists" ? (

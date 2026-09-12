@@ -353,8 +353,38 @@ export function MobileBottomPlayerLayout({
   artworkAccentSoft,
   artworkUrl
 }: LayoutProps) {
+  const pointerStartY = useRef<number | null>(null);
+  const pointerStartX = useRef<number | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse") return;
+    pointerStartY.current = e.clientY;
+    pointerStartX.current = e.clientX;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (pointerStartY.current === null || pointerStartX.current === null) return;
+    const deltaY = e.clientY - pointerStartY.current;
+    const deltaX = e.clientX - pointerStartX.current;
+    pointerStartY.current = null;
+    pointerStartX.current = null;
+
+    // Upward swipe gesture (swipe up): upward drag > 25px with vertical dominance
+    if (deltaY < -25 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      onToggleImmersive();
+    }
+  };
+
   return (
-    <div className="relative mx-auto w-full max-w-[760px] md:hidden" data-player-layout="mobile">
+    <div
+      className="relative mx-auto w-full max-w-[760px] md:hidden select-none"
+      data-player-layout="mobile"
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+    >
+      {/* Subtle indicator showing swipe up affordance */}
+      <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-0.5 w-7 rounded-full bg-white/20 opacity-70 pointer-events-none" />
+
       <div className="flex h-12 items-center gap-2.5 px-1">
         {/* Click body to open full immersive sheet */}
         <button

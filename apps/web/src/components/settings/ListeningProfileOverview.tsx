@@ -230,14 +230,14 @@ export function ListeningProfileOverview({
                   {group.tags.map((tag) => (
                     <span
                       key={`${group.id}:${tag.label}:${tag.source}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/[0.08] transition-all cursor-default"
+                      className="inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/[0.08] transition-all cursor-default overflow-hidden"
                       title={`契合度: ${(tag.confidence * 100).toFixed(0)}%`}
                     >
-                      <span>{tag.label}</span>
+                      <span className="truncate max-w-[130px] sm:max-w-[200px]">{tag.label}</span>
                       {tag.confidence >= 0.8 ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] shrink-0" />
                       ) : tag.confidence >= 0.6 ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)] shrink-0" />
                       ) : null}
                     </span>
                   ))}
@@ -282,23 +282,23 @@ export function ListeningProfileOverview({
               return (
                 <div
                   key={itemKey}
-                  className="flex items-center gap-3 py-2 px-3 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] group"
+                  className="flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3 rounded-xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] group min-w-0 overflow-hidden"
                 >
-                  <span className={`w-5 shrink-0 text-sm tabular-nums pl-0.5 ${rankColor}`}>
+                  <span className={`w-4 sm:w-5 shrink-0 text-xs sm:text-sm tabular-nums pl-0.5 ${rankColor}`}>
                     {index + 1}
                   </span>
-                  <div className="relative h-11 w-11 min-w-[2.75rem] min-h-[2.75rem] max-w-[2.75rem] max-h-[2.75rem] shrink-0 overflow-hidden rounded-xl bg-surface-elevated shadow-sm border border-white/10">
+                  <div className="relative h-10 w-10 sm:h-11 sm:w-11 min-w-[2.5rem] min-h-[2.5rem] max-w-[2.5rem] max-h-[2.5rem] shrink-0 overflow-hidden rounded-lg sm:rounded-xl bg-surface-elevated shadow-sm border border-white/10">
                     <Artwork alt="" className="h-full w-full object-cover block" src={item.artworkUrl} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <p className="truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors" title={item.title}>
                       {item.title}
                     </p>
-                    <p className="truncate text-xs text-foreground-muted">
+                    <p className="truncate text-[11px] sm:text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
                       {item.artist}{item.album ? ` · ${item.album}` : ""}
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 whitespace-nowrap">
                     <span className="block text-xs font-semibold tabular-nums text-foreground">
                       {item.playCount} 次
                     </span>
@@ -306,11 +306,11 @@ export function ListeningProfileOverview({
                       {formatDuration(item.listenedMs)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0 pl-1">
+                  <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 pl-0.5">
                     <button
                       type="button"
                       onClick={() => handlePlayTrack(item)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full p-0 text-foreground-muted hover:text-white hover:bg-white/[0.12] transition-colors"
+                      className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.12] transition-colors cursor-pointer"
                       title="立即播放"
                     >
                       <PlayIcon className="w-3.5 h-3.5" />
@@ -319,7 +319,7 @@ export function ListeningProfileOverview({
                       type="button"
                       disabled={isRadioRunning}
                       onClick={() => handleStartTrackRadio(item)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full p-0 text-foreground-muted hover:text-accent hover:bg-accent/15 transition-colors"
+                      className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-foreground-muted hover:text-accent hover:bg-accent/15 transition-colors cursor-pointer"
                       title="开启单曲漫游"
                     >
                       <RadioIcon className="w-3.5 h-3.5" />
@@ -349,18 +349,18 @@ export function ListeningProfileOverview({
               {profile.topArtists.map((artist, index) => (
                 <div
                   key={artist.name}
-                  className="flex items-center gap-3 py-2 px-3 rounded-2xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06]"
+                  className="flex items-center gap-2.5 sm:gap-3 py-2 px-2.5 sm:px-3 rounded-xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] min-w-0 overflow-hidden"
                 >
-                  <span className="w-5 shrink-0 text-sm font-bold tabular-nums text-foreground-muted pl-0.5">
+                  <span className="w-4 sm:w-5 shrink-0 text-xs sm:text-sm font-bold tabular-nums text-foreground-muted pl-0.5">
                     {index + 1}
                   </span>
-                  <div className="flex h-9 w-9 min-w-[2.25rem] min-h-[2.25rem] max-w-[2.25rem] max-h-[2.25rem] shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-accent/30 to-sky-400/30 border border-white/10 text-xs font-bold text-white">
+                  <div className="flex h-8 w-8 sm:h-9 sm:w-9 min-w-[2rem] min-h-[2rem] max-w-[2.25rem] max-h-[2.25rem] shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-accent/30 to-sky-400/30 border border-white/10 text-xs font-bold text-white">
                     {artist.name.slice(0, 1)}
                   </div>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                  <span className="min-w-0 flex-1 truncate text-xs sm:text-sm font-semibold text-foreground" title={artist.name}>
                     {artist.name}
                   </span>
-                  <span className="shrink-0 text-xs tabular-nums text-foreground-muted font-medium pr-2">
+                  <span className="shrink-0 text-xs tabular-nums text-foreground-muted font-medium whitespace-nowrap pr-1">
                     {artist.playCount} 次
                   </span>
                 </div>
@@ -404,10 +404,10 @@ export function ListeningProfileOverview({
                   };
                   const pct = ((src.listenedMs / totalSourceTime) * 100).toFixed(0);
                   return (
-                    <div key={src.source} className="flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${cfg.color} shadow-sm`} />
-                      <span>{cfg.label}</span>
-                      <span className="font-semibold text-foreground">{pct}%</span>
+                    <div key={src.source} className="flex items-center gap-1.5 min-w-0 truncate">
+                      <span className={`w-2 h-2 rounded-full ${cfg.color} shadow-sm shrink-0`} />
+                      <span className="truncate">{cfg.label}</span>
+                      <span className="font-semibold text-foreground shrink-0">{pct}%</span>
                     </div>
                   );
                 })}
@@ -432,14 +432,14 @@ function MetricCard({
   accentBorder?: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-surface/30 p-4 transition-colors hover:bg-surface/50 flex flex-col justify-between">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-medium text-foreground-muted">{label}</span>
-        <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-foreground-muted">
+    <div className="rounded-xl border border-surface-border bg-surface/30 p-3.5 sm:p-4 transition-colors hover:bg-surface/50 flex flex-col justify-between min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
+        <span className="text-xs font-medium text-foreground-muted truncate">{label}</span>
+        <div className="p-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-foreground-muted shrink-0">
           {icon}
         </div>
       </div>
-      <dd className="text-xl sm:text-2xl font-bold text-foreground tracking-tight tabular-nums truncate">
+      <dd className="text-lg sm:text-2xl font-bold text-foreground tracking-tight tabular-nums truncate">
         {value}
       </dd>
     </div>

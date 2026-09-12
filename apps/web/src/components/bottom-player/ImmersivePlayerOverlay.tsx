@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
@@ -92,6 +92,60 @@ export function ImmersivePlayerOverlay({
   onSeekToPosition
 }: ImmersivePlayerOverlayProps) {
   const [mobileView, setMobileView] = useState<"artwork" | "lyrics">("artwork");
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const isScrollingContentRef = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (typeof window !== "undefined" && window.innerWidth >= 768) return;
+    touchStartYRef.current = e.touches[0].clientY;
+    touchStartXRef.current = e.touches[0].clientX;
+    const target = e.target as HTMLElement | null;
+    const scrollable = target?.closest(".hide-scrollbar, [data-testid=\"room-lyrics-scroll\"]");
+    if (scrollable && scrollable.scrollTop > 0) {
+      isScrollingContentRef.current = true;
+    } else {
+      isScrollingContentRef.current = false;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null || touchStartXRef.current === null || isScrollingContentRef.current) return;
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - touchStartYRef.current;
+    const deltaX = e.touches[0].clientX - touchStartXRef.current;
+
+    // Only allow downward drag
+    if (deltaY > 0 && deltaY > Math.abs(deltaX)) {
+      setIsDragging(true);
+      const dampedY = deltaY > 160 ? 160 + (deltaY - 160) * 0.4 : deltaY;
+      setDragY(dampedY);
+    } else if (deltaY <= 0 && isDragging) {
+      setDragY(0);
+      setIsDragging(false);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging && dragY === 0) {
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      return;
+    }
+    const currentDrag = dragY;
+    setIsDragging(false);
+    touchStartYRef.current = null;
+    touchStartXRef.current = null;
+
+    if (currentDrag > 70) {
+      setDragY(0);
+      onClose();
+    } else {
+      setDragY(0);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -105,6 +159,8 @@ export function ImmersivePlayerOverlay({
   useEffect(() => {
     if (!isOpen) {
       setMobileView("artwork");
+      setDragY(0);
+      setIsDragging(false);
     }
   }, [isOpen]);
 
@@ -132,9 +188,23 @@ export function ImmersivePlayerOverlay({
       aria-hidden={!isOpen}
       aria-label="沉浸式播放"
       aria-modal="true"
-      className={`immersive-player-overlay fixed inset-0 z-[80] h-[100dvh] max-h-[100dvh] w-full overflow-hidden text-foreground transition-[opacity,transform,visibility,background-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none ${isOpen ? "visible translate-y-0 scale-100 opacity-100" : "pointer-events-none invisible translate-y-[3%] scale-[0.985] opacity-0"}`}
+      className={`immersive-player-overlay fixed inset-0 z-[80] h-[100dvh] max-h-[100dvh] w-full overflow-hidden text-foreground ${
+        isDragging
+          ? "touch-none"
+          : "transition-[opacity,transform,visibility,background-color] duration-350 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none"
+      } ${
+        isOpen
+          ? "visible translate-y-0 opacity-100 md:scale-100"
+          : "pointer-events-none invisible translate-y-full opacity-0 md:translate-y-[3%] md:scale-[0.985]"
+      }`}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
+      onTouchStart={handleTouchStart}
       role="dialog"
-      style={{ backgroundColor: artworkPalette.background }}
+      style={{
+        backgroundColor: artworkPalette.background,
+        ...(isDragging ? { transform: `translateY(${dragY}px)`, transition: "none" } : {})
+      }}
     >
       {artworkUrl ? (
         <div
@@ -316,9 +386,9 @@ function MobileImmersivePlayer({
 
   return (
     <section className="relative z-10 flex h-full min-h-0 flex-col px-8 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] md:hidden">
-      <header className="flex h-14 shrink-0 items-center justify-center">
+      <header className="flex h-12 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing">
         <button aria-label="退出沉浸式播放" className="inline-flex h-10 w-28 items-center justify-center rounded-full transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" onClick={onClose} title="退出沉浸式播放" type="button">
-          <span className="h-1.5 w-10 rounded-full opacity-60" aria-hidden="true" style={{ backgroundColor: artworkPalette.accent }} />
+          <span className="h-1.5 w-12 rounded-full opacity-60 hover:opacity-100 transition-opacity" aria-hidden="true" style={{ backgroundColor: artworkPalette.accent }} />
         </button>
       </header>
 

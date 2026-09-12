@@ -65,6 +65,22 @@ function TrackListSectionBase({
   const otherTrackCount = tracks.length - ownTrackCount;
   const visibleTracks = filterLibraryTracks(tracks, activeSessionUserId, trackFilter);
 
+  const [renderedCount, setRenderedCount] = useState(35);
+
+  useEffect(() => {
+    if (renderedCount >= visibleTracks.length) return;
+    const timer = window.setTimeout(() => {
+      setRenderedCount((prev) => Math.min(prev + 40, visibleTracks.length));
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [renderedCount, visibleTracks.length]);
+
+  useEffect(() => {
+    setRenderedCount(35);
+  }, [trackFilter]);
+
+  const renderedTracks = visibleTracks.slice(0, renderedCount);
+
   useEffect(() => {
     let cancelled = false;
     void listRoomPlaylistTrackIndex()
@@ -139,7 +155,7 @@ function TrackListSectionBase({
       <div className="flex flex-col gap-1.5">
         {visibleTracks.length > 0 ? (
           <div className="overflow-hidden rounded-xl border border-surface-border bg-surface">
-            {visibleTracks.map((track) => {
+            {renderedTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
                 activeSessionUserId: activeSession?.userId,

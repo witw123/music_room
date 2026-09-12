@@ -106,6 +106,8 @@ export function DiscoverPage() {
   const [activeFilterId, setActiveFilterId] = useState<string>("all");
   const [showColdStartDialog, setShowColdStartDialog] = useState(false);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [searchKeywords, setSearchKeywords] = useState("");
   // Background preloader for "play all"-style flows; cancelled when a new flow
   // starts or the page unmounts so stale downloads never keep running.
   const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
@@ -690,7 +692,17 @@ export function DiscoverPage() {
         </header>
 
         {/* Search header integration */}
-        <ProviderSearchPage embedded inlineSearch />
+        <ProviderSearchPage
+          embedded
+          inlineSearch={!isSearchActive}
+          keywords={searchKeywords}
+          onBackToRecommendations={isSearchActive ? () => setIsSearchActive(false) : undefined}
+          onKeywordsChange={setSearchKeywords}
+          onSearchActiveChange={setIsSearchActive}
+        />
+
+        {!isSearchActive ? (
+          <>
 
         {/* Genre & Scene Filter Pills (Artistic Capsules) */}
         <div className="mt-2.5 mb-4 flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
@@ -728,7 +740,7 @@ export function DiscoverPage() {
 
         {/* Filtered Genre Radar Spotlight */}
         {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
-          <section className="relative mb-6 overflow-hidden rounded-xl border border-surface-border bg-surface/40 p-3 sm:p-4 shadow-sm">
+          <section className="relative mb-6 overflow-hidden rounded-xl p-2 sm:p-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div className="space-y-0.5">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">{activeFilter?.label}精选推荐</h2>
@@ -744,7 +756,7 @@ export function DiscoverPage() {
                 <span>播放全部</span>
               </Button>
             </div>
-            <div className="pt-2 border-t border-white/[0.06]">
+            <div className="pt-2">
               <div className="max-h-[560px] overflow-y-auto hide-scrollbar">
                 <ProviderAlbumTrackTable
                   actions={toPlaylistTrackActions(trackActions)}
@@ -790,7 +802,7 @@ export function DiscoverPage() {
             title={`常听歌手 · ${topArtist}`}
             icon={<MicIcon className="w-4 h-4 text-accent" />}
           >
-            <div className="rounded-xl border border-white/[0.06] bg-[#121216] p-2 sm:p-4 shadow-sm">
+            <div className="rounded-xl p-1 sm:p-2">
               <ProviderAlbumTrackTable
                 actions={toPlaylistTrackActions(trackActions)}
                 showToolbar={false}
@@ -806,7 +818,7 @@ export function DiscoverPage() {
             title="宝藏单曲"
             icon={<DiscoverCompassIcon className="w-4 h-4 text-accent" />}
           >
-            <div className="rounded-xl border border-white/[0.06] bg-[#121216] p-2 sm:p-4 shadow-sm">
+            <div className="rounded-xl p-1 sm:p-2">
               <ProviderAlbumTrackTable
                 actions={toPlaylistTrackActions(trackActions)}
                 showToolbar={false}
@@ -823,6 +835,8 @@ export function DiscoverPage() {
           >
             <DiscoverPlaylistRail items={otherPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
           </DiscoverSection>
+        ) : null}
+          </>
         ) : null}
 
         <Feedback errorMessage={errorMessage} statusMessage={statusMessage} />

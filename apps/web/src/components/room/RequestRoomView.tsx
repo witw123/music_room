@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import dynamic from "next/dynamic";
 import type {
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
@@ -11,19 +12,23 @@ import type {
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { LibraryTabPanel } from "./LibraryTabPanel";
-import { LocalStorageTabPanel } from "./LocalStorageTabPanel";
-import { MembersPanel } from "./MembersPanel";
-import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { RoomControlHeader } from "./RoomControlHeader";
 import { RoomStage } from "./RoomStage";
-import { RoomReactionToolbar } from "./RoomReactionToolbar";
 import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
 import { MusicIcon, RadioIcon, UsersIcon } from "@/components/icons/DiscoverIcons";
+import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
+import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
+
+const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel));
+const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel));
+const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel));
+const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch));
+const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar));
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
 
 export function RequestRoomView(props: RoomDashboardViewProps) {
+  const { stageReady, panelsReady } = useProgressiveRoomLoading();
   const roomId = props.roomSnapshot.room.id;
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
   const snapshotRef = useRef(props.roomSnapshot);
@@ -192,7 +197,11 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
       <section className="mx-auto grid w-full max-w-[1600px] gap-2 px-2.5 pt-0 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
         <div className="relative z-10 hidden lg:block min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-white/[0.06] lg:bg-surface/[0.12]">
-          <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
+          {stageReady ? (
+            <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
+          ) : (
+            <div className="h-full min-h-[22rem] w-full rounded-2xl bg-surface/[0.04] animate-pulse" />
+          )}
         </div>
         <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl sm:rounded-3xl border border-white/[0.06] bg-[#0c0e15]/90 lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
           <header className="hidden lg:flex shrink-0 items-center justify-between px-3.5 pb-2 pt-2.5 sm:px-5 sm:pt-4 lg:px-6 border-b border-white/[0.06]">
@@ -267,6 +276,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         membershipNow={membershipNow}
         mobileTab={mobileWorkspaceTab}
         onMobileTabChange={setMobileWorkspaceTab}
+        panelsReady={panelsReady}
       />
     </div>
   );
@@ -286,6 +296,7 @@ function RequestRoomWorkspace(
     membershipNow: number;
     mobileTab: RequestWorkspaceTab;
     onMobileTabChange: (tab: RequestWorkspaceTab) => void;
+    panelsReady: boolean;
   }
 ) {
   const panelVisibility = (tab: RequestWorkspaceTab) =>
@@ -335,22 +346,26 @@ function RequestRoomWorkspace(
           </span>
         </header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
-          <LibraryTabPanel
-            activeSession={props.activeSession}
-            canAddToQueue={props.isHost}
-            canControlPlayback={props.canControlPlayback}
-            canManageAllTracks={props.isHost}
-            canManageLibrary={props.isHost}
-            localFolderName={props.localStorageSummary.localFolderName}
-            localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
-            onAddToQueue={props.onAddToQueue}
-            onDeleteTrack={props.onDeleteTrack}
-            onFilesSelected={props.onFilesSelected}
-            onPlayTrack={props.onPlayTrack}
-            onSaveTrackToLocal={props.onSaveTrackToLocal}
-            tracks={props.roomSnapshot.tracks}
-            uploadedTracks={props.uploadedTracks}
-          />
+          {props.panelsReady ? (
+            <LibraryTabPanel
+              activeSession={props.activeSession}
+              canAddToQueue={props.isHost}
+              canControlPlayback={props.canControlPlayback}
+              canManageAllTracks={props.isHost}
+              canManageLibrary={props.isHost}
+              localFolderName={props.localStorageSummary.localFolderName}
+              localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
+              onAddToQueue={props.onAddToQueue}
+              onDeleteTrack={props.onDeleteTrack}
+              onFilesSelected={props.onFilesSelected}
+              onPlayTrack={props.onPlayTrack}
+              onSaveTrackToLocal={props.onSaveTrackToLocal}
+              tracks={props.roomSnapshot.tracks}
+              uploadedTracks={props.uploadedTracks}
+            />
+          ) : (
+            <RoomPanelSkeleton />
+          )}
         </div>
       </section>
 
@@ -367,26 +382,30 @@ function RequestRoomWorkspace(
           </span>
         </header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
-          <LocalStorageTabPanel
-            activeSession={props.activeSession}
-            canManageLibrary={props.isHost}
-            hideUnavailableProvidersNotice
-            localStorageSummary={props.localStorageSummary}
-            onCleanLocalStorage={props.onCleanLocalStorage}
-            onDeletePlaylist={props.onDeletePlaylist}
-            onImportCachedTrack={props.onImportCachedTrack}
-            onImportNeteaseTrack={props.onImportNeteaseTrack}
-            onImportNeteaseTracks={props.onImportNeteaseTracks}
-            onImportQqMusicTrack={props.onImportQqMusicTrack}
-            onImportQqMusicTracks={props.onImportQqMusicTracks}
-            onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
-            onRefreshLocalStorage={props.onRefreshLocalStorage}
-            onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
-            onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
-            onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
-            playlists={props.playlists}
-            tracks={props.roomSnapshot.tracks}
-          />
+          {props.panelsReady ? (
+            <LocalStorageTabPanel
+              activeSession={props.activeSession}
+              canManageLibrary={props.isHost}
+              hideUnavailableProvidersNotice
+              localStorageSummary={props.localStorageSummary}
+              onCleanLocalStorage={props.onCleanLocalStorage}
+              onDeletePlaylist={props.onDeletePlaylist}
+              onImportCachedTrack={props.onImportCachedTrack}
+              onImportNeteaseTrack={props.onImportNeteaseTrack}
+              onImportNeteaseTracks={props.onImportNeteaseTracks}
+              onImportQqMusicTrack={props.onImportQqMusicTrack}
+              onImportQqMusicTracks={props.onImportQqMusicTracks}
+              onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
+              onRefreshLocalStorage={props.onRefreshLocalStorage}
+              onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
+              onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
+              onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
+              playlists={props.playlists}
+              tracks={props.roomSnapshot.tracks}
+            />
+          ) : (
+            <RoomPanelSkeleton />
+          )}
         </div>
       </section>
 
@@ -403,14 +422,18 @@ function RequestRoomWorkspace(
           </span>
         </header>
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
-          <MembersPanel
-            activeSessionId={props.activeSession?.userId ?? null}
-            isHost={props.isHost}
-            members={props.roomSnapshot.room.members}
-            now={props.membershipNow}
-            onRemoveMember={props.onRemoveMember}
-            onUpdateMemberPermissions={props.onUpdateMemberPermissions}
-          />
+          {props.panelsReady ? (
+            <MembersPanel
+              activeSessionId={props.activeSession?.userId ?? null}
+              isHost={props.isHost}
+              members={props.roomSnapshot.room.members}
+              now={props.membershipNow}
+              onRemoveMember={props.onRemoveMember}
+              onUpdateMemberPermissions={props.onUpdateMemberPermissions}
+            />
+          ) : (
+            <RoomPanelSkeleton />
+          )}
         </div>
       </section>
     </section>

@@ -401,7 +401,7 @@ export function RoomsHomePage({
         </div>
 
         {/* Room Cards Container */}
-        <div className="rounded-xl border border-surface-border bg-surface/60 p-3 sm:p-4 min-h-[240px] shadow-sm">
+        <div className="min-h-[240px]">
           <div className="mb-3 flex items-center justify-between md:hidden">
             <h2 className="text-xs font-semibold text-foreground tracking-tight">房间列表</h2>
             <span className="text-[11px] text-foreground-muted">{visibleRooms.length} 个</span>
@@ -421,7 +421,7 @@ export function RoomsHomePage({
               正在加载房间…
             </div>
           ) : (
-            <div className="flex min-h-[260px] flex-col items-center justify-center py-14 text-center opacity-85">
+            <div className="flex min-h-[260px] flex-col items-center justify-center py-14 text-center opacity-85 rounded-xl border border-surface-border/50 bg-surface/30">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted">
                 <svg
                   width="24"

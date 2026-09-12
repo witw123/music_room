@@ -130,23 +130,23 @@ export function TasteExclusionsManager({
               return (
                 <div
                   key={itemKey}
-                  className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-2xl transition-colors hover:bg-white/[0.04]"
+                  className="flex items-center justify-between gap-2 sm:gap-3 py-2 px-2.5 sm:px-3 rounded-xl transition-colors hover:bg-white/[0.04] min-w-0 overflow-hidden"
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center justify-center w-8 h-8 min-w-[2rem] min-h-[2rem] max-w-[2rem] max-h-[2rem] shrink-0 rounded-xl bg-surface-elevated text-foreground-muted">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+                    <div className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 min-w-[1.75rem] min-h-[1.75rem] max-w-[2rem] max-h-[2rem] shrink-0 rounded-lg bg-surface-elevated text-foreground-muted">
                       {item.kind === "artist" ? (
-                        <LandmarkIcon className="w-4 h-4" />
+                        <LandmarkIcon className="w-3.5 h-3.5" />
                       ) : (
-                        <MusicIcon className="w-4 h-4" />
+                        <MusicIcon className="w-3.5 h-3.5" />
                       )}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-foreground">
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+                        <span className="truncate text-xs sm:text-sm font-semibold text-foreground" title={item.label || item.key}>
                           {item.label || item.key}
                         </span>
                         <span
-                          className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium ${
+                          className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
                             item.action === "not-interested"
                               ? "bg-red-500/15 text-red-400"
                               : "bg-surface-elevated text-foreground-muted"
@@ -155,7 +155,7 @@ export function TasteExclusionsManager({
                           {item.action === "not-interested" ? "不再推荐" : "不计入画像"}
                         </span>
                       </div>
-                      <p className="text-[11px] text-foreground-muted mt-0.5">
+                      <p className="text-[10px] sm:text-[11px] text-foreground-muted mt-0.5 truncate">
                         {item.kind === "artist" ? "艺人" : "单曲"} · 屏蔽于 {new Date(item.createdAt).toLocaleDateString("zh-CN")}
                       </p>
                     </div>
@@ -167,10 +167,10 @@ export function TasteExclusionsManager({
                     size="sm"
                     disabled={isRemoving}
                     onClick={() => handleRestore(item.kind, item.key)}
-                    className="shrink-0 h-8 px-3 rounded-xl text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-white/[0.06]"
+                    className="shrink-0 h-7 sm:h-8 px-2.5 rounded-lg text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-white/[0.06] whitespace-nowrap"
                   >
-                    <RotateCcwIcon className="w-3.5 h-3.5 mr-1.5" />
-                    {isRemoving ? "恢复中..." : "恢复推荐"}
+                    <RotateCcwIcon className="w-3 h-3 mr-1" />
+                    <span>{isRemoving ? "恢复中..." : "恢复推荐"}</span>
                   </Button>
                 </div>
               );

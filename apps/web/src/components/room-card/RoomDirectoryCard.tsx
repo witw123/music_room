@@ -1,8 +1,11 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import type { CSSProperties } from "react";
 import type { RoomDirectoryItem, RoomType } from "@music-room/shared";
 import { ArtisticRoomStageScene } from "./ArtisticRoomStageScene";
+
+import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
 type RoomDirectoryCardProps = {
   room: RoomDirectoryItem;
@@ -51,6 +54,7 @@ const roomCardThemes: Record<RoomType, RoomCardTheme> = {
 export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectoryCardProps) {
   const room = directoryItem.room;
   const theme = roomCardThemes[room.roomType];
+  const nowPlaying = room.directoryNowPlaying;
   const cardStyle: RoomCardStyle = {
     "--room-accent": theme.accent,
     "--room-border": theme.border,
@@ -84,13 +88,20 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         </span>
       </header>
 
-      {/* Artistic Room Visual Scene (Starfield, Radial Wave, or Vinyl Nebula) */}
+      {/* Room Visual Scene: Dynamic Album Artwork with surrounding soundwave effects when playing, fallback to artistic scene */}
       <section
         className="relative mt-3 aspect-[2.6/1] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07090e] shadow-inner"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
-        <ArtisticRoomStageScene roomType={room.roomType} />
+        {nowPlaying?.title ? (
+          <RoomNowPlayingStageScene
+            accentColor={theme.accent}
+            nowPlaying={nowPlaying}
+          />
+        ) : (
+          <ArtisticRoomStageScene roomType={room.roomType} />
+        )}
       </section>
 
       <div className="pt-3.5">
@@ -102,6 +113,85 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
         </p>
       </div>
     </article>
+  );
+}
+
+function RoomNowPlayingStageScene({
+  nowPlaying,
+  accentColor
+}: {
+  nowPlaying: NonNullable<RoomDirectoryItem["room"]["directoryNowPlaying"]>;
+  accentColor: string;
+}) {
+  const artworkSrc = nowPlaying.artworkUrl ? getArtworkSourceUrl(nowPlaying.artworkUrl) : null;
+
+  return (
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden select-none">
+      {/* Blurred Album Artwork Background */}
+      {artworkSrc ? (
+        <div
+          aria-hidden="true"
+          className="absolute -inset-3 bg-cover bg-center opacity-30 blur-lg scale-110 transition-transform duration-700 group-hover:scale-125"
+          style={{ backgroundImage: `url("${artworkSrc}")` }}
+        />
+      ) : null}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/50 to-black/30" />
+
+      {/* Surrounding Acoustic Rings & Breathing Halo */}
+      <div className="relative flex items-center justify-center">
+        {/* Outer breathing halo */}
+        <div
+          className="absolute -inset-5 rounded-full blur-xl opacity-35 animate-pulse"
+          style={{ backgroundColor: accentColor }}
+        />
+        {/* Expanding acoustic wave rings */}
+        <div
+          className="absolute -inset-3 rounded-2xl border border-white/25 opacity-30 animate-ping"
+          style={{ animationDuration: "2.8s" }}
+        />
+        <div
+          className="absolute -inset-1.5 rounded-xl border opacity-50"
+          style={{ borderColor: accentColor }}
+        />
+
+        {/* Central Album Artwork Cover */}
+        <div className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl border border-white/25 bg-black/60 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
+          {artworkSrc ? (
+            <img
+              alt={nowPlaying.title}
+              className="h-full w-full object-cover"
+              decoding="async"
+              loading="lazy"
+              src={artworkSrc}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-white/50">
+              <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+              </svg>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Track Meta & Equalizer Pill */}
+      <div className="absolute bottom-1.5 inset-x-2.5 z-20 flex items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-black/60 px-2 py-1 backdrop-blur-md">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
+          <div className="flex items-end gap-0.5 h-2.5 shrink-0 text-white/80">
+            <span className="w-0.5 h-2 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="w-0.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+            <span className="w-0.5 h-1 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+          </div>
+          <span className="truncate text-[10px] sm:text-[11px] font-medium text-white">
+            {nowPlaying.title}
+          </span>
+          <span className="text-white/30 text-[10px]">·</span>
+          <span className="truncate text-[10px] text-white/60">
+            {nowPlaying.artist}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
