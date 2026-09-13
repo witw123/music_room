@@ -287,7 +287,7 @@ function VolumeControl({
     <div ref={rootRef} className="relative shrink-0">
       {isOpen ? (
         <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
-          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl dark:bg-[#17181c] dark:border-white/15">
+          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl dark:bg-[#17181c]">
             <div className="relative h-24 w-5 shrink-0">
               <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
                 <div
@@ -402,7 +402,7 @@ export function MobileBottomPlayerLayout({
         >
           <SquareAlbumCover
             artworkUrl={artworkUrl}
-            className="h-10 w-10 shrink-0 rounded-lg border border-white/[0.08] shadow-sm"
+            className="h-10 w-10 shrink-0 rounded-lg border border-surface-border shadow-sm"
           />
 
           <div className="min-w-0 flex-1">
@@ -712,7 +712,7 @@ export function QualityBadge({
 
       {isOpen && (
         <div
-          className={`light-popover-surface absolute bottom-full z-[70] mb-2 w-48 rounded-xl border border-white/15 bg-[#17181c] p-1.5 shadow-[0_16px_36px_rgba(0,0,0,0.85)] animate-in fade-in zoom-in-95 duration-150 ${
+          className={`light-popover-surface absolute bottom-full z-[70] mb-2 w-48 rounded-xl border border-surface-border bg-[#17181c] p-1.5 shadow-[0_16px_36px_rgba(0,0,0,0.85)] animate-in fade-in zoom-in-95 duration-150 ${
             popoverPlacement === "center" ? "left-1/2 -translate-x-1/2" : "right-0"
           }`}
           onClick={(e) => e.stopPropagation()}

@@ -389,7 +389,7 @@ export function PlaylistDetailView({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-5 border-b border-surface-border pb-6 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-5 pb-6 sm:flex-row sm:items-end">
         <div className="shrink-0 self-center sm:self-auto">
           <Artwork artworkUrls={artworkUrls} size="lg" title={title} />
         </div>
@@ -398,7 +398,6 @@ export function PlaylistDetailView({
             <span className="inline-flex items-center rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-foreground-muted">
               {isLocal ? "本地歌单" : "网络歌单"}
             </span>
-            <span className="text-xs text-foreground-muted">{rows.length} 首歌曲</span>
           </div>
           <h1 className="mt-2 text-xl font-bold text-foreground tracking-tight sm:text-2xl truncate">{title}</h1>
           {description ? (
@@ -412,54 +411,6 @@ export function PlaylistDetailView({
               {remoteError} 当前显示已保存的歌曲索引。
             </p>
           ) : null}
-
-          <div className="mt-4 flex flex-wrap items-center gap-2.5">
-            <Button
-              className="gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-accent-hover active:scale-95"
-              disabled={
-                playableTracks.length === 0 ||
-                playbackTrackId !== null ||
-                downloadTrackId !== null
-              }
-              onClick={() => void playAllTracks()}
-              type="button"
-            >
-              <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-              播放全部
-            </Button>
-            {showBatchDownload ? (
-              <Button
-                className="gap-1.5 rounded-xl border border-surface-border bg-surface/50 px-3.5 py-2 text-xs sm:text-sm font-medium text-foreground hover:bg-surface-hover"
-                disabled={
-                  isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0
-                }
-                onClick={() => void downloadAllTracks()}
-                type="button"
-                variant="outline"
-              >
-                <svg
-                  aria-hidden="true"
-                  fill="none"
-                  height="14"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.8"
-                  viewBox="0 0 24 24"
-                  width="14"
-                >
-                  <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
-                </svg>
-                {isDownloadingAll
-                  ? `下载中 ${downloadProgress.completed}/${downloadProgress.total}`
-                  : downloadableTracks.length > 0
-                    ? "一键下载"
-                    : "已全部下载"}
-              </Button>
-            ) : null}
-          </div>
         </div>
       </div>
 
@@ -472,7 +423,58 @@ export function PlaylistDetailView({
         </p>
       ) : null}
 
-      <div className="mt-5 space-y-0.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
+        <span className="text-xs font-medium text-foreground-muted">{rows.length} 首歌曲</span>
+        <div className="flex items-center gap-2">
+          {showBatchDownload ? (
+            <Button
+              className="gap-1.5 rounded-xl border border-surface-border bg-surface/50 px-3.5 py-2 text-xs sm:text-sm font-medium text-foreground hover:bg-surface-hover"
+              disabled={
+                isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0
+              }
+              onClick={() => void downloadAllTracks()}
+              type="button"
+              variant="outline"
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="14"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+                width="14"
+              >
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+              </svg>
+              {isDownloadingAll
+                ? `下载中 ${downloadProgress.completed}/${downloadProgress.total}`
+                : downloadableTracks.length > 0
+                  ? "一键下载"
+                  : "已全部下载"}
+            </Button>
+          ) : null}
+          <Button
+            className="gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-accent-hover active:scale-95"
+            disabled={
+              playableTracks.length === 0 ||
+              playbackTrackId !== null ||
+              downloadTrackId !== null
+            }
+            onClick={() => void playAllTracks()}
+            type="button"
+          >
+            <svg aria-hidden="true" fill="currentColor" height="14" viewBox="0 0 24 24" width="14">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            播放全部
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-0.5">
         {rows.length ? (
           rows.map(({ track, index, trackId }) => {
             if (!track) {

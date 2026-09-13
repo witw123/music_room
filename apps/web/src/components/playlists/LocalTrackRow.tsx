@@ -177,36 +177,17 @@ export function LocalTrackRow({
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="w-6 shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
-          {draggable ? (
-            <span aria-label="拖动调整顺序" className="flex items-center gap-1 cursor-grab" title="拖动调整顺序">
-              <svg
-                aria-hidden="true"
-                fill="none"
-                height="14"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="1.8"
-                viewBox="0 0 24 24"
-                width="14"
-              >
-                <path d="M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01" />
-              </svg>
-            </span>
-          ) : (
-            <>
-              <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
-              <svg
-                aria-hidden="true"
-                className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in"
-                fill="currentColor"
-                height="14"
-                viewBox="0 0 24 24"
-                width="14"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </>
-          )}
+          <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
+          <svg
+            aria-hidden="true"
+            className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in"
+            fill="currentColor"
+            height="14"
+            viewBox="0 0 24 24"
+            width="14"
+          >
+            <path d="M8 5v14l11-7z" />
+          </svg>
         </div>
         <Artwork artworkUrl={track.artworkUrl} title={track.title} />
         <div className="min-w-0 flex-1">
@@ -269,15 +250,6 @@ export function LocalTrackRow({
               )}
             </Button>
           ) : null}
-          {canFavorite ? (
-            <FavoriteTrackButton
-              isFavorite={isFavorite}
-              onToggle={onToggleFavorite!}
-              pending={isTogglingFavorite}
-              size="compact"
-              track={toCachedProviderTrack(track)}
-            />
-          ) : null}
           <Button
             aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
             className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
@@ -299,7 +271,7 @@ export function LocalTrackRow({
               viewBox="0 0 24 24"
               width="14"
             >
-              <path d="M12 5v14M5 12h14" />
+              <path d="M4 6h11M4 12h11M4 18h6M18 14v7M14.5 17.5h7" />
             </svg>
           </Button>
           {onMove ? (
@@ -324,9 +296,18 @@ export function LocalTrackRow({
                 viewBox="0 0 24 24"
                 width="14"
               >
-                <path d="M5 7h10M11 3l4 4-4 4M19 17H9m4-4-4 4 4 4" />
+                <path d="M12 5v14M5 12h14" />
               </svg>
             </Button>
+          ) : null}
+          {canFavorite ? (
+            <FavoriteTrackButton
+              isFavorite={isFavorite}
+              onToggle={onToggleFavorite!}
+              pending={isTogglingFavorite}
+              size="compact"
+              track={toCachedProviderTrack(track)}
+            />
           ) : null}
           {onRemove ? (
             <Button

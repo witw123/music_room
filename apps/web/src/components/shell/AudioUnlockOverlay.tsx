@@ -35,7 +35,7 @@ export function AudioUnlockOverlay({ visible, onUnlock }: AudioUnlockOverlayProp
       }}
       style={{ cursor: "pointer" }}
     >
-      <div className="light-audio-surface pointer-events-none flex max-w-sm flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/5 px-10 py-10 text-center shadow-2xl backdrop-blur-xl">
+      <div className="light-audio-surface pointer-events-none flex max-w-sm flex-col items-center gap-5 rounded-2xl border border-surface-border bg-white/5 px-10 py-10 text-center shadow-2xl backdrop-blur-xl">
         {/* Animated speaker icon */}
         <div className="relative flex h-20 w-20 items-center justify-center">
           <div className="absolute inset-0 animate-ping rounded-full bg-accent/20" />

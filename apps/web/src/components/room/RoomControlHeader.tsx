@@ -402,7 +402,7 @@ export function RoomEditDialog({
       <div
         aria-labelledby="edit-room-dialog-title"
         aria-modal="true"
-        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl sm:p-6"
+        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-5 shadow-2xl sm:p-6"
         role="dialog"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -426,7 +426,7 @@ export function RoomEditDialog({
         </div>
         <form className="flex flex-col gap-4" onSubmit={onSubmit}>
           <div
-            className="flex gap-2 rounded-xl border border-white/10 bg-black/20 p-1"
+            className="flex gap-2 rounded-xl border border-surface-border bg-surface p-1"
             role="tablist"
             aria-label="房间可见性"
           >
@@ -436,7 +436,7 @@ export function RoomEditDialog({
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   form.visibility === visibility
                     ? "bg-accent text-white"
-                    : "text-foreground-muted hover:bg-white/10"
+                    : "text-foreground-muted hover:bg-surface-hover"
                 }`}
                 key={visibility}
                 onClick={() => onChange((current) => ({ ...current, visibility }))}
@@ -447,7 +447,7 @@ export function RoomEditDialog({
               </button>
             ))}
           </div>
-          <div className="border border-white/10 bg-black/20 px-3 py-2.5">
+          <div className="border border-surface-border bg-surface px-3 py-2.5">
             <span className="block text-xs text-foreground-muted">房间类型</span>
             <span className="mt-1 block text-sm font-medium text-foreground">
               {roomType === "request"
@@ -461,7 +461,7 @@ export function RoomEditDialog({
           <label className="flex flex-col gap-2 text-sm text-foreground">
             房间名称
             <input
-              className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              className="rounded-xl border border-surface-border bg-surface px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
               maxLength={120}
               onChange={(event) =>
                 onChange((current) => ({ ...current, name: event.target.value }))
@@ -473,7 +473,7 @@ export function RoomEditDialog({
           <label className="flex flex-col gap-2 text-sm text-foreground">
             房间简介 <span className="text-xs text-foreground-muted">可选</span>
             <textarea
-              className="min-h-20 resize-y rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              className="min-h-20 resize-y rounded-xl border border-surface-border bg-surface px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
               maxLength={500}
               onChange={(event) =>
                 onChange((current) => ({ ...current, description: event.target.value }))
@@ -485,7 +485,7 @@ export function RoomEditDialog({
           <label className="flex flex-col gap-2 text-sm text-foreground">
             房间密码 <span className="text-xs text-foreground-muted">留空表示移除密码，至少 4 位</span>
             <input
-              className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              className="rounded-xl border border-surface-border bg-surface px-3 py-2.5 text-sm text-foreground caret-accent outline-none placeholder:text-foreground-muted focus:border-accent focus:ring-1 focus:ring-accent"
               maxLength={128}
               minLength={4}
               onChange={(event) =>

@@ -27,7 +27,7 @@ export function Artwork({
         ? "h-24 w-24 rounded-xl"
         : size === "row"
           ? "h-16 w-16 rounded-lg"
-          : "h-10 w-10 rounded-lg";
+          : "h-10 w-10 rounded-xl";
   const sources = uniqueArtworkUrls([...(artworkUrls ?? []), artworkUrl]);
   const sourceKey = sources.join("\u001f");
   const [failedSourceIndex, setFailedSourceIndex] = useState(0);
