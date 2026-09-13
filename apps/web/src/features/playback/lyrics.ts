@@ -307,8 +307,27 @@ function expandTimedWords(words: RoomLyricWord[], lineTimeMs: number) {
 
 export function getRoomLyricDisplayWords(lines: RoomLyricLine[], lineIndex: number): RoomLyricWord[] {
   const line = lines[lineIndex];
-  if (!line || line.words.length === 0) return [];
-  return line.words;
+  if (!line) return [];
+  // 1. If the lyric file has genuine word timestamps (YRC, QRC, Enhanced LRC), use them directly!
+  if (line.words.length > 0) return line.words;
+  if (line.timeMs === null) return [];
+
+  // 2. Smoothly estimate character-level timing across the line duration for plain LRC
+  // so users still get pleasant, natural karaoke progression on songs without verbatim lyrics files.
+  const segments = splitLyricSegments(line.text);
+  if (segments.length === 0) return [];
+  const nextLine = lines.slice(lineIndex + 1).find((candidate) =>
+    candidate.timeMs !== null && candidate.timeMs > line.timeMs!
+  );
+  const durationMs = nextLine?.timeMs !== null && nextLine?.timeMs !== undefined
+    ? Math.max(1_000, Math.min(10_000, nextLine.timeMs - line.timeMs))
+    : Math.max(1_500, Math.min(8_000, segments.length * 300));
+
+  return segments.map((text, index) => ({
+    text,
+    timeMs: line.timeMs! + (durationMs * index) / segments.length,
+    durationMs: durationMs / segments.length
+  }));
 }
 
 export function getActiveRoomLyricWordIndex(line: RoomLyricLine | undefined, positionMs: number) {

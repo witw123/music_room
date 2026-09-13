@@ -75,10 +75,13 @@ describe("room lyrics", () => {
     ]);
   });
 
-  it("does not fabricate word timings for plain line-synced lyrics", () => {
+  it("builds smooth character-level display timing for plain line-synced lyrics", () => {
     const lines = parseRoomLyrics("[00:01.00]歌词\n[00:03.00]下一行");
 
-    expect(getRoomLyricDisplayWords(lines, 0)).toEqual([]);
+    expect(getRoomLyricDisplayWords(lines, 0)).toEqual([
+      { text: "歌", timeMs: 1_000, durationMs: 1_000 },
+      { text: "词", timeMs: 2_000, durationMs: 1_000 }
+    ]);
   });
 
   it("parses QRC suffix format text(start,dur)", () => {

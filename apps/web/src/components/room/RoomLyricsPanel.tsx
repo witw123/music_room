@@ -274,7 +274,7 @@ export function RoomLyricsPanel({
                   }`}
                 >
                   <span className="block w-full whitespace-pre-wrap">
-                    {line.words.length > 0 && displayWords.length > 0 ? displayWords.map((word, wordIndex) => {
+                    {displayWords.length > 0 ? displayWords.map((word, wordIndex) => {
                       if (!isActive) {
                         return <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre">{word.text}</span>;
                       }

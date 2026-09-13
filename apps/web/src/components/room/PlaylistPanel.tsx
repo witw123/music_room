@@ -51,6 +51,7 @@ export function PlaylistPanel({
   canManageLibrary,
   canCreatePlaylist,
   onSavePlaylistFromQueue,
+  onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
   onImportNeteaseTracks,
@@ -58,6 +59,7 @@ export function PlaylistPanel({
   onDeletePlaylist
 }: PlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [loadingPlaylistId, setLoadingPlaylistId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
   const [isPending, startTransition] = useTransition();
@@ -251,12 +253,24 @@ export function PlaylistPanel({
     });
   };
 
+  const handleLoadAndPlayPlaylist = async (playlistId: string) => {
+    if (!onLoadPlaylistIntoRoom || loadingPlaylistId !== null) return;
+    setLoadingPlaylistId(playlistId);
+    try {
+      await onLoadPlaylistIntoRoom(playlistId);
+    } finally {
+      setLoadingPlaylistId(null);
+    }
+  };
+
   if (selectedPlaylist) {
     return (
       <PlaylistDetail
         onBack={() => {
           setSelectedPlaylistId(null);
         }}
+        onPlayPlaylist={() => void handleLoadAndPlayPlaylist(selectedPlaylist.id)}
+        isPlaylistLoading={loadingPlaylistId === selectedPlaylist.id}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
         onImportNeteaseTracks={onImportNeteaseTracks}
@@ -302,6 +316,8 @@ export function PlaylistPanel({
               artworkUrls={networkArtworkById[playlist.id] ?? []}
               onDelete={() => deletePlaylist(playlist.id)}
               onOpen={() => setSelectedPlaylistId(playlist.id)}
+              onPlay={() => void handleLoadAndPlayPlaylist(playlist.id)}
+              isLoading={loadingPlaylistId === playlist.id}
               playlist={playlist}
             />
           ))}
@@ -335,7 +351,21 @@ export function PlaylistPanel({
   );
 }
 
-function PlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { playlist: Playlist; artworkUrls: readonly string[]; onOpen: () => void; onDelete: () => void }) {
+function PlaylistCard({
+  playlist,
+  artworkUrls,
+  onOpen,
+  onDelete,
+  onPlay,
+  isLoading
+}: {
+  playlist: Playlist;
+  artworkUrls: readonly string[];
+  onOpen: () => void;
+  onDelete: () => void;
+  onPlay?: () => void;
+  isLoading?: boolean;
+}) {
   const source = getNetworkPlaylistSource(playlist);
   const providerName = source?.provider === "qqmusic" ? "QQ 音乐" : source?.provider === "netease" ? "网易云音乐" : "网络歌单";
 
@@ -347,26 +377,61 @@ function PlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { playlist: P
         onClick={onOpen}
         type="button"
       >
-        <Artwork artworkUrls={artworkUrls} title={playlist.title} size="sm" />
+        <div className="relative shrink-0">
+          <Artwork artworkUrls={artworkUrls} title={playlist.title} size="sm" />
+          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 backdrop-blur-[1px] transition-opacity group-hover:opacity-100">
+            <PlayIcon className="h-4 w-4 text-white fill-white" />
+          </div>
+        </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <strong className="block truncate text-sm font-semibold text-foreground">{playlist.title}</strong>
+          <strong className="block truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
+            {playlist.title}
+          </strong>
           <p className="truncate text-[10px] text-foreground-muted">{providerName} · {playlist.trackIds.length} 首歌曲</p>
         </div>
       </button>
-      <Button
-        aria-label={`删除歌单 ${playlist.title}`}
-        className="h-10 w-10 shrink-0 text-white/70 transition-colors hover:bg-red-500/15 hover:text-red-300 sm:h-8 sm:w-8"
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete();
-        }}
-        size="icon"
-        title="删除歌单"
-        type="button"
-        variant="ghost"
-      >
-        <TrashIcon />
-      </Button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {onPlay ? (
+          <Button
+            aria-label={`在房间播放歌单 ${playlist.title}`}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-2.5 text-xs font-semibold text-accent transition-all hover:bg-accent hover:text-white active:scale-95 disabled:cursor-wait disabled:opacity-50"
+            disabled={isLoading}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPlay();
+            }}
+            size="sm"
+            title="载入并在房间播放"
+            type="button"
+          >
+            {isLoading ? (
+              <>
+                <LoadingSpinner className="h-3 w-3 animate-spin" />
+                <span className="text-[11px]">载入中…</span>
+              </>
+            ) : (
+              <>
+                <PlayIcon className="h-3 w-3 fill-current" />
+                <span className="text-[11px]">播放</span>
+              </>
+            )}
+          </Button>
+        ) : null}
+        <Button
+          aria-label={`删除歌单 ${playlist.title}`}
+          className="h-8 w-8 shrink-0 text-foreground-muted transition-colors hover:bg-red-500/15 hover:text-red-400"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          size="icon"
+          title="删除歌单"
+          type="button"
+          variant="ghost"
+        >
+          <TrashIcon />
+        </Button>
+      </div>
     </article>
   );
 }
@@ -374,6 +439,8 @@ function PlaylistCard({ playlist, artworkUrls, onOpen, onDelete }: { playlist: P
 function PlaylistDetail({
   playlist,
   onBack,
+  onPlayPlaylist,
+  isPlaylistLoading,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
   onImportNeteaseTracks,
@@ -385,6 +452,8 @@ function PlaylistDetail({
 }: {
   playlist: Playlist;
   onBack: () => void;
+  onPlayPlaylist?: () => void;
+  isPlaylistLoading?: boolean;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
@@ -489,10 +558,34 @@ function PlaylistDetail({
 
   return (
     <section className="flex w-full flex-col" data-testid="network-playlist-detail">
-      <Button className="mb-4 self-start gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
-        <ArrowLeftIcon />
-        返回歌单
-      </Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <Button className="self-start gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
+          <ArrowLeftIcon />
+          返回歌单
+        </Button>
+        {onPlayPlaylist ? (
+          <Button
+            className="gap-1.5 rounded-lg bg-accent text-white shadow-xs transition-all hover:bg-accent-hover active:scale-95 disabled:cursor-wait"
+            disabled={isPlaylistLoading}
+            onClick={onPlayPlaylist}
+            size="sm"
+            type="button"
+            title="将整张歌单载入房间并开始播放"
+          >
+            {isPlaylistLoading ? (
+              <>
+                <LoadingSpinner className="h-3.5 w-3.5 animate-spin" />
+                <span>载入播放中…</span>
+              </>
+            ) : (
+              <>
+                <PlayIcon className="h-3.5 w-3.5 fill-current" />
+                <span>播放整张歌单</span>
+              </>
+            )}
+          </Button>
+        ) : null}
+      </div>
 
       <div className="mt-2 overflow-hidden rounded-lg border border-surface-border bg-surface/40" data-testid="network-playlist-tracks">
         {remoteLoading ? <p className="px-3 py-4 text-xs text-foreground-muted">正在加载歌曲信息…</p> : null}
@@ -745,4 +838,21 @@ function TrashIcon() {
 
 function CloseIcon() {
   return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>;
+}
+
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
+      <polygon points="6 3 20 12 6 21 6 3" />
+    </svg>
+  );
+}
+
+function LoadingSpinner({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" height="15" viewBox="0 0 24 24" width="15">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  );
 }
