@@ -44,7 +44,7 @@ export function DiscoverPlaylistRail({
             role="button"
             tabIndex={0}
           >
-            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface border border-white/[0.08] shadow-sm">
+            <div className="relative aspect-square min-w-0 w-full max-w-full overflow-hidden rounded-xl bg-surface border border-surface-border shadow-xs">
               <Artwork
                 alt={playlist.title}
                 className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105"
@@ -88,7 +88,7 @@ export function DiscoverPlaylistRail({
 export function Artwork({ alt, src, className = "" }: { alt: string; src: string | null; className?: string }) {
   const [failed, setFailed] = useState(false);
   const source = src ? getArtworkSourceUrl(src) : null;
-  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-white/[0.06] text-xl text-foreground-muted ${className}`}>♪</span>;
+  if (!source || failed) return <span aria-label={alt || undefined} className={`flex min-w-0 max-w-full items-center justify-center overflow-hidden bg-surface text-xl text-foreground-muted ${className}`}>♪</span>;
   // eslint-disable-next-line @next/next/no-img-element
   return <img alt={alt} className={`block min-w-0 max-w-full object-cover ${className}`} loading="lazy" onError={() => setFailed(true)} src={source} style={{ display: "block", height: "100%", maxHeight: "100%", maxWidth: "100%", width: "100%" }} />;
 }

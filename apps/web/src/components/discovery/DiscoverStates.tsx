@@ -75,18 +75,18 @@ export function DiscoverEmptyState({
   onAction?: () => void;
 }) {
   return (
-    <section className="mt-10 flex min-h-64 flex-col items-center justify-center rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#12141c]/90 to-[#0c0e15]/95 px-6 py-12 text-center shadow-xl">
-      <div className="p-3.5 rounded-2xl bg-accent/15 border border-accent/25 text-accent mb-4">
-        <DiscoverCompassIcon className="w-8 h-8" />
+    <section className="mt-8 flex min-h-60 flex-col items-center justify-center rounded-2xl border border-surface-border bg-surface-elevated px-6 py-10 text-center shadow-xs">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-surface-border bg-surface text-foreground-muted mb-3.5">
+        <DiscoverCompassIcon className="w-6 h-6" />
       </div>
-      <h2 className="text-base font-bold text-white">{title}</h2>
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
       <p className="mt-1.5 max-w-sm text-xs text-foreground-muted leading-relaxed">{description}</p>
       {actionHref ? (
-        <a className="mt-5 rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)]" href={actionHref}>
+        <a className="mt-4 rounded-xl bg-accent hover:bg-accent-hover px-5 py-2 text-xs font-medium text-white transition-all shadow-sm" href={actionHref}>
           {actionLabel}
         </a>
       ) : (
-        <button className="mt-5 rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white transition-all shadow-[0_4px_16px_var(--accent-glow)] active:scale-95" onClick={onAction} type="button">
+        <button className="mt-4 rounded-xl bg-accent hover:bg-accent-hover px-5 py-2 text-xs font-medium text-white transition-all shadow-sm active:scale-95" onClick={onAction} type="button">
           {actionLabel}
         </button>
       )}
@@ -96,12 +96,12 @@ export function DiscoverEmptyState({
 
 export function DiscoverSkeleton() {
   return (
-    <div aria-label="正在加载个性化发现内容" className="mt-7 grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+    <div aria-label="正在加载个性化发现内容" className="mt-6 grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {Array.from({ length: 6 }, (_, index) => (
-        <div className="animate-pulse p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.04]" key={index}>
-          <div className="aspect-square rounded-xl bg-white/[0.06]" />
-          <div className="mt-3 h-3 w-4/5 rounded bg-white/[0.06]" />
-          <div className="mt-2 h-2 w-1/2 rounded bg-white/[0.06]" />
+        <div className="animate-pulse p-2.5 rounded-xl bg-surface/50 border border-surface-border" key={index}>
+          <div className="aspect-square rounded-lg bg-surface-elevated" />
+          <div className="mt-3 h-3 w-4/5 rounded bg-surface-elevated" />
+          <div className="mt-2 h-2.5 w-1/2 rounded bg-surface-elevated" />
         </div>
       ))}
     </div>

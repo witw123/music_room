@@ -64,7 +64,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
   return (
     <article
-      className="group relative flex w-full h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#141418] p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-white/[0.14] hover:bg-[#18181e] focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
+      className="group relative flex w-full h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface-elevated p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-accent/40 focus-within:border-[color:var(--room-accent)] focus-within:ring-1 focus-within:ring-[color:var(--room-accent)] motion-reduce:transition-none"
       data-room-theme={room.roomType}
       data-room-type={room.roomType}
       data-testid="room-directory-card"
@@ -111,23 +111,23 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Track Playing Information Placed BELOW the cover */}
       {nowPlaying?.title ? (
-        <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 backdrop-blur-md">
+        <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-surface-border bg-surface/50 px-2.5 py-1.5 backdrop-blur-md">
           <div className="flex items-end gap-0.5 h-3 shrink-0 text-accent">
             <span className="w-0.5 h-full bg-current rounded-full animate-bounce" style={{ animationDuration: "0.8s" }} />
             <span className="w-0.5 h-2 bg-current rounded-full animate-bounce" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />
             <span className="w-0.5 h-2.5 bg-current rounded-full animate-bounce" style={{ animationDuration: "0.9s", animationDelay: "0.4s" }} />
           </div>
           <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate text-xs">
-            <span className="font-medium text-white truncate">{nowPlaying.title}</span>
+            <span className="font-medium text-foreground truncate">{nowPlaying.title}</span>
             {nowPlaying.artist ? (
-              <span className="text-white/40 truncate shrink-0">· {nowPlaying.artist}</span>
+              <span className="text-foreground-muted truncate shrink-0">· {nowPlaying.artist}</span>
             ) : null}
           </div>
         </div>
       ) : null}
 
       <div className={nowPlaying?.title ? "pt-2" : "pt-2.5"}>
-        <h3 className="truncate text-base sm:text-lg font-bold tracking-tight text-white group-hover:text-white transition-colors">
+        <h3 className="truncate text-base sm:text-lg font-bold tracking-tight text-foreground transition-colors">
           {room.name}
         </h3>
         <p className="mt-0.5 line-clamp-2 min-h-[2.25rem] break-words text-xs leading-relaxed text-foreground-muted/80">

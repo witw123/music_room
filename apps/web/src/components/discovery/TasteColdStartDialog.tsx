@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { Button } from "@/components/ui/button";
 import {
-  SparklesIcon,
+  SlidersIcon,
   CloseIcon,
   CheckIcon,
   MicIcon,
@@ -111,12 +111,12 @@ export function TasteColdStartDialog({
       >
         <div className="flex items-start justify-between gap-4 mb-4 sm:mb-6 shrink-0">
           <div className="flex items-center gap-3 sm:gap-3.5">
-            <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-accent/15 text-accent shrink-0">
-              <SparklesIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+            <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-surface border border-surface-border text-foreground shrink-0">
+              <SlidersIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">打造你的专属音乐雷达</h2>
-              <p className="text-xs sm:text-sm text-foreground-muted">选择 1-5 个你常听的风格或场景，生成专属推荐</p>
+              <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">定制聆听偏好</h2>
+              <p className="text-xs sm:text-sm text-foreground-muted">选择常听的曲风与场景，为你提供更贴合的发现内容</p>
             </div>
           </div>
           <button
@@ -132,7 +132,7 @@ export function TasteColdStartDialog({
           {/* Genre selection */}
           <div>
             <div className="flex items-center gap-2 mb-2.5 text-xs font-semibold text-foreground-muted uppercase tracking-wider">
-              <MusicIcon className="w-4 h-4 text-accent" /> 喜好曲风 (点击选择)
+              <MusicIcon className="w-4 h-4 text-accent" /> 喜好曲风
             </div>
             <div className="flex flex-wrap gap-2">
               {genreOptions.map(({ label, icon: IconComponent }) => {
@@ -144,7 +144,7 @@ export function TasteColdStartDialog({
                     onClick={() => toggleLabel(label)}
                     className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
-                        ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold border-transparent"
+                        ? "bg-accent text-white shadow-xs font-semibold border-transparent"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
                     }`}
                   >
@@ -172,7 +172,7 @@ export function TasteColdStartDialog({
                     onClick={() => toggleLabel(label)}
                     className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
-                        ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] font-semibold border-transparent"
+                        ? "bg-accent text-white shadow-xs font-semibold border-transparent"
                         : "bg-surface hover:bg-surface-hover text-foreground-muted hover:text-foreground border border-surface-border"
                     }`}
                   >
@@ -213,9 +213,7 @@ export function TasteColdStartDialog({
           </div>
         </div>
 
-        {/* Footer actions. Stacked full-width on phones so the primary CTA
-            stays reachable; the shrink-0 keeps the footer pinned while the
-            pill list scrolls above it. */}
+        {/* Footer actions */}
         <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-surface-border pt-4 mt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-6 sm:mt-6">
           <Button
             type="button"
@@ -229,10 +227,10 @@ export function TasteColdStartDialog({
             type="button"
             onClick={handleSubmit}
             disabled={submitting || selectedLabels.length === 0}
-            className="px-6 rounded-xl bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_16px_var(--accent-glow)]"
+            className="px-6 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium shadow-sm transition-all active:scale-95"
           >
-            <SparklesIcon className="w-4 h-4 mr-2" />
-            {submitting ? "正在生成专属推荐..." : "开启我的音乐雷达"}
+            <CheckIcon className="w-4 h-4 mr-2" />
+            {submitting ? "正在保存..." : "保存偏好"}
           </Button>
         </div>
         </div>

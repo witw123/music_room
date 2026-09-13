@@ -205,7 +205,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
         role="search"
       >
         <div
-          className={`relative flex min-w-0 flex-1 items-center rounded-xl border border-white/[0.1] bg-black/40 px-2.5 shadow-sm transition-all focus-within:border-accent focus-within:bg-black/60 focus-within:ring-2 focus-within:ring-accent/20 ${sizeClasses} ${
+          className={`relative flex min-w-0 flex-1 items-center rounded-xl border border-surface-border bg-surface px-2.5 shadow-sm transition-all focus-within:border-accent focus-within:bg-background-secondary focus-within:ring-2 focus-within:ring-accent/20 ${sizeClasses} ${
             disabled ? "opacity-60 cursor-not-allowed" : ""
           }`}
         >

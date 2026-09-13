@@ -15,6 +15,7 @@ import { VinylAuraVisualizer } from "@/components/room/VinylAuraVisualizer";
 import { appSettingsChangeEvent, getAppSettings, updateAppSettings } from "@/features/settings/settings-store";
 import { usePlayerStyle } from "@/features/settings/use-player-style";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
+import { QualityBadge } from "./bottom-player-layout";
 
 type ImmersivePlayerOverlayProps = {
   isOpen: boolean;
@@ -453,7 +454,7 @@ function MobileImmersivePlayer({
           />
           <div className="mt-2 grid grid-cols-3 items-center text-xs tabular-nums text-white/58">
             <span>{formatDuration(positionMs)}</span>
-            <span className="justify-self-center rounded-lg bg-white/[0.12] px-3 py-1 text-white/65">无损</span>
+            <QualityBadge variant="capsule" popoverPlacement="center" />
             <span className="justify-self-end">-{formatDuration(Math.max(0, durationMs - positionMs))}</span>
           </div>
         </div>
@@ -611,6 +612,7 @@ function DesktopImmersivePlayer({
           value={positionMs}
         />
         <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-white/45">{formatDuration(durationMs)}</span>
+        <QualityBadge variant="default" popoverPlacement="right" className="ml-1" />
       </div>
 
       <div className="mt-4 flex items-center justify-center gap-2 sm:gap-3">

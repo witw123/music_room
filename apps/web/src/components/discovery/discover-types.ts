@@ -40,15 +40,22 @@ export type DiscoverTrackActions = {
   onFeedback: (track: Track, action: "not-interested" | "exclude-from-profile") => void;
 };
 
-export const genreFilterPills = [
-  { id: "all", label: "全部", icon: SparklesIcon },
-  { id: "pop", label: "流行", icon: MicIcon, keywords: ["流行", "pop", "主打"] },
-  { id: "rock", label: "摇滚", icon: VolumeIcon, keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk"] },
-  { id: "electronic", label: "电子", icon: ZapIcon, keywords: ["电子", "edm", "house", "techno", "电音", "synth"] },
-  { id: "acg", label: "ACG", icon: SakuraIcon, keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop"] },
-  { id: "focus", label: "专注", icon: LaptopIcon, keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音"] },
-  { id: "night", label: "夜听", icon: MoonIcon, keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul"] },
-  { id: "guofeng", label: "国风", icon: LandmarkIcon, keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式"] }
+export type GenreFilterPill = {
+  id: string;
+  label: string;
+  keywords?: string[];
+  icon?: React.ComponentType<{ className?: string }>;
+};
+
+export const genreFilterPills: GenreFilterPill[] = [
+  { id: "all", label: "全部" },
+  { id: "pop", label: "流行", keywords: ["流行", "pop", "主打"] },
+  { id: "rock", label: "摇滚", keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk"] },
+  { id: "electronic", label: "电子", keywords: ["电子", "edm", "house", "techno", "电音", "synth"] },
+  { id: "acg", label: "ACG", keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop"] },
+  { id: "focus", label: "专注", keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音"] },
+  { id: "night", label: "夜听", keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul"] },
+  { id: "guofeng", label: "国风", keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式"] }
 ];
 
 export function toPlaylistTrackActions(actions: DiscoverTrackActions) {

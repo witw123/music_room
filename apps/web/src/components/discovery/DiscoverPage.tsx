@@ -42,10 +42,7 @@ import {
   invalidateDiscoverDataCache
 } from "@/features/workspace/page-data-cache";
 import {
-  SparklesIcon,
-  CompassIcon as DiscoverCompassIcon,
   SlidersIcon,
-  MicIcon,
   PlayIcon
 } from "@/components/icons/DiscoverIcons";
 import {
@@ -705,139 +702,156 @@ export function DiscoverPage() {
 
         {!isSearchActive ? (
           <>
-
-        {/* Genre & Scene Filter Pills (Artistic Capsules) */}
-        <div className="mt-2.5 mb-4 flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
-          {genreFilterPills.map((pill) => {
-            const IconComp = pill.icon;
-            const active = activeFilterId === pill.id;
-            return (
+            {/* Genre Filter Pills */}
+            <div className="mt-2.5 mb-3 flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar touch-pan-x">
+              {genreFilterPills.map((pill) => {
+                const active = activeFilterId === pill.id;
+                return (
+                  <button
+                    key={pill.id}
+                    type="button"
+                    onClick={() => setActiveFilterId(pill.id)}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none ${
+                      active
+                        ? "bg-foreground text-background font-semibold shadow-xs"
+                        : "bg-surface border border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover"
+                    }`}
+                  >
+                    {pill.label}
+                  </button>
+                );
+              })}
               <button
-                key={pill.id}
                 type="button"
-                onClick={() => setActiveFilterId(pill.id)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border ${
-                  active
-                    ? "bg-accent/15 text-accent border-accent/25 font-semibold"
-                    : "bg-surface border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover"
-                }`}
+                onClick={() => setShowColdStartDialog(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-foreground-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-surface-border ml-auto shrink-0 transition-colors cursor-pointer"
+                title="偏好设置"
               >
-                <IconComp className="w-3.5 h-3.5 shrink-0" />
-                <span>{pill.label}</span>
+                <SlidersIcon className="w-3.5 h-3.5 text-foreground-muted" />
+                <span className="hidden sm:inline">偏好设置</span>
               </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setShowColdStartDialog(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-foreground-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-surface-border ml-auto shrink-0 transition-colors"
-            title="定制偏好"
-          >
-            <SlidersIcon className="w-3.5 h-3.5 text-accent" />
-            <span className="hidden sm:inline">偏好定制</span>
-          </button>
-        </div>
+            </div>
 
-        {loading && !data ? <DiscoverSkeleton /> : null}
+            {loading && !data ? <DiscoverSkeleton /> : null}
 
-        {/* Filtered Genre Radar Spotlight */}
-        {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
-          <section className="relative mb-6 overflow-hidden rounded-xl p-2 sm:p-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div className="space-y-0.5">
-                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">{activeFilter?.label}精选推荐</h2>
-              </div>
-              <Button
-                type="button"
-                disabled={pending !== null}
-                onClick={() => playDailyRadarAll(filteredTopTracks)}
-                size="sm"
-                className="rounded-lg px-4 py-2 bg-accent hover:bg-accent-hover text-white font-medium shadow-sm transition-all active:scale-95 text-xs sm:text-sm self-start sm:self-auto"
+            {/* Filtered Genre Radar Spotlight */}
+            {activeFilterId !== "all" && filteredTopTracks.length > 0 ? (
+              <section className="relative mb-6 overflow-hidden rounded-xl p-2 sm:p-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div className="space-y-0.5">
+                    <h2 className="text-base sm:text-lg font-bold text-foreground tracking-tight">{activeFilter?.label}精选</h2>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={pending !== null}
+                    onClick={() => playDailyRadarAll(filteredTopTracks)}
+                    size="sm"
+                    className="rounded-lg px-4 py-2 bg-accent hover:bg-accent-hover text-white font-medium shadow-sm transition-all active:scale-95 text-xs sm:text-sm self-start sm:self-auto"
+                  >
+                    <PlayIcon className="w-3.5 h-3.5 mr-1.5" />
+                    <span>播放全部</span>
+                  </Button>
+                </div>
+                <div className="pt-2">
+                  <div className="max-h-[560px] overflow-y-auto hide-scrollbar">
+                    <ProviderAlbumTrackTable
+                      actions={toPlaylistTrackActions(trackActions)}
+                      showToolbar={false}
+                      tracks={filteredTopTracks}
+                    />
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
+            {!loading && noAccounts ? (
+              <DiscoverEmptyState
+                title="连接音乐平台后开始发现"
+                description="绑定网易云音乐或 QQ 音乐账号，我们将从你的常听曲目生成个性化推荐。"
+                actionHref="/app/settings"
+                actionLabel="前往绑定"
+              />
+            ) : null}
+            {!loading && !noAccounts && noProfile ? (
+              <DiscoverEmptyState
+                title="发现更多好音乐"
+                description="在 Music Room 播放或收藏歌曲，或通过偏好设置选择喜爱的曲风与艺人。"
+                actionLabel="定制聆听偏好"
+                onAction={() => setShowColdStartDialog(true)}
+              />
+            ) : null}
+            {!loading && !noAccounts && !noProfile && !hasContent ? (
+              <DiscoverEmptyState
+                title="暂无新内容"
+                description="可以稍后刷新，或继续聆听几首歌曲来丰富推荐内容。"
+                actionLabel="重新加载"
+                onAction={() => void load()}
+              />
+            ) : null}
+
+            {/* Section 1: Daily Mix */}
+            {dailyMixCards.length && activeFilterId === "all" ? (
+              <DiscoverSection
+                title="专为你推荐"
+                subtitle="根据近期聆听生成"
               >
-                <PlayIcon className="w-3.5 h-3.5 mr-1.5" />
-                <span>播放全部</span>
-              </Button>
-            </div>
-            <div className="pt-2">
-              <div className="max-h-[560px] overflow-y-auto hide-scrollbar">
-                <ProviderAlbumTrackTable
-                  actions={toPlaylistTrackActions(trackActions)}
-                  showToolbar={false}
-                  tracks={filteredTopTracks}
-                />
-              </div>
-            </div>
-          </section>
-        ) : null}
+                <DiscoverPlaylistRail items={dailyMixCards} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
+              </DiscoverSection>
+            ) : null}
 
-        {!loading && noAccounts ? <DiscoverEmptyState title="连接音乐平台后开始发现" description="绑定网易云音乐或 QQ 音乐后，发现页会从你的听歌画像召回新的歌曲和歌单。" actionHref="/app/settings" actionLabel="前往绑定" /> : null}
-        {!loading && !noAccounts && noProfile ? <DiscoverEmptyState title="开始探索你的专属推荐" description="在 Music Room 播放或收藏歌曲，或通过偏好设置快速定制你的专属雷达。" actionLabel="定制音乐偏好" onAction={() => setShowColdStartDialog(true)} /> : null}
-        {!loading && !noAccounts && !noProfile && !hasContent ? <DiscoverEmptyState title="暂无新内容" description="可以稍后刷新，或继续聆听几首歌曲来扩展推荐线索。" actionLabel="重新加载" onAction={() => void load()} /> : null}
-
-        {/* Section 1: Made For You · Daily Mix Matrix */}
-        {dailyMixCards.length && activeFilterId === "all" ? (
-          <DiscoverSection
-            title="Daily Mix"
-            icon={<SparklesIcon className="w-4 h-4 text-accent" />}
-          >
-            <DiscoverPlaylistRail items={dailyMixCards} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
-          </DiscoverSection>
-        ) : null}
-
-        {/* Section 2: Familiar Artists & Radios (Circle Avatar Rail) */}
-        {familiarArtists.length && activeFilterId === "all" ? (
-          <DiscoverArtistRail
-            artists={familiarArtists}
-            onStartRadio={async (track) => trackActions.onStartRadio(track)}
-            pending={pending}
-          />
-        ) : null}
-
-        {/* Section 3: All-Day Mood & Atmosphere Stations */}
-        {activeFilterId === "all" ? (
-          <MoodStationRail onPlayStation={playMoodStation} pending={pending} />
-        ) : null}
-
-        {/* Section 4: Contextual Attribution - Inspired By Top Artist */}
-        {inspiredTracks.length > 0 && topArtist && activeFilterId === "all" ? (
-          <DiscoverSection
-            title={`常听歌手 · ${topArtist}`}
-            icon={<MicIcon className="w-4 h-4 text-accent" />}
-          >
-            <div className="rounded-xl p-1 sm:p-2">
-              <ProviderAlbumTrackTable
-                actions={toPlaylistTrackActions(trackActions)}
-                showToolbar={false}
-                tracks={inspiredTracks}
+            {/* Section 2: Familiar Artists */}
+            {familiarArtists.length && activeFilterId === "all" ? (
+              <DiscoverArtistRail
+                artists={familiarArtists}
+                onStartRadio={async (track) => trackActions.onStartRadio(track)}
+                pending={pending}
               />
-            </div>
-          </DiscoverSection>
-        ) : null}
+            ) : null}
 
-        {/* Section 5: Deep Cuts & Hidden Gems */}
-        {deepCutTracks.length > 0 && activeFilterId === "all" ? (
-          <DiscoverSection
-            title="宝藏单曲"
-            icon={<DiscoverCompassIcon className="w-4 h-4 text-accent" />}
-          >
-            <div className="rounded-xl p-1 sm:p-2">
-              <ProviderAlbumTrackTable
-                actions={toPlaylistTrackActions(trackActions)}
-                showToolbar={false}
-                tracks={deepCutTracks}
-              />
-            </div>
-          </DiscoverSection>
-        ) : null}
+            {/* Section 3: Mood & Atmosphere Stations */}
+            {activeFilterId === "all" ? (
+              <MoodStationRail onPlayStation={playMoodStation} pending={pending} />
+            ) : null}
 
-        {/* Section 6: Curated & Thematic Genre Playlists */}
-        {otherPlaylists.length ? (
-          <DiscoverSection
-            title={activeFilterId === "all" ? "精选歌单" : `${activeFilter?.label ?? ""}风格歌单`}
-          >
-            <DiscoverPlaylistRail items={otherPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
-          </DiscoverSection>
-        ) : null}
+            {/* Section 4: Contextual Attribution - Inspired By Top Artist */}
+            {inspiredTracks.length > 0 && topArtist && activeFilterId === "all" ? (
+              <DiscoverSection
+                title={`来自 ${topArtist} 的相关推荐`}
+              >
+                <div className="rounded-xl">
+                  <ProviderAlbumTrackTable
+                    actions={toPlaylistTrackActions(trackActions)}
+                    showToolbar={false}
+                    tracks={inspiredTracks}
+                  />
+                </div>
+              </DiscoverSection>
+            ) : null}
+
+            {/* Section 5: Deep Cuts */}
+            {deepCutTracks.length > 0 && activeFilterId === "all" ? (
+              <DiscoverSection
+                title="单曲精选"
+                subtitle="值得细品的小众与慢热佳作"
+              >
+                <div className="rounded-xl">
+                  <ProviderAlbumTrackTable
+                    actions={toPlaylistTrackActions(trackActions)}
+                    showToolbar={false}
+                    tracks={deepCutTracks}
+                  />
+                </div>
+              </DiscoverSection>
+            ) : null}
+
+            {/* Section 6: Playlists */}
+            {otherPlaylists.length ? (
+              <DiscoverSection
+                title={activeFilterId === "all" ? "精选歌单" : `${activeFilter?.label ?? ""}歌单`}
+              >
+                <DiscoverPlaylistRail items={otherPlaylists} loadingKey={detailLoading} onOpen={openPlaylist} onPlay={playPlaylistCard} />
+              </DiscoverSection>
+            ) : null}
           </>
         ) : null}
 

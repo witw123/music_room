@@ -36,9 +36,9 @@ export function withAlpha(color: string, alpha: number) {
 
 const baseColor: Rgb = { r: 5, g: 8, b: 13 };
 const fallbackPalette: ArtworkPalette = {
-  background: "var(--background)",
-  surface: "var(--background-secondary)",
-  border: "var(--surface-border)",
+  background: "#0a0b0e",
+  surface: "#141518",
+  border: "rgba(255, 255, 255, 0.12)",
   accent: "rgb(161 161 170)",
   accentSoft: "rgba(161, 161, 170, 0.16)",
   accentGlow: "rgba(161, 161, 170, 0.28)"

@@ -22,7 +22,7 @@ export function extractDiscoverArtists(data: ProfileProviderRecommendations): Di
         representativeTrack: item.candidate,
         artworkUrl: item.candidate.artworkUrl ?? null,
         trackCount: 1,
-        reason: item.reasons[0] ?? "常听歌手"
+        reason: "艺人"
       });
     } else {
       map.get(artist)!.trackCount += 1;
@@ -32,20 +32,20 @@ export function extractDiscoverArtists(data: ProfileProviderRecommendations): Di
 }
 
 export const genreCategoryPresets = [
-  { id: "rock", title: "摇滚与能量专栏", description: "充满张力与力量感的摇滚、朋克与独立之声。", tags: ["摇滚", "独立", "能量", "朋克"], keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk", "硬核"] },
-  { id: "electronic", title: "电子律动空间", description: "跳跃节奏与合成器声场，沉浸式电音精选。", tags: ["电子", "EDM", "电音", "律动"], keywords: ["电子", "edm", "house", "techno", "电音", "synth", "dance", "舞曲"] },
-  { id: "focus", title: "专注与纯音小憩", description: "清透静谧的器乐与氛围音乐，伴你沉浸思考。", tags: ["专注", "纯音", "学习", "轻音乐"], keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音", "钢琴", "古典"] },
-  { id: "night", title: "夜听与疗愈私享", description: "深夜温暖陪伴，抚平情绪的治愈与慢调旋律。", tags: ["夜听", "深夜", "治愈", "R&B"], keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul", "放空", "疗愈"] },
-  { id: "acg", title: "ACG 与二次元幻想", description: "动漫游戏原声与日系旋律，开启异次元共鸣。", tags: ["ACG", "动漫", "二次元", "J-pop"], keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop", "日语"] },
-  { id: "guofeng", title: "新国风与古韵雅集", description: "丝竹戏腔与现代编曲交织的华夏音韵。", tags: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式", "武侠"] },
-  { id: "rnb", title: "R&B 与都市律动", description: "丝滑转音与慵懒节奏，都市夜色中的随性律动。", tags: ["R&B", "都市", "律动", "Soul"], keywords: ["r&b", "rnb", "soul", "嘻哈", "说唱", "hip-hop", "rap", "都市"] },
-  { id: "folk", title: "民谣与温暖叙事", description: "一把木吉他与质朴故事，诉说人间烟火与诗意。", tags: ["民谣", "木吉他", "温暖", "故事"], keywords: ["民谣", "folk", "吉他", "不插电", "民乐"] }
+  { id: "rock", title: "摇滚精选", description: "经典与当下独立摇滚之声", tags: ["摇滚", "独立", "朋克"], keywords: ["摇滚", "rock", "朋克", "金属", "metal", "punk", "硬核"] },
+  { id: "electronic", title: "电子律动", description: "House、Techno 与合成器节拍", tags: ["电子", "EDM", "律动"], keywords: ["电子", "edm", "house", "techno", "电音", "synth", "dance", "舞曲"] },
+  { id: "focus", title: "专注纯音", description: "工作与深度思考的平静伴奏", tags: ["专注", "纯音", "轻音乐"], keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "白噪音", "钢琴", "古典"] },
+  { id: "night", title: "深夜放空", description: "夜色中的慢调与柔和声音", tags: ["夜听", "深夜", "R&B"], keywords: ["夜听", "深夜", "夜晚", "晚安", "治愈", "r&b", "soul", "放空", "疗愈"] },
+  { id: "acg", title: "ACG 精选", description: "动漫原声与日系流行曲目", tags: ["ACG", "动漫", "J-pop"], keywords: ["acg", "anime", "二次元", "动漫", "动画", "游戏", "vocaloid", "日系", "j-pop", "日语"] },
+  { id: "guofeng", title: "国风雅韵", description: "民乐编曲与华语古韵", tags: ["国风", "古风", "仙侠"], keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式", "武侠"] },
+  { id: "rnb", title: "R&B 都会", description: "现代 R&B 与 Soul 律动", tags: ["R&B", "都市", "律动"], keywords: ["r&b", "rnb", "soul", "嘻哈", "说唱", "hip-hop", "rap", "都市"] },
+  { id: "folk", title: "民谣故事", description: "木吉他与质朴叙事之声", tags: ["民谣", "吉他", "故事"], keywords: ["民谣", "folk", "吉他", "不插电", "民乐"] }
 ];
 
 export function buildCuratedPlaylistCards(data: ProfileProviderRecommendations): DiscoverPlaylistCard[] {
   const getArtistsExcerpt = (tracks: Track[]) => {
     const artists = Array.from(new Set(tracks.map((t) => t.artist).filter(Boolean))).slice(0, 3);
-    return artists.length ? `包含 ${artists.join(" · ")} 等` : "为您量身定制的专属精选";
+    return artists.length ? `${artists.join("、")} 等` : "精选代表曲目";
   };
 
   const familiarTracks = data.familiarArtists.map((i) => i.candidate);
@@ -72,30 +72,30 @@ export function buildCuratedPlaylistCards(data: ProfileProviderRecommendations):
   const dailyMixes = [
     {
       id: "daily-mix-1",
-      title: "Daily Mix 1 · 核心偏好",
-      description: `精选最契合你听歌画像的常听歌手与代表作。${getArtistsExcerpt(familiarTracks.length ? familiarTracks : forYouTracks)}`,
-      tags: ["Daily Mix", "常听", "精选", "偏好"],
+      title: "Daily Mix 1",
+      description: getArtistsExcerpt(familiarTracks.length ? familiarTracks : forYouTracks),
+      tags: ["Daily Mix"],
       tracks: familiarTracks.length ? familiarTracks : forYouTracks
     },
     {
       id: "daily-mix-2",
-      title: "Daily Mix 2 · 深度宝藏",
-      description: `挖掘符合你品味但低热度的小众私藏曲目。${getArtistsExcerpt(deepTracks)}`,
-      tags: ["Daily Mix", "深度", "宝藏", "小众"],
+      title: "Daily Mix 2",
+      description: getArtistsExcerpt(deepTracks.length ? deepTracks : forYouTracks),
+      tags: ["Daily Mix"],
       tracks: deepTracks.length ? deepTracks : forYouTracks
     },
     {
       id: "daily-mix-3",
-      title: "Daily Mix 3 · 探索律动",
-      description: `跳出舒适圈，发现令人耳目一新的探索风味。${getArtistsExcerpt(moodTracks)}`,
-      tags: ["Daily Mix", "探索", "新歌", "律动"],
+      title: "Daily Mix 3",
+      description: getArtistsExcerpt(moodTracks.length ? moodTracks : forYouTracks),
+      tags: ["Daily Mix"],
       tracks: moodTracks.length ? moodTracks : forYouTracks
     },
     {
       id: "daily-mix-4",
-      title: "Daily Mix 4 · 慢调私享",
-      description: `舒缓慢调与治愈陪伴旋律，抚平思绪。${getArtistsExcerpt(slowTracks)}`,
-      tags: ["Daily Mix", "夜听", "疗愈", "慢调"],
+      title: "Daily Mix 4",
+      description: getArtistsExcerpt(slowTracks.length ? slowTracks : forYouTracks),
+      tags: ["Daily Mix"],
       tracks: slowTracks.length ? slowTracks : forYouTracks
     }
   ];
@@ -133,7 +133,7 @@ export function buildCuratedPlaylistCards(data: ProfileProviderRecommendations):
       },
       tracks,
       score: 100,
-      reasons: ["画像推荐"]
+      reasons: ["推荐"]
     } satisfies DiscoverPlaylistCard];
   });
 }

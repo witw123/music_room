@@ -647,13 +647,13 @@ export function ProviderSearchPage({
     if (albumId) await loadAlbumById(albumId, track.provider);
   }
 
-  if (!hydrated) return <div className="min-h-[100dvh] bg-black" />;
+  if (!hydrated) return <div className="min-h-[100dvh] bg-background" />;
 
   const showBackToRecommendations = onBackToRecommendations && (isSearchActive || hasSearched || Boolean(keywords.trim()));
   const prefixAction = showBackToRecommendations ? (
     <button
       aria-label="返回发现"
-      className="flex h-7 sm:h-8 items-center gap-1 rounded-lg px-1.5 sm:px-2 text-xs font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white shrink-0"
+      className="flex h-7 sm:h-8 items-center gap-1 rounded-lg px-1.5 sm:px-2 text-xs font-medium text-foreground-muted hover:text-foreground transition hover:bg-surface shrink-0"
       onClick={() => {
         setHasSearched(false);
         setSearchSuggestionsOpen(false);
@@ -671,7 +671,7 @@ export function ProviderSearchPage({
     onClose ? (
       <button
         aria-label="返回发现"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition hover:bg-surface hover:text-foreground"
         onClick={onClose}
         title="返回发现"
         type="button"
@@ -681,7 +681,7 @@ export function ProviderSearchPage({
     ) : (
       <Link
         aria-label="返回首页"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.07] hover:text-white"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition hover:bg-surface hover:text-foreground"
         href="/app"
         title="返回首页"
       >
@@ -693,7 +693,7 @@ export function ProviderSearchPage({
   const suffixAction = enabledProviders.length > 1 ? (
     <select
       aria-label="选择音乐平台"
-      className="h-8 w-[4.5rem] shrink-0 rounded-lg border border-white/[0.08] bg-black/60 px-1.5 text-[11px] text-white/75 outline-none sm:w-auto sm:px-2 sm:text-xs"
+      className="h-8 w-[4.5rem] shrink-0 rounded-lg border border-surface-border bg-surface px-1.5 text-[11px] text-foreground outline-none sm:w-auto sm:px-2 sm:text-xs"
       onChange={(event) => setProvider(event.target.value as Provider)}
       value={provider}
     >
@@ -767,16 +767,16 @@ export function ProviderSearchPage({
     <>
       {shouldShowSearchContent && enabledProviders.length > 0 ? (
         <>
-          <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-white/[0.1]`} role="tablist" aria-label="搜索结果类型">
+          <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-surface-border`} role="tablist" aria-label="搜索结果类型">
             <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
             <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
             <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
           </div>
 
           {!isConnected ? (
-            <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-amber-300/20 bg-amber-200/[0.06] px-5 py-4 text-sm text-amber-100/80">
+            <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100/90">
               <span>当前为免登录公开搜索，绑定 {providerName} 账号可使用完整播放及收藏导入等功能。</span>
-              <Link className="shrink-0 text-xs font-semibold text-amber-200 hover:text-white" href="/app/profile">去绑定</Link>
+              <Link className="shrink-0 text-xs font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-200 dark:hover:text-white" href="/app/profile">去绑定</Link>
             </div>
           ) : null}
 
@@ -806,7 +806,7 @@ export function ProviderSearchPage({
           ) : null}
         </>
       ) : shouldShowSearchContent ? (
-        <div className={`${embedded ? "mt-7" : "mt-10"} rounded-2xl border border-white/[0.1] bg-black p-8 text-sm text-white/55`}>当前没有启用音乐平台。</div>
+        <div className={`${embedded ? "mt-7" : "mt-10"} rounded-2xl border border-surface-border bg-surface p-8 text-sm text-foreground-muted`}>当前没有启用音乐平台。</div>
       ) : null}
 
       {statusMessage ? <p className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-4 py-3 text-xs text-emerald-200" role="status">{statusMessage}</p> : null}
@@ -845,7 +845,7 @@ export function ProviderSearchPage({
   }
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex justify-center">
           {searchBar}

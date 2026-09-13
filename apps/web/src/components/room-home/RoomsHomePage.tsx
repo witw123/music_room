@@ -341,7 +341,7 @@ export function RoomsHomePage({
 
         {/* Desktop Filter Tabs & Action Buttons */}
         <div className="hidden items-center justify-between gap-4 md:flex">
-          <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-2xl" role="tablist" aria-label="房间类型筛选">
+          <div className="flex items-center gap-1 rounded-2xl border border-surface-border p-1 bg-surface-elevated/80 shadow-sm backdrop-blur-2xl" role="tablist" aria-label="房间类型筛选">
             {(["all", "interactive", "request", "radio"] as const).map((roomType) => {
               const isSelected = roomTypeFilter === roomType;
               return (
@@ -349,8 +349,8 @@ export function RoomsHomePage({
                   aria-selected={isSelected}
                   className={`flex min-h-9 whitespace-nowrap items-center justify-center rounded-xl px-4 py-1.5 text-xs sm:text-sm font-medium transition-all duration-150 ${
                     isSelected
-                      ? "bg-white/10 text-white font-semibold shadow-sm"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-sm border border-surface-border"
+                      : "text-foreground-muted hover:text-foreground hover:bg-surface"
                   }`}
                   key={roomType}
                   onClick={() => setRoomTypeFilter(roomType)}
@@ -370,23 +370,13 @@ export function RoomsHomePage({
               onClick={() => openCreateRoom("public")}
               type="button"
             >
-              创建公开房间
-            </Button>
-            <Button
-              data-testid="create-private-room"
-              variant="outline"
-              size="sm"
-              className="rounded-xl border border-white/[0.08] bg-white/[0.05] hover:bg-white/[0.10] text-white text-xs sm:text-sm font-medium transition-all"
-              onClick={() => openCreateRoom("private")}
-              type="button"
-            >
-              创建私密房间
+              创建房间
             </Button>
             <Button
               data-testid="open-join-room-dialog"
               variant="outline"
               size="sm"
-              className="rounded-xl border border-white/[0.08] bg-white/[0.05] hover:bg-white/[0.10] text-white text-xs sm:text-sm font-medium transition-all"
+              className="rounded-xl border border-surface-border bg-surface hover:bg-surface-hover text-foreground text-xs sm:text-sm font-medium transition-all"
               onClick={openJoinDialog}
               type="button"
             >
@@ -396,7 +386,7 @@ export function RoomsHomePage({
               aria-label="刷新房间列表"
               variant="ghost"
               size="sm"
-              className="rounded-xl text-foreground-muted hover:text-white hover:bg-white/[0.06] text-xs sm:text-sm transition-all"
+              className="rounded-xl text-foreground-muted hover:text-foreground hover:bg-surface text-xs sm:text-sm transition-all"
               onClick={() => startTransition(() => void refreshAvailableRooms())}
               type="button"
             >

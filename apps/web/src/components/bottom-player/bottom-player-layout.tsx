@@ -287,7 +287,7 @@ function VolumeControl({
     <div ref={rootRef} className="relative shrink-0">
       {isOpen ? (
         <div className="absolute bottom-full right-1/2 z-[60] mb-2 flex translate-x-1/2 flex-col items-center">
-          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary/95 px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="light-popover-surface flex h-[9.25rem] w-14 flex-col items-center rounded-2xl border border-surface-border bg-background-secondary px-2.5 py-2.5 shadow-[0_14px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl dark:bg-[#17181c] dark:border-white/15">
             <div className="relative h-24 w-5 shrink-0">
               <div className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
                 <div
@@ -318,7 +318,7 @@ function VolumeControl({
             </div>
             <span className="mt-2 text-xs tabular-nums text-foreground-muted">{percentage}%</span>
           </div>
-          <div className="h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-background-secondary" aria-hidden="true" />
+          <div className="light-popover-surface-arrow h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-[#17181c]" aria-hidden="true" />
         </div>
       ) : null}
       <button
@@ -610,7 +610,17 @@ const AUDIO_QUALITY_OPTIONS: Array<{
   { value: "standard", label: "标准", badge: "标准", bitrate: "128k" }
 ];
 
-export function QualityBadge({ quality }: { quality?: string | null }) {
+export function QualityBadge({
+  quality,
+  variant = "default",
+  popoverPlacement = "right",
+  className = ""
+}: {
+  quality?: string | null;
+  variant?: "default" | "capsule";
+  popoverPlacement?: "right" | "center";
+  className?: string;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [preferredQuality, setPreferredQuality] = useState<AudioQualityPreference>(() => {
@@ -662,20 +672,30 @@ export function QualityBadge({ quality }: { quality?: string | null }) {
     setIsOpen(false);
   };
 
+  const isCapsule = variant === "capsule";
+
   return (
-    <div ref={rootRef} className="relative inline-flex shrink-0 items-center">
+    <div
+      ref={rootRef}
+      className={`relative inline-flex shrink-0 items-center ${isCapsule ? "justify-self-center" : ""}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label={`音频音质设置：当前${currentOption.label}`}
         aria-expanded={isOpen}
         title="点击切换首选音质"
-        className="inline-flex items-center gap-1 rounded border border-white/20 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium tracking-tight text-white/80 select-none hover:border-white/40 hover:bg-white/[0.08] hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+        className={
+          isCapsule
+            ? `inline-flex items-center gap-1 rounded-lg bg-white/[0.12] px-2.5 py-0.5 text-[11px] font-medium text-white/80 active:scale-95 transition-all select-none hover:bg-white/[0.18] hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`
+            : `inline-flex items-center gap-1 rounded border border-surface-border bg-surface/50 px-1.5 py-0.5 text-[10px] font-medium tracking-tight text-foreground-muted select-none hover:border-surface-border hover:bg-surface hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent ${className}`
+        }
       >
         <span>{currentOption.badge}</span>
         <svg
-          width="8"
-          height="8"
+          width={isCapsule ? 9 : 8}
+          height={isCapsule ? 9 : 8}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -690,7 +710,13 @@ export function QualityBadge({ quality }: { quality?: string | null }) {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full right-0 z-[60] mb-2 w-44 rounded-xl border border-surface-border bg-background-secondary/95 p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className={`light-popover-surface absolute bottom-full z-[70] mb-2 w-48 rounded-xl border border-white/15 bg-[#17181c] p-1.5 shadow-[0_16px_36px_rgba(0,0,0,0.85)] animate-in fade-in zoom-in-95 duration-150 ${
+            popoverPlacement === "center" ? "left-1/2 -translate-x-1/2" : "right-0"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <div className="px-2 py-1 text-[10px] font-semibold text-foreground-muted tracking-wider">
             首选音质偏好
           </div>
@@ -704,8 +730,8 @@ export function QualityBadge({ quality }: { quality?: string | null }) {
                   onClick={() => handleSelect(opt.value)}
                   className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
                     isSelected
-                      ? "bg-accent/15 text-accent font-medium"
-                      : "text-foreground-secondary hover:bg-white/5 hover:text-foreground"
+                      ? "bg-accent/15 text-accent font-semibold"
+                      : "text-foreground-secondary hover:bg-surface-hover hover:text-foreground"
                   }`}
                 >
                   <div className="flex items-center gap-1.5">
@@ -731,7 +757,7 @@ export function QualityBadge({ quality }: { quality?: string | null }) {
               );
             })}
           </div>
-          <div className="mt-1 border-t border-surface-border/50 px-2 pt-1 text-[9px] text-foreground-muted leading-tight">
+          <div className="mt-1 border-t border-surface-border px-2 pt-1 text-[9px] text-foreground-muted leading-tight">
             平台无高规格或无权限时平滑降级
           </div>
         </div>

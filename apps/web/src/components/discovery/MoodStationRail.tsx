@@ -13,62 +13,44 @@ import {
 export const moodStations = [
   {
     id: "night",
-    title: "深夜私享",
-    subtitle: "慢调 R&B · 治愈微醺",
+    title: "深夜",
+    subtitle: "R&B · 治愈慢调",
     keywords: ["夜听", "深夜", "治愈", "r&b", "soul", "放空"],
-    gradient: "from-indigo-950/70 via-purple-950/80 to-[#0b0c14]",
-    border: "border-purple-500/20",
-    badge: "#a855f7",
     icon: MoonIcon
   },
   {
     id: "focus",
-    title: "深度专注",
-    subtitle: "Lo-Fi 器乐 · 静谧流淌",
+    title: "专注",
+    subtitle: "器乐 · 沉浸思考",
     keywords: ["专注", "学习", "工作", "轻音乐", "纯音乐", "lo-fi", "chill", "钢琴"],
-    gradient: "from-blue-950/70 via-slate-900/80 to-[#0b0c14]",
-    border: "border-sky-500/20",
-    badge: "#38bdf8",
     icon: LaptopIcon
   },
   {
     id: "energy",
-    title: "律动充能",
-    subtitle: "电子节拍 · 摇滚能量",
+    title: "律动",
+    subtitle: "电子 · 节拍律动",
     keywords: ["电子", "edm", "摇滚", "rock", "舞曲", "能量"],
-    gradient: "from-rose-950/70 via-orange-950/80 to-[#0b0c14]",
-    border: "border-rose-500/20",
-    badge: "#f43f5e",
     icon: ZapIcon
   },
   {
     id: "morning",
-    title: "清新晨光",
-    subtitle: "不插电民谣 · 元气苏醒",
+    title: "清晨",
+    subtitle: "民谣 · 清新苏醒",
     keywords: ["民谣", "清新", "吉他", "流行", "晨光"],
-    gradient: "from-emerald-950/70 via-teal-950/80 to-[#0b0c14]",
-    border: "border-emerald-500/20",
-    badge: "#10b981",
     icon: MicIcon
   },
   {
     id: "acg",
-    title: "次元幻想",
-    subtitle: "ACG 燃曲 · 异次元羁绊",
+    title: "ACG",
+    subtitle: "原声 · 日系流行",
     keywords: ["acg", "anime", "二次元", "动漫", "游戏", "j-pop"],
-    gradient: "from-fuchsia-950/70 via-pink-950/80 to-[#0b0c14]",
-    border: "border-fuchsia-500/20",
-    badge: "#ec4899",
     icon: SakuraIcon
   },
   {
     id: "guofeng",
-    title: "华夏国韵",
-    subtitle: "丝竹戏腔 · 仙侠古意",
+    title: "国风",
+    subtitle: "民乐 · 古韵戏腔",
     keywords: ["国风", "古风", "仙侠", "华语", "戏腔", "新中式"],
-    gradient: "from-amber-950/70 via-red-950/80 to-[#0b0c14]",
-    border: "border-amber-500/20",
-    badge: "#f59e0b",
     icon: LandmarkIcon
   }
 ];
@@ -82,9 +64,8 @@ export function MoodStationRail({
 }) {
   return (
     <DiscoverSection
-      title="全天候情境与情绪电台"
-      subtitle="随时随刻，一键切入当前心情与氛围的最佳节拍"
-      icon={<ZapIcon className="w-4 h-4 text-accent" />}
+      title="场景电台"
+      subtitle="随时切入适合当前状态的流式旋律"
     >
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {moodStations.map((station) => {
@@ -96,16 +77,13 @@ export function MoodStationRail({
               type="button"
               disabled={pending !== null}
               onClick={() => void onPlayStation(station)}
-              className={`group relative flex flex-col justify-between overflow-hidden rounded-xl border ${station.border} bg-gradient-to-br ${station.gradient} p-3 sm:p-3.5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent min-h-[96px] sm:min-h-[104px] shadow-sm`}
+              className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-surface-border bg-surface-elevated p-3 sm:p-3.5 text-left transition-all duration-150 hover:bg-surface-hover hover:border-surface-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent min-h-[92px] sm:min-h-[98px] shadow-xs active:scale-[0.98] cursor-pointer select-none"
             >
-              <div className="flex items-center justify-between">
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.08] backdrop-blur-md border border-white/10"
-                  style={{ color: station.badge }}
-                >
+              <div className="flex items-center justify-between w-full">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-surface-border bg-surface text-foreground-muted transition-colors group-hover:text-foreground">
                   <IconComp className="w-3.5 h-3.5" />
                 </div>
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white opacity-80 group-hover:bg-accent group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
                   {isPending ? (
                     <span className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
@@ -113,8 +91,8 @@ export function MoodStationRail({
                   )}
                 </span>
               </div>
-              <div className="mt-2.5">
-                <p className="text-xs sm:text-sm font-semibold text-white group-hover:text-accent transition-colors">
+              <div className="mt-2">
+                <p className="text-xs sm:text-sm font-semibold tracking-tight text-foreground transition-colors group-hover:text-accent">
                   {station.title}
                 </p>
                 <p className="mt-0.5 text-[10px] sm:text-[11px] text-foreground-muted truncate">
