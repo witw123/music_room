@@ -196,21 +196,21 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
       </div>
 
       <section className="mx-auto grid w-full max-w-[1600px] gap-2 px-2.5 pt-0 lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="request-room-hero">
-        <div className="relative z-10 hidden lg:block min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden lg:border-r lg:border-white/[0.06] lg:bg-surface/[0.12]">
+        <div className="relative z-10 hidden lg:block min-h-0 min-w-0 overflow-visible lg:h-full lg:min-h-0 lg:overflow-hidden">
           {stageReady ? (
             <RoomStage {...buildRoomStageProps(props, { mobileControlsOnly: true })} />
           ) : (
             <div className="h-full min-h-[22rem] w-full rounded-2xl bg-surface/[0.04] animate-pulse" />
           )}
         </div>
-        <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl sm:rounded-3xl border border-white/[0.06] bg-[#0c0e15]/90 lg:h-full lg:overflow-hidden lg:rounded-none lg:border-0">
-          <header className="hidden lg:flex shrink-0 items-center justify-between px-3.5 pb-2 pt-2.5 sm:px-5 sm:pt-4 lg:px-6 border-b border-white/[0.06]">
+        <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:overflow-hidden lg:rounded-none">
+          <header className="hidden lg:flex shrink-0 items-center justify-between px-3.5 pb-2 pt-2.5 sm:px-5 sm:pt-4 lg:px-6">
             <div className="flex items-center gap-2 min-w-0">
               <span className="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-accent/20 text-accent border border-accent/25 shrink-0">
                 <MusicIcon className="w-3.5 h-3.5" />
               </span>
               <div className="flex flex-col min-w-0">
-                <h1 className="text-sm sm:text-lg font-bold text-white tracking-tight truncate">
+                <h1 className="text-sm sm:text-lg font-bold text-foreground tracking-tight truncate">
                   {props.roomSnapshot.room.name || "点歌台"}
                 </h1>
                 <span className="text-[10px] text-foreground-muted">
@@ -219,7 +219,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-foreground-muted">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-surface-border/60 bg-surface/60 px-3 py-1 font-mono text-[11px]">
                 <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
                 <span>当前队列 {queueCount} 首</span>
               </span>
@@ -261,7 +261,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 />
               )}
               {message ? (
-                <p className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs sm:text-sm text-white backdrop-blur-md shadow-md" role="status">
+                <p className="rounded-2xl border border-surface-border/60 bg-surface/80 px-4 py-3 text-xs sm:text-sm text-foreground backdrop-blur-md shadow-xs" role="status">
                   {message}
                 </p>
               ) : null}
@@ -303,9 +303,9 @@ function RequestRoomWorkspace(
     props.mobileTab === tab ? "flex" : "hidden lg:flex";
 
   return (
-    <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:border-t lg:border-white/[0.06] lg:px-0" data-testid="request-room-workspace">
+    <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:px-0" data-testid="request-room-workspace">
       <div className="material-surface-header sticky top-0 z-30 mb-3 px-1 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:pt-0 lg:hidden" role="tablist" aria-label="点歌房管理">
-        <div className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl">
+        <div className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md">
           {requestWorkspaceTabs.map((tab) => {
             const isActive = props.mobileTab === tab.id;
             const IconComp = tab.icon;
@@ -315,10 +315,10 @@ function RequestRoomWorkspace(
                 id={`request-workspace-tab-${tab.id}`}
                 aria-controls={`request-workspace-${tab.id}`}
                 aria-selected={isActive}
-                className={`flex-1 flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                className={`flex-1 flex min-h-8 sm:min-h-9 items-center justify-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all duration-150 cursor-pointer ${
                   isActive
-                    ? "bg-accent text-white shadow-[0_4px_16px_var(--accent-glow)] scale-[1.01]"
-                    : "text-foreground-muted hover:text-white hover:bg-white/[0.06]"
+                    ? "bg-accent text-white shadow-xs"
+                    : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
                 }`}
                 onClick={() => props.onMobileTabChange(tab.id)}
                 role="tab"
@@ -333,19 +333,19 @@ function RequestRoomWorkspace(
         </div>
       </div>
 
-      <section className={`${panelVisibility("library")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-library" role="tabpanel">
-        <header className="material-surface-header flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+      <section className={`${panelVisibility("library")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-library" role="tabpanel">
+        <header className="material-surface-header flex shrink-0 items-center justify-between px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
               <MusicIcon className="w-3.5 h-3.5" />
             </span>
-            <h2 className="text-sm font-bold text-white tracking-tight">房间曲库</h2>
+            <h2 className="text-sm font-bold text-foreground tracking-tight">房间曲库</h2>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
+          <span className="rounded-full border border-surface-border/50 bg-surface/50 px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
             {props.roomSnapshot.tracks.length} 首
           </span>
         </header>
-        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-1 sm:px-4">
           {props.panelsReady ? (
             <LibraryTabPanel
               activeSession={props.activeSession}
@@ -369,19 +369,19 @@ function RequestRoomWorkspace(
         </div>
       </section>
 
-      <section className={`${panelVisibility("playlists")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none lg:border-r lg:border-white/[0.06]`} id="request-workspace-playlists" role="tabpanel">
-        <header className="material-surface-header flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+      <section className={`${panelVisibility("playlists")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-playlists" role="tabpanel">
+        <header className="material-surface-header flex shrink-0 items-center justify-between px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
               <RadioIcon className="w-3.5 h-3.5" />
             </span>
-            <h2 className="text-sm font-bold text-white tracking-tight">歌单管理</h2>
+            <h2 className="text-sm font-bold text-foreground tracking-tight">歌单管理</h2>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
+          <span className="rounded-full border border-surface-border/50 bg-surface/50 px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
             {props.playlists.length} 个
           </span>
         </header>
-        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-1 sm:px-4">
           {props.panelsReady ? (
             <LocalStorageTabPanel
               activeSession={props.activeSession}
@@ -410,14 +410,14 @@ function RequestRoomWorkspace(
       </section>
 
       <section className={`${panelVisibility("members")} min-h-[20rem] sm:min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none`} id="request-workspace-members" role="tabpanel">
-        <header className="material-surface-header flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+        <header className="material-surface-header flex shrink-0 items-center justify-between px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent/15 text-accent border border-accent/20">
               <UsersIcon className="w-3.5 h-3.5" />
             </span>
-            <h2 className="text-sm font-bold text-white tracking-tight">房间成员</h2>
+            <h2 className="text-sm font-bold text-foreground tracking-tight">房间成员</h2>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
+          <span className="rounded-full border border-surface-border/50 bg-surface/50 px-2.5 py-0.5 text-[11px] font-mono text-foreground-muted">
             {props.roomSnapshot.room.members.length} 人
           </span>
         </header>
@@ -454,12 +454,12 @@ function RequestInbox({
   onApproveAll?: () => Promise<void>;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 backdrop-blur-2xl shadow-xl" data-testid="request-room-inbox">
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
+    <section className="overflow-hidden rounded-2xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs" data-testid="request-room-inbox">
+      <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
         <div className="flex items-center gap-2">
-          <h2 className="font-bold text-white text-sm sm:text-base">待审核点歌</h2>
+          <h2 className="font-bold text-foreground text-sm sm:text-base">待审核点歌</h2>
           {pendingRequests.length > 0 ? (
-            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-400">
               {pendingRequests.length}
             </span>
           ) : null}
@@ -470,14 +470,14 @@ function RequestInbox({
             onClick={() => void onApproveAll()}
             size="sm"
             type="button"
-            className="rounded-xl text-xs bg-accent hover:bg-accent-hover text-white shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+            className="rounded-xl text-xs bg-accent hover:bg-accent-hover text-white shadow-xs transition-all active:scale-95"
           >
             全部接纳入队
           </Button>
         ) : null}
       </div>
       {pendingRequests.length ? (
-        <div className="divide-y divide-white/[0.05]">
+        <div className="divide-y divide-surface-border/40">
           {pendingRequests.map((request) => (
             <RequestTicket
               key={request.id}
@@ -491,9 +491,9 @@ function RequestInbox({
         <div className="px-4 py-8 text-center text-xs text-foreground-muted">还没有等待审核的点歌。</div>
       )}
       {handledRequests.length ? (
-        <div className="border-t border-white/[0.06] px-4 py-3 sm:px-5">
+        <div className="border-t border-surface-border/40 px-4 py-3 sm:px-5">
           <p className="text-xs font-bold text-foreground-muted uppercase tracking-wider">最近处理记录</p>
-          <div className="mt-2 divide-y divide-white/[0.04]">
+          <div className="mt-2 divide-y divide-surface-border/30">
             {handledRequests.slice(0, 4).map((request) => (
               <RequestHistoryRow key={request.id} request={request} />
             ))}
@@ -514,10 +514,10 @@ function RequestTicket({
   onDecide: (request: RoomRequest, decision: "approved" | "rejected", options?: { playNext?: boolean }) => Promise<void>;
 }) {
   return (
-    <article className="flex min-w-0 items-center gap-3.5 px-4 py-3 sm:px-5 transition-colors hover:bg-white/[0.03]">
+    <article className="flex min-w-0 items-center gap-3.5 px-4 py-3 sm:px-5 transition-colors hover:bg-surface-hover/60">
       <Artwork artworkUrl={request.artworkUrl} title={request.title} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-white" title={request.title}>{request.title}</p>
+        <p className="truncate text-sm font-semibold text-foreground" title={request.title}>{request.title}</p>
         <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${request.artist}${request.album ? ` · ${request.album}` : ""}`}>
           {request.artist}{request.album ? ` · ${request.album}` : ""}
         </p>
@@ -535,7 +535,7 @@ function RequestTicket({
           onClick={() => void onDecide(request, "approved")}
           size="sm"
           type="button"
-          className="rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30"
+          className="rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30"
         >
           {pending ? "处理中…" : "接纳入队"}
         </Button>
@@ -577,13 +577,13 @@ function RequestHistory({
   tracks?: TrackMeta[];
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 backdrop-blur-2xl shadow-xl">
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5 sm:px-5">
-        <h2 className="font-bold text-white text-sm sm:text-base">{title}</h2>
+    <section className="overflow-hidden rounded-2xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs">
+      <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
+        <h2 className="font-bold text-foreground text-sm sm:text-base">{title}</h2>
         <span className="text-xs font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
       </div>
       {requests.length ? (
-        <div className="divide-y divide-white/[0.05]">
+        <div className="divide-y divide-surface-border/40">
           {requests.slice().reverse().map((request) => {
             let queuePosition: number | null = null;
             if (request.status === "approved" && queue.length > 0) {
@@ -619,15 +619,15 @@ function RequestHistoryRow({
       : "等待审核";
 
   const statusClass = request.status === "approved"
-    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
     : request.status === "rejected"
-      ? "bg-rose-500/15 border-rose-500/30 text-rose-300"
-      : "bg-amber-500/15 border-amber-500/30 text-amber-300";
+      ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+      : "bg-amber-500/15 border-amber-500/30 text-amber-400";
 
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-5">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs sm:text-sm font-semibold text-white">{request.title}</p>
+        <p className="truncate text-xs sm:text-sm font-semibold text-foreground">{request.title}</p>
         <p className="truncate text-xs text-foreground-muted">{request.artist}</p>
       </div>
       <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${statusClass}`}>
@@ -639,9 +639,9 @@ function RequestHistoryRow({
 
 function Artwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
   if (!artworkUrl) {
-    return <span aria-label={title} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] border border-white/[0.08] text-xs text-foreground-muted">♪</span>;
+    return <span aria-label={title} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface border border-surface-border/60 text-xs text-foreground-muted">♪</span>;
   }
-  return <img alt={title} className="h-11 w-11 shrink-0 rounded-xl object-cover border border-white/10 shadow-sm" src={artworkUrl} />;
+  return <img alt={title} className="h-11 w-11 shrink-0 rounded-xl object-cover border border-surface-border/60 shadow-xs" src={artworkUrl} />;
 }
 
 async function importRequestedTrack(

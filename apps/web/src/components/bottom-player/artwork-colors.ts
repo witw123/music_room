@@ -39,9 +39,9 @@ const fallbackPalette: ArtworkPalette = {
   background: "#0a0b0e",
   surface: "#141518",
   border: "rgba(255, 255, 255, 0.12)",
-  accent: "rgb(161 161 170)",
-  accentSoft: "rgba(161, 161, 170, 0.16)",
-  accentGlow: "rgba(161, 161, 170, 0.28)"
+  accent: "rgb(0 122 255)",
+  accentSoft: "rgba(0, 122, 255, 0.16)",
+  accentGlow: "rgba(0, 122, 255, 0.28)"
 };
 
 export function useArtworkPalette(artworkUrl: string | null | undefined) {

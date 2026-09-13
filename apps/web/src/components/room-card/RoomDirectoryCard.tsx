@@ -150,9 +150,9 @@ function RoomNowPlayingStageScene({
   const artworkSrc = nowPlaying.artworkUrl ? getArtworkSourceUrl(nowPlaying.artworkUrl) : null;
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center overflow-hidden select-none">
-      {/* Background Layer: Room's Default Theme Scene elements (Starfield / Vinyl / Radar) */}
-      <div className="absolute inset-0 opacity-40">
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden select-none bg-slate-50 dark:bg-[#07090e]">
+      {/* Background Layer: Room's Default Theme Scene elements */}
+      <div className="absolute inset-0 opacity-20 dark:opacity-40">
         <ArtisticRoomStageScene roomType={roomType} />
       </div>
 
@@ -160,22 +160,21 @@ function RoomNowPlayingStageScene({
       {artworkSrc ? (
         <div
           aria-hidden="true"
-          className="absolute -inset-3 bg-cover bg-center opacity-25 dark:opacity-35 blur-xl scale-110 transition-transform duration-700 group-hover:scale-125"
+          className="absolute -inset-4 bg-cover bg-center opacity-30 dark:opacity-35 blur-2xl scale-125 transition-transform duration-700 group-hover:scale-130"
           style={{ backgroundImage: `url("${artworkSrc}")` }}
         />
       ) : null}
-      <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-white/20 to-transparent dark:from-[#07090e]/80 dark:via-black/20 dark:to-black/40" />
+      <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/40 to-transparent dark:from-[#07090e]/90 dark:via-black/20 dark:to-black/40" />
 
-      {/* Surrounding Ambient Breathing Halo (Borderless) */}
+      {/* Surrounding Ambient Breathing Halo */}
       <div className="relative flex items-center justify-center pt-2">
-        {/* Outer breathing halo glow */}
         <div
-          className="absolute -inset-6 rounded-full blur-xl opacity-35 animate-pulse"
+          className="absolute -inset-6 rounded-full blur-xl opacity-20 dark:opacity-35 animate-pulse"
           style={{ backgroundColor: accentColor }}
         />
 
         {/* Central Album Artwork Cover */}
-        <div className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl bg-surface border border-surface-border shadow-md dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
+        <div className="relative z-10 h-16 w-16 sm:h-20 sm:w-20 shrink-0 overflow-hidden rounded-xl bg-white dark:bg-black/60 border border-black/5 dark:border-white/10 shadow-[0_8px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
           {artworkSrc ? (
             <img
               alt={nowPlaying.title}

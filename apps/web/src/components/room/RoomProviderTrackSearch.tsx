@@ -247,9 +247,9 @@ export function RoomProviderTrackSearch({
   const hotPills = remoteHotWords.length > 0 ? remoteHotWords.slice(0, 5) : [];
 
   return <section className="flex min-w-0 flex-col gap-3" data-testid={testId}>
-    <div className={surface === "framed" ? "flex min-w-0 flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-md transition-all shadow-sm" : "flex min-w-0 flex-col gap-3"}>
+    <div className={surface === "framed" ? "flex min-w-0 flex-col gap-3 rounded-2xl border border-surface-border/60 bg-surface/40 p-3.5 backdrop-blur-md transition-all shadow-xs" : "flex min-w-0 flex-col gap-3"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-flex rounded-xl border border-white/10 bg-black/30 p-1" role="tablist" aria-label="音乐平台">
+        <div className="inline-flex rounded-xl border border-surface-border/60 bg-surface/70 p-1" role="tablist" aria-label="音乐平台">
           {enabledSearchProviders.map((item) => {
             const isCurrent = provider === item;
             return (
@@ -261,8 +261,8 @@ export function RoomProviderTrackSearch({
                 onClick={() => setProvider(item)}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
                   isCurrent
-                    ? "bg-accent text-white shadow-sm"
-                    : "text-foreground-muted hover:bg-white/10 hover:text-foreground"
+                    ? "bg-accent text-white shadow-xs"
+                    : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground"
                 }`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${item === "netease" ? "bg-red-400" : "bg-emerald-400"}`} />
@@ -349,7 +349,7 @@ export function RoomProviderTrackSearch({
                 setSearchSuggestionsOpen(false);
                 void searchTracks(pill.label);
               }}
-              className="rounded-full border border-white/5 bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-foreground-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
+              className="rounded-full border border-surface-border/60 bg-surface/60 px-2.5 py-0.5 text-[11px] text-foreground-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
             >
               {pill.label}
             </button>
@@ -360,16 +360,16 @@ export function RoomProviderTrackSearch({
       {errorMessage ? <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="status">{errorMessage}</p> : null}
       {message ? <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{message}</p> : null}
 
-      {results.length > 0 ? <div className="divide-y divide-white/5 overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-inner">
+      {results.length > 0 ? <div className="divide-y divide-surface-border/40 overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50">
         {results.map((track) => {
           const isInLibrary = libraryTrackIds.has(track.providerTrackId);
           const isPending = pending === `${mode}:${track.providerTrackId}`;
           const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
-          return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-white/[0.03]">
+          return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-surface-hover/60">
             {track.artworkUrl ? (
-              <img src={track.artworkUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-white/10 object-cover shadow-sm" />
+              <img src={track.artworkUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs" />
             ) : (
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[10px] text-foreground-muted">音乐</span>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
@@ -388,10 +388,10 @@ export function RoomProviderTrackSearch({
               onClick={() => void handleTrackAction(track)}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
                 isManagedImport && isInLibrary
-                  ? "cursor-default border border-white/10 bg-white/5 text-foreground-muted/60"
+                  ? "cursor-default border border-surface-border/60 bg-surface text-foreground-muted/60"
                   : isPending
                     ? "border border-accent/40 bg-accent/20 text-accent opacity-75"
-                    : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-sm"
+                    : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-xs"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {isManagedImport && isInLibrary ? (isProgramMode ? "已在节目单" : "已在曲库") : isPending ? "处理中…" : actionLabel}

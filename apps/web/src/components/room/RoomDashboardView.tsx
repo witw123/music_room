@@ -171,8 +171,8 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
           )}
         </div>
       </div>
-      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-white/[0.06] md:min-h-0 md:rounded-none md:border-l md:border-t-0 md:shadow-[-20px_0_50px_rgba(0,0,0,0.36)]" data-custom-layout-item="room-panel">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-white/[0.06] px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
+      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col md:min-h-0 md:rounded-none md:shadow-[-6px_0_24px_rgba(0,0,0,0.05)] dark:md:shadow-[-12px_0_36px_rgba(0,0,0,0.3)]" data-custom-layout-item="room-panel">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
           {/* Mobile Room Header matching desktop control bar */}
           <div className="pb-2.5 md:hidden">
             <RoomControlHeader
@@ -192,7 +192,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             />
           </div>
 
-          <div aria-label="房间视图" className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 bg-[#10121a]/80 backdrop-blur-xl" role="tablist">
+          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;
               return (
@@ -206,10 +206,10 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
                   tabIndex={isActive ? 0 : -1}
-                  className={`flex-1 flex min-h-9 whitespace-nowrap items-center justify-center gap-1.5 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-medium transition-all duration-150 ${
+                  className={`flex-1 flex min-h-8 sm:min-h-9 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm font-medium transition-all duration-150 cursor-pointer ${
                     isActive
-                      ? "bg-white/10 text-white font-semibold shadow-sm"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs"
+                      : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
                   }`}
                   type="button"
                 >

@@ -159,7 +159,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
                     <time className="shrink-0 text-[10px] sm:text-xs tabular-nums text-foreground-muted/55" dateTime={new Date(message.timestamp).toISOString()}>{formatChatTime(message.timestamp)}</time>
                     {isHost ? <button aria-label={`删除 ${message.senderName} 的消息`} className="shrink-0 text-[10px] text-foreground-muted opacity-70 transition-opacity hover:text-danger hover:opacity-100 focus-visible:text-danger focus-visible:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100" disabled={deletingMessageId !== null} onClick={() => void deleteMessage(message.id)} type="button">{deletingMessageId === message.id ? "删除中" : "删除"}</button> : null}
                   </div>
-                  <div className={`inline-block max-w-full rounded-[0.875rem] px-3 py-2 text-left shadow-sm ${isCurrentUser ? "bg-accent text-white" : "bg-white/[0.1] text-foreground"}`}><p className="break-words text-xs sm:text-sm leading-5">{message.content}</p></div>
+                  <div className={`inline-block max-w-full rounded-[0.875rem] px-3 py-2 text-left shadow-xs ${isCurrentUser ? "bg-accent text-white" : "bg-surface border border-surface-border/60 text-foreground"}`}><p className="break-words text-xs sm:text-sm leading-5">{message.content}</p></div>
                 </div>
                 {isCurrentUser ? <ChatAvatar currentUser name={message.senderName} /> : null}
               </article>
@@ -168,7 +168,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
         </div>
       </div>
 
-      <form className="flex shrink-0 gap-2 border-t border-surface-border p-2.5 sm:p-3 bg-background/80 backdrop-blur-md" onSubmit={handleSend}>
+      <form className="flex shrink-0 gap-2 border-t border-surface-border/40 p-2.5 sm:p-3 bg-background/80 backdrop-blur-md" onSubmit={handleSend}>
         <label className="sr-only" htmlFor={`radio-chat-input-${roomId}`}>发送消息</label>
         <input
           className="min-w-0 flex-1 rounded-xl border border-surface-border bg-background px-3 py-2 text-xs sm:text-sm text-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60 placeholder:text-foreground-muted/50"
@@ -186,7 +186,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
 }
 
 function ChatAvatar({ name, currentUser = false }: { name: string; currentUser?: boolean }) {
-  return <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-inner border border-white/10 ${currentUser ? "bg-accent/15 text-accent" : "bg-white/[0.1] text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
+  return <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-inner border border-surface-border/60 ${currentUser ? "bg-accent/15 text-accent" : "bg-surface text-foreground-muted"}`}>{name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function mergeMessages(

@@ -172,9 +172,9 @@ export function RoomControlHeader({
                 onClick={() => void handleCopyJoinCode()}
                 type="button"
               >
-                <div className="light-control-surface flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-white/10 px-3 py-1.5 shadow-sm backdrop-blur-md transition-colors group-hover:bg-white/20">
-                  <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(0,112,243,0.8)]" />
-                  <span className="truncate font-mono text-[11px] font-bold tracking-[0.28em] text-white">
+                <div className="flex min-w-0 items-center gap-2 rounded-full border border-surface-border/60 bg-surface/80 px-3 py-1.5 shadow-xs transition-colors group-hover:bg-surface-hover">
+                  <span className="h-2 w-2 rounded-full bg-accent" />
+                  <span className="truncate font-mono text-[11px] font-bold tracking-[0.28em] text-foreground">
                     {roomSnapshot.room.joinCode}
                   </span>
                   <svg
@@ -184,7 +184,7 @@ export function RoomControlHeader({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    className="shrink-0 text-white/50 group-hover:text-white"
+                    className="shrink-0 text-foreground-muted group-hover:text-foreground"
                     aria-hidden="true"
                   >
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -198,7 +198,7 @@ export function RoomControlHeader({
                 <button
                   data-testid={isMobile ? "mobile-share-room-button" : "share-room-button"}
                   aria-label="分享房间"
-                  className="light-control-surface inline-flex h-8 min-w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-2.5 text-[11px] font-semibold text-white/75 shadow-sm backdrop-blur-md transition-[background-color,color,border-color,transform] duration-150 hover:bg-white/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-8 min-w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full border border-surface-border/60 bg-surface/80 px-2.5 text-[11px] font-semibold text-foreground-muted shadow-xs transition-[background-color,color,border-color,transform] duration-150 hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
                   disabled={isSharing}
                   onClick={() => void handleShareRoom()}
                   title="分享房间"
@@ -224,11 +224,11 @@ export function RoomControlHeader({
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] tracking-[0.18em] text-white/50">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-foreground-muted">
               <span className="flex items-center gap-1">
                 <svg
-                  width="10"
-                  height="10"
+                  width="11"
+                  height="11"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -260,7 +260,7 @@ export function RoomControlHeader({
             data-testid={isMobile ? "mobile-room-settings-button" : "room-settings-button"}
             variant="ghost"
             size="icon"
-            className="light-overlay-control h-8.5 w-8.5 sm:h-10 sm:w-10 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-white/15 hover:text-white"
+            className="h-8.5 w-8.5 sm:h-9 sm:w-9 rounded-full border border-surface-border/60 bg-surface/80 text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             onClick={() => setShowSettings((value) => !value)}
             type="button"
           >
@@ -284,11 +284,11 @@ export function RoomControlHeader({
                 className="fixed inset-0 z-[55]"
                 onClick={() => setShowSettings(false)}
               />
-              <div className="light-popover-surface animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-[#12141c]/95 p-1 shadow-2xl backdrop-blur-xl">
+              <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-surface-border bg-surface p-1 shadow-xl backdrop-blur-xl">
                 {canDeleteRoom && onUpdateRoom ? (
                   <button
                     data-testid={isMobile ? "mobile-edit-room-button" : "edit-room-button"}
-                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent/40"
                     onClick={openEditRoom}
                     type="button"
                   >
@@ -298,7 +298,7 @@ export function RoomControlHeader({
                 {onAwayRoom ? (
                   <button
                     data-testid={isMobile ? "mobile-away-room-button" : "away-room-button"}
-                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-200 transition-colors hover:bg-amber-300/10 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/40"
+                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-500 transition-colors hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                     onClick={() => {
                       setShowSettings(false);
                       onAwayRoom();
@@ -310,7 +310,7 @@ export function RoomControlHeader({
                 ) : null}
                 <button
                   data-testid={isMobile ? "mobile-leave-room-button" : "leave-room-button"}
-                  className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/40"
                   onClick={() => {
                     setShowSettings(false);
                     void onLeaveRoom?.();
@@ -324,7 +324,7 @@ export function RoomControlHeader({
                   <>
                     <button
                       data-testid={isMobile ? "mobile-delete-room-button" : "delete-room-button"}
-                      className="my-1 w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                      className="my-1 w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-red-500 transition-colors hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/30"
                       onClick={() => {
                         setShowSettings(false);
                         setShowDeleteConfirmation(true);

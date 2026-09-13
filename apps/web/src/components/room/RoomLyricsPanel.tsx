@@ -202,8 +202,8 @@ export function RoomLyricsPanel({
           <button
             aria-label={showTranslation ? "关闭翻译" : "开启翻译"}
             aria-pressed={showTranslation}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-30 ${
-              showTranslation ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
+            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+              showTranslation ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
             }`}
             disabled={!canToggleTranslation}
             onClick={onToggleTranslation}
@@ -215,8 +215,8 @@ export function RoomLyricsPanel({
           <button
             aria-label={showRomanized ? "关闭罗马音" : "开启罗马音"}
             aria-pressed={showRomanized}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-30 ${
-              showRomanized ? "border-white/75 text-white" : "border-white/15 text-white/40 hover:border-white/35 hover:text-white/70"
+            className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+              showRomanized ? "border-foreground text-foreground" : "border-surface-border/60 text-foreground-muted hover:border-foreground-muted hover:text-foreground"
             }`}
             disabled={!canToggleRomanized}
             onClick={onToggleRomanized}
@@ -237,7 +237,7 @@ export function RoomLyricsPanel({
           onPointerUp={handleLyricsPointerEnd}
         >
         {status === "loading" ? (
-          <p className="flex h-full items-center justify-center text-sm text-white/45">正在获取歌词…</p>
+          <p className="flex h-full items-center justify-center text-sm text-foreground-muted">正在获取歌词…</p>
         ) : lines.length > 0 ? (
           <div className={`mx-auto flex min-h-full w-full flex-col justify-center ${alignmentClass} ${isFiveLineView || isSevenLineView ? "gap-0 py-1 sm:gap-0.5 sm:py-2" : "gap-0.5 py-1 sm:gap-1 sm:py-2"}`}>
             {lines.map((line, index) => {
@@ -263,10 +263,10 @@ export function RoomLyricsPanel({
                   tabIndex={canSeekLine ? 0 : undefined}
                   data-testid="room-lyrics-line"
                   style={{ fontSize: `${getLyricFontSize({ isActive, visibleLines, fontScale })}rem` }}
-                  className={`${lineAlignmentClass} flex w-full ${canSeekLine ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[color,opacity] duration-300"} ${isSelected ? "text-accent" : ""} ${
+                  className={`${lineAlignmentClass} flex w-full ${canSeekLine ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[color,opacity] duration-300"} ${isSelected ? "text-accent" : ""} ${
                     isActive
-                      ? `font-bold text-white ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
-                      : `font-medium text-white/35 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
+                      ? `font-bold text-foreground ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
+                      : `font-medium text-foreground-muted/40 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
                   }`}
                 >
                   <span className="block w-full">
@@ -278,14 +278,14 @@ export function RoomLyricsPanel({
                       const progress = getRoomLyricWordProgress(word, smoothPositionMs);
                       if (progress >= 1) {
                         return (
-                          <span key={`${line.id}:word:${wordIndex}`} className="text-white">
+                          <span key={`${line.id}:word:${wordIndex}`} className="text-foreground">
                             {word.text}
                           </span>
                         );
                       }
                       if (progress <= 0) {
                         return (
-                          <span key={`${line.id}:word:${wordIndex}`} className="text-white/45">
+                          <span key={`${line.id}:word:${wordIndex}`} className="text-foreground-muted/40">
                             {word.text}
                           </span>
                         );
@@ -296,7 +296,7 @@ export function RoomLyricsPanel({
                           className="text-transparent inline will-change-[background-image]"
                           key={`${line.id}:word:${wordIndex}`}
                           style={{
-                            backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${(progress * 100).toFixed(1)}%, rgb(255 255 255 / 0.45) ${(progress * 100).toFixed(1)}%, rgb(255 255 255 / 0.45) 100%)`,
+                            backgroundImage: `linear-gradient(to right, var(--foreground) 0%, var(--foreground) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 40%, transparent) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 40%, transparent) 100%)`,
                             backgroundClip: "text",
                             WebkitBackgroundClip: "text"
                           }}
@@ -306,12 +306,12 @@ export function RoomLyricsPanel({
                       );
                     }) : line.text}
                     {!isChineseLyrics && showTranslation && translatedLine && translatedLine !== line.text ? (
-                      <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "text-white/72" : "text-white/30"}`}>
+                      <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "text-foreground-muted" : "text-foreground-muted/30"}`}>
                         {translatedLine}
                       </span>
                     ) : null}
                     {!isChineseLyrics && showRomanized && romanizedLine && romanizedLine !== line.text ? (
-                      <span className={`mt-1 block text-[0.68em] font-medium leading-[1.35] ${isActive ? "text-white/50" : "text-white/22"}`}>
+                      <span className={`mt-1 block text-[0.68em] font-medium leading-[1.35] ${isActive ? "text-foreground-muted/70" : "text-foreground-muted/20"}`}>
                         {romanizedLine}
                       </span>
                     ) : null}
@@ -321,7 +321,7 @@ export function RoomLyricsPanel({
             })}
           </div>
         ) : (
-          <p className="flex h-full items-center justify-center text-sm text-white/45">
+          <p className="flex h-full items-center justify-center text-sm text-foreground-muted">
             {status === "error" ? "歌词暂时不可用" : "暂无歌词"}
           </p>
         )}

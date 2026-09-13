@@ -416,7 +416,7 @@ function MembersPanelBase({
   return (
     <section className="flex w-full flex-col gap-3" data-testid="members-panel">
       {normalizedMembers.length > 0 ? (
-        <div className="divide-y divide-surface-border border-y border-surface-border">
+        <div className="divide-y divide-surface-border/40">
           {normalizedMembers.map((member) => {
             const presence = getPresence(member);
             const canManageMember = isHost && member.role !== "host" && member.id !== activeSessionId;
@@ -428,12 +428,12 @@ function MembersPanelBase({
                   <button
                     aria-controls={`member-permissions-${member.id}`}
                     aria-expanded={isSettingsOpen}
-                    className="flex w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent sm:px-4"
+                    className="flex w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent sm:px-4"
                     data-testid={`member-settings-${member.id}`}
                     onClick={() => setOpenSettingsMemberId(isSettingsOpen ? null : member.id)}
                     type="button"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-xs font-semibold text-foreground">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-surface-border/60 bg-surface text-xs font-semibold text-foreground">
                       {member.nickname.slice(0, 1).toUpperCase()}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -455,7 +455,7 @@ function MembersPanelBase({
                   </button>
                 </article>
                 {isSettingsOpen ? (
-                  <div className="motion-safe:animate-fade-in border-t border-surface-border bg-background/30 px-3 py-3 sm:px-4" data-testid={`member-permissions-${member.id}`} id={`member-permissions-${member.id}`}>
+                  <div className="motion-safe:animate-fade-in border-t border-surface-border/40 bg-surface/30 px-3 py-3 sm:px-4" data-testid={`member-permissions-${member.id}`} id={`member-permissions-${member.id}`}>
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div>
                         <span className="block text-xs font-semibold text-foreground">房间权限</span>
@@ -492,7 +492,7 @@ function MembersPanelBase({
           })}
         </div>
       ) : (
-        <p className="border-y border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
+        <p className="px-4 py-8 text-center text-xs text-foreground-muted">
           当前还没有成员进入房间。
         </p>
       )}

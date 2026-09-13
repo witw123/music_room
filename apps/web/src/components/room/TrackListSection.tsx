@@ -116,10 +116,10 @@ function TrackListSectionBase({
         onFilesSelected={(files) => runAction("upload", () => onFilesSelected(files))}
       />
 
-      <div className="border-b border-surface-border pb-1">
+      <div>
         <div
           aria-label="曲库来源筛选"
-          className="grid w-full grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface/60 p-1"
+          className="grid w-full grid-cols-3 gap-1 rounded-xl border border-surface-border/60 bg-surface/60 p-1"
           role="group"
         >
           {[
@@ -131,9 +131,9 @@ function TrackListSectionBase({
               key={option.value}
               aria-pressed={trackFilter === option.value}
               data-testid={`library-filter-${option.value}`}
-              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-2.5 ${
+              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-2.5 ${
                 trackFilter === option.value
-                  ? "bg-accent text-white shadow-sm"
+                  ? "bg-accent text-white shadow-xs"
                   : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
               }`}
               onClick={() => setTrackFilter(option.value)}
@@ -154,7 +154,7 @@ function TrackListSectionBase({
 
       <div className="flex flex-col gap-1.5">
         {visibleTracks.length > 0 ? (
-          <div className="overflow-hidden rounded-xl border border-surface-border bg-surface">
+          <div className="overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50">
             {renderedTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
@@ -180,7 +180,7 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border px-2.5 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-3.5"
+                  className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2.5 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-3.5"
                 >
                   <div className="row-span-2">
                     <TrackArtwork artworkUrl={artworkUrl} title={track.title} />

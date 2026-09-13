@@ -22,7 +22,7 @@ export function SearchSuggestions({
   if (!items.length) return null;
   return (
     <div
-      className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-1.5" : "relative mt-1.5"} max-h-64 overflow-y-auto hide-scrollbar rounded-2xl border border-surface-border bg-background-secondary/95 backdrop-blur-md p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]`}
+      className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-1.5" : "relative mt-1.5"} max-h-64 overflow-y-auto hide-scrollbar rounded-2xl border border-surface-border bg-white dark:bg-[#181a1f] p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.18)] dark:shadow-[0_18px_48px_rgba(0,0,0,0.5)]`}
       role="listbox"
       onPointerDownCapture={() => onInteractionChange?.(true)}
       onPointerUpCapture={() => {

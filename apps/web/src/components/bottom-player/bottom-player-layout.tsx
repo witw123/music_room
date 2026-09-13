@@ -417,9 +417,10 @@ export function MobileBottomPlayerLayout({
             aria-label={isPlaying ? "暂停" : "播放"}
             className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform duration-150 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               canControlPlayback
-                ? "bg-foreground text-background shadow-sm hover:opacity-90"
-                : "cursor-not-allowed bg-white/10 text-foreground-muted opacity-40"
+                ? "bg-accent text-white shadow-sm hover:opacity-90 cursor-pointer"
+                : "cursor-not-allowed bg-accent/40 text-white/50 opacity-40"
             }`}
+            style={canControlPlayback ? { backgroundColor: artworkAccent || "var(--accent)" } : undefined}
             disabled={!canControlPlayback || !playbackTrackId}
             onClick={onTogglePlay}
             title={isPlaying ? "暂停" : "播放"}
@@ -888,11 +889,10 @@ export function DesktopBottomPlayerLayout({
           data-testid="player-prev-button"
           variant="ghost"
           size="icon"
-          className="h-9 w-9 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+          className="h-9 w-9 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors"
           disabled={!canControlPlayback || !playbackTrackId}
           onClick={onPrev}
           title="上一首"
-          style={{ color: artworkAccent }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -903,10 +903,10 @@ export function DesktopBottomPlayerLayout({
           data-testid="player-toggle-button"
           className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent ${
             canControlPlayback
-              ? "hover:scale-105 active:scale-95 cursor-pointer"
-              : "cursor-not-allowed opacity-50"
+              ? "hover:scale-105 active:scale-95 cursor-pointer bg-accent"
+              : "cursor-not-allowed opacity-50 bg-accent/60"
           }`}
-          style={{ backgroundColor: artworkAccent }}
+          style={{ backgroundColor: artworkAccent || "var(--accent)" }}
           disabled={!canControlPlayback}
           onClick={onTogglePlay}
           title={isPlaying ? "暂停" : "播放"}
@@ -927,11 +927,10 @@ export function DesktopBottomPlayerLayout({
           data-testid="player-next-button"
           variant="ghost"
           size="icon"
-          className="h-9 w-9 rounded-full text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+          className="h-9 w-9 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors"
           disabled={!canControlPlayback || !playbackTrackId}
           onClick={onNext}
           title="下一首"
-          style={{ color: artworkAccent }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />

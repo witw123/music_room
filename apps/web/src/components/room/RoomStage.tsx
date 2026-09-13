@@ -404,48 +404,51 @@ function RoomStageBase({
                         className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
                           isPlaying
                             ? "border border-accent/30 bg-accent/20 text-accent"
-                            : "border border-white/10 bg-white/10 text-white/[0.55]"
+                            : "border border-surface-border/60 bg-surface/60 text-foreground-muted"
                         }`}
                       >
                         {playbackBarrier?.blocked ? "缓存中" : isPlaying ? "正在播放" : "准备就绪"}
                       </span>
                       {currentSourceOwnerNickname ? (
-                        <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
+                        <span className={`flex items-center gap-1 text-foreground-muted ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                             <circle cx="12" cy="7" r="4" />
                           </svg>
-                          当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
+                          当前音源：<span className="text-foreground">{currentSourceOwnerNickname}</span>
                         </span>
                       ) : null}
                     </div>
 
                     <h2
-                      className={`max-w-[18ch] font-extrabold tracking-tight text-white drop-shadow-lg ${
+                      className={`max-w-[18ch] font-extrabold tracking-tight text-foreground ${
                         ultraCompactStage
                           ? "text-[1.55rem] leading-[1]"
                           : compactStage
                             ? "text-[1.85rem] leading-[1]"
                             : "text-2xl leading-[1.06] sm:text-3xl md:text-[38px] lg:text-[44px]"
                       }`}
+                      data-testid="stage-track-title"
+                      title={currentTrack.title}
                     >
                       {currentTrack.title}
                     </h2>
 
                     <p
-                      className={`font-medium tracking-wide text-white/60 ${
+                      className={`font-medium tracking-wide text-foreground-muted ${
                         ultraCompactStage
                           ? "max-w-[24ch] text-[13px] leading-snug"
                           : compactStage
                             ? "max-w-[24ch] text-[15px] leading-snug"
                             : "max-w-[26ch] text-sm leading-relaxed sm:text-base md:text-[17px]"
                       }`}
+                      data-testid="stage-track-artist"
                     >
                       {`${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`}
                     </p>
                   </>
                 ) : (
-                  <p className="max-w-[26ch] text-center text-sm leading-relaxed text-white/60 sm:text-base">
+                  <p className="max-w-[26ch] text-center text-sm leading-relaxed text-foreground-muted sm:text-base">
                     从曲库添加音乐，或导入本地音频，马上开始这场协作收听。
                   </p>
                 )}
