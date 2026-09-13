@@ -173,7 +173,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
         </div>
       </div>
       <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-surface-border/60 md:min-h-0 md:rounded-none md:border-l md:border-t-0 md:border-surface-border/60 md:shadow-[-6px_0_24px_rgba(0,0,0,0.05)] dark:md:shadow-[-12px_0_36px_rgba(0,0,0,0.3)]" data-custom-layout-item="room-panel">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-surface-border/60 bg-surface/80 backdrop-blur-md px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-surface-border/60 px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
           {/* Mobile Room Header matching desktop control bar */}
           <div className="pb-2.5 md:hidden">
             <RoomControlHeader
@@ -193,7 +193,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             />
           </div>
 
-          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md" role="tablist">
+          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-surface-elevated/40 p-1 border border-surface-border/40" role="tablist">
             {tabConfigs.map(({ id: tab, label, icon: IconComp }) => {
               const isActive = activeTab === tab;
               return (

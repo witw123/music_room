@@ -77,7 +77,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             )}
           </div>
         </div>
-        <div className="material-surface relative z-0 flex h-[calc(100dvh-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-surface-border/60 bg-surface lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none lg:border-t-0 lg:border-b-0 lg:border-r-0 lg:border-l lg:border-surface-border/60">
+        <div className="material-surface relative z-0 flex h-[calc(100dvh-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-surface-border/60 lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none lg:border-t-0 lg:border-b-0 lg:border-r-0 lg:border-l lg:border-surface-border/60">
           <RadioWorkspaceTabs
             activeTab={rightTab}
             ariaLabel="房间信息"
@@ -104,7 +104,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           </div>
 
           {/* Radio Dedicated Member Interaction Bar */}
-          <div className="p-2 sm:p-2.5 border-t border-surface-border/40 bg-surface/90">
+          <div className="material-surface-header p-2 sm:p-2.5 border-t border-surface-border/40">
             <RoomReactionToolbar
               roomId={props.roomSnapshot.room.id}
               socket={props.socket}
@@ -117,7 +117,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       </section>
 
       <section className={`mx-auto mt-2 sm:mt-3 min-h-0 w-full max-w-[1600px] shrink-0 gap-2 sm:gap-3 overflow-hidden px-2 sm:px-3 lg:mt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:gap-0 lg:px-0 ${isHost ? "grid lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]" : "block"}`} data-testid="radio-room-workspace">
-        <div className="material-surface flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-surface-border/60 bg-surface lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l-0 lg:border-r lg:border-surface-border/60">
+        <div className="material-surface flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-surface-border/60 lg:min-h-0 lg:rounded-none lg:border-y-0 lg:border-l-0 lg:border-r lg:border-surface-border/60">
           <RadioWorkspaceTabs
             activeTab={leftTab}
             ariaLabel="电台内容"
@@ -184,7 +184,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 border-b border-surface-border/60 bg-surface px-2.5 py-1.5 sm:px-3 sm:py-2" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="material-surface-header shrink-0 border-b border-surface-border/60 px-2.5 py-1.5 sm:px-3 sm:py-2" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div
         aria-label={ariaLabel}
         className="flex items-center gap-1 rounded-xl bg-surface-elevated/40 p-1 border border-surface-border/40"

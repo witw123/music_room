@@ -168,7 +168,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
         </div>
       </div>
 
-      <form className="flex shrink-0 gap-2 border-t border-surface-border/60 p-2 sm:p-2.5 bg-surface" onSubmit={handleSend}>
+      <form className="material-surface-header flex shrink-0 gap-2 border-t border-surface-border/60 p-2 sm:p-2.5" onSubmit={handleSend}>
         <label className="sr-only" htmlFor={`radio-chat-input-${roomId}`}>发送消息</label>
         <input
           className="min-w-0 flex-1 rounded-xl border border-surface-border/60 bg-surface-elevated/40 px-3 py-2 text-xs sm:text-sm text-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60 placeholder:text-foreground-muted/50"

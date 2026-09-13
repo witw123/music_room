@@ -305,7 +305,7 @@ function RequestRoomWorkspace(
   return (
     <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:px-0" data-testid="request-room-workspace">
       <div className="material-surface-header sticky top-0 z-30 mb-3 px-1 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:pt-0 lg:hidden" role="tablist" aria-label="点歌房管理">
-        <div className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md">
+        <div className="flex items-center gap-1 rounded-xl bg-surface-elevated/40 p-1 border border-surface-border/40">
           {requestWorkspaceTabs.map((tab) => {
             const isActive = props.mobileTab === tab.id;
             const IconComp = tab.icon;

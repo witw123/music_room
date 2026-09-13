@@ -1059,8 +1059,18 @@
     color: #15803d !important;
   }
 
-  /* Room management surfaces are intentionally unstyled in dark mode and
-     inherit the workspace there. Give them a quiet elevated layer in light. */
+  /* Room management surfaces provide a solid, elevated surface in both dark and light modes. */
+  .material-surface {
+    background-color: #121316 !important;
+    border-color: var(--surface-border) !important;
+    color: var(--foreground);
+  }
+
+  .material-surface-header {
+    background-color: #121316 !important;
+    border-color: var(--surface-border) !important;
+  }
+
   html[data-theme="light"] .material-surface {
     background: color-mix(in srgb, var(--background-secondary) 92%, var(--background)) !important;
     border-color: var(--surface-border) !important;
