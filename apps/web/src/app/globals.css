@@ -136,6 +136,16 @@
       background-color: transparent;
     }
   }
+
+  /* Default every border to the theme token instead of Tailwind's gray-200.
+     A border-color utility that is missing from the loaded stylesheet (e.g. a
+     cached CSS chunk older than the markup) must then degrade to the quiet
+     themed line, never to a bright default stroke. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--surface-border);
+  }
 }
 
 @layer components {
