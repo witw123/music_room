@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react";
 import {
@@ -89,6 +90,8 @@ export function DesktopLyricsBar({
   const [surfaceHeight, setSurfaceHeight] = useState(76);
   const [isExpanded, setIsExpanded] = useState(false);
   const [overflowPx, setOverflowPx] = useState(0);
+  const overflowPxRef = useRef(0);
+  overflowPxRef.current = overflowPx;
   const [lyricScale, setLyricScale] = useState(
     () => getAppSettings().playback.desktopLyricScale
   );
@@ -153,46 +156,116 @@ export function DesktopLyricsBar({
   const translatedLines = useMemo(() => parseRoomLyrics(translatedLyric), [translatedLyric]);
   const romanizedLines = useMemo(() => parseRoomLyrics(romanizedLyric), [romanizedLyric]);
 
-  // Interpolate progress smoothly with rAF for 60/120fps word fill animation
-  const [smoothPositionMs, setSmoothPositionMs] = useState(progressMs);
+  // Progress interpolation stays out of React state: a rAF loop writes word fill
+  // (--word-fill custom property), auto-scroll transform and the time label straight
+  // to the DOM, so this transparent overlay does not reconcile per frame.
+  const [activeIndex, setActiveIndex] = useState(() =>
+    lines.length > 0 ? Math.max(0, getActiveRoomLyricIndex(lines, progressMs)) : -1
+  );
   const anchorRef = useRef({
     baseMs: progressMs,
     receivedAtMs: typeof performance !== "undefined" ? performance.now() : Date.now()
   });
+  const lastPositionRef = useRef(progressMs);
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  const displayWordsRef = useRef<{ text: string; timeMs: number; durationMs: number }[]>([]);
+  const wordFillStatesRef = useRef<string[]>([]);
+  const wordElsRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const timeLabelRef = useRef<HTMLSpanElement | null>(null);
+
+  const activeLine = activeIndex >= 0 ? lines[activeIndex] : null;
+  const displayWords = useMemo(
+    () => (activeIndex >= 0 ? getRoomLyricDisplayWords(lines, activeIndex) : []),
+    [lines, activeIndex]
+  );
+  displayWordsRef.current = displayWords;
+  // Fresh line renders start unfilled; the rAF/paused apply below rewrites buckets
+  // immediately, and resetting per render keeps stale buckets from leaking across lines.
+  wordFillStatesRef.current = new Array(displayWords.length).fill("");
+
+  const applyProgress = useCallback((positionMs: number) => {
+    lastPositionRef.current = positionMs;
+
+    const currentLines = linesRef.current;
+    const nextIndex = currentLines.length > 0
+      ? Math.max(0, getActiveRoomLyricIndex(currentLines, positionMs))
+      : -1;
+    setActiveIndex((current) => (current === nextIndex ? current : nextIndex));
+
+    const words = displayWordsRef.current;
+    const wordEls = wordElsRef.current;
+    const states = wordFillStatesRef.current;
+    for (let index = 0; index < words.length; index += 1) {
+      const word = words[index];
+      const el = wordEls[index];
+      if (!el || !word.text.trim()) continue;
+      const progress = getRoomLyricWordProgress(word, positionMs);
+      const bucket = progress >= 1 ? "full" : progress <= 0 ? "empty" : "filling";
+      if (bucket === states[index] && bucket !== "filling") continue;
+      states[index] = bucket;
+      el.style.setProperty(
+        "--word-fill",
+        bucket === "full" ? "100%" : bucket === "empty" ? "0%" : `${(progress * 100).toFixed(1)}%`
+      );
+    }
+
+    const container = containerRef.current;
+    const text = textContentRef.current;
+    if (container && text) {
+      const overflow = overflowPxRef.current;
+      if (overflow > 0 && words.length > 0) {
+        const startMs = words[0]?.timeMs ?? 0;
+        const lastWord = words[words.length - 1];
+        const endMs = (lastWord?.timeMs ?? 0) + (lastWord?.durationMs ?? 1000);
+        const duration = Math.max(800, endMs - startMs);
+        const lineProgress = Math.min(1, Math.max(0, (positionMs - startMs) / duration));
+        const offset = -Math.min(overflow, Math.round(lineProgress * (overflow + 24)));
+        text.style.transform = `translateX(${offset}px)`;
+      } else if (text.style.transform !== "none") {
+        text.style.transform = "none";
+      }
+    }
+
+    const label = timeLabelRef.current;
+    if (label) {
+      const nextLabel = formatDuration(positionMs);
+      if (label.textContent !== nextLabel) {
+        label.textContent = nextLabel;
+      }
+    }
+  }, []);
 
   useEffect(() => {
     anchorRef.current = {
       baseMs: progressMs,
       receivedAtMs: typeof performance !== "undefined" ? performance.now() : Date.now()
     };
-    setSmoothPositionMs(progressMs);
-  }, [progressMs, anchorAt]);
+    applyProgress(progressMs);
+  }, [applyProgress, anchorAt, progressMs]);
+
+  useEffect(() => {
+    applyProgress(anchorRef.current.baseMs);
+  }, [applyProgress, lines]);
 
   useEffect(() => {
     if (!isPlaying) {
-      setSmoothPositionMs(anchorRef.current.baseMs);
+      applyProgress(anchorRef.current.baseMs);
       return;
     }
     let animationFrameId = 0;
     let lastUpdateAt = 0;
-    const tick = () => {
-      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const tick = (now: number) => {
       if (now - lastUpdateAt >= 32) {
         lastUpdateAt = now;
-        setSmoothPositionMs(anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs));
+        applyProgress(anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs));
       }
       animationFrameId = window.requestAnimationFrame(tick);
     };
     animationFrameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [isPlaying]);
+  }, [applyProgress, isPlaying]);
 
-  const activeIndex = lines.length > 0 ? Math.max(0, getActiveRoomLyricIndex(lines, smoothPositionMs)) : -1;
-  const activeLine = activeIndex >= 0 ? lines[activeIndex] : null;
-  const displayWords = useMemo(
-    () => (activeIndex >= 0 ? getRoomLyricDisplayWords(lines, activeIndex) : []),
-    [lines, activeIndex]
-  );
   const lineText =
     displayWords.length > 0
       ? displayWords.map((word) => word.text).join("")
@@ -231,17 +304,8 @@ export function DesktopLyricsBar({
     setOverflowPx(diff > 4 ? diff : 0);
   }, [activeIndex, lineText, baseFontSize, subLineText, isExpanded]);
 
-  // Calculate auto-scroll translation offset as current line progresses
-  const scrollOffset = useMemo(() => {
-    if (overflowPx <= 0) return 0;
-    if (displayWords.length === 0) return 0;
-    const startMs = displayWords[0]?.timeMs ?? 0;
-    const lastWord = displayWords[displayWords.length - 1];
-    const endMs = (lastWord?.timeMs ?? 0) + (lastWord?.durationMs ?? 1000);
-    const duration = Math.max(800, endMs - startMs);
-    const progress = Math.min(1, Math.max(0, (smoothPositionMs - startMs) / duration));
-    return -Math.min(overflowPx, Math.round(progress * (overflowPx + 24)));
-  }, [overflowPx, displayWords, smoothPositionMs]);
+  // Calculate auto-scroll translation offset as current line progresses; the actual
+  // per-frame writes happen imperatively in applyProgress.
 
   const message = status === "loading" && !hasLyrics
     ? "正在获取歌词…"
@@ -313,7 +377,8 @@ export function DesktopLyricsBar({
           <div className="mt-0.5 flex items-center gap-1.5 text-[10px] md:text-[11px] text-white/75 truncate max-w-[8.5rem] md:max-w-[11rem]">
             {artist ? <span className="truncate">{artist}</span> : null}
             <span className="shrink-0 tabular-nums text-white/50 font-medium">
-              {formatDuration(smoothPositionMs)}{durationMs ? ` / ${formatDuration(durationMs)}` : ""}
+              <span ref={timeLabelRef}>{formatDuration(lastPositionRef.current)}</span>
+              {durationMs ? ` / ${formatDuration(durationMs)}` : ""}
             </span>
           </div>
         </div>
@@ -332,8 +397,7 @@ export function DesktopLyricsBar({
             overflowPx > 0 ? "duration-200 ease-linear self-start text-left" : "self-center text-center"
           } font-bold tracking-tight text-white leading-tight`}
           style={{
-            fontSize: `${baseFontSize}px`,
-            transform: overflowPx > 0 ? `translateX(${scrollOffset}px)` : "none"
+            fontSize: `${baseFontSize}px`
           }}
         >
           {hasLyrics && displayWords.length > 0 ? (
@@ -345,39 +409,29 @@ export function DesktopLyricsBar({
                   </span>
                 );
               }
-              const progress = getRoomLyricWordProgress(word, smoothPositionMs);
-              if (progress >= 1) {
-                return (
-                  <span
-                    className="inline-block whitespace-pre text-white font-bold"
-                    key={wordIndex}
-                  >
-                    {word.text}
-                  </span>
-                );
-              }
-              if (progress <= 0) {
-                return (
-                  <span
-                    className="inline-block whitespace-pre text-white/65 font-bold transition-colors duration-150"
-                    key={wordIndex}
-                  >
-                    {word.text}
-                  </span>
-                );
-              }
-              const filled = (progress * 100).toFixed(1);
+              const progress = getRoomLyricWordProgress(word, lastPositionRef.current);
+              const fillPercent = progress >= 1
+                ? "100%"
+                : progress <= 0
+                  ? "0%"
+                  : `${(progress * 100).toFixed(1)}%`;
               return (
                 <span
-                  className="inline-block whitespace-pre text-transparent font-bold will-change-[background-image]"
+                  className="inline-block whitespace-pre font-bold"
                   key={wordIndex}
+                  ref={(el) => {
+                    wordElsRef.current[wordIndex] = el;
+                  }}
                   style={{
-                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.65) ${filled}%, rgb(255 255 255 / 0.65) 100%)`,
+                    "--word-fill": fillPercent,
+                    backgroundImage:
+                      "linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) var(--word-fill, 0%), rgb(255 255 255 / 0.65) var(--word-fill, 0%), rgb(255 255 255 / 0.65) 100%)",
                     backgroundClip: "text",
                     WebkitBackgroundClip: "text",
+                    color: "transparent",
                     WebkitBoxDecorationBreak: "clone",
                     boxDecorationBreak: "clone"
-                  }}
+                  } as CSSProperties}
                 >
                   {word.text}
                 </span>

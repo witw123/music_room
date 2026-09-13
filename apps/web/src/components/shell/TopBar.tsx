@@ -14,7 +14,7 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
   const isMarketing = variant === "marketing";
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-[#000000]/85 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-[#000000]/95">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 min-w-0 items-center gap-3 md:h-16">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-accent shadow-[0_8px_30px_rgba(0,112,243,0.28)]">

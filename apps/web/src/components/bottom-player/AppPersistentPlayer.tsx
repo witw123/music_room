@@ -1,10 +1,11 @@
 "use client";
 
 import { BottomPlayer } from "./BottomPlayer";
-import { useLocalPlayer } from "@/features/playback/local-player-context";
+import { useLocalPlayer, usePlayerProgressMs } from "@/features/playback/local-player-context";
 
 export function AppPersistentPlayer() {
   const player = useLocalPlayer();
+  const progressMs = usePlayerProgressMs();
 
   return (
     <BottomPlayer
@@ -14,7 +15,7 @@ export function AppPersistentPlayer() {
       playback={player.playback}
       canControlPlayback={player.canControlPlayback}
       canSeekPlayback={player.canSeekPlayback}
-      progressMs={player.progressMs}
+      progressMs={progressMs}
       seekDraft={player.seekDraft}
       setSeekDraft={player.setSeekDraft}
       audioDurationMs={player.audioDurationMs}
@@ -23,8 +24,6 @@ export function AppPersistentPlayer() {
       syncProgressFromAudio={player.syncProgressFromAudio}
       syncDurationFromAudio={player.syncDurationFromAudio}
       currentTrack={player.currentTrack}
-      visualizerSamples={[]}
-      visualizerReducedMotion={true}
       onPlay={player.onPlay}
       onPause={player.onPause}
       onSeek={player.onSeek}

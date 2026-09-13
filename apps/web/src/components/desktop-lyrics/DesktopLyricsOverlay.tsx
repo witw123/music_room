@@ -185,7 +185,7 @@ export function DesktopLyricsOverlay() {
           showRomanized={showRomanized}
           onToggleTranslation={toggleTranslation}
           onToggleRomanized={toggleRomanized}
-          anchorAt={Date.now()}
+          anchorAt={activePlayer.anchorAt}
           onClose={close}
           onNext={activePlayer.onNext}
           onPrev={activePlayer.onPrev}

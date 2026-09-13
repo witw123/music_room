@@ -271,9 +271,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     if (!playbackBarrier.blocked && !waitingForResume) {
       return;
     }
+    // 250ms keeps countdown UI smooth enough while halving re-renders during the
+    // buffered/barrier window, when the main thread is busiest.
     const interval = window.setInterval(
       () => setBarrierClockMs(getRoomPlaybackClockNowMs()),
-      100
+      250
     );
     return () => window.clearInterval(interval);
   }, [playbackBarrier.blocked, playbackBarrier.resumeAtMs]);

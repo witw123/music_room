@@ -93,7 +93,9 @@ function BottomPlayerControllerBase({
     playbackBarrier
   });
   const isPlaybackBarrierBlocked = playbackBarrier?.blocked === true;
-  const visualizer = usePlayerAudioVisualizer({
+  // Feeds audioVisualizerStore for canvas consumers (VinylAuraVisualizer); sampling
+  // intentionally stays outside React state so this does not re-render per frame.
+  usePlayerAudioVisualizer({
     audioRef,
     outputStream: isSourceOwner ? roomAudioOutput.getBroadcastStream() : null,
     playbackStatus: isPlaybackBarrierBlocked && playback?.status === "playing"
@@ -156,9 +158,6 @@ function BottomPlayerControllerBase({
       syncProgressFromAudio={syncProgressFromAudio}
       syncDurationFromAudio={syncDurationFromAudio}
       currentTrack={progressTrack ?? currentTrack}
-      visualizerSamples={visualizer.samples}
-      visualizerReducedMotion={visualizer.reducedMotion}
-      visualizerMaxDevicePixelRatio={visualizer.maxDevicePixelRatio}
       onPlay={onPlay}
       onPause={onPause}
       onSeek={onSeek}

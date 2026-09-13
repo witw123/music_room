@@ -65,6 +65,28 @@ const idleSnapshot: SegmentedPlaybackSnapshot = {
 
 const playbackSnapshotCommitIntervalMs = 250;
 
+function isSegmentedSnapshotContentEqual(
+  a: SegmentedPlaybackSnapshot,
+  b: SegmentedPlaybackSnapshot
+) {
+  return a.state === b.state &&
+    a.audioPath === b.audioPath &&
+    a.playbackIdentity === b.playbackIdentity &&
+    a.bufferedMs === b.bufferedMs &&
+    a.ownedUnitCount === b.ownedUnitCount &&
+    a.totalUnitCount === b.totalUnitCount &&
+    a.audioContextState === b.audioContextState &&
+    a.lastError === b.lastError &&
+    a.sourceHealth === b.sourceHealth &&
+    a.sourceEnergy === b.sourceEnergy &&
+    a.decodedPeak === b.decodedPeak &&
+    a.decodedRms === b.decodedRms &&
+    a.maxSampleDelta === b.maxSampleDelta &&
+    a.underrunCount === b.underrunCount &&
+    a.lastUnderrunAt === b.lastUnderrunAt &&
+    a.lastDecodeError === b.lastDecodeError;
+}
+
 export function useSegmentedOpusPlayback(input: {
   roomSnapshot: RoomSnapshot | null;
   currentTrack: TrackMeta | null;
@@ -98,8 +120,17 @@ export function useSegmentedOpusPlayback(input: {
         current.sourceHealth !== resolved.sourceHealth ||
         current.lastError !== resolved.lastError ||
         current.lastDecodeError !== resolved.lastDecodeError;
+      if (immediate) {
+        lastSnapshotCommitAtRef.current = Date.now();
+        return resolved;
+      }
+      // Paused/idle rooms re-sample every 100ms without anything changing; skip the
+      // commit entirely instead of re-rendering the runtime at a fixed cadence.
+      if (isSegmentedSnapshotContentEqual(current, resolved)) {
+        return current;
+      }
       const now = Date.now();
-      if (!immediate && now - lastSnapshotCommitAtRef.current < playbackSnapshotCommitIntervalMs) {
+      if (now - lastSnapshotCommitAtRef.current < playbackSnapshotCommitIntervalMs) {
         return current;
       }
       lastSnapshotCommitAtRef.current = now;

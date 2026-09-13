@@ -86,13 +86,13 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
       >
         {/* Seamless Badges Over Cover: Room Type (Left) & Online Count (Right) with high contrast in both themes */}
         <div className="pointer-events-none absolute top-2.5 left-3 right-3 z-20 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/80 dark:bg-black/50 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-white/90 shadow-xs backdrop-blur-md">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-white/90 shadow-xs">
             <span className="opacity-80">
               <RoomTypeGlyph roomType={room.roomType} />
             </span>
             {theme.label}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/80 dark:bg-black/50 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs backdrop-blur-md">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs">
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
             {room.directoryOnlineMemberCount} 人在线
           </span>
@@ -111,7 +111,7 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Track Playing Information Placed BELOW the cover */}
       {nowPlaying?.title ? (
-        <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-surface-border bg-surface/50 px-2.5 py-1.5 backdrop-blur-md">
+        <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-surface-border bg-surface/85 px-2.5 py-1.5">
           <div className="flex items-end gap-0.5 h-3 shrink-0 text-accent">
             <span className="w-0.5 h-full bg-current rounded-full animate-bounce" style={{ animationDuration: "0.8s" }} />
             <span className="w-0.5 h-2 bg-current rounded-full animate-bounce" style={{ animationDuration: "1.1s", animationDelay: "0.2s" }} />

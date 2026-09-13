@@ -74,6 +74,8 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
 }
 
 /** Keep visited workspace pages mounted so route changes do not reset their data state. */
+const MAX_PERSISTENT_ROUTE_CACHE_ENTRIES = 6;
+
 function PersistentAppRouteViews({
   pathname,
   children
@@ -89,14 +91,24 @@ function PersistentAppRouteViews({
   const cachedPage = routeCache.current.get(routeKey);
   if (routeCache.current.has(routeKey)) {
     // A cached route can be shown immediately while Next resolves its new RSC payload.
+    // Re-insert to refresh recency so eviction drops least-recently-used routes.
     visibleRoute.current = routeKey;
     lastChildren.current = cachedPage;
+    routeCache.current.delete(routeKey);
+    routeCache.current.set(routeKey, cachedPage);
   } else if (children !== null && children !== undefined && children !== lastChildren.current) {
     // Pathname can update before children during a client transition. Do not cache the
     // previous route under the new key; wait for the new page node to arrive.
     routeCache.current.set(routeKey, children);
     visibleRoute.current = routeKey;
     lastChildren.current = children;
+    while (routeCache.current.size > MAX_PERSISTENT_ROUTE_CACHE_ENTRIES) {
+      const oldestEvictable = [...routeCache.current.keys()].find(
+        (candidate) => candidate !== routeKey && candidate !== visibleRoute.current
+      );
+      if (oldestEvictable === undefined) break;
+      routeCache.current.delete(oldestEvictable);
+    }
   }
 
   return (

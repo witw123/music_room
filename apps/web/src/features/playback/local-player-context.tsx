@@ -45,7 +45,6 @@ type LocalPlayerContextValue = {
   audioRef: RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null;
   currentTrack: TrackMeta | null;
-  progressMs: number;
   seekDraft: number | null;
   setSeekDraft: (value: number | null) => void;
   audioDurationMs: number;
@@ -78,6 +77,13 @@ type LocalPlayerContextValue = {
 };
 
 const LocalPlayerContext = createContext<LocalPlayerContextValue | null>(null);
+
+/**
+ * Playback progress changes ~4x/second while playing. Keeping it out of the main
+ * context value stops every useLocalPlayer consumer from re-rendering on each tick;
+ * only progress-aware subscribers (the persistent player) use this context.
+ */
+const LocalPlayerProgressContext = createContext(0);
 
 export function LocalPlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -858,7 +864,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     audioRef,
     playback,
     currentTrack,
-    progressMs,
     seekDraft,
     setSeekDraft,
     audioDurationMs,
@@ -910,7 +915,6 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     playTracks,
     playback,
     playbackMode,
-    progressMs,
     queue,
     seekDraft,
     syncDurationFromAudio,
@@ -921,7 +925,13 @@ export function LocalPlayerProvider({ children }: { children: ReactNode }) {
     libraryRecords
   ]);
 
-  return <LocalPlayerContext.Provider value={value}>{children}</LocalPlayerContext.Provider>;
+  return (
+    <LocalPlayerContext.Provider value={value}>
+      <LocalPlayerProgressContext.Provider value={progressMs}>
+        {children}
+      </LocalPlayerProgressContext.Provider>
+    </LocalPlayerContext.Provider>
+  );
 }
 
 export function useLocalPlayer() {
@@ -930,5 +940,9 @@ export function useLocalPlayer() {
     throw new Error("useLocalPlayer must be used within LocalPlayerProvider");
   }
   return context;
+}
+
+export function usePlayerProgressMs() {
+  return useContext(LocalPlayerProgressContext);
 }
 

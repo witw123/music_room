@@ -197,9 +197,11 @@ public class DesktopLyricsPlugin extends Plugin {
         private final Runnable frameRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isPlaying && !hidden) {
+                if (isPlaying && !hidden && hasLine) {
                     invalidate();
-                    mainHandler.postDelayed(this, 16);
+                    // ~30fps matches the karaoke fill granularity; 60fps full-view
+                    // invalidates on a translucent overlay drain battery needlessly.
+                    mainHandler.postDelayed(this, 33);
                 }
             }
         };
@@ -243,6 +245,10 @@ public class DesktopLyricsPlugin extends Plugin {
             translationLine = translation != null ? translation : romanized;
             requestLayout();
             invalidate();
+            if (hasLine && isPlaying && !hidden) {
+                mainHandler.removeCallbacks(frameRunnable);
+                mainHandler.post(frameRunnable);
+            }
         }
 
         void updatePlayback(boolean playing, double progressMs, double at) {

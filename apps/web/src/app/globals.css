@@ -390,7 +390,8 @@
   }
 
   .app-sidebar {
-    will-change: width;
+    /* width is a layout property — will-change cannot composite it, so drop the
+       reserved layer; the 200ms collapse reflow is an occasional interaction. */
     transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
@@ -426,6 +427,11 @@
 
   html[data-full-motion="true"] [data-card-scene] .full-motion-pulse {
     animation: pulseRadialWave 3.6s cubic-bezier(0.15, 0.85, 0.35, 1) infinite !important;
+    /* Scale instead of animating the SVG r geometry attribute: geometry keyframes
+       relayout the SVG every frame, transform stays on the compositor. */
+    transform-box: fill-box;
+    transform-origin: center;
+    vector-effect: non-scaling-stroke;
   }
 
   html[data-full-motion="true"] [data-card-scene] .full-motion-twinkle {
@@ -439,10 +445,10 @@
 
 
   .mobile-app-navigation {
-    background: color-mix(in srgb, var(--background-secondary) 92%, transparent);
+    /* Sits above scrolling content next to the player bar; realtime blur here cost
+       1-3ms GPU per frame on mid-range mobiles, so use a near-opaque surface instead. */
+    background: color-mix(in srgb, var(--background-secondary) 97%, transparent);
     border-top: 1px solid rgba(255, 255, 255, 0.06);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
   }
 
   .mobile-app-navigation__item {
@@ -1285,17 +1291,15 @@
 
   @keyframes pulseRadialWave {
     0% {
-      r: 4px;
+      transform: scale(1);
       opacity: 0.9;
-      stroke-width: 1.75px;
     }
     60% {
       opacity: 0.45;
     }
     100% {
-      r: 88px;
+      transform: scale(4);
       opacity: 0;
-      stroke-width: 0.5px;
     }
   }
 

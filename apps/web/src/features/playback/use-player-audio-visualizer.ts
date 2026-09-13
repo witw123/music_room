@@ -21,7 +21,6 @@ const maximumCanvasDevicePixelRatio = 1.5;
 export type PlayerAudioVisualizerRenderMode = "live" | "paused" | "idle" | "reduced-motion";
 
 export type PlayerAudioVisualizerState = {
-  samples: number[];
   isActive: boolean;
   renderMode: PlayerAudioVisualizerRenderMode;
   reducedMotion: boolean;
@@ -314,7 +313,10 @@ function commitVisualizerSamples(input: {
 export function usePlayerAudioVisualizer(
   input: UsePlayerAudioVisualizerInput
 ): PlayerAudioVisualizerState {
-  const [samples, setSamples] = useState<number[]>(() => buildIdleWaveformSamples(desktopSampleCount));
+  // Sampling results are published to audioVisualizerStore only; keeping them out of
+  // React state avoids a 30fps re-render of the whole player subtree for data that
+  // canvas consumers read imperatively.
+  const pausedSamplesRef = useRef<number[] | null>(null);
   const [isPageVisible, setIsPageVisible] = useState(
     typeof document === "undefined" ? true : !document.hidden
   );
@@ -385,13 +387,9 @@ export function usePlayerAudioVisualizer(
   }, []);
 
   useEffect(() => {
-    setSamples((current) => {
-      if (current.length === sampleCount) {
-        return current;
-      }
-
-      return buildIdleWaveformSamples(sampleCount);
-    });
+    if (pausedSamplesRef.current && pausedSamplesRef.current.length !== sampleCount) {
+      pausedSamplesRef.current = null;
+    }
   }, [sampleCount]);
 
   useEffect(() => {
@@ -522,7 +520,7 @@ export function usePlayerAudioVisualizer(
       const timeDomainBuffer = timeDomainBufferRef.current;
       if (!graph || !timeDomainBuffer) {
         commitVisualizerIdle(idleSamples, audioVisualizerStore.lastError ?? "visualizer-graph-missing");
-        setSamples(idleSamples);
+        pausedSamplesRef.current = idleSamples;
         scheduleNextFrame(tick);
         return;
       }
@@ -538,7 +536,7 @@ export function usePlayerAudioVisualizer(
         sourceKind: sourceSelection.kind,
         graphKey: sourceSelection.graphKey
       });
-      setSamples(nextSamples);
+      pausedSamplesRef.current = nextSamples;
       scheduleNextFrame(tick);
     };
 
@@ -547,17 +545,16 @@ export function usePlayerAudioVisualizer(
         return;
       }
 
-      setSamples((current) => {
-        const nextSamples =
-          current.length === sampleCount
-            ? decayWaveformSamples(current, pausedDecayFactor, pausedFloorAmplitude)
-            : buildIdleWaveformSamples(sampleCount, pausedFloorAmplitude);
-        commitVisualizerSamples({
-          samples: nextSamples,
-          sourceKind: sourceSelection.kind === "none" ? "none" : sourceSelection.kind,
-          graphKey: sourceSelection.kind === "none" ? "none" : sourceSelection.graphKey
-        });
-        return nextSamples;
+      const current = pausedSamplesRef.current ?? audioVisualizerStore.samples;
+      const nextSamples =
+        current.length === sampleCount
+          ? decayWaveformSamples(current, pausedDecayFactor, pausedFloorAmplitude)
+          : buildIdleWaveformSamples(sampleCount, pausedFloorAmplitude);
+      pausedSamplesRef.current = nextSamples;
+      commitVisualizerSamples({
+        samples: nextSamples,
+        sourceKind: sourceSelection.kind === "none" ? "none" : sourceSelection.kind,
+        graphKey: sourceSelection.kind === "none" ? "none" : sourceSelection.graphKey
       });
       scheduleNextFrame(tick);
     };
@@ -568,7 +565,7 @@ export function usePlayerAudioVisualizer(
       }
 
       stopGraphIfIdle("visualizer-idle");
-      setSamples(idleSamples);
+      pausedSamplesRef.current = idleSamples;
     };
 
     const tick = () => {
@@ -614,7 +611,6 @@ export function usePlayerAudioVisualizer(
   ]);
 
   return {
-    samples,
     isActive: isPageVisible && (renderMode === "live" || renderMode === "reduced-motion"),
     renderMode,
     reducedMotion,

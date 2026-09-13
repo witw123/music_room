@@ -40,6 +40,8 @@ export type DesktopLyricsPlayer = {
   playbackTrackId: string | null | undefined;
   isPlaying: boolean;
   progressMs: number;
+  /** Host wall-clock time (Date.now()) when progressMs was sampled. */
+  anchorAt: number;
   artworkUrl: string | null;
   canControlPlayback: boolean;
   onPrev: () => void;
@@ -161,13 +163,13 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
 
   const registerPlayer = useCallback((source: DesktopLyricsSource, player: DesktopLyricsPlayer) => {
     playersRef.current.set(source, player);
-    setActivePlayer((current) => current?.source === source ? player : current);
     selectActivePlayer();
 
     return {
       updatePlayer: (nextPlayer: DesktopLyricsPlayer) => {
         playersRef.current.set(source, nextPlayer);
-        setActivePlayer((current) => current?.source === source ? nextPlayer : current);
+        // selectActivePlayer is the single setState; calling setActivePlayer here too
+        // made every progress tick commit context state twice.
         selectActivePlayer();
       },
       unregisterPlayer: () => {
@@ -278,23 +280,47 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   const lyricLines = useMemo(() => parseRoomLyrics(lyrics.plainLyric), [lyrics.plainLyric]);
   const translatedLines = useMemo(() => parseRoomLyrics(lyrics.translatedLyric), [lyrics.translatedLyric]);
   const romanizedLines = useMemo(() => parseRoomLyrics(lyrics.romanizedLyric), [lyrics.romanizedLyric]);
+  // Alignments only depend on the lyric text; computing them per progress tick
+  // rescanned both line lists every time the position updated.
+  const translatedAlignment = useMemo(
+    () => alignRoomLyricLines(lyricLines, translatedLines),
+    [lyricLines, translatedLines]
+  );
+  const romanizedAlignment = useMemo(
+    () => alignRoomLyricLines(lyricLines, romanizedLines),
+    [lyricLines, romanizedLines]
+  );
 
   useEffect(() => {
-    if (!activePlayer || lyricLines.length === 0) {
-      setLyrics((current) => ({ ...current, currentLine: null, translatedLine: null, romanizedLine: null }));
+    if (!hasActivePlayer || lyricLines.length === 0) {
+      setLyrics((current) => {
+        if (current.currentLine === null && current.translatedLine === null && current.romanizedLine === null) {
+          return current;
+        }
+        return { ...current, currentLine: null, translatedLine: null, romanizedLine: null };
+      });
       return;
     }
-    const activeIndex = Math.max(0, getActiveRoomLyricIndex(lyricLines, activePlayer.progressMs));
+    const activeIndex = Math.max(0, getActiveRoomLyricIndex(lyricLines, activeProgressMs));
     const activeLine = lyricLines[activeIndex];
-    const translatedLine = alignRoomLyricLines(lyricLines, translatedLines)[activeIndex]?.text ?? null;
-    const romanizedLine = alignRoomLyricLines(lyricLines, romanizedLines)[activeIndex]?.text ?? null;
-    setLyrics((current) => ({
-      ...current,
-      currentLine: activeLine?.text ?? null,
-      translatedLine,
-      romanizedLine
-    }));
-  }, [activePlayer, activePlayer?.progressMs, lyricLines, romanizedLines, translatedLines]);
+    const translatedLine = translatedAlignment[activeIndex]?.text ?? null;
+    const romanizedLine = romanizedAlignment[activeIndex]?.text ?? null;
+    setLyrics((current) => {
+      if (
+        current.currentLine === (activeLine?.text ?? null) &&
+        current.translatedLine === translatedLine &&
+        current.romanizedLine === romanizedLine
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        currentLine: activeLine?.text ?? null,
+        translatedLine,
+        romanizedLine
+      };
+    });
+  }, [activeProgressMs, hasActivePlayer, lyricLines, romanizedAlignment, translatedAlignment]);
 
   const toggleTranslation = useCallback(() => {
     setShowTranslation((current) => {
@@ -355,13 +381,24 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     };
   }, [activeTrack, activePlayer?.artworkUrl, lyrics.plainLyric, lyrics.translatedLyric, lyrics.romanizedLyric]);
 
+  // Progress anchors are throttled: the lyrics window interpolates between anchors
+  // with rAF, so a 250ms cadence looks identical at a quarter of the bridge traffic.
+  const bridgeStructureKey = `${activeIsPlaying}|${activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId)}|${showTranslation}|${showRomanized}|${bridgeTrackPayload ? "t" : "n"}|${lyrics.plainLyric ?? ""}|${lyrics.translatedLyric ?? ""}|${lyrics.romanizedLyric ?? ""}`;
+  const lastBridgeStructureKeyRef = useRef<string | null>(null);
+  const lastBridgePostAtRef = useRef(0);
+
   useEffect(() => {
     if (!isTauriRuntime() || !hasActivePlayer) return;
     const channel = bridgeChannelRef.current;
     if (!channel) return;
+    const structureChanged = lastBridgeStructureKeyRef.current !== bridgeStructureKey;
+    const now = Date.now();
+    if (!structureChanged && now - lastBridgePostAtRef.current < 250) return;
+    lastBridgeStructureKeyRef.current = bridgeStructureKey;
+    lastBridgePostAtRef.current = now;
     const payload = {
       type: "state" as const,
-      at: Date.now(),
+      at: now,
       progressMs: activeProgressMs,
       isPlaying: activeIsPlaying,
       canControl: activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId),
@@ -374,7 +411,6 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
     } catch {
       // Bridge traffic is best-effort; the window re-syncs on the next tick.
     }
-    const now = Date.now();
     if (now - lastBridgeSnapshotWriteAtRef.current >= 500) {
       lastBridgeSnapshotWriteAtRef.current = now;
       try {
@@ -383,37 +419,45 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
         // Storage may be unavailable; the channel still keeps the window live.
       }
     }
-  }, [activeIsPlaying, hasActivePlayer, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeTrackPayload, showRomanized, showTranslation]);
+  }, [activeIsPlaying, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeStructureKey, bridgeTrackPayload, hasActivePlayer, showRomanized, showTranslation]);
 
   // ── Capacitor mobile shell: push anchors and char-level word timings to the
   // native SYSTEM_ALERT_WINDOW overlay; it interpolates and draws per frame. ──
+  const lastNativePlaybackPostAtRef = useRef(0);
   useEffect(() => {
     if (!isCapacitorRuntime() || !hasActivePlayer) return;
+    const now = Date.now();
+    if (now - lastNativePlaybackPostAtRef.current < 250) return;
+    lastNativePlaybackPostAtRef.current = now;
     getNativeDesktopLyricsPlugin()?.updatePlayback?.({
       isPlaying: activeIsPlaying,
       progressMs: activeProgressMs,
-      at: Date.now()
+      at: now
     });
-  }, [activeIsPlaying, hasActivePlayer, activeProgressMs]);
+  }, [activeIsPlaying, activeProgressMs, hasActivePlayer]);
 
+  const lastNativeLineKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isCapacitorRuntime() || !hasActivePlayer || lyricLines.length === 0) return;
     const plugin = getNativeDesktopLyricsPlugin();
     if (!plugin?.updateLine) return;
     const activeIndex = Math.max(0, getActiveRoomLyricIndex(lyricLines, activeProgressMs));
+    const lineKey = `${lyricLines.length}:${activeIndex}:${showTranslation}:${showRomanized}`;
+    if (lastNativeLineKeyRef.current === lineKey) return;
+    lastNativeLineKeyRef.current = lineKey;
     const words = getRoomLyricDisplayWords(lyricLines, activeIndex).map((word) => ({
       t: word.text,
       s: word.timeMs,
       d: word.durationMs
     }));
     const translation = showTranslation
-      ? alignRoomLyricLines(lyricLines, translatedLines)[activeIndex]?.text ?? null
+      ? translatedAlignment[activeIndex]?.text ?? null
       : null;
     const romanized = showRomanized
-      ? alignRoomLyricLines(lyricLines, romanizedLines)[activeIndex]?.text ?? null
+      ? romanizedAlignment[activeIndex]?.text ?? null
       : null;
     plugin.updateLine({ words: JSON.stringify(words), translation, romanized });
-  }, [activeProgressMs, hasActivePlayer, lyricLines, romanizedLines, showRomanized, showTranslation, translatedLines]);
+  }, [activeProgressMs, hasActivePlayer, lyricLines, romanizedAlignment, showRomanized, showTranslation, translatedAlignment]);
 
   const toggle = useCallback(() => {
     if (isTauriRuntime()) {
