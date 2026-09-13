@@ -97,7 +97,7 @@ Recommended reading order:
 - **Lyrics Experience**: Synced LRC, NetEase YRC verbatim lyrics, bilingual translations, romanized lyrics, mobile immersive view, and desktop floating lyrics
 - **Audio Asset Management**: Local audio import, personal library recovery, playlist management, and local directory sync
 - **Online Provider Integration**: Optional NetEase and QQ Music account binding, search, playlists, albums, and local import
-- **Personalization**: Favorite albums, profile/settings workspace, themes, away-room resume, and client update checker
+- **Personalization**: Favorite albums, listening-profile page (taste-tag radio, top tracks, now-playing), provider account binding, dedicated settings workspace, themes, away-room resume, and client update checker
 - **End-to-End Diagnostics**: Connection, signaling, ICE state, Web Audio scheduling, and RTP stream quality metrics
 - **Resilient Traversal**: Server-issued short-lived TURN credentials with static ICE configuration fallback
 

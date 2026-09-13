@@ -16,6 +16,7 @@ Music Room 是一套围绕“本地与外部音乐多人同步播放”构建的
 - 单一 Segmented Opus/WebRTC RTP 媒体广播链路
 - 官网展示入口 `/` 与客户端入口 `/app`
 - `/app/search`、`/app/playlists`、`/app/favorites`、`/app/profile` 和 `/app/settings` 工作区
+- 个人页为「听歌画像 / 房间足迹 / 平台账号」三个 Tab，画像页以可点击开启漫游电台的口味标签为核心；纯设置项在独立路由 `/app/settings`
 - 房间模式支持标准协作房与点歌房（电台模式，观众搜索点歌 + 房主审批入队）
 
 
