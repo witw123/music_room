@@ -50,7 +50,7 @@ export function DiscoverPlaylistRail({
                 className="absolute inset-0 h-full w-full object-cover block transition duration-300 group-hover:scale-105"
                 src={playlist.artworkUrl}
               />
-              <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/20" />
+              <span className="pointer-events-none absolute inset-0 bg-black/20 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
               <button
                 aria-label={`播放歌单《${playlist.title}》`}
                 className="absolute bottom-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-md transition-all duration-200 hover:scale-105 active:scale-90 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"

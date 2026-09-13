@@ -711,7 +711,7 @@ export function DiscoverPage() {
                     key={pill.id}
                     type="button"
                     onClick={() => setActiveFilterId(pill.id)}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none ${
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none ${
                       active
                         ? "bg-foreground text-background font-semibold shadow-xs"
                         : "bg-surface border border-surface-border text-foreground-muted hover:text-foreground hover:bg-surface-hover"
@@ -724,7 +724,7 @@ export function DiscoverPage() {
               <button
                 type="button"
                 onClick={() => setShowColdStartDialog(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-foreground-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-surface-border ml-auto shrink-0 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium text-foreground-muted hover:text-foreground bg-surface hover:bg-surface-hover border border-surface-border ml-auto shrink-0 transition-colors cursor-pointer"
                 title="偏好设置"
               >
                 <SlidersIcon className="w-3.5 h-3.5 text-foreground-muted" />

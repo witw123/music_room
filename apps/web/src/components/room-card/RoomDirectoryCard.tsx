@@ -80,20 +80,20 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
       {/* Room Visual Cover: Integrates Room Type Badge and Online Status inside the cover */}
       <section
-        className="relative w-full aspect-[2.3/1] shrink-0 overflow-hidden rounded-xl border border-white/[0.08] bg-[#07090e] shadow-inner"
+        className="relative w-full aspect-[2.3/1] shrink-0 overflow-hidden rounded-xl border border-surface-border bg-slate-100 dark:bg-[#07090e] shadow-xs"
         data-card-scene={room.roomType}
         data-testid="room-directory-stage"
       >
-        {/* Seamless Badges Over Cover: Room Type (Left) & Online Count (Right) naturally integrated */}
+        {/* Seamless Badges Over Cover: Room Type (Left) & Online Count (Right) with high contrast in both themes */}
         <div className="pointer-events-none absolute top-2.5 left-3 right-3 z-20 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/80 dark:bg-black/50 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-white/90 shadow-xs backdrop-blur-md">
             <span className="opacity-80">
               <RoomTypeGlyph roomType={room.roomType} />
             </span>
             {theme.label}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-mono tabular-nums text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/80 dark:bg-black/50 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs backdrop-blur-md">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
             {room.directoryOnlineMemberCount} 人在线
           </span>
         </div>
@@ -160,11 +160,11 @@ function RoomNowPlayingStageScene({
       {artworkSrc ? (
         <div
           aria-hidden="true"
-          className="absolute -inset-3 bg-cover bg-center opacity-35 blur-xl scale-110 transition-transform duration-700 group-hover:scale-125"
+          className="absolute -inset-3 bg-cover bg-center opacity-25 dark:opacity-35 blur-xl scale-110 transition-transform duration-700 group-hover:scale-125"
           style={{ backgroundImage: `url("${artworkSrc}")` }}
         />
       ) : null}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#07090e]/80 via-black/20 to-black/40" />
+      <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-white/20 to-transparent dark:from-[#07090e]/80 dark:via-black/20 dark:to-black/40" />
 
       {/* Surrounding Ambient Breathing Halo (Borderless) */}
       <div className="relative flex items-center justify-center pt-2">
@@ -174,8 +174,8 @@ function RoomNowPlayingStageScene({
           style={{ backgroundColor: accentColor }}
         />
 
-        {/* Central Album Artwork Cover - clean borderless with soft shadow */}
-        <div className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl bg-black/60 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
+        {/* Central Album Artwork Cover */}
+        <div className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl bg-surface border border-surface-border shadow-md dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
           {artworkSrc ? (
             <img
               alt={nowPlaying.title}
@@ -185,7 +185,7 @@ function RoomNowPlayingStageScene({
               src={artworkSrc}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-white/50">
+            <div className="flex h-full w-full items-center justify-center text-foreground-muted">
               <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
               </svg>

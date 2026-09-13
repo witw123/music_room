@@ -22,7 +22,7 @@ export function SearchSuggestions({
   if (!items.length) return null;
   return (
     <div
-      className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-2" : "relative mt-2"} max-h-64 overflow-y-auto rounded-2xl border border-surface-border bg-background-secondary p-2 shadow-[0_18px_48px_rgba(0,0,0,0.28)]`}
+      className={`${position === "overlay" ? "absolute inset-x-0 top-full z-40 mt-1.5" : "relative mt-1.5"} max-h-64 overflow-y-auto hide-scrollbar rounded-2xl border border-surface-border bg-background-secondary/95 backdrop-blur-md p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]`}
       role="listbox"
       onPointerDownCapture={() => onInteractionChange?.(true)}
       onPointerUpCapture={() => {
@@ -31,7 +31,7 @@ export function SearchSuggestions({
     >
       {items.map((item) => (
         <button
-          className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground active:bg-white/[0.08]"
+          className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs sm:text-sm text-foreground-muted transition hover:bg-surface-hover hover:text-foreground active:bg-foreground/[0.06]"
           key={`${item.label}:${item.provider ?? "local"}:${item.hint ?? ""}`}
           onClick={(e) => {
             e.preventDefault();
@@ -45,10 +45,10 @@ export function SearchSuggestions({
           role="option"
           type="button"
         >
-          <span className="shrink-0 text-foreground-muted/80"><SearchIcon /></span>
+          <span className="shrink-0 text-foreground-muted/60"><SearchIcon /></span>
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
           <span className="flex shrink-0 items-center gap-1.5 text-[10px]">
-            {item.provider ? <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-accent">{providerLabel(item.provider)}</span> : null}
+            {item.provider ? <span className="rounded-full bg-accent/10 px-2 py-0.5 text-accent font-medium">{providerLabel(item.provider)}</span> : null}
             {item.hint ? <span className="text-foreground-muted/80">{item.hint}</span> : null}
           </span>
         </button>

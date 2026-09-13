@@ -15,15 +15,15 @@ export function SearchTab({ active, onClick, children }: { active: boolean; onCl
   return (
     <button
       aria-selected={active}
-      className={`relative min-h-11 px-1 pb-3 text-sm font-semibold transition ${
-        active ? "text-white" : "text-white/40 hover:text-white/70"
+      className={`relative min-h-10 px-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors ${
+        active ? "text-foreground" : "text-foreground-muted hover:text-foreground"
       }`}
       onClick={onClick}
       role="tab"
       type="button"
     >
       {children}
-      {active ? <span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" /> : null}
+      {active ? <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-accent" /> : null}
     </button>
   );
 }
@@ -43,7 +43,7 @@ export function Artwork({
   return src ? (
     <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={getArtworkSourceUrl(src)} />
   ) : (
-    <span aria-label={alt} className={`flex items-center justify-center bg-[linear-gradient(135deg,#252a32,#15171b)] text-white/25 ${sizes[size]} ${className}`}>
+    <span aria-label={alt} className={`flex items-center justify-center bg-surface text-foreground-muted/40 ${sizes[size]} ${className}`}>
       <Icon name="music" />
     </span>
   );
@@ -51,10 +51,10 @@ export function Artwork({
 
 export function SearchEmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-white/[0.1] bg-black px-6 text-center">
-      <Icon name="search" />
-      <p className="mt-4 text-sm font-medium text-white/60">{title}</p>
-      <p className="mt-2 text-xs text-white/30">{description}</p>
+    <div className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-surface-border bg-surface px-6 text-center">
+      <span className="text-foreground-muted/50"><Icon name="search" /></span>
+      <p className="mt-3 text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-1.5 text-xs text-foreground-muted/70">{description}</p>
     </div>
   );
 }
@@ -70,7 +70,7 @@ export function TrackAlbumLink({
   onAlbum: (track: Track) => Promise<void>;
   className?: string;
 }) {
-  if (!track.album) return <span className={`${className} text-white/30`}>未知专辑</span>;
+  if (!track.album) return <span className={`${className} text-foreground-muted/50`}>未知专辑</span>;
   return (
     <button
       className={`${className} truncate text-left text-accent/80 transition hover:text-accent`}
@@ -86,10 +86,12 @@ export function TrackAlbumLink({
 
 export function Icon({
   name,
-  filled = false
+  filled = false,
+  className = ""
 }: {
   name: "search" | "heart" | "arrow-left" | "close" | "music" | "chevron-right" | "playlist-add" | "download" | "loading";
   filled?: boolean;
+  className?: string;
 }) {
   const common = {
     width: 16,
@@ -100,13 +102,14 @@ export function Icon({
     strokeWidth: 1.8,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
-    "aria-hidden": true
+    "aria-hidden": true,
+    className
   };
   if (name === "search") return <svg {...common}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>;
   if (name === "heart") return <svg {...common}><path d="M20.8 8.7c0 5.2-8.8 10.3-8.8 10.3S3.2 13.9 3.2 8.7A4.7 4.7 0 0 1 12 6.1a4.7 4.7 0 0 1 8.8 2.6Z" /></svg>;
   if (name === "playlist-add") return <svg {...common}><path d="M4 5.5h10M4 9.5h10M4 13.5h6" /><path d="M17 13v7M13.5 16.5h7" /></svg>;
   if (name === "download") return <svg {...common}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>;
-  if (name === "loading") return <svg {...common} className="animate-spin"><path d="M12 3a9 9 0 1 0 9 9" /></svg>;
+  if (name === "loading") return <svg {...common} className={`animate-spin ${className}`}><path d="M12 3a9 9 0 1 0 9 9" /></svg>;
   if (name === "arrow-left") return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></svg>;
   if (name === "close") return <svg {...common}><path d="m6 6 12 12M18 6 6 18" /></svg>;
   if (name === "chevron-right") return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;

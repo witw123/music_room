@@ -784,8 +784,12 @@
     background-color: var(--background) !important;
   }
 
-  html[data-theme="light"] [class*="bg-black/"] {
+  html[data-theme="light"] [class*="bg-black/"]:not([class~="bg-black/0"]):not([class~="opacity-0"]) {
     background-color: color-mix(in srgb, var(--background) 84%, transparent) !important;
+  }
+
+  html[data-theme="light"] [class~="bg-black/0"] {
+    background-color: transparent !important;
   }
 
   html[data-theme="light"] [class*="bg-[#"] {
@@ -1086,15 +1090,6 @@
     color: rgba(255, 255, 255, 0.9) !important;
   }
 
-  /* Room directory stage remains a dark visual media surface in either theme */
-  html[data-theme="light"] [data-testid="room-directory-stage"] {
-    background-color: #07090e !important;
-  }
-
-  html[data-theme="light"] [data-testid="room-directory-stage"] [class~="text-white"],
-  html[data-theme="light"] [data-testid="room-directory-stage"] [class*="text-white/"] {
-    color: rgba(255, 255, 255, 0.92) !important;
-  }
 
   html[data-theme="light"] .light-popover-surface-arrow {
     border-top-color: var(--background-secondary) !important;

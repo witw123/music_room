@@ -51,7 +51,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
     onFocus,
     onBlur,
     onKeyDown,
-    placeholder = "搜索歌曲、歌手、歌单或专辑",
+    placeholder = "搜索歌曲、艺人或歌单",
     disabled = false,
     loading = false,
     autoFocus = false,
@@ -60,7 +60,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
     inputClassName = "",
     prefixAction,
     suffixAction,
-    showSearchButton = true,
+    showSearchButton = false,
     searchButtonText = "搜索",
     searchButtonLoadingText = "搜索中…",
     dropdownContent,
@@ -191,9 +191,9 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
   const hasContent = Boolean((localValue || internalInputRef.current?.value || value).trim());
 
   const sizeClasses = {
-    sm: "h-9 text-xs",
-    default: "h-11 text-sm",
-    lg: "h-12 text-base"
+    sm: "h-8 text-xs",
+    default: "h-9 sm:h-10 text-xs sm:text-sm",
+    lg: "h-11 text-sm sm:text-base"
   }[size];
 
   return (
@@ -205,16 +205,16 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
         role="search"
       >
         <div
-          className={`relative flex min-w-0 flex-1 items-center rounded-xl border border-surface-border bg-surface px-2.5 shadow-sm transition-all focus-within:border-accent focus-within:bg-background-secondary focus-within:ring-2 focus-within:ring-accent/20 ${sizeClasses} ${
+          className={`relative flex min-w-0 flex-1 items-center rounded-full border border-surface-border bg-surface/80 px-3 transition-all duration-150 hover:bg-surface focus-within:border-foreground/25 focus-within:bg-surface-elevated focus-within:ring-2 focus-within:ring-foreground/5 ${sizeClasses} ${
             disabled ? "opacity-60 cursor-not-allowed" : ""
           }`}
         >
           {prefixAction ? (
-            <div className="flex shrink-0 items-center mr-1">{prefixAction}</div>
+            <div className="flex shrink-0 items-center mr-1.5">{prefixAction}</div>
           ) : (
             <span
               aria-hidden="true"
-              className="flex h-5 w-5 shrink-0 items-center justify-center text-foreground-muted/60 mr-1.5"
+              className="flex h-4 w-4 shrink-0 items-center justify-center text-foreground-muted/60 mr-2"
             >
               <SearchIcon />
             </span>
@@ -243,7 +243,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               autoCorrect="off"
               spellCheck={false}
               aria-label={ariaLabel}
-              className={`h-full w-full min-w-0 bg-transparent py-1 text-foreground placeholder:text-foreground-muted/40 outline-none ${inputClassName}`}
+              className={`h-full w-full min-w-0 bg-transparent py-1 text-foreground placeholder:text-foreground-muted/50 outline-none ${inputClassName}`}
             />
 
             {hasContent && !disabled ? (
@@ -252,7 +252,7 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
                 onClick={handleClear}
                 onPointerDown={(e) => e.preventDefault()}
                 aria-label="清空搜索内容"
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-foreground-muted/50 transition hover:bg-white/10 hover:text-foreground"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-foreground-muted/50 transition hover:bg-foreground/10 hover:text-foreground"
               >
                 <CloseIcon />
               </button>
@@ -277,9 +277,9 @@ export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function S
               e.preventDefault();
               handleSubmit();
             }}
-            className={`inline-flex min-h-[2.5rem] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-accent/40 bg-accent px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:border-accent active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 ${
-              !hasContent ? "opacity-50" : ""
-            }`}
+            className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-accent/40 bg-accent px-3.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-accent-hover hover:border-accent active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 ${
+              size === "sm" ? "h-8 text-[11px]" : "h-9 sm:h-10 text-xs"
+            } ${!hasContent ? "opacity-50" : ""}`}
           >
             {loading ? (
               <>

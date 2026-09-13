@@ -37,7 +37,7 @@ export function DiscoverArtistRail({
                   className="h-full w-full object-cover block"
                   src={item.artworkUrl}
                 />
-                <span className="absolute inset-0 bg-black/0 transition duration-200 group-hover:bg-black/25" />
+                <span className="pointer-events-none absolute inset-0 bg-black/25 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                 <span className="absolute inset-0 flex items-center justify-center text-white opacity-0 transition duration-150 group-hover:opacity-100 scale-90 group-hover:scale-100">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-md">
                     <PlayIcon className="w-3.5 h-3.5 ml-0.5" />

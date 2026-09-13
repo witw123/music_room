@@ -653,7 +653,7 @@ export function ProviderSearchPage({
   const prefixAction = showBackToRecommendations ? (
     <button
       aria-label="返回发现"
-      className="flex h-7 sm:h-8 items-center gap-1 rounded-lg px-1.5 sm:px-2 text-xs font-medium text-foreground-muted hover:text-foreground transition hover:bg-surface shrink-0"
+      className="flex h-7 items-center gap-1 rounded-full pl-1.5 pr-2.5 text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-foreground/10 transition-colors shrink-0 -ml-1 mr-1"
       onClick={() => {
         setHasSearched(false);
         setSearchSuggestionsOpen(false);
@@ -665,13 +665,13 @@ export function ProviderSearchPage({
       type="button"
     >
       <Icon name="arrow-left" />
-      <span className="hidden sm:inline">返回发现</span>
+      <span className="hidden sm:inline text-[11px]">发现</span>
     </button>
   ) : !embedded ? (
     onClose ? (
       <button
         aria-label="返回发现"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition hover:bg-surface hover:text-foreground"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-foreground-muted transition hover:bg-foreground/10 hover:text-foreground -ml-1 mr-1"
         onClick={onClose}
         title="返回发现"
         type="button"
@@ -681,7 +681,7 @@ export function ProviderSearchPage({
     ) : (
       <Link
         aria-label="返回首页"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground-muted transition hover:bg-surface hover:text-foreground"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-foreground-muted transition hover:bg-foreground/10 hover:text-foreground -ml-1 mr-1"
         href="/app"
         title="返回首页"
       >
@@ -691,18 +691,29 @@ export function ProviderSearchPage({
   ) : undefined;
 
   const suffixAction = enabledProviders.length > 1 ? (
-    <select
-      aria-label="选择音乐平台"
-      className="h-8 w-[4.5rem] shrink-0 rounded-lg border border-surface-border bg-surface px-1.5 text-[11px] text-foreground outline-none sm:w-auto sm:px-2 sm:text-xs"
-      onChange={(event) => setProvider(event.target.value as Provider)}
-      value={provider}
-    >
-      {enabledProviders.map((item) => (
-        <option key={item} value={item}>
-          {item === "netease" ? "网易云" : "QQ 音乐"}
-        </option>
-      ))}
-    </select>
+    <div className="relative flex items-center pl-1">
+      <div className="h-3.5 w-px bg-surface-border mr-1.5" />
+      <div className="relative flex items-center">
+        <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground cursor-pointer select-none">
+          <span className="font-medium text-[11px] sm:text-xs">{provider === "netease" ? "网易云" : "QQ 音乐"}</span>
+          <svg className="h-3 w-3 text-foreground-muted/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
+          </svg>
+        </div>
+        <select
+          aria-label="选择音乐平台"
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          onChange={(event) => setProvider(event.target.value as Provider)}
+          value={provider}
+        >
+          {enabledProviders.map((item) => (
+            <option key={item} value={item} className="bg-background text-foreground">
+              {item === "netease" ? "网易云音乐" : "QQ 音乐"}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   ) : undefined;
 
   const dropdownContent = searchSuggestionsOpen ? (
@@ -721,7 +732,7 @@ export function ProviderSearchPage({
   ) : null;
 
   const searchBar = (
-    <div className={`w-full ${embedded ? "mx-auto max-w-[650px]" : "sm:max-w-[650px]"}`}>
+    <div className={`w-full ${embedded ? "max-w-md sm:max-w-lg" : "max-w-md sm:max-w-lg"}`}>
       <SearchBar
         ref={searchInputRef}
         id="provider-search-input"
@@ -752,12 +763,12 @@ export function ProviderSearchPage({
         onKeyDown={(event) => {
           if (event.key === "Escape") setSearchSuggestionsOpen(false);
         }}
-        placeholder="搜索歌曲、歌手、歌单或专辑"
+        placeholder="搜索歌曲、艺人或歌单"
         loading={pending === "search"}
         prefixAction={prefixAction}
         suffixAction={suffixAction}
         dropdownContent={dropdownContent}
-        showSearchButton
+        showSearchButton={false}
       />
     </div>
   );
@@ -847,7 +858,7 @@ export function ProviderSearchPage({
   return (
     <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-7 sm:pt-6 md:px-10 md:pt-8">
-        <header className="flex justify-center">
+        <header className="flex">
           {searchBar}
         </header>
         {searchContent}
