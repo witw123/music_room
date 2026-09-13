@@ -17,7 +17,6 @@ export type RoomLyricWord = {
 const timestampPattern = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 const metadataPattern = /^\[(?:ar|al|ti|by|offset|re|ve):/i;
 const yrcLinePattern = /^\[(\d+),(\d+)\](.*)$/;
-const wordPattern = /\((\d+),(\d+)(?:,\d+)?\)([^()]*)/g;
 const lyricCharacterSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 export function parseRoomLyrics(value: string | null | undefined): RoomLyricLine[] {
