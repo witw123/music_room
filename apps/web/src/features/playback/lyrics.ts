@@ -189,14 +189,81 @@ function decodeXmlEntities(value: string) {
     .replace(/&amp;/gi, "&");
 }
 
+const enhancedLrcWordPattern = /<(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?>([^<]*)/g;
+const yrcPrefixWordPattern = /\((\d+),(\d+)(?:,\d+)?\)([^()]*)/g;
+const qrcSuffixWordPattern = /([^()]+)\((\d+),(\d+)(?:,\d+)?\)/g;
+
 function parseTimedWords(value: string): RoomLyricWord[] {
-  return [...value.matchAll(wordPattern)]
-    .map((match) => ({
-      timeMs: Number(match[1]),
-      durationMs: Number(match[2]),
-      text: match[3] ?? ""
-    }))
-    .filter((word) => Number.isFinite(word.timeMs) && Number.isFinite(word.durationMs) && word.text.length > 0);
+  if (!value?.trim()) return [];
+
+  // 1. Enhanced LRC: <00:01.20>word<00:01.60>...
+  if (value.includes("<")) {
+    const matches = [...value.matchAll(enhancedLrcWordPattern)];
+    if (matches.length > 0) {
+      const words: RoomLyricWord[] = [];
+      for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const minutes = Number(match[1]);
+        const seconds = Number(match[2]);
+        const fraction = match[3] ?? "0";
+        const fractionMs = fraction.length === 1
+          ? Number(fraction) * 100
+          : fraction.length === 2
+            ? Number(fraction) * 10
+            : Number(fraction.slice(0, 3));
+        const startTimeMs = (minutes * 60 + seconds) * 1000 + fractionMs;
+        const text = match[4] ?? "";
+
+        let durationMs = 300;
+        if (i + 1 < matches.length) {
+          const nextMatch = matches[i + 1];
+          const nextMin = Number(nextMatch[1]);
+          const nextSec = Number(nextMatch[2]);
+          const nextFrac = nextMatch[3] ?? "0";
+          const nextFracMs = nextFrac.length === 1
+            ? Number(nextFrac) * 100
+            : nextFrac.length === 2
+              ? Number(nextFrac) * 10
+              : Number(nextFrac.slice(0, 3));
+          const nextTimeMs = (nextMin * 60 + nextSec) * 1000 + nextFracMs;
+          durationMs = Math.max(0, nextTimeMs - startTimeMs);
+        }
+        if (text) {
+          words.push({ text, timeMs: startTimeMs, durationMs });
+        }
+      }
+      if (words.length > 0) return words;
+    }
+  }
+
+  // 2. QRC Suffix: text(start,dur) or text(start,dur,0)
+  const trimmed = value.trim();
+  if (trimmed && !trimmed.startsWith("(")) {
+    const suffixMatches = [...trimmed.matchAll(qrcSuffixWordPattern)];
+    if (suffixMatches.length > 0) {
+      return suffixMatches
+        .map((match) => ({
+          text: match[1],
+          timeMs: Number(match[2]),
+          durationMs: Number(match[3])
+        }))
+        .filter((w) => Number.isFinite(w.timeMs) && Number.isFinite(w.durationMs) && w.text.length > 0);
+    }
+  }
+
+  // 3. YRC Prefix: (start,dur)text or (start,dur,0)text
+  const prefixMatches = [...value.matchAll(yrcPrefixWordPattern)];
+  if (prefixMatches.length > 0) {
+    return prefixMatches
+      .map((match) => ({
+        timeMs: Number(match[1]),
+        durationMs: Number(match[2]),
+        text: match[3] ?? ""
+      }))
+      .filter((w) => Number.isFinite(w.timeMs) && Number.isFinite(w.durationMs) && w.text.length > 0);
+  }
+
+  return [];
 }
 
 const segmentPattern = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\s]+(?:\s+)?|\s+/gu;
@@ -211,11 +278,26 @@ function splitLyricSegments(value: string): string[] {
 }
 
 function expandTimedWords(words: RoomLyricWord[], lineTimeMs: number) {
+  if (words.length === 0) return [];
+
+  // Determine whether this line's words are relative offsets or absolute timestamps.
+  // In QRC, relative offsets start from 0 (or close to 0) while lineTimeMs is positive.
+  // In YRC / absolute timing, words have timestamps close to lineTimeMs (even with anticipatory singing).
+  const firstWordTime = words[0]?.timeMs ?? 0;
+  const isRelative = lineTimeMs > 0 && (
+    firstWordTime === 0 ||
+    (firstWordTime < lineTimeMs && (lineTimeMs - firstWordTime > 1500 || firstWordTime < lineTimeMs * 0.5))
+  );
+
   return words.flatMap((word) => {
     const segments = splitLyricSegments(word.text);
     if (segments.length === 0) return [];
-    const timeMs = word.timeMs < lineTimeMs ? lineTimeMs + word.timeMs : word.timeMs;
+
+    const timeMs = isRelative ? lineTimeMs + word.timeMs : word.timeMs;
     const durationMs = Math.max(0, word.durationMs);
+    if (segments.length === 1) {
+      return [{ text: segments[0], timeMs, durationMs }];
+    }
     return segments.map((text, index) => ({
       text,
       timeMs: timeMs + (durationMs * index) / segments.length,
@@ -224,26 +306,10 @@ function expandTimedWords(words: RoomLyricWord[], lineTimeMs: number) {
   });
 }
 
-export function getRoomLyricDisplayWords(lines: RoomLyricLine[], lineIndex: number) {
+export function getRoomLyricDisplayWords(lines: RoomLyricLine[], lineIndex: number): RoomLyricWord[] {
   const line = lines[lineIndex];
-  if (!line) return [];
-  if (line.words.length > 0) return line.words;
-  if (line.timeMs === null) return [];
-
-  const segments = splitLyricSegments(line.text);
-  if (segments.length === 0) return [];
-  const nextLine = lines.slice(lineIndex + 1).find((candidate) =>
-    candidate.timeMs !== null && candidate.timeMs > line.timeMs!
-  );
-  const durationMs = nextLine?.timeMs !== null && nextLine?.timeMs !== undefined
-    ? nextLine.timeMs - line.timeMs
-    : Math.max(1_500, Math.min(8_000, segments.length * 280));
-
-  return segments.map((text, index) => ({
-    text,
-    timeMs: line.timeMs! + (durationMs * index) / segments.length,
-    durationMs: durationMs / segments.length
-  }));
+  if (!line || line.words.length === 0) return [];
+  return line.words;
 }
 
 export function getActiveRoomLyricWordIndex(line: RoomLyricLine | undefined, positionMs: number) {

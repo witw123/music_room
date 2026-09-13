@@ -188,6 +188,8 @@ export function DesktopLyricsBar({
   }, [isPlaying]);
 
   const activeIndex = lines.length > 0 ? Math.max(0, getActiveRoomLyricIndex(lines, smoothPositionMs)) : -1;
+  const activeLine = activeIndex >= 0 ? lines[activeIndex] : null;
+  const isWordSynced = Boolean(activeLine && activeLine.words.length > 0);
   const displayWords = useMemo(
     () => (activeIndex >= 0 ? getRoomLyricDisplayWords(lines, activeIndex) : []),
     [lines, activeIndex]
@@ -195,7 +197,7 @@ export function DesktopLyricsBar({
   const lineText =
     displayWords.length > 0
       ? displayWords.map((word) => word.text).join("")
-      : lines[activeIndex >= 0 ? activeIndex : 0]?.text ?? null;
+      : activeLine?.text ?? null;
   const hasLyrics = lines.length > 0;
 
   // Sub-line: translation or romanization
@@ -335,7 +337,7 @@ export function DesktopLyricsBar({
             transform: overflowPx > 0 ? `translateX(${scrollOffset}px)` : "none"
           }}
         >
-          {hasLyrics && displayWords.length > 0 ? (
+          {hasLyrics && isWordSynced && displayWords.length > 0 ? (
             displayWords.map((word, wordIndex) => {
               if (!word.text.trim()) {
                 return (

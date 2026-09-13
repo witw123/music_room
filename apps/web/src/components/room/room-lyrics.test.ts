@@ -75,13 +75,31 @@ describe("room lyrics", () => {
     ]);
   });
 
-  it("builds character-level display timing for line-synced lyrics", () => {
+  it("does not fabricate word timings for plain line-synced lyrics", () => {
     const lines = parseRoomLyrics("[00:01.00]歌词\n[00:03.00]下一行");
 
-    expect(getRoomLyricDisplayWords(lines, 0)).toEqual([
-      { text: "歌", timeMs: 1_000, durationMs: 1_000 },
-      { text: "词", timeMs: 2_000, durationMs: 1_000 }
+    expect(getRoomLyricDisplayWords(lines, 0)).toEqual([]);
+  });
+
+  it("parses QRC suffix format text(start,dur)", () => {
+    const lines = parseRoomLyrics("[1000,1000]背(1000,500)景(1500,500)");
+    expect(lines[0]?.words).toEqual([
+      { text: "背", timeMs: 1_000, durationMs: 500 },
+      { text: "景", timeMs: 1_500, durationMs: 500 }
     ]);
+  });
+
+  it("parses Enhanced LRC format <mm:ss.xx>word", () => {
+    const lines = parseRoomLyrics("[00:01.00]<00:01.00>hello <00:01.50>world");
+    expect(lines[0]?.words).toEqual([
+      { text: "hello ", timeMs: 1_000, durationMs: 500 },
+      { text: "world", timeMs: 1_500, durationMs: 300 }
+    ]);
+  });
+
+  it("handles anticipatory singing without exploding relative timeMs", () => {
+    const lines = parseRoomLyrics("[10000,2000](9800,400,0)抢(10200,500,0)拍");
+    expect(lines[0]?.words[0]?.timeMs).toBe(9_800);
   });
 
   it("prefers provider word-synced lyrics over stored line-synced lyrics", () => {
