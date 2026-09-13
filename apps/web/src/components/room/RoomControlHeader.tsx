@@ -198,7 +198,7 @@ export function RoomControlHeader({
                 <button
                   data-testid={isMobile ? "mobile-share-room-button" : "share-room-button"}
                   aria-label="分享房间"
-                  className="inline-flex h-8 min-w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full border border-surface-border/60 bg-surface/80 px-2.5 text-[11px] font-semibold text-foreground-muted shadow-xs transition-[background-color,color,border-color,transform] duration-150 hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-8 min-w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full border border-surface-border/60 bg-surface/80 px-2.5 text-[11px] font-semibold text-foreground-muted shadow-xs transition-[background-color,color,border-color,transform] duration-150 hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
                   disabled={isSharing}
                   onClick={() => void handleShareRoom()}
                   title="分享房间"
@@ -288,7 +288,7 @@ export function RoomControlHeader({
                 {canDeleteRoom && onUpdateRoom ? (
                   <button
                     data-testid={isMobile ? "mobile-edit-room-button" : "edit-room-button"}
-                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                     onClick={openEditRoom}
                     type="button"
                   >
@@ -298,7 +298,7 @@ export function RoomControlHeader({
                 {onAwayRoom ? (
                   <button
                     data-testid={isMobile ? "mobile-away-room-button" : "away-room-button"}
-                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-500 transition-colors hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
                     onClick={() => {
                       setShowSettings(false);
                       onAwayRoom();
@@ -310,7 +310,7 @@ export function RoomControlHeader({
                 ) : null}
                 <button
                   data-testid={isMobile ? "mobile-leave-room-button" : "leave-room-button"}
-                  className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   onClick={() => {
                     setShowSettings(false);
                     void onLeaveRoom?.();
@@ -324,7 +324,7 @@ export function RoomControlHeader({
                   <>
                     <button
                       data-testid={isMobile ? "mobile-delete-room-button" : "delete-room-button"}
-                      className="my-1 w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-red-500 transition-colors hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                      className="my-1 w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-red-500 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30"
                       onClick={() => {
                         setShowSettings(false);
                         setShowDeleteConfirmation(true);

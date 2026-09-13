@@ -199,16 +199,27 @@ function parseTimedWords(value: string): RoomLyricWord[] {
     .filter((word) => Number.isFinite(word.timeMs) && Number.isFinite(word.durationMs) && word.text.length > 0);
 }
 
+const segmentPattern = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\s]+(?:\s+)?|\s+/gu;
+
+function splitLyricSegments(value: string): string[] {
+  if (!value) return [];
+  const matches = value.match(segmentPattern);
+  if (!matches || matches.length === 0) {
+    return [...lyricCharacterSegmenter.segment(value)].map((s) => s.segment);
+  }
+  return matches;
+}
+
 function expandTimedWords(words: RoomLyricWord[], lineTimeMs: number) {
   return words.flatMap((word) => {
-    const characters = splitLyricCharacters(word.text);
-    if (characters.length === 0) return [];
+    const segments = splitLyricSegments(word.text);
+    if (segments.length === 0) return [];
     const timeMs = word.timeMs < lineTimeMs ? lineTimeMs + word.timeMs : word.timeMs;
     const durationMs = Math.max(0, word.durationMs);
-    return characters.map((text, index) => ({
+    return segments.map((text, index) => ({
       text,
-      timeMs: timeMs + durationMs * index / characters.length,
-      durationMs: durationMs / characters.length
+      timeMs: timeMs + (durationMs * index) / segments.length,
+      durationMs: durationMs / segments.length
     }));
   });
 }
@@ -219,24 +230,20 @@ export function getRoomLyricDisplayWords(lines: RoomLyricLine[], lineIndex: numb
   if (line.words.length > 0) return line.words;
   if (line.timeMs === null) return [];
 
-  const characters = splitLyricCharacters(line.text);
-  if (characters.length === 0) return [];
+  const segments = splitLyricSegments(line.text);
+  if (segments.length === 0) return [];
   const nextLine = lines.slice(lineIndex + 1).find((candidate) =>
     candidate.timeMs !== null && candidate.timeMs > line.timeMs!
   );
   const durationMs = nextLine?.timeMs !== null && nextLine?.timeMs !== undefined
     ? nextLine.timeMs - line.timeMs
-    : Math.max(1_500, Math.min(8_000, characters.length * 280));
+    : Math.max(1_500, Math.min(8_000, segments.length * 280));
 
-  return characters.map((text, index) => ({
+  return segments.map((text, index) => ({
     text,
-    timeMs: line.timeMs! + durationMs * index / characters.length,
-    durationMs: durationMs / characters.length
+    timeMs: line.timeMs! + (durationMs * index) / segments.length,
+    durationMs: durationMs / segments.length
   }));
-}
-
-function splitLyricCharacters(value: string) {
-  return [...lyricCharacterSegmenter.segment(value)].map((segment) => segment.segment);
 }
 
 export function getActiveRoomLyricWordIndex(line: RoomLyricLine | undefined, positionMs: number) {

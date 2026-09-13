@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import type {
   RoomMediaConnectionState,
   RoomMember,
@@ -28,6 +28,7 @@ import type { RoomSocket } from "@/lib/network/ws-client";
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
   playbackBarrier?: RoomPlaybackBarrierClock | null;
+  currentPlaybackPositionRef?: MutableRefObject<number>;
   currentTrack: TrackMeta | null;
   currentTrackDuration: number;
   isPlaying: boolean;
@@ -54,6 +55,7 @@ type RoomStageProps = {
 function RoomStageBase({
   roomSnapshot,
   playbackBarrier,
+  currentPlaybackPositionRef,
   currentTrack,
   currentTrackDuration,
   isPlaying,
@@ -110,9 +112,13 @@ function RoomStageBase({
   const playbackBarrierRef = useRef(playbackBarrier);
   playbackBarrierRef.current = playbackBarrier;
   const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
-  const sourceProvider = currentTrack?.sourceRef?.provider ?? null;
+  const sourceProvider =
+    currentTrack?.sourceRef?.provider ??
+    (currentTrack?.sourceType === "netease" || currentTrack?.sourceType === "qqmusic"
+      ? currentTrack.sourceType
+      : null);
 
-  const sourceTrackId = currentTrack?.sourceRef?.trackId ?? null;
+  const sourceTrackId = currentTrack?.sourceRef?.trackId ?? currentTrack?.id ?? null;
   const currentTrackFileHash = currentTrack?.fileHash ?? null;
   const currentTrackLyrics = currentTrack?.lyrics?.trim() || null;
   const currentTrackTranslatedLyrics = currentTrack?.translatedLyrics?.trim() || null;
@@ -157,6 +163,11 @@ function RoomStageBase({
 
   useEffect(() => {
     const updatePosition = () => {
+      const livePosition = currentPlaybackPositionRef?.current;
+      if (typeof livePosition === "number" && livePosition > 0) {
+        setLyricsPositionMs(livePosition);
+        return;
+      }
       setLyricsPositionMs(
         getPlaybackEffectivePositionMs(
           playbackRef.current,
@@ -168,15 +179,12 @@ function RoomStageBase({
     };
 
     updatePosition();
-    if (
-      !isPlaying ||
-      playbackRef.current.status !== "playing" ||
-      (!playbackRef.current.startedAt && !playbackRef.current.startAt && playbackBarrierRef.current?.holdPositionMs === null)
-    ) return;
+    if (!isPlaying || playbackRef.current.status !== "playing") return;
 
-    const timer = window.setInterval(updatePosition, 500);
+    const timer = window.setInterval(updatePosition, 100);
     return () => window.clearInterval(timer);
   }, [
+    currentPlaybackPositionRef,
     currentTrackDuration,
     isPlaying,
     playbackPositionKey,

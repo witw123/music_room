@@ -398,6 +398,7 @@ export function MusicRoomApp({
     <RoomAppShell
       activeSession={activeSession}
       audioRef={appRefs.audioRef}
+      currentPlaybackPositionRef={appRefs.currentPlaybackPositionRef}
       authEntryHref={appEntries.authEntryHref}
       backgroundOnly={backgroundOnly}
       canControlPlayback={canControlPlayback}

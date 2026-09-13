@@ -29,6 +29,7 @@ export type RoomWorkspaceSectionProps = {
   playbackBarrier?: RoomPlaybackBarrierClock | null;
   initialRoomId: string | null;
   currentTrack: TrackMeta | null;
+  currentPlaybackPositionRef?: React.MutableRefObject<number>;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
   canReorderQueue: boolean;
@@ -62,6 +63,7 @@ function RoomWorkspaceSectionComponent({
   playbackBarrier,
   initialRoomId,
   currentTrack,
+  currentPlaybackPositionRef,
   canControlPlayback,
   canDeleteRoom,
   canReorderQueue,
@@ -105,6 +107,7 @@ function RoomWorkspaceSectionComponent({
       playbackBarrier={playbackBarrier}
       roomId={roomSnapshot?.room.id ?? initialRoomId}
       currentTrack={currentTrack}
+      currentPlaybackPositionRef={currentPlaybackPositionRef}
       canControlPlayback={canControlPlayback}
       canDeleteRoom={canDeleteRoom}
       canDisbandRoom={workspaceViewModel.canDisbandRoom}

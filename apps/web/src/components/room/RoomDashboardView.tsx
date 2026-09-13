@@ -40,6 +40,7 @@ export type RoomDashboardViewProps = {
   playbackBarrier?: RoomPlaybackBarrierClock | null;
   currentTrack: TrackMeta | null;
   currentTrackDuration: number;
+  currentPlaybackPositionRef?: React.MutableRefObject<number>;
   isPlaying: boolean;
   activeSession: AuthSession | null;
   host: RoomMember | undefined;
@@ -247,6 +248,7 @@ export function buildRoomStageProps(
     playbackBarrier: props.playbackBarrier,
     currentTrack: props.currentTrack,
     currentTrackDuration: props.currentTrackDuration,
+    currentPlaybackPositionRef: props.currentPlaybackPositionRef,
     isPlaying: props.isPlaying,
     host: props.host,
     canDeleteRoom: props.canDeleteRoom,

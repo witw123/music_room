@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/network/ws-client";
 import { isProviderTrack } from "@/features/room/playback/room-audio-path";
@@ -19,6 +19,7 @@ import { RoomOverlaySection } from "@/components/room/sections/RoomOverlaySectio
 type RoomAppShellProps = {
   activeSession: AuthSession | null;
   audioRef: RefObject<HTMLAudioElement | null>;
+  currentPlaybackPositionRef?: MutableRefObject<number>;
   authEntryHref: string;
   backgroundOnly?: boolean;
   canControlPlayback: boolean;
@@ -47,6 +48,7 @@ type RoomAppShellProps = {
 export function RoomAppShell({
   activeSession,
   audioRef,
+  currentPlaybackPositionRef,
   authEntryHref,
   backgroundOnly = false,
   canControlPlayback,
@@ -124,6 +126,7 @@ export function RoomAppShell({
           canReorderQueue={canReorderQueue}
           clipboardActions={clipboardActions}
           currentTrack={currentTrack}
+          currentPlaybackPositionRef={currentPlaybackPositionRef}
           initialRoomId={initialRoomId}
           isNavigatingRoomExit={pageState.isNavigatingRoomExit}
           isRecoveringRoom={pageState.isRecoveringRoom}

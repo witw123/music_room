@@ -34,6 +34,7 @@ type RoomWorkspaceProps = {
   playbackBarrier?: RoomPlaybackBarrierClock | null;
   roomId: string | null;
   currentTrack: TrackMeta | null;
+  currentPlaybackPositionRef?: React.MutableRefObject<number>;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
   canDisbandRoom: boolean;
@@ -160,6 +161,7 @@ function RoomWorkspaceBase({
   onTabChange,
   onDiagnosticsVisibilityChange,
   onSeek,
+  currentPlaybackPositionRef,
   socket,
   playerSlot
 }: RoomWorkspaceProps) {
@@ -218,6 +220,7 @@ function RoomWorkspaceBase({
               playbackBarrier={playbackBarrier}
               currentTrack={currentTrack}
               currentTrackDuration={currentTrackDuration}
+              currentPlaybackPositionRef={currentPlaybackPositionRef}
               isPlaying={isPlaying}
               activeSession={activeSession}
               host={host}

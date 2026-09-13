@@ -104,6 +104,36 @@
     caret-color: var(--foreground);
     transition: background-color 9999s ease-out 0s;
   }
+
+  /* Prevent persistent focus rings, borders, and shadows after mouse/touch click while preserving keyboard accessibility */
+  *:focus:not(:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:focus:not(:focus-visible),
+  [role="button"]:focus:not(:focus-visible),
+  a:focus:not(:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Prevent sticky hover effects on touch devices */
+  @media (hover: none) {
+    button:hover:not(:active),
+    [role="button"]:hover:not(:active) {
+      background-color: transparent;
+    }
+  }
 }
 
 @layer components {

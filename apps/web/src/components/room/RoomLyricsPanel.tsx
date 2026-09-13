@@ -230,7 +230,11 @@ export function RoomLyricsPanel({
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
         <div
           ref={scrollContainerRef}
-          className={`hide-scrollbar h-full touch-pan-y overflow-y-auto py-3 sm:py-4 ${lyricScrollPaddingClass}`}
+          className={`hide-scrollbar h-full touch-pan-y overflow-y-auto ${lyricScrollPaddingClass}`}
+          style={{
+            paddingTop: "clamp(2rem, 32%, 7.5rem)",
+            paddingBottom: "clamp(2rem, 32%, 7.5rem)"
+          }}
           onPointerCancel={handleLyricsPointerEnd}
           onPointerDown={handleLyricsPointerDown}
           onPointerMove={handleLyricsPointerMove}
@@ -239,7 +243,7 @@ export function RoomLyricsPanel({
         {status === "loading" ? (
           <p className="flex h-full items-center justify-center text-sm text-foreground-muted">正在获取歌词…</p>
         ) : lines.length > 0 ? (
-          <div className={`mx-auto flex min-h-full w-full flex-col justify-center ${alignmentClass} ${isFiveLineView || isSevenLineView ? "gap-0 py-1 sm:gap-0.5 sm:py-2" : "gap-0.5 py-1 sm:gap-1 sm:py-2"}`}>
+          <div className={`mx-auto flex min-h-full w-full flex-col justify-start ${alignmentClass} ${isFiveLineView || isSevenLineView ? "gap-0 py-1 sm:gap-0.5 sm:py-2" : "gap-0.5 py-1 sm:gap-1 sm:py-2"}`}>
             {lines.map((line, index) => {
               const isActive = index === activeIndex;
               const isSelected = line.id === selectedLineId;
@@ -269,23 +273,27 @@ export function RoomLyricsPanel({
                       : `font-medium text-foreground-muted/40 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
                   }`}
                 >
-                  <span className="block w-full">
+                  <span className="block w-full whitespace-pre-wrap">
                     {displayWords.length > 0 ? displayWords.map((word, wordIndex) => {
                       if (!isActive) {
-                        return <span key={`${line.id}:word:${wordIndex}`}>{word.text}</span>;
+                        return <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre">{word.text}</span>;
+                      }
+
+                      if (!word.text.trim()) {
+                        return <span key={`${line.id}:word:${wordIndex}`} className="inline whitespace-pre">{word.text}</span>;
                       }
 
                       const progress = getRoomLyricWordProgress(word, smoothPositionMs);
                       if (progress >= 1) {
                         return (
-                          <span key={`${line.id}:word:${wordIndex}`} className="text-foreground">
+                          <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre text-foreground">
                             {word.text}
                           </span>
                         );
                       }
                       if (progress <= 0) {
                         return (
-                          <span key={`${line.id}:word:${wordIndex}`} className="text-foreground-muted/40">
+                          <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre text-foreground-muted/40">
                             {word.text}
                           </span>
                         );
@@ -293,12 +301,14 @@ export function RoomLyricsPanel({
 
                       return (
                         <span
-                          className="text-transparent inline will-change-[background-image]"
+                          className="inline-block whitespace-pre text-transparent will-change-[background-image]"
                           key={`${line.id}:word:${wordIndex}`}
                           style={{
                             backgroundImage: `linear-gradient(to right, var(--foreground) 0%, var(--foreground) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 40%, transparent) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 40%, transparent) 100%)`,
                             backgroundClip: "text",
-                            WebkitBackgroundClip: "text"
+                            WebkitBackgroundClip: "text",
+                            WebkitBoxDecorationBreak: "clone",
+                            boxDecorationBreak: "clone"
                           }}
                         >
                           {word.text}

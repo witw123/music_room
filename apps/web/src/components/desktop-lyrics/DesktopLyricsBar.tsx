@@ -337,11 +337,18 @@ export function DesktopLyricsBar({
         >
           {hasLyrics && displayWords.length > 0 ? (
             displayWords.map((word, wordIndex) => {
+              if (!word.text.trim()) {
+                return (
+                  <span className="inline whitespace-pre text-white/65 font-bold" key={wordIndex}>
+                    {word.text}
+                  </span>
+                );
+              }
               const progress = getRoomLyricWordProgress(word, smoothPositionMs);
               if (progress >= 1) {
                 return (
                   <span
-                    className="inline text-white font-bold"
+                    className="inline-block whitespace-pre text-white font-bold"
                     key={wordIndex}
                   >
                     {word.text}
@@ -351,7 +358,7 @@ export function DesktopLyricsBar({
               if (progress <= 0) {
                 return (
                   <span
-                    className="inline text-white/65 font-bold transition-colors duration-150"
+                    className="inline-block whitespace-pre text-white/65 font-bold transition-colors duration-150"
                     key={wordIndex}
                   >
                     {word.text}
@@ -361,12 +368,14 @@ export function DesktopLyricsBar({
               const filled = (progress * 100).toFixed(1);
               return (
                 <span
-                  className="inline text-transparent font-bold will-change-[background-image]"
+                  className="inline-block whitespace-pre text-transparent font-bold will-change-[background-image]"
                   key={wordIndex}
                   style={{
                     backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${filled}%, rgb(255 255 255 / 0.65) ${filled}%, rgb(255 255 255 / 0.65) 100%)`,
                     backgroundClip: "text",
-                    WebkitBackgroundClip: "text"
+                    WebkitBackgroundClip: "text",
+                    WebkitBoxDecorationBreak: "clone",
+                    boxDecorationBreak: "clone"
                   }}
                 >
                   {word.text}

@@ -75,7 +75,9 @@ type DesktopLyricsState = {
   romanizedLine: string | null;
 };
 
-type CachedLyrics = Omit<DesktopLyricsState, "status" | "currentLine" | "translatedLine" | "romanizedLine">;
+type CachedLyrics = Omit<DesktopLyricsState, "status" | "currentLine" | "translatedLine" | "romanizedLine"> & {
+  wordSyncedLyric?: string | null;
+};
 
 const desktopLyricsPositionStorageKey = "music-room-desktop-lyrics-position-v1";
 const desktopLyricsBridgeChannelName = "music-room-desktop-lyrics";
@@ -252,8 +254,8 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       const resolvedPlain = selectRoomLyrics({
         localLyrics: directLyrics,
-        wordSyncedLyric: result.plainLyric,
-        plainLyric: directLyrics
+        wordSyncedLyric: result.wordSyncedLyric,
+        plainLyric: result.plainLyric ?? directLyrics
       });
       const resolvedTranslated = result.translatedLyric || localTranslated;
       const resolvedRomanized = result.romanizedLyric || localRomanized;
@@ -479,15 +481,13 @@ async function loadProviderLyrics(provider: "netease" | "qqmusic", trackId: stri
   try {
     const response = await fetchProviderLyricsCached(provider, trackId);
     return {
-      plainLyric: selectRoomLyrics({
-        wordSyncedLyric: response.wordSyncedLyric,
-        plainLyric: response.plainLyric
-      }),
+      plainLyric: response.plainLyric?.trim() || null,
+      wordSyncedLyric: response.wordSyncedLyric?.trim() || null,
       translatedLyric: response.translatedLyric?.trim() || null,
       romanizedLyric: response.romanizedLyric?.trim() || null
     };
   } catch {
-    return { plainLyric: null, translatedLyric: null, romanizedLyric: null };
+    return { plainLyric: null, wordSyncedLyric: null, translatedLyric: null, romanizedLyric: null };
   }
 }
 
