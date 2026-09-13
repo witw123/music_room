@@ -6,6 +6,7 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { Button } from "@/components/ui/button";
 import {
   SlidersIcon,
+  SparklesIcon,
   CloseIcon,
   CheckIcon,
   MicIcon,
