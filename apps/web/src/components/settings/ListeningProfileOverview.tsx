@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import type { AuthSession, PersonalizationProfileResponse, ProviderTrackCandidate } from "@music-room/shared";
+import type { AuthSession, ProviderTrackCandidate } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
-import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
+import { usePersonalizationProfile } from "@/features/personalization/use-personalization-profile";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
-import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
+import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import {
   buildPlaybackStatusMessage,
   prepareTrackForImmediatePlayback,
@@ -15,15 +14,14 @@ import {
 } from "@/features/playback/provider-playback-preparation";
 import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { TasteExclusionsManager } from "@/components/discovery/TasteExclusionsManager";
 import {
   PlayIcon,
   RadioIcon,
   MusicIcon,
-  HeadphonesIcon,
   LandmarkIcon,
   BarChartIcon,
-  SlidersIcon,
-  HeartIcon
+  SlidersIcon
 } from "@/components/icons/DiscoverIcons";
 
 const sourceConfig = {
@@ -39,73 +37,18 @@ export function ListeningProfileOverview({
   activeSession: AuthSession;
   onOpenColdStart?: () => void;
 }) {
-  const pathname = usePathname();
   const player = useLocalPlayer();
   const { favoriteTracks } = useFavoriteTracks(activeSession.userId);
-  const [profile, setProfile] = useState<PersonalizationProfileResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { profile, loading } = usePersonalizationProfile();
   const [activeRadioTrackKey, setActiveRadioTrackKey] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [showAllTopTracks, setShowAllTopTracks] = useState(false);
   const [showAllTopArtists, setShowAllTopArtists] = useState(false);
+  const [showExclusions, setShowExclusions] = useState(false);
 
   const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
 
   useEffect(() => () => queuePreloadRef.current?.cancel(), []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let request: Promise<void> | null = null;
-    let refreshQueued = false;
-    let refreshTimer: number | null = null;
-
-    const load = () => {
-      if (cancelled) return;
-      if (request) {
-        refreshQueued = true;
-        return;
-      }
-
-      setRefreshing(true);
-      request = musicRoomApi.getPersonalizationProfile()
-        .then((next) => {
-          if (!cancelled) setProfile(next);
-        })
-        .catch(() => {
-          // Keep the last successful profile visible
-        })
-        .finally(() => {
-          request = null;
-          if (cancelled) return;
-          setLoading(false);
-          setRefreshing(false);
-          if (refreshQueued) {
-            refreshQueued = false;
-            load();
-          }
-        });
-    };
-
-    const handleProfileChange = () => {
-      if (pathname !== "/app/profile" || refreshTimer !== null) return;
-      refreshTimer = window.setTimeout(() => {
-        refreshTimer = null;
-        load();
-      }, 450);
-    };
-
-    setProfile(null);
-    setLoading(pathname === "/app/profile");
-    if (pathname === "/app/profile") load();
-    window.addEventListener(personalizationChangedEvent, handleProfileChange);
-    return () => {
-      cancelled = true;
-      request = null;
-      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
-      window.removeEventListener(personalizationChangedEvent, handleProfileChange);
-    };
-  }, [activeSession.userId, pathname]);
 
   const handlePlayTrack = async (candidate: ProviderTrackCandidate) => {
     try {
@@ -147,23 +90,6 @@ export function ListeningProfileOverview({
     }
   };
 
-  const handlePlayAllFavorites = async () => {
-    if (!favoriteTracks.length) return;
-    const candidates = favoriteTracks.map(favoriteTrackToCandidate);
-    const firstTrack = candidates[0];
-    const remaining = candidates.slice(1);
-    try {
-      const prepared = await prepareTrackForImmediatePlayback(firstTrack);
-      await player.playTrack(prepared.record);
-      for (const track of remaining) {
-        player.addToQueue(toProviderTrackRecord(track));
-      }
-      setStatusMessage(`正在播放我喜欢的音乐（共 ${candidates.length} 首）`);
-    } catch {
-      setStatusMessage("播放失败，请稍后重试");
-    }
-  };
-
   const handleTagClick = async (tagLabel: string) => {
     const seedTrack = profile?.topTracks[0] || profile?.recentTracks?.[0];
     if (seedTrack) {
@@ -186,132 +112,12 @@ export function ListeningProfileOverview({
   const activeTasteGroups = profile.tasteGroups.filter((group) => group.tags.length > 0);
   const visibleTopTracks = showAllTopTracks ? profile.topTracks : profile.topTracks.slice(0, 5);
   const visibleTopArtists = showAllTopArtists ? profile.topArtists : profile.topArtists.slice(0, 5);
-  const recentTracks = profile.recentTracks ?? [];
 
   return (
-    <div className="profile-content space-y-4 sm:space-y-5 animate-in fade-in duration-300 pb-28 sm:pb-8 w-full max-w-full overflow-hidden" aria-busy={refreshing}>
-      {statusMessage && (
-        <p className="text-xs text-foreground bg-surface border border-surface-border px-3.5 py-2 rounded-xl">
-          {statusMessage}
-        </p>
-      )}
+    <div className="profile-content space-y-4 sm:space-y-5 animate-in fade-in duration-300 pb-28 sm:pb-8 w-full max-w-full overflow-hidden">
+      <StatusToast message={statusMessage} onDismiss={setStatusMessage} />
 
-      {/* Primary Assets Section: Liked Songs & Recently Played Quick Cards */}
-      <section className="grid gap-3.5 sm:grid-cols-2">
-        {/* Liked Songs Card */}
-        <div className="rounded-xl border border-surface-border bg-surface/50 p-4 flex flex-col justify-between transition-colors hover:bg-surface/70">
-          <div className="flex items-start gap-3.5">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-red-500/20 to-red-600/10 border border-red-500/20 text-red-500 shadow-xs">
-              <HeartIcon className="h-6 w-6 fill-current" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm sm:text-base font-bold text-foreground tracking-tight">我喜欢的音乐</h3>
-              <p className="mt-0.5 text-xs text-foreground-muted">
-                {favoriteTracks.length > 0 ? `${favoriteTracks.length} 首已收藏歌曲` : "暂未收藏歌曲"}
-              </p>
-              <p className="mt-1 text-[11px] text-foreground-muted/70 truncate">
-                {favoriteTracks.length > 0 ? `包含 ${favoriteTracks.slice(0, 2).map((track) => track.title).join("、")}${favoriteTracks.length > 2 ? " 等" : ""}` : "在各页面点击爱心即可收藏"}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between border-t border-surface-border/40 pt-3">
-            <span className="text-[11px] text-foreground-muted">
-              {favoriteTracks.length > 0 ? "随心畅听你的专属收藏" : "探索歌曲发现好音乐"}
-            </span>
-            <button
-              type="button"
-              disabled={favoriteTracks.length === 0}
-              onClick={() => void handlePlayAllFavorites()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-xs transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-            >
-              <PlayIcon className="w-3 h-3" />
-              <span>播放全部</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Recently Played Summary Card */}
-        <div className="rounded-xl border border-surface-border bg-surface/50 p-4 flex flex-col justify-between transition-colors hover:bg-surface/70">
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-surface-elevated text-foreground-muted">
-                  <HeadphonesIcon className="w-3.5 h-3.5" />
-                </span>
-                <h3 className="text-sm sm:text-base font-bold text-foreground tracking-tight">最近收听</h3>
-              </div>
-              <span className="text-[11px] text-foreground-muted tabular-nums">
-                {recentTracks.length > 0 ? `共 ${recentTracks.length} 首` : "暂无最近记录"}
-              </span>
-            </div>
-            {recentTracks.length > 0 ? (
-              <div className="space-y-1.5 mt-2">
-                {recentTracks.slice(0, 2).map((track) => (
-                  <div
-                    key={`${track.provider}:${track.providerTrackId}`}
-                    onClick={() => void handlePlayTrack(track)}
-                    className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-surface-hover/60 transition-colors cursor-pointer group min-w-0"
-                  >
-                    <div className="h-8 w-8 shrink-0 rounded-md overflow-hidden bg-surface-elevated border border-surface-border/40">
-                      <Artwork alt="" className="h-full w-full object-cover" src={track.artworkUrl} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold text-foreground group-hover:text-accent transition-colors">
-                        {track.title}
-                      </p>
-                      <p className="truncate text-[10px] text-foreground-muted">{track.artist}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handlePlayTrack(track);
-                      }}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-foreground-muted hover:text-foreground"
-                      title="播放"
-                    >
-                      <PlayIcon className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-foreground-muted py-3">在房间或电台收听歌曲后，这里会显示最近播放历史。</p>
-            )}
-          </div>
-          {recentTracks.length > 2 && (
-            <div className="mt-2 border-t border-surface-border/40 pt-2 flex items-center justify-between text-[11px] text-foreground-muted">
-              <span>共记录 {recentTracks.length} 首近期常听歌曲</span>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 4-Metric Statistics Grid */}
-      <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3.5">
-        <MetricCard
-          label="累计收听时长"
-          value={formatDuration(profile.totalListenedMs)}
-          icon={<HeadphonesIcon className="w-4 h-4 text-sky-400" />}
-        />
-        <MetricCard
-          label="播放总次数"
-          value={`${profile.totalPlayCount} 次`}
-          icon={<PlayIcon className="w-4 h-4 text-amber-400" />}
-        />
-        <MetricCard
-          label="探索曲目"
-          value={`${profile.trackCount} 首`}
-          icon={<MusicIcon className="w-4 h-4 text-purple-400" />}
-        />
-        <MetricCard
-          label="常听艺人"
-          value={`${profile.artistCount} 位`}
-          icon={<LandmarkIcon className="w-4 h-4 text-emerald-400" />}
-        />
-      </section>
-
-      {/* Taste & Genres Section */}
+      {/* Taste & Genres: the identity core of the page — click a tag to start radio */}
       <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -320,7 +126,7 @@ export function ListeningProfileOverview({
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-sm sm:text-base font-bold text-foreground tracking-tight truncate">常听曲风与偏好</h3>
-              <p className="text-xs text-foreground-muted truncate">根据你近期的收听与收藏记录统计，点击标签可开启专属漫游</p>
+              <p className="text-xs text-foreground-muted truncate">点击标签，即刻开启对应的专属漫游电台</p>
             </div>
           </div>
           {onOpenColdStart && (
@@ -335,24 +141,24 @@ export function ListeningProfileOverview({
         </div>
 
         {activeTasteGroups.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-4">
             {activeTasteGroups.map((group) => (
-              <div key={group.id} className="space-y-2 p-3 rounded-xl bg-surface-elevated/30 border border-surface-border/40">
+              <div key={group.id} className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-xs font-semibold text-foreground-muted uppercase tracking-wider">{group.label}</h4>
                   <span className="text-[10px] text-foreground-muted/60">{group.tags.length} 项</span>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {group.tags.map((tag) => (
                     <button
                       key={`${group.id}:${tag.label}:${tag.source}`}
                       type="button"
                       onClick={() => void handleTagClick(tag.label)}
-                      className="inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-surface hover:bg-surface-hover text-foreground border border-surface-border transition-all cursor-pointer overflow-hidden group"
+                      className="inline-flex max-w-full items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-medium bg-surface hover:bg-surface-hover text-foreground border border-surface-border hover:border-accent/50 hover:text-accent transition-all cursor-pointer overflow-hidden group"
                       title={`点击开启「${tag.label}」音乐漫游`}
                     >
-                      <span className="truncate max-w-[130px] sm:max-w-[180px]">{tag.label}</span>
-                      <RadioIcon className="w-3 h-3 text-foreground-muted group-hover:text-accent transition-colors shrink-0" />
+                      <span className="truncate max-w-[180px] sm:max-w-[240px]">{tag.label}</span>
+                      <RadioIcon className="w-3.5 h-3.5 text-foreground-muted group-hover:text-accent transition-colors shrink-0" />
                     </button>
                   ))}
                 </div>
@@ -403,6 +209,50 @@ export function ListeningProfileOverview({
                   : index === 2
                   ? "text-amber-600 font-bold"
                   : "text-foreground-muted font-medium";
+
+              if (index === 0) {
+                return (
+                  <div
+                    key={itemKey}
+                    className="flex items-center gap-3 p-3 mb-2 rounded-xl bg-surface-elevated/40 border border-surface-border/50 group w-full min-w-0 overflow-hidden"
+                  >
+                    <span className="w-4 shrink-0 text-center text-sm text-amber-400 font-bold">1</span>
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-surface-elevated border border-surface-border/40">
+                      <Artwork alt="" className="h-full w-full object-cover block" src={item.artworkUrl} />
+                    </div>
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="truncate text-sm font-bold text-foreground" title={item.title}>
+                        {item.title}
+                      </p>
+                      <p className="truncate text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
+                        {item.artist}{item.album ? ` · ${item.album}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-[11px] tabular-nums text-foreground-muted">
+                        {item.playCount} 次 · {formatDuration(item.listenedMs)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handlePlayTrack(item)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer"
+                        title="立即播放"
+                      >
+                        <PlayIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isRadioRunning}
+                        onClick={() => handleStartTrackRadio(item)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-border text-foreground-muted hover:text-accent hover:border-accent/40 transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                        title="开启单曲漫游"
+                      >
+                        <RadioIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div
@@ -550,30 +400,64 @@ export function ListeningProfileOverview({
           )}
         </div>
       </div>
+
+      {/* Exclusions manager: a low-frequency tool, kept as a quiet inline entry */}
+      <div className="flex justify-center pt-1">
+        <button
+          type="button"
+          onClick={() => setShowExclusions((prev) => !prev)}
+          className="inline-flex items-center gap-1 text-xs text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
+        >
+          {showExclusions ? "收起屏蔽记录" : "管理屏蔽记录与负反馈"}
+          <svg
+            aria-hidden="true"
+            className={`w-3 h-3 transition-transform duration-200 ${showExclusions ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      {showExclusions ? (
+        <section className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-5">
+          <TasteExclusionsManager onOpenColdStart={onOpenColdStart ?? (() => undefined)} />
+        </section>
+      ) : null}
     </div>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  icon
+function StatusToast({
+  message,
+  onDismiss
 }: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
+  message: string | null;
+  onDismiss: (message: string | null) => void;
 }) {
+  useEffect(() => {
+    if (!message) {
+      return;
+    }
+    const timer = window.setTimeout(() => onDismiss(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [message, onDismiss]);
+
+  if (!message) {
+    return null;
+  }
+
   return (
-    <div className="rounded-xl border border-surface-border bg-surface/50 p-3 sm:p-3.5 transition-colors hover:bg-surface/70 flex flex-col justify-between min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0">
-        <span className="text-xs font-medium text-foreground-muted truncate">{label}</span>
-        <div className="p-1 rounded-md bg-surface-elevated text-foreground-muted shrink-0">
-          {icon}
-        </div>
-      </div>
-      <dd className="text-base sm:text-xl font-bold text-foreground tracking-tight tabular-nums truncate">
-        {value}
-      </dd>
+    <div
+      aria-live="polite"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[90] flex justify-center px-4 md:bottom-24"
+      role="status"
+    >
+      <p className="pointer-events-auto max-w-full truncate rounded-xl border border-surface-border bg-[#121216]/97 px-4 py-2.5 text-xs text-foreground shadow-[0_8px_24px_rgba(0,0,0,0.45)] animate-in fade-in slide-in-from-bottom-2 duration-200">
+        {message}
+      </p>
     </div>
   );
 }
@@ -594,13 +478,15 @@ function Artwork({ alt, src, className = "" }: { alt: string; src: string | null
 
 function ProfileLoadingSkeleton() {
   return (
-    <div className="space-y-3.5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="h-20 rounded-xl bg-surface/40 border border-surface-border animate-pulse" />
-        ))}
+    <div className="space-y-4 sm:space-y-5">
+      <div className="h-28 rounded-xl bg-surface/40 border border-surface-border animate-pulse" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="h-64 rounded-xl bg-surface/40 border border-surface-border animate-pulse" />
+        <div className="space-y-4">
+          <div className="h-40 rounded-xl bg-surface/40 border border-surface-border animate-pulse" />
+          <div className="h-20 rounded-xl bg-surface/40 border border-surface-border animate-pulse" />
+        </div>
       </div>
-      <div className="h-36 rounded-xl bg-surface/40 border border-surface-border animate-pulse" />
     </div>
   );
 }

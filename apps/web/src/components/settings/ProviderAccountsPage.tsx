@@ -9,17 +9,17 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { PersonalOverview } from "./PersonalOverview";
 import { ListeningProfileOverview } from "./ListeningProfileOverview";
 import { RoomCenterOverview } from "@/components/room-home";
-import { TasteExclusionsManager } from "@/components/discovery/TasteExclusionsManager";
+import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
+import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
+import { ProviderDataImportSection } from "./ProviderDataImportSection";
 import { TasteColdStartDialog } from "@/components/discovery/TasteColdStartDialog";
-import { SettingsPage } from "./SettingsPage";
 import {
   BarChartIcon,
-  ShieldCheckIcon,
-  RadioIcon,
-  SettingsIcon
+  LandmarkIcon,
+  RadioIcon
 } from "@/components/icons/DiscoverIcons";
 
-type ProfileTab = "taste" | "exclusions" | "rooms" | "settings";
+type ProfileTab = "taste" | "rooms" | "providers";
 
 const tabList: Array<{
   id: ProfileTab;
@@ -27,10 +27,9 @@ const tabList: Array<{
   mobileLabel: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { id: "taste", label: "音乐与偏好", mobileLabel: "音乐偏好", icon: BarChartIcon },
-  { id: "exclusions", label: "屏蔽与负反馈", mobileLabel: "屏蔽记录", icon: ShieldCheckIcon },
-  { id: "rooms", label: "房间足迹", mobileLabel: "房间足迹", icon: RadioIcon },
-  { id: "settings", label: "平台与设置", mobileLabel: "设置", icon: SettingsIcon }
+  { id: "taste", label: "听歌画像", mobileLabel: "画像", icon: BarChartIcon },
+  { id: "rooms", label: "房间足迹", mobileLabel: "房间", icon: RadioIcon },
+  { id: "providers", label: "平台账号", mobileLabel: "平台", icon: LandmarkIcon }
 ];
 
 export function ProviderAccountsPage() {
@@ -103,7 +102,7 @@ export function ProviderAccountsPage() {
         <PersonalOverview activeSession={activeSession} onLogout={handleLogout} />
 
         {/* Ergonomic Responsive Segmented Tab Navigation */}
-        <div className="grid grid-cols-4 sm:inline-flex items-center gap-1 p-1 rounded-xl border border-surface-border bg-surface/50 mb-4 sm:mb-5 w-full sm:w-auto">
+        <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 p-1 rounded-xl border border-surface-border bg-surface/50 mb-4 sm:mb-5 w-full sm:w-auto">
           {tabList.map(({ id, label, mobileLabel, icon: IconComp }) => {
             const isActive = activeTab === id;
             return (
@@ -133,19 +132,32 @@ export function ProviderAccountsPage() {
           />
         )}
 
-        {activeTab === "exclusions" && (
-          <TasteExclusionsManager
-            onOpenColdStart={() => setShowColdStartDialog(true)}
-          />
-        )}
-
         {activeTab === "rooms" && (
           <RoomCenterOverview activeSession={activeSession} />
         )}
 
-        {activeTab === "settings" && (
-          <div className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-5">
-            <SettingsPage embedded onBack={() => setActiveTab("taste")} />
+        {activeTab === "providers" && (
+          <div className="rounded-xl border border-surface-border bg-surface/40 p-3.5 sm:p-5 space-y-6">
+            <section>
+              <h3 className="mb-3 text-sm font-semibold text-foreground">音乐平台账号</h3>
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
+                  <NeteaseSourcePanel activeSession={activeSession} mode="account" />
+                ) : null}
+                {process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? (
+                  <QqMusicSourcePanel activeSession={activeSession} mode="account" />
+                ) : null}
+                {process.env.NEXT_PUBLIC_NETEASE_ENABLED !== "true" && process.env.NEXT_PUBLIC_QQMUSIC_ENABLED !== "true" ? (
+                  <div className="rounded-xl border border-surface-border bg-surface/40 p-6 text-sm text-foreground-muted">
+                    当前没有启用第三方音乐平台。
+                  </div>
+                ) : null}
+              </div>
+            </section>
+            <section>
+              <h3 className="mb-3 text-sm font-semibold text-foreground">导入平台资料</h3>
+              <ProviderDataImportSection />
+            </section>
           </div>
         )}
       </div>
