@@ -210,50 +210,6 @@ export function ListeningProfileOverview({
                   ? "text-amber-600 font-bold"
                   : "text-foreground-muted font-medium";
 
-              if (index === 0) {
-                return (
-                  <div
-                    key={itemKey}
-                    className="flex items-center gap-3 p-3 mb-2 rounded-xl bg-surface-elevated/40 border border-surface-border/50 group w-full min-w-0 overflow-hidden"
-                  >
-                    <span className="w-4 shrink-0 text-center text-sm text-amber-400 font-bold">1</span>
-                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-surface-elevated border border-surface-border/40">
-                      <Artwork alt="" className="h-full w-full object-cover block" src={item.artworkUrl} />
-                    </div>
-                    <div className="min-w-0 flex-1 overflow-hidden">
-                      <p className="truncate text-sm font-bold text-foreground" title={item.title}>
-                        {item.title}
-                      </p>
-                      <p className="truncate text-xs text-foreground-muted" title={`${item.artist}${item.album ? ` · ${item.album}` : ""}`}>
-                        {item.artist}{item.album ? ` · ${item.album}` : ""}
-                      </p>
-                      <p className="mt-0.5 text-[11px] tabular-nums text-foreground-muted">
-                        {item.playCount} 次 · {formatDuration(item.listenedMs)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handlePlayTrack(item)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer"
-                        title="立即播放"
-                      >
-                        <PlayIcon className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isRadioRunning}
-                        onClick={() => handleStartTrackRadio(item)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-border text-foreground-muted hover:text-accent hover:border-accent/40 transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                        title="开启单曲漫游"
-                      >
-                        <RadioIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
-
               return (
                 <div
                   key={itemKey}

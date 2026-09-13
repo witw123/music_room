@@ -8,9 +8,6 @@ import type { PersonalizationExclusion, PlaybackMode } from "@music-room/shared"
 import { Button } from "@/components/ui/button";
 import { CustomLayoutEditor } from "./CustomLayoutEditor";
 import { LocalStorageManagementCard } from "./LocalStorageSettingsSection";
-import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
-import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
-import { ProviderDataImportSection } from "./ProviderDataImportSection";
 import { AboutSettingsSection } from "./AboutSettingsSection";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
@@ -59,13 +56,7 @@ const playerStyleLabels: Record<PlayerStyle, string> = {
   "square-cover": "正方形封面"
 };
 
-export function SettingsPage({
-  embedded = false,
-  onBack
-}: {
-  embedded?: boolean;
-  onBack?: () => void;
-}) {
+export function SettingsPage() {
   const router = useRouter();
   const authEntryHref = buildWorkspaceAuthHref({ redirectTo: "/app/profile" });
   const { activeSession, hydrated, clearIdentity } = useSessionIdentity({
@@ -183,42 +174,24 @@ export function SettingsPage({
   }
 
   const content = (
-      <div className={embedded ? "min-w-0" : "workspace-page__inner pt-6 sm:pt-10 md:pt-16"}>
+      <div className="workspace-page__inner pt-6 sm:pt-10 md:pt-16">
         <header className="workspace-page__header items-start">
           <div>
             <h1 className="workspace-page__title">设置</h1>
             <p className="workspace-page__description">调整播放和界面偏好。</p>
           </div>
-          {embedded && onBack ? (
-            <Button onClick={onBack} size="sm" type="button" variant="outline">返回我的</Button>
-          ) : (
-            <Link className="text-xs font-medium text-foreground-muted transition hover:text-foreground" href="/app/profile">
-              账号与歌单
-            </Link>
-          )}
+          <Link
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-surface-border bg-surface px-3 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            href="/app/profile"
+          >
+            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path d="m15 18-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            返回到我的页
+          </Link>
         </header>
 
         <div className="mt-6 space-y-8">
-          <SettingsSection title="音乐平台账号">
-            <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-              {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
-                <NeteaseSourcePanel activeSession={activeSession} mode="account" />
-              ) : null}
-              {process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? (
-                <QqMusicSourcePanel activeSession={activeSession} mode="account" />
-              ) : null}
-              {process.env.NEXT_PUBLIC_NETEASE_ENABLED !== "true" && process.env.NEXT_PUBLIC_QQMUSIC_ENABLED !== "true" ? (
-                <div className="rounded-xl border border-surface-border bg-surface/40 p-6 text-sm text-foreground-muted">
-                  当前没有启用第三方音乐平台。
-                </div>
-              ) : null}
-            </div>
-          </SettingsSection>
-
-          <SettingsSection title="导入平台资料">
-            <ProviderDataImportSection />
-          </SettingsSection>
-
           <LocalStorageManagementCard />
 
           <SettingsSection title="通用">
@@ -411,7 +384,7 @@ export function SettingsPage({
                   if (checked) {
                     const status = await checkAnyProviderAccountBound();
                     if (!status.bound) {
-                      window.alert("开启缓存播放必须先绑定网易云音乐或 QQ 音乐账号。请在上方「音乐平台账号」中完成绑定。");
+                      window.alert("开启缓存播放必须先绑定网易云音乐或 QQ 音乐账号。请前往「我的页 → 平台账号」完成绑定。");
                       return;
                     }
                     patchSettings({ playback: { fullyCachedPlayback: true } });
@@ -660,10 +633,6 @@ export function SettingsPage({
           value={settings.layout.customLayout}
         />
       ) : null;
-
-  if (embedded) {
-    return <>{content}{editor}</>;
-  }
 
   return <main className="workspace-page settings-page-scroll overflow-y-auto md:pl-60 lg:pb-28">{content}{editor}</main>;
 }
