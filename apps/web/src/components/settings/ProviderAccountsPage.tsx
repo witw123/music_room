@@ -27,10 +27,10 @@ const tabList: Array<{
   mobileLabel: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { id: "taste", label: "听歌画像", mobileLabel: "听歌画像", icon: BarChartIcon },
-  { id: "exclusions", label: "偏好与屏蔽", mobileLabel: "偏好屏蔽", icon: ShieldCheckIcon },
+  { id: "taste", label: "音乐与偏好", mobileLabel: "音乐偏好", icon: BarChartIcon },
+  { id: "exclusions", label: "屏蔽与负反馈", mobileLabel: "屏蔽记录", icon: ShieldCheckIcon },
   { id: "rooms", label: "房间足迹", mobileLabel: "房间足迹", icon: RadioIcon },
-  { id: "settings", label: "平台与设置", mobileLabel: "平台设置", icon: SettingsIcon }
+  { id: "settings", label: "平台与设置", mobileLabel: "设置", icon: SettingsIcon }
 ];
 
 export function ProviderAccountsPage() {

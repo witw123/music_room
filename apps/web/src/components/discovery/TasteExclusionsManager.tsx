@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   ShieldCheckIcon,
   RotateCcwIcon,
-  SparklesIcon,
+  SlidersIcon,
   MusicIcon,
   LandmarkIcon
 } from "@/components/icons/DiscoverIcons";
@@ -58,46 +58,46 @@ export function TasteExclusionsManager({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5">
       {/* Cold Start / Taste Tuning Banner */}
-      <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-accent uppercase tracking-wider">
-              <SparklesIcon className="w-3.5 h-3.5" />
-              <span>品味画像定制</span>
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+              <SlidersIcon className="w-3.5 h-3.5" />
+              <span>偏好定制</span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
+            <h3 className="text-sm sm:text-base font-bold text-foreground tracking-tight">
               重新调整你的音乐偏好
             </h3>
-            <p className="text-xs sm:text-sm text-foreground-muted max-w-xl">
-              无论是想尝试全新曲风，还是调整专注/夜听场景，随时重置你的 3 秒品味种子。
+            <p className="text-xs text-foreground-muted max-w-xl leading-relaxed">
+              挑选常听的曲风与使用场景，让推荐内容和自动续播电台更贴合你的听歌习惯。
             </p>
           </div>
           <Button
             type="button"
             onClick={onOpenColdStart}
-            className="rounded-xl px-5 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all shrink-0"
+            className="rounded-xl px-4 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-medium shadow-xs transition-all shrink-0"
           >
-            <SparklesIcon className="w-4 h-4 mr-2" />
-            定制偏好
+            <SlidersIcon className="w-3.5 h-3.5 mr-1.5" />
+            调整偏好
           </Button>
         </div>
       </section>
 
       {/* Exclusions List */}
-      <section className="rounded-3xl bg-surface/35 p-5 sm:p-7 shadow-[var(--surface-shadow)] backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3 mb-5">
+      <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-surface-elevated text-foreground">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface border border-surface-border text-foreground">
               <ShieldCheckIcon className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-foreground">负反馈与屏蔽清单</h3>
-              <p className="text-xs text-foreground-muted">已从推荐流与品味画像中排除的曲目或艺人</p>
+              <h3 className="text-sm sm:text-base font-bold text-foreground">屏蔽与负反馈</h3>
+              <p className="text-xs text-foreground-muted">已从推荐与偏好统计中排除的歌曲或歌手</p>
             </div>
           </div>
-          <span className="text-xs tabular-nums text-foreground-muted bg-surface/60 px-2.5 py-1 rounded-full">
+          <span className="text-xs tabular-nums text-foreground-muted bg-surface/60 border border-surface-border px-2 py-0.5 rounded-full">
             共 {exclusions.length} 项
           </span>
         </div>
@@ -109,17 +109,17 @@ export function TasteExclusionsManager({
         )}
 
         {loading ? (
-          <div className="space-y-2 py-4">
+          <div className="space-y-2 py-3">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="h-14 rounded-2xl bg-surface/35 animate-pulse" />
+              <div key={i} className="h-12 rounded-xl bg-surface/35 animate-pulse" />
             ))}
           </div>
         ) : exclusions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center rounded-2xl bg-surface/20">
-            <ShieldCheckIcon className="w-8 h-8 text-foreground-muted mb-2" />
-            <p className="text-sm font-medium text-foreground">暂无屏蔽项目</p>
-            <p className="text-xs text-foreground-muted mt-1">
-              在发现页对歌曲点击「不再推荐」或「不计入品味」后，可以在这里随时恢复。
+          <div className="flex flex-col items-center justify-center py-8 text-center rounded-xl bg-surface/20 border border-surface-border/40">
+            <ShieldCheckIcon className="w-7 h-7 text-foreground-muted mb-2" />
+            <p className="text-xs sm:text-sm font-medium text-foreground">暂无屏蔽项目</p>
+            <p className="text-xs text-foreground-muted mt-1 max-w-sm">
+              在歌曲或搜索结果中选择「不再推荐」后，可以在这里随时恢复。
             </p>
           </div>
         ) : (

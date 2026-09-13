@@ -137,6 +137,7 @@ export type PersonalizationProfileResponse = {
   tasteGroups: PersonalizationTasteGroup[];
   topTracks: Array<PersonalizationTrack & { listenedMs: number; playCount: number }>;
   topArtists: Array<{ name: string; score: number; listenedMs: number; playCount: number }>;
+  recentTracks?: PersonalizationTrack[];
   sourceDistribution: Array<{ source: string; listenedMs: number }>;
 };
 

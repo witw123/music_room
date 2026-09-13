@@ -5,6 +5,7 @@ import type {
   PersonalizationProfileResponse,
   PersonalizationRecommendationsQuery,
   PersonalizationRecommendationsResponse,
+  PersonalizationTrack,
   PersonalizationTrackInput,
   ProviderPlaylistSummary,
   ProviderTrackCandidate,
@@ -184,11 +185,12 @@ export class PersonalizationService {
       score: entityScore
     });
     const totalListenedMs = playbackEvents.reduce((total, event) => total + Number(event.listenedMs), 0);
+    const trackEntityMap = new Map(tracks.map((item) => [item.entityKey, item]));
     const topTracks = tracks
       .map((item) => ({ item, candidate: entityToCandidate(item) }))
       .filter((value): value is { item: typeof entities[number]; candidate: ProviderTrackCandidate } => value.candidate !== null)
       .sort((left, right) => entityScore(right.item) - entityScore(left.item))
-      .slice(0, 5)
+      .slice(0, 20)
       .map(({ item, candidate }) => ({
         ...candidate,
         score: entityScore(item),
@@ -196,6 +198,36 @@ export class PersonalizationService {
         listenedMs: Number(playbackEvents.filter((event) => event.entityKey === item.entityKey).reduce((total, event) => total + event.listenedMs, BigInt(0))),
         playCount: playbackEvents.filter((event) => event.entityKey === item.entityKey).length
       }));
+
+    const seenRecentKeys = new Set<string>();
+    const recentTracks: PersonalizationTrack[] = [];
+    const sortedPlaybackEvents = [...playbackEvents].sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
+    for (const event of sortedPlaybackEvents) {
+      if (!event.provider || !event.providerItemId) continue;
+      const key = `${event.provider}:${event.providerItemId}`;
+      if (seenRecentKeys.has(key)) continue;
+      seenRecentKeys.add(key);
+      const entity = trackEntityMap.get(key) ?? trackEntityMap.get(event.entityKey);
+      const candidate = entity ? entityToCandidate(entity) : null;
+      const baseCandidate: ProviderTrackCandidate = candidate ?? {
+        provider: (event.provider === "qqmusic" ? "qqmusic" : "netease"),
+        providerTrackId: event.providerItemId,
+        title: event.title ?? "未知曲目",
+        artist: event.artist ?? "未知歌手",
+        album: event.album ?? null,
+        durationMs: event.durationMs,
+        artworkUrl: null,
+        access: "unknown",
+        quality: null
+      };
+      recentTracks.push({
+        ...baseCandidate,
+        score: 1,
+        reasons: ["最近播放"]
+      });
+      if (recentTracks.length >= 15) break;
+    }
+
     const sourceDistribution = (["netease", "qqmusic", "local_upload"] as const).map((source) => ({
       source,
       listenedMs: Number(playbackEvents.filter((event) => event.provider === source).reduce((total, event) => total + event.listenedMs, BigInt(0)))
@@ -210,7 +242,8 @@ export class PersonalizationService {
       artistCount: topArtists.length,
       tasteGroups,
       topTracks,
-      topArtists: topArtists.slice(0, 5),
+      topArtists: topArtists.slice(0, 20),
+      recentTracks,
       sourceDistribution
     };
   }
