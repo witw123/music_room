@@ -89,9 +89,16 @@ export const trackRadioQuerySchema = z.object({
   )
 }).strict();
 
+export const coldStartTasteDimensionSchema = z.enum(["genre", "language", "region", "scene", "era"]);
+
+export const coldStartTasteSelectionSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  dimension: coldStartTasteDimensionSchema
+}).strict();
+
 export const coldStartTasteInputSchema = z.object({
-  selectedLabels: z.array(z.string().trim().min(1).max(80)).min(1).max(10),
-  initialArtists: z.array(z.string().trim().min(1).max(80)).max(10).optional()
+  selections: z.array(coldStartTasteSelectionSchema).min(1).max(24),
+  initialArtists: z.array(z.string().trim().min(1).max(80)).max(12).optional()
 }).strict();
 
 export type PersonalizationSurface = z.infer<typeof personalizationSurfaceSchema>;
@@ -102,6 +109,8 @@ export type PersonalizationTrackInput = z.infer<typeof personalizationTrackSchem
 export type PersonalizationFeedback = z.infer<typeof personalizationFeedbackSchema>;
 export type PersonalizationRecommendationsQuery = z.infer<typeof personalizationRecommendationsQuerySchema>;
 export type TrackRadioQuery = z.infer<typeof trackRadioQuerySchema>;
+export type ColdStartTasteDimension = z.infer<typeof coldStartTasteDimensionSchema>;
+export type ColdStartTasteSelection = z.infer<typeof coldStartTasteSelectionSchema>;
 export type ColdStartTasteInput = z.infer<typeof coldStartTasteInputSchema>;
 
 export type PersonalizationTasteGroupId = z.infer<typeof personalizationTasteGroupIdSchema>;

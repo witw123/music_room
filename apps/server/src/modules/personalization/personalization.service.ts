@@ -28,7 +28,7 @@ import {
   trackIdentity,
   type RecommendationCandidate
 } from "./recommendation-engine";
-import { buildTasteGroups, extractTasteEvidence } from "./taste-taxonomy";
+import { buildTasteGroups, extractTasteEvidence, inferBehavioralSceneEvidence } from "./taste-taxonomy";
 
 import {
   buildBehaviorTasteTags,
@@ -108,7 +108,7 @@ export class PersonalizationService {
       if (excluded?.reason === "exclude-from-profile") return;
       const delta = weight - previousWeight;
       if (delta === 0 && existing) return;
-      await this.projectTrack(transaction, userId, input.track, delta, occurredAt, !existing);
+      await this.projectTrack(transaction, userId, input.track, delta, occurredAt, !existing, input.timezoneOffsetMinutes ?? 0);
     });
     // Plain playback heartbeats only nudge entity scores by tiny increments;
     // invalidating the recall cache on every one of them kept the cache
@@ -467,18 +467,24 @@ export class PersonalizationService {
   ): Promise<{ ok: boolean }> {
     this.assertDatabaseAvailable();
     const now = new Date();
-    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    // Adjustments replace the previous seed set entirely, so deselecting a
+    // category stops influencing recall immediately instead of lingering.
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      this.prisma.userTasteEntity.deleteMany({
+        where: { userId, entityKey: { startsWith: "seed:" } }
+      })
+    ];
 
-    for (const label of input.selectedLabels) {
+    for (const selection of input.selections) {
       ops.push(
         this.prisma.userTasteEntity.upsert({
-          where: { userId_entityKind_entityKey: { userId, entityKind: "genre", entityKey: `seed:${normalizeText(label)}` } },
+          where: { userId_entityKind_entityKey: { userId, entityKind: selection.dimension, entityKey: `seed:${normalizeText(selection.label)}` } },
           create: {
             id: randomUUID(),
             userId,
-            entityKind: "genre",
-            entityKey: `seed:${normalizeText(label)}`,
-            title: label,
+            entityKind: selection.dimension,
+            entityKey: `seed:${normalizeText(selection.label)}`,
+            title: selection.label,
             positiveScore: 8.0,
             negativeScore: 0,
             confidence: 0.95,
@@ -487,6 +493,7 @@ export class PersonalizationService {
           },
           update: {
             positiveScore: 8.0,
+            negativeScore: 0,
             confidence: 0.95,
             updatedAt: now
           }
@@ -513,6 +520,7 @@ export class PersonalizationService {
             },
             update: {
               positiveScore: 9.0,
+              negativeScore: 0,
               confidence: 0.95,
               updatedAt: now
             }
@@ -563,12 +571,14 @@ export class PersonalizationService {
       return rightScore - leftScore;
     });
     const playlists = entities.filter((item) => item.entityKind === "playlist" && item.provider === provider).sort((left, right) => entityScore(right) - entityScore(left));
-    const tasteTerms = entities.filter((item) => item.entityKind === "genre" || item.entityKind === "scene").sort((left, right) => entityScore(right) - entityScore(left));
+    const tasteTerms = entities.filter((item) => ["genre", "scene", "language", "region", "era"].includes(item.entityKind)).sort((left, right) => entityScore(right) - entityScore(left));
     const libraryCandidates = tracks.map(entityToCandidate).filter((item): item is ProviderTrackCandidate => item !== null)
       .map((candidate) => ({ candidate, source: "library" as const, baseScore: 0.9, interestKey: "library", interestLabel: null }));
     const seed = libraryCandidates[0]?.candidate ?? null;
     const artistNames = artists.flatMap((item) => typeof item.title === "string" ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 4);
-    const tasteNames = tasteTerms.flatMap((item) => typeof item.title === "string" && entityScore(item) > 0 ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 2);
+    // Top 4 taste terms drive the provider explore search; every cold-start
+    // category stores a provider-searchable label, so each contributes songs.
+    const tasteNames = tasteTerms.flatMap((item) => typeof item.title === "string" && entityScore(item) > 0 ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 4);
     const playlistQueries = [...new Set([tasteNames[0], artistNames[0]].filter((value): value is string => Boolean(value)))].slice(0, 2);
     const savedPlaylist = surface === "discover" ? undefined : playlists[0];
     const external = await this.getProviderRecall(userId, provider, seed, artistNames, tasteNames, playlistQueries, savedPlaylist, surface);
@@ -621,15 +631,16 @@ export class PersonalizationService {
     return { candidates, playlists: dedupePlaylists(playlists) };
   }
 
-  private async projectTrack(transaction: Prisma.TransactionClient, userId: string, track: PersonalizationTrackInput, score: number, occurredAt: Date, incrementInteraction: boolean) {
+  private async projectTrack(transaction: Prisma.TransactionClient, userId: string, track: PersonalizationTrackInput, score: number, occurredAt: Date, incrementInteraction: boolean, timezoneOffsetMinutes = 0) {
     await this.projectEntity(transaction, userId, "track", trackKey(track), { provider: track.provider, providerItemId: track.providerTrackId, providerAlbumId: track.providerAlbumId ?? null, access: track.access, quality: track.quality, title: track.title, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score, occurredAt, incrementInteraction });
     await this.projectEntity(transaction, userId, "artist", normalizeText(track.artist), { title: track.artist, score: score * 0.55, occurredAt, incrementInteraction });
-    if (track.album) await this.projectEntity(transaction, userId, "album", `${track.provider}:${track.providerAlbumId ?? normalizeText(track.album)}`, { provider: track.provider, providerItemId: track.providerAlbumId ?? null, title: track.album, artist: track.artist, album: track.album, score: score * 0.25, occurredAt, incrementInteraction });
-    for (const evidence of extractTasteEvidence(track)) {
-      await this.projectEntity(transaction, userId, evidence.dimension, `${evidence.source}:${normalizeText(evidence.label)}`, {
-        title: evidence.label,
-        score: score * evidence.confidence * 0.35,
-        confidence: evidence.confidence,
+    if (track.album) await this.projectEntity(transaction, userId, "album", `${track.provider}:${track.providerAlbumId ?? normalizeText(track.album)}`, { provider: track.provider, providerItemId: track.providerAlbumId ?? null, title: track.album, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score: score * 0.25, occurredAt, incrementInteraction });
+    const evidence = [...extractTasteEvidence(track), ...inferBehavioralSceneEvidence(occurredAt, timezoneOffsetMinutes)];
+    for (const item of evidence) {
+      await this.projectEntity(transaction, userId, item.dimension, `${item.source}:${normalizeText(item.label)}`, {
+        title: item.label,
+        score: score * item.confidence * 0.35,
+        confidence: item.confidence,
         occurredAt,
         incrementInteraction
       });
