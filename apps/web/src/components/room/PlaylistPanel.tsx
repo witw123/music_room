@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import type {
   AuthSession,
@@ -9,7 +9,7 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
-import { formatDuration, normalizePlaylistTitle } from "@/lib/domain/music-room-ui";
+import { normalizePlaylistTitle } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
@@ -19,6 +19,10 @@ import {
 } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import {
+  ProviderAlbumTrackTable,
+  type ProviderAlbumTrackActions
+} from "@/components/provider-search/ProviderAlbumDetailView";
 
 type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
@@ -463,30 +467,75 @@ function PlaylistDetail({
   remoteLoading: boolean;
   remoteError: string | null;
 }) {
-  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
+  const [selectedTrackKeys, setSelectedTrackKeys] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(new Set());
   const pendingTrackIdsRef = useRef(new Set<string>());
   const [isImportingSelected, setIsImportingSelected] = useState(false);
-  const selectableTracks = tracks.filter(
-    (track): track is PlaylistTrackInfo => !!track?.providerTrack && !track.isInRoom
-  );
-  const selectedTracks = selectableTracks.filter((track) => selectedTrackIds.includes(track.id));
-  const allSelectableSelected = selectableTracks.length > 0 && selectedTracks.length === selectableTracks.length;
+
+  // Convert PlaylistTrackInfo[] to ProviderTrack[] to seamlessly feed ProviderAlbumTrackTable
+  const displayTracks: ProviderTrack[] = useMemo(() => {
+    return tracks.map((track, index) => {
+      if (track?.providerTrack) return track.providerTrack;
+      const rawId = playlist.trackIds[index] || `network:${index}`;
+      const parts = rawId.split(":");
+      const provider = (parts[1] === "qqmusic" ? "qqmusic" : "netease") as "netease" | "qqmusic";
+      const providerTrackId = parts[2] || parts[1] || String(index);
+      return {
+        provider,
+        providerTrackId,
+        title: track?.title ?? `曲目 ${index + 1}`,
+        artist: track?.artist ?? "未知歌手",
+        album: track?.album ?? null,
+        durationMs: track?.durationMs ?? 0,
+        artworkUrl: track?.artworkUrl ?? null,
+        access: "free" as const,
+        quality: "standard" as const
+      };
+    });
+  }, [tracks, playlist.trackIds]);
+
+  const trackKeyToInfo = useMemo(() => {
+    const map = new Map<string, PlaylistTrackInfo>();
+    tracks.forEach((track, index) => {
+      if (!track) return;
+      if (track.providerTrack) {
+        map.set(`${track.providerTrack.provider}:${track.providerTrack.providerTrackId}`, track);
+      }
+      map.set(track.id, track);
+      const rawId = playlist.trackIds[index];
+      if (rawId) map.set(rawId, track);
+    });
+    return map;
+  }, [tracks, playlist.trackIds]);
+
+  const selectableTracks = useMemo(() => {
+    return tracks.filter(
+      (track): track is PlaylistTrackInfo => !!track?.providerTrack && !track.isInRoom
+    );
+  }, [tracks]);
+
+  const selectableKeys = useMemo(() => {
+    return selectableTracks.map((t: PlaylistTrackInfo) => `${t.providerTrack!.provider}:${t.providerTrack!.providerTrackId}`);
+  }, [selectableTracks]);
+
+  const selectedTracks = useMemo(() => {
+    return selectedTrackKeys
+      .map((key) => trackKeyToInfo.get(key))
+      .filter((t): t is PlaylistTrackInfo => !!t && !t.isInRoom);
+  }, [selectedTrackKeys, trackKeyToInfo]);
+
+  const allSelectableSelected = selectableKeys.length > 0 && selectedTrackKeys.length >= selectableKeys.length;
   const isImportBusy = pendingTrackIds.size > 0 || isImportingSelected;
 
   useEffect(() => {
-    const availableIds = new Set(
-      tracks
-        .filter((track): track is PlaylistTrackInfo => !!track?.providerTrack && !track.isInRoom)
-        .map((track) => track.id)
-    );
-    setSelectedTrackIds((current) => {
-      const next = current.filter((trackId) => availableIds.has(trackId));
+    const validKeys = new Set(selectableKeys);
+    setSelectedTrackKeys((current) => {
+      const next = current.filter((key) => validKeys.has(key));
       return next.length === current.length ? current : next;
     });
-  }, [tracks]);
+  }, [selectableKeys]);
 
-  const importTrack = async (track: PlaylistTrackInfo) => {
+  const importTrack = useCallback(async (track: PlaylistTrackInfo) => {
     if (
       !canManageLibrary ||
       !track.providerTrack ||
@@ -495,15 +544,16 @@ function PlaylistDetail({
     ) return;
     pendingTrackIdsRef.current.add(track.id);
     setPendingTrackIds((current) => new Set(current).add(track.id));
+    const trackKey = `${track.providerTrack.provider}:${track.providerTrack.providerTrackId}`;
     try {
       if (track.providerTrack.provider === "netease") {
         await onImportNeteaseTrack(track.providerTrack);
       } else {
         await onImportQqMusicTrack(track.providerTrack);
       }
-      setSelectedTrackIds((current) => current.filter((trackId) => trackId !== track.id));
+      setSelectedTrackKeys((current) => current.filter((k) => k !== trackKey && k !== track.id));
     } catch {
-      // The upload pipeline reports the detailed error through the room status surface.
+      // Handled through room status
     } finally {
       pendingTrackIdsRef.current.delete(track.id);
       setPendingTrackIds((current) => {
@@ -512,20 +562,20 @@ function PlaylistDetail({
         return next;
       });
     }
-  };
+  }, [canManageLibrary, onImportNeteaseTrack, onImportQqMusicTrack]);
 
   const importSelectedTracks = async () => {
     if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
     setIsImportingSelected(true);
-    const selectedIds = new Set(selectedTracks.map((track) => track.id));
+    const selectedIds = new Set<string>(selectedTracks.map((track: PlaylistTrackInfo) => track.id));
     setPendingTrackIds(selectedIds);
     for (const track of selectedTracks) pendingTrackIdsRef.current.add(track.id);
     const neteaseTracks = selectedTracks
-      .filter((track) => track.providerTrack?.provider === "netease")
-      .map((track) => track.providerTrack) as NeteaseTrackCandidate[];
+      .filter((track: PlaylistTrackInfo) => track.providerTrack?.provider === "netease")
+      .map((track: PlaylistTrackInfo) => track.providerTrack) as NeteaseTrackCandidate[];
     const qqMusicTracks = selectedTracks
-      .filter((track) => track.providerTrack?.provider === "qqmusic")
-      .map((track) => track.providerTrack) as QqMusicTrackCandidate[];
+      .filter((track: PlaylistTrackInfo) => track.providerTrack?.provider === "qqmusic")
+      .map((track: PlaylistTrackInfo) => track.providerTrack) as QqMusicTrackCandidate[];
     try {
       const results = await Promise.allSettled([
         neteaseTracks.length > 0
@@ -536,7 +586,7 @@ function PlaylistDetail({
           : Promise.resolve()
       ]);
       const failed = results.some((result) => result.status === "rejected");
-      if (!failed) setSelectedTrackIds([]);
+      if (!failed) setSelectedTrackKeys([]);
     } finally {
       for (const track of selectedTracks) pendingTrackIdsRef.current.delete(track.id);
       setPendingTrackIds(new Set());
@@ -544,28 +594,47 @@ function PlaylistDetail({
     }
   };
 
-  const toggleTrackSelection = (trackId: string) => {
-    setSelectedTrackIds((current) =>
-      current.includes(trackId)
-        ? current.filter((item) => item !== trackId)
-        : [...current, trackId]
+  const toggleTrackSelection = (trackKey: string) => {
+    setSelectedTrackKeys((current) =>
+      current.includes(trackKey)
+        ? current.filter((item) => item !== trackKey)
+        : [...current, trackKey]
     );
   };
 
   const toggleSelectAll = () => {
-    setSelectedTrackIds(allSelectableSelected ? [] : selectableTracks.map((track) => track.id));
+    setSelectedTrackKeys(allSelectableSelected ? [] : selectableKeys);
   };
+
+  const trackActions: ProviderAlbumTrackActions = useMemo(() => ({
+    onPlay: onPlayPlaylist ? () => {
+      onPlayPlaylist();
+    } : undefined,
+    isInRoom: (track: ProviderTrack) => {
+      const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
+      return info?.isInRoom ?? false;
+    },
+    isImporting: (track: ProviderTrack) => {
+      const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
+      return info ? pendingTrackIds.has(info.id) : false;
+    },
+    onImport: canManageLibrary ? (track: ProviderTrack) => {
+      const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
+      if (info) void importTrack(info);
+    } : undefined
+  }), [canManageLibrary, importTrack, onPlayPlaylist, pendingTrackIds, trackKeyToInfo]);
 
   return (
     <section className="flex w-full flex-col" data-testid="network-playlist-detail">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <Button className="self-start gap-2" onClick={onBack} size="sm" type="button" variant="ghost">
+      {/* Top Header Actions */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-surface-border/40 pb-3">
+        <Button className="gap-1.5 rounded-xl text-xs font-semibold text-foreground-muted hover:text-foreground" onClick={onBack} size="sm" type="button" variant="ghost">
           <ArrowLeftIcon />
-          返回歌单
+          <span>返回歌单</span>
         </Button>
         {onPlayPlaylist ? (
           <Button
-            className="gap-1.5 rounded-lg bg-accent text-white shadow-xs transition-all hover:bg-accent-hover active:scale-95 disabled:cursor-wait"
+            className="gap-1.5 rounded-xl bg-accent text-white shadow-xs transition-all hover:bg-accent-hover active:scale-95 disabled:cursor-wait text-xs"
             disabled={isPlaylistLoading}
             onClick={onPlayPlaylist}
             size="sm"
@@ -587,80 +656,50 @@ function PlaylistDetail({
         ) : null}
       </div>
 
-      <div className="mt-2 overflow-hidden rounded-lg border border-surface-border bg-surface/40" data-testid="network-playlist-tracks">
-        {remoteLoading ? <p className="px-3 py-4 text-xs text-foreground-muted">正在加载歌曲信息…</p> : null}
-        {remoteError ? <p className="px-3 py-4 text-xs text-amber-200">歌曲信息加载失败，当前显示已保存的歌曲索引。</p> : null}
-        {tracks.length > 0 ? (
-          <div className="flex flex-col gap-2 p-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface/40 px-3 py-2">
-              <label className="flex min-w-0 cursor-pointer items-center gap-2 text-[11px] text-foreground-muted">
-                <input
-                  type="checkbox"
-                  checked={allSelectableSelected}
-                  disabled={!canManageLibrary || selectableTracks.length === 0 || isImportBusy}
-                  onChange={toggleSelectAll}
-                  className="h-4 w-4 accent-accent"
-                />
-                <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-foreground-muted">已选择 {selectedTracks.length} 首</span>
-                <button
-                  type="button"
-                   disabled={!canManageLibrary || selectedTracks.length === 0 || isImportBusy}
-                  onClick={() => void importSelectedTracks()}
-                  className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isImportBusy ? "导入中…" : "导入所选歌曲"}
-                </button>
-              </div>
-            </div>
-            <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
-              {tracks.map((track, index) => {
-                const trackId = track?.id ?? playlist.trackIds[index];
-                const isPending = !!track && pendingTrackIds.has(track.id);
-                return (
-                  <article className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between" key={`${playlist.id}:${playlist.trackIds[index]}`}>
-                    <div className="flex min-w-0 items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={!!track?.providerTrack && selectedTrackIds.includes(track.id)}
-                        disabled={!canManageLibrary || !track?.providerTrack || track.isInRoom || isImportBusy}
-                        onChange={() => toggleTrackSelection(trackId)}
-                        className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-                        aria-label={`选择《${track?.title ?? playlist.trackIds[index]}》`}
-                      />
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-foreground">{track?.title ?? playlist.trackIds[index]}</h3>
-                        <p className="mt-1 truncate text-[10px] text-foreground-muted">
-                          {track
-                            ? `${track.artist} · ${track.album ?? "未知专辑"} · ${formatDuration(track.durationMs)}`
-                            : "歌曲信息不可用"}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={!canManageLibrary || !track?.providerTrack || track.isInRoom || isImportBusy}
-                      onClick={() => {
-                        if (track) void importTrack(track);
-                      }}
-                      className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                        track?.isInRoom
-                          ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
-                          : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      }`}
-                    >
-                      {track?.isInRoom ? "已在当前房间" : isPending ? "导入中…" : "导入曲库"}
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
+      {/* Optional Batch Import Toolbar */}
+      {canManageLibrary && selectableTracks.length > 0 ? (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-surface-border/60 bg-surface/50 px-3 py-2">
+          <label className="flex min-w-0 cursor-pointer items-center gap-2 text-xs text-foreground-muted">
+            <input
+              type="checkbox"
+              checked={allSelectableSelected}
+              disabled={isImportBusy}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 accent-accent rounded"
+            />
+            <span>{allSelectableSelected ? "取消全选" : "全选未导入歌曲"}</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs tabular-nums text-foreground-muted">已选 {selectedTracks.length} 首</span>
+            <Button
+              disabled={selectedTracks.length === 0 || isImportBusy}
+              onClick={() => void importSelectedTracks()}
+              size="sm"
+              className="rounded-lg h-7 px-2.5 text-xs font-semibold bg-accent/15 text-accent hover:bg-accent/25 border border-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+            >
+              {isImportBusy ? "导入中…" : "导入所选歌曲"}
+            </Button>
           </div>
-        ) : (
+        </div>
+      ) : null}
+
+      {/* Tracks Surface - Directly reuses Discover Page ProviderAlbumTrackTable */}
+      <div className="overflow-hidden rounded-xl border border-surface-border/60 bg-surface/40 p-2 sm:p-3" data-testid="network-playlist-tracks">
+        {remoteLoading ? <p className="px-3 py-4 text-center text-xs text-foreground-muted">正在加载歌曲信息…</p> : null}
+        {remoteError ? <p className="px-3 py-4 text-center text-xs text-amber-500">歌曲信息加载失败，当前显示已保存的歌曲索引。</p> : null}
+        {displayTracks.length > 0 ? (
+          <ProviderAlbumTrackTable
+            actions={trackActions}
+            onToggleSelect={canManageLibrary && selectableTracks.length > 0 ? toggleTrackSelection : undefined}
+            selectablePredicate={(track) => !trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`)?.isInRoom}
+            selectedTrackIds={selectedTrackKeys}
+            showToolbar={false}
+            tracks={displayTracks}
+          />
+        ) : !remoteLoading ? (
           <p className="px-3 py-8 text-center text-xs text-foreground-muted">这个歌单还没有歌曲。</p>
-        )}
+        ) : null}
       </div>
     </section>
   );

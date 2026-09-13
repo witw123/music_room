@@ -294,7 +294,7 @@ export function PlayerQueueList({
   }
 
   return (
-    <div className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto bg-[#111216] p-2 hide-scrollbar ${className}`}>
+    <div className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-2 hide-scrollbar ${className}`}>
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;
@@ -309,8 +309,10 @@ export function PlayerQueueList({
                   <div
                     key={item.id}
                     data-testid="queue-item"
-                    className={`group flex items-center gap-3 rounded-xl border p-3 transition-all ${
-                      isCurrent ? "border-accent/50 bg-accent/20" : "border-transparent hover:border-white/10 hover:bg-white/[0.07]"
+                    className={`group flex items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5 transition-all ${
+                      isCurrent
+                        ? "border border-accent/35 bg-accent/10"
+                        : "border border-transparent hover:bg-surface-hover/60 hover:border-surface-border/40"
                     } ${draggingQueueItemId === item.id ? "scale-95 touch-none opacity-50" : "touch-pan-y"} ${dragOverQueueItemId === item.id && draggingQueueItemId !== item.id ? "border-accent/60 bg-accent/10" : ""}`}
                     data-queue-item-id={item.id}
                     draggable={canReorderQueue}
@@ -336,22 +338,22 @@ export function PlayerQueueList({
                     onPointerMove={handleTouchReorderMove}
                     onPointerUp={finishTouchReorder}
                   >
-                    <span className={`w-4 text-center font-mono text-xs font-bold ${isCurrent ? "text-sky-300" : "text-zinc-400"}`}>
+                    <span className={`w-5 text-center font-mono text-xs font-semibold tabular-nums ${isCurrent ? "text-accent font-bold" : "text-foreground-muted"}`}>
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <QueueArtwork artworkUrl={track?.artworkUrl ?? null} title={title} />
                     <div className="min-w-0 flex-1 pr-2">
-                       <strong className={`block truncate text-sm font-semibold ${isCurrent ? "text-sky-200" : "text-white"}`}>
+                       <strong className={`block truncate text-sm ${isCurrent ? "text-accent font-bold" : "text-foreground font-semibold"}`}>
                          {title}
                        </strong>
-                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-zinc-300">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-foreground-muted">
                          <span className="min-w-0 truncate">{artistName}</span>
-                         <span aria-hidden="true" className="shrink-0 text-white/30">·</span>
+                         <span aria-hidden="true" className="shrink-0 opacity-40">·</span>
                          <span className="min-w-0 truncate">{albumName}</span>
                        </p>
-                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-400">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-foreground-muted/70">
                          <span className="shrink-0 tabular-nums">{formatDuration(track?.durationMs ?? 0)}</span>
-                         <span aria-hidden="true" className="shrink-0 text-white/25">·</span>
+                         <span aria-hidden="true" className="shrink-0 opacity-30">·</span>
                          <span className="min-w-0 truncate">{memberName}上传</span>
                        </p>
                     </div>
@@ -360,10 +362,10 @@ export function PlayerQueueList({
                         <Button
                           aria-label={`将《${title}》设为下一首播放`}
                           aria-pressed={isNext}
-                          className={`h-10 w-10 disabled:opacity-100 sm:h-8 sm:w-8 ${
+                          className={`h-9 w-9 disabled:opacity-100 sm:h-8 sm:w-8 ${
                             isNext
-                              ? "bg-sky-400/15 text-sky-300 hover:bg-sky-400/20 hover:text-sky-200"
-                              : "text-zinc-300 hover:bg-white/10 hover:text-sky-300"
+                              ? "bg-accent/15 text-accent hover:bg-accent/25"
+                              : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground"
                           }`}
                           data-testid="queue-item-next-button"
                           disabled={isCurrent || isPending}
@@ -378,7 +380,7 @@ export function PlayerQueueList({
                             data-testid="queue-item-next-icon"
                             fill="currentColor"
                             height="16"
-                            style={{ color: isNext ? accentColor : "rgb(212 212 216)" }}
+                            style={{ color: isNext ? accentColor : "currentColor" }}
                             viewBox="0 0 24 24"
                             width="16"
                           >
@@ -390,7 +392,7 @@ export function PlayerQueueList({
                         variant="ghost"
                         size="icon"
                         data-testid="queue-item-play-button"
-                        className="h-10 w-10 text-zinc-300 hover:bg-white/10 hover:text-sky-300 sm:h-8 sm:w-8"
+                        className="h-9 w-9 text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground sm:h-8 sm:w-8"
                         disabled={!canControlPlayback || isCurrent}
                         onClick={() => void onPlayQueueItem(item.id)}
                         title="播放"
@@ -400,7 +402,7 @@ export function PlayerQueueList({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-10 w-10 text-zinc-300 hover:bg-red-500/15 hover:text-red-300 sm:h-8 sm:w-8"
+                        className="h-9 w-9 text-foreground-muted hover:bg-red-500/15 hover:text-red-400 sm:h-8 sm:w-8"
                         disabled={!canRemove}
                         onClick={() => startTransition(() => void onRemoveQueueItem(item.id))}
                         title="移除"

@@ -35,6 +35,9 @@ export type ProviderAlbumTrackActions = {
   isFavorite?: (track: Track) => boolean;
   onToggleFavorite?: (track: Track) => void | Promise<void>;
   isTogglingFavorite?: (track: Track) => boolean;
+  isInRoom?: (track: Track) => boolean;
+  isImporting?: (track: Track) => boolean;
+  onImport?: (track: Track) => void;
 };
 
 type ProviderAlbumDetailViewProps = {
@@ -157,11 +160,17 @@ function DescriptionDisclosure({ description }: { description: string | null }) 
 export function ProviderAlbumTrackTable({
   tracks,
   actions,
-  showToolbar = true
+  showToolbar = true,
+  selectedTrackIds,
+  onToggleSelect,
+  selectablePredicate
 }: {
   tracks: Track[];
   actions?: ProviderAlbumTrackActions;
   showToolbar?: boolean;
+  selectedTrackIds?: string[];
+  onToggleSelect?: (trackId: string) => void;
+  selectablePredicate?: (track: Track) => boolean;
 }) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
@@ -170,21 +179,21 @@ export function ProviderAlbumTrackTable({
     : tracks;
 
   return (
-    <section className={showToolbar ? "mt-8" : "mt-2"}>
+    <section className={showToolbar ? "mt-6" : "mt-1"}>
       {showToolbar ? (
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-3 mb-2">
-          <div className="flex items-center gap-3">
-            <span className="text-base font-bold text-white tracking-tight">歌曲列表</span>
-            <span className="text-xs font-medium text-foreground-muted px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08]">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-2">
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm sm:text-base font-bold text-foreground tracking-tight">歌曲列表</span>
+            <span className="text-xs font-medium text-foreground-muted px-2 py-0.5 rounded-full bg-surface border border-surface-border">
               {tracks.length} 首
             </span>
           </div>
-          <label className="flex h-9 w-full max-w-[240px] items-center gap-2 rounded-xl border border-white/[0.08] bg-[#11131c]/80 px-3 text-foreground-muted sm:w-auto shadow-inner">
+          <label className="flex h-8 sm:h-9 w-full max-w-[240px] items-center gap-2 rounded-xl border border-surface-border bg-surface px-3 text-foreground-muted sm:w-auto">
             <Icon name="search" />
             <span className="sr-only">搜索曲目</span>
             <input
               aria-label="搜索曲目"
-              className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-foreground-muted/50"
+              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-foreground-muted/50"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="在列表中搜索..."
               type="search"
@@ -195,62 +204,82 @@ export function ProviderAlbumTrackTable({
       ) : null}
 
       {/* Borderless Smooth Tracklist Rows */}
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         {visibleTracks.length ? (
-          visibleTracks.map((track, index) => (
-            <div
-              className={`group flex items-center justify-between gap-2.5 px-2 py-2 sm:px-3.5 sm:py-2.5 rounded-xl transition-all hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06] ${
-                actions ? "cursor-pointer" : ""
-              }`}
-              key={`${track.provider}:${track.providerTrackId}`}
-              onClick={() => {
-                if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
-                actions.onPlay(track);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
-                event.preventDefault();
-                actions.onPlay(track);
-              }}
-              tabIndex={actions?.onPlay ? 0 : undefined}
-            >
-              {/* Index number or Play Icon on hover */}
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                <div className="hidden sm:flex w-6 shrink-0 items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
-                  <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
-                  <PlayIcon className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in" />
+          visibleTracks.map((track, index) => {
+            const trackKey = `${track.provider}:${track.providerTrackId}`;
+            const isSelected = selectedTrackIds?.includes(trackKey) ?? false;
+            const isSelectable = selectablePredicate ? selectablePredicate(track) : true;
+            return (
+              <div
+                className={`group flex items-center justify-between gap-2 px-2 py-2 sm:px-3 sm:py-2 rounded-xl transition-all hover:bg-surface-hover/60 border border-transparent hover:border-surface-border/40 ${
+                  actions?.onPlay ? "cursor-pointer" : ""
+                } ${isSelected ? "bg-accent/5 border-accent/20" : ""}`}
+                key={trackKey}
+                onClick={() => {
+                  if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
+                  actions.onPlay(track);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  if (!actions?.onPlay || !actions.isPlayable?.(track) || actions.isDownloading?.(track) || actions.isPreparingPlayback?.(track)) return;
+                  event.preventDefault();
+                  actions.onPlay(track);
+                }}
+                tabIndex={actions?.onPlay ? 0 : undefined}
+              >
+                {/* Checkbox (if enabled) & Index number or Play Icon */}
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+                  {onToggleSelect ? (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={!isSelectable}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        onToggleSelect(trackKey);
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                      className="h-4 w-4 shrink-0 rounded accent-accent cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`选择《${track.title}》`}
+                    />
+                  ) : null}
+
+                  <div className="hidden sm:flex w-6 shrink-0 items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
+                    <span className="group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
+                    <PlayIcon className="hidden group-hover:block w-3.5 h-3.5 text-accent animate-fade-in" />
+                  </div>
+
+                  {/* Track Artwork Thumbnail */}
+                  <TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} />
+
+                  {/* Title & Artist */}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
+                      {track.title}
+                    </p>
+                    <p className="truncate text-xs text-foreground-muted mt-0.5">
+                      {track.artist}
+                      {track.album ? ` · ${track.album}` : ""}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Track Artwork Thumbnail */}
-                <TrackArtwork alt={track.album ?? track.title} src={track.artworkUrl} />
+                {/* Album (Desktop only) */}
+                <span className="hidden lg:block min-w-0 max-w-[200px] truncate text-xs text-foreground-muted/70">
+                  {track.album ?? "未知专辑"}
+                </span>
 
-                {/* Title & Artist */}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
-                    {track.title}
-                  </p>
-                  <p className="truncate text-xs text-foreground-muted mt-0.5">
-                    {track.artist}
-                    {track.album ? ` · ${track.album}` : ""}
-                  </p>
-                </div>
+                {/* Duration */}
+                <span className="hidden sm:inline-block shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
+                  {formatDuration(track.durationMs)}
+                </span>
+
+                {/* Action Buttons */}
+                {actions ? <TrackActions track={track} actions={actions} /> : null}
               </div>
-
-              {/* Album (Desktop only) */}
-              <span className="hidden lg:block min-w-0 max-w-[200px] truncate text-xs text-foreground-muted/70">
-                {track.album ?? "未知专辑"}
-              </span>
-
-              {/* Duration (Hidden on small mobile for space) */}
-              <span className="hidden sm:inline-block shrink-0 text-xs font-mono text-foreground-muted tabular-nums px-2">
-                {formatDuration(track.durationMs)}
-              </span>
-
-              {/* Action Buttons */}
-              {actions ? <TrackActions track={track} actions={actions} /> : null}
-            </div>
-          ))
+            );
+          })
         ) : (
           <p className="px-4 py-12 text-center text-xs text-foreground-muted">没有匹配的歌曲。</p>
         )}
@@ -267,9 +296,13 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
   const queued = actions.isQueued?.(track) ?? false;
   const downloading = actions.isDownloading?.(track) ?? false;
   const preparingPlayback = actions.isPreparingPlayback?.(track) ?? false;
-  const disabled = downloading || preparingPlayback;
+  const inRoom = actions.isInRoom?.(track) ?? false;
+  const importing = actions.isImporting?.(track) ?? false;
+  const disabled = downloading || preparingPlayback || importing;
+
   const menuItems: MobileTrackAction[] = [
     ...(actions.onPlay ? [{ id: "play", label: preparingPlayback ? "准备播放中" : playable ? "播放" : "需要下载后播放", icon: "play" as const, disabled: disabled || !playable, onSelect: () => actions.onPlay?.(track) }] : []),
+    ...(actions.onImport ? [{ id: "import", label: inRoom ? "已在房间曲库" : importing ? "导入中…" : "导入曲库", icon: "plus" as const, disabled: inRoom || importing, onSelect: () => actions.onImport?.(track) }] : []),
     ...(actions.onDownload ? [{ id: "download", label: downloaded ? "已下载" : downloading ? "下载中" : "下载到本地", icon: "download" as const, disabled: disabled || downloaded, onSelect: () => actions.onDownload?.(track) }] : []),
     ...(actions.onAddToQueue ? [{ id: "queue", label: queued ? "已在队列中" : queueable ? "加入队列" : "需要下载后加入队列", icon: "queue" as const, disabled: disabled || queued || !queueable, onSelect: () => actions.onAddToQueue?.(track) }] : []),
     ...(actions.onAddToPlaylist ? [{ id: "playlist", label: "加入歌单", icon: "plus" as const, disabled, onSelect: () => { if (menuAnchor) actions.onAddToPlaylist?.(track, menuAnchor); } }] : []),
@@ -279,10 +312,39 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
   return (
     <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
       <div className="hidden items-center gap-1 sm:flex">
+        {actions.onImport ? (
+          inRoom ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
+              已在曲库
+            </span>
+          ) : (
+            <Button
+              aria-label={`将《${track.title}》导入曲库`}
+              className="h-7 sm:h-8 rounded-lg px-2.5 text-xs text-accent hover:bg-accent/10 border border-accent/20"
+              disabled={disabled || importing}
+              onClick={() => actions.onImport?.(track)}
+              size="sm"
+              title="导入曲库"
+              type="button"
+              variant="ghost"
+            >
+              {importing ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <svg aria-hidden="true" className="animate-spin" fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="12">
+                    <path d="M12 3a9 9 0 1 0 9 9" />
+                  </svg>
+                  <span>导入中</span>
+                </span>
+              ) : (
+                <span>导入曲库</span>
+              )}
+            </Button>
+          )
+        ) : null}
         {actions.onDownload ? (
           <Button
             aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
-            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
             disabled={disabled || downloaded}
             onClick={() => actions.onDownload?.(track)}
             size="icon"
@@ -302,7 +364,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
         {actions.onAddToQueue ? (
           <Button
             aria-label={queued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
-            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
             disabled={disabled || queued || !queueable}
             onClick={() => actions.onAddToQueue?.(track)}
             size="icon"
@@ -316,7 +378,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
         {actions.onAddToPlaylist ? (
           <Button
             aria-label={`将《${track.title}》加入歌单`}
-            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
             disabled={disabled}
             onClick={(event) => actions.onAddToPlaylist?.(track, getAnchoredDialogAnchor(event.currentTarget))}
             size="icon"
@@ -340,7 +402,7 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
       {actions.onDownload ? (
         <Button
           aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
-          className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white sm:hidden"
+          className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground sm:hidden"
           disabled={disabled || downloaded}
           onClick={() => actions.onDownload?.(track)}
           size="icon"
@@ -359,11 +421,9 @@ function TrackActions({ track, actions }: { track: Track; actions: ProviderAlbum
       ) : null}
       <Button
         aria-label={`打开《${track.title}》的操作菜单`}
-        className="h-8 w-8 sm:hidden text-foreground-muted hover:text-white"
+        className="h-8 w-8 sm:hidden text-foreground-muted hover:text-foreground"
         onClick={(event) => { event.stopPropagation(); setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget)); }}
         size="icon"
-        title="更多操作"
-        type="button"
         variant="ghost"
       >
         <MoreIcon />
