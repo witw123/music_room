@@ -628,7 +628,6 @@ function DesktopImmersivePlayer({
           value={positionMs}
         />
         <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-white/45">{formatDuration(durationMs)}</span>
-        <QualityBadge variant="default" popoverPlacement="right" className="ml-1" />
       </div>
 
       <div className="mt-4 flex items-center justify-center gap-2.5 sm:gap-3.5">

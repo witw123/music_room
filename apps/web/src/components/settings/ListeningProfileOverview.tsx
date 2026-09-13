@@ -119,8 +119,8 @@ export function ListeningProfileOverview({
 
       {/* Taste & Genres: the identity core of the page — click a tag to start radio */}
       <section className="rounded-xl border border-surface-border bg-surface/40 p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="mb-4">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="p-1 rounded-lg bg-surface-elevated text-foreground-muted shrink-0">
               <SlidersIcon className="w-4 h-4 text-accent" />
             </div>
@@ -129,15 +129,6 @@ export function ListeningProfileOverview({
               <p className="text-xs text-foreground-muted truncate">点击标签，即刻开启对应的专属漫游电台</p>
             </div>
           </div>
-          {onOpenColdStart && (
-            <button
-              type="button"
-              onClick={onOpenColdStart}
-              className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium text-accent hover:text-white bg-accent/10 hover:bg-accent border border-accent/20 transition-all cursor-pointer"
-            >
-              调整偏好
-            </button>
-          )}
         </div>
 
         {activeTasteGroups.length > 0 ? (
