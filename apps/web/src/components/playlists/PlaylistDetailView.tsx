@@ -346,7 +346,7 @@ export function PlaylistDetailView({
   return (
     <section className="mt-2" data-testid="playlist-detail">
       <div className="mb-4 flex items-center justify-between">
-        <Button className="gap-1.5 text-xs text-foreground-muted hover:text-white" onClick={onBack} size="sm" type="button" variant="ghost">
+        <Button className="gap-1.5 text-xs text-foreground-muted hover:text-foreground" onClick={onBack} size="sm" type="button" variant="ghost">
           <svg
             aria-hidden="true"
             fill="none"
@@ -389,18 +389,18 @@ export function PlaylistDetailView({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-5 border-b border-white/[0.06] pb-6 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-5 border-b border-surface-border pb-6 sm:flex-row sm:items-end">
         <div className="shrink-0 self-center sm:self-auto">
           <Artwork artworkUrls={artworkUrls} size="lg" title={title} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-md bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-foreground-muted">
+            <span className="inline-flex items-center rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-foreground-muted">
               {isLocal ? "本地歌单" : "网络歌单"}
             </span>
             <span className="text-xs text-foreground-muted">{rows.length} 首歌曲</span>
           </div>
-          <h1 className="mt-2 text-xl font-bold text-white tracking-tight sm:text-2xl truncate">{title}</h1>
+          <h1 className="mt-2 text-xl font-bold text-foreground tracking-tight sm:text-2xl truncate">{title}</h1>
           {description ? (
             <p className="mt-1.5 text-sm text-foreground-muted line-clamp-2 max-w-2xl">{description}</p>
           ) : null}
@@ -431,7 +431,7 @@ export function PlaylistDetailView({
             </Button>
             {showBatchDownload ? (
               <Button
-                className="gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-2 text-xs sm:text-sm font-medium text-white hover:bg-white/[0.08]"
+                className="gap-1.5 rounded-xl border border-surface-border bg-surface/50 px-3.5 py-2 text-xs sm:text-sm font-medium text-foreground hover:bg-surface-hover"
                 disabled={
                   isDownloadingAll || downloadTrackId !== null || downloadableTracks.length === 0
                 }
@@ -474,22 +474,11 @@ export function PlaylistDetailView({
 
       <div className="mt-5 space-y-0.5">
         {rows.length ? (
-          <div className="hidden sm:flex items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-foreground-muted/60 border-b border-white/[0.04] mb-1">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <span className="w-6 text-center tabular-nums">#</span>
-              <span>标题</span>
-            </div>
-            <span className="hidden lg:block w-44 truncate">专辑</span>
-            <span className="w-16 text-right tabular-nums pr-2">时长</span>
-            <span className="w-24 text-right pr-1">操作</span>
-          </div>
-        ) : null}
-        {rows.length ? (
           rows.map(({ track, index, trackId }) => {
             if (!track) {
               return (
                 <article
-                  className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-white/[0.04] ${
+                  className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-surface-hover/60 ${
                     dragOverTrackId === trackId ? "bg-accent/10" : ""
                   } ${canEditTracks ? "cursor-grab active:cursor-grabbing" : ""}`}
                   draggable={canEditTracks}
@@ -518,7 +507,7 @@ export function PlaylistDetailView({
                       {String(index + 1).padStart(2, "0")}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white/80">{trackId}</p>
+                      <p className="truncate text-sm font-semibold text-foreground/80">{trackId}</p>
                       <p className="mt-0.5 text-xs text-foreground-muted">曲目信息不可用</p>
                     </div>
                   </div>

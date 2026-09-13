@@ -141,7 +141,7 @@ export function LocalTrackRow({
 
   return (
     <article
-      className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-white/[0.04] ${
+      className={`group flex items-center justify-between gap-2 px-2 py-2 sm:gap-3 sm:px-3 rounded-xl transition-all border border-transparent hover:bg-surface-hover/60 hover:border-surface-border/40 ${
         isPlayable ? "cursor-pointer" : ""
       } ${isCurrent ? "bg-accent/10 text-accent" : ""} ${
         isDragTarget ? "bg-accent/15" : ""
@@ -210,17 +210,12 @@ export function LocalTrackRow({
         </div>
         <Artwork artworkUrl={track.artworkUrl} title={track.title} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
+          <p className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
             {track.title}
           </p>
           <p className="truncate text-xs text-foreground-muted mt-0.5">
             {track.artist}
-            {track.lyrics ? " · 有歌词" : ""}
-            {track.availableOffline
-              ? " · 已下载"
-              : track.provider === "netease" || track.provider === "qqmusic"
-                ? " · 可直接播放"
-                : " · 需下载"}
+            {track.album ? ` · ${track.album}` : ""}
           </p>
         </div>
       </div>
@@ -235,7 +230,7 @@ export function LocalTrackRow({
           {onDownload ? (
             <Button
               aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
-              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
               disabled={track.availableOffline || isDownloading || isPreparingPlayback}
               onClick={onDownload}
               size="icon"
@@ -285,7 +280,7 @@ export function LocalTrackRow({
           ) : null}
           <Button
             aria-label={isQueued ? `《${track.title}》已在队列中` : `将《${track.title}》加入队列`}
-            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
             disabled={isQueued || !isQueueable || isPreparingPlayback}
             onClick={onAddToQueue}
             size="icon"
@@ -310,7 +305,7 @@ export function LocalTrackRow({
           {onMove ? (
             <Button
               aria-label={`移动《${track.title}》到其他歌单`}
-              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
+              className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
               disabled={!track.providerTrackId && track.provider !== "local_upload"}
               onClick={(event) => onMove(getAnchoredDialogAnchor(event.currentTarget))}
               size="icon"
@@ -362,7 +357,7 @@ export function LocalTrackRow({
         {onDownload ? (
           <Button
             aria-label={track.availableOffline ? `《${track.title}》已下载` : `下载《${track.title}》`}
-            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white sm:hidden"
+            className="h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground sm:hidden"
             disabled={track.availableOffline || isDownloading || isPreparingPlayback}
             onClick={onDownload}
             size="icon"
@@ -403,7 +398,7 @@ export function LocalTrackRow({
         ) : null}
         <Button
           aria-label={`打开《${track.title}》的操作菜单`}
-          className="h-8 w-8 sm:hidden text-foreground-muted hover:text-white"
+          className="h-8 w-8 sm:hidden text-foreground-muted hover:text-foreground"
           onClick={(event) => {
             event.stopPropagation();
             setMenuAnchor(getAnchoredDialogAnchor(event.currentTarget));
@@ -446,7 +441,7 @@ export function PlaylistOrderButtons({
     <div className="flex items-center gap-0.5 sm:hidden">
       <Button
         aria-label={`上移《${title}》`}
-        className="h-10 w-10 text-foreground-muted hover:bg-white/10 hover:text-foreground"
+        className="h-10 w-10 text-foreground-muted hover:bg-surface-hover hover:text-foreground"
         disabled={index === 0}
         onClick={() => onMove(-1)}
         size="icon"
@@ -470,7 +465,7 @@ export function PlaylistOrderButtons({
       </Button>
       <Button
         aria-label={`下移《${title}》`}
-        className="h-10 w-10 text-foreground-muted hover:bg-white/10 hover:text-foreground"
+        className="h-10 w-10 text-foreground-muted hover:bg-surface-hover hover:text-foreground"
         disabled={index === total - 1}
         onClick={() => onMove(1)}
         size="icon"

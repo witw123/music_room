@@ -14,7 +14,9 @@
     --surface: rgba(255, 255, 255, 0.045);
     --surface-elevated: rgba(255, 255, 255, 0.075);
     --surface-hover: rgba(255, 255, 255, 0.095);
-    --surface-border: rgba(255, 255, 255, 0.11);
+    /* Dark mode draws structure with a quieter line than light mode: borders
+       here only separate surfaces, they must never read as bright strokes. */
+    --surface-border: rgba(255, 255, 255, 0.06);
     --surface-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
     --accent: #007aff;
     --accent-hover: #3395ff;
