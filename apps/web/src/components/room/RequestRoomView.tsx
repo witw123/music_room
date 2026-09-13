@@ -203,8 +203,8 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
             <div className="h-full min-h-[22rem] w-full rounded-2xl bg-surface/[0.04] animate-pulse" />
           )}
         </div>
-        <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl sm:rounded-3xl bg-background border-t border-surface-border/60 lg:h-full lg:overflow-hidden lg:rounded-none lg:border-t-0 lg:border-l lg:border-surface-border/60">
-          <header className="hidden lg:flex shrink-0 items-center justify-between border-b border-surface-border/60 px-3.5 pb-3 pt-2.5 sm:px-5 sm:pt-4 lg:px-6">
+        <section className="relative z-0 flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:overflow-hidden lg:rounded-none">
+          <header className="hidden lg:flex shrink-0 items-center justify-between px-3.5 pb-2 pt-2.5 sm:px-5 sm:pt-4 lg:px-6">
             <div className="flex items-center gap-2 min-w-0">
               <span className="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-accent/20 text-accent border border-accent/25 shrink-0">
                 <MusicIcon className="w-3.5 h-3.5" />
@@ -305,7 +305,7 @@ function RequestRoomWorkspace(
   return (
     <section className="mx-auto mt-3 w-full max-w-[1600px] px-3 lg:mt-0 lg:grid lg:h-full lg:min-h-full lg:grid-cols-[minmax(20rem,34fr)_minmax(24rem,42fr)_minmax(18rem,24fr)] lg:px-0" data-testid="request-room-workspace">
       <div className="material-surface-header sticky top-0 z-30 mb-3 px-1 pt-[calc(0.85rem+env(safe-area-inset-top,0px))] lg:pt-0 lg:hidden" role="tablist" aria-label="点歌房管理">
-        <div className="flex items-center gap-1 rounded-xl bg-surface-elevated/40 p-1 border border-surface-border/40">
+        <div className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md">
           {requestWorkspaceTabs.map((tab) => {
             const isActive = props.mobileTab === tab.id;
             const IconComp = tab.icon;
@@ -455,7 +455,7 @@ function RequestInbox({
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs" data-testid="request-room-inbox">
-      <div className="flex items-center justify-between border-b border-surface-border/60 px-4 py-3.5 sm:px-5">
+      <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
         <div className="flex items-center gap-2">
           <h2 className="font-bold text-foreground text-sm sm:text-base">待审核点歌</h2>
           {pendingRequests.length > 0 ? (
@@ -578,7 +578,7 @@ function RequestHistory({
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs">
-      <div className="flex items-center justify-between border-b border-surface-border/60 px-4 py-3.5 sm:px-5">
+      <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
         <h2 className="font-bold text-foreground text-sm sm:text-base">{title}</h2>
         <span className="text-xs font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
       </div>

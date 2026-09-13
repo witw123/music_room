@@ -416,7 +416,7 @@ function MembersPanelBase({
   return (
     <section className="flex w-full flex-col gap-3" data-testid="members-panel">
       {normalizedMembers.length > 0 ? (
-        <div className="divide-y divide-surface-border/50 rounded-xl border border-surface-border/60 bg-surface/40 overflow-hidden">
+        <div className="divide-y divide-surface-border/40">
           {normalizedMembers.map((member) => {
             const presence = getPresence(member);
             const canManageMember = isHost && member.role !== "host" && member.id !== activeSessionId;

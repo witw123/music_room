@@ -9,8 +9,12 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
-import { formatDuration, normalizePlaylistTitle } from "@/lib/domain/music-room-ui";
+import { normalizePlaylistTitle } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
+import {
+  ProviderAlbumTrackTable,
+  type ProviderAlbumTrackActions
+} from "@/components/provider-search/ProviderAlbumDetailView";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   listRoomPlaylistTrackIndex,
@@ -286,7 +290,7 @@ export function PlaylistPanel({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="network-playlist-panel">
-      <div className="flex flex-col gap-2 border-b border-surface-border/60 pb-3 mb-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-foreground">网络歌单</p>
           <p className="mt-1 truncate text-[10px] text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p>
@@ -602,6 +606,24 @@ function PlaylistDetail({
     setSelectedTrackKeys(allSelectableSelected ? [] : selectableKeys);
   };
 
+  const trackActions: ProviderAlbumTrackActions = useMemo(() => ({
+    onPlay: onPlayPlaylist ? () => {
+      onPlayPlaylist();
+    } : undefined,
+    isInRoom: (track: ProviderTrack) => {
+      const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
+      return info?.isInRoom ?? false;
+    },
+    isImporting: (track: ProviderTrack) => {
+      const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
+      return info ? pendingTrackIds.has(info.id) : false;
+    },
+    onImport: canManageLibrary ? (track: ProviderTrack) => {
+      const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
+      if (info) void importTrack(info);
+    } : undefined
+  }), [canManageLibrary, importTrack, onPlayPlaylist, pendingTrackIds, trackKeyToInfo]);
+
   return (
     <section className="flex w-full flex-col" data-testid="network-playlist-detail">
       {/* Top Header Actions */}
@@ -662,125 +684,21 @@ function PlaylistDetail({
         </div>
       ) : null}
 
-      {/* Tracks Surface - Aligned with Collection Playlist Track List (Screenshot 3) */}
-      <div className="mt-1 space-y-0.5" data-testid="network-playlist-tracks">
+      {/* Tracks Surface - Same track table as the favorites songs list */}
+      <div data-testid="network-playlist-tracks">
+        {remoteLoading ? <p className="px-3 py-4 text-center text-xs text-foreground-muted">正在加载歌曲信息…</p> : null}
+        {remoteError ? <p className="px-3 py-4 text-center text-xs text-amber-500">歌曲信息加载失败，当前显示已保存的歌曲索引。</p> : null}
         {displayTracks.length > 0 ? (
-          <div className="hidden sm:flex items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-foreground-muted/60 border-b border-white/[0.04] mb-1">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <span className="w-6 text-center tabular-nums">#</span>
-              <span>标题</span>
-            </div>
-            <span className="hidden lg:block w-44 truncate">专辑</span>
-            <span className="w-16 text-right tabular-nums pr-2">时长</span>
-            <span className="w-24 text-right pr-1">操作</span>
-          </div>
-        ) : null}
-
-        {remoteLoading ? (
-          <p className="px-3 py-8 text-center text-xs text-foreground-muted">正在加载歌曲信息…</p>
-        ) : null}
-        {remoteError ? (
-          <p className="px-3 py-4 text-center text-xs text-amber-500">歌曲信息加载失败，当前显示已保存的歌曲索引。</p>
-        ) : null}
-
-        {displayTracks.map((track, index) => {
-          const trackKey = `${track.provider}:${track.providerTrackId}`;
-          const info = trackKeyToInfo.get(trackKey);
-          const isInRoom = info?.isInRoom ?? false;
-          const isImporting = info ? pendingTrackIds.has(info.id) : false;
-          const isSelected = selectedTrackKeys.includes(trackKey);
-          const canSelect = canManageLibrary && !isInRoom;
-
-          return (
-            <article
-              key={`${trackKey}-${index}`}
-              className={`group flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-white/[0.04] ${
-                isSelected ? "bg-accent/10" : ""
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-6 shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums text-foreground-muted">
-                  {canSelect ? (
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={isImportBusy}
-                      onChange={() => toggleTrackSelection(trackKey)}
-                      className="h-4 w-4 accent-accent rounded cursor-pointer"
-                      aria-label={`选择《${track.title}》`}
-                    />
-                  ) : (
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                  )}
-                </div>
-
-                {/* Cover artwork */}
-                <Artwork artworkUrl={track.artworkUrl} size="sm" title={track.title} />
-
-                {/* Title & Subtitle */}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-white group-hover:text-accent transition-colors">
-                    {track.title}
-                  </p>
-                  <p className="truncate text-xs text-foreground-muted mt-0.5">
-                    {track.artist}
-                    {isInRoom ? (
-                      <span className="text-emerald-400 font-medium"> · 已在曲库</span>
-                    ) : (
-                      <span> · 可直接播放</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              {/* Album */}
-              <span className="hidden lg:block w-44 truncate text-xs text-foreground-muted/70">
-                {track.album || "未知专辑"}
-              </span>
-
-              {/* Duration */}
-              <span className="w-16 shrink-0 text-right text-xs font-mono text-foreground-muted tabular-nums pr-2">
-                {formatDuration(track.durationMs)}
-              </span>
-
-              {/* Operations */}
-              <div className="w-24 flex items-center justify-end gap-1 shrink-0">
-                {canManageLibrary && !isInRoom ? (
-                  <Button
-                    aria-label={`导入《${track.title}》到曲库`}
-                    className="h-8 w-8 rounded-lg text-foreground-muted hover:text-white hover:bg-white/[0.08]"
-                    disabled={isImporting || isImportBusy}
-                    onClick={() => {
-                      if (info) void importTrack(info);
-                    }}
-                    size="icon"
-                    title="导入到曲库"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {isImporting ? (
-                      <LoadingSpinner className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <DownloadIcon className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                ) : isInRoom ? (
-                  <span
-                    className="flex h-8 w-8 items-center justify-center text-emerald-400"
-                    title="已在房间曲库中"
-                  >
-                    <CheckIcon className="h-4 w-4" />
-                  </span>
-                ) : null}
-              </div>
-            </article>
-          );
-        })}
-
-        {!remoteLoading && displayTracks.length === 0 ? (
-          <div className="px-6 py-8 text-center text-sm text-foreground-muted">
-            这个歌单还没有歌曲。
-          </div>
+          <ProviderAlbumTrackTable
+            actions={trackActions}
+            onToggleSelect={canManageLibrary && selectableTracks.length > 0 ? toggleTrackSelection : undefined}
+            selectablePredicate={(track) => !trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`)?.isInRoom}
+            selectedTrackIds={selectedTrackKeys}
+            showToolbar={false}
+            tracks={displayTracks}
+          />
+        ) : !remoteLoading ? (
+          <p className="px-3 py-8 text-center text-xs text-foreground-muted">这个歌单还没有歌曲。</p>
         ) : null}
       </div>
     </section>
@@ -978,40 +896,3 @@ function LoadingSpinner({ className }: { className?: string }) {
   );
 }
 
-function DownloadIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      height="14"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="14"
-    >
-      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
-    </svg>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      height="14"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="14"
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
