@@ -267,10 +267,10 @@ export function RoomLyricsPanel({
                   tabIndex={canSeekLine ? 0 : undefined}
                   data-testid="room-lyrics-line"
                   style={{ fontSize: `${getLyricFontSize({ isActive, visibleLines, fontScale })}rem` }}
-                  className={`${lineAlignmentClass} flex w-full ${canSeekLine ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[color,opacity] duration-300"} ${isSelected ? "text-accent" : ""} ${
+                  className={`${lineAlignmentClass} flex w-full ${canSeekLine ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent" : ""} ${isActive ? (isSevenLineView ? "min-h-[3.5rem] sm:min-h-[4rem]" : isFiveLineView ? "min-h-[4rem] sm:min-h-[4.5rem]" : "min-h-[3rem] sm:min-h-[3.5rem]") : (isSevenLineView ? "min-h-[2.25rem] sm:min-h-[2.5rem]" : isFiveLineView ? "min-h-[2.5rem] sm:min-h-[3rem]" : "min-h-[2rem] sm:min-h-[2.25rem]")} shrink-0 ${mobile ? "max-w-none px-1 [overflow-wrap:anywhere]" : "max-w-[30rem]"} items-center break-words leading-[1.35] ${frozen ? "" : "transition-[opacity,transform,color] duration-300"} ${isSelected ? "text-accent" : "text-foreground"} ${
                     isActive
-                      ? `font-bold text-foreground ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
-                      : `font-medium text-foreground-muted/40 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
+                      ? `font-bold opacity-100 ${isSevenLineView ? "text-[1.05rem] sm:text-[1.25rem]" : isFiveLineView ? "text-[1.15rem] sm:text-[1.4rem]" : "text-[1.05rem] sm:text-[1.25rem]"}`
+                      : `font-medium opacity-30 hover:opacity-60 ${isSevenLineView ? "text-[0.75rem] sm:text-[0.9rem]" : isFiveLineView ? "text-[0.8rem] sm:text-[0.95rem]" : "text-[0.78rem] sm:text-[0.9rem]"}`
                   }`}
                 >
                   <span className="block w-full whitespace-pre-wrap">
@@ -280,20 +280,20 @@ export function RoomLyricsPanel({
                       }
 
                       if (!word.text.trim()) {
-                        return <span key={`${line.id}:word:${wordIndex}`} className="inline whitespace-pre">{word.text}</span>;
+                        return <span key={`${line.id}:word:${wordIndex}`} className="inline whitespace-pre opacity-30">{word.text}</span>;
                       }
 
                       const progress = getRoomLyricWordProgress(word, smoothPositionMs);
                       if (progress >= 1) {
                         return (
-                          <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre text-foreground">
+                          <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre opacity-100">
                             {word.text}
                           </span>
                         );
                       }
                       if (progress <= 0) {
                         return (
-                          <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre text-foreground-muted/40">
+                          <span key={`${line.id}:word:${wordIndex}`} className="inline-block whitespace-pre opacity-30">
                             {word.text}
                           </span>
                         );
@@ -304,7 +304,7 @@ export function RoomLyricsPanel({
                           className="inline-block whitespace-pre text-transparent will-change-[background-image]"
                           key={`${line.id}:word:${wordIndex}`}
                           style={{
-                            backgroundImage: `linear-gradient(to right, var(--foreground) 0%, var(--foreground) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 40%, transparent) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 40%, transparent) 100%)`,
+                            backgroundImage: `linear-gradient(to right, var(--foreground) 0%, var(--foreground) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 30%, transparent) ${(progress * 100).toFixed(1)}%, color-mix(in srgb, var(--foreground) 30%, transparent) 100%)`,
                             backgroundClip: "text",
                             WebkitBackgroundClip: "text",
                             WebkitBoxDecorationBreak: "clone",
@@ -316,12 +316,12 @@ export function RoomLyricsPanel({
                       );
                     }) : line.text}
                     {!isChineseLyrics && showTranslation && translatedLine && translatedLine !== line.text ? (
-                      <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "text-foreground-muted" : "text-foreground-muted/30"}`}>
+                      <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "text-accent opacity-90" : "opacity-40"}`}>
                         {translatedLine}
                       </span>
                     ) : null}
                     {!isChineseLyrics && showRomanized && romanizedLine && romanizedLine !== line.text ? (
-                      <span className={`mt-1 block text-[0.68em] font-medium leading-[1.35] ${isActive ? "text-foreground-muted/70" : "text-foreground-muted/20"}`}>
+                      <span className={`mt-1 block text-[0.68em] font-medium leading-[1.35] ${isActive ? "opacity-75" : "opacity-30"}`}>
                         {romanizedLine}
                       </span>
                     ) : null}
