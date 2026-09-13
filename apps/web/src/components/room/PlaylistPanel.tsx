@@ -272,7 +272,7 @@ export function PlaylistPanel({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="network-playlist-panel">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 border-b border-surface-border/60 pb-3 mb-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-foreground">网络歌单</p>
           <p className="mt-1 truncate text-[10px] text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p>

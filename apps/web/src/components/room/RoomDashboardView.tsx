@@ -172,8 +172,8 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
           )}
         </div>
       </div>
-      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col md:min-h-0 md:rounded-none md:shadow-[-6px_0_24px_rgba(0,0,0,0.05)] dark:md:shadow-[-12px_0_36px_rgba(0,0,0,0.3)]" data-custom-layout-item="room-panel">
-        <div className="material-surface-header sticky top-0 z-30 shrink-0 px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
+      <section className="material-surface relative z-20 flex min-h-[24rem] w-full min-w-0 flex-1 flex-col border-t border-surface-border/60 md:min-h-0 md:rounded-none md:border-l md:border-t-0 md:border-surface-border/60 md:shadow-[-6px_0_24px_rgba(0,0,0,0.05)] dark:md:shadow-[-12px_0_36px_rgba(0,0,0,0.3)]" data-custom-layout-item="room-panel">
+        <div className="material-surface-header sticky top-0 z-30 shrink-0 border-b border-surface-border/60 bg-surface/80 backdrop-blur-md px-3 pb-2 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] sm:px-5 sm:pt-3 md:pt-2.5 md:rounded-none">
           {/* Mobile Room Header matching desktop control bar */}
           <div className="pb-2.5 md:hidden">
             <RoomControlHeader

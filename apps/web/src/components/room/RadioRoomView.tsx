@@ -152,7 +152,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           </div>
         </div>
         {isHost ? (
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:rounded-none">
+          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:rounded-none border-t border-surface-border/60 lg:border-t-0 lg:border-l lg:border-surface-border/60">
             <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
               {panelsReady ? (
                 <HostBroadcastDesk {...props} />
@@ -184,7 +184,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0 sm:px-5 lg:pt-2.5 lg:pb-2.5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="material-surface-header shrink-0 border-b border-surface-border/60 bg-surface/80 backdrop-blur-md px-3 pb-2 pt-1 sm:px-5 lg:pt-2.5 lg:pb-2.5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
       <div
         aria-label={ariaLabel}
         className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md"
@@ -378,7 +378,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
         <RoomProviderTrackSearch canManageLibrary hideUnavailableProvidersNotice mode="program" onImportNeteaseTrack={importAndQueue} onImportQqMusicTrack={importAndQueue} roomTracks={props.roomSnapshot.tracks} surface="plain" testId="radio-room-program" />
       </div>
 
-      <section className="mt-5 pt-3" data-testid="radio-room-imports">
+      <section className="mt-5 pt-4 border-t border-surface-border/60" data-testid="radio-room-imports">
         <h3 className="text-sm font-bold text-foreground mb-3">导入电台曲目</h3>
         <div aria-label="导入歌曲方式" className="grid grid-cols-2 rounded-xl border border-surface-border/40 p-1 bg-surface/70" role="tablist">
           <button

@@ -116,7 +116,7 @@ function TrackListSectionBase({
         onFilesSelected={(files) => runAction("upload", () => onFilesSelected(files))}
       />
 
-      <div>
+      <div className="border-b border-surface-border/60 pb-2.5">
         <div
           aria-label="曲库来源筛选"
           className="grid w-full grid-cols-3 gap-1 rounded-xl border border-surface-border/60 bg-surface/60 p-1"
