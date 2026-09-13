@@ -5,16 +5,6 @@ import type {
 } from "@music-room/shared";
 import type { DiscoverPlaylistRecommendation, ProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
-import {
-  SparklesIcon,
-  MicIcon,
-  VolumeIcon,
-  ZapIcon,
-  SakuraIcon,
-  LaptopIcon,
-  MoonIcon,
-  LandmarkIcon
-} from "@/components/icons/DiscoverIcons";
 import { MusicRoomApiError } from "@/lib/network/music-room-api";
 
 export type Provider = "netease" | "qqmusic";
