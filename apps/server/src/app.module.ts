@@ -16,6 +16,8 @@ import { RedisModule } from "./infra/redis/redis.module";
 import { MetricsModule } from "./common/metrics/metrics.module";
 import { NeteaseModule } from "./modules/providers/netease/netease.module";
 import { QqMusicModule } from "./modules/providers/qqmusic/qqmusic.module";
+import { BilibiliModule } from "./modules/providers/bilibili/bilibili.module";
+import { AlistModule } from "./modules/storage/alist/alist.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
 import { SecurityModule } from "./common/security/security.module";
@@ -46,6 +48,8 @@ import { PersonalizationModule } from "./modules/personalization/personalization
     TrackModule,
     NeteaseModule,
     QqMusicModule,
+    BilibiliModule,
+    AlistModule,
     PersonalizationModule,
     AdminModule,
     FavoritesModule

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { neteaseTrackCandidateSchema } from "./netease";
 import { qqMusicTrackCandidateSchema } from "./qqmusic";
+import { bilibiliTrackCandidateSchema } from "./bilibili";
 
-export const providerSchema = z.enum(["netease", "qqmusic"]);
+export const providerSchema = z.enum(["netease", "qqmusic", "bilibili"]);
 
 export const providerSearchSuggestionSchema = z
   .object({
@@ -62,7 +63,11 @@ export const providerPlaylistSummarySchema = z
   })
   .strict();
 
-export const providerTrackCandidateSchema = z.union([neteaseTrackCandidateSchema, qqMusicTrackCandidateSchema]);
+export const providerTrackCandidateSchema = z.union([
+  neteaseTrackCandidateSchema,
+  qqMusicTrackCandidateSchema,
+  bilibiliTrackCandidateSchema
+]);
 
 export const providerPlaylistDetailSchema = providerPlaylistSummarySchema.extend({
   tracks: z.array(providerTrackCandidateSchema)
