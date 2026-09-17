@@ -37,7 +37,6 @@ import {
   entityToCandidate,
   eventWeight,
   historicalTasteEntities,
-  keepMultiArtistPlaylists,
   longTermHalfLifeMs,
   normalizeText,
   playlistTasteEntities,
@@ -563,73 +562,16 @@ export class PersonalizationService {
   }
 
   private async recallProvider(userId: string, provider: Provider, entities: TasteEntityRecord[], events: TasteEventRecord[], surface: PersonalizationRecommendationsQuery["surface"]) {
-    const tracks = entities.filter((item) => item.entityKind === "track" && item.provider === provider).sort((left, right) => entityScore(right) - entityScore(left));
-    const sessionArtists = new Set(events.filter((event) => event.artist && Date.now() - event.occurredAt.getTime() <= sessionWindowMs).map((event) => normalizeText(event.artist!)));
-    const artists = entities.filter((item) => item.entityKind === "artist" && (item.provider === provider || !item.provider)).sort((left, right) => {
-      const leftScore = entityScore(left) + (left.title && sessionArtists.has(normalizeText(left.title)) ? 3 : 0);
-      const rightScore = entityScore(right) + (right.title && sessionArtists.has(normalizeText(right.title)) ? 3 : 0);
-      return rightScore - leftScore;
-    });
-    const playlists = entities.filter((item) => item.entityKind === "playlist" && item.provider === provider).sort((left, right) => entityScore(right) - entityScore(left));
-    const tasteTerms = entities.filter((item) => ["genre", "scene", "language", "region", "era"].includes(item.entityKind)).sort((left, right) => entityScore(right) - entityScore(left));
+    const tracks = entities.filter((item) => item.entityKind === "track" && (item.provider === provider || !item.provider)).sort((left, right) => entityScore(right) - entityScore(left));
     const libraryCandidates = tracks.map(entityToCandidate).filter((item): item is ProviderTrackCandidate => item !== null)
       .map((candidate) => ({ candidate, source: "library" as const, baseScore: 0.9, interestKey: "library", interestLabel: null }));
-    const seed = libraryCandidates[0]?.candidate ?? null;
-    const artistNames = artists.flatMap((item) => typeof item.title === "string" ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 4);
-    // Top 4 taste terms drive the provider explore search; every cold-start
-    // category stores a provider-searchable label, so each contributes songs.
-    const tasteNames = tasteTerms.flatMap((item) => typeof item.title === "string" && entityScore(item) > 0 ? [item.title] : []).filter((name, index, names) => names.findIndex((item) => normalizeText(item) === normalizeText(name)) === index).slice(0, 4);
-    const playlistQueries = [...new Set([tasteNames[0], artistNames[0]].filter((value): value is string => Boolean(value)))].slice(0, 2);
-    const savedPlaylist = surface === "discover" ? undefined : playlists[0];
-    const external = await this.getProviderRecall(userId, provider, seed, artistNames, tasteNames, playlistQueries, savedPlaylist, surface);
     return {
-      candidates: dedupeCandidates([...(surface === "discover" ? [] : libraryCandidates), ...external.candidates]),
-      playlists: external.playlists
+      candidates: dedupeCandidates(libraryCandidates),
+      playlists: []
     };
   }
 
-  private async getProviderRecall(userId: string, provider: Provider, seed: ProviderTrackCandidate | null, artists: string[], tasteNames: string[], playlistQueries: string[], savedPlaylist: TasteEntityRecord | undefined, surface: PersonalizationRecommendationsQuery["surface"]) {
-    const service = provider === "netease" ? this.netease : this.qqmusic;
-    const candidates: Candidate[] = [];
-    const playlists: ProviderPlaylistSummary[] = [];
-    const tasks: Promise<void>[] = [];
-    if (seed) tasks.push((async () => {
-      const related = await service.getRelatedPlaylists(userId, seed.providerTrackId);
-      playlists.push(...related.items.slice(0, 6));
-      const details = await Promise.all(related.items.slice(0, 2).map((playlist) => service.getPlaylist(userId, playlist.providerPlaylistId).catch(() => null)));
-      details.filter((detail) => detail !== null).forEach((detail) => {
-        candidates.push(...detail.tracks.slice(0, 20).map((candidate) => ({ candidate, source: "related" as const, baseScore: 0.82, interestKey: `track:${trackIdentity(seed)}`, interestLabel: seed.title })));
-      });
-    })().catch(() => undefined));
-    if (artists.length) tasks.push((async () => {
-      for (const artist of artists) {
-        const result = await service.searchTracks(userId, { keywords: artist, limit: 12, offset: 0 });
-        candidates.push(...result.items.map((candidate) => ({ candidate, source: "artist" as const, baseScore: 0.68, interestKey: `artist:${normalizeText(artist)}`, interestLabel: artist })));
-      }
-    })().catch(() => undefined));
-    if (tasteNames.length) tasks.push((async () => {
-      for (const tasteName of tasteNames) {
-        const result = await service.searchTracks(userId, { keywords: tasteName, limit: 12, offset: 0 });
-        candidates.push(...result.items.map((candidate) => ({ candidate, source: "explore" as const, baseScore: 0.62, interestKey: `taste:${normalizeText(tasteName)}`, interestLabel: tasteName })));
-      }
-    })().catch(() => undefined));
-    if (playlistQueries.length) tasks.push((async () => {
-      const results = await Promise.all(playlistQueries.map((playlistQuery) => service.searchPlaylists(userId, { keywords: playlistQuery, limit: 6, offset: 0 }).catch(() => null)));
-      for (const result of results) {
-        if (!result) continue;
-        const summaries = surface === "discover" ? await keepMultiArtistPlaylists(userId, service, result.items.slice(0, 2)) : result.items;
-        playlists.push(...summaries);
-      }
-    })().catch(() => undefined));
-    const savedPlaylistId = savedPlaylist?.providerItemId;
-    const savedPlaylistTitle = savedPlaylist?.title ?? null;
-    if (typeof savedPlaylistId === "string") tasks.push((async () => {
-      const detail = await service.getPlaylist(userId, savedPlaylistId);
-      candidates.push(...detail.tracks.slice(0, 24).map((candidate) => ({ candidate, source: "playlist" as const, baseScore: 0.78, interestKey: `playlist:${savedPlaylistId}`, interestLabel: savedPlaylistTitle })));
-    })().catch(() => undefined));
-    await Promise.all(tasks);
-    return { candidates, playlists: dedupePlaylists(playlists) };
-  }
+
 
   private async projectTrack(transaction: Prisma.TransactionClient, userId: string, track: PersonalizationTrackInput, score: number, occurredAt: Date, incrementInteraction: boolean, timezoneOffsetMinutes = 0) {
     await this.projectEntity(transaction, userId, "track", trackKey(track), { provider: track.provider, providerItemId: track.providerTrackId, providerAlbumId: track.providerAlbumId ?? null, access: track.access, quality: track.quality, title: track.title, artist: track.artist, album: track.album, durationMs: track.durationMs, artworkUrl: track.artworkUrl, score, occurredAt, incrementInteraction });

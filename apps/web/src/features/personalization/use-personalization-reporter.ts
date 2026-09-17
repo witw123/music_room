@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { PersonalizationTrackInput, ProviderTrackCandidate, TrackMeta } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { recordLocalListeningProgress } from "./local-personalization-store";
 
 const heartbeatIntervalMs = 15_000;
 const maxProgressDeltaMs = 60_000;
@@ -39,6 +40,15 @@ export function usePersonalizationReporter(input: {
     if (!session || session.listenedMs < 1_000) return;
     try {
       session.track = await enrichPersonalizationTrack(session.track);
+      try {
+        recordLocalListeningProgress({
+          track: session.track,
+          deltaMs: session.listenedMs,
+          isNewPlay: !session.completionReported
+        });
+      } catch {
+        // Local profile update should not block telemetry
+      }
       await musicRoomApi.recordPersonalizationEvent({
         id: session.id,
         type: "playback",
