@@ -144,7 +144,11 @@ export function BilibiliPartDetailView({
                   onClick={() => onPlayTrack(part)}
                 >
                   <span className="w-6 text-center text-xs tabular-nums text-foreground-muted/70 group-hover:text-foreground font-mono">
-                    {String(index + 1).padStart(2, "0")}
+                    {isPending ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent align-middle" />
+                    ) : (
+                      String(index + 1).padStart(2, "0")
+                    )}
                   </span>
 
                   <div className="min-w-0 flex-1">
@@ -169,7 +173,11 @@ export function BilibiliPartDetailView({
                     onClick={() => onPlayTrack(part)}
                     className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface transition disabled:opacity-40"
                   >
-                    <PlayIcon className="w-3.5 h-3.5 fill-current" />
+                    {isPending ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                    ) : (
+                      <PlayIcon className="w-3.5 h-3.5 fill-current" />
+                    )}
                   </button>
 
                   {onQueueTrack && (
