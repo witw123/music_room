@@ -218,6 +218,15 @@ export async function requestBlob(
   };
 }
 
+export type DirectAudioResolveResult = {
+  url: string;
+  urls?: string[];
+  mimeType?: string | null;
+  fileType?: string;
+  provider?: string;
+  providerTrackId?: string;
+};
+
 export async function resolveDownloadedAudioMimeType(blob: Blob, declaredType: string) {
   if (blob.size <= 0) {
     throw new Error("下载到的音频为空，请稍后重试。");
@@ -268,6 +277,22 @@ export async function resolveDownloadedAudioMimeType(blob: Blob, declaredType: s
     return "audio/mpeg";
   }
 
+  // MP4 / M4A / AAC container (ftyp box at byte 4..7)
+  if (
+    probe.length >= 8 &&
+    probe[4] === 0x66 &&
+    probe[5] === 0x74 &&
+    probe[6] === 0x79 &&
+    probe[7] === 0x70
+  ) {
+    return "audio/mp4";
+  }
+
+  // AAC ADTS syncword (0xfff)
+  if (probe.length >= 2 && probe[0] === 0xff && (probe[1]! & 0xf0) === 0xf0) {
+    return "audio/mp4";
+  }
+
   for (let index = 0; index + 2 < probe.length; index += 1) {
     if (probe[index] !== 0xff || (probe[index + 1]! & 0xe0) !== 0xe0) {
       continue;
@@ -280,45 +305,70 @@ export async function resolveDownloadedAudioMimeType(blob: Blob, declaredType: s
     }
   }
 
-  throw new Error("下载内容不是有效的 MP3 或 FLAC 音频，请重试或更换音质。");
+  if (
+    normalizedDeclaredType === "audio/mp4" ||
+    normalizedDeclaredType === "video/mp4" ||
+    normalizedDeclaredType === "audio/aac" ||
+    normalizedDeclaredType === "audio/x-m4a"
+  ) {
+    return "audio/mp4";
+  }
+
+  if (normalizedDeclaredType.startsWith("audio/")) {
+    return normalizedDeclaredType;
+  }
+
+  throw new Error("下载内容不是有效的音频，请重试或更换音质。");
 }
 
 export async function downloadWithDirectFallback(input: {
-  resolve: () => Promise<ProviderAudioResolveResponse>;
+  resolve: () => Promise<ProviderAudioResolveResponse | DirectAudioResolveResult>;
   fallback: () => Promise<{ blob: Blob; contentType: string }>;
   signal?: AbortSignal;
 }) {
   try {
     const resolved = await input.resolve();
-    const response = await fetch(resolved.url, {
-      signal: input.signal,
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store"
-    });
-    if (!response.ok) {
-      throw new Error(`Direct provider download failed: ${response.status}`);
+    const candidateUrls = Array.isArray((resolved as { urls?: string[] }).urls) && (resolved as { urls: string[] }).urls.length > 0
+      ? (resolved as { urls: string[] }).urls
+      : [resolved.url];
+
+    for (const directUrl of candidateUrls) {
+      if (input.signal?.aborted) throw new Error("Download aborted");
+      try {
+        const response = await fetch(directUrl, {
+          signal: input.signal,
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store",
+          referrerPolicy: "no-referrer"
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const contentType = await resolveDownloadedAudioMimeType(
+            blob,
+            response.headers.get("content-type") ?? resolved.mimeType ?? ""
+          );
+          return {
+            blob,
+            contentType
+          };
+        }
+      } catch {
+        // Try next candidate URL
+      }
     }
-    const blob = await response.blob();
-    const contentType = await resolveDownloadedAudioMimeType(
-      blob,
-      response.headers.get("content-type") ?? resolved.mimeType ?? ""
-    );
-    return {
-      blob,
-      contentType
-    };
   } catch (error) {
     if (input.signal?.aborted) {
       throw error;
     }
-    const fallback = await input.fallback();
-    return {
-      ...fallback,
-      contentType: await resolveDownloadedAudioMimeType(
-        fallback.blob,
-        fallback.contentType
-      )
-    };
   }
+
+  const fallback = await input.fallback();
+  return {
+    ...fallback,
+    contentType: await resolveDownloadedAudioMimeType(
+      fallback.blob,
+      fallback.contentType
+    )
+  };
 }

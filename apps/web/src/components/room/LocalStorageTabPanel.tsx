@@ -53,6 +53,7 @@ function LocalStorageTabPanelBase({
   onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onDeletePlaylist,
@@ -122,6 +123,7 @@ function LocalStorageTabPanelBase({
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
           onImportBilibiliTrack={onImportBilibiliTrack}
+          onImportBilibiliTracks={onImportBilibiliTracks}
           testId="network-playlist-search"
         />
         <PlaylistPanel

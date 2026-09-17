@@ -105,6 +105,7 @@ export function buildLocalAudioFileName(input: {
 
 export function normalizeLocalAudioMimeType(value: string | undefined) {
   const type = value?.split(";", 1)[0]?.trim().toLowerCase();
+  if (type === "video/mp4" || type === "audio/x-m4a" || type === "audio/m4a") return "audio/mp4";
   if (!type?.startsWith("audio/")) return "audio/mpeg";
   if (type === "audio/x-flac") return "audio/flac";
   if (type === "audio/mp3") return "audio/mpeg";

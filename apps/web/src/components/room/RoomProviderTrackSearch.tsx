@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   BilibiliTrackCandidate,
@@ -39,6 +39,16 @@ const bilibiliDefaultHotWords: SearchSuggestionItem[] = [
 
 export type RoomProviderTrackSearchMode = "import" | "program" | "request" | "suggest";
 
+export type BilibiliPartDetail = {
+  bvid: string;
+  title: string;
+  rawTitle: string;
+  artist: string;
+  artworkUrl: string | null;
+  pageCount: number;
+  parts: BilibiliTrackCandidate[];
+};
+
 type RoomProviderTrackSearchProps = {
   roomTracks: TrackMeta[];
   mode: RoomProviderTrackSearchMode;
@@ -46,6 +56,7 @@ type RoomProviderTrackSearchProps = {
   onImportNeteaseTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
   onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onRequestTrack?: (track: ProviderTrack) => Promise<void>;
   onRequestSubmitted?: () => void;
   hideUnavailableProvidersNotice?: boolean;
@@ -103,6 +114,7 @@ export function RoomProviderTrackSearch({
   onImportNeteaseTrack,
   onImportQqMusicTrack,
   onImportBilibiliTrack,
+  onImportBilibiliTracks,
   onRequestTrack,
   onRequestSubmitted,
   hideUnavailableProvidersNotice = false,
@@ -113,6 +125,7 @@ export function RoomProviderTrackSearch({
   const [account, setAccount] = useState<ProviderAccount | null>(null);
   const [keywords, setKeywords] = useState("");
   const [results, setResults] = useState<ProviderTrack[]>([]);
+  const [bilibiliPartDetail, setBilibiliPartDetail] = useState<BilibiliPartDetail | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -130,6 +143,7 @@ export function RoomProviderTrackSearch({
     searchRequestRef.current += 1;
     setAccount(null);
     setResults([]);
+    setBilibiliPartDetail(null);
     setErrorMessage(null);
     setSearchSuggestionsOpen(false);
     setRemoteSuggestions([]);
@@ -205,11 +219,15 @@ export function RoomProviderTrackSearch({
     };
   }, [isConnected, keywords, provider, searchSuggestionsOpen]);
 
-  const libraryTrackIds = new Set(
-    roomTracks
-      .filter((track) => track.sourceType === provider && track.sourceRef?.provider === provider)
-      .map((track) => track.sourceRef?.trackId)
-      .filter((trackId): trackId is string => !!trackId)
+  const libraryTrackIds = useMemo(
+    () =>
+      new Set(
+        roomTracks
+          .filter((track) => track.sourceType === provider && track.sourceRef?.provider === provider)
+          .map((track) => track.sourceRef?.trackId)
+          .filter((trackId): trackId is string => !!trackId)
+      ),
+    [provider, roomTracks]
   );
 
   const searchTracks = useCallback(async (query: string) => {
@@ -218,6 +236,7 @@ export function RoomProviderTrackSearch({
     setPending("search");
     setErrorMessage(null);
     setMessage(null);
+    setBilibiliPartDetail(null);
     try {
       if (provider === "bilibili") {
         const response = await musicRoomApi.searchBilibiliTracks(query, { pageSize: 10 });
@@ -249,9 +268,52 @@ export function RoomProviderTrackSearch({
     }
     searchRequestRef.current += 1;
     setResults([]);
+    setBilibiliPartDetail(null);
     setMessage(null);
     setPending((current) => current === "search" ? null : current);
   }, [keywords]);
+
+  const handleOpenBilibiliParts = useCallback(async (track: ProviderTrack) => {
+    const bilibiliTrack = track as BilibiliTrackCandidate;
+    const bvid = bilibiliTrack.bvid || bilibiliTrack.providerTrackId.split(":")[0];
+    if (!bvid) return;
+    const actionKey = `parts:${bvid}`;
+    setPending(actionKey);
+    setErrorMessage(null);
+    try {
+      const detail = await musicRoomApi.getBilibiliVideoParts(bvid);
+      setBilibiliPartDetail(detail);
+    } catch (error) {
+      setErrorMessage(toSearchErrorMessage(error));
+    } finally {
+      setPending((current) => (current === actionKey ? null : current));
+    }
+  }, []);
+
+  const handleImportAllParts = useCallback(async (parts: BilibiliTrackCandidate[]) => {
+    const unimported = parts.filter((part) => !libraryTrackIds.has(part.providerTrackId));
+    if (unimported.length === 0) {
+      setMessage("所有分P单曲均已在曲库中。");
+      return;
+    }
+    setPending("import-all-parts");
+    setErrorMessage(null);
+    setMessage(null);
+    try {
+      if (onImportBilibiliTracks) {
+        await onImportBilibiliTracks(unimported);
+      } else if (onImportBilibiliTrack) {
+        for (const track of unimported) {
+          await onImportBilibiliTrack(track);
+        }
+      }
+      setMessage(`已成功导入 ${unimported.length} 首分P单曲到曲库。`);
+    } catch (error) {
+      setErrorMessage(toSearchErrorMessage(error));
+    } finally {
+      setPending((current) => (current === "import-all-parts" ? null : current));
+    }
+  }, [libraryTrackIds, onImportBilibiliTrack, onImportBilibiliTracks]);
 
   const handleTrackAction = async (candidate: ProviderTrack) => {
     const actionKey = `${mode}:${candidate.providerTrackId}`;
@@ -348,6 +410,7 @@ export function RoomProviderTrackSearch({
         }}
         onClear={() => {
           setResults([]);
+          setBilibiliPartDetail(null);
           setMessage(null);
           setErrorMessage(null);
           setSearchSuggestionsOpen(false);
@@ -386,7 +449,7 @@ export function RoomProviderTrackSearch({
         showSearchButton
       />
 
-      {!keywords.trim() && hotPills.length > 0 && results.length === 0 ? (
+      {!keywords.trim() && hotPills.length > 0 && results.length === 0 && !bilibiliPartDetail ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <span className="text-[11px] text-foreground-muted/60">热门搜索:</span>
           {hotPills.map((pill) => (
@@ -410,69 +473,178 @@ export function RoomProviderTrackSearch({
       {errorMessage ? <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="status">{errorMessage}</p> : null}
       {message ? <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{message}</p> : null}
 
-      {results.length > 0 ? <div className="divide-y divide-surface-border/40 overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50">
-        {results.map((track) => {
-          const isInLibrary = libraryTrackIds.has(track.providerTrackId);
-          const isPending = pending === `${mode}:${track.providerTrackId}`;
-          const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
-          const bilibiliTrack = track.provider === "bilibili" ? (track as BilibiliTrackCandidate) : null;
-          const isMultiPart =
-            bilibiliTrack &&
-            (Boolean(typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1) ||
-              /(?:全|\s)?(\d+)\s*[pP篇首集]|合集|精选|收录|教学/i.test(track.title) ||
-              track.durationMs > 600000);
-
-          return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-surface-hover/60">
-            {track.artworkUrl ? (
-              <img
-                src={track.artworkUrl}
-                referrerPolicy="no-referrer"
-                alt=""
-                className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs"
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = "none";
-                }}
-              />
-            ) : (
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <p className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
-                {isMultiPart ? (
-                  <span className="shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400">
-                    {typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1
-                      ? `共 ${bilibiliTrack.pageCount} P`
-                      : "分P"}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist}${track.album ? ` · ${track.album}` : ""}`}>
-                {track.artist}{track.album ? ` · ${track.album}` : ""}
-              </p>
-              <div className="mt-1 flex items-center gap-2 text-[10px] text-foreground-muted/70">
-                <span className="font-mono">{formatDuration(track.durationMs)}</span>
-                <span>·</span>
-                <span className="capitalize">{track.provider === "netease" ? "网易云" : track.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</span>
-              </div>
-            </div>
+      {bilibiliPartDetail ? (
+        <div className="flex flex-col gap-2.5 rounded-xl border border-surface-border/60 bg-surface/50 p-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-surface-border/40 pb-2">
             <button
               type="button"
-              disabled={disabled}
-              onClick={() => void handleTrackAction(track)}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                isManagedImport && isInLibrary
-                  ? "cursor-default border border-surface-border/60 bg-surface text-foreground-muted/60"
-                  : isPending
-                    ? "border border-accent/40 bg-accent/20 text-accent opacity-75"
-                    : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-xs"
-              } disabled:cursor-not-allowed disabled:opacity-50`}
+              onClick={() => setBilibiliPartDetail(null)}
+              className="inline-flex items-center gap-1 rounded-lg border border-surface-border/60 bg-surface/70 px-2.5 py-1 text-xs font-medium text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
             >
-              {isManagedImport && isInLibrary ? (isProgramMode ? "已在节目单" : "已在曲库") : isPending ? "处理中…" : actionLabel}
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+              <span>返回搜索</span>
             </button>
-          </article>;
-        })}
-      </div> : null}
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+              <span className="truncate text-xs font-medium text-foreground" title={bilibiliPartDetail.title}>
+                {bilibiliPartDetail.title}
+              </span>
+              <span className="shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400">
+                共 {bilibiliPartDetail.parts.length} P
+              </span>
+              {isManagedImport && canManageLibrary && (onImportBilibiliTracks || onImportBilibiliTrack) && bilibiliPartDetail.parts.length > 1 ? (
+                <button
+                  type="button"
+                  disabled={pending !== null}
+                  onClick={() => void handleImportAllParts(bilibiliPartDetail.parts)}
+                  className="shrink-0 rounded-lg border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent hover:border-accent hover:bg-accent hover:text-white transition-all disabled:opacity-50"
+                >
+                  {pending === "import-all-parts" ? "导入中…" : "全部导入"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-lg border border-surface-border/40 bg-surface/40">
+            {bilibiliPartDetail.parts.map((part, index) => {
+              const isInLibrary = libraryTrackIds.has(part.providerTrackId);
+              const isPending = pending === `${mode}:${part.providerTrackId}`;
+              const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
+
+              return (
+                <article
+                  key={part.providerTrackId}
+                  className="flex min-w-0 items-center gap-2.5 p-2.5 transition-colors hover:bg-surface-hover/60"
+                >
+                  <span className="w-6 shrink-0 text-center font-mono text-xs tabular-nums text-foreground-muted/70">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-foreground" title={part.title}>
+                      {part.title}
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-foreground-muted/70">
+                      <span className="font-mono">{formatDuration(part.durationMs)}</span>
+                      <span>·</span>
+                      <span className="truncate">{part.artist || bilibiliPartDetail.artist}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => void handleTrackAction(part)}
+                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                      isManagedImport && isInLibrary
+                        ? "cursor-default border border-surface-border/60 bg-surface text-foreground-muted/60"
+                        : isPending
+                          ? "border border-accent/40 bg-accent/20 text-accent opacity-75"
+                          : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-xs"
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {isManagedImport && isInLibrary ? (isProgramMode ? "已在节目单" : "已在曲库") : isPending ? "处理中…" : actionLabel}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ) : results.length > 0 ? (
+        <div className="divide-y divide-surface-border/40 overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50">
+          {results.map((track) => {
+            const isInLibrary = libraryTrackIds.has(track.providerTrackId);
+            const isPending = pending === `${mode}:${track.providerTrackId}`;
+            const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
+            const bilibiliTrack = track.provider === "bilibili" ? (track as BilibiliTrackCandidate) : null;
+            const isMultiPart =
+              bilibiliTrack &&
+              (Boolean(typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1) ||
+                /(?:全|\s)?(\d+)\s*[pP篇首集]|合集|精选|收录|教学/i.test(track.title) ||
+                track.durationMs > 600000);
+            const isPartsPending = bilibiliTrack && pending === `parts:${bilibiliTrack.bvid || track.providerTrackId.split(":")[0]}`;
+
+            return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-surface-hover/60">
+              {track.artworkUrl ? (
+                <img
+                  src={track.artworkUrl}
+                  referrerPolicy="no-referrer"
+                  alt=""
+                  className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
+                  {isMultiPart ? (
+                    <button
+                      type="button"
+                      disabled={pending !== null}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleOpenBilibiliParts(track);
+                      }}
+                      title="点击展开分P列表"
+                      className="inline-flex shrink-0 items-center gap-1 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400 hover:bg-pink-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <span>
+                        {typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1
+                          ? `共 ${bilibiliTrack.pageCount} P`
+                          : "分P"}
+                      </span>
+                      <svg className="h-2.5 w-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                    </button>
+                  ) : null}
+                </div>
+                <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist}${track.album ? ` · ${track.album}` : ""}`}>
+                  {track.artist}{track.album ? ` · ${track.album}` : ""}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-foreground-muted/70">
+                  <span className="font-mono">{formatDuration(track.durationMs)}</span>
+                  <span>·</span>
+                  <span className="capitalize">{track.provider === "netease" ? "网易云" : track.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</span>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {bilibiliTrack ? (
+                  <button
+                    type="button"
+                    disabled={pending !== null}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleOpenBilibiliParts(track);
+                    }}
+                    title="查看分P列表"
+                    className="shrink-0 rounded-lg border border-surface-border/60 bg-surface/80 px-2 py-1.5 text-xs font-medium text-foreground-muted hover:border-pink-500/40 hover:bg-pink-500/10 hover:text-pink-400 transition-all disabled:opacity-50"
+                  >
+                    {isPartsPending ? (
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-pink-400 border-t-transparent align-middle" />
+                    ) : (
+                      "分P"
+                    )}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => void handleTrackAction(track)}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                    isManagedImport && isInLibrary
+                      ? "cursor-default border border-surface-border/60 bg-surface text-foreground-muted/60"
+                      : isPending
+                        ? "border border-accent/40 bg-accent/20 text-accent opacity-75"
+                        : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-xs"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {isManagedImport && isInLibrary ? (isProgramMode ? "已在节目单" : "已在曲库") : isPending ? "处理中…" : actionLabel}
+                </button>
+              </div>
+            </article>;
+          })}
+        </div>
+      ) : null}
     </div>
   </section>;
 }

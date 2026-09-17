@@ -553,15 +553,20 @@ export const musicRoomApi = {
   getBilibiliRanking: (subType = "3") =>
     request<BilibiliTrackCandidate[]>(`/v1/providers/bilibili/ranking?subType=${encodeURIComponent(subType)}`),
   resolveBilibiliAudio: (trackId: string) =>
-    request<{ url: string; mimeType: string; fileType: string; bvid: string; cid: number }>(
+    request<{ url: string; urls: string[]; mimeType: string; fileType: string; bvid: string; cid: number }>(
       `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio-url`
     ),
   downloadBilibiliTrack: (trackId: string, signal?: AbortSignal) =>
-    requestBlob(
-      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
-      { signal },
-      { throttleImport: true }
-    ),
+    downloadWithDirectFallback({
+      resolve: () => musicRoomApi.resolveBilibiliAudio(trackId),
+      fallback: () =>
+        requestBlob(
+          `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
+          { signal },
+          { throttleImport: true }
+        ),
+      signal
+    }),
   testAlistConnection: (config: { url: string; mountPath: string; token?: string }) =>
     request<AlistTestResponse>("/v1/storage/alist/test", {
       method: "POST",

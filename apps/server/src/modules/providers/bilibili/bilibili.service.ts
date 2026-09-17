@@ -141,7 +141,7 @@ export class BilibiliService {
   async resolveAudio(
     bvid: string,
     cid?: number,
-    _quality?: "standard" | "high" | "exhigh"
+    quality?: "standard" | "high" | "exhigh"
   ): Promise<{
     url: string;
     urls: string[];
@@ -153,12 +153,29 @@ export class BilibiliService {
     const resolvedCid = cid ?? (await this.resolveFirstCid(bvid));
     const playData = await this.client.getPlayUrl(bvid, resolvedCid);
 
+    // 尝试获取 TV 端直链（TV 直链开放浏览器 CORS 与 no-referrer，供用户客户端直接下载）
+    let tvDirectUrl: string | undefined;
+    try {
+      const viewData = await this.client.getVideoView(bvid);
+      const targetAid = Number(viewData.aid);
+      if (targetAid) {
+        const tvData = await (this.client as any).getTvPlayUrl(targetAid, resolvedCid);
+        tvDirectUrl = tvData?.durl?.[0]?.url;
+      }
+    } catch {
+      // 容错忽略
+    }
+
     const audioStreams = playData.dash?.audio ?? [];
     if (audioStreams.length > 0) {
       // 按照 bandwidth 降序排序，取最高音质
       const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]!;
       // 对 CDN 备选节点进行打分优选与去重排序
       const candidateUrls = sortBilibiliAudioUrls(bestAudio.baseUrl, bestAudio.backupUrl);
+      if (tvDirectUrl) {
+        // 将支持浏览器直接 CORS 下载的直链置于前列供客户端直接抓取
+        candidateUrls.unshift(tvDirectUrl);
+      }
       const primaryUrl = candidateUrls[0] || bestAudio.baseUrl || "";
       if (!primaryUrl) {
         throw new NotFoundException(`未能解析到 B 站音频流直链: ${bvid}`);
@@ -174,7 +191,7 @@ export class BilibiliService {
     }
 
     // Fallback: durl 流
-    const durl = playData.durl?.[0]?.url;
+    const durl = tvDirectUrl || playData.durl?.[0]?.url;
     if (durl) {
       return {
         url: durl,
