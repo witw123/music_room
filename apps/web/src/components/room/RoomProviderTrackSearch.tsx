@@ -416,7 +416,11 @@ export function RoomProviderTrackSearch({
           const isPending = pending === `${mode}:${track.providerTrackId}`;
           const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
           const bilibiliTrack = track.provider === "bilibili" ? (track as BilibiliTrackCandidate) : null;
-          const isMultiPart = bilibiliTrack && typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1;
+          const isMultiPart =
+            bilibiliTrack &&
+            (Boolean(typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1) ||
+              /(?:全|\s)?(\d+)\s*[pP篇首集]|合集|精选|收录|教学/i.test(track.title) ||
+              track.durationMs > 600000);
 
           return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-surface-hover/60">
             {track.artworkUrl ? (
@@ -437,7 +441,9 @@ export function RoomProviderTrackSearch({
                 <p className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
                 {isMultiPart ? (
                   <span className="shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400">
-                    共 {bilibiliTrack.pageCount} P
+                    {typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1
+                      ? `共 ${bilibiliTrack.pageCount} P`
+                      : "分P"}
                   </span>
                 ) : null}
               </div>

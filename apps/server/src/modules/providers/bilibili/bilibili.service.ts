@@ -413,6 +413,16 @@ export class BilibiliService {
     const title = cleaned.songTitle || cleanTitle;
     const artist = cleaned.artist || cleanAuthor || "未知UP主";
 
+    // 智能推断分 P 数量
+    let inferredPageCount: number | undefined;
+    const pMatch = cleanTitle.match(/(?:全|\s)?(\d+)\s*[pP篇首集]/i);
+    if (pMatch && pMatch[1]) {
+      const parsed = parseInt(pMatch[1], 10);
+      if (parsed > 1 && parsed < 1000) inferredPageCount = parsed;
+    } else if (durationMs > 600000 || /合集|精选|收录|教学/i.test(cleanTitle)) {
+      inferredPageCount = 2;
+    }
+
     return {
       provider: "bilibili",
       providerTrackId: item.bvid,
@@ -423,7 +433,8 @@ export class BilibiliService {
       durationMs,
       artworkUrl: pic,
       access: "free",
-      quality: "exhigh"
+      quality: "exhigh",
+      pageCount: inferredPageCount
     };
   }
 

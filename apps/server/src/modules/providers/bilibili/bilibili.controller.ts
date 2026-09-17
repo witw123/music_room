@@ -108,12 +108,20 @@ export class BilibiliController {
     const payload = parseRequestBody(bilibiliResolveAudioQuerySchema, query);
     const { bvid, cid } = this.parseTrackId(trackId, payload.cid?.toString());
 
-    const streamResult = await this.service.openAudioStream(
-      bvid,
-      cid,
-      payload.quality,
-      range
-    );
+    let streamResult;
+    try {
+      streamResult = await this.service.openAudioStream(
+        bvid,
+        cid,
+        payload.quality,
+        range
+      );
+    } catch (error) {
+      throw new HttpException(
+        error instanceof Error ? error.message : "获取 B 站音频流失败",
+        HttpStatus.BAD_GATEWAY
+      );
+    }
 
     // 设置响应状态码（200 或 206）
     res.status(streamResult.status);

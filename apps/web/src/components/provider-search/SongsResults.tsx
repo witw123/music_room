@@ -64,6 +64,12 @@ export function SongsResults({
                   item.availableOffline
               );
               const downloading = pending === `download:${track.provider}:${track.providerTrackId}`;
+              const isBilibili = track.provider === "bilibili";
+              const isMultiPart =
+                isBilibili &&
+                (Boolean(track.pageCount && track.pageCount > 1) ||
+                  /(?:全|\s)?(\d+)\s*[pP篇首集]|合集|精选|收录|教学/i.test(track.title) ||
+                  track.durationMs > 600000);
 
               return (
                 <article
@@ -100,17 +106,17 @@ export function SongsResults({
                         <h3 className="truncate text-sm font-medium text-white/90 leading-tight">
                           {track.title}
                         </h3>
-                        {track.provider === "bilibili" && track.pageCount && track.pageCount > 1 ? (
+                        {isMultiPart ? (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onOpenBilibiliParts?.(track);
                             }}
-                            className="shrink-0 inline-flex items-center gap-0.5 rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/30 transition-colors"
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-pink-500/25 bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/25 transition-colors"
                             title="查看分P列表"
                           >
-                            <span>共 {track.pageCount} P</span>
+                            <span>{track.pageCount && track.pageCount > 1 ? `共 ${track.pageCount} P` : "分P"}</span>
                             <span className="text-[9px]">›</span>
                           </button>
                         ) : null}
@@ -150,6 +156,29 @@ export function SongsResults({
                               <path d="M8 5v14l11-7z" />
                             </svg>
                           )}
+                        </Button>
+                      ) : null}
+
+                      {/* Bilibili Multi-Part Entrance */}
+                      {isBilibili ? (
+                        <Button
+                          aria-label={`查看《${track.title}》分P列表`}
+                          className="h-8 w-8 text-white/70 hover:text-white"
+                          disabled={pending !== null}
+                          onClick={() => onOpenBilibiliParts?.(track)}
+                          size="icon"
+                          title="查看分P列表"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6" />
+                            <line x1="8" y1="12" x2="21" y2="12" />
+                            <line x1="8" y1="18" x2="21" y2="18" />
+                            <circle cx="4" cy="6" r="1.5" fill="currentColor" />
+                            <circle cx="4" cy="12" r="1.5" fill="currentColor" />
+                            <circle cx="4" cy="18" r="1.5" fill="currentColor" />
+                          </svg>
                         </Button>
                       ) : null}
 
@@ -194,7 +223,7 @@ export function SongsResults({
 
                   {/* Desktop Grid Layout */}
                   <div
-                    className="hidden cursor-pointer md:grid md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_100px] md:items-center md:gap-3 md:px-5 md:py-3.5"
+                    className="hidden cursor-pointer md:grid md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_130px] md:items-center md:gap-3 md:px-5 md:py-3.5"
                     onClick={() => {
                       if (onPlay && pending === null) {
                         void onPlay(track);
@@ -220,17 +249,17 @@ export function SongsResults({
                         <h3 className="truncate text-sm font-medium text-white/90 group-hover:text-white transition-colors">
                           {track.title}
                         </h3>
-                        {track.provider === "bilibili" && track.pageCount && track.pageCount > 1 ? (
+                        {isMultiPart ? (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onOpenBilibiliParts?.(track);
                             }}
-                            className="shrink-0 inline-flex items-center gap-0.5 rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/30 transition-colors"
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-pink-500/25 bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/25 transition-colors"
                             title="查看分P列表"
                           >
-                            <span>共 {track.pageCount} P</span>
+                            <span>{track.pageCount && track.pageCount > 1 ? `共 ${track.pageCount} P` : "分P"}</span>
                             <span className="text-[9px]">›</span>
                           </button>
                         ) : null}
@@ -245,6 +274,28 @@ export function SongsResults({
                       className="flex items-center justify-end gap-1"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      {/* Bilibili Multi-Part Entrance */}
+                      {isBilibili ? (
+                        <Button
+                          aria-label={`查看《${track.title}》分P列表`}
+                          className="h-8 w-8 text-white/60 hover:text-white"
+                          disabled={pending !== null}
+                          onClick={() => onOpenBilibiliParts?.(track)}
+                          size="icon"
+                          title="查看分P列表"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6" />
+                            <line x1="8" y1="12" x2="21" y2="12" />
+                            <line x1="8" y1="18" x2="21" y2="18" />
+                            <circle cx="4" cy="6" r="1.5" fill="currentColor" />
+                            <circle cx="4" cy="12" r="1.5" fill="currentColor" />
+                            <circle cx="4" cy="18" r="1.5" fill="currentColor" />
+                          </svg>
+                        </Button>
+                      ) : null}
                       <Button
                         aria-label={downloaded ? `《${track.title}》已下载` : `下载《${track.title}》`}
                         className="h-8 w-8 text-white/60 hover:text-white"
