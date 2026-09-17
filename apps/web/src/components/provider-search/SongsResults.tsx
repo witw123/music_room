@@ -23,7 +23,8 @@ export function SongsResults({
   isFavorite,
   isTogglingFavorite,
   onToggleFavorite,
-  onPlay
+  onPlay,
+  onOpenBilibiliParts
 }: {
   results: Track[];
   pending: string | null;
@@ -35,6 +36,7 @@ export function SongsResults({
   isTogglingFavorite: (track: Track) => boolean;
   onToggleFavorite: (track: Track) => void;
   onPlay?: (track: Track) => Promise<void> | void;
+  onOpenBilibiliParts?: (track: Track) => void;
 }) {
   return (
     <section className="mt-4 sm:mt-6">
@@ -94,9 +96,25 @@ export function SongsResults({
 
                     {/* Meta: Title & Artist/Album */}
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-medium text-white/90 leading-tight">
-                        {track.title}
-                      </h3>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="truncate text-sm font-medium text-white/90 leading-tight">
+                          {track.title}
+                        </h3>
+                        {track.provider === "bilibili" && track.pageCount && track.pageCount > 1 ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenBilibiliParts?.(track);
+                            }}
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/30 transition-colors"
+                            title="查看分P列表"
+                          >
+                            <span>共 {track.pageCount} P</span>
+                            <span className="text-[9px]">›</span>
+                          </button>
+                        ) : null}
+                      </div>
                       <div className="mt-1 flex items-center gap-1.5 text-xs text-white/45 truncate">
                         <span className="truncate">{track.artist}</span>
                         {track.album ? (
@@ -198,10 +216,24 @@ export function SongsResults({
 
                     <div className="flex min-w-0 items-center gap-3">
                       <Artwork alt={track.album ?? track.title} size="sm" src={track.artworkUrl} />
-                      <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <h3 className="truncate text-sm font-medium text-white/90 group-hover:text-white transition-colors">
                           {track.title}
                         </h3>
+                        {track.provider === "bilibili" && track.pageCount && track.pageCount > 1 ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenBilibiliParts?.(track);
+                            }}
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-medium text-pink-300 hover:bg-pink-500/30 transition-colors"
+                            title="查看分P列表"
+                          >
+                            <span>共 {track.pageCount} P</span>
+                            <span className="text-[9px]">›</span>
+                          </button>
+                        ) : null}
                       </div>
                     </div>
 

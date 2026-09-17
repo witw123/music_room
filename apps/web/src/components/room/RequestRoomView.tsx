@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import dynamic from "next/dynamic";
 import type {
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
   RoomRequest,
@@ -25,7 +26,7 @@ const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.Member
 const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch));
 const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar));
 
-type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
 export function RequestRoomView(props: RoomDashboardViewProps) {
   const { stageReady, panelsReady } = useProgressiveRoomLoading();
@@ -241,6 +242,9 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 mode="request"
                 roomTracks={props.roomSnapshot.tracks}
                 onRequestTrack={submitRequest}
+                onImportNeteaseTrack={props.onImportNeteaseTrack}
+                onImportQqMusicTrack={props.onImportQqMusicTrack}
+                onImportBilibiliTrack={props.onImportBilibiliTrack}
                 testId={isHost ? "request-room-host-search" : "request-room-search"}
               />
 
@@ -671,6 +675,18 @@ async function importRequestedTrack(
       provider: "qqmusic",
       providerTrackId: request.providerTrackId,
       access: "unknown",
+      quality: null,
+      title: request.title,
+      artist: request.artist,
+      album: request.album,
+      durationMs: request.durationMs,
+      artworkUrl: request.artworkUrl
+    });
+  } else if (request.provider === "bilibili") {
+    await props.onImportBilibiliTrack?.({
+      provider: "bilibili",
+      providerTrackId: request.providerTrackId,
+      access: "free",
       quality: null,
       title: request.title,
       artist: request.artist,

@@ -58,9 +58,21 @@ export class BilibiliService {
       throw new NotFoundException(`Bilibili 视频分P未找到: ${bvid}`);
     }
 
+    const cleaned = cleanBilibiliTitle(detail.title, detail.ownerName);
+    const mainArtist = cleaned.artist || detail.ownerName;
+    const albumTitle = cleaned.songTitle || detail.title;
+
+    // 清洗分 P 标题
+    const pageCleaned = detail.pages.length > 1
+      ? cleanBilibiliTitle(targetPage.part, mainArtist)
+      : cleaned;
+
     const title = detail.pages.length > 1
-      ? `${detail.title} (${targetPage.part})`
-      : detail.title;
+      ? (pageCleaned.songTitle || targetPage.part)
+      : (cleaned.songTitle || detail.title);
+
+    const artist = pageCleaned.artist || mainArtist;
+    const album = detail.pages.length > 1 ? albumTitle : null;
 
     const providerTrackId = `${bvid}:${targetPage.cid}`;
 
@@ -70,12 +82,59 @@ export class BilibiliService {
       bvid,
       cid: targetPage.cid,
       title,
-      artist: detail.ownerName,
-      album: null,
+      artist,
+      album,
       durationMs: targetPage.duration * 1000,
       artworkUrl: detail.pic,
       access: "free",
-      quality: "exhigh"
+      quality: "exhigh",
+      pageCount: detail.pages.length
+    };
+  }
+
+  async getVideoParts(bvid: string): Promise<{
+    bvid: string;
+    title: string;
+    rawTitle: string;
+    artist: string;
+    artworkUrl: string | null;
+    pageCount: number;
+    parts: BilibiliTrackCandidate[];
+  }> {
+    const detail = await this.getVideoDetail(bvid);
+    const cleaned = cleanBilibiliTitle(detail.title, detail.ownerName);
+    const albumTitle = cleaned.songTitle || detail.title;
+    const mainArtist = cleaned.artist || detail.ownerName;
+
+    const parts: BilibiliTrackCandidate[] = (detail.pages || []).map((page) => {
+      const pageCleaned = cleanBilibiliTitle(page.part, mainArtist);
+      const partSongTitle = pageCleaned.songTitle || page.part || `P${page.page}`;
+      const partArtist = pageCleaned.artist || mainArtist;
+
+      return {
+        provider: "bilibili",
+        providerTrackId: `${bvid}:${page.cid}`,
+        bvid,
+        cid: page.cid,
+        title: partSongTitle,
+        artist: partArtist,
+        album: detail.pages.length > 1 ? albumTitle : null,
+        durationMs: page.duration * 1000,
+        artworkUrl: detail.pic,
+        access: "free",
+        quality: "exhigh",
+        pageCount: detail.pages.length
+      };
+    });
+
+    return {
+      bvid,
+      title: albumTitle,
+      rawTitle: detail.title,
+      artist: mainArtist,
+      artworkUrl: detail.pic,
+      pageCount: detail.pages.length,
+      parts
     };
   }
 
@@ -198,11 +257,12 @@ export class BilibiliService {
     };
   }
 
-  async search(keyword: string, page = 1, pageSize = 20, tid?: number): Promise<BilibiliSearchResponse> {
-    const { items } = await this.client.searchVideo(keyword, page, pageSize, tid);
+  async search(keyword: string, page = 1, pageSize = 10, tid?: number): Promise<BilibiliSearchResponse> {
+    const { items, total } = await this.client.searchVideo(keyword, page, pageSize, tid);
     const candidates = items.map((item) => this.mapSearchItemToCandidate(item));
     return {
       items: candidates,
+      total,
       limit: pageSize,
       offset: (page - 1) * pageSize
     };
@@ -349,12 +409,16 @@ export class BilibiliService {
     const durationMs = this.parseDurationToMs(item.duration);
     const pic = item.pic ? (item.pic.startsWith("//") ? `https:${item.pic}` : item.pic) : null;
 
+    const cleaned = cleanBilibiliTitle(cleanTitle, cleanAuthor);
+    const title = cleaned.songTitle || cleanTitle;
+    const artist = cleaned.artist || cleanAuthor || "未知UP主";
+
     return {
       provider: "bilibili",
       providerTrackId: item.bvid,
       bvid: item.bvid,
-      title: cleanTitle,
-      artist: cleanAuthor || "未知UP主",
+      title,
+      artist,
       album: null,
       durationMs,
       artworkUrl: pic,

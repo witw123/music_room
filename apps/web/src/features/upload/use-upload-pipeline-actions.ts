@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type {
+  BilibiliTrackCandidate,
   GuestSession,
   NeteaseTrackCandidate,
   QqMusicTrackCandidate,
@@ -325,12 +326,34 @@ export function useUploadPipelineActions({
     ]
   );
 
+  const handleBilibiliTrackImport = useCallback(
+    (candidate: BilibiliTrackCandidate) => importProviderTracks({
+      activeSession, candidates: [candidate], inFlightUploadHashesRef,
+      origin: "bilibili-import", persistTrackIntoLibrary, roomSnapshot,
+      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteLocalTrackData: deleteLocalTrackDataForTracks,
+      setStatusMessage, setUploadedTracks, sourceType: "bilibili",
+      syncRoomSnapshot, refreshCacheLibrary
+    }),
+    [
+      activeSession,
+      inFlightUploadHashesRef,
+      persistTrackIntoLibrary,
+      roomSnapshot,
+      setStatusMessage,
+      setUploadedTracks,
+      syncRoomSnapshot,
+      refreshCacheLibrary
+    ]
+  );
+
   return {
     syncRoomSnapshot,
     persistTrackIntoLibrary,
     handleFilesSelected,
     handleNeteaseTrackImport,
     handleQqMusicTrackImport,
+    handleBilibiliTrackImport,
     handleNeteaseTrackImports: (candidates: NeteaseTrackCandidate[]) => importProviderTracks({
       activeSession, candidates, inFlightUploadHashesRef, origin: "netease-import",
       persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
@@ -344,6 +367,13 @@ export function useUploadPipelineActions({
       deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
       deleteLocalTrackData: deleteLocalTrackDataForTracks,
       sourceType: "qqmusic", syncRoomSnapshot, refreshCacheLibrary
+    }),
+    handleBilibiliTrackImports: (candidates: BilibiliTrackCandidate[]) => importProviderTracks({
+      activeSession, candidates, inFlightUploadHashesRef, origin: "bilibili-import",
+      persistTrackIntoLibrary, roomSnapshot, setStatusMessage, setUploadedTracks,
+      deleteTrack: (roomId, trackId) => musicRoomApi.deleteTrack(roomId, trackId),
+      deleteLocalTrackData: deleteLocalTrackDataForTracks,
+      sourceType: "bilibili", syncRoomSnapshot, refreshCacheLibrary
     })
   };
 }

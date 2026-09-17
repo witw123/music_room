@@ -108,9 +108,16 @@ export function VinylBadge({
         {artworkUrl ? (
           <div
             aria-hidden="true"
-            className="absolute z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_12px_rgba(0,0,0,0.4)]"
-            style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
-          />
+            className="absolute z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 shadow-[0_0_12px_rgba(0,0,0,0.4)]"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt=""
+              className="h-full w-full object-cover"
+              referrerPolicy="no-referrer"
+              src={getArtworkSourceUrl(artworkUrl)}
+            />
+          </div>
         ) : null}
         <div
           className={`absolute z-20 flex ${centerSize} items-center justify-center rounded-full border shadow-inner`}

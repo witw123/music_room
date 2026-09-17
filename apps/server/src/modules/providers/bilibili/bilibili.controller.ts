@@ -60,6 +60,15 @@ export class BilibiliController {
     return this.service.getVideoDetail(parsedBvid.data);
   }
 
+  @Get("view/:bvid/parts")
+  async getVideoParts(@Param("bvid") bvid: string) {
+    const parsedBvid = bilibiliBvidSchema.safeParse(bvid);
+    if (!parsedBvid.success) {
+      throw new HttpException("无效的 B 站视频 ID", HttpStatus.BAD_REQUEST);
+    }
+    return this.service.getVideoParts(parsedBvid.data);
+  }
+
   @Get("tracks/:trackId")
   async getTrack(
     @Param("trackId") trackId: string,

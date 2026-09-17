@@ -373,9 +373,16 @@ function RoomStageBase({
                           {artworkUrl ? (
                             <div
                               aria-hidden="true"
-                              className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]"
-                              style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
-                            />
+                              className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 shadow-[0_0_24px_rgba(0,0,0,0.35)]"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                alt=""
+                                className="h-full w-full object-cover"
+                                referrerPolicy="no-referrer"
+                                src={getArtworkSourceUrl(artworkUrl)}
+                              />
+                            </div>
                           ) : null}
                           <div
                             className="absolute z-20 flex aspect-square items-center justify-center rounded-full border shadow-inner"
@@ -536,7 +543,17 @@ function MobileRoomStagePlayer({
         ) : (
           <div className="relative flex h-full w-full items-center justify-center rounded-full border border-white/10 bg-black shadow-[0_18px_44px_rgba(0,0,0,0.38)]">
             <div className="absolute inset-[7%] overflow-hidden rounded-full border border-white/10 bg-white/[0.04]">
-              {artworkUrl ? <div aria-hidden="true" className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }} /> : <div className="flex h-full w-full items-center justify-center text-xs text-white/45">音乐</div>}
+              {artworkUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt=""
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
+                  src={getArtworkSourceUrl(artworkUrl)}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-white/45">音乐</div>
+              )}
             </div>
             <div className="relative z-10 h-[18%] w-[18%] rounded-full border border-white/15 bg-black" style={{ boxShadow: `0 0 0 0.6rem ${artworkPalette.accentSoft}` }} />
           </div>

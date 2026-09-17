@@ -52,9 +52,11 @@ import {
   toProviderErrorMessage,
   useProviderTrackActions,
   resolveTrackArtwork,
+  PaginationBar,
   type Provider,
   type Track
 } from "./index";
+import { BilibiliPartDetailView, type BilibiliPartDetail } from "./BilibiliPartDetailView";
 
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
@@ -145,8 +147,9 @@ export function ProviderSearchPage({
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
   const [bilibiliSubCategory, setBilibiliSubCategory] = useState<number | undefined>(undefined);
-  const [bilibiliRankings, setBilibiliRankings] = useState<Track[]>([]);
-  const [loadingRankings, setLoadingRankings] = useState(false);
+  const [searchPage, setSearchPage] = useState(1);
+  const [totalTracks, setTotalTracks] = useState(0);
+  const [bilibiliPartDetail, setBilibiliPartDetail] = useState<BilibiliPartDetail | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const keywordsRef = useRef(keywords);
   keywordsRef.current = keywords;
@@ -283,13 +286,17 @@ export function ProviderSearchPage({
     };
   }, [activeSession]);
 
-  const searchTracksForQuery = useCallback(async (query: string, customTid?: number) => {
+  const searchTracksForQuery = useCallback(async (query: string, customTid?: number, page = 1) => {
     const requestId = ++searchRequestRef.current;
     if (!query) {
       setHasSearched(false);
+      setSearchPage(1);
+      setTotalTracks(0);
       return;
     }
     setHasSearched(true);
+    setSearchPage(page);
+    setBilibiliPartDetail(null);
     onSearchActiveChange?.(true);
     setPending("search");
     setErrorMessage(null);
@@ -300,10 +307,12 @@ export function ProviderSearchPage({
         ? await musicRoomApi.searchNeteaseTracks(query)
         : provider === "qqmusic"
           ? await musicRoomApi.searchQqMusicTracks(query)
-          : await musicRoomApi.searchBilibiliTracks(query, { tid: activeTid });
+          : await musicRoomApi.searchBilibiliTracks(query, { tid: activeTid, page, pageSize: 10 });
       const ranked = await rankSearchResultsWithPersonalization(response.items);
       if (searchRequestRef.current === requestId) {
         setResults(ranked);
+        const total = "total" in response && typeof response.total === "number" ? response.total : (response.items.length >= 10 ? 100 : response.items.length);
+        setTotalTracks(total);
         setStatusMessage(null);
       }
     } catch (error) {
@@ -317,22 +326,20 @@ export function ProviderSearchPage({
     }
   }, [bilibiliSubCategory, onSearchActiveChange, provider]);
 
-  useEffect(() => {
-    if (provider !== "bilibili") return;
-    let cancelled = false;
-    setLoadingRankings(true);
-    musicRoomApi.getBilibiliRanking(bilibiliSubCategory ? String(bilibiliSubCategory) : "3")
-      .then((items) => {
-        if (!cancelled) setBilibiliRankings(items);
-      })
-      .catch(() => {
-        if (!cancelled) setBilibiliRankings([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRankings(false);
-      });
-    return () => { cancelled = true; };
-  }, [provider, bilibiliSubCategory]);
+  const handleOpenBilibiliParts = useCallback(async (track: Track) => {
+    const bvid = ("bvid" in track && typeof (track as { bvid?: unknown }).bvid === "string" ? (track as { bvid: string }).bvid : null) ?? track.providerTrackId.split(":")[0];
+    if (!bvid) return;
+    setPending(`parts:${bvid}`);
+    setErrorMessage(null);
+    try {
+      const detail = await musicRoomApi.getBilibiliVideoParts(bvid);
+      setBilibiliPartDetail(detail);
+    } catch (error) {
+      setErrorMessage(toProviderErrorMessage(error, "bilibili"));
+    } finally {
+      setPending(null);
+    }
+  }, []);
 
   async function handleImportBilibiliSuccess(tracks: Track[], playlistTitle: string) {
     try {
@@ -849,7 +856,7 @@ export function ProviderSearchPage({
     </div>
   );
 
-  const shouldShowSearchContent = !embedded || isSearchActive || hasSearched || provider === "bilibili";
+  const shouldShowSearchContent = !embedded || isSearchActive || hasSearched;
   const searchContent = (
     <>
       {shouldShowSearchContent && enabledProviders.length > 0 ? (
@@ -911,18 +918,28 @@ export function ProviderSearchPage({
             </div>
           ) : null}
 
-          {provider === "bilibili" && !hasSearched && !keywords.trim() ? (
-            <div className="mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground-muted">
-                  音乐区热门榜单
-                </h3>
-                {loadingRankings && (
-                  <span className="text-[11px] text-foreground-muted">加载中...</span>
-                )}
-              </div>
+          {bilibiliPartDetail ? (
+            <BilibiliPartDetailView
+              detail={bilibiliPartDetail}
+              onBack={() => setBilibiliPartDetail(null)}
+              onPlayTrack={playProviderTrack}
+              onDownloadTrack={downloadTrack}
+              onImportPlaylist={openPlaylistPicker}
+              onPlayAll={(tracks) => {
+                if (tracks.length > 0) void playProviderTrack(tracks[0]);
+              }}
+              pendingTrackId={pending}
+              isFavorite={isFavoriteTrack}
+              onToggleFavorite={(track) => {
+                void toggleFavoriteTrack(track)
+                  .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+                  .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
+              }}
+            />
+          ) : contentTab === "songs" && (hasSearched || Boolean(keywords.trim())) ? (
+            <>
               <SongsResults
-                results={bilibiliRankings}
+                results={results}
                 pending={pending}
                 localTracks={localTracks}
                 onAlbum={loadAlbumForTrack}
@@ -936,27 +953,19 @@ export function ProviderSearchPage({
                     .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
                 }}
                 onPlay={playProviderTrack}
+                onOpenBilibiliParts={handleOpenBilibiliParts}
               />
-            </div>
-          ) : null}
-
-          {contentTab === "songs" && (hasSearched || Boolean(keywords.trim()) || provider !== "bilibili") ? (
-            <SongsResults
-              results={results}
-              pending={pending}
-              localTracks={localTracks}
-              onAlbum={loadAlbumForTrack}
-              onDownload={downloadTrack}
-              onImportPlaylist={openPlaylistPicker}
-              isFavorite={isFavoriteTrack}
-              isTogglingFavorite={(track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`}
-              onToggleFavorite={(track) => {
-                void toggleFavoriteTrack(track)
-                  .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
-                  .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
-              }}
-              onPlay={playProviderTrack}
-            />
+              {provider === "bilibili" && results.length > 0 ? (
+                <PaginationBar
+                  page={searchPage}
+                  pageSize={10}
+                  total={totalTracks}
+                  onPageChange={(page) => {
+                    void searchTracksForQuery(keywords.trim(), bilibiliSubCategory, page);
+                  }}
+                />
+              ) : null}
+            </>
           ) : null}
            {contentTab === "playlists" ? (
             <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} trackActions={providerTrackActions()} />

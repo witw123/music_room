@@ -210,9 +210,16 @@ export function ImmersivePlayerOverlay({
       {artworkUrl ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -inset-[8%] z-0 scale-110 bg-cover bg-center opacity-35 blur-3xl transition-[opacity,transform] duration-700 motion-reduce:transition-none"
-          style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
-        />
+          className="pointer-events-none absolute -inset-[8%] z-0 overflow-hidden scale-110 opacity-35 blur-3xl transition-[opacity,transform] duration-700 motion-reduce:transition-none"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt=""
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+            src={getArtworkSourceUrl(artworkUrl)}
+          />
+        </div>
       ) : null}
       <div
         aria-hidden="true"
@@ -730,9 +737,17 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_26px_90px_rgba(0,0,0,0.55)] animate-spin-slow" style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
               <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
               <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(from 0deg at 50% 50%, ${palette.accentSoft} 0deg, transparent 90deg, ${palette.accentSoft} 180deg, transparent 270deg, ${palette.accentSoft} 360deg)` }} />
-              {Array.from({ length: 6 }).map((_, index) => <div key={index} className="absolute rounded-full border border-white/[0.02]" style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }} />)}
-              {artworkUrl ? <div className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 bg-cover bg-center shadow-[0_0_24px_rgba(0,0,0,0.35)]" style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }} /> : null}
-              <div className="absolute z-20 flex aspect-square w-[26%] items-center justify-center rounded-full border shadow-inner" style={{ borderColor: palette.border, backgroundColor: palette.accentSoft }}><div className="aspect-square w-[32%] rounded-full border border-white/5 bg-black shadow-inner" /></div>
+              {artworkUrl ? (
+                <div className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 shadow-[0_0_24px_rgba(0,0,0,0.35)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    alt=""
+                    className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
+                    src={getArtworkSourceUrl(artworkUrl)}
+                  />
+                </div>
+              ) : null}
             </div>
           </>
         )}

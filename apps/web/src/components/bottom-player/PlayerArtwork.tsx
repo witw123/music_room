@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { getArtworkSourceUrl } from "./artwork-colors";
 
 type SquareAlbumCoverProps = {
@@ -8,6 +8,10 @@ type SquareAlbumCoverProps = {
 };
 
 export function SquareAlbumCover({ artworkUrl, className = "", style }: SquareAlbumCoverProps) {
+  const [loadError, setLoadError] = useState(false);
+  const src = artworkUrl ? getArtworkSourceUrl(artworkUrl) : null;
+  const showImage = Boolean(src && !loadError);
+
   return (
     <div
       aria-hidden="true"
@@ -15,10 +19,15 @@ export function SquareAlbumCover({ artworkUrl, className = "", style }: SquareAl
       data-testid="square-album-cover"
       style={style}
     >
-      {artworkUrl ? (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url("${getArtworkSourceUrl(artworkUrl)}")` }}
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="eager"
+          referrerPolicy="no-referrer"
+          src={src!}
+          onError={() => setLoadError(true)}
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-white">

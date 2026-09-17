@@ -17,7 +17,8 @@ export const bilibiliTrackCandidateSchema = z
     durationMs: z.number().int().nonnegative(),
     artworkUrl: z.string().url().nullable(),
     access: z.enum(["free", "vip", "paid", "unknown"]).default("free"),
-    quality: bilibiliQualitySchema.nullable().default("exhigh")
+    quality: bilibiliQualitySchema.nullable().default("exhigh"),
+    pageCount: z.number().int().positive().optional()
   })
   .strict();
 
@@ -45,6 +46,7 @@ export const bilibiliVideoDetailSchema = z
 export const bilibiliSearchResponseSchema = z
   .object({
     items: z.array(bilibiliTrackCandidateSchema),
+    total: z.number().int().nonnegative().optional(),
     limit: z.number().int().positive(),
     offset: z.number().int().nonnegative()
   })

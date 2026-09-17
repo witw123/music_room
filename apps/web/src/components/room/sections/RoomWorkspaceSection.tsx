@@ -122,8 +122,10 @@ function RoomWorkspaceSectionComponent({
       onLoadPlaylistIntoRoom={roomActions.loadPlaylistIntoRoom}
       onImportNeteaseTrack={uploads.handleNeteaseTrackImport}
       onImportQqMusicTrack={uploads.handleQqMusicTrackImport}
+      onImportBilibiliTrack={uploads.handleBilibiliTrackImport}
       onImportNeteaseTracks={uploads.handleNeteaseTrackImports}
       onImportQqMusicTracks={uploads.handleQqMusicTrackImports}
+      onImportBilibiliTracks={uploads.handleBilibiliTrackImports}
       onUpdatePlaylistTitle={roomActions.updatePlaylistTitle}
       onUpdatePlaylistTracks={roomActions.updatePlaylistTracks}
       onUpdateRoom={roomActions.updateRoom}

@@ -83,7 +83,7 @@ export const updateRoomMemberPermissionsRequestSchema = z
   .strict();
 
 export const createRoomSongRequestSchema = z.object({
-  provider: z.enum(["netease", "qqmusic", "local"]),
+  provider: z.enum(["netease", "qqmusic", "bilibili", "local"]),
   providerTrackId: trimmedString(240),
   title: trimmedString(240),
   artist: trimmedString(240),

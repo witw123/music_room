@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type {
+  BilibiliTrackCandidate,
   GuestSession,
   QqMusicTrackCandidate,
   NeteaseTrackCandidate,
@@ -210,8 +211,10 @@ export function useTrackUploads(options: {
     handleFilesSelected,
     handleNeteaseTrackImport,
     handleQqMusicTrackImport,
+    handleBilibiliTrackImport,
     handleNeteaseTrackImports,
-    handleQqMusicTrackImports
+    handleQqMusicTrackImports,
+    handleBilibiliTrackImports
   } = useUploadPipelineActions({
     activeSession,
     dispatchRoomStateEvent,
@@ -489,10 +492,14 @@ export function useTrackUploads(options: {
       handleNeteaseTrackImport(candidate),
     handleQqMusicTrackImport: (candidate: QqMusicTrackCandidate) =>
       handleQqMusicTrackImport(candidate),
+    handleBilibiliTrackImport: (candidate: BilibiliTrackCandidate) =>
+      handleBilibiliTrackImport(candidate),
     handleNeteaseTrackImports: (candidates: NeteaseTrackCandidate[]) =>
       handleNeteaseTrackImports(candidates),
     handleQqMusicTrackImports: (candidates: QqMusicTrackCandidate[]) =>
       handleQqMusicTrackImports(candidates),
+    handleBilibiliTrackImports: (candidates: BilibiliTrackCandidate[]) =>
+      handleBilibiliTrackImports(candidates),
     syncRoomSnapshot,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,

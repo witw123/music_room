@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type {
+  BilibiliTrackCandidate,
   NeteaseAccountStatus,
   NeteaseTrackCandidate,
   QqMusicAccountStatus,
@@ -15,13 +16,25 @@ import { SearchBar } from "@/components/ui/search-bar";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 
-type Provider = "netease" | "qqmusic";
-type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type Provider = "netease" | "qqmusic" | "bilibili";
+type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
 const enabledSearchProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
-  ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
+  ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : []),
+  "bilibili" as const
+];
+
+const bilibiliDefaultHotWords: SearchSuggestionItem[] = [
+  { label: "周杰伦", hint: "热门", provider: "bilibili" },
+  { label: "二次元", hint: "推荐", provider: "bilibili" },
+  { label: "纯音乐", hint: "推荐", provider: "bilibili" },
+  { label: "国风", hint: "推荐", provider: "bilibili" },
+  { label: "翻唱", hint: "推荐", provider: "bilibili" },
+  { label: "VOCALOID", hint: "推荐", provider: "bilibili" },
+  { label: "东方Project", hint: "推荐", provider: "bilibili" },
+  { label: "名侦探柯南", hint: "推荐", provider: "bilibili" }
 ];
 
 export type RoomProviderTrackSearchMode = "import" | "program" | "request" | "suggest";
@@ -32,6 +45,7 @@ type RoomProviderTrackSearchProps = {
   canManageLibrary?: boolean;
   onImportNeteaseTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onRequestTrack?: (track: ProviderTrack) => Promise<void>;
   onRequestSubmitted?: () => void;
   hideUnavailableProvidersNotice?: boolean;
@@ -40,6 +54,7 @@ type RoomProviderTrackSearchProps = {
 };
 
 async function enrichProviderSearchResults(provider: Provider, items: ProviderTrack[]) {
+  if (provider === "bilibili") return items;
   const missingArtwork = items.filter((track) => !track.artworkUrl);
   const albumIds = [...new Set(
     missingArtwork
@@ -87,13 +102,14 @@ export function RoomProviderTrackSearch({
   canManageLibrary = false,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onRequestTrack,
   onRequestSubmitted,
   hideUnavailableProvidersNotice = false,
   surface = "framed",
   testId = "room-provider-track-search"
 }: RoomProviderTrackSearchProps) {
-  const [provider, setProvider] = useState<Provider>(enabledSearchProviders[0] ?? "netease");
+  const [provider, setProvider] = useState<Provider>(enabledSearchProviders[0] ?? "bilibili");
   const [account, setAccount] = useState<ProviderAccount | null>(null);
   const [keywords, setKeywords] = useState("");
   const [results, setResults] = useState<ProviderTrack[]>([]);
@@ -118,6 +134,12 @@ export function RoomProviderTrackSearch({
     setSearchSuggestionsOpen(false);
     setRemoteSuggestions([]);
     setRemoteHotWords([]);
+
+    if (provider === "bilibili") {
+      setRemoteHotWords(bilibiliDefaultHotWords);
+      return;
+    }
+
     const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
     void load()
       .then((nextAccount) => { if (!cancelled) setAccount(nextAccount); })
@@ -128,7 +150,7 @@ export function RoomProviderTrackSearch({
     };
   }, [provider]);
 
-  const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
+  const providerName = provider === "netease" ? "网易云音乐" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩";
   const isConnected = account?.connected === true;
   const isProgramMode = mode === "program";
   const isManagedImport = mode === "import" || isProgramMode;
@@ -136,9 +158,22 @@ export function RoomProviderTrackSearch({
   useEffect(() => {
     if (!searchSuggestionsOpen) {
       setRemoteSuggestions([]);
-      setRemoteHotWords([]);
+      if (provider !== "bilibili") setRemoteHotWords([]);
       return;
     }
+    if (provider === "bilibili") {
+      const query = keywords.trim().toLowerCase();
+      if (query) {
+        const filtered = bilibiliDefaultHotWords.filter((item) =>
+          item.label.toLowerCase().includes(query)
+        );
+        setRemoteSuggestions(filtered);
+      } else {
+        setRemoteHotWords(bilibiliDefaultHotWords);
+      }
+      return;
+    }
+
     let cancelled = false;
     const query = keywords.trim();
     const timerId = window.setTimeout(async () => {
@@ -184,15 +219,22 @@ export function RoomProviderTrackSearch({
     setErrorMessage(null);
     setMessage(null);
     try {
-      const response = provider === "netease"
-        ? await musicRoomApi.searchNeteaseTracks(query)
-        : await musicRoomApi.searchQqMusicTracks(query);
-      if (searchRequestRef.current !== requestId) return;
-      setResults(response.items);
-      void enrichProviderSearchResults(provider, response.items)
-        .then((items) => { if (searchRequestRef.current === requestId) setResults(items); })
-        .catch(() => undefined);
-      if (response.items.length === 0) setMessage("没有找到匹配的歌曲。");
+      if (provider === "bilibili") {
+        const response = await musicRoomApi.searchBilibiliTracks(query, { pageSize: 10 });
+        if (searchRequestRef.current !== requestId) return;
+        setResults(response.items);
+        if (response.items.length === 0) setMessage("没有找到匹配的 B 站音频/视频。");
+      } else {
+        const response = provider === "netease"
+          ? await musicRoomApi.searchNeteaseTracks(query)
+          : await musicRoomApi.searchQqMusicTracks(query);
+        if (searchRequestRef.current !== requestId) return;
+        setResults(response.items);
+        void enrichProviderSearchResults(provider, response.items)
+          .then((items) => { if (searchRequestRef.current === requestId) setResults(items); })
+          .catch(() => undefined);
+        if (response.items.length === 0) setMessage("没有找到匹配的歌曲。");
+      }
     } catch (error) {
       if (searchRequestRef.current === requestId) setErrorMessage(toSearchErrorMessage(error));
     } finally {
@@ -220,8 +262,9 @@ export function RoomProviderTrackSearch({
     setMessage(null);
     try {
       if (isManagedImport) {
-        if (candidate.provider === "netease") await onImportNeteaseTrack?.(candidate);
-        else await onImportQqMusicTrack?.(candidate);
+        if (candidate.provider === "netease") await onImportNeteaseTrack?.(candidate as NeteaseTrackCandidate);
+        else if (candidate.provider === "bilibili") await onImportBilibiliTrack?.(candidate as BilibiliTrackCandidate);
+        else await onImportQqMusicTrack?.(candidate as QqMusicTrackCandidate);
         setMessage(isProgramMode ? `《${candidate.title}》已加入节目单。` : `《${candidate.title}》已导入曲库。`);
       } else {
         await onRequestTrack?.(candidate);
@@ -240,11 +283,11 @@ export function RoomProviderTrackSearch({
   if (enabledSearchProviders.length === 0) {
     if (hideUnavailableProvidersNotice) return null;
     return <section className="flex flex-col gap-1 border-b border-surface-border pb-3" data-testid={testId}>
-      <span className="text-xs text-foreground-muted">网易云音乐和 QQ 音乐当前未启用。</span>
+      <span className="text-xs text-foreground-muted">暂无已启用的音乐平台。</span>
     </section>;
   }
 
-  const hotPills = remoteHotWords.length > 0 ? remoteHotWords.slice(0, 5) : [];
+  const hotPills = remoteHotWords.length > 0 ? remoteHotWords.slice(0, 6) : [];
 
   return <section className="flex min-w-0 flex-col gap-3" data-testid={testId}>
     <div className={surface === "framed" ? "flex min-w-0 flex-col gap-3 rounded-2xl border border-surface-border/60 bg-surface/40 p-3.5 backdrop-blur-md transition-all shadow-xs" : "flex min-w-0 flex-col gap-3"}>
@@ -265,13 +308,20 @@ export function RoomProviderTrackSearch({
                     : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground"
                 }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${item === "netease" ? "bg-red-400" : "bg-emerald-400"}`} />
-                <span>{item === "netease" ? "网易云" : "QQ 音乐"}</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  item === "netease" ? "bg-red-400" : item === "qqmusic" ? "bg-emerald-400" : "bg-pink-400"
+                }`} />
+                <span>{item === "netease" ? "网易云" : item === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</span>
               </button>
             );
           })}
         </div>
-        {isConnected ? (
+        {provider === "bilibili" ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-500/20 bg-pink-500/10 px-2.5 py-1 text-[11px] font-medium text-pink-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-pink-400" />
+            <span>免登录 · 公开检索</span>
+          </span>
+        ) : isConnected ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>已连接{account?.nickname ? ` · ${account.nickname}` : ""}</span>
@@ -313,7 +363,7 @@ export function RoomProviderTrackSearch({
         onKeyDown={(event) => {
           if (event.key === "Escape") setSearchSuggestionsOpen(false);
         }}
-        placeholder={`搜索${providerName}歌曲、歌手或专辑`}
+        placeholder={`搜索${providerName}歌曲、歌手或视频`}
         loading={pending === "search"}
         dropdownContent={
           searchSuggestionsOpen ? (
@@ -365,21 +415,39 @@ export function RoomProviderTrackSearch({
           const isInLibrary = libraryTrackIds.has(track.providerTrackId);
           const isPending = pending === `${mode}:${track.providerTrackId}`;
           const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
+          const bilibiliTrack = track.provider === "bilibili" ? (track as BilibiliTrackCandidate) : null;
+          const isMultiPart = bilibiliTrack && typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1;
+
           return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-surface-hover/60">
             {track.artworkUrl ? (
-              <img src={track.artworkUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs" />
+              <img
+                src={track.artworkUrl}
+                referrerPolicy="no-referrer"
+                alt=""
+                className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = "none";
+                }}
+              />
             ) : (
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
+                {isMultiPart ? (
+                  <span className="shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-medium text-pink-400">
+                    共 {bilibiliTrack.pageCount} P
+                  </span>
+                ) : null}
+              </div>
               <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist}${track.album ? ` · ${track.album}` : ""}`}>
                 {track.artist}{track.album ? ` · ${track.album}` : ""}
               </p>
               <div className="mt-1 flex items-center gap-2 text-[10px] text-foreground-muted/70">
                 <span className="font-mono">{formatDuration(track.durationMs)}</span>
                 <span>·</span>
-                <span className="capitalize">{track.provider === "netease" ? "网易云" : "QQ 音乐"}</span>
+                <span className="capitalize">{track.provider === "netease" ? "网易云" : track.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</span>
               </div>
             </div>
             <button

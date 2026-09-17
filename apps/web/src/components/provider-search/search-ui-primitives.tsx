@@ -129,5 +129,49 @@ export function toProviderErrorMessage(error: unknown, provider: Provider) {
     if (error.code === "QQMUSIC_TRACK_NOT_FOUND") return "该歌曲没有可用的公开音频，可能受到 VIP 或版权限制；免费歌曲也无法播放时请重新绑定 QQ 音乐。";
     return error.message;
   }
-  return error instanceof Error ? error.message : `${provider === "netease" ? "网易云" : "QQ 音乐"}操作失败，请稍后重试。`;
+  return error instanceof Error ? error.message : `${provider === "netease" ? "网易云" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}操作失败，请稍后重试。`;
+}
+
+export function PaginationBar({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  className = ""
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (newPage: number) => void;
+  className?: string;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className={`mt-6 flex flex-wrap items-center justify-between gap-3 text-xs text-foreground-muted ${className}`}>
+      <span className="tabular-nums">
+        共 {total} 项结果 · 第 {page} / {totalPages} 页
+      </span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          className="rounded-md border border-surface-border bg-surface px-2.5 py-1 font-medium transition hover:bg-surface-hover hover:text-foreground disabled:opacity-35 disabled:cursor-not-allowed select-none"
+        >
+          上一页
+        </button>
+        <span className="min-w-6 text-center text-foreground font-semibold tabular-nums">{page}</span>
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          className="rounded-md border border-surface-border bg-surface px-2.5 py-1 font-medium transition hover:bg-surface-hover hover:text-foreground disabled:opacity-35 disabled:cursor-not-allowed select-none"
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  );
 }

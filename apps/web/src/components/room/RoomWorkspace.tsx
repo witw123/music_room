@@ -3,6 +3,7 @@
 import { memo, type ReactNode } from "react";
 import type {
   AuthSession,
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   Playlist,
   PeerDiagnosticsSnapshot,
@@ -49,8 +50,10 @@ type RoomWorkspaceProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
@@ -118,8 +121,10 @@ function RoomWorkspaceBase({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onUpdateRoom,
@@ -239,8 +244,10 @@ function RoomWorkspaceBase({
               onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
               onImportNeteaseTrack={onImportNeteaseTrack}
               onImportQqMusicTrack={onImportQqMusicTrack}
+              onImportBilibiliTrack={onImportBilibiliTrack}
               onImportNeteaseTracks={onImportNeteaseTracks}
               onImportQqMusicTracks={onImportQqMusicTracks}
+              onImportBilibiliTracks={onImportBilibiliTracks}
               onUpdatePlaylistTitle={onUpdatePlaylistTitle}
               onUpdatePlaylistTracks={onUpdatePlaylistTracks}
               onUpdateRoom={onUpdateRoom}

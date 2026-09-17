@@ -514,7 +514,7 @@ export const musicRoomApi = {
     const params = new URLSearchParams({
       keyword: keywords,
       page: String(options?.page ?? 1),
-      pageSize: String(options?.pageSize ?? 20)
+      pageSize: String(options?.pageSize ?? 10)
     });
     if (typeof options?.tid === "number" && options.tid > 0) {
       params.set("tid", String(options.tid));
@@ -523,6 +523,16 @@ export const musicRoomApi = {
   },
   getBilibiliView: (bvid: string) =>
     request<BilibiliVideoDetail>(`/v1/providers/bilibili/view/${encodeURIComponent(bvid)}`),
+  getBilibiliVideoParts: (bvid: string) =>
+    request<{
+      bvid: string;
+      title: string;
+      rawTitle: string;
+      artist: string;
+      artworkUrl: string | null;
+      pageCount: number;
+      parts: BilibiliTrackCandidate[];
+    }>(`/v1/providers/bilibili/view/${encodeURIComponent(bvid)}/parts`),
   getBilibiliLyrics: (trackId: string) =>
     request<ProviderLyrics>(`/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/lyrics`),
   importBilibiliFavorite: (payload: { url: string; page?: number; pageSize?: number }) => {

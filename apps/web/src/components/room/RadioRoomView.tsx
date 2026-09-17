@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import type { NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { PlayerQueueList } from "@/components/bottom-player";
 import { formatDuration } from "@/lib/domain/music-room-ui";
@@ -24,7 +24,7 @@ const LocalAudioImport = dynamic(() => import("./LocalAudioImport").then((m) => 
 const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel));
 const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel));
 
-type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
 export function RadioRoomView(props: RoomDashboardViewProps) {
   const { stageReady, panelsReady } = useProgressiveRoomLoading();
@@ -296,6 +296,8 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     try {
       if (candidate.provider === "netease") {
         await props.onImportNeteaseTrack(candidate);
+      } else if (candidate.provider === "bilibili") {
+        await props.onImportBilibiliTrack?.(candidate);
       } else {
         await props.onImportQqMusicTrack(candidate);
       }
@@ -375,7 +377,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
       </section>
 
       <div className="mt-5">
-        <RoomProviderTrackSearch canManageLibrary hideUnavailableProvidersNotice mode="program" onImportNeteaseTrack={importAndQueue} onImportQqMusicTrack={importAndQueue} roomTracks={props.roomSnapshot.tracks} surface="plain" testId="radio-room-program" />
+        <RoomProviderTrackSearch canManageLibrary hideUnavailableProvidersNotice mode="program" onImportNeteaseTrack={importAndQueue} onImportQqMusicTrack={importAndQueue} onImportBilibiliTrack={importAndQueue} roomTracks={props.roomSnapshot.tracks} surface="plain" testId="radio-room-program" />
       </div>
 
       <section className="mt-5 pt-3" data-testid="radio-room-imports">

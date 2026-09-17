@@ -3,6 +3,7 @@
 import { memo, useState } from "react";
 import type {
   AuthSession,
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   Playlist,
   QqMusicTrackCandidate,
@@ -28,8 +29,10 @@ type LocalStorageTabPanelProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
@@ -47,6 +50,7 @@ function LocalStorageTabPanelBase({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
   onUpdatePlaylistTitle,
@@ -117,6 +121,7 @@ function LocalStorageTabPanelBase({
           hideUnavailableProvidersNotice={hideUnavailableProvidersNotice}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
+          onImportBilibiliTrack={onImportBilibiliTrack}
           testId="network-playlist-search"
         />
         <PlaylistPanel

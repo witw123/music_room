@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useState, type KeyboardEvent } from "reac
 import dynamic from "next/dynamic";
 import type {
   AuthSession,
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   Playlist,
   PeerDiagnosticsSnapshot,
@@ -59,8 +60,10 @@ export type RoomDashboardViewProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onUpdateRoom: (input: UpdateRoomRequest) => Promise<boolean>;
@@ -235,7 +238,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
 
 function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementTabId }) {
   if (props.activeTab === "library") return <LibraryTabPanel tracks={props.roomSnapshot.tracks} uploadedTracks={props.uploadedTracks} localFolderName={props.localStorageSummary.localFolderName} localSavedFileHashes={props.localStorageSummary.localSavedFileHashes} onSaveTrackToLocal={props.onSaveTrackToLocal} canControlPlayback={props.canControlPlayback} canManageLibrary={props.canManageLibrary} canManageAllTracks={props.isHost} canAddToQueue={props.canAddToQueue} activeSession={props.activeSession} onFilesSelected={props.onFilesSelected} onAddToQueue={props.onAddToQueue} onDeleteTrack={props.onDeleteTrack} onPlayTrack={props.onPlayTrack} />;
-  if (props.activeTab === "local") return <LocalStorageTabPanel tracks={props.roomSnapshot.tracks} playlists={props.playlists} activeSession={props.activeSession} canManageLibrary={props.canManageLibrary} localStorageSummary={props.localStorageSummary} onCleanLocalStorage={props.onCleanLocalStorage} onRefreshLocalStorage={props.onRefreshLocalStorage} onImportCachedTrack={props.onImportCachedTrack} onSavePlaylistFromQueue={props.onSavePlaylistFromQueue} onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom} onImportNeteaseTrack={props.onImportNeteaseTrack} onImportQqMusicTrack={props.onImportQqMusicTrack} onImportNeteaseTracks={props.onImportNeteaseTracks} onImportQqMusicTracks={props.onImportQqMusicTracks} onUpdatePlaylistTitle={props.onUpdatePlaylistTitle} onUpdatePlaylistTracks={props.onUpdatePlaylistTracks} onDeletePlaylist={props.onDeletePlaylist} />;
+  if (props.activeTab === "local") return <LocalStorageTabPanel tracks={props.roomSnapshot.tracks} playlists={props.playlists} activeSession={props.activeSession} canManageLibrary={props.canManageLibrary} localStorageSummary={props.localStorageSummary} onCleanLocalStorage={props.onCleanLocalStorage} onRefreshLocalStorage={props.onRefreshLocalStorage} onImportCachedTrack={props.onImportCachedTrack} onSavePlaylistFromQueue={props.onSavePlaylistFromQueue} onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom} onImportNeteaseTrack={props.onImportNeteaseTrack} onImportQqMusicTrack={props.onImportQqMusicTrack} onImportBilibiliTrack={props.onImportBilibiliTrack} onImportNeteaseTracks={props.onImportNeteaseTracks} onImportQqMusicTracks={props.onImportQqMusicTracks} onImportBilibiliTracks={props.onImportBilibiliTracks} onUpdatePlaylistTitle={props.onUpdatePlaylistTitle} onUpdatePlaylistTracks={props.onUpdatePlaylistTracks} onDeletePlaylist={props.onDeletePlaylist} />;
   return <MembersTabPanel members={props.roomSnapshot.room.members} now={props.membershipNow} peerDiagnostics={props.peerDiagnostics} peerRecentEvents={props.peerRecentEvents} localMemberState={props.localMemberState} playbackStatus={props.roomSnapshot.room.playback.status} sourceSessionId={props.roomSnapshot.room.playback.sourceSessionId} sourcePeerId={props.currentSourcePeerId} iceConfigSource={props.iceConfigSource} iceConfigStatus={props.iceConfigStatus} activeSessionId={props.activeSession?.userId ?? null} isHost={props.isHost} onUpdateMemberPermissions={props.onUpdateMemberPermissions} onRemoveMember={props.onRemoveMember} onDiagnosticsVisibilityChange={props.onDiagnosticsVisibilityChange} />;
 }
 
