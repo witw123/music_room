@@ -345,12 +345,11 @@ export function ProviderSearchPage({
         tags: ["network", "bilibili", "favorite"],
         trackIds: tracks.map((track) => `provider:bilibili:${track.providerTrackId}`)
       });
-      await Promise.all(tracks.map(async (track) => {
-        try {
-          await upsertLocalPlaylistTrack(toProviderTrackRecord(track));
-        } catch {
-        }
-      }));
+      await Promise.all(
+        tracks.map((track) =>
+          upsertLocalPlaylistTrack(toProviderTrackRecord(track)).catch(() => undefined)
+        )
+      );
       setStatusMessage(`收藏夹《${playlistTitle}》（${tracks.length} 首歌曲）已成功导入为网络歌单。`);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "导入歌单失败");

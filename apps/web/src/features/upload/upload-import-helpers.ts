@@ -1,7 +1,7 @@
 import type { RemoteTrackSourceRef, TrackMeta, TrackSourceType } from "@music-room/shared";
 import { MusicRoomApiError, musicRoomApi, resolveDownloadedAudioMimeType } from "@/lib/network/music-room-api";
 import { fetchProviderLyricsCached } from "@/features/playback/lyrics";
-import { getAssetManifest, getAssetUnit } from "@/features/library/indexeddb";
+import { getAssetUnit } from "@/features/library/indexeddb";
 import { playbackProfileId } from "@/features/library/audio-asset-builder";
 
 export function buildProviderSourceRef(

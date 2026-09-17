@@ -199,7 +199,7 @@ export class BilibiliService {
   }
 
   async search(keyword: string, page = 1, pageSize = 20, tid?: number): Promise<BilibiliSearchResponse> {
-    const { items, total } = await this.client.searchVideo(keyword, page, pageSize, tid);
+    const { items } = await this.client.searchVideo(keyword, page, pageSize, tid);
     const candidates = items.map((item) => this.mapSearchItemToCandidate(item));
     return {
       items: candidates,

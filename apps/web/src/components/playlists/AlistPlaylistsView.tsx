@@ -23,8 +23,7 @@ export function AlistPlaylistsView() {
     testResult,
     saveConfig,
     removeConfig,
-    testConnection,
-    setTestResult
+    testConnection
   } = useAlistStorage();
 
   const player = useLocalPlayer();
@@ -78,7 +77,7 @@ export function AlistPlaylistsView() {
     if (isConfigured && config?.url) {
       void loadDirectory(currentPath);
     }
-  }, [isConfigured, config?.url, loadDirectory]);
+  }, [isConfigured, config?.url, loadDirectory, currentPath]);
 
   // Navigate deeper into subdirectory
   const handleNavigateSubdir = (dirName: string) => {

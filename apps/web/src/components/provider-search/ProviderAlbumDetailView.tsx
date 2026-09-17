@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import type {
-  NeteaseTrackCandidate,
   ProviderAlbumDetail,
-  ProviderTrackCandidate,
-  QqMusicTrackCandidate
+  ProviderTrackCandidate
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";

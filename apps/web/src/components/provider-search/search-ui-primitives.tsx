@@ -39,6 +39,7 @@ export function Artwork({
 }) {
   const sizes = { sm: "h-10 w-10 rounded-lg", md: "h-20 w-20 rounded-xl", lg: "rounded-2xl" };
   return src ? (
+    // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} className={`object-cover ${sizes[size]} ${className}`} loading="lazy" src={getArtworkSourceUrl(src)} />
   ) : (
     <span aria-label={alt} className={`flex items-center justify-center bg-surface text-foreground-muted/40 ${sizes[size]} ${className}`}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
+import type { ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate } from "@music-room/shared";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";

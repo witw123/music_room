@@ -1,5 +1,4 @@
 import type {
-  AlistConfig,
   AlistListResponse,
   AlistTestResponse,
   AuthSession,

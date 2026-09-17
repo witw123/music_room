@@ -1,9 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   GuestSession,
-  NeteaseTrackCandidate,
   ProviderTrackCandidate,
-  QqMusicTrackCandidate,
   RoomSnapshot,
   TrackMeta,
   TrackSourceType

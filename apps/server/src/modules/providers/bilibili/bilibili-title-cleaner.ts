@@ -48,7 +48,7 @@ export function cleanBilibiliTitle(rawTitle: string, uploaderName = ""): Cleaned
 
   // 5. 规范化空白字符与多余符号
   title = title
-    .replace(/[【】\[\]()（）]/g, " ")
+    .replace(/[【】()[\]（）]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 

@@ -202,7 +202,7 @@ export class AlistService {
     endpoint: string,
     body: Record<string, unknown>,
     token?: string
-  ): Promise<{ code: number; message: string; data?: any }> {
+  ): Promise<{ code: number; message: string; data?: unknown }> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json"
     };
@@ -220,6 +220,6 @@ export class AlistService {
       throw new Error(`Alist HTTP 响应异常: ${res.status} ${res.statusText}`);
     }
 
-    return res.json() as Promise<{ code: number; message: string; data?: any }>;
+    return res.json() as Promise<{ code: number; message: string; data?: unknown }>;
   }
 }
