@@ -60,12 +60,17 @@ export class AlistService {
     const normalizedUrl = baseUrl.replace(/\/+$/, "");
     const normalizedPath = dirPath.startsWith("/") ? dirPath : `/${dirPath}`;
 
-    const res = await this.callAlistApi(normalizedUrl, "/api/fs/list", {
-      path: normalizedPath,
-      page,
-      per_page: perPage,
-      refresh
-    }, token);
+    const res = await this.callAlistApi<{ content?: AlistFileItem[]; total?: number }>(
+      normalizedUrl,
+      "/api/fs/list",
+      {
+        path: normalizedPath,
+        page,
+        per_page: perPage,
+        refresh
+      },
+      token
+    );
 
     if (res.code !== 200) {
       throw new HttpException(
@@ -151,9 +156,14 @@ export class AlistService {
     const normalizedUrl = baseUrl.replace(/\/+$/, "");
     const normalizedPath = filePath.startsWith("/") ? filePath : `/${filePath}`;
 
-    const res = await this.callAlistApi(normalizedUrl, "/api/fs/get", {
-      path: normalizedPath
-    }, token);
+    const res = await this.callAlistApi<{ raw_url?: string; size?: number; name?: string }>(
+      normalizedUrl,
+      "/api/fs/get",
+      {
+        path: normalizedPath
+      },
+      token
+    );
 
     if (res.code !== 200 || !res.data?.raw_url) {
       throw new HttpException(
@@ -197,12 +207,12 @@ export class AlistService {
     };
   }
 
-  private async callAlistApi(
+  private async callAlistApi<T = Record<string, unknown>>(
     baseUrl: string,
     endpoint: string,
     body: Record<string, unknown>,
     token?: string
-  ): Promise<{ code: number; message: string; data?: unknown }> {
+  ): Promise<{ code: number; message: string; data?: T }> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json"
     };
@@ -220,6 +230,6 @@ export class AlistService {
       throw new Error(`Alist HTTP 响应异常: ${res.status} ${res.statusText}`);
     }
 
-    return res.json() as Promise<{ code: number; message: string; data?: unknown }>;
+    return res.json() as Promise<{ code: number; message: string; data?: T }>;
   }
 }
