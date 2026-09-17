@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, QqMusicTrackCandidate } from "@music-room/shared";
+import type { NeteaseTrackCandidate, ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ import {
 import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
 
-type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type Track = ProviderTrackCandidate;
 
 export function FavoriteAlbumsPage({
   embedded = false,

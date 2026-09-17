@@ -21,9 +21,21 @@ import type { useLocalPlayer } from "@/features/playback/local-player-context";
 export async function resolveTrackArtwork(track: Track): Promise<Track> {
   if (track.artworkUrl) return track;
   try {
-    return track.provider === "netease"
-      ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-      : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    if (track.provider === "netease") {
+      return await musicRoomApi.getNeteaseTrack(track.providerTrackId);
+    }
+    if (track.provider === "qqmusic") {
+      return await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    }
+    if (track.provider === "bilibili") {
+      const bvid = track.bvid ?? track.providerTrackId.split(":")[0]!;
+      const detail = await musicRoomApi.getBilibiliView(bvid);
+      return {
+        ...track,
+        artworkUrl: detail.pic
+      };
+    }
+    return track;
   } catch {
     return track;
   }

@@ -53,7 +53,7 @@ export const roomRequestSchema = z.object({
   roomId: z.string(),
   requesterId: z.string(),
   requesterName: z.string(),
-  provider: z.enum(["netease", "qqmusic", "local"]),
+  provider: z.enum(["netease", "qqmusic", "bilibili", "alist", "local"]),
   providerTrackId: z.string(),
   title: z.string(),
   artist: z.string(),

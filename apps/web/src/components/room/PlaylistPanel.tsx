@@ -6,6 +6,7 @@ import type {
   AuthSession,
   NeteaseTrackCandidate,
   Playlist,
+  ProviderTrackCandidate,
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
@@ -24,7 +25,7 @@ import {
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
-type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type ProviderTrack = ProviderTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
 type PlaylistTrackInfo = Pick<TrackMeta, "id" | "title" | "artist" | "album" | "durationMs" | "artworkUrl"> & {
   providerTrack: ProviderTrack | null;
@@ -548,7 +549,7 @@ function PlaylistDetail({
     try {
       if (track.providerTrack.provider === "netease") {
         await onImportNeteaseTrack(track.providerTrack);
-      } else {
+      } else if (track.providerTrack.provider === "qqmusic") {
         await onImportQqMusicTrack(track.providerTrack);
       }
       setSelectedTrackKeys((current) => current.filter((k) => k !== trackKey && k !== track.id));

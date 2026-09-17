@@ -674,7 +674,10 @@ function BottomPlayerBase({
 }
 
 function toFavoriteTrackCandidate(track: TrackMeta | null): ProviderTrackCandidate | null {
-  if (!track?.sourceRef || (track.sourceType !== "netease" && track.sourceType !== "qqmusic")) {
+  if (!track?.sourceRef || track.sourceRef.provider === "alist") {
+    return null;
+  }
+  if (track.sourceType !== "netease" && track.sourceType !== "qqmusic" && track.sourceType !== "bilibili") {
     return null;
   }
   return {

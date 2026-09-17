@@ -1,8 +1,8 @@
-import type { NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate, NeteaseTrackCandidate, ProviderLyrics, QqMusicTrackCandidate } from "@music-room/shared";
 import type { CachedLibraryTrackSummaryRecord, LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import type { LocalRepositoryPlaylistRecord } from "@/features/library/local-repository";
 
-export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
 export type LocalPlaylistRecord = {
   id: string;
@@ -25,7 +25,7 @@ export function createLocalPlaylistSourceId(): string {
   return `local-playlist-source-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
-export function providerTrackKey(provider: ProviderTrack["provider"], providerTrackId: string): string {
+export function providerTrackKey(provider: string, providerTrackId: string): string {
   return `provider:${provider}:${providerTrackId}`;
 }
 

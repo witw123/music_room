@@ -15,6 +15,6 @@ import { NeteaseService } from "./netease.service";
     NeteaseCryptoService,
     NeteaseService
   ],
-  exports: [NeteaseService]
+  exports: [NeteaseService, NeteaseApiClient]
 })
 export class NeteaseModule {}

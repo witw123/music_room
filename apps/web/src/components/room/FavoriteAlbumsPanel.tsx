@@ -6,6 +6,7 @@ import type {
   NeteaseTrackCandidate,
   ProviderAlbumDetail,
   ProviderAlbumFavorite,
+  ProviderTrackCandidate,
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
@@ -17,7 +18,7 @@ import {
   setCachedFavorites
 } from "@/features/workspace/page-data-cache";
 
-type FavoriteTrack = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type FavoriteTrack = ProviderTrackCandidate;
 
 type FavoriteAlbumsPanelProps = {
   activeSession: AuthSession | null;
@@ -229,7 +230,7 @@ function FavoriteAlbumDetail({
     try {
       if (track.provider === "netease") {
         await onImportNeteaseTrack(track);
-      } else {
+      } else if (track.provider === "qqmusic") {
         await onImportQqMusicTrack(track);
       }
       setSelectedTrackIds((current) => current.filter((trackId) => trackId !== key));

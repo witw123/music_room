@@ -19,7 +19,7 @@ import {
   ChevronLeftIcon
 } from "@/components/icons/DiscoverIcons";
 
-type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
+type Track = ProviderTrackCandidate;
 
 export type ProviderAlbumTrackActions = {
   isDownloaded?: (track: Track) => boolean;

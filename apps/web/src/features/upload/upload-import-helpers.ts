@@ -14,7 +14,9 @@ export function buildProviderSourceRef(
 export function sourceTypeLabel(sourceType: Exclude<TrackSourceType, "local_upload">) {
   return {
     netease: "网易云",
-    qqmusic: "QQ 音乐"
+    qqmusic: "QQ 音乐",
+    bilibili: "哔哩哔哩",
+    alist: "Alist 网盘"
   }[sourceType];
 }
 
@@ -28,15 +30,15 @@ export async function hasUsableLocalPlaybackAsset(track: TrackMeta) {
     return false;
   }
 
-  const manifest = await getAssetManifest(playbackAsset.assetId).catch(() => null);
-  if (!manifest?.complete) {
-    return false;
-  }
-
-  return !!(await getAssetUnit(playbackAsset.assetId, 0).catch(() => null));
+  const units = await Promise.all(
+    Array.from({ length: playbackAsset.unitCount }, (_, index) =>
+      getAssetUnit(playbackAsset.assetId, index)
+    )
+  );
+  return units.every(Boolean);
 }
 
-export async function resolveCachedAudioMimeType(file: File) {
+export async function resolveImportedAudioMimeType(file: Blob) {
   return resolveDownloadedAudioMimeType(file, file.type);
 }
 
@@ -57,11 +59,11 @@ export async function resolveImportedLyrics(input: {
   sourceTrackId?: string;
 }) {
   const preferredProviders =
-    input.sourceType === "local_upload"
-      ? (["netease", "qqmusic"] as const)
-      : ([input.sourceType] as const);
+    input.sourceType === "netease" || input.sourceType === "qqmusic"
+      ? ([input.sourceType] as const)
+      : (["netease", "qqmusic"] as const);
 
-  if (input.sourceTrackId && input.sourceType !== "local_upload") {
+  if (input.sourceTrackId && (input.sourceType === "netease" || input.sourceType === "qqmusic")) {
     const direct = await requestProviderLyrics(input.sourceType, input.sourceTrackId);
     if (direct) return direct;
   }
@@ -110,9 +112,12 @@ export type ProviderLyricsPayload = {
 };
 
 export async function requestProviderLyricsPayload(
-  provider: "netease" | "qqmusic",
+  provider: string,
   trackId: string
 ): Promise<ProviderLyricsPayload | null> {
+  if (provider !== "netease" && provider !== "qqmusic") {
+    return null;
+  }
   try {
     const response = await fetchProviderLyricsCached(provider, trackId);
     const lyrics = (response.wordSyncedLyric ?? response.plainLyric)?.trim();
@@ -127,7 +132,7 @@ export async function requestProviderLyricsPayload(
 }
 
 export async function requestProviderLyrics(
-  provider: "netease" | "qqmusic",
+  provider: string,
   trackId: string
 ) {
   const payload = await requestProviderLyricsPayload(provider, trackId);

@@ -23,7 +23,7 @@ const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 export type UploadedTrack = {
   file: File;
   objectUrl: string;
-  origin: "live-upload" | "netease-import" | "qqmusic-import";
+  origin: "live-upload" | "netease-import" | "qqmusic-import" | "bilibili-import" | "alist-import";
 };
 
 export type CachedLibraryTrack = {
@@ -35,7 +35,7 @@ export type CachedLibraryTrack = {
   lyrics?: string | null;
   translatedLyrics?: string | null;
   romanizedLyrics?: string | null;
-  provider?: "netease" | "qqmusic" | "local_upload";
+  provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   providerTrackId?: string | null;
   sourceDirectoryId?: string | null;
   sourceFileName?: string | null;

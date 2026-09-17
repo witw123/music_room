@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { FavoriteAlbumsPage } from "@/components/discovery";
 import { PlaylistsWorkspacePage } from "./PlaylistsWorkspacePage";
-import { MusicIcon, RadioIcon, HeartIcon } from "@/components/icons/DiscoverIcons";
+import { AlistPlaylistsView } from "./AlistPlaylistsView";
+import { MusicIcon, RadioIcon, HeartIcon, FolderIcon } from "@/components/icons/DiscoverIcons";
 
-type PlaylistLibraryTab = "local" | "network" | "favorites";
+type PlaylistLibraryTab = "local" | "network" | "favorites" | "alist";
 
 const tabs: Array<{ id: PlaylistLibraryTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "local", label: "本地歌单", icon: MusicIcon },
   { id: "network", label: "网络歌单", icon: RadioIcon },
-  { id: "favorites", label: "我的收藏", icon: HeartIcon }
+  { id: "favorites", label: "我的收藏", icon: HeartIcon },
+  { id: "alist", label: "网盘目录", icon: FolderIcon }
 ];
 
 export function PlaylistsLibraryPage() {
@@ -53,6 +55,7 @@ export function PlaylistsLibraryPage() {
         {activeTab === "local" ? <PlaylistsWorkspacePage embedded playlistView="local" /> : null}
         {activeTab === "network" ? <PlaylistsWorkspacePage embedded playlistView="network" /> : null}
         {activeTab === "favorites" ? <FavoriteAlbumsPage embedded fixedHeight={false} showTitle={false} /> : null}
+        {activeTab === "alist" ? <AlistPlaylistsView /> : null}
       </div>
     </main>
   );

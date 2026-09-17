@@ -61,8 +61,8 @@ export type LocalRepositoryTrackRecord = {
   mimeType: string;
   sizeBytes: number;
   loudness?: TrackLoudness;
-  sourceType?: "netease" | "qqmusic" | "local_upload";
-  sourceRef?: { provider: "netease" | "qqmusic"; trackId: string } | null;
+  sourceType?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
+  sourceRef?: { provider: "netease" | "qqmusic" | "bilibili" | "alist"; trackId: string } | null;
   source: {
     kind: "managed" | "external";
     relativePath: string;
@@ -236,7 +236,7 @@ export class LocalRepository {
     file: Blob;
     fileHash: string;
     mimeType: string;
-    provider?: "netease" | "qqmusic" | "local_upload";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   }, options?: { reuseExisting?: boolean }) {
     const relativePath = this.getCachedSourcePath(input);
     if (options?.reuseExisting && await getFileByPath(this.root, relativePath, false)) {
@@ -249,7 +249,7 @@ export class LocalRepository {
   getCachedSourcePath(input: {
     fileHash: string;
     mimeType: string;
-    provider?: "netease" | "qqmusic" | "local_upload";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   }) {
     const extension = inferFileExtension(input.mimeType);
     const provider = input.provider ?? "local_upload";
@@ -273,7 +273,7 @@ export class LocalRepository {
     fileHash: string;
     artworkUrl: string;
     retention: "library" | "cache";
-    provider?: "netease" | "qqmusic" | "local_upload";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   }) {
     const normalizedUrl = input.artworkUrl.trim();
     if (!normalizedUrl) return null;
@@ -307,7 +307,7 @@ export class LocalRepository {
   getArtworkPath(input: {
     fileHash: string;
     retention: "library" | "cache";
-    provider?: "netease" | "qqmusic" | "local_upload";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
     extension?: string;
   }) {
     const baseDirectory = input.retention === "library"
@@ -878,7 +878,7 @@ export function createRepositoryTrackRecord(input: {
   lyrics?: string | null;
   translatedLyrics?: string | null;
   romanizedLyrics?: string | null;
-  provider?: "netease" | "qqmusic" | "local_upload";
+  provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   providerTrackId?: string | null;
   mimeType: string;
   durationMs: number;

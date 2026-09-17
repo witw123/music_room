@@ -1,4 +1,5 @@
 import type {
+  Provider,
   ProviderPlaylistDetail,
   ProviderPlaylistSummary,
   ProviderTrackCandidate
@@ -7,7 +8,7 @@ import type { DiscoverPlaylistRecommendation, ProfileProviderRecommendations } f
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { MusicRoomApiError } from "@/lib/network/music-room-api";
 
-export type Provider = "netease" | "qqmusic";
+export type { Provider };
 export type Track = ProviderTrackCandidate;
 export type DiscoverData = ProfileProviderRecommendations;
 export type Detail = { summary: ProviderPlaylistSummary; value: ProviderPlaylistDetail };

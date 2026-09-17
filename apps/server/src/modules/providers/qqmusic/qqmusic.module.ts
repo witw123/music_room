@@ -5,5 +5,5 @@ import { QqMusicApiClient } from "./qqmusic-api.client";
 import { QqMusicController } from "./qqmusic.controller";
 import { QqMusicCryptoService } from "./qqmusic-crypto.service";
 import { QqMusicService } from "./qqmusic.service";
-@Module({ imports: [AuthModule], controllers: [QqMusicController], providers: [QqMusicAccountService, QqMusicApiClient, QqMusicCryptoService, QqMusicService], exports: [QqMusicService] })
+@Module({ imports: [AuthModule], controllers: [QqMusicController], providers: [QqMusicAccountService, QqMusicApiClient, QqMusicCryptoService, QqMusicService], exports: [QqMusicService, QqMusicApiClient] })
 export class QqMusicModule {}

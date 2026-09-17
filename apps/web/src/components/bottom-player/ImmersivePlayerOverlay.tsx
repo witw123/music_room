@@ -336,7 +336,7 @@ type MobileImmersivePlayerProps = ImmersivePlayerOverlayProps & {
   onSetMobileView: (view: "artwork" | "lyrics") => void;
   onSeekToPosition?: (positionMs: number) => void;
   playerStyle: "vinyl" | "square-cover";
-  sourceProvider: "netease" | "qqmusic" | undefined;
+  sourceProvider: string | undefined;
   sourceTrackId: string | undefined;
 };
 
@@ -742,7 +742,7 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying
   );
 }
 
-function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, mobile = false, onSeekToPosition, positionMs, roomLyrics, translatedLyrics: storedTranslatedLyrics, romanizedLyrics: storedRomanizedLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; frozen?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; onSeekToPosition?: (positionMs: number) => void; positionMs: number; roomLyrics: string | null; translatedLyrics?: string | null; romanizedLyrics?: string | null; sourceProvider: "netease" | "qqmusic" | undefined; sourceTrackId: string | undefined }) {
+function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, mobile = false, onSeekToPosition, positionMs, roomLyrics, translatedLyrics: storedTranslatedLyrics, romanizedLyrics: storedRomanizedLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; frozen?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; onSeekToPosition?: (positionMs: number) => void; positionMs: number; roomLyrics: string | null; translatedLyrics?: string | null; romanizedLyrics?: string | null; sourceProvider: string | undefined; sourceTrackId: string | undefined }) {
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
   const [translatedLyric, setTranslatedLyric] = useState<string | null>(null);
   const [romanizedLyric, setRomanizedLyric] = useState<string | null>(null);
@@ -780,7 +780,7 @@ function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, m
 
     const hasWordSynced = hasWordSyncedRoomLyrics(localLyrics);
     if (
-      (sourceProvider !== "netease" && sourceProvider !== "qqmusic") ||
+      (sourceProvider !== "netease" && sourceProvider !== "qqmusic" && sourceProvider !== "bilibili") ||
       !sourceTrackId ||
       (hasWordSynced && localTranslated && localRomanized)
     ) {

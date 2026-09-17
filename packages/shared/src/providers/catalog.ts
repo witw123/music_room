@@ -4,6 +4,7 @@ import { qqMusicTrackCandidateSchema } from "./qqmusic";
 import { bilibiliTrackCandidateSchema } from "./bilibili";
 
 export const providerSchema = z.enum(["netease", "qqmusic", "bilibili"]);
+export type Provider = z.infer<typeof providerSchema>;
 
 export const providerSearchSuggestionSchema = z
   .object({

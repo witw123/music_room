@@ -5,3 +5,4 @@ export * from "./PlaylistCards";
 export * from "./PlaylistDetailView";
 export * from "./PlaylistsWorkspacePage";
 export * from "./PlaylistsLibraryPage";
+export * from "./AlistPlaylistsView";

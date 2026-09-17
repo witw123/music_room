@@ -1,10 +1,12 @@
 import {
+  Body,
   Controller,
   Get,
   Headers,
   HttpException,
   HttpStatus,
   Param,
+  Post,
   Query,
   Req,
   Res
@@ -14,6 +16,8 @@ import { Readable } from "node:stream";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   bilibiliBvidSchema,
+  bilibiliImportFavoriteBodySchema,
+  bilibiliRankingQuerySchema,
   bilibiliResolveAudioQuerySchema,
   bilibiliSearchQuerySchema
 } from "./bilibili.schemas";
@@ -26,7 +30,25 @@ export class BilibiliController {
   @Get("search")
   async search(@Query() query: Record<string, unknown>) {
     const payload = parseRequestBody(bilibiliSearchQuerySchema, query);
-    return this.service.search(payload.keyword, payload.page, payload.pageSize);
+    return this.service.search(payload.keyword, payload.page, payload.pageSize, payload.tid);
+  }
+
+  @Get("ranking")
+  async getRanking(@Query() query: Record<string, unknown>) {
+    const payload = parseRequestBody(bilibiliRankingQuerySchema, query);
+    return this.service.getRanking(payload.subType);
+  }
+
+  @Post("favorites/import")
+  async importFavorite(
+    @Body() body: Record<string, unknown>,
+    @Query("page") pageQuery?: string,
+    @Query("pageSize") pageSizeQuery?: string
+  ) {
+    const payload = parseRequestBody(bilibiliImportFavoriteBodySchema, body);
+    const page = pageQuery ? parseInt(pageQuery, 10) || 1 : 1;
+    const pageSize = pageSizeQuery ? parseInt(pageSizeQuery, 10) || 30 : 30;
+    return this.service.importFavorite(payload.url, page, pageSize);
   }
 
   @Get("view/:bvid")
@@ -45,6 +67,15 @@ export class BilibiliController {
   ) {
     const { bvid, cid } = this.parseTrackId(trackId, cidQuery);
     return this.service.resolveTrack(bvid, cid);
+  }
+
+  @Get("tracks/:trackId/lyrics")
+  async getLyrics(
+    @Param("trackId") trackId: string,
+    @Query("cid") cidQuery?: string
+  ) {
+    const { bvid, cid } = this.parseTrackId(trackId, cidQuery);
+    return this.service.getLyrics(bvid, cid);
   }
 
   @Get("tracks/:trackId/audio-url")

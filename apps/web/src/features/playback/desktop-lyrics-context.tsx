@@ -521,7 +521,7 @@ export function useDesktopLyricsRegistration(player: DesktopLyricsPlayer) {
   }, [player]);
 }
 
-async function loadProviderLyrics(provider: "netease" | "qqmusic", trackId: string): Promise<CachedLyrics> {
+async function loadProviderLyrics(provider: "netease" | "qqmusic" | "bilibili", trackId: string): Promise<CachedLyrics> {
   try {
     const response = await fetchProviderLyricsCached(provider, trackId);
     return {

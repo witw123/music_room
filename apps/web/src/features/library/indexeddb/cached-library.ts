@@ -152,7 +152,7 @@ export async function getCachedLibraryTrack(fileHash: string) {
 }
 
 export async function getCachedLibraryTrackByProviderTrack(
-  provider: "netease" | "qqmusic",
+  provider: string,
   providerTrackId: string
 ) {
   return musicRoomDatabase.cachedTrackLibrary

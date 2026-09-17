@@ -317,7 +317,7 @@ export async function getRoomLocalAudioFile(input: {
   title: string;
   mimeType: string;
   originalAssetId?: string | null;
-  provider?: "netease" | "qqmusic";
+  provider?: "netease" | "qqmusic" | "bilibili" | "alist";
   providerTrackId?: string | null;
 }) {
   const [savedFile, cachedFile] = await Promise.all([
@@ -406,7 +406,7 @@ export async function saveAudioFileToLocalDirectory(input: {
     lyrics?: string | null;
     translatedLyrics?: string | null;
     romanizedLyrics?: string | null;
-    provider?: "netease" | "qqmusic" | "local_upload";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
     providerTrackId?: string | null;
     durationMs: number;
     sizeBytes?: number;
@@ -540,7 +540,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
   fileHash: string;
   title: string;
   mimeType: string;
-  provider?: "netease" | "qqmusic" | "local_upload";
+  provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   originalAsset?: OriginalAssetManifest;
   playbackAsset?: PlaybackAssetManifest;
   reuseExisting?: boolean;
@@ -580,7 +580,7 @@ async function persistCachedTrackRecord(
   relativePath: string,
   retention: "library" | "cache",
   assets?: {
-    provider?: "netease" | "qqmusic" | "local_upload";
+    provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
     originalAsset?: OriginalAssetManifest;
     playbackAsset?: PlaybackAssetManifest;
   }
@@ -620,18 +620,12 @@ async function persistCachedTrackRecord(
         fileHash,
         artworkUrl: summary.artworkUrl,
         retention,
-        provider: summary.provider === "netease" || summary.provider === "qqmusic"
-          ? summary.provider
-          : assets?.provider ?? "local_upload"
+        provider: summary.provider ?? assets?.provider ?? "local_upload"
       }) ?? existing?.artworkPath ?? null
     : existing?.artworkPath ?? null;
-  const storedProvider = summary.provider === "netease" || summary.provider === "qqmusic"
-    ? summary.provider
-    : assets?.provider === "netease" || assets?.provider === "qqmusic"
-      ? assets.provider
-      : null;
+  const storedProvider = summary.provider ?? assets?.provider ?? null;
   const storedProviderTrackId = summary.providerTrackId?.trim() || null;
-  const storedProviderSource = storedProvider && storedProviderTrackId
+  const storedProviderSource = storedProvider && storedProvider !== "local_upload" && storedProviderTrackId
     ? { provider: storedProvider, trackId: storedProviderTrackId }
     : null;
   const storedSourceType = storedProviderSource?.provider ?? summary.provider ?? assets?.provider;

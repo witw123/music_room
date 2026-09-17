@@ -49,11 +49,14 @@ export function isProviderTrackInput(
 function isProviderBackedRecord(
   record: LocalPlaylistTrackRecord
 ): record is LocalPlaylistTrackRecord & {
-  provider: "netease" | "qqmusic";
+  provider: "netease" | "qqmusic" | "bilibili" | "alist";
   providerTrackId: string;
 } {
   return (
-    (record.provider === "netease" || record.provider === "qqmusic") &&
+    (record.provider === "netease" ||
+      record.provider === "qqmusic" ||
+      record.provider === "bilibili" ||
+      record.provider === "alist") &&
     !!record.providerTrackId
   );
 }

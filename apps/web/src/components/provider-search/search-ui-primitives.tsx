@@ -1,11 +1,9 @@
-/* eslint-disable @next/next/no-img-element */
-import React from "react";
-import type { NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
+import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { MusicRoomApiError } from "@/lib/network/music-room-api";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 
-export type Provider = "netease" | "qqmusic";
-export type Track = NeteaseTrackCandidate | QqMusicTrackCandidate;
+export type Provider = "netease" | "qqmusic" | "bilibili";
+export type Track = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
 export function albumKey(provider: Provider, providerAlbumId: string) {
   return `${provider}:${providerAlbumId}`;

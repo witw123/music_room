@@ -1,11 +1,18 @@
 import type {
+  AlistConfig,
+  AlistListResponse,
+  AlistTestResponse,
   AuthSession,
+  BilibiliSearchResponse,
+  BilibiliTrackCandidate,
+  BilibiliVideoDetail,
   IceConfigResponse,
   NeteaseAccountStatus,
   NeteaseQrStartResponse,
   NeteaseQrStatusResponse,
   NeteaseSearchResponse,
   NeteaseTrackCandidate,
+  Provider,
   ProviderAlbumListResponse,
   ProviderAlbumDetail,
   ProviderAlbumFavorite,
@@ -398,7 +405,7 @@ export const musicRoomApi = {
       method: "PUT",
       body: JSON.stringify(album)
     }),
-  deleteFavoriteAlbum: (provider: "netease" | "qqmusic", providerAlbumId: string) =>
+  deleteFavoriteAlbum: (provider: Provider, providerAlbumId: string) =>
     request<{ ok: boolean }>(
       `/v1/favorites/albums/${provider}/${encodeURIComponent(providerAlbumId)}`,
       { method: "DELETE" }
@@ -409,7 +416,7 @@ export const musicRoomApi = {
       method: "PUT",
       body: JSON.stringify(track)
     }),
-  deleteFavoriteTrack: (provider: "netease" | "qqmusic", providerTrackId: string) =>
+  deleteFavoriteTrack: (provider: Provider, providerTrackId: string) =>
     request<{ ok: boolean }>(
       `/v1/favorites/tracks/${provider}/${encodeURIComponent(providerTrackId)}`,
       { method: "DELETE" }
@@ -420,7 +427,7 @@ export const musicRoomApi = {
       method: "PUT",
       body: JSON.stringify(artist)
     }),
-  deleteFavoriteArtist: (provider: "netease" | "qqmusic", providerArtistId: string) =>
+  deleteFavoriteArtist: (provider: Provider, providerArtistId: string) =>
     request<{ ok: boolean }>(
       `/v1/favorites/artists/${provider}/${encodeURIComponent(providerArtistId)}`,
       { method: "DELETE" }
@@ -503,5 +510,71 @@ export const musicRoomApi = {
     }).then((playlist) => {
       notifyPlaylistsChanged();
       return playlist;
-    })
+    }),
+  searchBilibiliTracks: (keywords: string, options?: { page?: number; pageSize?: number; tid?: number }) => {
+    const params = new URLSearchParams({
+      keyword: keywords,
+      page: String(options?.page ?? 1),
+      pageSize: String(options?.pageSize ?? 20)
+    });
+    if (typeof options?.tid === "number" && options.tid > 0) {
+      params.set("tid", String(options.tid));
+    }
+    return request<BilibiliSearchResponse>(`/v1/providers/bilibili/search?${params.toString()}`);
+  },
+  getBilibiliView: (bvid: string) =>
+    request<BilibiliVideoDetail>(`/v1/providers/bilibili/view/${encodeURIComponent(bvid)}`),
+  getBilibiliLyrics: (trackId: string) =>
+    request<ProviderLyrics>(`/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  importBilibiliFavorite: (payload: { url: string; page?: number; pageSize?: number }) => {
+    const params = new URLSearchParams();
+    if (payload.page) params.set("page", String(payload.page));
+    if (payload.pageSize) params.set("pageSize", String(payload.pageSize));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return request<{
+      title: string;
+      items: BilibiliTrackCandidate[];
+      total: number;
+      hasMore: boolean;
+    }>(`/v1/providers/bilibili/favorites/import${query}`, {
+      method: "POST",
+      body: JSON.stringify({ url: payload.url })
+    });
+  },
+  getBilibiliRanking: (subType = "3") =>
+    request<BilibiliTrackCandidate[]>(`/v1/providers/bilibili/ranking?subType=${encodeURIComponent(subType)}`),
+  resolveBilibiliAudio: (trackId: string) =>
+    request<{ url: string; mimeType: string; fileType: string; bvid: string; cid: number }>(
+      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio-url`
+    ),
+  downloadBilibiliTrack: (trackId: string, signal?: AbortSignal) =>
+    requestBlob(
+      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
+      { signal },
+      { throttleImport: true }
+    ),
+  testAlistConnection: (config: { url: string; mountPath: string; token?: string }) =>
+    request<AlistTestResponse>("/v1/storage/alist/test", {
+      method: "POST",
+      body: JSON.stringify(config)
+    }),
+  listAlistDirectory: (payload: {
+    url: string;
+    path: string;
+    page?: number;
+    perPage?: number;
+    refresh?: boolean;
+    token?: string;
+  }) =>
+    request<AlistListResponse>("/v1/storage/alist/list", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  getAlistFile: (payload: { url: string; path: string; token?: string }) =>
+    request<{ rawUrl: string; size: number; name: string }>("/v1/storage/alist/file", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  getAlistStreamUrl: (rawUrl: string) =>
+    `/v1/storage/alist/stream?url=${encodeURIComponent(rawUrl)}`
 }

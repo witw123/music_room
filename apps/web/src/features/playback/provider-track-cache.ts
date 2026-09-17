@@ -41,7 +41,9 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
   const preferredQuality = getAppSettings().playback.preferredAudioQuality;
   const response = resolvedTrack.provider === "netease"
     ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId, preferredQuality)
-    : await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId, preferredQuality);
+    : resolvedTrack.provider === "qqmusic"
+      ? await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId, preferredQuality)
+      : await musicRoomApi.downloadBilibiliTrack(resolvedTrack.providerTrackId);
   const fileHash = await hashAudioBlob(response.blob);
   const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
   const artworkResponse = resolvedTrack.provider === "qqmusic" && resolvedTrack.artworkUrl && /^https?:\/\//i.test(resolvedTrack.artworkUrl)
@@ -54,7 +56,9 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
   );
   const lyricPayload = await (resolvedTrack.provider === "netease"
     ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-    : musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
+    : resolvedTrack.provider === "qqmusic"
+      ? musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
+      : Promise.resolve(null)
   ).catch(() => null);
   const lyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
   const loudness = await analyzeAudioBlobLoudness(response.blob);
@@ -240,7 +244,7 @@ function isDisposableProviderPlaybackCache(
   record: Pick<CachedLibraryTrackSummaryRecord, "provider" | "providerTrackId" | "sourceTrackIds" | "sourceRoomIds"> | null | undefined
 ) {
   return !!record
-    && (record.provider === "netease" || record.provider === "qqmusic")
+    && (record.provider === "netease" || record.provider === "qqmusic" || record.provider === "bilibili" || record.provider === "alist")
     && !!record.providerTrackId
     && record.sourceTrackIds.length === 0
     && record.sourceRoomIds.length === 0;
@@ -259,9 +263,21 @@ function notifyProviderPlaybackCacheChanged(
 async function resolveProviderTrack(track: ProviderTrack): Promise<ProviderTrack> {
   if (track.artworkUrl) return track;
   try {
-    return track.provider === "netease"
-      ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-      : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    if (track.provider === "netease") {
+      return await musicRoomApi.getNeteaseTrack(track.providerTrackId);
+    }
+    if (track.provider === "qqmusic") {
+      return await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    }
+    if (track.provider === "bilibili") {
+      const bvid = track.bvid ?? track.providerTrackId.split(":")[0]!;
+      const detail = await musicRoomApi.getBilibiliView(bvid);
+      return {
+        ...track,
+        artworkUrl: detail.pic
+      };
+    }
+    return track;
   } catch {
     return track;
   }

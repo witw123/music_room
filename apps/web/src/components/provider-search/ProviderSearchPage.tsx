@@ -31,6 +31,8 @@ import type { ProviderAlbumTrackActions } from "./ProviderAlbumDetailView";
 import { ProviderPlaylistPickerDialog, type ProviderPlaylistPickerOption } from "./ProviderPlaylistPickerDialog";
 import { SearchSuggestions, type SearchSuggestionItem } from "./ProviderSearchSuggestions";
 import { SearchBar } from "@/components/ui/search-bar";
+import { Button } from "@/components/ui/button";
+import { BilibiliImportDialog } from "./BilibiliImportDialog";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
   getCachedFavorites,
@@ -59,8 +61,17 @@ type ContentTab = "songs" | "playlists" | "albums";
 
 const enabledProviders: Provider[] = [
   ...(process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? ["netease" as const] : []),
-  ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : [])
+  ...(process.env.NEXT_PUBLIC_QQMUSIC_ENABLED === "true" ? ["qqmusic" as const] : []),
+  "bilibili" as const
 ];
+
+const bilibiliCategories = [
+  { label: "全部", tid: undefined },
+  { label: "原创音乐", tid: 28 },
+  { label: "翻唱", tid: 31 },
+  { label: "VOCALOID", tid: 30 },
+  { label: "演奏", tid: 59 }
+] as const;
 
 type ProviderSearchPageProps = {
   onClose?: () => void;
@@ -102,12 +113,12 @@ export function ProviderSearchPage({
     : enabledProviders[0] ?? "netease";
   const [provider, setProvider] = useState<Provider>(defaultProvider);
   const [account, setAccount] = useState<Account | null>(() =>
-    activeSession ? getCachedProviderAccount(activeSession.userId, defaultProvider) ?? null : null
+    activeSession && defaultProvider !== "bilibili" ? getCachedProviderAccount(activeSession.userId, defaultProvider) ?? null : null
   );
   const [uncontrolledKeywords, setUncontrolledKeywords] = useState("");
   const keywords = controlledKeywords ?? uncontrolledKeywords;
-  const isConnected = account?.connected === true;
-  const providerName = provider === "netease" ? "网易云音乐" : "QQ 音乐";
+  const isConnected = provider === "bilibili" || account?.connected === true;
+  const providerName = provider === "netease" ? "网易云音乐" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩";
   const [results, setResults] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<ProviderPlaylistSummary[]>([]);
   const [playlist, setPlaylist] = useState<ProviderPlaylistDetail | null>(null);
@@ -133,6 +144,10 @@ export function ProviderSearchPage({
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
+  const [bilibiliSubCategory, setBilibiliSubCategory] = useState<number | undefined>(undefined);
+  const [bilibiliRankings, setBilibiliRankings] = useState<Track[]>([]);
+  const [loadingRankings, setLoadingRankings] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const keywordsRef = useRef(keywords);
   keywordsRef.current = keywords;
   const lastSearchRequestKeyRef = useRef<number | null>(null);
@@ -221,7 +236,7 @@ export function ProviderSearchPage({
     if (!activeSession || !enabledProviders.includes(provider)) return;
     let cancelled = false;
     setAccount(
-      activeSession
+      activeSession && provider !== "bilibili"
         ? getCachedProviderAccount(activeSession.userId, provider) ?? null
         : null
     );
@@ -236,6 +251,10 @@ export function ProviderSearchPage({
     setSearchSuggestionsOpen(false);
     setRemoteSuggestions([]);
     setRemoteHotWords([]);
+    if (provider === "bilibili") {
+      setAccount(null);
+      return;
+    }
     const load = provider === "netease" ? musicRoomApi.getNeteaseAccount : musicRoomApi.getQqMusicAccount;
     void load()
       .then((nextAccount) => {
@@ -264,7 +283,7 @@ export function ProviderSearchPage({
     };
   }, [activeSession]);
 
-  const searchTracksForQuery = useCallback(async (query: string) => {
+  const searchTracksForQuery = useCallback(async (query: string, customTid?: number) => {
     const requestId = ++searchRequestRef.current;
     if (!query) {
       setHasSearched(false);
@@ -276,9 +295,12 @@ export function ProviderSearchPage({
     setErrorMessage(null);
     setContentTab("songs");
     try {
+      const activeTid = customTid !== undefined ? customTid : bilibiliSubCategory;
       const response = provider === "netease"
         ? await musicRoomApi.searchNeteaseTracks(query)
-        : await musicRoomApi.searchQqMusicTracks(query);
+        : provider === "qqmusic"
+          ? await musicRoomApi.searchQqMusicTracks(query)
+          : await musicRoomApi.searchBilibiliTracks(query, { tid: activeTid });
       const ranked = await rankSearchResultsWithPersonalization(response.items);
       if (searchRequestRef.current === requestId) {
         setResults(ranked);
@@ -293,7 +315,60 @@ export function ProviderSearchPage({
         setPending(null);
       }
     }
-  }, [onSearchActiveChange, provider]);
+  }, [bilibiliSubCategory, onSearchActiveChange, provider]);
+
+  useEffect(() => {
+    if (provider !== "bilibili") return;
+    let cancelled = false;
+    setLoadingRankings(true);
+    musicRoomApi.getBilibiliRanking(bilibiliSubCategory ? String(bilibiliSubCategory) : "3")
+      .then((items) => {
+        if (!cancelled) setBilibiliRankings(items);
+      })
+      .catch(() => {
+        if (!cancelled) setBilibiliRankings([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRankings(false);
+      });
+    return () => { cancelled = true; };
+  }, [provider, bilibiliSubCategory]);
+
+  async function handleImportBilibiliSuccess(tracks: Track[], playlistTitle: string) {
+    try {
+      setPending("import-bilibili-favorite");
+      await musicRoomApi.createPlaylist({
+        title: playlistTitle,
+        description: "导入自哔哩哔哩公开收藏夹",
+        coverUrl: tracks[0]?.artworkUrl ?? null,
+        isCollaborative: false,
+        tags: ["network", "bilibili", "favorite"],
+        trackIds: tracks.map((track) => `provider:bilibili:${track.providerTrackId}`)
+      });
+      await Promise.all(tracks.map(async (track) => {
+        try {
+          await upsertLocalPlaylistTrack(toProviderTrackRecord(track));
+        } catch {
+        }
+      }));
+      setStatusMessage(`收藏夹《${playlistTitle}》（${tracks.length} 首歌曲）已成功导入为网络歌单。`);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "导入歌单失败");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function handleImportBilibiliQueue(tracks: Track[]) {
+    try {
+      const records = tracks.map((track) => toProviderTrackRecord(track));
+      await Promise.all(records.map((r) => upsertLocalPlaylistTrack(r).catch(() => undefined)));
+      setPlaybackTracks((prev) => [...prev, ...records]);
+      setStatusMessage(`已将 ${tracks.length} 首歌曲添加到播放列表。`);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "加入播放列表失败");
+    }
+  }
 
   useEffect(() => {
     if (skipKeywordResetRef.current) {
@@ -695,7 +770,9 @@ export function ProviderSearchPage({
       <div className="h-3.5 w-px bg-surface-border mr-1.5" />
       <div className="relative flex items-center">
         <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground cursor-pointer select-none">
-          <span className="font-medium text-[11px] sm:text-xs">{provider === "netease" ? "网易云" : "QQ 音乐"}</span>
+          <span className="font-medium text-[11px] sm:text-xs">
+            {provider === "netease" ? "网易云" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}
+          </span>
           <svg className="h-3 w-3 text-foreground-muted/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
           </svg>
@@ -708,7 +785,7 @@ export function ProviderSearchPage({
         >
           {enabledProviders.map((item) => (
             <option key={item} value={item} className="bg-background text-foreground">
-              {item === "netease" ? "网易云音乐" : "QQ 音乐"}
+              {item === "netease" ? "网易云音乐" : item === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}
             </option>
           ))}
         </select>
@@ -773,16 +850,60 @@ export function ProviderSearchPage({
     </div>
   );
 
-  const shouldShowSearchContent = !embedded || isSearchActive || hasSearched;
+  const shouldShowSearchContent = !embedded || isSearchActive || hasSearched || provider === "bilibili";
   const searchContent = (
     <>
       {shouldShowSearchContent && enabledProviders.length > 0 ? (
         <>
-          <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-surface-border`} role="tablist" aria-label="搜索结果类型">
-            <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
-            <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
-            <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
-          </div>
+          {provider !== "bilibili" ? (
+            <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-surface-border`} role="tablist" aria-label="搜索结果类型">
+              <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
+              <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
+              <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
+            </div>
+          ) : (
+            <div className={`${embedded ? "mt-4" : "mt-6"} flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3`}>
+              <div className="flex items-center gap-1.5 overflow-x-auto py-1" role="tablist" aria-label="B站音乐分区">
+                {bilibiliCategories.map((cat) => {
+                  const active = bilibiliSubCategory === cat.tid;
+                  return (
+                    <button
+                      key={cat.label}
+                      type="button"
+                      onClick={() => {
+                        setBilibiliSubCategory(cat.tid);
+                        if (keywords.trim()) {
+                          void searchTracksForQuery(keywords.trim(), cat.tid);
+                        }
+                      }}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors select-none ${
+                        active
+                          ? "bg-foreground text-background font-semibold"
+                          : "bg-surface text-foreground-muted hover:bg-surface-hover hover:text-foreground border border-surface-border"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setImportDialogOpen(true)}
+                className="text-xs text-foreground-muted hover:text-foreground flex items-center gap-1.5 border border-surface-border/80 px-2.5 py-1 rounded-md"
+              >
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>导入收藏夹</span>
+              </Button>
+            </div>
+          )}
 
           {!isConnected ? (
             <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100/90">
@@ -791,7 +912,36 @@ export function ProviderSearchPage({
             </div>
           ) : null}
 
-          {contentTab === "songs" ? (
+          {provider === "bilibili" && !hasSearched && !keywords.trim() ? (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground-muted">
+                  音乐区热门榜单
+                </h3>
+                {loadingRankings && (
+                  <span className="text-[11px] text-foreground-muted">加载中...</span>
+                )}
+              </div>
+              <SongsResults
+                results={bilibiliRankings}
+                pending={pending}
+                localTracks={localTracks}
+                onAlbum={loadAlbumForTrack}
+                onDownload={downloadTrack}
+                onImportPlaylist={openPlaylistPicker}
+                isFavorite={isFavoriteTrack}
+                isTogglingFavorite={(track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`}
+                onToggleFavorite={(track) => {
+                  void toggleFavoriteTrack(track)
+                    .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+                    .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
+                }}
+                onPlay={playProviderTrack}
+              />
+            </div>
+          ) : null}
+
+          {contentTab === "songs" && (hasSearched || Boolean(keywords.trim()) || provider !== "bilibili") ? (
             <SongsResults
               results={results}
               pending={pending}
@@ -843,6 +993,15 @@ export function ProviderSearchPage({
     />
   ) : null;
 
+  const bilibiliImportDialog = (
+    <BilibiliImportDialog
+      open={importDialogOpen}
+      onClose={() => setImportDialogOpen(false)}
+      onImportSuccess={(tracks, title) => void handleImportBilibiliSuccess(tracks, title)}
+      onAddToQueue={(tracks) => void handleImportBilibiliQueue(tracks)}
+    />
+  );
+
   if (embedded) {
     return (
       <div className="min-w-0">
@@ -851,6 +1010,7 @@ export function ProviderSearchPage({
         </header>
         {searchContent}
         {playlistPicker}
+        {bilibiliImportDialog}
       </div>
     );
   }
@@ -864,6 +1024,7 @@ export function ProviderSearchPage({
         {searchContent}
       </div>
       {playlistPicker}
+      {bilibiliImportDialog}
     </main>
   );
 }

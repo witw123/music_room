@@ -34,7 +34,7 @@ export async function importRadioRecommendationCandidates(input: {
       if (!candidate.existingRoomTrackId) {
         if (candidate.candidate.provider === "netease") {
           await input.onImportNeteaseTrack(candidate.candidate);
-        } else {
+        } else if (candidate.candidate.provider === "qqmusic") {
           await input.onImportQqMusicTrack(candidate.candidate);
         }
       }

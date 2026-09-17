@@ -17,11 +17,12 @@ import {
   buildCachedLibraryTrackUpsertRecord,
   notifyCacheLibraryChanged
 } from "@/features/library/cache-library";
+import { providerDisplayName } from "@/lib/domain/provider-labels";
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
 import { analyzeAudioBlobLoudness } from "./loudness";
 
 export type OfflineProviderSource = {
-  provider: "netease" | "qqmusic";
+  provider: "netease" | "qqmusic" | "bilibili" | "alist";
   trackId: string;
   label: string;
 };
@@ -71,7 +72,7 @@ export function resolveOfflineProviderSource(input: {
   return {
     provider: providerSource.provider,
     trackId: providerSource.trackId,
-    label: providerSource.provider === "netease" ? "网易云音乐" : "QQ 音乐"
+    label: providerDisplayName(providerSource.provider)
   } satisfies OfflineProviderSource;
 }
 
@@ -128,9 +129,17 @@ async function importOfflineProviderTrack(input: {
     onStatus?.(input.forceDownload
       ? `正在从${source.label}下载并缓存《${track.title}》…`
       : `成员不在线，正在从${source.label}下载并缓存《${track.title}》…`);
-    const downloaded = source.provider === "netease"
-      ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
-      : await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal);
+    const downloaded =
+      source.provider === "netease"
+        ? await musicRoomApi.downloadNeteaseTrack(source.trackId, "exhigh", signal)
+        : source.provider === "qqmusic"
+        ? await musicRoomApi.downloadQqMusicTrack(source.trackId, "exhigh", signal)
+        : source.provider === "bilibili"
+        ? await musicRoomApi.downloadBilibiliTrack(source.trackId, signal)
+        : await fetch(musicRoomApi.getAlistStreamUrl(source.trackId), { signal }).then(async (res) => ({
+            blob: await res.blob(),
+            contentType: res.headers.get("content-type") ?? "audio/mpeg"
+          }));
     const mimeType = await resolveDownloadedAudioMimeType(
       downloaded.blob,
       downloaded.contentType
@@ -206,6 +215,9 @@ async function importOfflineProviderTrack(input: {
 }
 
 async function resolveProviderLyrics(source: OfflineProviderSource) {
+  if (source.provider !== "netease" && source.provider !== "qqmusic") {
+    return null;
+  }
   try {
     const response = source.provider === "netease"
       ? await musicRoomApi.getNeteaseLyrics(source.trackId)

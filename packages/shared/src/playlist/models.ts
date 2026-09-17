@@ -15,15 +15,33 @@ export const qqMusicTrackSourceRefSchema = z
   })
   .strict();
 
+export const bilibiliTrackSourceRefSchema = z
+  .object({
+    provider: z.literal("bilibili"),
+    trackId: z.string().trim().min(1)
+  })
+  .strict();
+
+export const alistTrackSourceRefSchema = z
+  .object({
+    provider: z.literal("alist"),
+    trackId: z.string().trim().min(1)
+  })
+  .strict();
+
 export const remoteTrackSourceRefSchema = z.union([
   neteaseTrackSourceRefSchema,
-  qqMusicTrackSourceRefSchema
+  qqMusicTrackSourceRefSchema,
+  bilibiliTrackSourceRefSchema,
+  alistTrackSourceRefSchema
 ]);
 
 export const trackSourceTypeSchema = z.enum([
   "local_upload",
   "netease",
-  "qqmusic"
+  "qqmusic",
+  "bilibili",
+  "alist"
 ]);
 
 export const trackLoudnessSchema = z.object({

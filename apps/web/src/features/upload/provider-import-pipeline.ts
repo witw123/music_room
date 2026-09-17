@@ -2,6 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   GuestSession,
   NeteaseTrackCandidate,
+  ProviderTrackCandidate,
   QqMusicTrackCandidate,
   RoomSnapshot,
   TrackMeta,
@@ -25,12 +26,12 @@ import {
   buildProviderSourceRef,
   extensionForImportedMimeType,
   requestProviderLyricsPayload,
-  resolveCachedAudioMimeType,
+  resolveImportedAudioMimeType,
   sanitizeFileName,
   sourceTypeLabel
 } from "./upload-import-helpers";
 
-export type ProviderTrackCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate;
+export type { ProviderTrackCandidate };
 
 export type PreparedProviderImport = {
   candidate: ProviderTrackCandidate;
@@ -67,7 +68,7 @@ export async function prefetchProviderAudio(
     });
     try {
       const file = new File([cachedFile], cachedFile.name, {
-        type: await resolveCachedAudioMimeType(cachedFile)
+        type: await resolveImportedAudioMimeType(cachedFile)
       });
       const assets = await getReusableAudioAssets({
         fileHash: cachedTrack.fileHash,

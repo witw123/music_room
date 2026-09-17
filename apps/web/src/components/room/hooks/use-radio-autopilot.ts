@@ -34,7 +34,7 @@ export type RadioAutopilotNextTrack = {
   album: string | null;
   artworkUrl: string | null;
   durationMs: number;
-  provider: "netease" | "qqmusic";
+  provider: "netease" | "qqmusic" | "bilibili" | "alist";
   preloadStatus: "preloading" | "ready";
 };
 
@@ -227,6 +227,7 @@ function getCurrentProviderSource(snapshot: RoomSnapshot) {
   const track = trackId ? snapshot.tracks.find((item) => item.id === trackId) : null;
   if (
     !track?.sourceRef ||
+    (track.sourceRef.provider !== "netease" && track.sourceRef.provider !== "qqmusic") ||
     (track.sourceType !== "netease" && track.sourceType !== "qqmusic")
   ) {
     return null;

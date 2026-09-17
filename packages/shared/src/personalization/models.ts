@@ -36,7 +36,7 @@ export const tasteEventTypeSchema = z.enum([
 export const recommendationFeedbackActionSchema = z.enum(["not-interested", "exclude-from-profile"]);
 
 export const personalizationTrackSchema = z.object({
-  provider: z.enum(["local_upload", "netease", "qqmusic"]),
+  provider: z.enum(["local_upload", "netease", "qqmusic", "bilibili", "alist"]),
   providerTrackId: z.string().trim().min(1).max(512),
   access: z.enum(["free", "vip", "paid", "unknown"]),
   quality: z.enum(["standard", "high", "exhigh", "lossless", "hires"]).nullable(),

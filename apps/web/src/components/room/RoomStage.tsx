@@ -242,7 +242,7 @@ function RoomStageBase({
 
       const hasWordSynced = hasWordSyncedRoomLyrics(localLyrics);
       if (
-        (sourceProvider !== "netease" && sourceProvider !== "qqmusic") ||
+        (sourceProvider !== "netease" && sourceProvider !== "qqmusic" && sourceProvider !== "bilibili") ||
         !sourceTrackId ||
         (hasWordSynced && localTranslated && localRomanized)
       ) {

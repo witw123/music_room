@@ -359,7 +359,7 @@ export function getActiveRoomLyricIndex(lines: RoomLyricLine[], positionMs: numb
 const providerLyricsCache = new Map<string, Promise<ProviderLyrics>>();
 
 export function fetchProviderLyricsCached(
-  provider: "netease" | "qqmusic",
+  provider: "netease" | "qqmusic" | "bilibili",
   trackId: string
 ): Promise<ProviderLyrics> {
   const cacheKey = `${provider}:${trackId}`;
@@ -368,7 +368,9 @@ export function fetchProviderLyricsCached(
   const promise = (
     provider === "netease"
       ? musicRoomApi.getNeteaseLyrics(trackId)
-      : musicRoomApi.getQqMusicLyrics(trackId)
+      : provider === "qqmusic"
+        ? musicRoomApi.getQqMusicLyrics(trackId)
+        : musicRoomApi.getBilibiliLyrics(trackId)
   ).catch((error) => {
     providerLyricsCache.delete(cacheKey);
     throw error;

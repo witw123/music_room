@@ -62,7 +62,7 @@ export type CacheLibraryTrackUpsertRecord = {
   lyrics?: string | null;
   translatedLyrics?: string | null;
   romanizedLyrics?: string | null;
-  provider?: "netease" | "qqmusic" | "local_upload";
+  provider?: "netease" | "qqmusic" | "bilibili" | "alist" | "local_upload";
   providerTrackId?: string | null;
   mimeType: string;
   durationMs: number;
