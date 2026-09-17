@@ -82,7 +82,7 @@ export function VinylBadge({
   const centerSize = compact ? "h-3.5 w-3.5" : "h-4 w-4";
 
   if (playerStyle === "square-cover") {
-    return <SquareAlbumCover artworkUrl={artworkUrl} className={`${shellSize} shrink-0 rounded-xl`} />;
+    return <SquareAlbumCover artworkUrl={artworkUrl} className={`${shellSize} shrink-0 rounded-md shadow-sm border border-white/10`} />;
   }
 
   return (
@@ -402,14 +402,14 @@ export function MobileBottomPlayerLayout({
         {/* Click body to open full immersive sheet */}
         <button
           aria-label="打开播放详情"
-          className="flex min-w-0 flex-1 items-center gap-2.5 py-1 text-left outline-none transition-transform duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent"
+          className="flex min-w-0 flex-1 items-center gap-2.5 py-1 text-left outline-none transition-transform duration-150 active:scale-[0.98] focus-visible:outline-none"
           onClick={onToggleImmersive}
           title="打开播放详情"
           type="button"
         >
           <SquareAlbumCover
             artworkUrl={artworkUrl}
-            className="h-10 w-10 shrink-0 rounded-lg border border-surface-border shadow-sm"
+            className="h-10 w-10 shrink-0 rounded-md border-0 shadow-sm"
           />
 
           <div className="min-w-0 flex-1">
@@ -835,7 +835,9 @@ export function DesktopBottomPlayerLayout({
       {/* Left: Album Cover + Track Title/Artist + Favorite Button */}
       <div className="flex min-w-0 items-center gap-3 w-[260px] lg:w-[320px] shrink-0">
         <button
-          className="group/cover relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent shrink-0"
+          className={`group/cover relative outline-none focus-visible:ring-2 focus-visible:ring-accent shrink-0 ${
+            playerStyle === "square-cover" ? "rounded-md" : "rounded-full"
+          }`}
           onClick={onToggleImmersive}
           title="打开沉浸式播放"
           aria-label="打开沉浸式播放"
@@ -849,7 +851,11 @@ export function DesktopBottomPlayerLayout({
             isPlaying={isPlaying}
             playerStyle={playerStyle}
           />
-          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/cover:opacity-100">
+          <div
+            className={`absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/cover:opacity-100 ${
+              playerStyle === "square-cover" ? "rounded-md" : "rounded-full"
+            }`}
+          >
             <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             </svg>

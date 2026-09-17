@@ -332,11 +332,18 @@ export async function downloadWithDirectFallback(input: {
       ? (resolved as { urls: string[] }).urls
       : [resolved.url];
 
-    for (const directUrl of candidateUrls) {
+    for (let directUrl of candidateUrls) {
       if (input.signal?.aborted) throw new Error("Download aborted");
+      if (directUrl.startsWith("http://")) {
+        directUrl = directUrl.replace(/^http:\/\//i, "https://");
+      }
+      const timeoutCtrl = new AbortController();
+      const timer = setTimeout(() => timeoutCtrl.abort(), 4000);
+      const abortHandler = () => timeoutCtrl.abort();
+      input.signal?.addEventListener("abort", abortHandler, { once: true });
       try {
         const response = await fetch(directUrl, {
-          signal: input.signal,
+          signal: timeoutCtrl.signal,
           mode: "cors",
           credentials: "omit",
           cache: "no-store",
@@ -354,7 +361,11 @@ export async function downloadWithDirectFallback(input: {
           };
         }
       } catch {
+        if (input.signal?.aborted) throw new Error("Download aborted");
         // Try next candidate URL
+      } finally {
+        clearTimeout(timer);
+        input.signal?.removeEventListener("abort", abortHandler);
       }
     }
   } catch (error) {

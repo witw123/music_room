@@ -1,6 +1,7 @@
 import type { PlaybackMode, PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import {
   getCachedLibraryTrack,
+  upsertCachedLibraryTrack,
   upsertLocalPlaylistTrack,
   type LocalPlaylistTrackRecord
 } from "@/features/library/indexeddb";
@@ -139,8 +140,7 @@ export async function enrichTrackMetadata(
     !Number.isFinite(track.durationMs) ||
     track.durationMs <= 0 ||
     !track.artworkUrl ||
-    !track.lyrics ||
-    !track.loudness;
+    !track.lyrics;
   if (!needsMetadata || (track.fileHash && metadataEnrichedHashes.has(track.fileHash))) {
     return track;
   }
@@ -149,7 +149,18 @@ export async function enrichTrackMetadata(
     readEmbeddedAudioMetadata(file),
     track.fileHash ? getCachedLibraryTrack(track.fileHash).catch(() => null) : Promise.resolve(null)
   ]);
-  const loudness = track.loudness ?? cached?.loudness ?? (await analyzeAudioBlobLoudness(file));
+  const loudness = track.loudness ?? cached?.loudness ?? null;
+  if (!loudness && track.fileHash) {
+    void analyzeAudioBlobLoudness(file).then((result) => {
+      if (result && track.fileHash) {
+        getCachedLibraryTrack(track.fileHash).then((record) => {
+          if (record) {
+            upsertCachedLibraryTrack({ ...record, loudness: result });
+          }
+        }).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+  }
   if (track.fileHash) metadataEnrichedHashes.add(track.fileHash);
   const preferEmbedded = track.provider === "local_upload";
   const nextTrack: LocalPlaylistTrackRecord = {

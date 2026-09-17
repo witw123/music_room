@@ -54,32 +54,20 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     resolvedTrack.artworkUrl,
     artworkResponse?.blob
   );
-  const lyricPayload = await (resolvedTrack.provider === "netease"
-    ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-    : resolvedTrack.provider === "qqmusic"
-      ? musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-      : resolvedTrack.provider === "bilibili"
-        ? musicRoomApi.getBilibiliLyrics(resolvedTrack.providerTrackId)
-        : Promise.resolve(null)
-  ).catch(() => null);
-  const lyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
-  const loudness = await analyzeAudioBlobLoudness(response.blob);
-
   await upsertCachedLibraryTrack({
     fileHash,
     title: resolvedTrack.title,
     artist: resolvedTrack.artist,
     album: resolvedTrack.album,
     artworkUrl,
-    lyrics,
-    translatedLyrics: lyricPayload?.translatedLyric ?? null,
-    romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
+    lyrics: null,
+    translatedLyrics: null,
+    romanizedLyrics: null,
     provider: resolvedTrack.provider,
     providerTrackId: resolvedTrack.providerTrackId,
     mimeType,
     durationMs: resolvedTrack.durationMs,
     sizeBytes: response.blob.size,
-    ...(loudness ? { loudness } : {}),
     file: response.blob,
     sourceTrackIds: [],
     sourceRoomIds: [],
@@ -100,6 +88,52 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
   // waiting for the next removal event.
   notifyProviderPlaybackCacheChanged([fileHash], "add");
 
+  // 关键优化：后台异步获取歌词与计算响度，绝对不阻塞用户点击即播体验
+  void (async () => {
+    try {
+      const [lyricPayload, loudness] = await Promise.all([
+        (resolvedTrack.provider === "netease"
+          ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
+          : resolvedTrack.provider === "qqmusic"
+            ? musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
+            : resolvedTrack.provider === "bilibili"
+              ? musicRoomApi.getBilibiliLyrics(resolvedTrack.providerTrackId)
+              : Promise.resolve(null)
+        ).catch(() => null),
+        analyzeAudioBlobLoudness(response.blob).catch(() => null)
+      ]);
+
+      if (lyricPayload || loudness) {
+        const bgLyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
+        await upsertCachedLibraryTrack({
+          fileHash,
+          title: resolvedTrack.title,
+          artist: resolvedTrack.artist,
+          album: resolvedTrack.album,
+          artworkUrl,
+          lyrics: bgLyrics,
+          translatedLyrics: lyricPayload?.translatedLyric ?? null,
+          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
+          provider: resolvedTrack.provider,
+          providerTrackId: resolvedTrack.providerTrackId,
+          mimeType,
+          durationMs: resolvedTrack.durationMs,
+          sizeBytes: response.blob.size,
+          ...(loudness ? { loudness } : {}),
+          file: response.blob,
+          sourceTrackIds: [],
+          sourceRoomIds: [],
+          lastSourceTrackId: null,
+          lastSourceRoomId: null,
+          lastOwnerNickname: null
+        });
+        notifyProviderPlaybackCacheChanged([fileHash], "add");
+      }
+    } catch {
+      // 忽略后台补全异常
+    }
+  })();
+
   return {
     ...toProviderTrackRecord({ ...resolvedTrack, artworkUrl }),
     id: localPlaylistTrackId(resolvedTrack),
@@ -107,10 +141,9 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     fileName: cachedFile?.fileName ?? null,
     sizeBytes: response.blob.size,
     mimeType,
-    lyrics,
-    translatedLyrics: lyricPayload?.translatedLyric ?? null,
-    romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-    ...(loudness ? { loudness } : {}),
+    lyrics: null,
+    translatedLyrics: null,
+    romanizedLyrics: null,
     availableOffline: false,
     updatedAt: new Date().toISOString()
   };

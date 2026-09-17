@@ -344,7 +344,7 @@ export const musicRoomApi = {
   ) =>
     downloadWithDirectFallback({
       resolve: () => musicRoomApi.resolveNeteaseAudio(trackId, quality),
-      fallback: () => requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }, { throttleImport: true }),
+      fallback: () => requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }),
       signal
     }),
   getQqMusicAccount: () => request<QqMusicAccountStatus>("/v1/providers/qqmusic/account"),
@@ -445,7 +445,7 @@ export const musicRoomApi = {
   ) =>
     downloadWithDirectFallback({
       resolve: () => musicRoomApi.resolveQqMusicAudio(trackId, quality),
-      fallback: () => requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }, { throttleImport: true }),
+      fallback: () => requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }),
       signal
     }),
   downloadQqMusicArtwork: (artworkUrl: string, signal?: AbortSignal) => {
@@ -562,8 +562,7 @@ export const musicRoomApi = {
       fallback: () =>
         requestBlob(
           `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
-          { signal },
-          { throttleImport: true }
+          { signal }
         ),
       signal
     }),

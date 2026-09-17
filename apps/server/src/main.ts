@@ -1,5 +1,9 @@
 import "reflect-metadata";
+import dns from "node:dns";
 import { Logger } from "@nestjs/common";
+
+dns.setDefaultResultOrder?.("ipv4first");
+
 import { NestFactory } from "@nestjs/core";
 import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";

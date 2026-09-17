@@ -165,6 +165,7 @@ export class BilibiliApiClient {
 
   private cachedCookies: string | null = null;
   private cookiesExpiresAt = 0;
+  private readonly videoViewCache = new Map<string, { data: BilibiliViewData; expiresAt: number }>();
 
   /**
    * 免登录获取完整访客 Cookie（b_nut, buvid3, buvid4 等），满足 B 站 WAF 反爬校验
@@ -241,6 +242,12 @@ export class BilibiliApiClient {
   }
 
   async getVideoView(bvid: string): Promise<BilibiliViewData> {
+    const now = Date.now();
+    const cached = this.videoViewCache.get(bvid);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
     const cookie = await this.getGuestCookies();
     const url = `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`;
     const res = await fetch(url, {
@@ -257,6 +264,15 @@ export class BilibiliApiClient {
     if (json.code !== 0 || !json.data) {
       throw new Error(`Bilibili video not found: ${json.message || "Unknown error"}`);
     }
+
+    // 缓存 5 分钟
+    this.videoViewCache.set(bvid, { data: json.data, expiresAt: now + 5 * 60 * 1000 });
+    if (this.videoViewCache.size > 200) {
+      for (const [key, item] of this.videoViewCache.entries()) {
+        if (item.expiresAt <= now) this.videoViewCache.delete(key);
+      }
+    }
+
     return json.data;
   }
 
@@ -345,7 +361,7 @@ export class BilibiliApiClient {
     throw new Error(`未能获取 B 站视频播放流: ${bvid} (cid: ${cid})`);
   }
 
-  private async getTvPlayUrl(aid: number, cid: number): Promise<BilibiliPlayUrlData | null> {
+  async getTvPlayUrl(aid: number, cid: number): Promise<BilibiliPlayUrlData | null> {
     const params: Record<string, string | number> = {
       appkey: BILIBILI_TV_APPKEY,
       avid: aid,
@@ -377,7 +393,7 @@ export class BilibiliApiClient {
           order: i + 1,
           length: d.length,
           size: d.size,
-          url: d.url
+          url: d.url.replace(/^http:\/\//i, "https://")
         }))
       };
     }
