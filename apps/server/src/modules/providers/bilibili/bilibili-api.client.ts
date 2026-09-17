@@ -3,6 +3,7 @@ import type {
   BilibiliSubtitleItem,
   BilibiliSubtitleMeta
 } from "./bilibili-subtitle";
+import { BilibiliWbiSigner } from "./bilibili-wbi";
 
 const BILIBILI_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -202,7 +203,15 @@ export class BilibiliApiClient {
 
   async getPlayUrl(bvid: string, cid: number): Promise<BilibiliPlayUrlData> {
     const cookie = await this.getGuestCookies();
-    const url = `https://api.bilibili.com/x/player/wbi/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}&fnval=16`;
+    const signedQuery = await BilibiliWbiSigner.sign(
+      {
+        bvid,
+        cid,
+        fnval: 4048
+      },
+      cookie
+    );
+    const url = `https://api.bilibili.com/x/player/wbi/playurl?${signedQuery}`;
     const res = await fetch(url, {
       headers: {
         "User-Agent": BILIBILI_UA,

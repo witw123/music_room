@@ -2,6 +2,7 @@ import { BilibiliService, extractBilibiliMediaId } from "./bilibili.service";
 import { sortBilibiliAudioUrls, scoreBilibiliCdnUrl, type BilibiliApiClient } from "./bilibili-api.client";
 import { cleanBilibiliTitle } from "./bilibili-title-cleaner";
 import { convertBilibiliSubtitlesToLrc } from "./bilibili-subtitle";
+import { getMixinKey, encWbi } from "./bilibili-wbi";
 import type { NeteaseApiClient } from "../netease/netease-api.client";
 import type { QqMusicApiClient } from "../qqmusic/qqmusic-api.client";
 
@@ -255,6 +256,28 @@ describe("BilibiliService and Utilities", () => {
       expect(candidates[0]?.bvid).toBe("BV1Rank1");
       expect(candidates[0]?.title).toBe("热歌榜首");
       expect(candidates[0]?.durationMs).toBe(210000);
+    });
+  });
+
+  describe("bilibili-wbi signer", () => {
+    it("generates correct mixinKey with 32 characters", () => {
+      const imgKey = "7cd084941338484aae1ad9425b84077c";
+      const subKey = "4932caff0ff746eab6f01bf08b70ac45";
+      const mixin = getMixinKey(imgKey + subKey);
+      expect(mixin).toHaveLength(32);
+      expect(typeof mixin).toBe("string");
+    });
+
+    it("encodes and signs query params with w_rid and wts", () => {
+      const imgKey = "7cd084941338484aae1ad9425b84077c";
+      const subKey = "4932caff0ff746eab6f01bf08b70ac45";
+      const signed = encWbi({ bvid: "BV1xx411c7mD", cid: 62131, fnval: 4048 }, imgKey, subKey);
+      expect(signed).toContain("bvid=BV1xx411c7mD");
+      expect(signed).toContain("cid=62131");
+      expect(signed).toContain("fnval=4048");
+      expect(signed).toContain("&wts=");
+      expect(signed).toContain("&w_rid=");
+      expect(signed).toMatch(/&w_rid=[a-f0-9]{32}/);
     });
   });
 });

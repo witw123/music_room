@@ -32,7 +32,7 @@ export async function downloadProviderTrackToLibrary(input: {
   onResolved?: (resolvedTrack: LocalPlaylistTrackRecord) => void;
 }): Promise<LocalPlaylistTrackRecord> {
   const { track, existing } = input;
-  const provider = track.provider === "netease" || track.provider === "qqmusic"
+  const provider = track.provider === "netease" || track.provider === "qqmusic" || track.provider === "bilibili"
     ? track.provider
     : null;
   if (!provider || !track.providerTrackId) {
@@ -88,7 +88,9 @@ export async function downloadProviderTrackToLibrary(input: {
     const preferredQuality = getAppSettings().playback.preferredAudioQuality;
     const response = provider === "netease"
       ? await musicRoomApi.downloadNeteaseTrack(providerTrackId, preferredQuality)
-      : await musicRoomApi.downloadQqMusicTrack(providerTrackId, preferredQuality);
+      : provider === "bilibili"
+        ? await musicRoomApi.downloadBilibiliTrack(providerTrackId)
+        : await musicRoomApi.downloadQqMusicTrack(providerTrackId, preferredQuality);
     blob = response.blob;
     fileHash = await hashAudioBlob(blob);
     mimeType = normalizeLocalAudioMimeType(response.contentType || blob.type);
@@ -97,7 +99,9 @@ export async function downloadProviderTrackToLibrary(input: {
       ? null
       : await (provider === "netease"
         ? musicRoomApi.getNeteaseLyrics(providerTrackId)
-        : musicRoomApi.getQqMusicLyrics(providerTrackId)
+        : provider === "bilibili"
+          ? musicRoomApi.getBilibiliLyrics(providerTrackId)
+          : musicRoomApi.getQqMusicLyrics(providerTrackId)
       ).catch(() => null);
     lyrics = existingRecord?.lyrics
       ?? lyricPayload?.wordSyncedLyric
@@ -148,9 +152,21 @@ export async function downloadProviderTrackToLibrary(input: {
 async function resolveProviderTrackArtwork(track: ProviderTrack): Promise<ProviderTrack> {
   if (track.artworkUrl) return track;
   try {
-    return track.provider === "netease"
-      ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-      : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    if (track.provider === "netease") {
+      return await musicRoomApi.getNeteaseTrack(track.providerTrackId);
+    }
+    if (track.provider === "qqmusic") {
+      return await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+    }
+    if (track.provider === "bilibili") {
+      const bvid = track.bvid ?? track.providerTrackId.split(":")[0]!;
+      const detail = await musicRoomApi.getBilibiliView(bvid);
+      return {
+        ...track,
+        artworkUrl: detail.pic
+      };
+    }
+    return track;
   } catch {
     return track;
   }

@@ -324,10 +324,17 @@ export function useTrackUploads(options: {
 
       let file: Blob | null = null;
       if (track.sourceRef) {
-        setStatusMessage(`正在从${track.sourceRef.provider === "netease" ? "网易云音乐" : "QQ 音乐"}下载《${track.title}》...`);
+        const providerName = track.sourceRef.provider === "netease"
+          ? "网易云音乐"
+          : track.sourceRef.provider === "bilibili"
+            ? "哔哩哔哩"
+            : "QQ 音乐";
+        setStatusMessage(`正在从${providerName}下载《${track.title}》...`);
         const downloaded = track.sourceRef.provider === "netease"
           ? await musicRoomApi.downloadNeteaseTrack(track.sourceRef.trackId, "exhigh")
-          : await musicRoomApi.downloadQqMusicTrack(track.sourceRef.trackId, "exhigh");
+          : track.sourceRef.provider === "bilibili"
+            ? await musicRoomApi.downloadBilibiliTrack(track.sourceRef.trackId)
+            : await musicRoomApi.downloadQqMusicTrack(track.sourceRef.trackId, "exhigh");
         const downloadedMimeType = normalizeLocalAudioMimeType(downloaded.contentType);
         file = new File(
           [downloaded.blob],
@@ -379,7 +386,9 @@ export function useTrackUploads(options: {
       const providerLyrics = track.sourceRef
         ? await (track.sourceRef.provider === "netease"
             ? musicRoomApi.getNeteaseLyrics(track.sourceRef.trackId)
-            : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
+            : track.sourceRef.provider === "bilibili"
+              ? musicRoomApi.getBilibiliLyrics(track.sourceRef.trackId)
+              : musicRoomApi.getQqMusicLyrics(track.sourceRef.trackId)
           ).catch(() => null)
         : null;
       const lyrics = providerLyrics?.wordSyncedLyric

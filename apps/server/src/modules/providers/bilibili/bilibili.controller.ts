@@ -109,18 +109,22 @@ export class BilibiliController {
     // 设置响应状态码（200 或 206）
     res.status(streamResult.status);
 
-    // 透传关键流媒体响应头
-    for (const [key, value] of Object.entries(streamResult.headers)) {
-      if (
-        key === "content-range" ||
-        key === "content-length" ||
-        key === "content-type" ||
-        key === "accept-ranges"
-      ) {
-        res.setHeader(key, value);
-      }
-    }
+    // 标准流媒体响应头
+    res.setHeader("Content-Type", "audio/mp4");
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="bilibili-${bvid}.m4a"`
+    );
+
+    if (streamResult.headers["content-length"]) {
+      res.setHeader("Content-Length", streamResult.headers["content-length"]);
+    }
+    if (streamResult.headers["content-range"]) {
+      res.setHeader("Content-Range", streamResult.headers["content-range"]);
+    }
 
     if (!streamResult.body) {
       res.end();
@@ -129,6 +133,20 @@ export class BilibiliController {
 
     // 将 Fetch ReadableStream 桥接到 Node.js Response
     const nodeStream = Readable.fromWeb(streamResult.body as import("node:stream/web").ReadableStream);
+    nodeStream.on("error", (err) => {
+      if (!res.headersSent) {
+        res.status(502).end();
+      } else if (!res.destroyed) {
+        res.destroy(err);
+      }
+    });
+
+    _req.on("close", () => {
+      if (!res.writableEnded) {
+        void streamResult.body?.cancel().catch(() => undefined);
+      }
+    });
+
     nodeStream.pipe(res);
   }
 

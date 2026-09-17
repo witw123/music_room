@@ -58,7 +58,9 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
     : resolvedTrack.provider === "qqmusic"
       ? musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-      : Promise.resolve(null)
+      : resolvedTrack.provider === "bilibili"
+        ? musicRoomApi.getBilibiliLyrics(resolvedTrack.providerTrackId)
+        : Promise.resolve(null)
   ).catch(() => null);
   const lyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
   const loudness = await analyzeAudioBlobLoudness(response.blob);

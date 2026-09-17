@@ -80,7 +80,9 @@ export async function prefetchProviderAudio(
 
   const source = sourceType === "netease"
     ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
-    : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
+    : sourceType === "bilibili"
+      ? await musicRoomApi.downloadBilibiliTrack(candidate.providerTrackId)
+      : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
   const extension = extensionForImportedMimeType(source.contentType);
   return {
     cachedTrack: null,
