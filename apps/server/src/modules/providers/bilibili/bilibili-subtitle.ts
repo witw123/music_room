@@ -66,3 +66,22 @@ export function convertBilibiliSubtitlesToLrc(items: BilibiliSubtitleItem[]): st
 
   return lines.join("\n");
 }
+
+export function isValidLyricSubtitle(items: BilibiliSubtitleItem[]): boolean {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  if (items.length < 2) return false;
+
+  const commentaryMarkers = /(?:评论区|一键三连|投币|长按|求赞|关注我|点个赞|下期|粉丝群|加群|微信号|公众号|淘客|优惠券|灰太狼)/;
+  let commentaryHits = 0;
+  for (const item of items) {
+    const text = (item.content ?? "").trim();
+    if (commentaryMarkers.test(text)) {
+      commentaryHits += 1;
+    }
+  }
+
+  // 若命中口播或营销导流关键词，判定为视频口白而非纯音乐歌词
+  if (commentaryHits >= 1) return false;
+
+  return true;
+}

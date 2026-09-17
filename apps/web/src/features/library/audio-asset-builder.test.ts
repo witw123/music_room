@@ -46,7 +46,8 @@ describe("audio asset preparation", () => {
     expect(resolveSupportedUploadFormat({ name: "song.flac", type: "" })).toBe("flac");
     expect(resolveSupportedUploadFormat({ name: "song", type: "audio/wav" })).toBe("wav");
     expect(resolveSupportedUploadFormat({ name: "song.mp3", type: "audio/mpeg" })).toBe("mp3");
-    expect(resolveSupportedUploadFormat({ name: "song.m4a", type: "audio/mp4" })).toBeNull();
+    expect(resolveSupportedUploadFormat({ name: "song.m4a", type: "audio/mp4" })).toBe("m4a");
+    expect(resolveSupportedUploadFormat({ name: "song.exe", type: "application/octet-stream" })).toBeNull();
   });
 
   it("keeps seek preroll as overlap metadata without shifting the room timeline", () => {

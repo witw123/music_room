@@ -84,6 +84,20 @@ describe("BilibiliService and Utilities", () => {
       expect(res.artist).toBe("买辣椒也用券");
       expect(res.fullQuery).toBe("买辣椒也用券 起风了");
     });
+
+    it("strips track index numbers from part title and uploader", () => {
+      const res = cleanBilibiliTitle("01 晴天", "001.周杰伦");
+      expect(res.songTitle).toBe("晴天");
+      expect(res.artist).toBe("周杰伦");
+      expect(res.fullQuery).toBe("周杰伦 晴天");
+    });
+
+    it("cleans real-world live titles like 周杰伦《花海》超清修复 现场万人大合唱", () => {
+      const res = cleanBilibiliTitle("周杰伦《花海》超清修复 现场万人大合唱", "剪辑UP主");
+      expect(res.songTitle).toBe("花海");
+      expect(res.artist).toBe("周杰伦");
+      expect(res.fullQuery).toBe("周杰伦 花海");
+    });
   });
 
   describe("bilibili-subtitle", () => {
@@ -151,27 +165,7 @@ describe("BilibiliService and Utilities", () => {
   });
 
   describe("getLyrics", () => {
-    it("uses native CC subtitles if available", async () => {
-      mockClient.getVideoSubtitles.mockResolvedValueOnce([
-        {
-          id: 1,
-          lan: "zh-CN",
-          lan_doc: "中文（中国）",
-          subtitle_url: "//aisubtitle.hdslb.com/bfs/subtitle/1.json"
-        }
-      ]);
-      mockClient.fetchSubtitleContent.mockResolvedValueOnce([
-        { from: 2.0, to: 4.0, content: "天青色等烟雨" }
-      ]);
-
-      const lyrics = await service.getLyrics("BV1xx", 1001);
-      expect(lyrics.provider).toBe("bilibili");
-      expect(lyrics.providerTrackId).toBe("BV1xx:1001");
-      expect(lyrics.plainLyric).toContain("[00:02.00] 天青色等烟雨");
-    });
-
-    it("falls back to Netease cross-platform matching when no CC subtitles exist", async () => {
-      mockClient.getVideoSubtitles.mockResolvedValueOnce([]);
+    it("prioritizes professional Netease lyrics even if CC subtitles exist", async () => {
       mockClient.getVideoView.mockResolvedValueOnce({
         bvid: "BV1xx",
         title: "【4K无损】周杰伦 - 青花瓷",
@@ -182,7 +176,7 @@ describe("BilibiliService and Utilities", () => {
 
       mockNeteaseClient.searchTracks.mockResolvedValueOnce({
         result: {
-          songs: [{ id: 186016, name: "青花瓷", dt: 239000 }]
+          songs: [{ id: 186016, name: "青花瓷", dt: 239000, artists: [{ name: "周杰伦" }] }]
         }
       });
       mockNeteaseClient.getLyrics.mockResolvedValueOnce({
@@ -192,8 +186,67 @@ describe("BilibiliService and Utilities", () => {
 
       const lyrics = await service.getLyrics("BV1xx", 1001);
       expect(lyrics.provider).toBe("bilibili");
+      expect(lyrics.providerTrackId).toBe("BV1xx:1001");
       expect(lyrics.plainLyric).toContain("天青色等烟雨 而我在等你");
       expect(lyrics.wordSyncedLyric).toContain("[2500,3000]");
+    });
+
+    it("falls back to valid native CC subtitles when cross-platform matching yields no result", async () => {
+      mockClient.getVideoView.mockResolvedValueOnce({
+        bvid: "BV1xx",
+        title: "原创小曲",
+        duration: 120,
+        owner: { name: "音乐独立人" },
+        pages: [{ cid: 1001, page: 1, part: "原创小曲", duration: 120 }]
+      });
+      mockNeteaseClient.searchTracks.mockResolvedValueOnce({ result: { songs: [] } });
+      mockQqmusicClient.searchTracks.mockResolvedValueOnce([]);
+
+      mockClient.getVideoSubtitles.mockResolvedValueOnce([
+        {
+          id: 1,
+          lan: "zh-CN",
+          lan_doc: "中文（中国）",
+          subtitle_url: "//aisubtitle.hdslb.com/bfs/subtitle/1.json"
+        }
+      ]);
+      mockClient.fetchSubtitleContent.mockResolvedValueOnce([
+        { from: 2.0, to: 4.0, content: "天青色等烟雨" },
+        { from: 4.0, to: 6.0, content: "而我在等你" }
+      ]);
+
+      const lyrics = await service.getLyrics("BV1xx", 1001);
+      expect(lyrics.provider).toBe("bilibili");
+      expect(lyrics.providerTrackId).toBe("BV1xx:1001");
+      expect(lyrics.plainLyric).toContain("[00:02.00] 天青色等烟雨");
+    });
+
+    it("rejects native CC subtitles that contain UP host commentary or promotional text", async () => {
+      mockClient.getVideoView.mockResolvedValueOnce({
+        bvid: "BV1xx",
+        title: "周杰伦《花海》",
+        duration: 240,
+        owner: { name: "剪辑UP主" },
+        pages: [{ cid: 1001, page: 1, part: "花海", duration: 240 }]
+      });
+      mockNeteaseClient.searchTracks.mockResolvedValueOnce({ result: { songs: [] } });
+      mockQqmusicClient.searchTracks.mockResolvedValueOnce([]);
+
+      mockClient.getVideoSubtitles.mockResolvedValueOnce([
+        {
+          id: 1,
+          lan: "zh-CN",
+          lan_doc: "中文（中国）",
+          subtitle_url: "//aisubtitle.hdslb.com/bfs/subtitle/1.json"
+        }
+      ]);
+      mockClient.fetchSubtitleContent.mockResolvedValueOnce([
+        { from: 0.5, to: 2.0, content: "作词: 哭泣灰太狼" },
+        { from: 2.5, to: 5.0, content: "在评论区~ 大家记得一键三连投币哦" }
+      ]);
+
+      const lyrics = await service.getLyrics("BV1xx", 1001);
+      expect(lyrics.plainLyric).toBeNull();
     });
   });
 

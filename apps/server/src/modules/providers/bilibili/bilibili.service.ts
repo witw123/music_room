@@ -3,7 +3,7 @@ import type { BilibiliSearchResponse, BilibiliTrackCandidate, BilibiliVideoDetai
 import { NeteaseApiClient } from "../netease/netease-api.client";
 import { QqMusicApiClient } from "../qqmusic/qqmusic-api.client";
 import { BilibiliApiClient, sortBilibiliAudioUrls, type BilibiliFavoriteItem, type BilibiliRankingItem, type BilibiliSearchItem } from "./bilibili-api.client";
-import { selectBestSubtitle, convertBilibiliSubtitlesToLrc } from "./bilibili-subtitle";
+import { selectBestSubtitle, convertBilibiliSubtitlesToLrc, isValidLyricSubtitle } from "./bilibili-subtitle";
 import { cleanBilibiliTitle } from "./bilibili-title-cleaner";
 
 export function extractBilibiliMediaId(input: string): string {
@@ -150,9 +150,14 @@ export class BilibiliService {
     bvid: string;
     cid: number;
   }> {
-    const viewData = await this.client.getVideoView(bvid);
-    const resolvedCid = cid ?? viewData.pages?.[0]?.cid ?? (await this.resolveFirstCid(bvid));
-    const targetAid = Number(viewData.aid);
+    let viewData = null;
+    try {
+      viewData = await this.client.getVideoView(bvid);
+    } catch {
+      viewData = null;
+    }
+    const resolvedCid = cid ?? viewData?.pages?.[0]?.cid ?? (await this.resolveFirstCid(bvid));
+    const targetAid = viewData?.aid ? Number(viewData.aid) : undefined;
 
     // 并发请求 Web PlayUrl 与 TV 直链（TV 直链开放浏览器 CORS 与 no-referrer，供客户端直接极速下载）
     const [playDataResult, tvDataResult] = await Promise.allSettled([
@@ -243,36 +248,20 @@ export class BilibiliService {
     const resolvedCid = cid ?? (await this.resolveFirstCid(bvid));
     const providerTrackId = `${bvid}:${resolvedCid}`;
 
-    // 1. 尝试提取 B 站原生 CC 字幕转 LRC
-    try {
-      const subtitles = await this.client.getVideoSubtitles(bvid, resolvedCid);
-      const bestSubtitle = selectBestSubtitle(subtitles);
-      if (bestSubtitle) {
-        const items = await this.client.fetchSubtitleContent(bestSubtitle.subtitle_url);
-        const lrc = convertBilibiliSubtitlesToLrc(items);
-        if (lrc.trim().length > 0) {
-          return {
-            provider: "bilibili",
-            providerTrackId,
-            plainLyric: lrc,
-            wordSyncedLyric: null,
-            translatedLyric: null,
-            romanizedLyric: null
-          };
-        }
-      }
-    } catch (err) {
-      this.logger.warn(`Bilibili native subtitle lookup failed for ${providerTrackId}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    // 2. 标题降噪与跨平台（网易云 / QQ音乐）静默匹配
+    // 1. 优先尝试标题降噪与专业音乐平台（网易云 / QQ 音乐）匹配
+    // 专业音乐平台拥有经过校对的专业歌词、逐字歌词 (YRC) 以及译文，信噪比远高于视频口播字幕
     try {
       const videoDetail = await this.getVideoDetail(bvid);
       const targetPage = videoDetail.pages.find((p) => p.cid === resolvedCid) ?? videoDetail.pages[0];
       const pageTitle = (targetPage && videoDetail.pages.length > 1 && targetPage.part) ? targetPage.part : videoDetail.title;
       const cleaned = cleanBilibiliTitle(pageTitle, videoDetail.ownerName);
 
-      const matchedLyrics = await this.matchCrossPlatformLyrics(cleaned.fullQuery, targetPage?.duration ?? videoDetail.duration);
+      const matchedLyrics = await this.matchCrossPlatformLyrics(
+        cleaned.fullQuery,
+        targetPage?.duration ?? videoDetail.duration,
+        cleaned.songTitle,
+        cleaned.artist
+      );
       if (matchedLyrics) {
         return {
           provider: "bilibili",
@@ -284,7 +273,31 @@ export class BilibiliService {
         };
       }
     } catch (err) {
-      this.logger.warn(`Cross-platform lyric fallback failed for ${providerTrackId}: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(`Cross-platform lyric lookup failed for ${providerTrackId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 2. 兜底尝试提取 B 站原生 CC 字幕（需过滤口播/营销导流等伪歌词）
+    try {
+      const subtitles = await this.client.getVideoSubtitles(bvid, resolvedCid);
+      const bestSubtitle = selectBestSubtitle(subtitles);
+      if (bestSubtitle) {
+        const items = await this.client.fetchSubtitleContent(bestSubtitle.subtitle_url);
+        if (isValidLyricSubtitle(items)) {
+          const lrc = convertBilibiliSubtitlesToLrc(items);
+          if (lrc.trim().length > 0) {
+            return {
+              provider: "bilibili",
+              providerTrackId,
+              plainLyric: lrc,
+              wordSyncedLyric: null,
+              translatedLyric: null,
+              romanizedLyric: null
+            };
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Bilibili native subtitle lookup failed for ${providerTrackId}: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     return {
@@ -352,7 +365,9 @@ export class BilibiliService {
 
   private async matchCrossPlatformLyrics(
     query: string,
-    durationSeconds?: number
+    durationSeconds?: number,
+    targetSongTitle?: string,
+    targetArtist?: string
   ): Promise<{
     plainLyric: string | null;
     wordSyncedLyric: string | null;
@@ -366,33 +381,56 @@ export class BilibiliService {
       try {
         const searchResult = await this.neteaseApiClient.searchTracks({
           keywords: query,
-          limit: 5,
+          limit: 8,
           offset: 0,
           cookie: ""
         });
-        const songs = (searchResult.result as { songs?: Array<{ id: number; dt: number; name: string }> })?.songs ?? [];
-        if (songs.length > 0) {
-          const matchedSong = (durationMs > 0
-            ? songs.find((s) => Math.abs(s.dt - durationMs) <= 8000)
-            : null) ?? songs[0]!;
+        const songs = (searchResult.result as {
+          songs?: Array<{
+            id: number;
+            dt: number;
+            name: string;
+            artists?: Array<{ name: string }>;
+            ar?: Array<{ name: string }>;
+          }>;
+        })?.songs ?? [];
 
-          const lyricsData = await this.neteaseApiClient.getLyrics({
-            trackId: String(matchedSong.id),
-            cookie: ""
+        if (songs.length > 0) {
+          const scoredSongs = songs.map((s) => {
+            const artistName = s.artists?.[0]?.name ?? s.ar?.[0]?.name;
+            const score = this.scoreLyricCandidate(
+              s.name,
+              artistName,
+              s.dt,
+              targetSongTitle,
+              targetArtist,
+              durationMs
+            );
+            return { song: s, score };
           });
 
-          const plain = (lyricsData?.lrc as { lyric?: string })?.lyric?.trim() || null;
-          const wordSynced = (lyricsData?.yrc as { lyric?: string })?.lyric?.trim() || null;
-          const trans = (lyricsData?.tlyric as { lyric?: string })?.lyric?.trim() || null;
-          const roma = (lyricsData?.romalrc as { lyric?: string })?.lyric?.trim() || null;
+          scoredSongs.sort((a, b) => b.score - a.score);
+          const best = scoredSongs[0];
 
-          if (plain || wordSynced) {
-            return {
-              plainLyric: plain,
-              wordSyncedLyric: wordSynced,
-              translatedLyric: trans,
-              romanizedLyric: roma
-            };
+          if (best && best.score >= 0) {
+            const lyricsData = await this.neteaseApiClient.getLyrics({
+              trackId: String(best.song.id),
+              cookie: ""
+            });
+
+            const plain = (lyricsData?.lrc as { lyric?: string })?.lyric?.trim() || null;
+            const wordSynced = (lyricsData?.yrc as { lyric?: string })?.lyric?.trim() || null;
+            const trans = (lyricsData?.tlyric as { lyric?: string })?.lyric?.trim() || null;
+            const roma = (lyricsData?.romalrc as { lyric?: string })?.lyric?.trim() || null;
+
+            if (plain || wordSynced) {
+              return {
+                plainLyric: plain,
+                wordSyncedLyric: wordSynced,
+                translatedLyric: trans,
+                romanizedLyric: roma
+              };
+            }
           }
         }
       } catch (err) {
@@ -405,33 +443,61 @@ export class BilibiliService {
       try {
         const searchRecords = await this.qqmusicApiClient.searchTracks({
           keywords: query,
-          limit: 5,
+          limit: 8,
           offset: 0,
           cookie: "",
           kind: "song"
         });
-        const list = searchRecords as Array<{ songmid?: string; mid?: string; interval?: number }>;
-        if (list.length > 0) {
-          const matched = (durationMs > 0
-            ? list.find((s) => Math.abs((s.interval ?? 0) * 1000 - durationMs) <= 8000)
-            : null) ?? list[0]!;
+        const list = searchRecords as Array<{
+          songmid?: string;
+          mid?: string;
+          songname?: string;
+          name?: string;
+          singer?: Array<{ name: string }> | string;
+          interval?: number;
+        }>;
 
-          const songMid = matched.songmid || matched.mid;
-          if (songMid) {
-            const lyricsBody = await this.qqmusicApiClient.getLyrics({
-              trackId: songMid,
-              cookie: ""
-            });
-            const plain = lyricsBody.lyric?.trim() || null;
-            const trans = lyricsBody.trans?.trim() || null;
-            const roma = lyricsBody.roma?.trim() || null;
-            if (plain) {
-              return {
-                plainLyric: plain,
-                wordSyncedLyric: null,
-                translatedLyric: trans,
-                romanizedLyric: roma
-              };
+        if (list.length > 0) {
+          const scoredList = list.map((item) => {
+            const name = item.songname || item.name || "";
+            const artist = Array.isArray(item.singer)
+              ? item.singer.map((s) => s.name).join("/")
+              : typeof item.singer === "string"
+                ? item.singer
+                : undefined;
+            const duration = (item.interval ?? 0) * 1000;
+            const score = this.scoreLyricCandidate(
+              name,
+              artist,
+              duration,
+              targetSongTitle,
+              targetArtist,
+              durationMs
+            );
+            return { item, score };
+          });
+
+          scoredList.sort((a, b) => b.score - a.score);
+          const best = scoredList[0];
+
+          if (best && best.score >= 0) {
+            const songMid = best.item.songmid || best.item.mid;
+            if (songMid) {
+              const lyricsBody = await this.qqmusicApiClient.getLyrics({
+                trackId: songMid,
+                cookie: ""
+              });
+              const plain = lyricsBody.lyric?.trim() || null;
+              const trans = lyricsBody.trans?.trim() || null;
+              const roma = lyricsBody.roma?.trim() || null;
+              if (plain) {
+                return {
+                  plainLyric: plain,
+                  wordSyncedLyric: null,
+                  translatedLyric: trans,
+                  romanizedLyric: roma
+                };
+              }
             }
           }
         }
@@ -441,6 +507,57 @@ export class BilibiliService {
     }
 
     return null;
+  }
+
+  private scoreLyricCandidate(
+    candidateName: string,
+    candidateArtist: string | undefined,
+    candidateDurationMs: number,
+    targetSongTitle?: string,
+    targetArtist?: string,
+    targetDurationMs = 0
+  ): number {
+    let score = 0;
+    const candNameNorm = (candidateName || "").toLowerCase().replace(/\s+/g, "");
+    const targetTitleNorm = (targetSongTitle || "").toLowerCase().replace(/\s+/g, "");
+
+    // 1. 歌名匹配权重
+    if (targetTitleNorm) {
+      if (candNameNorm === targetTitleNorm) {
+        score += 50;
+      } else if (candNameNorm.includes(targetTitleNorm) || targetTitleNorm.includes(candNameNorm)) {
+        score += 30;
+      } else {
+        score -= 40;
+      }
+    } else {
+      score += 10;
+    }
+
+    // 2. 歌手匹配权重
+    if (targetArtist && candidateArtist) {
+      const candArtistNorm = candidateArtist.toLowerCase().replace(/\s+/g, "");
+      const targetArtistNorm = targetArtist.toLowerCase().replace(/\s+/g, "");
+      if (candArtistNorm.includes(targetArtistNorm) || targetArtistNorm.includes(candArtistNorm)) {
+        score += 30;
+      }
+    }
+
+    // 3. 时长贴合度权重（考虑视频片头片尾留白，容差扩展至 25 秒）
+    if (targetDurationMs > 0 && candidateDurationMs > 0) {
+      const diff = Math.abs(candidateDurationMs - targetDurationMs);
+      if (diff <= 5000) {
+        score += 30;
+      } else if (diff <= 15000) {
+        score += 20;
+      } else if (diff <= 25000) {
+        score += 10;
+      } else if (diff > 90000) {
+        score -= 30;
+      }
+    }
+
+    return score;
   }
 
   private mapSearchItemToCandidate(item: BilibiliSearchItem): BilibiliTrackCandidate {

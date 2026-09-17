@@ -93,6 +93,18 @@ export function resolveSupportedUploadFormat(file: Pick<File, "name" | "type">) 
   ) {
     return "mp3" as const;
   }
+  if (
+    signature.includes("audio/mp4") ||
+    signature.includes("audio/m4a") ||
+    signature.includes("audio/x-m4a") ||
+    signature.includes("audio/aac") ||
+    signature.includes("video/mp4") ||
+    signature.endsWith(".m4a") ||
+    signature.endsWith(".mp4") ||
+    signature.endsWith(".aac")
+  ) {
+    return "m4a" as const;
+  }
   return null;
 }
 
@@ -101,8 +113,9 @@ export async function prepareAudioAssets(input: {
   signal?: AbortSignal;
   onProgress?: (progress: AssetPreparationProgress) => void;
 }): Promise<PreparedAudioAssets> {
-  if (!resolveSupportedUploadFormat(input.file)) {
-    throw new Error("仅支持 FLAC、WAV 和 MP3 音频文件。");
+  const format = resolveSupportedUploadFormat(input.file);
+  if (!format) {
+    throw new Error("仅支持 FLAC、WAV、MP3 和 M4A 音频文件。");
   }
   if (input.file.size <= 0) {
     throw new Error("音频文件为空。");
@@ -110,7 +123,8 @@ export async function prepareAudioAssets(input: {
 
   const decodePlan = await inspectDecodePlan(input.file, input.onProgress);
   const sourcePromise = prepareOriginalAsset(input);
-  let playbackDraftId = decodePlan.useStreaming ? createPlaybackDraftId() : null;
+  const useStreaming = decodePlan.useStreaming && format !== "m4a";
+  let playbackDraftId = useStreaming ? createPlaybackDraftId() : null;
   const prepareStreamingFallback = () => {
     playbackDraftId ??= createPlaybackDraftId();
     return prepareStreamingPlaybackAsset({
@@ -122,13 +136,13 @@ export async function prepareAudioAssets(input: {
         : undefined
     });
   };
-  const playbackPromise = decodePlan.useStreaming
+  const playbackPromise = useStreaming
     ? prepareStreamingFallback()
     : preparePlaybackAsset({
         ...input,
         fileHash: sourcePromise.then((source) => source.fileHash)
       }).catch((error) => {
-        if (input.signal?.aborted) {
+        if (input.signal?.aborted || format === "m4a") {
           throw error;
         }
         return prepareStreamingFallback();
@@ -335,8 +349,8 @@ async function prepareStreamingPlaybackAsset(input: {
   onProgress?: (progress: AssetPreparationProgress) => void;
 }): Promise<PreparedPlaybackAsset> {
   const format = resolveSupportedUploadFormat(input.file);
-  if (!format) {
-    throw new Error("仅支持 FLAC、WAV 和 MP3 音频文件。");
+  if (!format || format === "m4a") {
+    throw new Error("流式分片解码仅支持 FLAC、WAV 和 MP3 音频文件。");
   }
 
   let channelCount: 1 | 2 | null = null;
@@ -1360,5 +1374,6 @@ function mimeTypeFromFileName(name: string) {
   const lower = name.toLowerCase();
   if (lower.endsWith(".flac")) return "audio/flac";
   if (lower.endsWith(".wav")) return "audio/wav";
+  if (lower.endsWith(".m4a") || lower.endsWith(".mp4") || lower.endsWith(".aac")) return "audio/mp4";
   return "audio/mpeg";
 }

@@ -45,6 +45,15 @@ export async function resolveImportedAudioMimeType(file: Blob) {
 export function extensionForImportedMimeType(mimeType: string) {
   if (mimeType === "audio/flac") return "flac";
   if (mimeType === "audio/wav") return "wav";
+  if (
+    mimeType === "audio/mp4" ||
+    mimeType === "audio/m4a" ||
+    mimeType === "audio/x-m4a" ||
+    mimeType === "audio/aac" ||
+    mimeType === "video/mp4"
+  ) {
+    return "m4a";
+  }
   return "mp3";
 }
 
