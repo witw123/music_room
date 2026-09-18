@@ -77,7 +77,14 @@ export class BilibiliWbiSigner {
         headers.Cookie = cookie;
       }
 
-      const res = await fetch("https://api.bilibili.com/x/web-interface/nav", { headers });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      let res: Response;
+      try {
+        res = await fetch("https://api.bilibili.com/x/web-interface/nav", { headers, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (res.ok) {
         const json = (await res.json()) as {
           code: number;

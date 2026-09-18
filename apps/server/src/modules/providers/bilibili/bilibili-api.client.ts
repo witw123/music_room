@@ -14,6 +14,27 @@ const BILIBILI_TV_APPKEY = "4409e200fedc5a43";
 const BILIBILI_TV_APPSEC = "59b43e04ad6965f34319062b425580dd";
 const BILIBILI_TV_UA = "Bilibili/7.20.0 (Android; 10)";
 
+// 仅约束“建连 + 响应头”阶段：响应头到达后即解除，
+// 保证代理流式转发（Range 透传）不会被计时器中断。
+const UPSTREAM_HEADER_TIMEOUT_MS = 6000;
+
+async function fetchUpstream(
+  url: string,
+  init: RequestInit = {},
+  headerTimeoutMs = UPSTREAM_HEADER_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error(`Bilibili upstream header timeout (${headerTimeoutMs}ms)`)),
+    headerTimeoutMs
+  );
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type BilibiliViewData = {
   bvid: string;
   aid: number;
@@ -177,24 +198,27 @@ export class BilibiliApiClient {
     }
 
     try {
-      // 1. 访问主页获取基础会话 cookie（含 b_nut）
-      const homeRes = await fetch("https://www.bilibili.com/", {
-        headers: {
-          "User-Agent": BILIBILI_UA
-        }
-      });
-      const homeCookies: string[] =
-        typeof (homeRes.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie === "function"
-          ? (homeRes.headers as unknown as { getSetCookie: () => string[] }).getSetCookie()
-          : [homeRes.headers.get("set-cookie")].filter((c): c is string => Boolean(c));
+      // 并发获取：1. 主页基础会话 cookie（含 b_nut）；2. 访客 SPI 凭据（buvid3 / buvid4）
+      const [homeSettled, spiSettled] = await Promise.allSettled([
+        fetchUpstream("https://www.bilibili.com/", {
+          headers: {
+            "User-Agent": BILIBILI_UA
+          }
+        }),
+        fetchUpstream("https://api.bilibili.com/x/frontend/finger/spi", {
+          headers: {
+            "User-Agent": BILIBILI_UA,
+            Referer: BILIBILI_REFERER
+          }
+        })
+      ]);
 
-      // 2. 获取访客 SPI 凭据（buvid3 / buvid4）
-      const spiRes = await fetch("https://api.bilibili.com/x/frontend/finger/spi", {
-        headers: {
-          "User-Agent": BILIBILI_UA,
-          Referer: BILIBILI_REFERER
-        }
-      });
+      const homeCookies: string[] =
+        homeSettled.status === "fulfilled"
+          ? typeof (homeSettled.value.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie === "function"
+            ? (homeSettled.value.headers as unknown as { getSetCookie: () => string[] }).getSetCookie()
+            : [homeSettled.value.headers.get("set-cookie")].filter((c): c is string => Boolean(c))
+          : [];
 
       const cookieParts: string[] = [];
       for (const raw of homeCookies) {
@@ -204,8 +228,8 @@ export class BilibiliApiClient {
         }
       }
 
-      if (spiRes.ok) {
-        const spiJson = (await spiRes.json()) as {
+      if (spiSettled.status === "fulfilled" && spiSettled.value.ok) {
+        const spiJson = (await spiSettled.value.json()) as {
           code: number;
           data?: { b_3?: string; b_4?: string };
         };
@@ -250,7 +274,7 @@ export class BilibiliApiClient {
 
     const cookie = await this.getGuestCookies();
     const url = `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`;
-    const res = await fetch(url, {
+    const res = await fetchUpstream(url, {
       headers: {
         "User-Agent": BILIBILI_UA,
         Referer: BILIBILI_REFERER,
@@ -299,7 +323,7 @@ export class BilibiliApiClient {
         cookie
       );
       const url = `https://api.bilibili.com/x/player/wbi/playurl?${signedQuery}`;
-      const res = await fetch(url, {
+      const res = await fetchUpstream(url, {
         headers: {
           "User-Agent": BILIBILI_UA,
           Referer: `https://www.bilibili.com/video/${bvid}`,
@@ -323,7 +347,7 @@ export class BilibiliApiClient {
     // 2. 尝试普通 Web playurl 接口
     try {
       const plainUrl = `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}&qn=64&fnval=4048&fnver=0&fourk=1`;
-      const res = await fetch(plainUrl, {
+      const res = await fetchUpstream(plainUrl, {
         headers: {
           "User-Agent": BILIBILI_UA,
           Referer: `https://www.bilibili.com/video/${bvid}`,
@@ -379,7 +403,7 @@ export class BilibiliApiClient {
     const sign = crypto.createHash("md5").update(queryStr + BILIBILI_TV_APPSEC).digest("hex");
     const tvUrl = `https://api.bilibili.com/x/tv/ugc/playurl?${queryStr}&sign=${sign}`;
 
-    const res = await fetch(tvUrl, {
+    const res = await fetchUpstream(tvUrl, {
       headers: {
         "User-Agent": BILIBILI_TV_UA
       }
@@ -404,7 +428,7 @@ export class BilibiliApiClient {
     const cookie = await this.getGuestCookies();
     const url = `https://api.bilibili.com/x/player/v2?bvid=${encodeURIComponent(bvid)}&cid=${cid}`;
     try {
-      const res = await fetch(url, {
+      const res = await fetchUpstream(url, {
         headers: {
           "User-Agent": BILIBILI_UA,
           Referer: BILIBILI_REFERER,
@@ -435,7 +459,7 @@ export class BilibiliApiClient {
       targetUrl = `https:${targetUrl}`;
     }
     try {
-      const res = await fetch(targetUrl, {
+      const res = await fetchUpstream(targetUrl, {
         headers: {
           "User-Agent": BILIBILI_UA,
           Referer: BILIBILI_REFERER
@@ -462,7 +486,7 @@ export class BilibiliApiClient {
     if (typeof tid === "number" && tid > 0) {
       url += `&tids=${tid}`;
     }
-    const res = await fetch(url, {
+    const res = await fetchUpstream(url, {
       headers: {
         "User-Agent": BILIBILI_UA,
         Referer: BILIBILI_REFERER,
@@ -494,7 +518,7 @@ export class BilibiliApiClient {
     const cleanId = mediaId.replace(/^ml/i, "").trim();
     const url = `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${encodeURIComponent(cleanId)}&pn=${page}&ps=${pageSize}&platform=web&order=mtime&type=0`;
 
-    const res = await fetch(url, {
+    const res = await fetchUpstream(url, {
       headers: {
         "User-Agent": BILIBILI_UA,
         Referer: BILIBILI_REFERER,
@@ -531,7 +555,7 @@ export class BilibiliApiClient {
   async getMusicRanking(subType = "3"): Promise<BilibiliRankingItem[]> {
     const cookie = await this.getGuestCookies();
     const url = `https://api.bilibili.com/x/web-interface/ranking/v2?rid=${encodeURIComponent(subType)}&type=all`;
-    const res = await fetch(url, {
+    const res = await fetchUpstream(url, {
       headers: {
         "User-Agent": BILIBILI_UA,
         Referer: BILIBILI_REFERER,
@@ -593,7 +617,7 @@ export class BilibiliApiClient {
 
       // 1. 尝试默认 Web 请求头
       try {
-        const res = await fetch(url, { headers: defaultHeaders });
+        const res = await fetchUpstream(url, { headers: defaultHeaders });
         if (res.status === 200 || res.status === 206) {
           const responseHeaders: Record<string, string> = {};
           for (const [key, value] of res.headers.entries()) {
@@ -608,7 +632,7 @@ export class BilibiliApiClient {
 
         // 若返回 403，尝试 TV 端请求头（TV 流针对空 Referer + TV UA 开放）
         if (res.status === 403) {
-          const tvRes = await fetch(url, { headers: tvHeaders });
+          const tvRes = await fetchUpstream(url, { headers: tvHeaders });
           if (tvRes.status === 200 || tvRes.status === 206) {
             const responseHeaders: Record<string, string> = {};
             for (const [key, value] of tvRes.headers.entries()) {
@@ -627,7 +651,7 @@ export class BilibiliApiClient {
       } catch (err) {
         // 网络异常时也尝试 TV 请求头
         try {
-          const tvRes = await fetch(url, { headers: tvHeaders });
+          const tvRes = await fetchUpstream(url, { headers: tvHeaders });
           if (tvRes.status === 200 || tvRes.status === 206) {
             const responseHeaders: Record<string, string> = {};
             for (const [key, value] of tvRes.headers.entries()) {

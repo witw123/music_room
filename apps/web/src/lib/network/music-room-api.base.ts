@@ -321,6 +321,175 @@ export async function resolveDownloadedAudioMimeType(blob: Blob, declaredType: s
   throw new Error("下载内容不是有效的音频，请重试或更换音质。");
 }
 
+const DIRECT_PROBE_TIMEOUT_MS = 5000;
+const DIRECT_DOWNLOAD_HEADER_TIMEOUT_MS = 8000;
+const DIRECT_CANDIDATE_LIMIT = 6;
+const DIRECT_PARALLEL_RANGE_THRESHOLD_BYTES = 2 * 1024 * 1024;
+const DIRECT_PARALLEL_RANGE_MAX_BYTES = 512 * 1024 * 1024;
+const DIRECT_PARALLEL_RANGE_PARTS = 4;
+
+type DirectCandidateProbeResult = {
+  url: string;
+  ok: boolean;
+  contentType: string | null;
+  contentLength: number | null;
+  acceptsRanges: boolean;
+  elapsedMs: number;
+};
+
+function upgradeDirectUrl(url: string) {
+  return url.startsWith("http://") ? url.replace(/^http:\/\//i, "https://") : url;
+}
+
+function buildDirectFetchInit(signal: AbortSignal, headers?: Record<string, string>): RequestInit {
+  return {
+    signal,
+    mode: "cors",
+    credentials: "omit",
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+    ...(headers ? { headers } : {})
+  };
+}
+
+/**
+ * 以“仅到响应头”的轻量请求探测候选 CDN 直链（参考 bili-music 的候选探测策略）：
+ * 拿到响应头后立即取消响应体，探测只关心该候选能否快速应答，
+ * 落选候选不会消耗任何字节流量。
+ */
+async function probeDirectCandidate(
+  directUrl: string,
+  outerSignal?: AbortSignal
+): Promise<DirectCandidateProbeResult> {
+  const startedAt = Date.now();
+  const timeoutCtrl = new AbortController();
+  const timer = setTimeout(() => timeoutCtrl.abort(), DIRECT_PROBE_TIMEOUT_MS);
+  const abortHandler = () => timeoutCtrl.abort();
+  outerSignal?.addEventListener("abort", abortHandler, { once: true });
+  try {
+    const response = await fetch(directUrl, buildDirectFetchInit(timeoutCtrl.signal));
+    const contentType = response.headers.get("content-type");
+    const contentLengthRaw = Number(response.headers.get("content-length"));
+    const acceptsRanges = (response.headers.get("accept-ranges") ?? "").toLowerCase().includes("bytes");
+    void response.body?.cancel().catch(() => undefined);
+    return {
+      url: directUrl,
+      ok: response.ok,
+      contentType,
+      contentLength: Number.isFinite(contentLengthRaw) && contentLengthRaw > 0 ? contentLengthRaw : null,
+      acceptsRanges,
+      elapsedMs: Date.now() - startedAt
+    };
+  } catch {
+    return {
+      url: directUrl,
+      ok: false,
+      contentType: null,
+      contentLength: null,
+      acceptsRanges: false,
+      elapsedMs: Date.now() - startedAt
+    };
+  } finally {
+    clearTimeout(timer);
+    outerSignal?.removeEventListener("abort", abortHandler);
+  }
+}
+
+/**
+ * 并发探测所有候选，任一健康候选应答立即胜出（内容相同，取最快者），
+ * 避免旧实现按串行逐个等待 4 秒超时。探测 Promise 不会 reject。
+ */
+function resolveFirstHealthyProbe(
+  probes: Promise<DirectCandidateProbeResult>[]
+): Promise<DirectCandidateProbeResult | null> {
+  return new Promise((resolve) => {
+    if (probes.length === 0) {
+      resolve(null);
+      return;
+    }
+    let settledCount = 0;
+    let winnerChosen = false;
+    for (const probe of probes) {
+      void probe.then((result) => {
+        settledCount += 1;
+        if (result.ok && !winnerChosen) {
+          winnerChosen = true;
+          resolve(result);
+          return;
+        }
+        if (settledCount === probes.length && !winnerChosen) {
+          resolve(null);
+        }
+      });
+    }
+  });
+}
+
+async function fetchDirectWithHeaderTimeout(
+  directUrl: string,
+  outerSignal: AbortSignal | undefined,
+  headers?: Record<string, string>
+): Promise<Response> {
+  const timeoutCtrl = new AbortController();
+  const timer = setTimeout(() => timeoutCtrl.abort(), DIRECT_DOWNLOAD_HEADER_TIMEOUT_MS);
+  const abortHandler = () => timeoutCtrl.abort();
+  outerSignal?.addEventListener("abort", abortHandler, { once: true });
+  try {
+    return await fetch(directUrl, buildDirectFetchInit(timeoutCtrl.signal, headers));
+  } finally {
+    clearTimeout(timer);
+    outerSignal?.removeEventListener("abort", abortHandler);
+  }
+}
+
+async function downloadDirectBlob(directUrl: string, outerSignal?: AbortSignal): Promise<Blob> {
+  const response = await fetchDirectWithHeaderTimeout(directUrl, outerSignal);
+  if (!response.ok) {
+    void response.body?.cancel().catch(() => undefined);
+    throw new Error(`CDN 直链返回 HTTP ${response.status}`);
+  }
+  // 响应头已到达，此处不再有下载总时长限制（仅受外部 signal 约束）。
+  return response.blob();
+}
+
+/**
+ * 对支持 Range 的大文件并发拉取多个分段后拼装，绕开单连接限速。
+ * 任一分段失败或长度不符时返回 null，由调用方回退到整包下载。
+ */
+async function downloadDirectBlobInParallelRanges(
+  directUrl: string,
+  contentLength: number,
+  outerSignal?: AbortSignal
+): Promise<Blob | null> {
+  const partSize = Math.ceil(contentLength / DIRECT_PARALLEL_RANGE_PARTS);
+  try {
+    const parts = await Promise.all(
+      Array.from({ length: DIRECT_PARALLEL_RANGE_PARTS }, (_, index) => {
+        const start = index * partSize;
+        const end = Math.min(contentLength - 1, start + partSize - 1);
+        const expectedSize = end - start + 1;
+        return fetchDirectWithHeaderTimeout(directUrl, outerSignal, {
+          Range: `bytes=${start}-${end}`
+        }).then(async (response) => {
+          if (response.status !== 206) {
+            // 服务器忽略 Range 返回 200 整包时立即放弃，避免重复下载整文件。
+            void response.body?.cancel().catch(() => undefined);
+            throw new Error(`CDN 分段请求返回 HTTP ${response.status}`);
+          }
+          const part = await response.blob();
+          if (part.size !== expectedSize) {
+            throw new Error(`CDN 分段长度不符：${part.size} != ${expectedSize}`);
+          }
+          return part;
+        });
+      })
+    );
+    return new Blob(parts);
+  } catch {
+    return null;
+  }
+}
+
 export async function downloadWithDirectFallback(input: {
   resolve: () => Promise<ProviderAudioResolveResponse | DirectAudioResolveResult>;
   fallback: () => Promise<{ blob: Blob; contentType: string }>;
@@ -331,41 +500,35 @@ export async function downloadWithDirectFallback(input: {
     const candidateUrls = Array.isArray((resolved as { urls?: string[] }).urls) && (resolved as { urls: string[] }).urls.length > 0
       ? (resolved as { urls: string[] }).urls
       : [resolved.url];
+    if (input.signal?.aborted) throw new Error("Download aborted");
 
-    for (let directUrl of candidateUrls) {
-      if (input.signal?.aborted) throw new Error("Download aborted");
-      if (directUrl.startsWith("http://")) {
-        directUrl = directUrl.replace(/^http:\/\//i, "https://");
+    const candidates = candidateUrls
+      .slice(0, DIRECT_CANDIDATE_LIMIT)
+      .map(upgradeDirectUrl);
+    const winner = await resolveFirstHealthyProbe(
+      candidates.map((candidateUrl) => probeDirectCandidate(candidateUrl, input.signal))
+    );
+
+    if (winner) {
+      let blob: Blob | null = null;
+      if (
+        winner.acceptsRanges &&
+        winner.contentLength &&
+        winner.contentLength >= DIRECT_PARALLEL_RANGE_THRESHOLD_BYTES &&
+        winner.contentLength <= DIRECT_PARALLEL_RANGE_MAX_BYTES
+      ) {
+        blob = await downloadDirectBlobInParallelRanges(winner.url, winner.contentLength, input.signal);
       }
-      const timeoutCtrl = new AbortController();
-      const timer = setTimeout(() => timeoutCtrl.abort(), 4000);
-      const abortHandler = () => timeoutCtrl.abort();
-      input.signal?.addEventListener("abort", abortHandler, { once: true });
-      try {
-        const response = await fetch(directUrl, {
-          signal: timeoutCtrl.signal,
-          mode: "cors",
-          credentials: "omit",
-          cache: "no-store",
-          referrerPolicy: "no-referrer"
-        });
-        if (response.ok) {
-          const blob = await response.blob();
-          const contentType = await resolveDownloadedAudioMimeType(
-            blob,
-            response.headers.get("content-type") ?? resolved.mimeType ?? ""
-          );
-          return {
-            blob,
-            contentType
-          };
-        }
-      } catch {
-        if (input.signal?.aborted) throw new Error("Download aborted");
-        // Try next candidate URL
-      } finally {
-        clearTimeout(timer);
-        input.signal?.removeEventListener("abort", abortHandler);
+      if (!blob && !input.signal?.aborted) {
+        blob = await downloadDirectBlob(winner.url, input.signal);
+      }
+      if (input.signal?.aborted) throw new Error("Download aborted");
+      if (blob && blob.size > 0) {
+        const contentType = await resolveDownloadedAudioMimeType(
+          blob,
+          winner.contentType ?? resolved.mimeType ?? ""
+        );
+        return { blob, contentType };
       }
     }
   } catch (error) {

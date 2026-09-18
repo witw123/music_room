@@ -225,18 +225,28 @@ export class BilibiliService {
     }
     const targetAid = Number(viewData.aid);
 
+    // 并发请求 Web PlayUrl 与 TV 直链：DASH 音频流优先，TV durl 作为代理链路的额外容灾候选
+    const [playDataResult, tvDataResult] = await Promise.allSettled([
+      this.client.getPlayUrl(bvid, resolvedCid, targetAid),
+      targetAid ? this.client.getTvPlayUrl(targetAid, resolvedCid) : Promise.resolve(null)
+    ]);
+    const playData = playDataResult.status === "fulfilled" ? playDataResult.value : null;
+    const tvData = tvDataResult.status === "fulfilled" ? tvDataResult.value : null;
+    const tvDirectUrl = tvData?.durl?.[0]?.url;
+
     // 服务端代理优先尝试纯音频 DASH 流（音质高、体积小只有几 MB、服务端自带 Referer）
-    const playData = await this.client.getPlayUrl(bvid, resolvedCid, targetAid).catch(() => null);
     const audioStreams = playData?.dash?.audio ?? [];
     if (audioStreams.length > 0) {
       const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]!;
       const candidateUrls = sortBilibiliAudioUrls(bestAudio.baseUrl, bestAudio.backupUrl);
+      if (tvDirectUrl) {
+        candidateUrls.push(tvDirectUrl);
+      }
       return this.client.fetchAudioStream(candidateUrls, range);
     }
 
     // 兜底尝试 TV 流或 durl
-    const tvData = targetAid ? await this.client.getTvPlayUrl(targetAid, resolvedCid).catch(() => null) : null;
-    const durl = tvData?.durl?.[0]?.url || playData?.durl?.[0]?.url;
+    const durl = tvDirectUrl || playData?.durl?.[0]?.url;
     if (durl) {
       return this.client.fetchAudioStream([durl], range);
     }
