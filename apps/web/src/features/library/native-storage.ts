@@ -110,8 +110,24 @@ class NativeDirectory implements RepositoryDirectoryHandle {
   }
 }
 
+const verbatimPathPrefix = "\\\\?\\";
+const verbatimUncPathPrefix = "\\\\?\\UNC\\";
+
+/**
+ * Windows reports the root in the verbatim form `\\?\E:\game\Music Room`,
+ * because that is what `canonicalize()` returns. The prefix is a Win32
+ * long-path detail the user never typed and it only makes the root unreadable
+ * wherever we show it, so the reported name drops it. Paths handed back to the
+ * native layer keep the form the native side gave us.
+ */
+function formatStorageRootName(path: string) {
+  if (path.startsWith(verbatimUncPathPrefix)) return `\\\\${path.slice(verbatimUncPathPrefix.length)}`;
+  if (path.startsWith(verbatimPathPrefix)) return path.slice(verbatimPathPrefix.length);
+  return path;
+}
+
 export async function getNativeStorageDirectory() {
   const { path } = await storage("root");
   if (!path) throw new Error("无法确定应用存储根目录。");
-  return { handle: new NativeDirectory(path, ""), name: path };
+  return { handle: new NativeDirectory(path, ""), name: formatStorageRootName(path) };
 }

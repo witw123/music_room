@@ -49,6 +49,20 @@ describe("native repository transport", () => {
     expect([...files.keys()]).toEqual([".music-room/audio.mp3"]);
   });
 
+  it("reports the storage root without the Windows verbatim prefix", async () => {
+    const invoke = vi.fn(async () => ({ path: String.raw`\\?\E:\game\Music Room` }));
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {}, __TAURI__: { core: { invoke } } });
+
+    await expect(getNativeStorageDirectory()).resolves.toMatchObject({ name: String.raw`E:\game\Music Room` });
+  });
+
+  it("keeps UNC storage roots addressable", async () => {
+    const invoke = vi.fn(async () => ({ path: String.raw`\\?\UNC\server\share\Music Room` }));
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {}, __TAURI__: { core: { invoke } } });
+
+    await expect(getNativeStorageDirectory()).resolves.toMatchObject({ name: String.raw`\\server\share\Music Room` });
+  });
+
   it("surfaces native errors rather than changing storage roots", async () => {
     vi.stubGlobal("window", {
       __TAURI_INTERNALS__: {},
