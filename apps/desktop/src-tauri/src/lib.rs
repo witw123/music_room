@@ -137,6 +137,17 @@ async fn set_desktop_lyrics_size(app: AppHandle, width: f64, height: f64) -> Res
     Ok(())
 }
 
+// The web bundle this window renders is served from a remote origin, so its
+// baked-in version always tracks the latest deploy and on its own can never
+// reveal that the installed binary is behind. Report the shell's compiled-in
+// version instead — it comes from tauri.conf.json, which the release tag must
+// match, so the update check compares the installed app against the release
+// rather than the (always current) web build against itself.
+#[command]
+async fn get_app_version(app: AppHandle) -> Result<String, String> {
+    Ok(app.package_info().version.to_string())
+}
+
 #[command]
 async fn focus_main_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
@@ -208,6 +219,7 @@ pub fn run() {
             hide_desktop_lyrics_window,
             drag_desktop_lyrics_window,
             set_desktop_lyrics_size,
+            get_app_version,
             focus_main_window,
             open_external_url
         ])

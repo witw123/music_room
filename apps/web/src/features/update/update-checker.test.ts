@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  checkForUpdates,
   formatFileSize,
+  getCurrentAppVersion,
   isNewerVersion,
   matchPlatformAsset,
   parseSemver,
+  resolveCurrentAppVersion,
   type ReleaseAsset
 } from "./update-checker";
 
@@ -97,6 +100,122 @@ describe("update-checker", () => {
     it("returns null for web platform", () => {
       const asset = matchPlatformAsset(mockAssets, "web");
       expect(asset).toBeNull();
+    });
+  });
+
+  describe("resolveCurrentAppVersion", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    /** Host the page in a desktop shell whose version command answers `version`. */
+    function stubDesktopShell(invoke?: (command: string) => Promise<unknown>) {
+      vi.stubGlobal("window", {
+        __TAURI_INTERNALS__: {},
+        __TAURI__: invoke ? { core: { invoke } } : undefined
+      });
+    }
+
+    it("returns the web bundle version in a plain browser", async () => {
+      expect(await resolveCurrentAppVersion()).toBe(getCurrentAppVersion());
+    });
+
+    it("prefers the desktop shell's own version over the web bundle version", async () => {
+      const invoke = vi.fn(async () => "0.3.2");
+      stubDesktopShell(invoke);
+
+      expect(await resolveCurrentAppVersion()).toBe("0.3.2");
+      expect(invoke).toHaveBeenCalledWith("get_app_version", undefined);
+    });
+
+    it("trims the version the shell reports", async () => {
+      stubDesktopShell(async () => " 0.3.4 \n");
+      expect(await resolveCurrentAppVersion()).toBe("0.3.4");
+    });
+
+    it("falls back when the shell rejects the command", async () => {
+      stubDesktopShell(async () => {
+        throw new Error("command get_app_version not found");
+      });
+      expect(await resolveCurrentAppVersion()).toBe(getCurrentAppVersion());
+    });
+
+    it("falls back when the shell returns an empty version", async () => {
+      stubDesktopShell(async () => "");
+      expect(await resolveCurrentAppVersion()).toBe(getCurrentAppVersion());
+    });
+
+    it("falls back when the Tauri global exposes no invoke", async () => {
+      stubDesktopShell(undefined);
+      expect(await resolveCurrentAppVersion()).toBe(getCurrentAppVersion());
+    });
+  });
+
+  describe("checkForUpdates", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function stubLatestRelease(tagName: string) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                tag_name: tagName,
+                name: tagName,
+                published_at: "2026-09-19T00:00:00Z",
+                html_url: "https://example.com/release",
+                body: "",
+                assets: []
+              }),
+              { status: 200, headers: { "content-type": "application/json" } }
+            )
+        )
+      );
+    }
+
+    function stubDesktopShellVersion(version: string) {
+      vi.stubGlobal("window", {
+        __TAURI_INTERNALS__: {},
+        __TAURI__: { core: { invoke: async () => version } }
+      });
+    }
+
+    // Regression: the desktop window loads the web bundle remotely, so the
+    // comparison must use the installed shell's version. Comparing the web
+    // bundle's own version against the release made every desktop build look
+    // up to date, including ones several releases behind.
+    it("reports an update when the installed desktop shell trails the release", async () => {
+      stubDesktopShellVersion("0.3.2");
+      stubLatestRelease("v0.3.4");
+
+      const result = await checkForUpdates();
+
+      expect(result.currentVersion).toBe("0.3.2");
+      expect(result.latestVersion).toBe("0.3.4");
+      expect(result.hasUpdate).toBe(true);
+    });
+
+    it("reports no update when the installed desktop shell matches the release", async () => {
+      stubDesktopShellVersion("0.3.4");
+      stubLatestRelease("v0.3.4");
+
+      const result = await checkForUpdates();
+
+      expect(result.currentVersion).toBe("0.3.4");
+      expect(result.hasUpdate).toBe(false);
+    });
+
+    it("still honors an explicit version override", async () => {
+      stubDesktopShellVersion("0.3.4");
+      stubLatestRelease("v0.3.4");
+
+      const result = await checkForUpdates("0.3.2");
+
+      expect(result.currentVersion).toBe("0.3.2");
+      expect(result.hasUpdate).toBe(true);
     });
   });
 

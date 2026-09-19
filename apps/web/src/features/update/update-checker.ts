@@ -37,6 +37,27 @@ export function getCurrentAppVersion(): string {
   return APP_VERSION;
 }
 
+/**
+ * The version of the installed desktop shell when one is hosting this page.
+ *
+ * `getCurrentAppVersion()` reports the web bundle's build-time version, and the
+ * Tauri window loads that bundle from a remote origin — so the value always
+ * tracks the latest deploy and describes the *web*, never the binary the user
+ * installed. Comparing it against the latest release can therefore only ever
+ * answer "up to date", even for a desktop build several releases behind. Ask
+ * the shell for its own compiled-in version and fall back only if it cannot
+ * answer (plain browser, Capacitor shell, or a binary predating the command).
+ */
+export async function resolveCurrentAppVersion(): Promise<string> {
+  if (isTauriRuntime()) {
+    const shellVersion = await invokeTauri<string>("get_app_version");
+    if (typeof shellVersion === "string" && shellVersion.trim()) {
+      return shellVersion.trim();
+    }
+  }
+  return getCurrentAppVersion();
+}
+
 export function parseSemver(versionStr: string): [number, number, number] {
   const clean = versionStr.trim().replace(/^[vV]/, "");
   const [core] = clean.split("-");
@@ -214,7 +235,7 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
 }
 
 export async function checkForUpdates(currentVersionOverride?: string): Promise<UpdateCheckResult> {
-  const currentVersion = currentVersionOverride || getCurrentAppVersion();
+  const currentVersion = currentVersionOverride || (await resolveCurrentAppVersion());
   const release = await fetchLatestRelease();
   const runtime = getClientRuntime();
   const platform = getClientPlatform();

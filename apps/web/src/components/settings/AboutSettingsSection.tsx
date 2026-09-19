@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   formatFileSize,
@@ -8,18 +8,31 @@ import {
   getClientPlatform,
   getClientRuntime,
   getPlatformDisplayName,
-  openExternalUrl
+  openExternalUrl,
+  resolveCurrentAppVersion
 } from "@/features/update/update-checker";
 import { useAppUpdate } from "@/features/update/use-app-update";
 
 export function AboutSettingsSection() {
-  const currentVersion = getCurrentAppVersion();
+  // The build-time web version stands in until the desktop shell answers with
+  // its own — see `resolveCurrentAppVersion`.
+  const [currentVersion, setCurrentVersion] = useState(getCurrentAppVersion);
   const platform = getClientPlatform();
   const runtime = getClientRuntime();
   const platformName = getPlatformDisplayName(platform, runtime);
 
   const { status, result, errorMessage, check } = useAppUpdate();
   const [showChangelog, setShowChangelog] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveCurrentAppVersion().then((version) => {
+      if (!cancelled) setCurrentVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCheckUpdate = () => {
     void check(true);
