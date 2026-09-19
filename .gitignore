@@ -24,3 +24,6 @@ outputs/
 .tmp/
 apps/server/.tmp/
 apps/web/test-results/
+apps/mobile/android/keystore.properties
+apps/mobile/android/*.jks
+apps/mobile/android/*.keystore

@@ -263,6 +263,7 @@ pnpm deploy:check         # 部署前置环境检查
 - [TURN 网络检查清单](./docs/deploy/turn-network-checklist.md)
 - [风险与约束](./docs/deployment/risks.md)
 - [可观测性](./docs/deployment/observability.md)
+- [Android 发布签名](./docs/deploy/android-release.md)
 
 ## 发布
 
@@ -270,7 +271,7 @@ pnpm deploy:check         # 部署前置环境检查
 
 - **Web 与服务端**：通过 `Dockerfile.web`、`Dockerfile.server` 和 `deploy/linux` 中的 Compose 配置进行容器化发布与部署
 - **桌面端**：使用 `pnpm desktop:build` 生成各平台原生安装包
-- **移动端**：使用 `pnpm mobile:sync` 同步构建后，通过 Android Studio 打包 APK / AAB，或通过 Xcode 打包 iOS 应用
+- **移动端**：打 tag 后由 CI 用固定上传密钥签名并产出 Android APK（`assembleRelease`），见[Android 发布签名](./docs/deploy/android-release.md)；本地仍可用 `pnpm mobile:sync` 配合 Android Studio / Xcode 打包
 
 ## 当前已知边界
 

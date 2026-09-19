@@ -263,6 +263,7 @@ More deployment details:
 
 - [Deployment guide](./docs/deployment/deployment.md)
 - [TURN network checklist](./docs/deploy/turn-network-checklist.md)
+- [Android release signing](./docs/deploy/android-release.md)
 - [Risks and constraints](./docs/deployment/risks.md)
 - [Observability](./docs/deployment/observability.md)
 
@@ -272,7 +273,7 @@ Production releases support a multi-platform release matrix:
 
 - **Web & Server**: Containerized deployment via `Dockerfile.web`, `Dockerfile.server`, and Docker Compose in `deploy/linux`
 - **Desktop Client**: Generate Windows (.exe / .msi), macOS (.dmg), or Linux installers using `pnpm desktop:build`
-- **Mobile Client**: Synchronize build assets with `pnpm mobile:sync`, then package Android APK / AAB with Android Studio or iOS app with Xcode
+- **Mobile Client**: Tagging a release builds a signed Android APK (`assembleRelease`) in CI — see [Android release signing](./docs/deploy/android-release.md). Local packaging still works via `pnpm mobile:sync` with Android Studio / Xcode
 
 ## Known Boundaries
 

@@ -108,16 +108,37 @@ jobs:
           cd apps/mobile
           npx cap sync android
 
+      # The upload key lives in a repository secret, base64-encoded, so nothing
+      # signed-in is ever checked in. See docs/deploy/android-release.md.
+      - name: Decode Android signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::缺少签名密钥。请在仓库 Secrets 添加 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD，步骤见 docs/deploy/android-release.md。未配置时不再回退到 debug 包——debug APK 无法作为正式发布件。"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > "$RUNNER_TEMP/music-room-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/music-room-release.jks" >> "$GITHUB_ENV"
+
+      - name: Resolve app version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "ANDROID_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
       - name: Build Android APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           cd apps/mobile/android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace
 
       - name: Prepare APK Asset
         run: |
           mkdir -p release-apk
-          APK_FILE=$(find apps/mobile/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          APK_FILE=$(find apps/mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           cp "$APK_FILE" release-apk/MusicRoom-Android-${{ github.ref_name }}.apk
 
       - name: Upload Android APK to Release
