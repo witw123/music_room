@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { authorizeStorageRoot, stubStorageRootPicker } from "./storage-root";
 
 const session = {
   id: "session_directory_visual",
@@ -123,9 +124,11 @@ async function mockDirectoryApi(page: Page) {
 }
 
 test("room directory cards match the visual hierarchy at desktop and mobile", async ({ page }, testInfo) => {
+  await stubStorageRootPicker(page);
   await mockDirectoryApi(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/app");
+  await authorizeStorageRoot(page);
 
   const cards = page.getByTestId("room-directory-card");
   await expect(cards).toHaveCount(3);

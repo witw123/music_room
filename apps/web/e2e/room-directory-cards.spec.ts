@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { authorizeStorageRoot, stubStorageRootPicker } from "./storage-root";
 
 function uniqueId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -6,12 +7,14 @@ function uniqueId(prefix: string) {
 
 async function register(page: Page) {
   const id = uniqueId("directory-cards");
+  await stubStorageRootPicker(page);
   await page.goto("/auth?redirectTo=/app");
   await page.getByTestId("auth-mode-toggle").click();
   await page.getByTestId("auth-register-username").fill(id);
   await page.getByTestId("auth-register-password").fill("password-123");
   await page.getByTestId("auth-register-nickname").fill(id);
   await page.getByTestId("auth-register-submit").click();
+  await authorizeStorageRoot(page);
   await expect(page.getByTestId("create-public-room")).toBeVisible();
 }
 
@@ -36,6 +39,7 @@ test("room directory gives each room format a distinct stage", async ({ page }, 
   for (const room of rooms) {
     await createRoom(page, room.roomType, room.name);
     await page.goto("/app");
+    await authorizeStorageRoot(page);
     await expect(page.getByTestId("create-public-room")).toBeVisible();
   }
 

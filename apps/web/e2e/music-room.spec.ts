@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { authorizeStorageRoot, storageRootAuthorizeLabel, stubStorageRootPicker } from "./storage-root";
 
 function uniqueId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -6,12 +7,14 @@ function uniqueId(prefix: string) {
 
 async function register(page: Page, nicknamePrefix: string) {
   const id = uniqueId(nicknamePrefix);
+  await stubStorageRootPicker(page);
   await page.goto("/auth?redirectTo=/app");
   await page.getByTestId("auth-mode-toggle").click();
   await page.getByTestId("auth-register-username").fill(id);
   await page.getByTestId("auth-register-password").fill("password-123");
   await page.getByTestId("auth-register-nickname").fill(id);
   await page.getByTestId("auth-register-submit").click();
+  await authorizeStorageRoot(page);
   await expect(page.getByTestId("create-public-room")).toBeVisible();
   return id;
 }
@@ -90,6 +93,29 @@ async function uploadTwoTracks(page: Page) {
   await expect(page.getByTestId("track-card")).toHaveCount(2, { timeout: 90_000 });
 }
 
+test("storage-root-gate", async ({ page }) => {
+  await stubStorageRootPicker(page);
+  const id = uniqueId("host-storage-root");
+  await page.goto("/auth?redirectTo=/app");
+  await page.getByTestId("auth-mode-toggle").click();
+  await page.getByTestId("auth-register-username").fill(id);
+  await page.getByTestId("auth-register-password").fill("password-123");
+  await page.getByTestId("auth-register-nickname").fill(id);
+  await page.getByTestId("auth-register-submit").click();
+
+  // A fresh context holds no storage root, so the app is held behind the gate.
+  const authorizeButton = page.getByRole("button", { name: storageRootAuthorizeLabel });
+  await expect(authorizeButton).toBeVisible();
+  await expect(page.getByTestId("create-public-room")).toHaveCount(0);
+
+  await authorizeButton.click();
+  await expect(page.getByTestId("create-public-room")).toBeVisible();
+
+  // The authorized root is persisted, so reloading must not gate the app again.
+  await page.reload();
+  await expect(page.getByTestId("create-public-room")).toBeVisible();
+});
+
 test("auth-room-smoke", async ({ page }) => {
   await register(page, "host-smoke");
   await createRoom(page);
@@ -107,6 +133,7 @@ test("two-user-realtime", async ({ browser, page }) => {
   await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
 
   await listenerPage.reload();
+  await authorizeStorageRoot(listenerPage);
   await expect(listenerPage.getByTestId("room-code-button")).toContainText(joinCode);
   await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
   await listenerContext.close();
