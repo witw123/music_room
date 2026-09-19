@@ -20,7 +20,6 @@ import { QqMusicService } from "../providers/qqmusic/qqmusic.service";
 import { RoomService } from "../room/room.service";
 import {
   dedupeCandidates,
-  dedupePlaylists,
   partitionDiscoveryRecommendations,
   rankRecommendationCandidates,
   rerankRecommendationCandidates,
@@ -49,7 +48,6 @@ import {
 const recallCacheSeconds = 30 * 60;
 const recallEpochSeconds = 30 * 24 * 60 * 60;
 const recommendedRememberSeconds = 7 * 24 * 60 * 60;
-const sessionWindowMs = 2 * 60 * 60 * 1_000;
 const maxTracksPerSection = 16;
 const compactionCutoffDays = 30;
 const compactionTriggerProbability = 0.05;
@@ -561,7 +559,10 @@ export class PersonalizationService {
     };
   }
 
-  private async recallProvider(userId: string, provider: Provider, entities: TasteEntityRecord[], events: TasteEventRecord[], surface: PersonalizationRecommendationsQuery["surface"]) {
+  // `events` and `surface` are the inputs the provider-playlist recall path was
+  // meant to consume; that path is currently stubbed (`playlists: []` below), so
+  // they are carried through unused rather than dropped from the signature.
+  private async recallProvider(userId: string, provider: Provider, entities: TasteEntityRecord[], _events: TasteEventRecord[], _surface: PersonalizationRecommendationsQuery["surface"]) {
     const tracks = entities.filter((item) => item.entityKind === "track" && (item.provider === provider || !item.provider)).sort((left, right) => entityScore(right) - entityScore(left));
     const libraryCandidates = tracks.map(entityToCandidate).filter((item): item is ProviderTrackCandidate => item !== null)
       .map((candidate) => ({ candidate, source: "library" as const, baseScore: 0.9, interestKey: "library", interestLabel: null }));
