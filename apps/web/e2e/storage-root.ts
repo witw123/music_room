@@ -1,9 +1,10 @@
 import { expect, type Page } from "@playwright/test";
 
-// `StorageRootGate` blocks /app, /rooms and /room until a storage root exists,
-// and a fresh browser context has none: IndexedDB starts empty, so the app
-// renders the authorization screen instead of the app. Every spec that enters
-// the app therefore has to grant a root first.
+// `StorageRootGate` holds the signed-in app on /app, /rooms and /room until a
+// storage root exists, and a fresh browser context has none: IndexedDB starts
+// empty, so a spec that signs in renders the authorization screen instead of
+// the app. Every spec that enters the signed-in app therefore has to grant a
+// root first.
 //
 // The real picker cannot be driven headlessly, so `showDirectoryPicker` is
 // stubbed with a real OPFS directory handle. It has to be a genuine

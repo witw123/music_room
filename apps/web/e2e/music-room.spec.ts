@@ -95,6 +95,14 @@ async function uploadTwoTracks(page: Page) {
 
 test("storage-root-gate", async ({ page }) => {
   await stubStorageRootPicker(page);
+  const authorizeButton = page.getByRole("button", { name: storageRootAuthorizeLabel });
+
+  // Signed out, the room directory stays browsable: nobody is asked for a root.
+  await page.goto("/app");
+  await expect(page.getByRole("button", { name: "刷新房间列表" })).toBeVisible();
+  await expect(authorizeButton).toHaveCount(0);
+
+  // Signing in hands the app over to the gate until a root is authorized.
   const id = uniqueId("host-storage-root");
   await page.goto("/auth?redirectTo=/app");
   await page.getByTestId("auth-mode-toggle").click();
@@ -103,8 +111,6 @@ test("storage-root-gate", async ({ page }) => {
   await page.getByTestId("auth-register-nickname").fill(id);
   await page.getByTestId("auth-register-submit").click();
 
-  // A fresh context holds no storage root, so the app is held behind the gate.
-  const authorizeButton = page.getByRole("button", { name: storageRootAuthorizeLabel });
   await expect(authorizeButton).toBeVisible();
   await expect(page.getByTestId("create-public-room")).toHaveCount(0);
 

@@ -13,10 +13,15 @@ import {
 } from "@/features/library/local-audio-storage";
 import { hasNativeStorage } from "@/features/library/native-storage";
 import { storageRootChangingEvent, storageRootChangedEvent } from "@/features/library/storage-root-events";
+import { useActiveSession } from "@/features/session/use-session-identity";
 
 export function StorageRootGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const required = /^\/(app|rooms|room)(\/|$)/.test(pathname ?? "");
+  const activeSession = useActiveSession();
+  // Only the signed-in app needs a storage root. An anonymous visitor browses
+  // the room directory without answering a directory prompt first; the gate
+  // comes up when the session arrives and drops away again on sign-out.
+  const required = Boolean(activeSession) && /^\/(app|rooms|room)(\/|$)/.test(pathname ?? "");
   const [ready, setReady] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [busy, setBusy] = useState(true);

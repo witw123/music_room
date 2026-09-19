@@ -134,6 +134,16 @@ export function areAuthSessionsEqual(
   );
 }
 
+/**
+ * Reads the signed-in session only, without the login-status plumbing the full
+ * identity hook carries. Shell gates that merely need to know whether someone
+ * is signed in use this.
+ */
+export function useActiveSession() {
+  return useSyncExternalStore(subscribeToSession, getSessionSnapshot, getSessionSnapshot)
+    .activeSession;
+}
+
 export function useSessionIdentity(options: {
   sessionStorageKey: string;
   initialStatusMessage: string;
