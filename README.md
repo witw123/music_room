@@ -7,7 +7,7 @@
 
 Music Room is a multi-client collaborative music-room application for listening to users' own local audio and imported tracks together in real time. The monorepo contains the Next.js Web client, Tauri 2 desktop app, Capacitor 7 mobile app, NestJS server, and shared frontend/server contracts.
 
-Current workspace version: `0.3.2`<br>
+Current workspace version: `0.3.3`<br>
 Documentation snapshot: `2026-09`
 
 ## Product Scope
