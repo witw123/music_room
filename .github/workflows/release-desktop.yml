@@ -90,9 +90,13 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
+      # Deliberately no `android-actions/setup-android` here. It unconditionally
+      # runs `sdkmanager tools`, and that legacy package is no longer published,
+      # so the action dies on the current ubuntu-24.04 image (which ships
+      # cmdline-tools 16.0) with "Failed to find package 'tools'". The runner
+      # image already provides the SDK at /usr/local/lib/android/sdk together
+      # with ANDROID_HOME / ANDROID_SDK_ROOT, and Gradle downloads any missing
+      # component on demand because the licences below are accepted.
       - name: Accept Android Licenses
         run: yes | sdkmanager --licenses || true
 
