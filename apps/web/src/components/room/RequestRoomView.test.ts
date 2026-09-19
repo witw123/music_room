@@ -24,4 +24,13 @@ describe("RequestRoomView layout", () => {
     expect(requestRoomSource).not.toContain('id="request-workspace-queue"');
     expect(requestRoomSource).toContain('id="request-workspace-playlists"');
   });
+
+  it("removes the duplicate hero search bar and preserves request desk and workspace search", () => {
+    expect(requestRoomSource).not.toContain("request-room-host-search");
+    expect(requestRoomSource).not.toContain("request-room-search");
+    expect(requestRoomSource).not.toContain("<RoomProviderTrackSearch");
+    expect(requestRoomSource).toContain("<RequestInbox");
+    expect(requestRoomSource).toContain("<RequestHistory");
+    expect(requestRoomSource).toContain("onRequestTrack={props.onSubmitRequest}");
+  });
 });

@@ -23,7 +23,6 @@ import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
 const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel));
 const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel));
 const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel));
-const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch));
 const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar));
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
@@ -238,16 +237,6 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 className="mb-1"
               />
 
-              <RoomProviderTrackSearch
-                mode="request"
-                roomTracks={props.roomSnapshot.tracks}
-                onRequestTrack={submitRequest}
-                onImportNeteaseTrack={props.onImportNeteaseTrack}
-                onImportQqMusicTrack={props.onImportQqMusicTrack}
-                onImportBilibiliTrack={props.onImportBilibiliTrack}
-                testId={isHost ? "request-room-host-search" : "request-room-search"}
-              />
-
               {isHost ? (
                 <RequestInbox
                   pendingRequestId={pendingRequestId}
@@ -281,6 +270,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         mobileTab={mobileWorkspaceTab}
         onMobileTabChange={setMobileWorkspaceTab}
         panelsReady={panelsReady}
+        onSubmitRequest={submitRequest}
       />
     </div>
   );
@@ -301,6 +291,7 @@ function RequestRoomWorkspace(
     mobileTab: RequestWorkspaceTab;
     onMobileTabChange: (tab: RequestWorkspaceTab) => void;
     panelsReady: boolean;
+    onSubmitRequest: (track: ProviderCandidate) => Promise<void>;
   }
 ) {
   const panelVisibility = (tab: RequestWorkspaceTab) =>
@@ -390,6 +381,8 @@ function RequestRoomWorkspace(
             <LocalStorageTabPanel
               activeSession={props.activeSession}
               canManageLibrary={props.isHost}
+              searchMode={props.isHost ? "import" : "request"}
+              onRequestTrack={props.onSubmitRequest}
               hideUnavailableProvidersNotice
               localStorageSummary={props.localStorageSummary}
               onCleanLocalStorage={props.onCleanLocalStorage}
@@ -399,6 +392,8 @@ function RequestRoomWorkspace(
               onImportNeteaseTracks={props.onImportNeteaseTracks}
               onImportQqMusicTrack={props.onImportQqMusicTrack}
               onImportQqMusicTracks={props.onImportQqMusicTracks}
+              onImportBilibiliTrack={props.onImportBilibiliTrack}
+              onImportBilibiliTracks={props.onImportBilibiliTracks}
               onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
               onRefreshLocalStorage={props.onRefreshLocalStorage}
               onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}

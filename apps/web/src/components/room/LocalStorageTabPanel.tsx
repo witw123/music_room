@@ -14,7 +14,7 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { LocalPlaylistPanel } from "./LocalPlaylistPanel";
 import { FavoriteAlbumsPanel } from "./FavoriteAlbumsPanel";
-import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
+import { RoomProviderTrackSearch, type RoomProviderTrackSearchMode, type ProviderTrack } from "./RoomProviderTrackSearch";
 
 type LocalStorageTabPanelProps = {
   tracks: TrackMeta[];
@@ -37,6 +37,8 @@ type LocalStorageTabPanelProps = {
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   hideUnavailableProvidersNotice?: boolean;
+  searchMode?: RoomProviderTrackSearchMode;
+  onRequestTrack?: (track: ProviderTrack) => Promise<void>;
 };
 
 function LocalStorageTabPanelBase({
@@ -57,7 +59,9 @@ function LocalStorageTabPanelBase({
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onDeletePlaylist,
-  hideUnavailableProvidersNotice = false
+  hideUnavailableProvidersNotice = false,
+  searchMode,
+  onRequestTrack
 }: LocalStorageTabPanelProps) {
   const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"local" | "network" | "favorites">("local");
@@ -117,13 +121,14 @@ function LocalStorageTabPanelBase({
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
         <RoomProviderTrackSearch
           roomTracks={tracks}
-          mode="import"
+          mode={searchMode ?? "import"}
           canManageLibrary={canManageLibrary}
           hideUnavailableProvidersNotice={hideUnavailableProvidersNotice}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
           onImportBilibiliTrack={onImportBilibiliTrack}
           onImportBilibiliTracks={onImportBilibiliTracks}
+          onRequestTrack={onRequestTrack}
           testId="network-playlist-search"
         />
         <PlaylistPanel

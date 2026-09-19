@@ -17,7 +17,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 
 type Provider = "netease" | "qqmusic" | "bilibili";
-type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
+export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 type ProviderAccount = NeteaseAccountStatus | QqMusicAccountStatus;
 
 const enabledSearchProviders: Provider[] = [
