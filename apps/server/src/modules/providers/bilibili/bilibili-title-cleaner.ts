@@ -6,7 +6,8 @@ const NOISE_TAGS = [
   "instrumental", "inst", "自制", "搬运", "压制", "首发", "新歌", "单曲", "精选", "歌词版",
   "万人大合唱", "合唱", "剪辑", "混剪", "循环", "单曲循环", "cd", "无杂音", "修复",
   "后台播放", "华语流行音乐", "车载音乐", "车载", "自用收藏", "自用", "黑胶", "沉浸式",
-  "耳机福利", "福利", "神级", "收藏级", "立体声", "环绕声", "双声道", "空间音频", "最叼", "才是最叼的", "付费"
+  "耳机福利", "福利", "神级", "收藏级", "立体声", "环绕声", "双声道", "空间音频", "最叼", "才是最叼的", "付费",
+  "超高音质", "极高音质", "无损音质", "音质版"
 ];
 
 // 括号类模式匹配
@@ -16,7 +17,7 @@ const BRACKET_PATTERN = /【([^】]+)】|\[([^\]]+)\]|\(([^)]+)\)|（([^）]+)�
 const TRACK_INDEX_REGEX = /^(?:(?:P|p)?\d{1,4}|[0-9]{1,4}|[一二三四五六七八九十]{1,3})[\s._\-、:：/|]+/g;
 
 // 中文噪词集中过滤正则
-const CN_NOISE_REGEX = /(?:4K|8K|60帧|60FPS|1080P|720P|超清|高清|无损|高音质|音质|HIFI|Hi-Res|hires|黑胶|立体声|环绕声|双声道|空间音频|超重低音|重低音|母带|杜比|全景声|修复|无杂音|CD|完整版|完整|官方|Official|MV|Live|现场版|现场|纯享版|纯享|精选|歌词版|动态歌词|附歌词|新歌|首发|伴奏|instrumental|inst|翻唱版|翻唱|Cover|Remix|万人大合唱|合唱|剪辑|混剪|单曲循环|循环|后台播放|华语流行音乐|车载音乐|车载|自用收藏|自用|自制|搬运|压制|沉浸式|耳机福利|福利|神级|收藏级|最叼|才是最叼的|付费|双语字幕|中文字幕|中字|熟肉|生肉)/gi;
+const CN_NOISE_REGEX = /(?:4K|8K|60帧|60FPS|1080P|720P|超清|高清|无损音质|超高音质|极高音质|无损|高音质|音质版|音质|HIFI|Hi-Res|hires|黑胶|立体声|环绕声|双声道|空间音频|超重低音|重低音|母带|杜比|全景声|修复|无杂音|CD|完整版|完整|官方|Official|MV|Live|现场版|现场|纯享版|纯享|精选|歌词版|动态歌词|附歌词|新歌|首发|伴奏|instrumental|inst|翻唱版|翻唱|Cover|Remix|万人大合唱|合唱|剪辑|混剪|单曲循环|循环|后台播放|华语流行音乐|车载音乐|车载|自用收藏|自用|自制|搬运|压制|沉浸式|耳机福利|福利|神级|收藏级|最叼|才是最叼的|付费|双语字幕|中文字幕|中字|熟肉|生肉)/gi;
 
 export type CleanedTitleInfo = {
   songTitle: string;
@@ -110,10 +111,21 @@ export function cleanBilibiliTitle(rawTitle: string, rawUploaderName = ""): Clea
   // 7. 检查常见分隔符："歌手 - 歌名" 或 "歌名 - 歌手"
   const separatorMatch = title.match(/^(.+?)\s*[-—|]\s*(.+)$/);
   if (separatorMatch) {
-    let part1 = stripTrackIndex(stripNoiseTags(separatorMatch[1]!));
-    let part2 = stripTrackIndex(stripNoiseTags(separatorMatch[2]!));
+    const part1 = stripTrackIndex(stripNoiseTags(separatorMatch[1]!));
+    const part2 = stripTrackIndex(stripNoiseTags(separatorMatch[2]!));
 
-    if (uploader && part2.toLowerCase().includes(uploader.toLowerCase())) {
+    // 用 UP 主名双向模糊判断哪一部分是歌手：B站标题两种顺序都常见，
+    // UP 主名（或其频道名主体）通常与歌手部分互相包含。
+    const partMatchesUploader = (part: string) => {
+      if (!uploader || !part) return false;
+      const normalizedPart = part.toLowerCase();
+      const normalizedUploader = uploader.toLowerCase();
+      return normalizedPart.includes(normalizedUploader) || normalizedUploader.includes(normalizedPart);
+    };
+    const part1IsArtist = partMatchesUploader(part1);
+    const part2IsArtist = partMatchesUploader(part2);
+
+    if (part2IsArtist && !part1IsArtist) {
       // part2 是歌手，part1 是歌名
       return {
         songTitle: part1,
@@ -122,7 +134,7 @@ export function cleanBilibiliTitle(rawTitle: string, rawUploaderName = ""): Clea
       };
     }
 
-    // 通常 part1 是歌手，part2 是歌名
+    // 默认 part1 是歌手，part2 是歌名
     return {
       songTitle: part2,
       artist: part1,

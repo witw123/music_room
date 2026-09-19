@@ -124,7 +124,7 @@ export async function requestProviderLyricsPayload(
   provider: string,
   trackId: string
 ): Promise<ProviderLyricsPayload | null> {
-  if (provider !== "netease" && provider !== "qqmusic") {
+  if (provider !== "netease" && provider !== "qqmusic" && provider !== "bilibili") {
     return null;
   }
   try {

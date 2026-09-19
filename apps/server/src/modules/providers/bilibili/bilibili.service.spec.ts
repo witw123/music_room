@@ -248,6 +248,70 @@ describe("BilibiliService and Utilities", () => {
       const lyrics = await service.getLyrics("BV1xx", 1001);
       expect(lyrics.plainLyric).toBeNull();
     });
+
+    it("matches lyrics when the cleaned title swaps song and artist order", async () => {
+      // 标题"花海 - 周杰伦"（歌名在前）在无 UP 主信号时清洗器无法判向，
+      // 匹配器需要用反向朝向打分命中真实歌曲，且旧版 search 返回的 duration 字段也要生效
+      mockClient.getVideoView.mockResolvedValueOnce({
+        bvid: "BV1rev",
+        title: "花海 - 周杰伦 【无损音质】",
+        duration: 266,
+        owner: { name: "音乐铺子" },
+        pages: [{ cid: 2001, page: 1, part: "花海 - 周杰伦", duration: 266 }]
+      });
+      mockNeteaseClient.searchTracks.mockResolvedValueOnce({
+        result: {
+          songs: [
+            { id: 185811, name: "花海", duration: 260000, artists: [{ name: "周杰伦" }] },
+            { id: 999, name: "花海（治愈版）", duration: 258000, artists: [{ name: "周杰伦." }] }
+          ]
+        }
+      });
+      mockNeteaseClient.getLyrics.mockResolvedValueOnce({
+        lrc: { lyric: "[00:10.00]风吹过山丘" },
+        yrc: { lyric: "[10000,2000](10000,1000,0)风(11000,1000,0)吹" }
+      });
+
+      const lyrics = await service.getLyrics("BV1rev", 2001);
+      expect(lyrics.wordSyncedLyric).toContain("[10000,2000]");
+      const requestedTrackId = mockNeteaseClient.getLyrics.mock.calls[0]?.[0]?.trackId;
+      expect(requestedTrackId).toBe("185811");
+    });
+
+    it("retries the search with the bare song title when the polluted query yields no confident match", async () => {
+      mockClient.getVideoView.mockResolvedValueOnce({
+        bvid: "BV1retry",
+        title: "【私藏馆】周杰伦《稻香》超治愈神作",
+        duration: 224,
+        owner: { name: "私藏馆" },
+        pages: [{ cid: 3001, page: 1, part: "稻香", duration: 224 }]
+      });
+      mockNeteaseClient.searchTracks
+        .mockResolvedValueOnce({
+          result: {
+            songs: [{ id: 777, name: "稻香", dt: 223000, artists: [{ name: "Lucky小爱" }] }]
+          }
+        })
+        .mockResolvedValueOnce({
+          result: {
+            songs: [
+              { id: 185807, name: "稻香", dt: 223000, artists: [{ name: "周杰伦" }] }
+            ]
+          }
+        });
+      mockNeteaseClient.getLyrics.mockResolvedValueOnce({
+        lrc: { lyric: "[00:05.00]对这个世界如果你有太多的抱怨" },
+        yrc: null
+      });
+
+      const lyrics = await service.getLyrics("BV1retry", 3001);
+      // 第二次搜索应使用纯歌名"稻香"，并命中周杰伦原版（score 110 > 首轮候选）
+      expect(mockNeteaseClient.searchTracks).toHaveBeenCalledTimes(2);
+      expect(mockNeteaseClient.searchTracks.mock.calls[1]?.[0]?.keywords).toBe("稻香");
+      const requestedTrackId = mockNeteaseClient.getLyrics.mock.calls[0]?.[0]?.trackId;
+      expect(requestedTrackId).toBe("185807");
+      expect(lyrics.plainLyric).toContain("对这个世界");
+    });
   });
 
   describe("importFavorite", () => {
