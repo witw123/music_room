@@ -101,7 +101,12 @@ export function toProviderTrackRecord(
 }
 
 export function toCachedProviderTrack(record: LocalPlaylistTrackRecord): ProviderTrack | null {
-  if ((record.provider !== "netease" && record.provider !== "qqmusic") || !record.providerTrackId) {
+  if (
+    (record.provider !== "netease" &&
+      record.provider !== "qqmusic" &&
+      record.provider !== "bilibili") ||
+    !record.providerTrackId
+  ) {
     return null;
   }
 

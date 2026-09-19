@@ -216,7 +216,9 @@ export function PlaylistDetailView({
   const playableTracks = sequenceTracks.filter(canPrepareTrack);
   const downloadableTracks = sequenceTracks.filter(
     (track) =>
-      (track.provider === "netease" || track.provider === "qqmusic") &&
+      (track.provider === "netease" ||
+        track.provider === "qqmusic" ||
+        track.provider === "bilibili") &&
       !!track.providerTrackId &&
       !track.availableOffline
   );
@@ -269,7 +271,9 @@ export function PlaylistDetailView({
 
   async function downloadTrack(track: LocalPlaylistTrackRecord) {
     const provider =
-      track.provider === "netease" || track.provider === "qqmusic" ? track.provider : null;
+      track.provider === "netease" || track.provider === "qqmusic" || track.provider === "bilibili"
+        ? track.provider
+        : null;
     if (!provider || !track.providerTrackId || track.availableOffline || downloadTrackId)
       return false;
     setDownloadTrackId(track.id);
@@ -536,7 +540,9 @@ export function PlaylistDetailView({
             const playable = canPrepareTrack(track);
             const queueable =
               player.isTrackPlayable(track) ||
-              ((track.provider === "netease" || track.provider === "qqmusic") &&
+              ((track.provider === "netease" ||
+                track.provider === "qqmusic" ||
+                track.provider === "bilibili") &&
                 !!track.providerTrackId &&
                 cachedProviderTrackIds.has(providerTrackKey(track.provider, track.providerTrackId)));
             return (
@@ -556,7 +562,9 @@ export function PlaylistDetailView({
                 onAddToQueue={() => player.addToQueue(track)}
                 onDownload={
                   track.providerTrackId &&
-                  (track.provider === "netease" || track.provider === "qqmusic")
+                  (track.provider === "netease" ||
+                    track.provider === "qqmusic" ||
+                    track.provider === "bilibili")
                     ? () => void downloadTrack(track)
                     : undefined
                 }

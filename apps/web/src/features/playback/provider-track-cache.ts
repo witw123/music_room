@@ -188,7 +188,9 @@ export async function listCachedProviderPlaybackTrackKeys() {
   const keys = new Set<string>();
   for (const summary of summaries) {
     if (
-      (summary.provider === "netease" || summary.provider === "qqmusic") &&
+      (summary.provider === "netease" ||
+        summary.provider === "qqmusic" ||
+        summary.provider === "bilibili") &&
       summary.providerTrackId
     ) {
       keys.add(providerTrackKey(summary.provider, summary.providerTrackId));
