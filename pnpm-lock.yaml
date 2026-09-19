@@ -53,6 +53,9 @@ importers:
       '@capacitor/android':
         specifier: ^7.0.0
         version: 7.6.8(@capacitor/core@7.6.8)
+      '@capacitor/app':
+        specifier: ^7.0.0
+        version: 7.1.2(@capacitor/core@7.6.8)
       '@capacitor/cli':
         specifier: ^7.0.0
         version: 7.6.8
@@ -493,6 +496,11 @@ packages:
     resolution: {integrity: sha512-N5LXe1ls+TA0mq+RhtyDdP1JISzAAI+OuLGL3G7OWQxfQQOZYkiEjEJMYqMV6JR421IqpRsYj08JOfC0PFC3NA==}
     peerDependencies:
       '@capacitor/core': ^7.6.0
+
+  '@capacitor/app@7.1.2':
+    resolution: {integrity: sha512-d4I/oF/PRu4megL7/IGKYfe5j7yzSON1FRFgq6kH+m5kH6g7V+wyjHRLauCzGNjdRx4S+nWOumINds0qcRBtKg==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor/cli@7.6.8':
     resolution: {integrity: sha512-sJYLoSS1wVHjDPwRc0grtNZcQZnkQc7TJKoVZdHL2HI5TPCq+27WBrMAo0mXvQQSH2axPYCz5cyRrcqqakOvxQ==}
@@ -2523,6 +2531,7 @@ packages:
 
   crypto-js@4.2.0:
     resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
+    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
 
   cssesc@3.0.0:
     resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
@@ -5361,6 +5370,10 @@ snapshots:
   '@borewit/text-codec@0.2.2': {}
 
   '@capacitor/android@7.6.8(@capacitor/core@7.6.8)':
+    dependencies:
+      '@capacitor/core': 7.6.8
+
+  '@capacitor/app@7.1.2(@capacitor/core@7.6.8)':
     dependencies:
       '@capacitor/core': 7.6.8
 

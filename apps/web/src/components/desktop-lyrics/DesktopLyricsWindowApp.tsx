@@ -242,7 +242,7 @@ export function DesktopLyricsWindowApp() {
 
   return (
     <main
-      className="flex h-[100dvh] w-full items-center p-1.5 overflow-hidden"
+      className="flex h-[calc(100*var(--app-dvh))] w-full items-center p-1.5 overflow-hidden"
       data-testid="desktop-lyrics-window"
       onPointerDown={handleBarPointerDown}
       onPointerMove={handleBarPointerMove}

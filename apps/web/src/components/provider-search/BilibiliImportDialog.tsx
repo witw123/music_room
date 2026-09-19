@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BilibiliTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 
 type BilibiliImportDialogProps = {
@@ -49,6 +50,9 @@ export function BilibiliImportDialog({
       return () => window.removeEventListener("keydown", handleKeyDown);
     }
   }, [open, loading, onClose]);
+
+  // Mirrors the Escape condition above: stay put while an import is running.
+  useBackHandler(onClose, open && !loading);
 
   if (!open) return null;
 

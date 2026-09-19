@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import {
   formatFileSize,
   getPlatformDisplayName,
@@ -29,6 +30,8 @@ export function UpdatePromptDialog({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onDismiss, open]);
+
+  useBackHandler(onDismiss, open);
 
   if (!open || !result || !result.hasUpdate) return null;
   if (typeof document === "undefined") return null;
@@ -59,7 +62,7 @@ export function UpdatePromptDialog({
         aria-describedby="update-dialog-description"
         aria-labelledby="update-dialog-title"
         aria-modal="true"
-        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface p-5 shadow-2xl"
+        className="light-dialog-surface max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface p-5 shadow-2xl"
         role="dialog"
       >
         <div className="flex items-center justify-between gap-3">

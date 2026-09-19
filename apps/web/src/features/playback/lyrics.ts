@@ -17,7 +17,27 @@ export type RoomLyricWord = {
 const timestampPattern = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 const metadataPattern = /^\[(?:ar|al|ti|by|offset|re|ve):/i;
 const yrcLinePattern = /^\[(\d+),(\d+)\](.*)$/;
-const lyricCharacterSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+// `Intl.Segmenter` needs Chrome 87+ / Safari 14.1+, and the bundle ships the
+// same chunk to the Capacitor WebView as to desktop browsers, so it must not
+// be constructed at module scope: an engine without it would throw while the
+// chunk is being evaluated, taking the whole app down before any render.
+// Resolved lazily, with a code-point split as the substitute.
+let lyricCharacterSegmenter: Intl.Segmenter | null | undefined;
+
+function getLyricCharacterSegmenter() {
+  if (lyricCharacterSegmenter === undefined) {
+    try {
+      lyricCharacterSegmenter =
+        typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+          ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+          : null;
+    } catch {
+      lyricCharacterSegmenter = null;
+    }
+  }
+  return lyricCharacterSegmenter;
+}
 
 export function parseRoomLyrics(value: string | null | undefined): RoomLyricLine[] {
   if (!value?.trim()) return [];
@@ -271,7 +291,11 @@ function splitLyricSegments(value: string): string[] {
   if (!value) return [];
   const matches = value.match(segmentPattern);
   if (!matches || matches.length === 0) {
-    return [...lyricCharacterSegmenter.segment(value)].map((s) => s.segment);
+    const segmenter = getLyricCharacterSegmenter();
+    // Without a segmenter, code points are the closest available split. It
+    // diverges from grapheme clusters for emoji ZWJ sequences and combining
+    // marks, which only affects how those spans are highlighted.
+    return segmenter ? [...segmenter.segment(value)].map((s) => s.segment) : Array.from(value);
   }
   return matches;
 }

@@ -184,7 +184,7 @@ function RoomWorkspaceBase({
       : InteractiveRoomView;
 
   return (
-    <main className="relative box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-background pb-[var(--room-mobile-bottom-inset)] md:pl-60 lg:pb-[var(--room-desktop-bottom-inset)]" data-custom-layout-room-host="true">
+    <main className="relative box-border flex h-[calc(100*var(--app-dvh))] max-h-[calc(100*var(--app-dvh))] min-h-0 flex-col overflow-hidden bg-background pb-[var(--room-mobile-bottom-inset)] md:pl-60 lg:pb-[var(--room-desktop-bottom-inset)]" data-custom-layout-room-host="true">
 
       <div className="hidden md:contents">
         <AppSidebar

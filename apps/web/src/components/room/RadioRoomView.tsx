@@ -67,7 +67,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         />
       </div>
 
-      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-2 px-2.5 pt-0 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
+      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-2 px-2.5 pt-0 lg:h-[calc(100*var(--app-dvh)-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
         <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-transparent lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none">
           <div className="min-h-0 flex-1">
             {stageReady ? (
@@ -77,7 +77,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             )}
           </div>
         </div>
-        <div className="relative z-0 flex h-[calc(100dvh-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none">
+        <div className="relative z-0 flex h-[calc(100*var(--app-dvh)-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none">
           <RadioWorkspaceTabs
             activeTab={rightTab}
             ariaLabel="房间信息"
@@ -116,7 +116,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         </div>
       </section>
 
-      <section className={`mx-auto mt-3 min-h-0 w-full max-w-[1600px] shrink-0 gap-3 overflow-hidden px-3 lg:mt-3 lg:h-[calc(100dvh-var(--room-desktop-bottom-inset))] lg:gap-0 lg:px-0 ${isHost ? "grid lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]" : "block"}`} data-testid="radio-room-workspace">
+      <section className={`mx-auto mt-3 min-h-0 w-full max-w-[1600px] shrink-0 gap-3 overflow-hidden px-3 lg:mt-3 lg:h-[calc(100*var(--app-dvh)-var(--room-desktop-bottom-inset))] lg:gap-0 lg:px-0 ${isHost ? "grid lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]" : "block"}`} data-testid="radio-room-workspace">
         <div className="flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none">
           <RadioWorkspaceTabs
             activeTab={leftTab}
@@ -229,7 +229,7 @@ function RadioLibraryList({
   const [_visibleCount] = useState(10);
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-3 sm:p-5 lg:max-h-[min(42rem,calc(100dvh-10rem))]">
+    <div className="flex h-full min-h-0 flex-col p-3 sm:p-5 lg:max-h-[min(42rem,calc(100*var(--app-dvh)-10rem))]">
       <LibraryTabPanel
         activeSession={props.activeSession}
         canAddToQueue={isHost}

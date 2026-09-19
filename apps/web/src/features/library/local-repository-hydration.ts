@@ -138,9 +138,9 @@ async function restoreTrackSummary(
     cachedAt: record.updatedAt,
     sourceTrackIds: record.roomRefs?.map((ref) => ref.trackId) ?? [],
     sourceRoomIds: record.roomRefs?.map((ref) => ref.roomId) ?? [],
-    lastSourceTrackId: record.roomRefs?.at(-1)?.trackId ?? null,
-    lastSourceRoomId: record.roomRefs?.at(-1)?.roomId ?? null,
-    lastOwnerNickname: record.roomRefs?.at(-1)?.ownerNickname ?? null
+    lastSourceTrackId: record.roomRefs?.[record.roomRefs.length - 1]?.trackId ?? null,
+    lastSourceRoomId: record.roomRefs?.[record.roomRefs.length - 1]?.roomId ?? null,
+    lastOwnerNickname: record.roomRefs?.[record.roomRefs.length - 1]?.ownerNickname ?? null
   };
   await upsertCachedLibraryTrackSummary(summary);
 }

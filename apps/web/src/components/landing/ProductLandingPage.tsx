@@ -270,7 +270,7 @@ export function ProductLandingPage() {
   const appHref = buildAppEntryHref();
 
   return (
-    <main className="relative min-h-[100dvh] overflow-hidden bg-[#06070a] font-sans selection:bg-accent/30 selection:text-white">
+    <main className="relative min-h-[calc(100*var(--app-dvh))] overflow-hidden bg-[#06070a] font-sans selection:bg-accent/30 selection:text-white">
       <TopBar activeSession={null} variant="marketing" />
 
       {/* Cosmic Background Grid */}

@@ -728,7 +728,7 @@ export function ProviderSearchPage({
     if (albumId) await loadAlbumById(albumId, track.provider);
   }
 
-  if (!hydrated) return <div className="min-h-[100dvh] bg-background" />;
+  if (!hydrated) return <div className="min-h-[calc(100*var(--app-dvh))] bg-background" />;
 
   const showBackToRecommendations = onBackToRecommendations && (isSearchActive || hasSearched || Boolean(keywords.trim()));
   const prefixAction = showBackToRecommendations ? (
@@ -1024,8 +1024,8 @@ export function ProviderSearchPage({
   }
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] overflow-y-auto hide-scrollbar bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1320px] flex-col px-4 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-7 sm:pt-6 md:px-10 md:pt-8">
+    <main className="h-[calc(100*var(--app-dvh))] min-h-[calc(100*var(--app-dvh))] overflow-y-auto hide-scrollbar bg-background pb-[calc(12rem+env(safe-area-inset-bottom))] text-foreground md:pl-60 lg:pb-28">
+      <div className="mx-auto flex min-h-[calc(100*var(--app-dvh))] w-full max-w-[1320px] flex-col px-4 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-7 sm:pt-6 md:px-10 md:pt-8">
         <header className="flex">
           {searchBar}
         </header>

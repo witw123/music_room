@@ -54,7 +54,7 @@ export function PlaylistEditorDialog({
     >
       <form
         aria-labelledby={titleId}
-        className="light-dialog-surface max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6"
+        className="light-dialog-surface max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] p-5 text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] sm:p-6"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();

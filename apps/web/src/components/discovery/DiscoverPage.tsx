@@ -539,7 +539,7 @@ export function DiscoverPage() {
     }
   }, [playPlaylistAll]);
 
-  if (!hydrated) return <div className="min-h-[100dvh] bg-background" />;
+  if (!hydrated) return <div className="min-h-[calc(100*var(--app-dvh))] bg-background" />;
 
   if (detail) {
     return (

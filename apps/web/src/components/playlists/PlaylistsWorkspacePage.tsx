@@ -580,7 +580,7 @@ export function PlaylistsWorkspacePage({
     }
   }
 
-  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-[100dvh] bg-background" />;
+  if (!hydrated || !activeSession) return embedded ? null : <div className="min-h-[calc(100*var(--app-dvh))] bg-background" />;
 
   const WorkspaceShell = embedded ? "section" : "main";
 

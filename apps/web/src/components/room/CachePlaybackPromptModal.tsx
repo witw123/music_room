@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { checkAnyProviderAccountBound } from "@/features/playback/provider-account-guard";
 import { updateAppSettings } from "@/features/settings/settings-store";
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
@@ -79,6 +80,8 @@ export function CachePlaybackPromptModal({
       triggerElementRef.current?.focus();
     };
   }, [isOpen, onClose]);
+
+  useBackHandler(onClose, isOpen);
 
   if (!isOpen || !track) return null;
 

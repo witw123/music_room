@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
 export type AnchoredDialogAnchor = {
   top: number;
@@ -55,6 +56,8 @@ export function AnchoredDialog({
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  useBackHandler(onClose);
 
   useLayoutEffect(() => {
     const updatePosition = () => {
@@ -118,7 +121,7 @@ export function AnchoredDialog({
     >
       <div
         aria-labelledby={ariaLabelledBy}
-        className={`light-dialog-surface fixed z-[501] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] ${compact ? "w-[min(18rem,calc(100vw-1.5rem))] p-2" : "w-[min(28rem,calc(100vw-1.5rem))] p-5 sm:p-6"} ${className ?? ""}`}
+        className={`light-dialog-surface fixed z-[501] max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#151a21] text-foreground shadow-[0_24px_80px_rgba(0,0,0,0.72)] ${compact ? "w-[min(18rem,calc(100vw-1.5rem))] p-2" : "w-[min(28rem,calc(100vw-1.5rem))] p-5 sm:p-6"} ${className ?? ""}`}
         role="dialog"
         aria-modal="true"
         ref={dialogRef}

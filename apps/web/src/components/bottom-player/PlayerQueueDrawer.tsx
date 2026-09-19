@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent 
 import type { QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { getArtworkSourceUrl } from "./artwork-colors";
 
 export type PlayerQueueListProps = {
@@ -78,11 +79,14 @@ export function PlayerQueueDrawer({
 
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
+
+  useBackHandler(() => setIsOpen(false), isOpen);
 
   return (
     <div ref={rootRef} className="relative">
@@ -118,7 +122,7 @@ export function PlayerQueueDrawer({
           <aside
             aria-label="播放队列"
             data-testid="player-queue-drawer"
-            className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-surface-border bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:z-[100] max-sm:mb-0 max-sm:w-full max-sm:max-h-[75dvh] max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:border-x-0 max-sm:border-b-0 max-sm:border-t max-sm:border-surface-border max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+            className="light-player-queue absolute bottom-full right-0 z-50 mb-4 flex max-h-[60vh] w-[min(520px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-surface-border bg-[#17181c] text-white shadow-[0_20px_60px_rgba(0,0,0,0.65)] animate-slide-up origin-bottom-right max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:z-[100] max-sm:mb-0 max-sm:w-full max-sm:max-h-[calc(75*var(--app-dvh))] max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:border-x-0 max-sm:border-b-0 max-sm:border-t max-sm:border-surface-border max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
           >
             <div className="flex shrink-0 items-center justify-center pt-2.5 pb-1 sm:hidden">
               <div className="h-1 w-10 rounded-full bg-white/25" />

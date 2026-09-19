@@ -8,6 +8,7 @@ import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
 import { fetchProviderLyricsCached, hasWordSyncedRoomLyrics, selectRoomLyrics } from "@/features/playback/lyrics";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { Slider } from "@/components/ui/slider";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { getArtworkSourceUrl, useArtworkPalette, type ArtworkPalette } from "./artwork-colors";
 import { type PlaybackMode } from "./playback-mode";
 import { SquareAlbumCover } from "./PlayerArtwork";
@@ -157,6 +158,8 @@ export function ImmersivePlayerOverlay({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  useBackHandler(onClose, isOpen);
+
   useEffect(() => {
     if (!isOpen) {
       setMobileView("artwork");
@@ -189,7 +192,7 @@ export function ImmersivePlayerOverlay({
       aria-hidden={!isOpen}
       aria-label="沉浸式播放"
       aria-modal="true"
-      className={`immersive-player-overlay fixed inset-0 z-[80] h-[100dvh] max-h-[100dvh] w-full overflow-hidden text-foreground ${
+      className={`immersive-player-overlay fixed inset-0 z-[80] h-[calc(100*var(--app-dvh))] max-h-[calc(100*var(--app-dvh))] w-full overflow-hidden text-foreground ${
         isDragging
           ? "touch-none"
           : "transition-[opacity,transform,visibility,background-color] duration-350 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none"
@@ -289,7 +292,7 @@ export function ImmersivePlayerOverlay({
         <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
 
-      <main className="relative z-10 mx-auto hidden h-[100dvh] min-h-0 w-full max-w-[1560px] grid-cols-2 items-center gap-12 overflow-hidden px-10 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:gap-16 lg:px-14 xl:gap-24 xl:px-20">
+      <main className="relative z-10 mx-auto hidden h-[calc(100*var(--app-dvh))] min-h-0 w-full max-w-[1560px] grid-cols-2 items-center gap-12 overflow-hidden px-10 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:gap-16 lg:px-14 xl:gap-24 xl:px-20">
         <div className="relative flex min-h-0 w-full min-w-0 items-center justify-center">
           <DesktopImmersivePlayer
             artworkPalette={artworkPalette}
@@ -729,7 +732,7 @@ function SpeakerGlyph({ volume }: { volume: number }) {
 
 function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying, mobile = false, palette, playerStyle }: { artworkUrl: string | null; desktop?: boolean; frozen?: boolean; isPlaying: boolean; mobile?: boolean; palette: ArtworkPalette; playerStyle: "vinyl" | "square-cover" }) {
   return (
-    <div className={`relative flex aspect-square max-w-full items-center justify-center ${mobile ? "w-[min(68vw,31dvh,34rem)]" : desktop ? "h-[min(58vh,34rem)] w-auto" : "h-[min(68dvh,34rem)] w-auto"}`}>
+    <div className={`relative flex aspect-square max-w-full items-center justify-center ${mobile ? "w-[min(68vw,calc(31*var(--app-dvh)),34rem)]" : desktop ? "h-[min(58vh,34rem)] w-auto" : "h-[min(calc(68*var(--app-dvh)),34rem)] w-auto"}`}>
       <div className={`relative flex aspect-square items-center justify-center overflow-visible ${desktop || playerStyle === "square-cover" ? "w-full" : "w-[86%]"}`}>
         {playerStyle === "square-cover" ? <SquareAlbumCover artworkUrl={artworkUrl} className={`${desktop ? "rounded-[0.75rem]" : "rounded-[1.25rem]"} h-full w-full shadow-[0_26px_90px_rgba(0,0,0,0.35)]`} /> : (
           <>

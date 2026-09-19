@@ -209,7 +209,7 @@ export function useRadioAutopilot({
 export function isRadioPlaybackAtQueueEnd(snapshot: RoomSnapshot) {
   const currentQueueItemId = snapshot.room.playback.currentQueueItemId;
   if (!currentQueueItemId || snapshot.room.playback.status !== "playing") return false;
-  return snapshot.queue.at(-1)?.id === currentQueueItemId;
+  return snapshot.queue[snapshot.queue.length - 1]?.id === currentQueueItemId;
 }
 
 function getCurrentAutopilotSeed(snapshot: RoomSnapshot) {

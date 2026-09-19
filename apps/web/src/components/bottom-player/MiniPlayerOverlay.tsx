@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Slider } from "@/components/ui/slider";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { getArtworkSourceUrl, useArtworkPalette } from "@/components/bottom-player/artwork-colors";
 
 type DocumentPictureInPictureApi = {
@@ -125,6 +126,8 @@ export function MiniPlayerOverlay({
     return () => ownerWindow.removeEventListener("resize", clampPosition);
   }, [isOpen, pipWindow]);
 
+  useBackHandler(onClose, isOpen);
+
   if (!isOpen) return null;
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -168,8 +171,8 @@ export function MiniPlayerOverlay({
       ref={panelRef}
       aria-label="迷你播放器"
       className={`fixed z-[70] text-foreground ${pipWindow
-        ? "inset-0 h-[100dvh] w-full overflow-hidden rounded-none border-0 shadow-none"
-        : `max-h-[calc(100dvh-1.5rem)] w-[min(640px,calc(100vw-1rem))] overflow-hidden rounded-[18px] border shadow-[0_24px_80px_rgba(0,0,0,0.65)] ${position ? "" : "left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] -translate-x-1/2"}`}`}
+        ? "inset-0 h-[calc(100*var(--app-dvh))] w-full overflow-hidden rounded-none border-0 shadow-none"
+        : `max-h-[calc(100*var(--app-dvh)-1.5rem)] w-[min(640px,calc(100vw-1rem))] overflow-hidden rounded-[18px] border shadow-[0_24px_80px_rgba(0,0,0,0.65)] ${position ? "" : "left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] -translate-x-1/2"}`}`}
       data-testid="mini-player-overlay"
       role="dialog"
       style={{

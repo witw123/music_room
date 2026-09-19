@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import {
   customLayoutCanvas,
   customLayoutItemLabels,
@@ -124,6 +125,8 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose, pageId, selectedItemId, updatePageItem]);
+
+  useBackHandler(onClose);
 
   const currentPage = draft.pages[pageId];
   const availableItemIds = getCustomLayoutItemIds(pageId);

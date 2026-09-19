@@ -228,7 +228,7 @@ export function AuthPage() {
       : "text-accent";
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col bg-[#000000] font-sans selection:bg-accent/30 selection:text-white">
+    <main className="relative flex min-h-[calc(100*var(--app-dvh))] flex-col bg-[#000000] font-sans selection:bg-accent/30 selection:text-white">
       <div className="relative z-10 mx-auto my-auto flex min-h-[80vh] w-full max-w-5xl flex-col items-center justify-center p-4 sm:p-6 lg:p-12">
         <div className="relative flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#08080a] lg:flex-row">
           {/* Desktop Left Marketing Panel */}

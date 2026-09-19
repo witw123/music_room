@@ -290,7 +290,7 @@ export function QqMusicSourcePanel({
           ) : null}
 
           {results.length > 0 ? (
-            <div className="qqmusic-results-scroll max-h-[min(28rem,52dvh)] overflow-y-auto overscroll-contain rounded-lg border border-surface-border sm:max-h-[min(32rem,58dvh)]">
+            <div className="qqmusic-results-scroll max-h-[min(28rem,calc(52*var(--app-dvh)))] overflow-y-auto overscroll-contain rounded-lg border border-surface-border sm:max-h-[min(32rem,calc(58*var(--app-dvh)))]">
               <div className="flex flex-col divide-y divide-surface-border">
               {results.map((track) => {
                 const isImporting = pendingAction === `import:${track.providerTrackId}`;

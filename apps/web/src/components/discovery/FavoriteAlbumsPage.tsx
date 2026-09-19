@@ -397,7 +397,7 @@ export function FavoriteAlbumsPage({
     }
   }
 
-  if (!hydrated || !activeSession) return <div className="min-h-[100dvh] bg-background" />;
+  if (!hydrated || !activeSession) return <div className="min-h-[calc(100*var(--app-dvh))] bg-background" />;
 
   const detailItem = detail
     ? items.find((item) => item.provider === detail.provider && item.providerAlbumId === detail.providerAlbumId) ?? null

@@ -21,7 +21,7 @@ describe("RadioRoomView layout", () => {
     expect(radioRoomSource).toContain("<RadioMembersPanel");
     expect(radioRoomSource).not.toContain("RadioCommunityPanels");
     expect(radioRoomSource).toContain("useState(10)");
-    expect(radioRoomSource).toContain("lg:max-h-[min(42rem,calc(100dvh-10rem))]");
+    expect(radioRoomSource).toContain("lg:max-h-[min(42rem,calc(100*var(--app-dvh)-10rem))]");
     expect(radioRoomSource).not.toContain("lg:border-t lg:border-surface-border");
   });
 

@@ -2,7 +2,7 @@ export default function NotFoundPage() {
   return (
     <main
       style={{
-        minHeight: "100dvh",
+        minHeight: "calc(100 * var(--app-dvh))",
         display: "grid",
         placeItems: "center",
         padding: "2rem",

@@ -719,7 +719,7 @@ function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCance
     >
       <form
         aria-labelledby="room-save-playlist-title"
-        className="light-dialog-surface my-auto max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:p-5"
+        className="light-dialog-surface my-auto max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();

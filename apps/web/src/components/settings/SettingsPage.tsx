@@ -137,7 +137,7 @@ export function SettingsPage() {
   }, [activeSession]);
 
   if (!hydrated || !activeSession) {
-    return <div className="min-h-[100dvh] bg-background" />;
+    return <div className="min-h-[calc(100*var(--app-dvh))] bg-background" />;
   }
 
   function patchSettings(patch: Parameters<typeof updateAppSettings>[0]) {

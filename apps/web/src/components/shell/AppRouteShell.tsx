@@ -57,7 +57,7 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
 
   return (
     <LocalPlayerProvider>
-      <div className="min-h-[100dvh] overflow-x-hidden bg-background">
+      <div className="min-h-[calc(100*var(--app-dvh))] overflow-x-hidden bg-background">
         <div className="hidden md:contents">
           <AppSidebar
             hasBottomPlayer

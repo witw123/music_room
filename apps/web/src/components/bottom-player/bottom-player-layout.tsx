@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
@@ -289,6 +290,8 @@ function VolumeControl({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
+
+  useBackHandler(() => setIsOpen(false), isOpen);
 
   return (
     <div ref={rootRef} className="relative shrink-0">
@@ -664,6 +667,8 @@ export function QualityBadge({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
+
+  useBackHandler(() => setIsOpen(false), isOpen);
 
   const activeQuality = (quality as AudioQualityPreference) || preferredQuality;
   const currentOption =

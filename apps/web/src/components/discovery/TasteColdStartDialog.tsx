@@ -160,7 +160,7 @@ export function TasteColdStartDialog({
           mobile bottom navigation (z-70) paint over the dialog footer and the
           primary CTA becomes untappable on phones. */}
       <div
-        className="relative w-full max-w-2xl p-4 sm:p-6 md:p-8 rounded-2xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[90dvh] flex flex-col"
+        className="relative w-full max-w-2xl p-4 sm:p-6 md:p-8 rounded-2xl bg-background-secondary border border-surface-border shadow-2xl text-foreground overflow-hidden max-h-[calc(90*var(--app-dvh))] flex flex-col"
       >
         <div className="flex items-start justify-between gap-4 mb-4 sm:mb-5 shrink-0">
           <div className="flex items-center gap-3 sm:gap-3.5">

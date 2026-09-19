@@ -258,7 +258,7 @@ export function RoomsHomePage({
   );
 
   if (!hydrated) {
-    return <div className="min-h-[100dvh] bg-background" />;
+    return <div className="min-h-[calc(100*var(--app-dvh))] bg-background" />;
   }
 
   return (
