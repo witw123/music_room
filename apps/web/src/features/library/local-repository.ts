@@ -10,28 +10,16 @@ import {
   type TrackMeta,
   type TrackLoudness
 } from "@music-room/shared";
+import { forEachWithConcurrency, resolveLocalFileConcurrency } from "./local-audio-storage-helpers";
+import type {
+  RepositoryDirectoryHandle as FileSystemDirectoryHandle,
+  RepositoryFileHandle as FileSystemFileHandle
+} from "./directory-handle";
 export const localRepositoryDirectoryName = ".music-room";
 export const localRepositoryFormat = "music-room-local-repository" as const;
 export const localRepositorySchemaVersion = 1 as const;
 
 const repositoryManifestFileName = "repository.json";
-const repositoryDirectories = [
-  "catalog/tracks",
-  "catalog/rooms",
-  "catalog/provider-tracks",
-  "catalog/playlists",
-  "library/sources",
-  "library/artwork",
-  "library/lyrics",
-  "assets/original",
-  "assets/playback",
-  "cache/provider",
-  "cache/artwork",
-  "cache/previews",
-  "jobs",
-  "tmp",
-  "trash"
-] as const;
 const playbackWriteConcurrency = 4;
 
 export type LocalRepositoryManifest = {
@@ -173,14 +161,10 @@ export class LocalRepository {
     public readonly manifest: LocalRepositoryManifest
   ) {}
 
-  static async open(root: FileSystemDirectoryHandle, options?: { recover?: boolean }) {
+  static async initialize(root: FileSystemDirectoryHandle) {
     const dataDirectory = await root.getDirectoryHandle(localRepositoryDirectoryName, {
       create: true
     });
-    for (const directory of repositoryDirectories) {
-      await getDirectoryByPath(dataDirectory, directory, true);
-    }
-
     const existing = await readJsonFile<LocalRepositoryManifest>(
       dataDirectory,
       repositoryManifestFileName
@@ -194,6 +178,14 @@ export class LocalRepository {
     if (!existing) {
       await writeJsonFile(dataDirectory, repositoryManifestFileName, manifest);
     }
+    return new LocalRepository(root, dataDirectory, manifest);
+  }
+
+  static async open(root: FileSystemDirectoryHandle, options?: { recover?: boolean }) {
+    const dataDirectory = await root.getDirectoryHandle(localRepositoryDirectoryName);
+    const manifest = await readJsonFile<LocalRepositoryManifest>(dataDirectory, repositoryManifestFileName);
+    if (!manifest) throw new Error("Music Room 仓库未初始化或无法读取。");
+    validateRepositoryManifest(manifest);
     const repository = new LocalRepository(root, dataDirectory, manifest);
     if (options?.recover !== false) {
       await repository.cleanupTemporaryWrites();
@@ -208,13 +200,12 @@ export class LocalRepository {
     await writeJsonFile(this.dataDirectory, repositoryManifestFileName, this.manifest);
   }
 
-  async commitCatalogChanges() {
-    await this.writeCatalogIndex();
-    await this.touch();
-  }
-
-  async listFiles() {
-    return listFilesFromDirectory(this.dataDirectory, localRepositoryDirectoryName);
+  async listFiles(prefixes: readonly string[] = [localRepositoryDirectoryName]) {
+    const groups = await Promise.all(prefixes.map(async (prefix) => {
+      const directory = await getDirectoryByPath(this.root, prefix.replace(/\/$/, ""), false);
+      return directory ? listFilesFromDirectory(directory, prefix.replace(/\/$/, "")) : [];
+    }));
+    return groups.flat();
   }
 
   async writeManagedSource(input: {
@@ -356,7 +347,7 @@ export class LocalRepository {
 
   async writeTrack(
     record: LocalRepositoryTrackRecord,
-    options?: { updateCatalog?: boolean }
+    options?: { touchManifest?: boolean }
   ) {
     const existing = await this.readTrack(record.fileHash);
     const roomRefs = record.roomRefs ?? existing?.roomRefs;
@@ -371,8 +362,7 @@ export class LocalRepository {
       `${localRepositoryDirectoryName}/catalog/tracks/${nextRecord.fileHash}.json`,
       nextRecord
     );
-    if (options?.updateCatalog !== false) {
-      await this.writeCatalogIndex();
+    if (options?.touchManifest !== false) {
       await this.touch();
     }
   }
@@ -383,10 +373,9 @@ export class LocalRepository {
     );
   }
 
-  async deleteTrack(fileHash: string, options?: { updateCatalog?: boolean }) {
+  async deleteTrack(fileHash: string, options?: { touchManifest?: boolean }) {
     await this.removePath(`${localRepositoryDirectoryName}/catalog/tracks/${fileHash}.json`);
-    if (options?.updateCatalog !== false) {
-      await this.writeCatalogIndex();
+    if (options?.touchManifest !== false) {
       await this.touch();
     }
   }
@@ -418,7 +407,7 @@ export class LocalRepository {
     for (const record of tracks) {
       const roomRefs = record.roomRefs?.filter((ref) => ref.roomId !== snapshot.room.id) ?? [];
       if (roomRefs.length !== (record.roomRefs?.length ?? 0)) {
-        await this.writeTrack({ ...record, roomRefs }, { updateCatalog: false });
+        await this.writeTrack({ ...record, roomRefs }, { touchManifest: false });
       }
       // Room membership is metadata, not cache ownership. Cached audio stays
       // available after a room snapshot no longer references the track.
@@ -474,9 +463,8 @@ export class LocalRepository {
         roomRefs,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now
-      }, { updateCatalog: false });
+      }, { touchManifest: false });
     }
-    await this.writeCatalogIndex();
     await this.touch();
   }
 
@@ -496,7 +484,6 @@ export class LocalRepository {
     await this.removePath(
       `${localRepositoryDirectoryName}/catalog/rooms/${encodeURIComponent(roomId)}.json`
     );
-    await this.writeCatalogIndex();
     await this.touch();
   }
 
@@ -508,9 +495,8 @@ export class LocalRepository {
         (ref) => ref.roomId !== roomId || (removed ? !removed.has(ref.trackId) : false)
       ) ?? [];
       if (roomRefs.length === (record.roomRefs?.length ?? 0)) continue;
-      await this.writeTrack({ ...record, roomRefs }, { updateCatalog: false });
+      await this.writeTrack({ ...record, roomRefs }, { touchManifest: false });
     }
-    await this.writeCatalogIndex();
     await this.touch();
   }
 
@@ -533,7 +519,6 @@ export class LocalRepository {
       `${localRepositoryDirectoryName}/catalog/playlists/${record.id}.json`,
       record
     );
-    await this.writeCatalogIndex();
     await this.touch();
   }
 
@@ -551,7 +536,6 @@ export class LocalRepository {
 
   async deletePlaylist(id: string) {
     await this.removePath(`${localRepositoryDirectoryName}/catalog/playlists/${id}.json`);
-    await this.writeCatalogIndex();
     await this.touch();
   }
 
@@ -703,12 +687,11 @@ export class LocalRepository {
     await Promise.all(
       tracks
         .filter((track) => track.playbackAsset && obsoleteAssetIds.has(track.playbackAsset.assetId))
-        .map((track) => this.writeTrack({ ...track, playbackAsset: null }, { updateCatalog: false }))
+        .map((track) => this.writeTrack({ ...track, playbackAsset: null }, { touchManifest: false }))
     );
     await Promise.all(obsolete.map((asset) => this.removeDirectory(
       this.getPlaybackAssetPath(asset.manifest.assetId, asset.manifest.profileId)
     )));
-    await this.writeCatalogIndex();
     await this.touch();
   }
 
@@ -806,21 +789,6 @@ export class LocalRepository {
       relativePath,
       new Blob([JSON.stringify(value, null, 2)], { type: "application/json" })
     );
-  }
-
-  private async writeCatalogIndex() {
-    const [tracks, rooms, playlists] = await Promise.all([
-      this.listTracks(),
-      this.listRooms(),
-      this.listPlaylists()
-    ]);
-    await this.writeJson(`${localRepositoryDirectoryName}/catalog/index.json`, {
-      schemaVersion: 1,
-      updatedAt: new Date().toISOString(),
-      trackHashes: tracks.map((track) => track.fileHash).sort(),
-      roomIds: rooms.map((room) => room.roomId).sort(),
-      playlistIds: playlists.map((playlist) => playlist.id).sort()
-    });
   }
 
   private async readJson<T>(relativePath: string) {
@@ -1005,8 +973,9 @@ async function getDirectoryByParts(
   for (const part of parts) {
     try {
       directory = await directory.getDirectoryHandle(part, { create });
-    } catch {
-      return null;
+    } catch (error) {
+      if ((error as DOMException).name === "NotFoundError" && !create) return null;
+      throw error;
     }
   }
   return directory;
@@ -1024,8 +993,9 @@ async function getFileByPath(
   if (!directory) return null;
   try {
     return await directory.getFileHandle(fileName, { create });
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as DOMException).name === "NotFoundError" && !create) return null;
+    throw error;
   }
 }
 
@@ -1057,24 +1027,42 @@ async function listFilesFromDirectory(
   if (!iterable.values) return [];
 
   const files: LocalRepositoryFileEntry[] = [];
+  const pending: Array<{ recordIndex: number; relativePath: string; handle: FileSystemFileHandle }> = [];
   for await (const entry of iterable.values()) {
     const relativePath = `${relativeDirectory}/${entry.name}`;
     if (entry.kind === "file") {
-      try {
-        files.push({
-          relativePath,
-          sizeBytes: (await entry.getFile()).size
-        });
-      } catch {
-        // Ignore files that disappear while the directory is being inspected.
-      }
+      pending.push({ recordIndex: files.length, relativePath, handle: entry });
+      // Placeholder, counted as present until `getFile()` says otherwise, so
+      // the result keeps directory-iteration order.
+      files.push({ relativePath, sizeBytes: 0 });
       continue;
     }
     if (entry.kind === "directory") {
       files.push(...await listFilesFromDirectory(entry, relativePath));
     }
   }
-  return files;
+
+  // `getFile()` is what costs here, and doing it one file at a time is what
+  // made listing a full library slow; run it with a bounded fan-out instead.
+  const missing = new Set<number>();
+  await forEachWithConcurrency(
+    pending,
+    resolveLocalFileConcurrency(pending.length),
+    async (file) => {
+      try {
+        files[file.recordIndex] = {
+          relativePath: file.relativePath,
+          sizeBytes: file.handle.getSize
+            ? await file.handle.getSize()
+            : (await file.handle.getFile()).size
+        };
+      } catch {
+        // Ignore files that disappear while the directory is being inspected.
+        missing.add(file.recordIndex);
+      }
+    }
+  );
+  return missing.size === 0 ? files : files.filter((_, index) => !missing.has(index));
 }
 
 function splitSafePath(path: string) {

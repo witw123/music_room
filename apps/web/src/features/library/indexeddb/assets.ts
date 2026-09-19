@@ -6,6 +6,7 @@ import {
   type AudioAssetManifest
 } from "@music-room/shared";
 import { LocalRepository } from "../local-repository";
+import { getLocalAudioDirectory } from "./storage-records";
 import {
   assetUnitId,
   musicRoomDatabase,
@@ -300,7 +301,7 @@ export async function getAssetUnitIndexes(assetId: string) {
 }
 
 async function getLocalRepositoryForAssetRead() {
-  const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+  const directory = await getLocalAudioDirectory();
   if (!directory) return null;
   return LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
 }
@@ -365,7 +366,8 @@ export async function deleteOriginalAssetForTrack(trackId: string) {
 }
 
 export async function upsertTranscodeJob(
-  input: Omit<TranscodeJobRecord, "updatedAt">
+  input: Omit<TranscodeJobRecord, "updatedAt">,
+  options?: { persistRepository?: boolean }
 ) {
   const record = {
     ...input,
@@ -373,7 +375,8 @@ export async function upsertTranscodeJob(
   } satisfies TranscodeJobRecord;
   await musicRoomDatabase.transcodeJobs.put(record);
 
-  const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+  if (options?.persistRepository === false) return;
+  const directory = await getLocalAudioDirectory();
   if (directory) {
     await LocalRepository.open(directory.handle, { recover: false })
       .then((repository) => repository.writeTranscodeJob(record))
@@ -384,4 +387,3 @@ export async function upsertTranscodeJob(
 export async function listQueuedTranscodeJobs() {
   return musicRoomDatabase.transcodeJobs.where("status").equals("queued").toArray();
 }
-

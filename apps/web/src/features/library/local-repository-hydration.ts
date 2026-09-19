@@ -38,6 +38,7 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
       if (record.retention === "library") {
         await saveLocalAudioFileRecord({
           fileHash: record.fileHash,
+          sizeBytes: record.sizeBytes,
           fileName,
           relativePath: record.source.relativePath,
           storageKind: "saved"
@@ -50,6 +51,27 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
           sizeBytes: record.sizeBytes
         });
       }
+    } else if (record.retention === "library") {
+      await saveLocalAudioFileRecord({
+        fileHash: record.fileHash,
+        sizeBytes: record.sizeBytes,
+        fileName: record.source.relativePath,
+        lastModified: record.source.lastModified,
+        storageKind: "saved",
+        source: "directory-scan"
+      });
+      await upsertLocalPlaylistTrack({
+        id: `local-file:${record.fileHash}`,
+        fileHash: record.fileHash,
+        fileName: record.source.relativePath,
+        lastModified: record.source.lastModified,
+        source: "directory-scan",
+        title: record.title, artist: record.artist, album: record.album ?? null,
+        artworkUrl: record.artworkUrl ?? null, lyrics: record.lyrics ?? null,
+        durationMs: record.durationMs, sizeBytes: record.sizeBytes, mimeType: record.mimeType,
+        provider: "local_upload", providerTrackId: null, availableOffline: true,
+        createdAt: record.createdAt, updatedAt: record.updatedAt
+      }, { persistRepository: false });
     }
 
     if (record.originalAsset) {
@@ -84,7 +106,17 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
   }
 
   for (const providerTrack of await repository.listProviderTracks<Parameters<typeof upsertLocalPlaylistTrack>[0]>()) {
-    await upsertLocalPlaylistTrack(providerTrack);
+    await upsertLocalPlaylistTrack(providerTrack, { persistRepository: false });
+    if (providerTrack.sourceDirectoryId && providerTrack.fileHash && providerTrack.fileName) {
+      await saveLocalAudioFileRecord({
+        fileHash: providerTrack.fileHash,
+        fileName: providerTrack.fileName,
+        sizeBytes: providerTrack.sizeBytes,
+        lastModified: providerTrack.lastModified,
+        sourceDirectoryId: providerTrack.sourceDirectoryId,
+        storageKind: "saved"
+      });
+    }
   }
 
   for (const job of await repository.listTranscodeJobs()) {
@@ -95,7 +127,7 @@ export async function hydrateLocalRepository(repository: LocalRepository) {
       status: job.status,
       progress: job.progress,
       errorMessage: job.errorMessage
-    });
+    }, { persistRepository: false });
   }
 
   return { restoredTrackCount, restoredOriginalAssetCount, restoredPlaybackAssetCount };

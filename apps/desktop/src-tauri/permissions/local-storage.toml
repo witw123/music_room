@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-local-storage"
+description = "Access the fixed Music Room repository"
+commands.allow = ["local_storage"]

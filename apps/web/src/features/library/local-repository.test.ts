@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import {
   createRepositoryTrackRecord,
@@ -66,6 +66,46 @@ class MemoryDirectoryHandle {
 }
 
 describe("LocalRepository", () => {
+  it("opens an existing repository without creating directories or rewriting the manifest", async () => {
+    const root = new MemoryDirectoryHandle("Music Room");
+    await LocalRepository.initialize(root);
+    const getDirectory = vi.spyOn(root, "getDirectoryHandle");
+    const data = await root.getDirectoryHandle(".music-room");
+    const manifest = await data.getFileHandle("repository.json");
+    const write = vi.spyOn(manifest, "createWritable");
+    getDirectory.mockClear();
+    await LocalRepository.open(root, { recover: false });
+    expect(getDirectory).toHaveBeenCalledExactlyOnceWith(".music-room");
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("does not scan audio directories when listing auxiliary files", async () => {
+    const root = new MemoryDirectoryHandle("Music Room");
+    const repository = await LocalRepository.initialize(root);
+    const audioPath = await repository.writeManagedSource({
+      file: new Blob(["audio"]), fileHash: "a".repeat(64), mimeType: "audio/mpeg"
+    });
+    await repository.writeLyrics("a".repeat(64), "lyrics");
+    const library = await (await root.getDirectoryHandle(".music-room")).getDirectoryHandle("library");
+    const audioDirectory = await (await library.getDirectoryHandle("sources")).getDirectoryHandle("aa");
+    const audio = await audioDirectory.getFileHandle(audioPath.split("/").at(-1)!);
+    const readAudio = vi.spyOn(audio, "getFile");
+    expect(await repository.listFiles([".music-room/library/lyrics/"])).toHaveLength(1);
+    expect(readAudio).not.toHaveBeenCalled();
+  });
+
+  it("does not regenerate a global catalog when writing one track", async () => {
+    const repository = await LocalRepository.initialize(new MemoryDirectoryHandle("Music Room"));
+    const listTracks = vi.spyOn(repository, "listTracks");
+    await repository.writeTrack(createRepositoryTrackRecord({
+      fileHash: "a".repeat(64), title: "Song", artist: "Artist",
+      mimeType: "audio/mpeg", durationMs: 1000, sizeBytes: 5,
+      source: { kind: "managed", relativePath: ".music-room/library/sources/a.mp3" },
+      retention: "library"
+    }));
+    expect(listTracks).not.toHaveBeenCalled();
+    expect(await repository.readPath(".music-room/catalog/index.json")).toBeNull();
+  });
   function buildTrack(id: string, fileHash: string, ownerSessionId: string): TrackMeta {
     return {
       id,
@@ -121,7 +161,7 @@ describe("LocalRepository", () => {
 
   it("mirrors room track metadata and keeps uploader references separate", async () => {
     const root = new MemoryDirectoryHandle("Music Room") as unknown as FileSystemDirectoryHandle;
-    const repository = await LocalRepository.open(root);
+    const repository = await LocalRepository.initialize(root);
     const firstTrack = buildTrack("track-a", "a".repeat(64), "owner-a");
     const secondTrack = buildTrack("track-b", "b".repeat(64), "owner-b");
 
@@ -148,7 +188,7 @@ describe("LocalRepository", () => {
 
   it("creates a repository and persists source, track, and playlist records", async () => {
     const root = new MemoryDirectoryHandle("Music Room") as unknown as FileSystemDirectoryHandle;
-    const repository = await LocalRepository.open(root);
+    const repository = await LocalRepository.initialize(root);
     const sourcePath = await repository.writeManagedSource({
       file: new Blob(["audio"], { type: "audio/mpeg" }),
       fileHash: "a".repeat(64),
@@ -182,7 +222,7 @@ describe("LocalRepository", () => {
 
   it("persists playback units under the profile and asset id", async () => {
     const root = new MemoryDirectoryHandle("Music Room") as unknown as FileSystemDirectoryHandle;
-    const repository = await LocalRepository.open(root);
+    const repository = await LocalRepository.initialize(root);
     const assetId = "b".repeat(64);
     const sourceFileHash = "c".repeat(64);
     const manifest = {

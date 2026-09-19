@@ -1,9 +1,13 @@
-import { isTauriRuntime } from "@/lib/desktop/tauri";
+import type {
+  RepositoryDirectoryHandle as FileSystemDirectoryHandle,
+  RepositoryFileHandle as FileSystemFileHandle
+} from "./directory-handle";
+import { hasNativeStorage } from "./native-storage";
 
 export type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {
     mode?: "read" | "readwrite";
-  }) => Promise<PermissionedDirectoryHandle>;
+  }) => Promise<globalThis.FileSystemDirectoryHandle>;
 };
 
 export type PermissionedDirectoryHandle = FileSystemDirectoryHandle & {
@@ -17,6 +21,7 @@ export type IterableDirectoryHandle = FileSystemDirectoryHandle & {
 
 export type LocalAudioStorageState = {
   supported: boolean;
+  fixedRoot?: boolean;
   directoryName: string | null;
   savedFileHashes: string[];
   cachedFileHashes: string[];
@@ -50,8 +55,8 @@ export type SelectedLocalAudioFile = {
 export function supportsLocalAudioDirectory() {
   return (
     typeof window !== "undefined" &&
-    (typeof (window as DirectoryPickerWindow).showDirectoryPicker === "function" ||
-      (typeof navigator !== "undefined" && typeof navigator.storage?.getDirectory === "function"))
+    !hasNativeStorage() &&
+    typeof (window as DirectoryPickerWindow).showDirectoryPicker === "function"
   );
 }
 
@@ -119,22 +124,15 @@ export async function requestDirectoryPermission(
   if (typeof handle.queryPermission !== "function") {
     return true;
   }
-  const current = await handle.queryPermission({ mode }).catch(() => "granted" as PermissionState);
+  const current = await handle.queryPermission({ mode }).catch(() => "denied" as PermissionState);
   if (current === "granted") {
     return true;
   }
-  const requested = await handle.requestPermission({ mode }).catch(() => "granted" as PermissionState);
+  const requested = await handle.requestPermission({ mode }).catch(() => "denied" as PermissionState);
   return requested === "granted";
 }
 
-/**
- * The software client (Tauri) reads the app-owned OPFS root, where no user
- * permission prompt applies — but WebView2 may still report "prompt" for
- * those handles, which silently nulled every cache read and broke cached
- * playback. Browsers keep the standard queryPermission behavior.
- */
 export async function hasDirectoryReadPermission(handle: FileSystemDirectoryHandle) {
-  if (isTauriRuntime()) return true;
   return (
     (await asPermissionedHandle(handle)
       .queryPermission({ mode: "read" })
@@ -154,7 +152,71 @@ export function asPermissionedHandle(handle: FileSystemDirectoryHandle): Permiss
 }
 
 export function yieldToBrowser() {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  // `globalThis`, not `window`: the frame-budget yielder below can trip this
+  // from the node test environment, where `window` does not exist.
+  return new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+}
+
+/**
+ * Crossing a macrotask boundary is not free: once the browser notices nested
+ * `setTimeout(0)` it clamps it to ~4ms, so yielding on every item of a large
+ * directory walk spends seconds of wall clock doing nothing. Yield only after a
+ * frame's worth of work has accumulated — still frequent enough to keep the
+ * main thread responsive, rare enough to stay off the clamp.
+ *
+ * `scheduler.yield()` resumes at the front of the queue instead of behind
+ * pending timers, so prefer it where the browser has it.
+ */
+export function createFrameBudgetYielder(budgetMs = 14) {
+  let lastYieldAt = performance.now();
+  return async function yieldIfFrameBudgetExhausted() {
+    if (performance.now() - lastYieldAt < budgetMs) return;
+    lastYieldAt = performance.now();
+    const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+    if (typeof scheduler?.yield === "function") {
+      await scheduler.yield();
+      return;
+    }
+    await yieldToBrowser();
+  };
+}
+
+/**
+ * Matches `resolveEncodingConcurrency`: leave one core for the main thread and
+ * cap the fan-out so a large library cannot queue hundreds of OPFS requests.
+ */
+export function resolveLocalFileConcurrency(count: number, hardwareConcurrency =
+  typeof navigator === "undefined" ? 2 : navigator.hardwareConcurrency) {
+  if (!Number.isFinite(count) || count <= 0) return 1;
+  const availableWorkers = Number.isFinite(hardwareConcurrency)
+    ? Math.max(1, Math.floor(hardwareConcurrency) - 1)
+    : 2;
+  return Math.min(count, 4, availableWorkers);
+}
+
+/**
+ * Runs `worker` over `items` with a bounded number in flight, in the same
+ * worker-pool shape as the repository's playback-unit writer. Rejections
+ * propagate as they would from a sequential loop; callers that tolerate a bad
+ * item should catch inside `worker`.
+ */
+export async function forEachWithConcurrency<T>(
+  items: ReadonlyArray<T>,
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>
+) {
+  if (items.length === 0) return;
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, Math.floor(concurrency)), items.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const index = nextIndex++;
+        if (index >= items.length) return;
+        await worker(items[index]!, index);
+      }
+    })
+  );
 }
 
 export function isAbortError(error: unknown) {

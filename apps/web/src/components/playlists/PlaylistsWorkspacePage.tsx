@@ -35,7 +35,6 @@ import {
   restoreLocalPlaylistsFromRepository,
   listMergedLocalPlaylistTracks,
   listRoomPlaylistTrackIndex,
-  syncSelectedLocalDirectoryTracks,
   sortLocalPlaylists,
   toCachedProviderTrack,
   updateLocalPlaylist,
@@ -208,15 +207,7 @@ export function PlaylistsWorkspacePage({
         return { tracks, playlists, storage, roomTracks };
       };
 
-      let current = await readLocalData();
-      let scannedTrackCount = 0;
-      try {
-        scannedTrackCount = await syncSelectedLocalDirectoryTracks();
-        current = await readLocalData();
-      } catch {
-        if (version === refreshVersion.current) setMessage("本地目录扫描失败，已显示上次保存的歌单数据。");
-      }
-      return { ...current, scannedTrackCount };
+      return readLocalData();
     };
 
     const loadNetworkData = async () => {
@@ -281,7 +272,7 @@ export function PlaylistsWorkspacePage({
         }
       }
     }
-    return localResult.status === "fulfilled" ? localResult.value.scannedTrackCount : 0;
+    return localResult.status === "fulfilled" ? localResult.value.tracks.length : 0;
   }, [activeUserId, playlistView]);
 
   useEffect(() => {

@@ -83,7 +83,9 @@ export type TranscodeJobRecord = {
 
 export type LocalAudioDirectoryRecord = {
   id: "default";
-  handle: FileSystemDirectoryHandle;
+  kind: "selected" | "native";
+  indexReady?: boolean;
+  handle?: FileSystemDirectoryHandle;
   name: string;
   repositoryId?: string;
   schemaVersion?: number;
@@ -101,6 +103,7 @@ export type LocalAudioStorageKind = "cache" | "saved";
 
 export type LocalAudioFileRecord = {
   fileHash: string;
+  sizeBytes: number;
   fileName: string;
   lastModified?: number;
   relativePath?: string;

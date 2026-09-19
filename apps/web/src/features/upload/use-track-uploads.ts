@@ -41,8 +41,7 @@ import {
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
 import {
-  deleteRoomSnapshotFromLocalRepository,
-  persistRoomSnapshotToLocalRepository
+  deleteRoomSnapshotFromLocalRepository
 } from "@/features/library/local-room-storage";
 import {
   playlistsChangedEventName,
@@ -54,8 +53,7 @@ import {
   getDefaultLocalPlaylistTrackIds,
   listMergedLocalPlaylistTracks,
   cancelSelectedLocalDirectorySync,
-  restoreLocalPlaylistsFromRepository,
-  syncSelectedLocalDirectoryTracks
+  restoreLocalPlaylistsFromRepository
 } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
@@ -116,7 +114,6 @@ export function useTrackUploads(options: {
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
-  const localDirectoryScanAttemptedRef = useRef(false);
   const refreshCacheLibraryPromiseRef = useRef<Promise<void> | null>(null);
   const refreshCacheLibraryQueuedRef = useRef(false);
   const refreshCacheLibraryRef = useRef<(() => Promise<void>) | null>(null);
@@ -136,16 +133,6 @@ export function useTrackUploads(options: {
 
     const refreshPromise = (async () => {
       const localStorageState = await getLocalAudioStorageState();
-      if (localStorageState.directoryName && !localDirectoryScanAttemptedRef.current) {
-        localDirectoryScanAttemptedRef.current = true;
-        void syncSelectedLocalDirectoryTracks()
-          .then(() => {
-            if (typeof window !== "undefined") {
-              window.dispatchEvent(new Event(cacheLibraryChangedEventName));
-            }
-          })
-          .catch(() => undefined);
-      }
       const [snapshot, localPlaylistTracks, cacheStats] = await Promise.all([
         loadCacheLibrarySnapshot({ listCachedLibraryTrackSummaries }),
         listMergedLocalPlaylistTracks(),
@@ -301,21 +288,14 @@ export function useTrackUploads(options: {
   const chooseLocalFolder = useCallback(async () => {
     try {
       cancelSelectedLocalDirectorySync();
-      const folderName = await chooseLocalAudioDirectory();
-      localDirectoryScanAttemptedRef.current = false;
-      if (roomSnapshot) {
-        await persistRoomSnapshotToLocalRepository(roomSnapshot);
-      }
-      await syncSelectedLocalDirectoryTracks();
-      localDirectoryScanAttemptedRef.current = true;
-      await refreshCacheLibrary();
-      setStatusMessage(`Music Room 本地存储仓库已设置为“${folderName}”，房间歌曲信息会自动镜像到该目录。`);
+      await chooseLocalAudioDirectory();
+      window.location.reload();
     } catch (error) {
       setStatusMessage(error instanceof Error && error.name === "AbortError"
         ? "已取消选择本地音频文件夹。"
         : toLocalAudioErrorMessage(error));
     }
-  }, [refreshCacheLibrary, roomSnapshot, setStatusMessage]);
+  }, [setStatusMessage]);
 
   const saveTrackToLocal = useCallback(async (track: TrackMeta) => {
     try {

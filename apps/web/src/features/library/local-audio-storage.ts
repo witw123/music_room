@@ -1,5 +1,10 @@
 "use client";
 
+import type { RepositoryDirectoryHandle as FileSystemDirectoryHandle } from "./directory-handle";
+import { hasNativeStorage } from "./native-storage";
+import { hydrateLocalRepository } from "./local-repository-hydration";
+import { storageRootChangingEvent, storageRootChangedEvent } from "./storage-root-events";
+
 import type {
   OriginalAssetManifest,
   PlaybackAssetManifest,
@@ -28,7 +33,9 @@ import {
   deleteLocalAudioFileRecord,
   saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
-  saveLocalAudioFileRecord
+  saveLocalAudioFileRecord,
+  markLocalRepositoryIndexReady,
+  type LocalAudioFileRecord
 } from "./indexeddb";
 import {
   createRepositoryTrackRecord,
@@ -48,14 +55,16 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import {
   asPermissionedHandle,
   buildLocalAudioFileName,
+  createFrameBudgetYielder,
+  forEachWithConcurrency,
   getFileByPath,
   hasDirectoryReadPermission,
   isAbortError,
   isAudioFile,
-  isLocalOtherFile,
+  localOtherFilePrefixes,
   requestDirectoryPermission,
+  resolveLocalFileConcurrency,
   supportsLocalAudioDirectory,
-  yieldToBrowser,
   type DirectoryPickerWindow,
   type IterableDirectoryHandle,
   type LocalAudioCacheStats,
@@ -67,6 +76,7 @@ import {
 export * from "./local-audio-storage-helpers";
 
 export async function chooseLocalAudioDirectory() {
+  if (hasNativeStorage()) throw new Error("客户端使用固定的应用根目录，不能更改。");
   const picker = typeof window === "undefined"
     ? undefined
     : (window as DirectoryPickerWindow).showDirectoryPicker;
@@ -75,16 +85,35 @@ export async function chooseLocalAudioDirectory() {
   }
 
   const handle = await picker({ mode: "readwrite" });
-  // Opening without recovery avoids scanning a large repository before the
-  // selected handle can be persisted and shown in settings.
-  const repository = await LocalRepository.open(handle, { recover: false });
-  await saveLocalAudioDirectory({
-    handle,
-    name: handle.name,
-    repositoryId: repository.manifest.repositoryId,
-    schemaVersion: repository.manifest.schemaVersion
-  });
+  // Initialization creates only the manifest; child directories are created on write.
+  const repository = await LocalRepository.initialize(handle);
+  window.dispatchEvent(new Event(storageRootChangingEvent));
+  try {
+    await enqueueLocalRepositoryWrite(async () => {
+      await saveLocalAudioDirectory({
+        handle,
+        name: handle.name,
+        repositoryId: repository.manifest.repositoryId,
+        schemaVersion: repository.manifest.schemaVersion
+      });
+      await hydrateLocalRepository(repository);
+      await markLocalRepositoryIndexReady(repository.manifest.repositoryId);
+    });
+  } finally {
+    window.dispatchEvent(new Event(storageRootChangedEvent));
+  }
   return handle.name;
+}
+
+export async function initializeLocalStorage() {
+  const directory = await getLocalAudioDirectory();
+  if (!directory || !(await hasDirectoryReadPermission(directory.handle))) return false;
+  const repository = await LocalRepository.open(directory.handle, { recover: false });
+  if (!directory.indexReady) {
+    await hydrateLocalRepository(repository);
+    await markLocalRepositoryIndexReady(repository.manifest.repositoryId);
+  }
+  return true;
 }
 
 export async function getConfiguredLocalRepository() {
@@ -99,7 +128,7 @@ export async function getConfiguredLocalRepository() {
   }
 }
 
-export async function getLocalAudioStorageState(): Promise<LocalAudioStorageState> {
+export async function getLocalAudioStorageState(options?: { verifyFiles?: boolean }): Promise<LocalAudioStorageState> {
   const [directory, files, cachedFiles] = await Promise.all([
     getLocalAudioDirectory(),
     listLocalAudioFiles("saved"),
@@ -114,6 +143,7 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
   if (!directory || permission !== "granted") {
     return {
       supported: supportsLocalAudioDirectory(),
+      fixedRoot: hasNativeStorage(),
       directoryName: directory?.name ?? null,
       savedFileHashes: [],
       cachedFileHashes: [],
@@ -121,12 +151,25 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
     };
   }
 
+  if (!options?.verifyFiles) {
+    return {
+      supported: supportsLocalAudioDirectory(),
+      fixedRoot: hasNativeStorage(),
+      directoryName: directory.name,
+      savedFileHashes: files.map((file) => file.fileHash),
+      cachedFileHashes: cachedFiles.map((file) => file.fileHash),
+      permission
+    };
+  }
+  // Explicit verification shares one repository for both storage kinds.
+  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
   const [availableSavedFiles, availableCachedFiles] = await Promise.all([
-    filterReadableLocalFiles(directory.handle, files, true),
-    filterReadableLocalFiles(directory.handle, cachedFiles, false)
+    filterReadableLocalFiles(directory.handle, files, true, repository),
+    filterReadableLocalFiles(directory.handle, cachedFiles, false, repository)
   ]);
   return {
     supported: supportsLocalAudioDirectory(),
+    fixedRoot: hasNativeStorage(),
     directoryName: directory?.name ?? null,
     savedFileHashes: availableSavedFiles,
     cachedFileHashes: availableCachedFiles,
@@ -197,7 +240,7 @@ export async function listLocalAudioFilesInDirectory(
 async function getWritableLocalAudioDirectory() {
   const directory = await getLocalAudioDirectory();
   if (!directory) {
-    return null;
+    throw new Error("请先选择 Music Room 根目录。");
   }
 
   const permission = await requestDirectoryPermission(
@@ -214,12 +257,26 @@ export async function ensureLocalAudioDirectoryWriteAccess() {
   return !!(await getWritableLocalAudioDirectory());
 }
 
-export async function getLocalAudioFile(
-  fileHash: string,
-  sourceDirectoryId?: string | null,
-  sourceFileName?: string | null
-) {
-  const fileRecord = await getLocalAudioFileRecord(fileHash, "saved");
+/**
+ * Resolve a stored record to the `File` it points at.
+ *
+ * Split out of `getLocalAudioFile` so callers that already hold the record (and
+ * possibly an open repository) can skip re-reading both.
+ */
+async function resolveLocalAudioFile(
+  fileRecord: LocalAudioFileRecord | null,
+  options?: {
+    sourceDirectoryId?: string | null;
+    sourceFileName?: string | null;
+    // Only consulted for records living in the app root; a record carrying
+    // `sourceDirectoryId` belongs to a user-picked source folder and is
+    // resolved through that handle instead. Omit it to open one on demand;
+    // pass `null` to say "this root has none".
+    repository?: LocalRepository | null;
+  }
+): Promise<File | null> {
+  const sourceDirectoryId = options?.sourceDirectoryId;
+  const sourceFileName = options?.sourceFileName;
 
   if (sourceDirectoryId) {
     const sourceDirectory = await getLocalPlaylistDirectory(sourceDirectoryId);
@@ -236,10 +293,9 @@ export async function getLocalAudioFile(
   }
 
   if (fileRecord.sourceDirectoryId) {
-    const rootDirectory = await getLocalAudioDirectory();
-    if (!rootDirectory) return null;
-    if (!(await hasDirectoryReadPermission(rootDirectory.handle))) return null;
-    return getFileByPath(rootDirectory.handle, sourceFileName ?? fileRecord.fileName).catch(() => null);
+    const sourceDirectory = await getLocalPlaylistDirectory(fileRecord.sourceDirectoryId);
+    if (!sourceDirectory || !(await hasDirectoryReadPermission(sourceDirectory.handle))) return null;
+    return getFileByPath(sourceDirectory.handle, sourceFileName ?? fileRecord.fileName).catch(() => null);
   }
 
   const directory = await getLocalAudioDirectory();
@@ -249,13 +305,30 @@ export async function getLocalAudioFile(
     return null;
   }
 
-  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
+  // `undefined` means "caller supplied nothing, open one"; `null` means "this
+  // library genuinely has no repository". The two must stay distinct — folding
+  // `null` into the default would restore the per-track re-open this hoist
+  // exists to remove.
+  const repository =
+    options?.repository === undefined
+      ? await LocalRepository.open(directory.handle, { recover: false }).catch(() => null)
+      : options.repository;
   const repositoryFile = fileRecord.relativePath && repository
     ? await repository.readPath(fileRecord.relativePath)
     : null;
   if (repositoryFile) return repositoryFile;
   if (fileRecord.source !== "directory-scan") return null;
   return getFileByPath(directory.handle, fileRecord.fileName).catch(() => null);
+}
+
+export async function getLocalAudioFile(
+  fileHash: string,
+  sourceDirectoryId?: string | null,
+  sourceFileName?: string | null,
+  repository?: LocalRepository | null
+) {
+  const fileRecord = await getLocalAudioFileRecord(fileHash, "saved");
+  return resolveLocalAudioFile(fileRecord, { sourceDirectoryId, sourceFileName, repository });
 }
 
 export async function getOriginalAssetFile(input: {
@@ -320,11 +393,10 @@ export async function getRoomLocalAudioFile(input: {
   provider?: "netease" | "qqmusic" | "bilibili" | "alist";
   providerTrackId?: string | null;
 }) {
-  const [savedFile, cachedFile] = await Promise.all([
-    getLocalAudioFile(input.fileHash).catch(() => null),
-    getLocalAudioCacheFile(input.fileHash).catch(() => null)
-  ]);
+  const repository = await getConfiguredLocalRepository();
+  const savedFile = await getLocalAudioFile(input.fileHash, null, null, repository).catch(() => null);
   if (savedFile) return savedFile;
+  const cachedFile = await getLocalAudioCacheFile(input.fileHash, repository).catch(() => null);
   if (cachedFile) return cachedFile;
 
   const browserCache = await getCachedLibraryTrack(input.fileHash).catch(() => null);
@@ -373,7 +445,7 @@ export async function getRoomLocalAudioFile(input: {
   return null;
 }
 
-export async function getLocalAudioCacheFile(fileHash: string) {
+export async function getLocalAudioCacheFile(fileHash: string, openedRepository?: LocalRepository | null) {
   const [directory, fileRecord] = await Promise.all([
     getLocalAudioDirectory(),
     getLocalAudioCacheFileRecord(fileHash)
@@ -386,7 +458,9 @@ export async function getLocalAudioCacheFile(fileHash: string) {
     return null;
   }
 
-  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
+  const repository = openedRepository === undefined
+    ? await LocalRepository.open(directory.handle, { recover: false }).catch(() => null)
+    : openedRepository;
   const repositoryFile = fileRecord.relativePath && repository
     ? await repository.readPath(fileRecord.relativePath)
     : null;
@@ -417,14 +491,9 @@ export async function saveAudioFileToLocalDirectory(input: {
 }) {
   return enqueueLocalRepositoryWrite(async () => {
     const directory = await getWritableLocalAudioDirectory();
-    if (!directory) {
-      throw new Error("请先选择本地音频文件夹。 ");
-    }
-
   const fileName = buildLocalAudioFileName(input);
     const repository = await LocalRepository.open(directory.handle, { recover: false });
   const existingTrack = await repository.readTrack(input.fileHash);
-  await deleteLocalAudioCacheFile(input.fileHash);
   const relativePath = await repository.writeManagedSource({
     file: input.file,
     fileHash: input.fileHash,
@@ -493,12 +562,6 @@ export async function saveAudioFileToLocalDirectory(input: {
     await repository.removePath(existingTrack.lyricsPath);
   }
 
-  await saveLocalAudioFileRecord({
-    fileHash: input.fileHash,
-    fileName,
-    relativePath,
-    storageKind: "saved"
-  });
   if (input.track) {
     const sizeBytes = input.track.sizeBytes ?? input.file.size;
     await repository.writeTrack(createRepositoryTrackRecord({
@@ -525,8 +588,16 @@ export async function saveAudioFileToLocalDirectory(input: {
       createdAt: existingTrack?.createdAt
     }));
   } else {
-    await persistCachedTrackRecord(input.fileHash, relativePath, "library");
+    await persistCachedTrackRecord(repository, input.fileHash, relativePath, "library");
   }
+  await saveLocalAudioFileRecord({
+    fileHash: input.fileHash,
+    sizeBytes: input.file.size,
+    fileName,
+    relativePath,
+    storageKind: "saved"
+  });
+  await deleteLocalAudioCacheFile(input.fileHash, { repository });
   await deleteCachedLibraryTrackFile(input.fileHash);
   if (input.trackId) {
     await deleteOriginalAssetForTrack(input.trackId);
@@ -547,10 +618,6 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
 }) {
   return enqueueLocalRepositoryWrite(async () => {
     const directory = await getWritableLocalAudioDirectory();
-    if (!directory) {
-      return null;
-    }
-
   const fileName = buildLocalAudioFileName(input);
     const repository = await LocalRepository.open(directory.handle, { recover: false });
   const relativePath = await repository.writeCachedSource({
@@ -565,7 +632,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
     relativePath,
     sizeBytes: input.file.size
   });
-  await persistCachedTrackRecord(input.fileHash, relativePath, "cache", {
+  await persistCachedTrackRecord(repository, input.fileHash, relativePath, "cache", {
     provider: input.provider,
     originalAsset: input.originalAsset,
     playbackAsset: input.playbackAsset
@@ -576,6 +643,7 @@ export async function saveCachedAudioFileToLocalDirectory(input: {
 }
 
 async function persistCachedTrackRecord(
+  repository: LocalRepository,
   fileHash: string,
   relativePath: string,
   retention: "library" | "cache",
@@ -587,8 +655,6 @@ async function persistCachedTrackRecord(
 ) {
   const summary = await getCachedLibraryTrackSummary(fileHash);
   if (!summary) return;
-  const repository = await getConfiguredLocalRepository();
-  if (!repository) return;
   const existing = await repository.readTrack(fileHash);
   let originalAsset = existing?.originalAsset ?? null;
   if (assets?.originalAsset) {
@@ -709,7 +775,7 @@ function stripAssetUnitRecord(unit: Awaited<ReturnType<typeof getAssetUnits>>[nu
 
 export async function deleteLocalAudioCacheFile(
   fileHash: string,
-  options?: { requestPermission?: boolean }
+  options?: { requestPermission?: boolean; repository?: LocalRepository; deferTouch?: boolean }
 ) {
   const fileRecord = await getLocalAudioCacheFileRecord(fileHash);
   if (!fileRecord) {
@@ -734,16 +800,17 @@ export async function deleteLocalAudioCacheFile(
     return false;
   }
 
-  const repository = await LocalRepository.open(directory.handle, { recover: false }).catch(() => null);
+  const repository = options?.repository ?? await LocalRepository.open(directory.handle, { recover: false });
   if (repository && fileRecord.relativePath) {
     await repository.removePath(fileRecord.relativePath);
   }
   await deleteLocalAudioCacheFileRecord(fileHash);
   if (!(await getLocalAudioFileRecord(fileHash, "saved"))) {
     if (repository) {
-      await repository.deleteTrack(fileHash).catch(() => undefined);
+      await repository.deleteTrack(fileHash, { touchManifest: false });
     }
   }
+  if (!options?.deferTouch) await repository.touch();
   return true;
 }
 
@@ -771,9 +838,14 @@ export async function getLocalAudioCacheStats(): Promise<LocalAudioCacheStats> {
   const sizes = await Promise.all([...hashes].map(async (fileHash) => {
     const localFile = localFilesByHash.get(fileHash);
     if (localFile?.sizeBytes !== undefined) return localFile.sizeBytes;
+    // The summary row carries the same byte count the blob would report:
+    // `sizeBytes` is required on the record and
+    // `toCachedLibraryTrackSummaryRecord` only strips `file`. Prefer it and
+    // skip pulling the blob out of IndexedDB — this ran once per cached track.
+    const summary = summariesByHash.get(fileHash);
+    if (summary?.sizeBytes) return summary.sizeBytes;
     const browserRecord = await getCachedLibraryTrack(fileHash).catch(() => null);
     if (browserRecord?.file) return browserRecord.file.size;
-    const summary = summariesByHash.get(fileHash);
     return summary?.sizeBytes ?? 0;
   }));
 
@@ -784,6 +856,7 @@ export async function getLocalAudioCacheStats(): Promise<LocalAudioCacheStats> {
 }
 
 export async function clearLocalAudioCache() {
+  return enqueueLocalRepositoryWrite(async () => {
   const [browserHashes, localCacheFiles] = await Promise.all([
     listCachedLibraryTrackHashes(),
     listLocalAudioCacheFiles()
@@ -794,19 +867,63 @@ export async function clearLocalAudioCache() {
   ]);
 
   const failedLocalFiles = new Set<string>();
+  const repository = await getConfiguredLocalRepository();
+  const removedTracks: LocalRepositoryTrackRecord[] = [];
   for (const file of localCacheFiles) {
-    if (!(await deleteLocalAudioCacheFile(file.fileHash))) {
+    try {
+      const track = repository ? await repository.readTrack(file.fileHash) : null;
+      if (!(await deleteLocalAudioCacheFile(file.fileHash, {
+        repository: repository ?? undefined, deferTouch: true
+      }))) {
+        failedLocalFiles.add(file.fileHash);
+      } else if (track && !(await getLocalAudioFileRecord(file.fileHash, "saved"))) {
+        removedTracks.push(track);
+      }
+    } catch {
       failedLocalFiles.add(file.fileHash);
     }
   }
   for (const fileHash of hashes) {
-    await deleteCachedLibraryTrack(fileHash);
+    if (!failedLocalFiles.has(fileHash) && !(await getLocalAudioFileRecord(fileHash, "saved"))) {
+      await deleteCachedLibraryTrack(fileHash);
+    } else if (!failedLocalFiles.has(fileHash)) {
+      await deleteCachedLibraryTrackFile(fileHash);
+    }
+  }
+  if (repository) {
+    await removeUnreferencedTrackAssets(repository, removedTracks);
+    if (removedTracks.length) await repository.touch();
   }
 
   return {
     deletedEntryCount: hashes.size - failedLocalFiles.size,
     failedEntryCount: failedLocalFiles.size
   };
+  });
+}
+
+async function removeUnreferencedTrackAssets(repository: LocalRepository, removed: LocalRepositoryTrackRecord[]) {
+  if (!removed.length) return;
+  const [remaining, rooms] = await Promise.all([repository.listTracks(), repository.listRooms()]);
+  const protectedIds = new Set([
+    ...remaining.flatMap((track) => [track.originalAsset?.assetId, track.playbackAsset?.assetId]),
+    ...rooms.flatMap((room) => room.tracks.flatMap((track) => [track.originalAsset?.assetId, track.playbackAsset?.assetId]))
+  ]);
+  for (const track of removed) {
+    if (track.originalAsset && !protectedIds.has(track.originalAsset.assetId)) {
+      await repository.removeDirectory(`.music-room/assets/original/${track.originalAsset.assetId}`);
+      await deleteAudioAsset(track.originalAsset.assetId);
+    }
+    if (track.playbackAsset && !protectedIds.has(track.playbackAsset.assetId)) {
+      await repository.removeDirectory(repository.getPlaybackAssetPath(track.playbackAsset.assetId, track.playbackAsset.profileId));
+      await deleteAudioAsset(track.playbackAsset.assetId);
+    }
+    for (const path of [track.artworkPath, track.lyricsPath]) {
+      if (path && !remaining.some((other) => other.artworkPath === path || other.lyricsPath === path)) {
+        await repository.removePath(path);
+      }
+    }
+  }
 }
 
 export async function getLocalAudioStorageStats(): Promise<LocalAudioStorageStats> {
@@ -815,28 +932,16 @@ export async function getLocalAudioStorageStats(): Promise<LocalAudioStorageStat
     listLocalAudioFiles("saved"),
     getConfiguredLocalRepository()
   ]);
-  const tracks: LocalRepositoryTrackRecord[] = repository ? await repository.listTracks() : [];
-  const tracksByHash = new Map(tracks.map((track) => [track.fileHash, track] as const));
-  const savedSizes: number[] = [];
-  for (const file of savedFiles) {
-    const track = tracksByHash.get(file.fileHash);
-    if (track?.source.kind === "managed") {
-      savedSizes.push(track.sizeBytes);
-      continue;
-    }
-    const localFile = await getLocalAudioFile(file.fileHash).catch(() => null);
-    savedSizes.push(localFile?.size ?? track?.sizeBytes ?? 0);
-    await yieldToBrowser();
-  }
+  const managedFiles = savedFiles.filter((file) => !file.sourceDirectoryId && file.source !== "directory-scan");
   const otherFiles = repository
-    ? (await repository.listFiles()).filter((file) => isLocalOtherFile(file.relativePath))
+    ? await repository.listFiles(localOtherFilePrefixes)
     : [];
 
   return {
     cache,
     saved: {
-      fileCount: savedFiles.length,
-      bytes: savedSizes.reduce((total, size) => total + size, 0)
+      fileCount: managedFiles.length,
+      bytes: managedFiles.reduce((total, file) => total + file.sizeBytes, 0)
     },
     other: {
       fileCount: otherFiles.length,
@@ -846,6 +951,7 @@ export async function getLocalAudioStorageStats(): Promise<LocalAudioStorageStat
 }
 
 export async function clearSavedLocalAudio() {
+  return enqueueLocalRepositoryWrite(async () => {
   const savedFiles = await listLocalAudioFiles("saved");
   const repository = await getConfiguredLocalRepository();
   if (!repository) {
@@ -859,6 +965,7 @@ export async function clearSavedLocalAudio() {
   let deletedEntryCount = 0;
   let failedEntryCount = 0;
   let skippedExternalCount = 0;
+  const removedTracks: LocalRepositoryTrackRecord[] = [];
   for (const file of savedFiles) {
     const track = await repository.readTrack(file.fileHash);
     const isExternalSource = file.source === "directory-scan" || !!file.sourceDirectoryId || track?.source.kind === "external";
@@ -871,30 +978,38 @@ export async function clearSavedLocalAudio() {
       if (file.relativePath) {
         await repository.removePath(file.relativePath);
       }
-      await repository.deleteTrack(file.fileHash);
+      await repository.deleteTrack(file.fileHash, { touchManifest: false });
       await deleteLocalAudioFileRecord(file.fileHash, "saved");
+      await deleteCachedLibraryTrack(file.fileHash);
+      if (track) removedTracks.push(track);
       deletedEntryCount += 1;
     } catch {
       failedEntryCount += 1;
     }
   }
+  await removeUnreferencedTrackAssets(repository, removedTracks);
+  if (deletedEntryCount) await repository.touch();
 
   return { deletedEntryCount, failedEntryCount, skippedExternalCount };
+  });
 }
 
 export async function clearLocalOtherFiles() {
+  return enqueueLocalRepositoryWrite(async () => {
   const repository = await getConfiguredLocalRepository();
   if (!repository) {
     return { deletedEntryCount: 0, failedEntryCount: 0 };
   }
 
-  const files = (await repository.listFiles()).filter(({ relativePath }) => isLocalOtherFile(relativePath));
+  const files = await repository.listFiles(localOtherFilePrefixes);
   const tracks = await repository.listTracks();
   let deletedEntryCount = 0;
   let failedEntryCount = 0;
+  const removedPaths = new Set<string>();
   for (const file of files) {
     try {
       await repository.removePath(file.relativePath);
+      removedPaths.add(file.relativePath);
       deletedEntryCount += 1;
     } catch {
       failedEntryCount += 1;
@@ -904,11 +1019,11 @@ export async function clearLocalOtherFiles() {
   for (const track of tracks) {
     const nextTrack = {
       ...track,
-      artworkPath: track.artworkPath && isLocalOtherFile(track.artworkPath) ? null : track.artworkPath,
-      lyricsPath: track.lyricsPath && isLocalOtherFile(track.lyricsPath) ? null : track.lyricsPath
+      artworkPath: track.artworkPath && removedPaths.has(track.artworkPath) ? null : track.artworkPath,
+      lyricsPath: track.lyricsPath && removedPaths.has(track.lyricsPath) ? null : track.lyricsPath
     };
     if (nextTrack.artworkPath !== track.artworkPath || nextTrack.lyricsPath !== track.lyricsPath) {
-      await repository.writeTrack(nextTrack, { updateCatalog: false });
+      await repository.writeTrack(nextTrack, { touchManifest: false });
     }
   }
   if (files.length > 0) {
@@ -916,6 +1031,7 @@ export async function clearLocalOtherFiles() {
   }
 
   return { deletedEntryCount, failedEntryCount };
+  });
 }
 
 
@@ -925,16 +1041,16 @@ async function collectSelectedLocalAudioFiles(
   parentPath: string,
   files: SelectedLocalAudioFile[],
   signal?: AbortSignal,
-  counter = { value: 0 }
+  // Threaded through the recursion so the whole walk shares one budget; a
+  // per-directory yielder would reset the clock at every level. This replaced a
+  // modulo-24 counter, whose only job was deciding when to yield.
+  yieldIfFrameBudgetExhausted = createFrameBudgetYielder()
 ) {
   for await (const entry of (directory as IterableDirectoryHandle).values()) {
     if (signal?.aborted) {
       throw new DOMException("Local directory scan was cancelled.", "AbortError");
     }
-    counter.value += 1;
-    if (counter.value % 24 === 0) {
-      await yieldToBrowser();
-    }
+    await yieldIfFrameBudgetExhausted();
     const fileName = parentPath ? `${parentPath}/${entry.name}` : entry.name;
     if (entry.kind === "file") {
       const file = await entry.getFile();
@@ -948,7 +1064,7 @@ async function collectSelectedLocalAudioFiles(
     if (!parentPath && entry.name === ".music-room") {
       continue;
     }
-    await collectSelectedLocalAudioFiles(entry, fileName, files, signal, counter);
+    await collectSelectedLocalAudioFiles(entry, fileName, files, signal, yieldIfFrameBudgetExhausted);
   }
 }
 
@@ -962,27 +1078,34 @@ async function filterReadableLocalFiles(
     relativePath?: string;
     source?: "directory-scan";
   }>,
-  allowExternalRootFiles: boolean
+  allowExternalRootFiles: boolean,
+  // Required, not optional: this runs once per storage kind over the same
+  // handle, so the caller opens the repository once and shares it. Passing
+  // `null` is meaningful (no repository on this root) and must not re-open.
+  repository: LocalRepository | null
 ) {
-  const repository = await LocalRepository.open(root, { recover: false }).catch(() => null);
-  const available: string[] = [];
-  for (const record of records) {
-    if (record.relativePath && repository && await repository.readPath(record.relativePath)) {
-      available.push(record.fileHash);
-      await yieldToBrowser();
-      continue;
-    }
-    if (allowExternalRootFiles && record.source === "directory-scan") {
-      try {
-        await getFileByPath(root, record.fileName);
-        available.push(record.fileHash);
-      } catch {
-        // The record points to a file that is no longer present.
+  const readable = new Array<boolean>(records.length).fill(false);
+  const yieldIfFrameBudgetExhausted = createFrameBudgetYielder();
+  await forEachWithConcurrency(
+    records,
+    resolveLocalFileConcurrency(records.length),
+    async (record, index) => {
+      await yieldIfFrameBudgetExhausted();
+      if (record.relativePath && repository && await repository.readPath(record.relativePath)) {
+        readable[index] = true;
+        return;
+      }
+      if (allowExternalRootFiles && record.source === "directory-scan") {
+        try {
+          await getFileByPath(root, record.fileName);
+          readable[index] = true;
+        } catch {
+          // The record points to a file that is no longer present.
+        }
       }
     }
-    await yieldToBrowser();
-  }
-  return available;
+  );
+  // Rebuilt in record order rather than completion order — the probes now
+  // finish out of order, and callers treat this list as a stable snapshot.
+  return records.flatMap((record, index) => (readable[index] ? [record.fileHash] : []));
 }
-
-

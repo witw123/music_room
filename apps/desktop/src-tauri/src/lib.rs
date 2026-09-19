@@ -1,4 +1,5 @@
 mod system_media;
+mod local_storage;
 
 use tauri::{
     command,
@@ -212,6 +213,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            local_storage::local_storage,
             system_media_update_meta,
             system_media_update_playback,
             system_media_clear,

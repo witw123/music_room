@@ -17,8 +17,13 @@ import { AppPersistentPlayer } from "@/components/bottom-player/AppPersistentPla
 import { resolvePlaybackOwnership } from "@/features/playback/playback-ownership";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { WorkspaceQueryProvider } from "@/features/workspace/workspace-query-provider";
+import { StorageRootGate } from "./StorageRootGate";
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
+  return <StorageRootGate><RoomRuntime>{children}</RoomRuntime></StorageRootGate>;
+}
+
+function RoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isLyricsWindow =
     pathname === "/desktop-lyrics" ||

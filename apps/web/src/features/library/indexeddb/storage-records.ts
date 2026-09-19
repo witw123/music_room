@@ -9,31 +9,33 @@ import {
   type LocalPlaylistTrackRecord
 } from "./database";
 import { LocalRepository } from "../local-repository";
+import { getNativeStorageDirectory, hasNativeStorage } from "../native-storage";
+import type { RepositoryDirectoryHandle } from "../directory-handle";
 
-export async function getLocalAudioDirectory(): Promise<LocalAudioDirectoryRecord | null> {
-  const existing = await musicRoomDatabase.localAudioDirectory.get("default");
-  if (existing) {
-    return existing;
-  }
+type ActiveDirectory = Omit<LocalAudioDirectoryRecord, "handle"> & { handle: RepositoryDirectoryHandle };
+let nativeDirectory: Promise<ActiveDirectory> | null = null;
 
-  if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.getDirectory === "function") {
-    try {
-      const opfsRoot = await navigator.storage.getDirectory();
-      const appDir = await opfsRoot.getDirectoryHandle("music_room", { create: true });
+export async function getLocalAudioDirectory(): Promise<ActiveDirectory | null> {
+  if (hasNativeStorage()) {
+    nativeDirectory ??= (async () => {
+      const directory = await getNativeStorageDirectory();
+      const repository = await LocalRepository.initialize(directory.handle);
       const record: LocalAudioDirectoryRecord = {
-        id: "default",
-        handle: appDir,
-        name: "应用安装数据目录 (自动创建)",
+        id: "default", kind: "native", name: directory.name,
+        repositoryId: repository.manifest.repositoryId,
+        schemaVersion: repository.manifest.schemaVersion,
         updatedAt: new Date().toISOString()
       };
-      await musicRoomDatabase.localAudioDirectory.put(record);
-      return record;
-    } catch {
-      return null;
-    }
+      const activeRecord = await activateDirectory(record);
+      return { ...activeRecord, handle: directory.handle };
+    })().catch((error) => {
+      nativeDirectory = null;
+      throw error;
+    });
+    return nativeDirectory;
   }
-
-  return null;
+  const existing = await musicRoomDatabase.localAudioDirectory.get("default");
+  return existing?.kind === "selected" && existing.handle ? { ...existing, handle: existing.handle } : null;
 }
 
 export async function saveLocalAudioDirectory(input: {
@@ -42,14 +44,44 @@ export async function saveLocalAudioDirectory(input: {
   repositoryId?: string;
   schemaVersion?: number;
 }) {
-  await musicRoomDatabase.localAudioDirectory.put({
+  await activateDirectory({
     id: "default",
+    kind: "selected",
     handle: input.handle,
     name: input.name,
     repositoryId: input.repositoryId,
     schemaVersion: input.schemaVersion,
     updatedAt: new Date().toISOString()
   });
+}
+
+async function activateDirectory(record: LocalAudioDirectoryRecord) {
+  const existing = await musicRoomDatabase.localAudioDirectory.get("default");
+  const sameRepository = existing?.repositoryId === record.repositoryId && existing?.kind === record.kind;
+  record = { ...record, indexReady: sameRepository && existing?.indexReady === true };
+  // These tables are the current repository's working index, not a second root.
+  // The old on-disk repository is left untouched.
+  const mirrors = [
+    musicRoomDatabase.localAudioFiles, musicRoomDatabase.localAudioCacheFiles,
+    musicRoomDatabase.cachedTrackLibrary, musicRoomDatabase.cachedTrackLibraryMetadata,
+    musicRoomDatabase.assetManifests, musicRoomDatabase.assetUnits,
+    musicRoomDatabase.trackAssetLinks, musicRoomDatabase.transcodeJobs,
+    musicRoomDatabase.playbackAssetDraftUnits, musicRoomDatabase.localPlaylistTracks
+  ];
+  await musicRoomDatabase.transaction("rw", [...mirrors, musicRoomDatabase.localAudioDirectory], async () => {
+    if (!sameRepository) {
+      for (const table of mirrors) await table.clear();
+    }
+    await musicRoomDatabase.localAudioDirectory.put(record);
+  });
+  return record;
+}
+
+export async function markLocalRepositoryIndexReady(repositoryId: string) {
+  const directory = await getLocalAudioDirectory();
+  if (directory?.repositoryId !== repositoryId) throw new Error("存储目录已改变，请重新加载。");
+  await musicRoomDatabase.localAudioDirectory.update("default", { indexReady: true });
+  directory.indexReady = true;
 }
 
 export async function getLocalPlaylistDirectory(id: string) {
@@ -113,6 +145,34 @@ export async function deleteLocalAudioCacheFileRecord(fileHash: string) {
   await musicRoomDatabase.localAudioCacheFiles.delete(fileHash);
 }
 
+export async function applyDirectoryScanIndex(input: {
+  repositoryId: string;
+  tracks: LocalPlaylistTrackRecord[];
+  staleTrackIds: string[];
+  staleFileHashes: string[];
+}) {
+  await musicRoomDatabase.transaction("rw", [
+    musicRoomDatabase.localAudioDirectory,
+    musicRoomDatabase.localPlaylistTracks,
+    musicRoomDatabase.localAudioFiles
+  ], async () => {
+    const active = await musicRoomDatabase.localAudioDirectory.get("default");
+    if (active?.repositoryId !== input.repositoryId) throw new Error("扫描期间根目录已改变。");
+    await musicRoomDatabase.localPlaylistTracks.bulkDelete(input.staleTrackIds);
+    await musicRoomDatabase.localAudioFiles.bulkDelete(input.staleFileHashes);
+    await musicRoomDatabase.localPlaylistTracks.bulkPut(input.tracks);
+    await musicRoomDatabase.localAudioFiles.bulkPut(input.tracks.map((track) => ({
+      fileHash: track.fileHash!,
+      fileName: track.fileName!,
+      sizeBytes: track.sizeBytes,
+      lastModified: track.lastModified,
+      source: "directory-scan" as const,
+      storageKind: "saved" as const,
+      savedAt: track.updatedAt
+    })));
+  });
+}
+
 export async function upsertLocalPlaylistTrack(
   input: Omit<LocalPlaylistTrackRecord, "createdAt" | "updatedAt"> & {
     createdAt?: string;
@@ -128,7 +188,7 @@ export async function upsertLocalPlaylistTrack(
     updatedAt: input.updatedAt ?? now
   });
   if (options?.persistRepository !== false) {
-    const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+    const directory = await getLocalAudioDirectory();
     if (directory) {
       await LocalRepository.open(directory.handle, { recover: false })
         .then((repository) => repository.writeProviderTrack(input.id, {
@@ -211,4 +271,3 @@ export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord,
     savedAt: input.savedAt ?? new Date().toISOString()
   });
 }
-

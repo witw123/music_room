@@ -8,6 +8,7 @@ import {
   type AudioAssetManifestRecord
 } from "./database";
 import { LocalRepository } from "../local-repository";
+import { getLocalAudioDirectory } from "./storage-records";
 
 export async function deleteLocalTrackDataForTracks(
   trackIds: readonly string[],
@@ -125,7 +126,7 @@ export async function deleteLocalTrackDataForTracks(
 
   await cleanupDeletedLocalRepositoryData(deletedLocalFileHashes, deletedLocalAssetManifests);
   if (options?.roomId) {
-    const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+    const directory = await getLocalAudioDirectory();
     const repository = directory
       ? await LocalRepository.open(directory.handle, { recover: false }).catch(() => null)
       : null;
@@ -140,7 +141,7 @@ async function cleanupDeletedLocalRepositoryData(
   manifests: ReadonlyMap<string, AudioAssetManifestRecord>
 ) {
   if (fileHashes.size === 0 && manifests.size === 0) return;
-  const directory = await musicRoomDatabase.localAudioDirectory.get("default");
+  const directory = await getLocalAudioDirectory();
   const repository = directory
     ? await LocalRepository.open(directory.handle, { recover: false }).catch(() => null)
     : null;

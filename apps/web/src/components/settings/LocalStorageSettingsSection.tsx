@@ -9,14 +9,19 @@ import {
   chooseLocalAudioDirectory,
   getLocalAudioStorageStats,
   getLocalAudioStorageState,
+  requestLocalAudioDirectoryPermission,
   type LocalAudioStorageState
 } from "@/features/library/local-audio-storage";
 import {
   cancelSelectedLocalDirectorySync,
   syncSelectedLocalDirectoryTracks
 } from "@/features/playlist/local-playlist";
+import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 
 export function LocalStorageManagementCard() {
+  const pageActive = useWorkspacePageActive();
+  const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [state, setState] = useState<LocalAudioStorageState | null>(null);
   const [cacheBytes, setCacheBytes] = useState(0);
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
@@ -24,41 +29,39 @@ export function LocalStorageManagementCard() {
   const [savedTrackCount, setSavedTrackCount] = useState(0);
   const [otherBytes, setOtherBytes] = useState(0);
   const [otherFileCount, setOtherFileCount] = useState(0);
-  const [pendingAction, setPendingAction] = useState<"choose" | "clean-cache" | "clean-saved" | "clean-other" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"choose" | "scan" | "authorize" | "clean-cache" | "clean-saved" | "clean-other" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const pending = pendingAction !== null;
 
-  const refresh = useCallback(async () => {
-    const [nextState, stats] = await Promise.all([
-      getLocalAudioStorageState(),
-      getLocalAudioStorageStats()
-    ]);
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    setLoadFailed(false);
+    const nextState = await getLocalAudioStorageState();
+    if (signal?.aborted) return;
     setState(nextState);
+    const stats = await getLocalAudioStorageStats();
+    if (signal?.aborted) return;
     setCachedTrackCount(stats.cache.fileCount);
     setCacheBytes(stats.cache.bytes);
     setSavedTrackCount(stats.saved.fileCount);
     setSavedBytes(stats.saved.bytes);
     setOtherFileCount(stats.other.fileCount);
+    setLoaded(true);
     setOtherBytes(stats.other.bytes);
   }, []);
 
   useEffect(() => {
-    let disposed = false;
-    void (async () => {
-      try {
-        const nextState = await getLocalAudioStorageState();
-        if (nextState.directoryName) {
-          await syncSelectedLocalDirectoryTracks();
-        }
-        if (!disposed) await refresh();
-      } catch {
-        if (!disposed) setMessage("无法同步本地目录状态。");
+    if (!pageActive) return;
+    const controller = new AbortController();
+    void refresh(controller.signal).catch(() => {
+      if (!controller.signal.aborted) {
+        setLoadFailed(true);
+        setMessage("无法读取本地目录状态。");
       }
-    })();
+    });
     return () => {
-      disposed = true;
+      controller.abort();
     };
-  }, [refresh]);
+  }, [refresh, pageActive]);
 
   const choose = async () => {
     if (pending) return;
@@ -66,13 +69,36 @@ export function LocalStorageManagementCard() {
     setMessage(null);
     try {
       cancelSelectedLocalDirectorySync();
-      const name = await chooseLocalAudioDirectory();
-      setMessage(`正在同步“${name}”中的本地歌曲…`);
-      await syncSelectedLocalDirectoryTracks();
-      await refresh();
-      setMessage(`本地歌曲保存位置已设置为“${name}”，目录数据已同步。`);
+      await chooseLocalAudioDirectory();
+      window.location.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选择本地目录失败，请重试。");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const scan = async () => {
+    setPendingAction("scan");
+    setMessage(null);
+    try {
+      const count = await syncSelectedLocalDirectoryTracks();
+      await refresh();
+      setMessage(`目录检查完成，共 ${count} 首来源歌曲。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "检查目录失败。");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const authorize = async () => {
+    setPendingAction("authorize");
+    try {
+      if (!(await requestLocalAudioDirectoryPermission())) throw new Error("目录授权未完成。");
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "目录授权失败。");
     } finally {
       setPendingAction(null);
     }
@@ -155,10 +181,18 @@ export function LocalStorageManagementCard() {
             管理下载歌曲、封面、歌词和浏览器缓存所在的位置。
           </p>
           <p className="mt-3 truncate text-xs text-foreground-muted" title={state?.directoryName ?? undefined}>
-            {state?.directoryName ? `当前目录：${state.directoryName}` : "尚未选择 Music Room 根文件夹"}
+            {state?.directoryName ? `根目录：${state.directoryName}` : state ? "尚未选择根目录" : "正在读取根目录…"}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          {state?.directoryName && state.permission !== "granted" && !state.fixedRoot ? (
+            <Button disabled={pending} onClick={() => void authorize()} size="sm" variant="outline">重新授权</Button>
+          ) : null}
+          {state?.directoryName && state.permission === "granted" && !state.fixedRoot ? (
+            <Button disabled={pending} onClick={() => void scan()} size="sm" variant="outline">
+              {pendingAction === "scan" ? "检查中…" : "检查目录"}
+            </Button>
+          ) : null}
           {state?.supported ? (
             <Button
               data-testid="choose-local-folder-button"
@@ -177,35 +211,35 @@ export function LocalStorageManagementCard() {
         <StorageSection
           dataTestId="local-storage-cache"
           description="浏览器播放缓存和本地缓存音频"
-          disabled={pending}
+          disabled={pending || !loaded || cachedTrackCount === 0}
           label="播放缓存"
           onClean={() => void cleanCache()}
           pending={pendingAction === "clean-cache"}
-          summary={`${formatBytes(cacheBytes)} · ${cachedTrackCount} 首音频`}
+          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(cacheBytes)} · ${cachedTrackCount} 首音频` : "读取中…"}
           actionLabel="清理缓存"
         />
         <StorageSection
           dataTestId="local-storage-saved"
           description="已保存到 Music Room 目录的本地歌曲"
-          disabled={pending}
+          disabled={pending || !loaded || state?.permission !== "granted" || savedTrackCount === 0}
           label="本地歌曲"
           onClean={() => void cleanSaved()}
           pending={pendingAction === "clean-saved"}
-          summary={`${formatBytes(savedBytes)} · ${savedTrackCount} 首歌曲`}
+          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(savedBytes)} · ${savedTrackCount} 首歌曲` : "读取中…"}
           actionLabel="清理本地歌曲"
         />
         <StorageSection
           dataTestId="local-storage-other"
           description="封面、歌词和其他辅助文件"
-          disabled={pending}
+          disabled={pending || !loaded || state?.permission !== "granted" || otherFileCount === 0}
           label="其他文件"
           onClean={() => void cleanOther()}
           pending={pendingAction === "clean-other"}
-          summary={`${formatBytes(otherBytes)} · ${otherFileCount} 个文件`}
+          summary={loadFailed ? "无法读取" : loaded ? `${formatBytes(otherBytes)} · ${otherFileCount} 个文件` : "读取中…"}
           actionLabel="清理其他文件"
         />
       </div>
-      {state?.supported === false ? <p className="mt-3 text-xs text-amber-300">当前浏览器不支持选择本地文件夹，请使用 Chrome 或 Edge。</p> : null}
+      {state?.supported === false && !state.fixedRoot ? <p className="mt-3 text-xs text-amber-300">当前浏览器不支持选择本地文件夹，请使用 Chrome 或 Edge。</p> : null}
       {message ? <p className="mt-3 text-xs text-foreground-muted" role="status">{message}</p> : null}
     </section>
   );
@@ -238,7 +272,7 @@ function StorageSection({
   summary: string;
 }) {
   return (
-    <div className="flex min-h-36 flex-col justify-between rounded-xl border border-surface-border bg-surface/30 p-4" data-testid={dataTestId}>
+    <div className="flex flex-col justify-between rounded-lg border border-surface-border bg-surface/30 p-4" data-testid={dataTestId}>
       <div>
         <h3 className="text-sm font-semibold text-foreground">{label}</h3>
         <p className="mt-1 text-xs leading-5 text-foreground-muted">{description}</p>
