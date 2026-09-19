@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { capacitorPlugin } from "@/lib/desktop/tauri";
-import { runBackHandler } from "@/lib/desktop/back-handler";
+import { resolveBackNavigation, runBackHandler } from "@/lib/desktop/back-handler";
 
 type BackButtonPayload = { canGoBack?: boolean };
 
@@ -25,14 +25,20 @@ const exitHintWindowMs = 2_000;
  * whole activity. Order of precedence:
  *
  * 1. an open overlay (registered through `useBackHandler`) consumes the press,
- * 2. otherwise step back through the SPA history,
- * 3. at the history root, require a second press before quitting, so a stray
+ * 2. the home page quits, so a press on a start destination never rewinds,
+ * 3. otherwise step back through the SPA history,
+ * 4. with no history left, require a second press before quitting, so a stray
  *    swipe on the home screen does not close the app.
  *
  * No-op in plain browsers and on desktop, where the plugin global is absent.
  */
 export function ShellBackButton() {
   const router = useRouter();
+  const pathname = usePathname();
+  // The listener is installed once for the app's lifetime, so it reads the
+  // current route through a ref rather than re-subscribing on every navigation.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
   const lastPressAtRef = useRef(0);
   const [isExitHintVisible, setIsExitHintVisible] = useState(false);
   const exitHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,7 +53,10 @@ export function ShellBackButton() {
     const handleBack = (payload: BackButtonPayload | undefined) => {
       if (runBackHandler()) return;
 
-      if (payload?.canGoBack) {
+      if (
+        resolveBackNavigation({ pathname: pathnameRef.current, canGoBack: payload?.canGoBack }) ===
+        "history"
+      ) {
         router.back();
         return;
       }

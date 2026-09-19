@@ -33,3 +33,24 @@ export function runBackHandler() {
   handler();
   return true;
 }
+
+/**
+ * Routes that render the rooms home page — the app's start destination. Both
+ * are listed because `/app` and `/rooms` render the same page.
+ */
+const homePaths = ["/app", "/rooms"];
+
+/**
+ * Decides where a back press goes once no overlay has claimed it.
+ *
+ * `canGoBack` cannot answer this on its own: it stays true once anything has
+ * been visited, so on the home page it would keep rewinding history instead of
+ * ever quitting. A start destination quits instead.
+ */
+export function resolveBackNavigation(input: {
+  pathname: string | null | undefined;
+  canGoBack: boolean | undefined;
+}): "history" | "exit" {
+  const onHomePath = typeof input.pathname === "string" && homePaths.includes(input.pathname);
+  return !onHomePath && input.canGoBack ? "history" : "exit";
+}
