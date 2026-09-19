@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { AuthSession, ProviderTrackCandidate } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { usePersonalizationProfile } from "@/features/personalization/use-personalization-profile";
@@ -8,9 +8,7 @@ import { useLocalPlayer } from "@/features/playback/local-player-context";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import {
   buildPlaybackStatusMessage,
-  prepareTrackForImmediatePlayback,
-  preloadProviderTracksInBackground,
-  type BackgroundPreloadHandle
+  prepareTrackForImmediatePlayback
 } from "@/features/playback/provider-playback-preparation";
 import { toProviderTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
@@ -46,10 +44,6 @@ export function ListeningProfileOverview({
   const [showAllTopArtists, setShowAllTopArtists] = useState(false);
   const [showExclusions, setShowExclusions] = useState(false);
 
-  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
-
-  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
-
   const handlePlayTrack = async (candidate: ProviderTrackCandidate) => {
     try {
       const prepared = await prepareTrackForImmediatePlayback(candidate);
@@ -71,19 +65,8 @@ export function ListeningProfileOverview({
       for (const nextTrack of queuedTracks) {
         player.addToQueue(toProviderTrackRecord(nextTrack));
       }
-      queuePreloadRef.current?.cancel();
-      queuePreloadRef.current = preloadProviderTracksInBackground(queuedTracks, {
-        concurrency: 2,
-        onPrepared: (result) => player.updateQueueRecord(result.record),
-        onSettled: (summary) => {
-          if (!summary.cancelled && summary.failed > 0) {
-            setStatusMessage(`${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`);
-          }
-        }
-      });
       setStatusMessage(`已开启从《${candidate.title}》出发的单曲漫游`);
     } catch {
-      queuePreloadRef.current?.cancel();
       setStatusMessage(`开启漫游失败，请稍后重试`);
     } finally {
       setActiveRadioTrackKey(null);

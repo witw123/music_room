@@ -18,6 +18,10 @@ import {
 import { ImmersivePlayerOverlay } from "./ImmersivePlayerOverlay";
 import { useSystemMediaTransport } from "@/features/playback/system-media-bridge";
 import {
+  installBrowserMediaSessionActionHandlers,
+  syncBrowserMediaSession
+} from "@/features/playback/playback-media-session";
+import {
   MiniPlayerOverlay,
   requestMiniPlayerWindow
 } from "./MiniPlayerOverlay";
@@ -417,16 +421,58 @@ function BottomPlayerBase({
   );
 
   const togglePlayback = useCallback(() => {
+    if (!playerControlsEnabled) return;
     void (isPlaying ? onPause(getLiveProgressMs()) : onPlay());
-  }, [getLiveProgressMs, isPlaying, onPause, onPlay]);
+  }, [getLiveProgressMs, isPlaying, onPause, onPlay, playerControlsEnabled]);
 
   const playPrev = useCallback(() => {
+    if (!playerControlsEnabled) return;
     void onPrev();
-  }, [onPrev]);
+  }, [onPrev, playerControlsEnabled]);
 
   const playNext = useCallback(() => {
+    if (!playerControlsEnabled) return;
     void onNext();
-  }, [onNext]);
+  }, [onNext, playerControlsEnabled]);
+
+  const mediaHandlers = {
+    onPlay: () => { if (playerControlsEnabled) void onPlay(); },
+    onPause: () => { if (playerControlsEnabled) void onPause(getLiveProgressMs()); },
+    onToggle: togglePlayback,
+    onPrev: playPrev,
+    onNext: playNext,
+    onSeekTo: requestSeek,
+    onSeekBy: (deltaMs: number) => requestSeek(
+      (isPlaying ? getLiveProgressMs() : boundedProgressMs) + deltaMs
+    ),
+    getPositionMs: () => isPlaying ? getLiveProgressMs() : boundedProgressMs
+  };
+  const mediaHandlersRef = useRef(mediaHandlers);
+  mediaHandlersRef.current = mediaHandlers;
+
+  useEffect(() => {
+    const cleanup = installBrowserMediaSessionActionHandlers({
+      onPlay: () => mediaHandlersRef.current.onPlay(),
+      onPause: () => mediaHandlersRef.current.onPause(),
+      onToggle: () => mediaHandlersRef.current.onToggle(),
+      onPreviousTrack: () => mediaHandlersRef.current.onPrev(),
+      onNextTrack: () => mediaHandlersRef.current.onNext(),
+      onSeek: (positionMs) => mediaHandlersRef.current.onSeekTo(positionMs),
+      getPositionMs: () => mediaHandlersRef.current.getPositionMs()
+    });
+    return () => {
+      cleanup();
+      syncBrowserMediaSession({ track: null, playback: null });
+    };
+  }, []);
+
+  useEffect(() => {
+    syncBrowserMediaSession({
+      track: currentTrack ? { ...currentTrack, artworkUrl, durationMs: currentTrackDuration } : null,
+      playback,
+      positionMs: boundedProgressMs
+    });
+  }, [artworkUrl, boundedProgressMs, currentTrack, currentTrackDuration, playback]);
 
   const desktopLyrics = useDesktopLyrics();
   const desktopLyricsPlayer = useMemo(() => ({
@@ -459,21 +505,7 @@ function BottomPlayerBase({
         isPlaying: isPlaying === true
       }
       : null,
-    handlers: {
-      onPlay: () => {
-        void onPlay();
-      },
-      onPause: () => {
-        void onPause(getLiveProgressMs());
-      },
-      onToggle: togglePlayback,
-      onPrev: playPrev,
-      onNext: playNext,
-      onSeekTo: requestSeek,
-      onSeekBy: (deltaMs) => {
-        requestSeek(getLiveProgressMs() + deltaMs);
-      }
-    }
+    handlers: mediaHandlers
   });
 
   const applyVolume = useCallback(
@@ -585,7 +617,7 @@ function BottomPlayerBase({
       />
       </div>
 
-      <audio
+      {desktopLyricsSource === "room" ? <audio
         ref={audioRef}
         className="hidden"
         playsInline
@@ -600,7 +632,7 @@ function BottomPlayerBase({
         onPlay={syncProgressFromAudio}
         onPause={syncProgressFromAudio}
         onSeeked={syncProgressFromAudio}
-      />
+      /> : null}
 
       {isPending ? (
         <div className={`${isPlaybackBarrierBlocked ? "" : "animate-fade-in"} absolute -top-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-3 py-1 text-xs text-foreground-muted shadow-lg backdrop-blur-md`}>

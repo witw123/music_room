@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PersonalizationExclusion } from "@music-room/shared";
+import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
 import { Button } from "@/components/ui/button";
@@ -18,37 +21,41 @@ export function TasteExclusionsManager({
 }: {
   onOpenColdStart: () => void;
 }) {
-  const [exclusions, setExclusions] = useState<PersonalizationExclusion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const pageActive = useWorkspacePageActive();
+  const { activeSession } = useSessionIdentity({
+    sessionStorageKey: "music-room-session",
+    initialStatusMessage: ""
+  });
+  const queryClient = useQueryClient();
+  const queryKey = ["personalization", activeSession?.userId ?? null, "exclusions"];
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => musicRoomApi.listPersonalizationExclusions(signal),
+    enabled: pageActive && Boolean(activeSession)
+  });
+  const exclusions = query.data ?? [];
+  const loading = query.isLoading;
   const [removingKey, setRemovingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadExclusions = async () => {
-    try {
-      setLoading(true);
-      const items = await musicRoomApi.listPersonalizationExclusions();
-      setExclusions(items);
-      setErrorMessage(null);
-    } catch {
-      setErrorMessage("加载屏蔽记录失败，请稍后重试。");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    void loadExclusions();
-    const handleEvent = () => void loadExclusions();
-    window.addEventListener(personalizationChangedEvent, handleEvent);
-    return () => window.removeEventListener(personalizationChangedEvent, handleEvent);
-  }, []);
+    if (!pageActive) {
+      void queryClient.cancelQueries({
+        queryKey: ["personalization", activeSession?.userId ?? null, "exclusions"],
+        type: "inactive"
+      });
+    }
+  }, [pageActive, activeSession?.userId, queryClient]);
 
   const handleRestore = async (kind: "track" | "artist", key: string) => {
     const itemKey = `${kind}:${key}`;
     setRemovingKey(itemKey);
+    setErrorMessage(null);
     try {
       await musicRoomApi.removePersonalizationExclusion(kind, key);
-      setExclusions((prev) => prev.filter((item) => !(item.kind === kind && item.key === key)));
+      await queryClient.cancelQueries({ queryKey });
+      queryClient.setQueryData<PersonalizationExclusion[]>(queryKey,
+        (prev) => prev?.filter((item) => !(item.kind === kind && item.key === key)));
       window.dispatchEvent(new Event(personalizationChangedEvent));
     } catch {
       setErrorMessage("恢复失败，请稍后重试。");
@@ -102,9 +109,9 @@ export function TasteExclusionsManager({
           </span>
         </div>
 
-        {errorMessage && (
+        {(errorMessage || query.error) && (
           <p className="mb-4 text-xs text-red-400 bg-red-950/30 px-3 py-2 rounded-lg">
-            {errorMessage}
+            {errorMessage ?? "加载屏蔽记录失败，请稍后重试。"}
           </p>
         )}
 

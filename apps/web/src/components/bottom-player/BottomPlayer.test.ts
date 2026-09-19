@@ -196,7 +196,7 @@ describe("BottomPlayer source", () => {
     expect(localPlayerSource).toContain("const refreshLibraryRecords = useCallback");
     expect(localPlayerSource).toContain("mergeLocalTrackRecord");
     expect(localPlayerSource).toContain(
-      "canControlPlayback: Boolean(currentRecord || queueRecords.length > 0 || libraryRecords.length > 0)"
+      "canControlPlayback: active && Boolean(currentRecord || queueRecords.length > 0 || libraryRecords.length > 0)"
     );
   });
 });

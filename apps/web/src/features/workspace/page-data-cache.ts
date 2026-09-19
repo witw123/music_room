@@ -2,8 +2,7 @@ import type {
   NeteaseAccountStatus,
   Playlist,
   ProviderAlbumFavorite,
-  QqMusicAccountStatus,
-  RoomDirectoryItem
+  QqMusicAccountStatus
 } from "@music-room/shared";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
@@ -22,19 +21,10 @@ export type PlaylistPageData = {
   networkLoaded: boolean;
 };
 
-const roomsByUser = new Map<string, RoomDirectoryItem[]>();
 const playlistsByUser = new Map<string, PlaylistPageData>();
 const favoritesByUser = new Map<string, ProviderAlbumFavorite[]>();
 const providerAccountsByUser = new Map<string, ProviderAccount>();
 const discoverByUser = new Map<string, { data: ProfileProviderRecommendations; cachedAt: number }>();
-
-export function getCachedRooms(userId: string) {
-  return roomsByUser.get(userId);
-}
-
-export function setCachedRooms(userId: string, rooms: RoomDirectoryItem[]) {
-  roomsByUser.set(userId, rooms);
-}
 
 export function getCachedPlaylistData(userId: string) {
   return playlistsByUser.get(userId);

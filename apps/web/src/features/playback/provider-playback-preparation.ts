@@ -77,7 +77,27 @@ function preparationKeyFor(input: ProviderTrack | LocalPlaylistTrackRecord): str
 
 // Concurrent clicks on the same track (row + "play all", double click, ...) must
 // share one download instead of racing each other.
-const inflightPreparations = new Map<string, Promise<PreparedPlaybackTrack>>();
+type Preparation = {
+  controller: AbortController;
+  promise: Promise<PreparedPlaybackTrack>;
+  consumers: number;
+};
+const inflightPreparations = new Map<string, Preparation>();
+let foregroundPreparations = 0;
+const foregroundListeners = new Set<() => void>();
+
+export function hasForegroundPlaybackPreparation() {
+  return foregroundPreparations > 0;
+}
+
+export function subscribeForegroundPlaybackPreparation(listener: () => void) {
+  foregroundListeners.add(listener);
+  return () => { foregroundListeners.delete(listener); };
+}
+
+function notifyForegroundListeners() {
+  for (const listener of foregroundListeners) listener();
+}
 
 /**
  * Unified entry point used by every "click to play" path (discover page,
@@ -91,21 +111,59 @@ const inflightPreparations = new Map<string, Promise<PreparedPlaybackTrack>>();
  * can resolve the audio blob and start playback immediately.
  */
 export async function prepareTrackForImmediatePlayback(
-  input: ProviderTrack | LocalPlaylistTrackRecord
+  input: ProviderTrack | LocalPlaylistTrackRecord,
+  options: { signal?: AbortSignal; background?: boolean } = {}
 ): Promise<PreparedPlaybackTrack> {
+  const { signal, background = false } = options;
+  signal?.throwIfAborted();
   const key = preparationKeyFor(input);
-  const inflight = inflightPreparations.get(key);
-  if (inflight) return inflight;
+  let entry = inflightPreparations.get(key);
+  if (!entry || entry.controller.signal.aborted) {
+    const controller = new AbortController();
+    const created: Preparation = {
+      controller,
+      consumers: 0,
+      promise: runPreparation(input, controller.signal).finally(() => {
+        if (inflightPreparations.get(key) === created) inflightPreparations.delete(key);
+      })
+    };
+    entry = created;
+    inflightPreparations.set(key, entry);
+  }
 
-  const promise = runPreparation(input).finally(() => {
-    inflightPreparations.delete(key);
+  // A foreground click can take over an in-flight prefetch. Cancelling the
+  // prefetch subscriber must not cancel the download still needed by the click.
+  entry.consumers += 1;
+  const activeEntry = entry;
+  let onAbort: (() => void) | undefined;
+  const result = new Promise<PreparedPlaybackTrack>((resolve, reject) => {
+    onAbort = () => reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    activeEntry.promise.then(resolve, reject);
   });
-  inflightPreparations.set(key, promise);
-  return promise;
+  if (!background) {
+    foregroundPreparations += 1;
+    notifyForegroundListeners();
+  }
+  try {
+    const prepared = await result;
+    return isProviderTrackInput(input)
+      ? prepared
+      : { ...prepared, record: { ...prepared.record, id: input.id } };
+  } finally {
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+    activeEntry.consumers -= 1;
+    if (activeEntry.consumers === 0) activeEntry.controller.abort();
+    if (!background) {
+      foregroundPreparations -= 1;
+      notifyForegroundListeners();
+    }
+  }
 }
 
 async function runPreparation(
-  input: ProviderTrack | LocalPlaylistTrackRecord
+  input: ProviderTrack | LocalPlaylistTrackRecord,
+  signal: AbortSignal
 ): Promise<PreparedPlaybackTrack> {
   // 1) The record itself is an explicitly saved local file.
   if (!isProviderTrackInput(input) && input.availableOffline && input.fileHash) {
@@ -115,6 +173,7 @@ async function runPreparation(
   // 2) The record already points at a living playback-cache entry.
   if (
     !isProviderTrackInput(input) &&
+    !isProviderBackedRecord(input) &&
     input.fileHash &&
     (await hasProviderTrackPlaybackCache(input.fileHash).catch(() => false))
   ) {
@@ -129,6 +188,7 @@ async function runPreparation(
 
   // 4) Reusable playback-cache entry.
   const providerTrack = toProviderTrackView(input);
+  signal.throwIfAborted();
   if (providerTrack) {
     const cachedRecord = await findCachedProviderPlaybackRecord(providerTrack).catch(() => null);
     if (cachedRecord) return { record: cachedRecord, source: "playback-cache" };
@@ -142,9 +202,11 @@ async function runPreparation(
     );
   }
   try {
-    const record = await cacheProviderTrackForPlayback(providerTrack);
+    signal.throwIfAborted();
+    const record = await cacheProviderTrackForPlayback(providerTrack, signal);
     return { record, source: "playback-download" };
   } catch (error) {
+    signal.throwIfAborted();
     if (error instanceof PlaybackPreparationError) throw error;
     throw new PlaybackPreparationError("preparation-failed", toPreparationFailureMessage(error), {
       cause: error
@@ -197,80 +259,4 @@ export function toPlaybackPreparationErrorMessage(error: unknown, fallback: stri
 function toPreparationFailureMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "音频准备失败，请稍后重试。";
-}
-
-export type BackgroundPreloadHandle = {
-  cancel: () => void;
-};
-
-/**
- * Prepare a list of upcoming queue tracks in the background (default two at a
- * time) without blocking whatever is currently playing. Prepared records are
- * handed to `onPrepared` so callers can swap them into the player queue;
- * failures never abort the rest of the preload and are reported via
- * `onFailed` / the final `onSettled` summary.
- */
-export function preloadProviderTracksInBackground(
-  tracks: ReadonlyArray<ProviderTrack | LocalPlaylistTrackRecord>,
-  options: {
-    concurrency?: number;
-    onPrepared?: (
-      prepared: PreparedPlaybackTrack,
-      track: ProviderTrack | LocalPlaylistTrackRecord
-    ) => void;
-    onFailed?: (track: ProviderTrack | LocalPlaylistTrackRecord, error: unknown) => void;
-    onSettled?: (summary: { prepared: number; failed: number; cancelled: boolean }) => void;
-  } = {}
-): BackgroundPreloadHandle {
-  const concurrency = Math.max(1, Math.min(options.concurrency ?? 2, 4));
-  const queue = [...tracks];
-  let cursor = 0;
-  let preparedCount = 0;
-  let failedCount = 0;
-  let cancelled = false;
-  let settled = false;
-  let activeWorkers = 0;
-
-  const settle = () => {
-    if (settled) return;
-    settled = true;
-    options.onSettled?.({ prepared: preparedCount, failed: failedCount, cancelled });
-  };
-
-  const runWorker = async () => {
-    activeWorkers += 1;
-    try {
-      while (!cancelled) {
-        const index = cursor;
-        if (index >= queue.length) return;
-        cursor += 1;
-        const track = queue[index]!;
-        try {
-          const prepared = await prepareTrackForImmediatePlayback(track);
-          if (cancelled) return;
-          preparedCount += 1;
-          options.onPrepared?.(prepared, track);
-        } catch (error) {
-          if (cancelled) return;
-          failedCount += 1;
-          options.onFailed?.(track, error);
-        }
-      }
-    } finally {
-      activeWorkers -= 1;
-      if (activeWorkers === 0) settle();
-    }
-  };
-
-  for (let index = 0; index < Math.min(concurrency, queue.length); index += 1) {
-    void runWorker();
-  }
-  if (queue.length === 0) settle();
-
-  return {
-    cancel: () => {
-      cancelled = true;
-      settle();
-    }
-  };
 }

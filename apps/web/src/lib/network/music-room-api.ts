@@ -91,8 +91,8 @@ export const musicRoomApi = {
       method: "POST"
     }),
   me: () => request<AuthSession>("/v1/auth/me", undefined, { notifyAuthExpired: false }),
-  getPersonalizationProfile: () =>
-    request<PersonalizationProfileResponse>("/v1/personalization/profile"),
+  getPersonalizationProfile: (signal?: AbortSignal) =>
+    request<PersonalizationProfileResponse>("/v1/personalization/profile", { signal }),
   recordPersonalizationEvent: (input: RecordPersonalizationEvent) =>
     request<{ ok: boolean }>("/v1/personalization/events", {
       method: "POST",
@@ -109,8 +109,8 @@ export const musicRoomApi = {
   },
   recordPersonalizationFeedback: (input: PersonalizationFeedback) =>
     request<{ ok: boolean }>("/v1/personalization/feedback", { method: "POST", body: JSON.stringify(input) }),
-  listPersonalizationExclusions: () =>
-    request<PersonalizationExclusion[]>("/v1/personalization/exclusions"),
+  listPersonalizationExclusions: (signal?: AbortSignal) =>
+    request<PersonalizationExclusion[]>("/v1/personalization/exclusions", { signal }),
   removePersonalizationExclusion: (kind: "track" | "artist", key: string) =>
     request<{ ok: boolean }>(`/v1/personalization/exclusions/${kind}/${encodeURIComponent(key)}`, { method: "DELETE" }),
   getTrackRadio: (input: TrackRadioQuery) =>
@@ -144,7 +144,7 @@ export const musicRoomApi = {
   getRoomInteractionStats: () => request<RoomInteractionStats>("/v1/rooms/stats"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
-  listRooms: () => request<RoomDirectoryItem[]>("/v1/rooms"),
+  listRooms: (signal?: AbortSignal) => request<RoomDirectoryItem[]>("/v1/rooms", { signal }),
   joinRoomByCode: (joinCode: string, password?: string) =>
     request<RoomJoinResponse>("/v1/rooms/join-by-code", {
       method: "POST",
@@ -332,10 +332,12 @@ export const musicRoomApi = {
     request<ProviderAlbumDetail>(`/v1/providers/netease/albums/${encodeURIComponent(albumId)}`),
   resolveNeteaseAudio: (
     trackId: string,
-    quality: ProviderAudioQuality = "exhigh"
+    quality: ProviderAudioQuality = "exhigh",
+    signal?: AbortSignal
   ) =>
     request<ProviderAudioResolveResponse>(
-      `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`
+      `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`,
+      { signal }
     ),
   downloadNeteaseTrack: (
     trackId: string,
@@ -343,7 +345,7 @@ export const musicRoomApi = {
     signal?: AbortSignal
   ) =>
     downloadWithDirectFallback({
-      resolve: () => musicRoomApi.resolveNeteaseAudio(trackId, quality),
+      resolve: () => musicRoomApi.resolveNeteaseAudio(trackId, quality, signal),
       fallback: () => requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }),
       signal
     }),
@@ -409,7 +411,7 @@ export const musicRoomApi = {
       `/v1/favorites/albums/${provider}/${encodeURIComponent(providerAlbumId)}`,
       { method: "DELETE" }
     ),
-  listFavoriteTracks: () => request<ProviderTrackFavorite[]>("/v1/favorites/tracks"),
+  listFavoriteTracks: (signal?: AbortSignal) => request<ProviderTrackFavorite[]>("/v1/favorites/tracks", { signal }),
   saveFavoriteTrack: (track: ProviderTrackCandidate) =>
     request<ProviderTrackFavorite>("/v1/favorites/tracks", {
       method: "PUT",
@@ -433,10 +435,12 @@ export const musicRoomApi = {
     ),
   resolveQqMusicAudio: (
     trackId: string,
-    quality: ProviderAudioQuality = "exhigh"
+    quality: ProviderAudioQuality = "exhigh",
+    signal?: AbortSignal
   ) =>
     request<ProviderAudioResolveResponse>(
-      `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`
+      `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`,
+      { signal }
     ),
   downloadQqMusicTrack: (
     trackId: string,
@@ -444,7 +448,7 @@ export const musicRoomApi = {
     signal?: AbortSignal
   ) =>
     downloadWithDirectFallback({
-      resolve: () => musicRoomApi.resolveQqMusicAudio(trackId, quality),
+      resolve: () => musicRoomApi.resolveQqMusicAudio(trackId, quality, signal),
       fallback: () => requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }),
       signal
     }),
@@ -452,8 +456,8 @@ export const musicRoomApi = {
     const params = new URLSearchParams({ url: artworkUrl });
     return requestBlob(`/v1/providers/qqmusic/artwork?${params.toString()}`, { signal });
   },
-  listMyPlaylists: () =>
-    request<Playlist[]>("/v1/playlists"),
+  listMyPlaylists: (signal?: AbortSignal) =>
+    request<Playlist[]>("/v1/playlists", { signal }),
   createPlaylist: (payload: {
     title: string;
     description?: string | null;
@@ -550,15 +554,16 @@ export const musicRoomApi = {
       body: JSON.stringify({ url: payload.url })
     });
   },
-  getBilibiliRanking: (subType = "3") =>
-    request<BilibiliTrackCandidate[]>(`/v1/providers/bilibili/ranking?subType=${encodeURIComponent(subType)}`),
-  resolveBilibiliAudio: (trackId: string) =>
+  getBilibiliRanking: (subType = "3", signal?: AbortSignal) =>
+    request<BilibiliTrackCandidate[]>(`/v1/providers/bilibili/ranking?subType=${encodeURIComponent(subType)}`, { signal }),
+  resolveBilibiliAudio: (trackId: string, signal?: AbortSignal) =>
     request<{ url: string; urls: string[]; mimeType: string; fileType: string; bvid: string; cid: number }>(
-      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio-url`
+      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio-url`,
+      { signal }
     ),
   downloadBilibiliTrack: (trackId: string, signal?: AbortSignal) =>
     downloadWithDirectFallback({
-      resolve: () => musicRoomApi.resolveBilibiliAudio(trackId),
+      resolve: () => musicRoomApi.resolveBilibiliAudio(trackId, signal),
       fallback: () =>
         requestBlob(
           `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,

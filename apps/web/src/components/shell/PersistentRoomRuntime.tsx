@@ -13,14 +13,21 @@ import { isCapacitorRuntime } from "@/lib/desktop/tauri";
 import { requestNotificationPermission } from "@/features/playback/system-notifications";
 import { useAppUpdate } from "@/features/update/use-app-update";
 import { UpdatePromptDialog } from "@/components/update/UpdatePromptDialog";
+import { AppPersistentPlayer } from "@/components/bottom-player/AppPersistentPlayer";
+import { resolvePlaybackOwnership } from "@/features/playback/playback-ownership";
+import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { WorkspaceQueryProvider } from "@/features/workspace/workspace-query-provider";
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isLyricsWindow =
     pathname === "/desktop-lyrics" ||
     (typeof window !== "undefined" && window.location.search.includes("window=desktop-lyrics"));
-  const routeRoomId = isLyricsWindow ? null : resolveRoomRouteId(pathname);
   const [awayRoomId, setAwayRoomId] = useState<string | null>(null);
+  const { activeSession } = useSessionIdentity({
+    sessionStorageKey: "music-room-session",
+    initialStatusMessage: ""
+  });
 
   useEffect(() => {
     if (isCapacitorRuntime()) {
@@ -40,23 +47,28 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
     };
   }, [isLyricsWindow]);
 
-  const runtimeRoomId = isLyricsWindow ? null : (routeRoomId ?? awayRoomId);
+  const { owner, routeRoomId, runtimeRoomId } = resolvePlaybackOwnership(
+    pathname, awayRoomId, isLyricsWindow
+  );
   const { result: updateResult, isPromptOpen: isUpdatePromptOpen, dismissPrompt: dismissUpdatePrompt } = useAppUpdate({
     autoCheck: !isLyricsWindow
   });
 
   return (
-    <DesktopLyricsProvider>
-      {children}
-      {runtimeRoomId ? (
-        <LocalPlayerProvider>
-          <MusicRoomApp
-            backgroundOnly={!routeRoomId}
-            initialRoomId={runtimeRoomId}
-            workspaceOnly
-          />
+    <DesktopLyricsProvider activeSource={owner}>
+      <WorkspaceQueryProvider key={activeSession?.userId ?? "anonymous"}>
+        <LocalPlayerProvider active={owner === "local"}>
+          {children}
+          {owner === "local" ? <AppPersistentPlayer /> : null}
+          {runtimeRoomId ? (
+            <MusicRoomApp
+              backgroundOnly={!routeRoomId}
+              initialRoomId={runtimeRoomId}
+              workspaceOnly
+            />
+          ) : null}
         </LocalPlayerProvider>
-      ) : null}
+      </WorkspaceQueryProvider>
       <DesktopLyricsOverlay />
       <ShellBackButton />
       <UpdatePromptDialog
@@ -66,15 +78,4 @@ export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
       />
     </DesktopLyricsProvider>
   );
-}
-
-function resolveRoomRouteId(pathname: string | null) {
-  const match = pathname?.match(/^\/room\/([^/]+)$/);
-  if (!match) return null;
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
 }

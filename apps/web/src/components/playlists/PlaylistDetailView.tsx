@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import {
   providerTrackKey,
@@ -14,9 +14,7 @@ import {
 import {
   buildPlaybackStatusMessage,
   prepareTrackForImmediatePlayback,
-  preloadProviderTracksInBackground,
-  toPlaybackPreparationErrorMessage,
-  type BackgroundPreloadHandle
+  toPlaybackPreparationErrorMessage
 } from "@/features/playback/provider-playback-preparation";
 import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
 import { musicRoomApi } from "@/lib/network/music-room-api";
@@ -83,16 +81,11 @@ export function PlaylistDetailView({
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ completed: 0, total: 0 });
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
-  // Background preloader for "播放全部"; cancelled when a new run starts or the
-  // view unmounts so stale downloads never keep running.
-  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
   // Provider keys whose audio sits in the persistent playback cache. Rows of
   // a network playlist only carry provider identity, so this is what makes
   // their queueable state survive a reload instead of trusting the in-memory
   // state of the current session.
   const [cachedProviderTrackIds, setCachedProviderTrackIds] = useState<Set<string>>(() => new Set());
-
-  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,21 +259,8 @@ export function PlaylistDetailView({
       for (const track of remaining) {
         player.addToQueue(track);
       }
-      queuePreloadRef.current?.cancel();
-      queuePreloadRef.current = preloadProviderTracksInBackground(remaining, {
-        concurrency: 2,
-        onPrepared: (prepared) => player.updateQueueRecord(prepared.record),
-        onSettled: (summary) => {
-          if (!summary.cancelled && summary.failed > 0) {
-            setDownloadMessage(
-              `正在播放“${title}”；${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`
-            );
-          }
-        }
-      });
-      setDownloadMessage(`正在播放“${title}”，其余歌曲正在后台预加载。`);
+      setDownloadMessage(`正在播放“${title}”`);
     } catch (error) {
-      queuePreloadRef.current?.cancel();
       setDownloadMessage(toPlaybackPreparationErrorMessage(error, "播放歌单失败，请重试。"));
     } finally {
       setPlaybackTrackId(null);

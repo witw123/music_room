@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+const tauri = vi.hoisted(() => ({ listen: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/desktop/tauri", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/desktop/tauri")>(),
+  listenTauri: tauri.listen
+}));
 import {
   createPlaybackMediaSessionKey,
   installBrowserMediaSessionActionHandlers,
@@ -79,6 +84,37 @@ describe("browser media session", () => {
     expect(onSeek).toHaveBeenCalledWith(25_000);
     cleanup();
     expect(mediaSession.setActionHandler).toHaveBeenLastCalledWith("seekto", null);
+  });
+
+  it("toggles the active player with the hardware play/pause key", async () => {
+    let callback!: (key: string) => void;
+    const stop = vi.fn();
+    tauri.listen.mockImplementationOnce(async (_event, handler) => {
+      callback = handler;
+      return stop;
+    });
+    const onPlay = vi.fn();
+    const onToggle = vi.fn();
+    const cleanup = installBrowserMediaSessionActionHandlers({ onPlay, onToggle });
+    await Promise.resolve();
+    callback("play-pause");
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(onPlay).not.toHaveBeenCalled();
+    cleanup();
+    callback("play-pause");
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("removes a delayed native listener after the old player has unmounted", async () => {
+    let finish!: (stop: () => void) => void;
+    tauri.listen.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const cleanup = installBrowserMediaSessionActionHandlers({ onPlay: vi.fn() });
+    cleanup();
+    const stop = vi.fn();
+    finish(stop);
+    await Promise.resolve();
+    expect(stop).toHaveBeenCalledOnce();
   });
 
   it("publishes track metadata, playback state, and position", () => {

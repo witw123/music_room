@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -18,7 +19,7 @@ import { AppSidebar } from "@/components/shell";
 import { AwayRoomReturnButton } from "./AwayRoomReturnButton";
 import { RoomDirectoryCard } from "@/components/room-card";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { getCachedRooms, setCachedRooms } from "@/features/workspace/page-data-cache";
+import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { CreateRoomDialogModal } from "./CreateRoomDialogModal";
 import { JoinCodeDialogModal } from "./JoinCodeDialogModal";
 import { SelectedRoomDialogModal } from "./SelectedRoomDialogModal";
@@ -30,6 +31,7 @@ import {
 } from "@/lib/domain/away-room";
 
 const lastRoomStorageKey = "music-room-last-room";
+const emptyRooms: RoomDirectoryItem[] = [];
 
 type RoomsHomePageProps = {
   awayRoomId?: string | null;
@@ -55,18 +57,23 @@ export function RoomsHomePage({
     hydrated,
     statusMessage,
     setStatusMessage,
-    clearIdentity,
-    refreshSession
+    clearIdentity
   } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
-  const [availableRooms, setAvailableRooms] = useState<RoomDirectoryItem[]>(() =>
-    activeSession ? getCachedRooms(activeSession.userId) ?? [] : []
-  );
-  const [roomsLoaded, setRoomsLoaded] = useState(() =>
-    Boolean(activeSession && getCachedRooms(activeSession.userId))
-  );
+  const pageActive = useWorkspacePageActive();
+  const queryClient = useQueryClient();
+  const roomsQuery = useQuery({
+    queryKey: ["rooms", activeSession?.userId ?? null],
+    queryFn: ({ signal }) => musicRoomApi.listRooms(signal),
+    enabled: hydrated && pageActive,
+    staleTime: 10_000,
+    refetchInterval: pageActive ? 10_000 : false
+  });
+  const availableRooms = roomsQuery.data ?? emptyRooms;
+  const roomsLoaded = !roomsQuery.isPending;
+  const refreshAvailableRooms = roomsQuery.refetch;
   const [roomTypeFilter, setRoomTypeFilter] = useState<"all" | RoomType>("all");
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -98,60 +105,18 @@ export function RoomsHomePage({
     router.push(buildRoomHref(effectiveAwayRoomId) as Route);
   }
 
-  const refreshAvailableRooms = useCallback(async () => {
-    try {
-      const rooms = await musicRoomApi.listRooms();
-      if (activeSession) {
-        setCachedRooms(activeSession.userId, rooms);
-      }
-      setAvailableRooms(rooms);
-      setRoomsLoaded(true);
-    } catch (error) {
-      setRoomsLoaded(true);
-      setStatusMessage(toUserFacingError(error));
-    }
-  }, [activeSession, setStatusMessage]);
+  useEffect(() => {
+    if (roomsQuery.error) setStatusMessage(toUserFacingError(roomsQuery.error));
+  }, [roomsQuery.error, setStatusMessage]);
 
   useEffect(() => {
-    if (!hydrated) {
-      return;
+    if (!pageActive) {
+      void queryClient.cancelQueries({
+        queryKey: ["rooms", activeSession?.userId ?? null],
+        type: "inactive"
+      });
     }
-
-    if (activeSession) {
-      const cachedRooms = getCachedRooms(activeSession.userId);
-      if (cachedRooms) {
-        setAvailableRooms(cachedRooms);
-        setRoomsLoaded(true);
-      }
-      void refreshSession();
-    }
-
-    void refreshAvailableRooms();
-  }, [hydrated, activeSession, refreshSession, refreshAvailableRooms]);
-
-  useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-
-    const refresh = () => {
-      // Hidden tabs keep this workspace mounted in the route cache; polling
-      // from a background tab wastes requests and battery for state the user
-      // cannot see until they return (focus/visibilitychange re-fires then).
-      if (document.visibilityState === "hidden") return;
-      void refreshAvailableRooms();
-    };
-
-    const intervalId = window.setInterval(refresh, 10000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [hydrated, refreshAvailableRooms]);
+  }, [pageActive, activeSession?.userId, queryClient]);
 
   function openCreateRoom(visibility: "public" | "private") {
     if (!activeSession) {

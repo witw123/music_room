@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ProviderAlbumDetail, ProviderAlbumFavorite, ProviderArtistFavorite, ProviderTrackCandidate } from "@music-room/shared";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -27,9 +27,7 @@ import {
 import {
   buildPlaybackStatusMessage,
   prepareTrackForImmediatePlayback,
-  preloadProviderTracksInBackground,
-  toPlaybackPreparationErrorMessage,
-  type BackgroundPreloadHandle
+  toPlaybackPreparationErrorMessage
 } from "@/features/playback/provider-playback-preparation";
 import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
 import {
@@ -87,12 +85,6 @@ export function FavoriteAlbumsPage({
   const [playlistPickerAnchor, setPlaylistPickerAnchor] = useState<AnchoredDialogAnchor | null>(null);
   const [playlistPickerOptions, setPlaylistPickerOptions] = useState<ProviderPlaylistPickerOption[]>([]);
   const [playlistPickerLoading, setPlaylistPickerLoading] = useState(false);
-  // Background preloader for "播放全部"; cancelled when a new run starts or the
-  // page unmounts so stale downloads never keep running.
-  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
-
-  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
-
   useEffect(() => {
     if (hydrated && !activeSession) router.replace(authEntryHref as Route);
   }, [activeSession, authEntryHref, hydrated, router]);
@@ -300,19 +292,8 @@ export function FavoriteAlbumsPage({
       for (const next of rest) {
         player.addToQueue(getLocalRecord(next));
       }
-      queuePreloadRef.current?.cancel();
-      queuePreloadRef.current = preloadProviderTracksInBackground(rest, {
-        concurrency: 2,
-        onPrepared: (result) => player.updateQueueRecord(result.record),
-        onSettled: (summary) => {
-          if (!summary.cancelled && summary.failed > 0) {
-            setErrorMessage(`${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`);
-          }
-        }
-      });
       setStatusMessage(`已开启收藏全部 ${candidateTracks.length} 首歌曲播放`);
     } catch (error) {
-      queuePreloadRef.current?.cancel();
       setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放收藏歌曲失败，请稍后重试。"));
     } finally {
       setPending(null);

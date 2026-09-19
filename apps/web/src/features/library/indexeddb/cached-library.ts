@@ -71,6 +71,23 @@ export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRec
   );
 }
 
+export async function updateCachedLibraryTrackMetadata(
+  fileHash: string,
+  metadata: Partial<Pick<CachedLibraryTrackRecord,
+    "artworkUrl" | "lyrics" | "translatedLyrics" | "romanizedLyrics" | "loudness">>
+) {
+  // Patch existing rows only: background enrichment must not recreate released audio.
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.cachedTrackLibrary,
+    musicRoomDatabase.cachedTrackLibraryMetadata,
+    async () => {
+      await musicRoomDatabase.cachedTrackLibrary.update(fileHash, metadata);
+      await musicRoomDatabase.cachedTrackLibraryMetadata.update(fileHash, metadata);
+    }
+  );
+}
+
 export async function putPlaybackAssetDraftUnit(input: {
   draftId: string;
   unitIndex: number;
@@ -217,4 +234,3 @@ export async function upsertCachedLibraryTrackSummary(
     sourceRoomIds: [...new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds])]
   });
 }
-

@@ -18,6 +18,7 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { getProfileProviderRecommendations } from "@/features/discovery/profile-provider-recommendations";
 import { personalizationChangedEvent } from "@/features/personalization/use-personalization-reporter";
+import { useWorkspacePageActive } from "@/features/workspace/page-activity";
 import { useFavoriteTracks } from "@/features/favorites/use-favorite-tracks";
 import { useLocalPlayer } from "@/features/playback/local-player-context";
 import {
@@ -31,9 +32,7 @@ import { isLocalPlaylistMirror } from "@/features/playlist/local-playlist-databa
 import {
   buildPlaybackStatusMessage,
   prepareTrackForImmediatePlayback,
-  preloadProviderTracksInBackground,
-  toPlaybackPreparationErrorMessage,
-  type BackgroundPreloadHandle
+  toPlaybackPreparationErrorMessage
 } from "@/features/playback/provider-playback-preparation";
 import { downloadProviderTrackToLibrary } from "@/features/playback/provider-track-download";
 import {
@@ -72,6 +71,7 @@ import {
 } from "./index";
 
 export function DiscoverPage() {
+  const pageActive = useWorkspacePageActive();
   const { activeSession, hydrated } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
@@ -103,29 +103,11 @@ export function DiscoverPage() {
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchKeywords, setSearchKeywords] = useState("");
-  // Background preloader for "play all"-style flows; cancelled when a new flow
-  // starts or the page unmounts so stale downloads never keep running.
-  const queuePreloadRef = useRef<BackgroundPreloadHandle | null>(null);
-
-  useEffect(() => () => queuePreloadRef.current?.cancel(), []);
-
-  const startQueuePreload = useCallback((tracks: Track[]) => {
-    queuePreloadRef.current?.cancel();
-    queuePreloadRef.current = preloadProviderTracksInBackground(tracks, {
-      concurrency: 2,
-      onPrepared: (prepared) => player.updateQueueRecord(prepared.record),
-      onSettled: (summary) => {
-        if (!summary.cancelled && summary.failed > 0) {
-          setErrorMessage(`${summary.failed} 首歌曲预加载失败，播放到对应歌曲时会自动跳过。`);
-        }
-      }
-    });
-  }, [player]);
-
   useEffect(() => {
-    if (!activeSession) return;
+    if (!activeSession || !pageActive) return;
     let cancelled = false;
-    void musicRoomApi.listMyPlaylists().then((lists) => {
+    const controller = new AbortController();
+    void musicRoomApi.listMyPlaylists(controller.signal).then((lists) => {
       if (cancelled) return;
       const keys = new Set<string>();
       for (const pl of lists) {
@@ -142,10 +124,12 @@ export function DiscoverPage() {
     }).catch(() => {});
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [activeSession]);
+  }, [activeSession, pageActive]);
 
   useEffect(() => {
+    if (!pageActive) return;
     let cancelled = false;
     void listMergedLocalPlaylistTracks().then((tracks) => {
       if (!cancelled) setLocalTracks(tracks);
@@ -153,7 +137,7 @@ export function DiscoverPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSession]);
+  }, [activeSession, pageActive]);
 
   const requestVersionRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
@@ -161,6 +145,7 @@ export function DiscoverPage() {
   const profileRefreshTimerRef = useRef<number | null>(null);
 
   const load = useCallback(async (force = false) => {
+    if (!pageActive || !hydrated || !activeSession) return;
     if (activeSession && !force) {
       const cached = getCachedDiscoverData(activeSession.userId);
       if (cached) {
@@ -191,24 +176,23 @@ export function DiscoverPage() {
     } finally {
       if (requestVersionRef.current === version) setLoading(false);
     }
-  }, [activeSession]);
+  }, [activeSession, hydrated, pageActive]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (activeSession) {
-      const cached = getCachedDiscoverData(activeSession.userId);
-      if (cached) {
-        setData(cached);
-        setLoading(false);
-        return;
-      }
-    }
+    if (!hydrated || !pageActive) return;
+    setDetailLoading(null);
     void load();
-  }, [hydrated, activeSession, load]);
+    return () => {
+      requestVersionRef.current += 1;
+      requestAbortRef.current?.abort();
+    };
+  }, [hydrated, activeSession, load, pageActive]);
 
   useEffect(() => {
     if (!activeSession) return;
     const handlePersonalizationChange = () => {
+      invalidateDiscoverDataCache(activeSession.userId);
+      if (!pageActive) return;
       const now = Date.now();
       if (now - lastProfileRefreshAtRef.current < 4000) return;
       lastProfileRefreshAtRef.current = now;
@@ -228,7 +212,7 @@ export function DiscoverPage() {
         window.clearTimeout(profileRefreshTimerRef.current);
       }
     };
-  }, [activeSession, load]);
+  }, [activeSession, load, pageActive]);
 
   async function resolveTrackArtwork(track: Track) {
     if (track.artworkUrl) return track;
@@ -325,7 +309,6 @@ export function DiscoverPage() {
       for (const track of rest) {
         player.addToQueue(toProviderTrackRecord(track));
       }
-      startQueuePreload(rest);
       setStatusMessage(`已开启今日聚焦全部 ${tracks.length} 首歌曲播放`);
     } catch (error) {
       setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放聚焦歌曲失败，请稍后重试。"));
@@ -383,7 +366,6 @@ export function DiscoverPage() {
         for (const nextTrack of queuedTracks) {
           player.addToQueue(toProviderTrackRecord(nextTrack));
         }
-        startQueuePreload(queuedTracks);
         setStatusMessage(`已开启从《${track.title}》出发的单曲漫游`);
       } catch (error) {
         setErrorMessage(toPlaybackPreparationErrorMessage(error, "开启漫游失败，请稍后重试。"));
@@ -407,14 +389,13 @@ export function DiscoverPage() {
       for (const track of rest) {
         player.addToQueue(toProviderTrackRecord(track));
       }
-      startQueuePreload(rest);
       setStatusMessage(title ? `正在播放歌单《${title}》` : `已开启全部 ${tracks.length} 首歌曲播放`);
     } catch (error) {
       setErrorMessage(toPlaybackPreparationErrorMessage(error, "播放歌单歌曲失败，请稍后重试。"));
     } finally {
       setPending(null);
     }
-  }, [player, startQueuePreload]);
+  }, [player]);
 
   const toggleFavoritePlaylist = async (playlistDetail: ProviderPlaylistDetail) => {
     const key = providerPlaylistKey(playlistDetail.provider, playlistDetail.providerPlaylistId);
@@ -657,7 +638,6 @@ export function DiscoverPage() {
         for (const t of queuedTracks) {
           player.addToQueue(toProviderTrackRecord(t));
         }
-        startQueuePreload(queuedTracks);
         setStatusMessage(`正在播放「${station.title}」专属场景电台`);
       }
     } catch (error) {

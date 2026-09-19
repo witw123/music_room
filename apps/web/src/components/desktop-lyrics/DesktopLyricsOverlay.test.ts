@@ -11,7 +11,7 @@ describe("desktop lyrics integration", () => {
     expect(playerSource).toContain("useDesktopLyricsRegistration");
     expect(controllerSource).toContain('desktopLyricsSource="room"');
     expect(localPlayerSource).toContain('desktopLyricsSource="local"');
-    expect(runtimeSource).toContain("<DesktopLyricsProvider>");
+    expect(runtimeSource).toContain("<DesktopLyricsProvider activeSource={owner}>");
     expect(runtimeSource).toContain("<DesktopLyricsOverlay />");
   });
 

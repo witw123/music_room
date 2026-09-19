@@ -21,6 +21,7 @@ import {
   listLocalAudioCacheFiles,
   listLocalAudioFiles,
   upsertCachedLibraryTrack,
+  updateCachedLibraryTrackMetadata,
   type CachedLibraryTrackSummaryRecord,
   type LocalPlaylistTrackRecord
 } from "@/features/library/indexeddb";
@@ -33,40 +34,38 @@ export const providerPlaybackCacheChangedEvent = "music-room-provider-playback-c
 export type ProviderPlaybackCacheChangeKind = "add" | "remove";
 
 /** Download a provider track into the disposable playback cache, never the saved library. */
-export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promise<LocalPlaylistTrackRecord> {
-  const resolvedTrack = await resolveProviderTrack(track);
-  const existingCache = await findReusableProviderPlaybackCache(resolvedTrack);
+export async function cacheProviderTrackForPlayback(
+  track: ProviderTrack,
+  signal?: AbortSignal
+): Promise<LocalPlaylistTrackRecord> {
+  signal?.throwIfAborted();
+  const existingCache = await findReusableProviderPlaybackCache(track);
+  signal?.throwIfAborted();
   if (existingCache) return existingCache;
 
   const preferredQuality = getAppSettings().playback.preferredAudioQuality;
-  const response = resolvedTrack.provider === "netease"
-    ? await musicRoomApi.downloadNeteaseTrack(resolvedTrack.providerTrackId, preferredQuality)
-    : resolvedTrack.provider === "qqmusic"
-      ? await musicRoomApi.downloadQqMusicTrack(resolvedTrack.providerTrackId, preferredQuality)
-      : await musicRoomApi.downloadBilibiliTrack(resolvedTrack.providerTrackId);
+  const response = track.provider === "netease"
+    ? await musicRoomApi.downloadNeteaseTrack(track.providerTrackId, preferredQuality, signal)
+    : track.provider === "qqmusic"
+      ? await musicRoomApi.downloadQqMusicTrack(track.providerTrackId, preferredQuality, signal)
+      : await musicRoomApi.downloadBilibiliTrack(track.providerTrackId, signal);
+  signal?.throwIfAborted();
   const fileHash = await hashAudioBlob(response.blob);
+  signal?.throwIfAborted();
   const mimeType = normalizeLocalAudioMimeType(response.contentType || response.blob.type);
-  const artworkResponse = resolvedTrack.provider === "qqmusic" && resolvedTrack.artworkUrl && /^https?:\/\//i.test(resolvedTrack.artworkUrl)
-    ? await musicRoomApi.downloadQqMusicArtwork(resolvedTrack.artworkUrl).catch(() => null)
-    : null;
-  const artworkUrl = await resolveLocalArtworkUrl(
-    response.blob,
-    resolvedTrack.artworkUrl,
-    artworkResponse?.blob
-  );
   await upsertCachedLibraryTrack({
     fileHash,
-    title: resolvedTrack.title,
-    artist: resolvedTrack.artist,
-    album: resolvedTrack.album,
-    artworkUrl,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    artworkUrl: track.artworkUrl,
     lyrics: null,
     translatedLyrics: null,
     romanizedLyrics: null,
-    provider: resolvedTrack.provider,
-    providerTrackId: resolvedTrack.providerTrackId,
+    provider: track.provider,
+    providerTrackId: track.providerTrackId,
     mimeType,
-    durationMs: resolvedTrack.durationMs,
+    durationMs: track.durationMs,
     sizeBytes: response.blob.size,
     file: response.blob,
     sourceTrackIds: [],
@@ -76,69 +75,27 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     lastOwnerNickname: null
   });
 
-  const cachedFile = await saveCachedAudioFileToLocalDirectory({
-    file: response.blob,
-    fileHash,
-    title: resolvedTrack.title,
-    mimeType,
-    provider: resolvedTrack.provider
-  });
-
-  // Broadcast the addition so views can refresh "cached" indicators without
-  // waiting for the next removal event.
+  signal?.throwIfAborted();
   notifyProviderPlaybackCacheChanged([fileHash], "add");
 
-  // 关键优化：后台异步获取歌词与计算响度，绝对不阻塞用户点击即播体验
-  void (async () => {
-    try {
-      const [lyricPayload, loudness] = await Promise.all([
-        (resolvedTrack.provider === "netease"
-          ? musicRoomApi.getNeteaseLyrics(resolvedTrack.providerTrackId)
-          : resolvedTrack.provider === "qqmusic"
-            ? musicRoomApi.getQqMusicLyrics(resolvedTrack.providerTrackId)
-            : resolvedTrack.provider === "bilibili"
-              ? musicRoomApi.getBilibiliLyrics(resolvedTrack.providerTrackId)
-              : Promise.resolve(null)
-        ).catch(() => null),
-        analyzeAudioBlobLoudness(response.blob).catch(() => null)
-      ]);
-
-      if (lyricPayload || loudness) {
-        const bgLyrics = lyricPayload?.wordSyncedLyric ?? lyricPayload?.plainLyric ?? null;
-        await upsertCachedLibraryTrack({
-          fileHash,
-          title: resolvedTrack.title,
-          artist: resolvedTrack.artist,
-          album: resolvedTrack.album,
-          artworkUrl,
-          lyrics: bgLyrics,
-          translatedLyrics: lyricPayload?.translatedLyric ?? null,
-          romanizedLyrics: lyricPayload?.romanizedLyric ?? null,
-          provider: resolvedTrack.provider,
-          providerTrackId: resolvedTrack.providerTrackId,
-          mimeType,
-          durationMs: resolvedTrack.durationMs,
-          sizeBytes: response.blob.size,
-          ...(loudness ? { loudness } : {}),
-          file: response.blob,
-          sourceTrackIds: [],
-          sourceRoomIds: [],
-          lastSourceTrackId: null,
-          lastSourceRoomId: null,
-          lastOwnerNickname: null
-        });
-        notifyProviderPlaybackCacheChanged([fileHash], "add");
-      }
-    } catch {
-      // 忽略后台补全异常
-    }
-  })();
+  // Keep the Blob in IndexedDB until the directory copy has committed.
+  // Yield a task so playback can bind its audio before optional work starts.
+  setTimeout(() => {
+    void completePlaybackMetadata(track, response.blob, fileHash).catch(() => undefined);
+    void saveCachedAudioFileToLocalDirectory({
+      file: response.blob,
+      fileHash,
+      title: track.title,
+      mimeType,
+      provider: track.provider
+    }).catch(() => undefined);
+  }, 0);
 
   return {
-    ...toProviderTrackRecord({ ...resolvedTrack, artworkUrl }),
-    id: localPlaylistTrackId(resolvedTrack),
+    ...toProviderTrackRecord(track),
+    id: localPlaylistTrackId(track),
     fileHash,
-    fileName: cachedFile?.fileName ?? null,
+    fileName: null,
     sizeBytes: response.blob.size,
     mimeType,
     lyrics: null,
@@ -147,6 +104,36 @@ export async function cacheProviderTrackForPlayback(track: ProviderTrack): Promi
     availableOffline: false,
     updatedAt: new Date().toISOString()
   };
+}
+
+async function completePlaybackMetadata(track: ProviderTrack, file: Blob, fileHash: string) {
+  const artwork = async () => {
+    const resolved = await resolveProviderTrack(track);
+    const downloaded = resolved.provider === "qqmusic" && resolved.artworkUrl && /^https?:\/\//i.test(resolved.artworkUrl)
+      ? await musicRoomApi.downloadQqMusicArtwork(resolved.artworkUrl).catch(() => null)
+      : null;
+    return resolveLocalArtworkUrl(file, resolved.artworkUrl, downloaded?.blob);
+  };
+  const [artworkUrl, lyricPayload, loudness] = await Promise.all([
+    artwork().catch(() => track.artworkUrl),
+    (track.provider === "netease"
+      ? musicRoomApi.getNeteaseLyrics(track.providerTrackId)
+      : track.provider === "qqmusic"
+        ? musicRoomApi.getQqMusicLyrics(track.providerTrackId)
+        : musicRoomApi.getBilibiliLyrics(track.providerTrackId)
+    ).catch(() => null),
+    analyzeAudioBlobLoudness(file).catch(() => null)
+  ]);
+  await updateCachedLibraryTrackMetadata(fileHash, {
+    artworkUrl,
+    ...(lyricPayload ? {
+      lyrics: lyricPayload.wordSyncedLyric ?? lyricPayload.plainLyric ?? null,
+      translatedLyrics: lyricPayload.translatedLyric ?? null,
+      romanizedLyrics: lyricPayload.romanizedLyric ?? null
+    } : {}),
+    ...(loudness ? { loudness } : {})
+  });
+  notifyProviderPlaybackCacheChanged([fileHash], "add");
 }
 
 /** Look up an existing playback-cache entry for a provider track without downloading anything. */
@@ -252,15 +239,6 @@ async function findReusableProviderPlaybackCache(track: ProviderTrack) {
     getLocalAudioCacheFileRecord(summary.fileHash).catch(() => null)
   ]);
   if (!browserCache && !localCacheFile) return null;
-  const loudness = summary.loudness
-    ?? (browserCache?.file ? await analyzeAudioBlobLoudness(browserCache.file) : null);
-  if (loudness && !summary.loudness && browserCache) {
-    await upsertCachedLibraryTrack({
-      ...browserCache,
-      loudness
-    }).catch(() => undefined);
-  }
-
   return {
     ...toProviderTrackRecord(track),
     id: localPlaylistTrackId(track),
@@ -268,8 +246,11 @@ async function findReusableProviderPlaybackCache(track: ProviderTrack) {
     fileName: localCacheFile?.fileName ?? null,
     sizeBytes: summary.sizeBytes,
     mimeType: summary.mimeType,
+    artworkUrl: summary.artworkUrl ?? track.artworkUrl,
     lyrics: summary.lyrics ?? null,
-    ...(loudness ? { loudness } : {}),
+    translatedLyrics: summary.translatedLyrics ?? null,
+    romanizedLyrics: summary.romanizedLyrics ?? null,
+    ...(summary.loudness ? { loudness: summary.loudness } : {}),
     availableOffline: false,
     updatedAt: summary.cachedAt
   } satisfies LocalPlaylistTrackRecord;

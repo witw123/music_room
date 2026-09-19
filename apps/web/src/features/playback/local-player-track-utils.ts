@@ -109,11 +109,11 @@ export async function loadLocalAudioFile(track: LocalPlaylistTrackRecord): Promi
   );
   if (localFile) return localFile;
 
-  const cachedFile = await getLocalAudioCacheFile(track.fileHash);
-  if (cachedFile) return cachedFile;
-
   const cachedRecord = await getCachedLibraryTrack(track.fileHash);
   if (cachedRecord?.file) return cachedRecord.file;
+
+  const cachedFile = await getLocalAudioCacheFile(track.fileHash);
+  if (cachedFile) return cachedFile;
 
   // Support Alist online streaming: fetch via stream endpoint
   if (track.provider === "alist" && track.fileName && (track.fileName.startsWith("/") || track.fileName.startsWith("http"))) {

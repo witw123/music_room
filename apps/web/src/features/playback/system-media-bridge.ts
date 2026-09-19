@@ -98,6 +98,7 @@ export function useSystemMediaTransport(input: {
     let unlisten: (() => void) | undefined;
 
     const apply = (payload: CommandPayload | undefined) => {
+      if (cancelled) return;
       applyCommand(payload?.action, payload?.positionMs, payload?.deltaMs, handlersRef.current);
     };
 
@@ -138,6 +139,8 @@ export function useSystemMediaTransport(input: {
       cancelled = true;
       unlisten?.();
       unlisten = undefined;
+      if (isTauriRuntime()) void invokeTauri("system_media_clear");
+      else void capacitorPlugin("SystemMediaControls")?.hide?.({});
     };
   }, [isNative]);
 

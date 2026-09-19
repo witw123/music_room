@@ -87,10 +87,10 @@ export async function generateLocalDiscoveryRecommendations(input?: {
   // 1. 并发获取用户本地资产与持久化数据
   const [localRecords, favoriteTracks, myPlaylists, bilibiliRanking] = await Promise.all([
     listMergedLocalPlaylistTracks().catch(() => []),
-    musicRoomApi.listFavoriteTracks().catch(() => []),
-    musicRoomApi.listMyPlaylists().catch(() => []),
+    musicRoomApi.listFavoriteTracks(input?.signal).catch(() => []),
+    musicRoomApi.listMyPlaylists(input?.signal).catch(() => []),
     // 客户端直接向开放公开榜单拉取新热补充
-    musicRoomApi.getBilibiliRanking("3").catch(() => [])
+    musicRoomApi.getBilibiliRanking("3", input?.signal).catch(() => [])
   ]);
 
   if (input?.signal?.aborted) {

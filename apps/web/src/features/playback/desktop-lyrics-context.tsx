@@ -122,7 +122,11 @@ const emptyLyrics: DesktopLyricsState = {
 
 const DesktopLyricsContext = createContext<DesktopLyricsContextValue | null>(null);
 
-export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
+export function DesktopLyricsProvider({
+  children, activeSource
+}: { children: ReactNode; activeSource: DesktopLyricsSource | null }) {
+  const activeSourceRef = useRef(activeSource);
+  activeSourceRef.current = activeSource;
   const playersRef = useRef(new Map<DesktopLyricsSource, DesktopLyricsPlayer>());
   const [activePlayer, setActivePlayer] = useState<DesktopLyricsPlayer | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -151,15 +155,15 @@ export function DesktopLyricsProvider({ children }: { children: ReactNode }) {
   }, [close]);
 
   const selectActivePlayer = useCallback(() => {
-    const roomPlayer = playersRef.current.get("room");
-    const localPlayer = playersRef.current.get("local");
-    const nextPlayer = roomPlayer?.currentTrack || roomPlayer?.playbackTrackId
-      ? roomPlayer
-      : localPlayer?.currentTrack || localPlayer?.playbackTrackId
-        ? localPlayer
-        : null;
-    setActivePlayer(nextPlayer ?? null);
+    const player = activeSourceRef.current
+      ? playersRef.current.get(activeSourceRef.current)
+      : null;
+    setActivePlayer(player?.currentTrack || player?.playbackTrackId ? player : null);
   }, []);
+
+  useEffect(() => {
+    selectActivePlayer();
+  }, [activeSource, selectActivePlayer]);
 
   const registerPlayer = useCallback((source: DesktopLyricsSource, player: DesktopLyricsPlayer) => {
     playersRef.current.set(source, player);

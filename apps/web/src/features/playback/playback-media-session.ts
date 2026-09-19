@@ -17,6 +17,7 @@ export type PlaybackMediaSession = {
 export type BrowserMediaSessionActionHandlers = {
   onPlay?: () => void | Promise<unknown>;
   onPause?: () => void | Promise<unknown>;
+  onToggle?: () => void | Promise<unknown>;
   onStop?: () => void | Promise<unknown>;
   onPreviousTrack?: () => void | Promise<unknown>;
   onNextTrack?: () => void | Promise<unknown>;
@@ -72,10 +73,12 @@ export function installBrowserMediaSessionActionHandlers(
   const mediaSession = getBrowserMediaSession();
 
   let unlistenTauriMediaKeys: (() => void) | undefined;
+  let disposed = false;
   void listenTauri<string>("media-key", (key) => {
+    if (disposed) return;
     switch (key) {
       case "play-pause":
-        invokeMediaSessionAction(input.onPlay);
+        invokeMediaSessionAction(input.onToggle);
         break;
       case "next-track":
         invokeMediaSessionAction(input.onNextTrack);
@@ -88,11 +91,13 @@ export function installBrowserMediaSessionActionHandlers(
         break;
     }
   }).then((unlisten) => {
-    unlistenTauriMediaKeys = unlisten;
+    if (disposed) unlisten?.();
+    else unlistenTauriMediaKeys = unlisten;
   });
 
   if (!mediaSession || typeof mediaSession.setActionHandler !== "function" || nativeSystemMediaOwnsSession()) {
     return () => {
+      disposed = true;
       unlistenTauriMediaKeys?.();
     };
   }
@@ -131,6 +136,7 @@ export function installBrowserMediaSessionActionHandlers(
   }
 
   return () => {
+    disposed = true;
     unlistenTauriMediaKeys?.();
     for (const action of mediaSessionActions) {
       try {

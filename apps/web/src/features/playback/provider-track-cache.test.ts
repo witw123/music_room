@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const indexedDbMocks = vi.hoisted(() => ({
   deleteCachedLibraryTrack: vi.fn(),
@@ -10,7 +10,8 @@ const indexedDbMocks = vi.hoisted(() => ({
   listCachedLibraryTrackSummaries: vi.fn(),
   listLocalAudioCacheFiles: vi.fn(),
   listLocalAudioFiles: vi.fn(),
-  upsertCachedLibraryTrack: vi.fn()
+  upsertCachedLibraryTrack: vi.fn(),
+  updateCachedLibraryTrackMetadata: vi.fn()
 }));
 
 const storageMocks = vi.hoisted(() => ({
@@ -58,7 +59,15 @@ const apiMocks = vi.hoisted(() => ({
     getQqMusicLyrics: vi.fn()
   }
 }));
+const metadataMocks = vi.hoisted(() => ({
+  resolveLocalArtworkUrl: vi.fn().mockResolvedValue(null)
+}));
+const loudnessMocks = vi.hoisted(() => ({
+  analyzeAudioBlobLoudness: vi.fn().mockResolvedValue(null)
+}));
 
+vi.mock("@/features/library/audio-metadata", () => metadataMocks);
+vi.mock("./loudness", () => loudnessMocks);
 vi.mock("@/features/library/indexeddb", () => indexedDbMocks);
 vi.mock("@/features/library/local-audio-storage", () => storageMocks);
 vi.mock("@/features/playlist/local-playlist", () => playlistMocks);
@@ -111,6 +120,7 @@ function buildSummary(overrides: Record<string, unknown> = {}) {
 
 describe("provider playback cache lifecycle", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     indexedDbMocks.getCachedLibraryTrack.mockResolvedValue(null);
     indexedDbMocks.getCachedLibraryTrackSummary.mockResolvedValue(null);
@@ -132,6 +142,11 @@ describe("provider playback cache lifecycle", () => {
     });
   });
 
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it.each([
     ["netease", "downloadNeteaseTrack"],
     ["qqmusic", "downloadQqMusicTrack"]
@@ -140,7 +155,39 @@ describe("provider playback cache lifecycle", () => {
 
     expect(apiMocks.musicRoomApi[method]).toHaveBeenCalledOnce();
     expect(indexedDbMocks.upsertCachedLibraryTrack).toHaveBeenCalledOnce();
+    expect(storageMocks.saveCachedAudioFileToLocalDirectory).not.toHaveBeenCalled();
+    await vi.runAllTimersAsync();
     expect(storageMocks.saveCachedAudioFileToLocalDirectory).toHaveBeenCalledOnce();
+  });
+
+  it("returns playable audio while directory synchronization is still pending", async () => {
+    let finishCopy!: (value: null) => void;
+    storageMocks.saveCachedAudioFileToLocalDirectory.mockImplementationOnce(
+      () => new Promise((resolve) => { finishCopy = resolve; })
+    );
+    const record = await cacheProviderTrackForPlayback(buildTrack("netease"));
+    expect(record.fileHash).toBe("hash_1");
+    expect(record.fileName).toBeNull();
+    expect(metadataMocks.resolveLocalArtworkUrl).not.toHaveBeenCalled();
+    await vi.runAllTimersAsync();
+    expect(storageMocks.saveCachedAudioFileToLocalDirectory).toHaveBeenCalledOnce();
+    expect(indexedDbMocks.upsertCachedLibraryTrack).toHaveBeenCalledOnce();
+    expect(indexedDbMocks.updateCachedLibraryTrackMetadata).toHaveBeenCalledOnce();
+    finishCopy(null);
+  });
+
+  it("passes cancellation into the download and does not persist cancelled audio", async () => {
+    const controller = new AbortController();
+    apiMocks.musicRoomApi.downloadNeteaseTrack.mockImplementationOnce(
+      async (_id, _quality, signal: AbortSignal) => {
+        expect(signal).toBe(controller.signal);
+        controller.abort();
+        throw signal.reason;
+      }
+    );
+    await expect(cacheProviderTrackForPlayback(buildTrack("netease"), controller.signal))
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(indexedDbMocks.upsertCachedLibraryTrack).not.toHaveBeenCalled();
   });
 
   it("removes only the browser copy when a local cache exists", async () => {

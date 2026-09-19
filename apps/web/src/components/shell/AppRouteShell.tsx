@@ -3,16 +3,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
-import { AppPersistentPlayer } from "@/components/bottom-player";
 import { AppSidebar } from "./AppSidebar";
 import { AwayRoomReturnButton } from "@/components/room-home";
 import { MobileAppNavigation } from "./MobileAppNavigation";
-import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import { awayRoomChangeEvent, clearAwayRoomId, readAwayRoomId, requestAwayRoomResume } from "@/lib/domain/away-room";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { useCustomLayoutRuntime } from "@/features/settings/use-custom-layout-runtime";
+import { WorkspacePageActivity } from "@/features/workspace/page-activity";
 
 export function AppRouteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -56,7 +55,6 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <LocalPlayerProvider>
       <div className="min-h-[calc(100*var(--app-dvh))] overflow-x-hidden bg-background">
         <div className="hidden md:contents">
           <AppSidebar
@@ -66,10 +64,8 @@ export function AppRouteShell({ children }: { children: ReactNode }) {
         </div>
         {awayRoomId ? <AwayRoomReturnButton onClick={handleResumeAwayRoom} /> : null}
         <PersistentAppRouteViews pathname={pathname}>{children}</PersistentAppRouteViews>
-        {awayRoomId ? null : <AppPersistentPlayer />}
         <MobileAppNavigation />
       </div>
-    </LocalPlayerProvider>
   );
 }
 
@@ -121,7 +117,9 @@ function PersistentAppRouteViews({
             className={isVisible ? "mobile-app-route-view custom-layout-content-region md:contents" : "hidden"}
             key={cachedRoute}
           >
-            {page}
+            <WorkspacePageActivity.Provider value={isVisible}>
+              {page}
+            </WorkspacePageActivity.Provider>
           </div>
         );
       })}
