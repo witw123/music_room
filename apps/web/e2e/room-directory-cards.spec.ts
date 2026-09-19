@@ -14,8 +14,7 @@ async function register(page: Page) {
   await page.getByTestId("auth-register-password").fill("password-123");
   await page.getByTestId("auth-register-nickname").fill(id);
   await page.getByTestId("auth-register-submit").click();
-  await authorizeStorageRoot(page);
-  await expect(page.getByTestId("create-public-room")).toBeVisible();
+  await authorizeStorageRoot(page, page.getByTestId("create-public-room"));
 }
 
 async function createRoom(page: Page, roomType: "interactive" | "request" | "radio", name: string) {
@@ -39,8 +38,7 @@ test("room directory gives each room format a distinct stage", async ({ page }, 
   for (const room of rooms) {
     await createRoom(page, room.roomType, room.name);
     await page.goto("/app");
-    await authorizeStorageRoot(page);
-    await expect(page.getByTestId("create-public-room")).toBeVisible();
+    await authorizeStorageRoot(page, page.getByTestId("create-public-room"));
   }
 
   await page.setViewportSize({ width: 1440, height: 1000 });

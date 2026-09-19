@@ -14,8 +14,7 @@ async function register(page: Page, nicknamePrefix: string) {
   await page.getByTestId("auth-register-password").fill("password-123");
   await page.getByTestId("auth-register-nickname").fill(id);
   await page.getByTestId("auth-register-submit").click();
-  await authorizeStorageRoot(page);
-  await expect(page.getByTestId("create-public-room")).toBeVisible();
+  await authorizeStorageRoot(page, page.getByTestId("create-public-room"));
   return id;
 }
 
@@ -139,7 +138,7 @@ test("two-user-realtime", async ({ browser, page }) => {
   await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
 
   await listenerPage.reload();
-  await authorizeStorageRoot(listenerPage);
+  await authorizeStorageRoot(listenerPage, listenerPage.getByTestId("room-code-button"));
   await expect(listenerPage.getByTestId("room-code-button")).toContainText(joinCode);
   await expect(listenerPage.getByTestId("online-member-count")).toHaveText("2", { timeout: 15_000 });
   await listenerContext.close();

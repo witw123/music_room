@@ -128,9 +128,8 @@ test("room directory cards match the visual hierarchy at desktop and mobile", as
   await mockDirectoryApi(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/app");
-  await authorizeStorageRoot(page);
-
   const cards = page.getByTestId("room-directory-card");
+  await authorizeStorageRoot(page, cards.first());
   await expect(cards).toHaveCount(3);
   await expect(page.locator('[data-room-type="interactive"] [data-card-scene="interactive"]')).toBeVisible();
   await expect(page.locator('[data-room-type="request"] [data-card-scene="request"]')).toBeVisible();
