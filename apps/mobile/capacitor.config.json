@@ -16,6 +16,7 @@
     "captureInput": true,
     "webContentsDebuggingEnabled": true
   },
+  "loggingBehavior": "none",
   "plugins": {
     "CapacitorCookies": {
       "enabled": true
