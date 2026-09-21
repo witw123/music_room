@@ -5,6 +5,7 @@ import {
 } from "@/features/library/indexeddb";
 import {
   toCachedProviderTrack,
+  toProviderTrackRecord,
   type ProviderTrack
 } from "@/features/playlist/local-playlist";
 import {
@@ -194,7 +195,13 @@ async function runPreparation(
     if (cachedRecord) return { record: cachedRecord, source: "playback-cache" };
   }
 
-  // 5) Download into the playback cache.
+  // 5) B 站音轨支持流式直出：无需阻塞等待全量下载，立即返回音轨记录供原生流式播放
+  if (providerTrack?.provider === "bilibili") {
+    const streamRecord = toProviderTrackRecord(providerTrack);
+    return { record: streamRecord, source: "playback-download" };
+  }
+
+  // 6) Download into the playback cache.
   if (!providerTrack) {
     throw new PlaybackPreparationError(
       "missing-audio-source",

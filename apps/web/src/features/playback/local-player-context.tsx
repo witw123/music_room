@@ -18,16 +18,16 @@ import type {
   QueueItem,
   TrackMeta
 } from "@music-room/shared";
-import { takeNextShuffleTrack } from "@music-room/shared";
+import { takeNextShuffleTrack, synchronizeShuffleBagTrackIds } from "@music-room/shared";
 import { getCachedLibraryTrackSummary, type LocalPlaylistTrackRecord } from "@/features/library/indexeddb";
 import {
+  cacheProviderTrackForPlayback,
   providerPlaybackCacheChangedEvent,
   releaseProviderTrackPlaybackCache
 } from "@/features/playback/provider-track-cache";
 import { prepareTrackForImmediatePlayback } from "./provider-playback-preparation";
 import { canPrepareProviderTrack, getQueuePreloadWindow, QueuePreloader } from "./queue-preload";
-import { synchronizeShuffleBagTrackIds } from "@music-room/shared";
-import { listMergedLocalPlaylistTracks } from "@/features/playlist/local-playlist";
+import { listMergedLocalPlaylistTracks, toCachedProviderTrack } from "@/features/playlist/local-playlist";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   appSettingsChangeEvent,
@@ -44,6 +44,7 @@ import {
   mergeLocalTrackRecord,
   toTrackMeta
 } from "./local-player-track-utils";
+import { musicRoomApi } from "@/lib/network/music-room-api";
 
 type LocalPlayerContextValue = {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -292,7 +293,8 @@ export function LocalPlayerProvider({ children, active }: { children: ReactNode;
       }
       const candidateFile = await loadAudioFile(candidate).catch(() => null);
       if (requestId !== playRequestRef.current) return;
-      if (candidateFile) {
+      const isPlayableBilibiliStream = !candidateFile && candidate.provider === "bilibili" && !!candidate.providerTrackId;
+      if (candidateFile || isPlayableBilibiliStream) {
         nextRecords = nextRecords.map((item, index) => index === candidateIndex ? candidate : item);
         selectedIndex = candidateIndex;
         record = candidate;
@@ -303,16 +305,22 @@ export function LocalPlayerProvider({ children, active }: { children: ReactNode;
 
     if (requestId !== playRequestRef.current || !activeRef.current) return;
     preparingTrackIdRef.current = null;
-    if (!record || !file) return;
+    const isBilibiliStream = !file && record?.provider === "bilibili" && !!record.providerTrackId;
+    if (!record || (!file && !isBilibiliStream)) return;
 
     const audio = audioRef.current;
     if (!audio) return;
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
     }
-    const objectUrl = URL.createObjectURL(file);
-    objectUrlRef.current = objectUrl;
+    const mediaSourceUrl = file
+      ? URL.createObjectURL(file)
+      : musicRoomApi.getBilibiliAudioStreamUrl(record.providerTrackId!);
+    if (file) {
+      objectUrlRef.current = mediaSourceUrl;
+    }
     mediaEpochRef.current += 1;
     playbackSequenceKindRef.current = sequenceKind;
     if (playbackMode === "shuffle") {
@@ -342,11 +350,21 @@ export function LocalPlayerProvider({ children, active }: { children: ReactNode;
     setPlayback(createPlaybackSnapshot({ record, status: "paused", positionMs: 0 }));
 
     audio.pause();
-    audio.src = objectUrl;
+    audio.src = mediaSourceUrl;
     audio.load();
-    // Automatic track changes can happen while the tab is backgrounded, when
-    // React effects are throttled. Apply the next track's gain before calling
-    // play() so normalization never waits for the page to become visible.
+
+    // 如果是通过流式直接起播的 B 站音轨，触发后台静默写入本地缓存供后续离线使用
+    if (isBilibiliStream) {
+      const providerTrack = toCachedProviderTrack(record);
+      if (providerTrack) {
+        void cacheProviderTrackForPlayback(providerTrack).then((cached) => {
+          setLibraryRecords((current) => current.map((item) =>
+            item.id === cached.id ? cached : item
+          ));
+        }).catch(() => undefined);
+      }
+    }
+
     roomAudioOutput.applyVolume({
       localAudio: audio,
       volume,
@@ -377,7 +395,7 @@ export function LocalPlayerProvider({ children, active }: { children: ReactNode;
     }
     // Metadata parsing must not delay binding or starting the audio element.
     const playingRecord = record;
-    if (canPrepareProviderTrack(playingRecord)) return;
+    if (canPrepareProviderTrack(playingRecord) || !file) return;
     void enrichTrack(playingRecord, file).then((enriched) => {
       if (requestId !== playRequestRef.current) return;
       currentRecordRef.current = enriched;
@@ -1065,6 +1083,7 @@ export function LocalPlayerProvider({ children, active }: { children: ReactNode;
           className="hidden"
           data-testid="personal-audio"
           playsInline
+          crossOrigin="anonymous"
           onLoadedMetadata={() => {
             syncDurationFromAudio();
             syncProgressFromAudio();

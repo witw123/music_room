@@ -161,6 +161,12 @@ describe("BilibiliService and Utilities", () => {
       ]);
       expect(audio.fileType).toBe("m4a");
       expect(audio.mimeType).toBe("audio/mp4");
+      expect(mockClient.getPlayUrl).toHaveBeenCalledTimes(1);
+
+      // 二次调用命中 30 分钟内存缓存，不再重复调用底层接口
+      const cachedAudio = await service.resolveAudio("BV1xx", 1001);
+      expect(cachedAudio.url).toBe("https://upos-sz-mirrorcos.bilivideo.com/320k.m4a");
+      expect(mockClient.getPlayUrl).toHaveBeenCalledTimes(1);
     });
   });
 

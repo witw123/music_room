@@ -130,10 +130,13 @@ export class BilibiliController {
     res.setHeader("Content-Type", "audio/mp4");
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Disposition", "inline");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range, Origin, Content-Type, Accept");
     res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="bilibili-${bvid}.m4a"`
+      "Access-Control-Expose-Headers",
+      "Accept-Ranges, Content-Range, Content-Length, Content-Type, ETag, Last-Modified"
     );
 
     if (streamResult.headers["content-length"]) {

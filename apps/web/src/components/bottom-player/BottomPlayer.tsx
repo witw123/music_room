@@ -620,6 +620,7 @@ function BottomPlayerBase({
       {desktopLyricsSource === "room" ? <audio
         ref={audioRef}
         className="hidden"
+        crossOrigin="anonymous"
         playsInline
         // Older iPad Safari versions still consult the prefixed attribute for
         // WebRTC MediaStream playback even when `playsInline` is present.

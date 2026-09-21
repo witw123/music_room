@@ -146,6 +146,100 @@ export class BilibiliService {
     };
   }
 
+  private readonly audioStreamCache = new Map<
+    string,
+    { candidateUrls: string[]; mimeType: string; fileType: string; expiresAt: number }
+  >();
+
+  private async getResolvedAudioCandidates(bvid: string, cid?: number): Promise<{
+    candidateUrls: string[];
+    mimeType: string;
+    fileType: string;
+    cid: number;
+  }> {
+    const now = Date.now();
+    let viewData = null;
+    try {
+      viewData = await this.client.getVideoView(bvid);
+    } catch {
+      viewData = null;
+    }
+    const resolvedCid = cid ?? viewData?.pages?.[0]?.cid ?? (await this.resolveFirstCid(bvid));
+    const targetAid = viewData?.aid ? Number(viewData.aid) : undefined;
+    const cacheKey = `${bvid}:${resolvedCid}`;
+
+    const cached = this.audioStreamCache.get(cacheKey);
+    if (cached && cached.expiresAt > now && cached.candidateUrls.length > 0) {
+      return {
+        candidateUrls: cached.candidateUrls,
+        mimeType: cached.mimeType,
+        fileType: cached.fileType,
+        cid: resolvedCid
+      };
+    }
+
+    // 1. 优先获取 Web PlayUrl（音质最高、纯音频 DASH 体积仅 3~5MB）
+    let playData = null;
+    try {
+      playData = await this.client.getPlayUrl(bvid, resolvedCid, targetAid);
+    } catch (err) {
+      this.logger.warn(`Failed to fetch Web PlayUrl for ${bvid}:${resolvedCid}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const audioStreams = playData?.dash?.audio ?? [];
+    if (audioStreams.length > 0) {
+      const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]!;
+      const candidateUrls = sortBilibiliAudioUrls(bestAudio.baseUrl, bestAudio.backupUrl);
+      if (candidateUrls.length > 0) {
+        const result = {
+          candidateUrls,
+          mimeType: "audio/mp4",
+          fileType: "m4a",
+          expiresAt: now + 30 * 60 * 1000 // 缓存 30 分钟
+        };
+        this.audioStreamCache.set(cacheKey, result);
+        return {
+          candidateUrls,
+          mimeType: result.mimeType,
+          fileType: result.fileType,
+          cid: resolvedCid
+        };
+      }
+    }
+
+    // 2. 只有在缺失 DASH 音频流时（如极老视频投稿），才尝试 Web durl 或 TV 端 durl 兜底
+    let fallbackUrl: string | undefined = playData?.durl?.[0]?.url;
+    if (!fallbackUrl && targetAid) {
+      try {
+        const tvData = await this.client.getTvPlayUrl(targetAid, resolvedCid);
+        fallbackUrl = tvData?.durl?.[0]?.url;
+      } catch (err) {
+        this.logger.warn(`Failed to fetch TV PlayUrl fallback for ${bvid}:${resolvedCid}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    if (fallbackUrl) {
+      if (fallbackUrl.startsWith("http://")) {
+        fallbackUrl = fallbackUrl.replace(/^http:\/\//i, "https://");
+      }
+      const result = {
+        candidateUrls: [fallbackUrl],
+        mimeType: "video/mp4",
+        fileType: "mp4",
+        expiresAt: now + 15 * 60 * 1000 // 兜底缓存 15 分钟
+      };
+      this.audioStreamCache.set(cacheKey, result);
+      return {
+        candidateUrls: [fallbackUrl],
+        mimeType: result.mimeType,
+        fileType: result.fileType,
+        cid: resolvedCid
+      };
+    }
+
+    throw new NotFoundException(`未能解析到 B 站音频流直链: ${bvid} (cid: ${resolvedCid})`);
+  }
+
   async resolveAudio(
     bvid: string,
     cid?: number,
@@ -158,66 +252,20 @@ export class BilibiliService {
     bvid: string;
     cid: number;
   }> {
-    let viewData = null;
-    try {
-      viewData = await this.client.getVideoView(bvid);
-    } catch {
-      viewData = null;
-    }
-    const resolvedCid = cid ?? viewData?.pages?.[0]?.cid ?? (await this.resolveFirstCid(bvid));
-    const targetAid = viewData?.aid ? Number(viewData.aid) : undefined;
-
-    // 并发请求 Web PlayUrl 与 TV 直链（TV 直链开放浏览器 CORS 与 no-referrer，供客户端直接极速下载）
-    const [playDataResult, tvDataResult] = await Promise.allSettled([
-      this.client.getPlayUrl(bvid, resolvedCid, targetAid),
-      targetAid ? this.client.getTvPlayUrl(targetAid, resolvedCid) : Promise.resolve(null)
-    ]);
-
-    const playData = playDataResult.status === "fulfilled" ? playDataResult.value : null;
-    const tvData = tvDataResult.status === "fulfilled" ? tvDataResult.value : null;
-    let tvDirectUrl = tvData?.durl?.[0]?.url;
-    if (tvDirectUrl?.startsWith("http://")) {
-      tvDirectUrl = tvDirectUrl.replace(/^http:\/\//i, "https://");
+    const { candidateUrls, mimeType, fileType, cid: resolvedCid } = await this.getResolvedAudioCandidates(bvid, cid);
+    const primaryUrl = candidateUrls[0] || "";
+    if (!primaryUrl) {
+      throw new NotFoundException(`未能解析到 B 站音频流直链: ${bvid}`);
     }
 
-    const audioStreams = playData?.dash?.audio ?? [];
-    if (audioStreams.length > 0) {
-      // 按照 bandwidth 降序排序，取最高音质
-      const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]!;
-      // 对 CDN 备选节点进行打分优选与去重排序
-      const candidateUrls = sortBilibiliAudioUrls(bestAudio.baseUrl, bestAudio.backupUrl);
-      if (tvDirectUrl) {
-        // 将支持浏览器直接 CORS 下载的直链置于最前列供客户端直接抓取
-        candidateUrls.unshift(tvDirectUrl);
-      }
-      const primaryUrl = candidateUrls[0] || bestAudio.baseUrl || "";
-      if (!primaryUrl) {
-        throw new NotFoundException(`未能解析到 B 站音频流直链: ${bvid}`);
-      }
-      return {
-        url: primaryUrl,
-        urls: candidateUrls.length > 0 ? candidateUrls : [primaryUrl],
-        mimeType: tvDirectUrl && primaryUrl === tvDirectUrl ? "video/mp4" : "audio/mp4",
-        fileType: tvDirectUrl && primaryUrl === tvDirectUrl ? "mp4" : "m4a",
-        bvid,
-        cid: resolvedCid
-      };
-    }
-
-    // Fallback: durl 流
-    const durl = tvDirectUrl || playData?.durl?.[0]?.url;
-    if (durl) {
-      return {
-        url: durl,
-        urls: [durl],
-        mimeType: "video/mp4",
-        fileType: "mp4",
-        bvid,
-        cid: resolvedCid
-      };
-    }
-
-    throw new NotFoundException(`Bilibili 视频无可用播放流: ${bvid}`);
+    return {
+      url: primaryUrl,
+      urls: candidateUrls,
+      mimeType,
+      fileType,
+      bvid,
+      cid: resolvedCid
+    };
   }
 
   async openAudioStream(
@@ -226,40 +274,8 @@ export class BilibiliService {
     _quality?: "standard" | "high" | "exhigh",
     range?: string
   ) {
-    const viewData = await this.client.getVideoView(bvid);
-    const resolvedCid = cid ?? viewData.pages?.[0]?.cid;
-    if (!resolvedCid) {
-      throw new NotFoundException(`Bilibili 视频无可用分P: ${bvid}`);
-    }
-    const targetAid = Number(viewData.aid);
-
-    // 并发请求 Web PlayUrl 与 TV 直链：DASH 音频流优先，TV durl 作为代理链路的额外容灾候选
-    const [playDataResult, tvDataResult] = await Promise.allSettled([
-      this.client.getPlayUrl(bvid, resolvedCid, targetAid),
-      targetAid ? this.client.getTvPlayUrl(targetAid, resolvedCid) : Promise.resolve(null)
-    ]);
-    const playData = playDataResult.status === "fulfilled" ? playDataResult.value : null;
-    const tvData = tvDataResult.status === "fulfilled" ? tvDataResult.value : null;
-    const tvDirectUrl = tvData?.durl?.[0]?.url;
-
-    // 服务端代理优先尝试纯音频 DASH 流（音质高、体积小只有几 MB、服务端自带 Referer）
-    const audioStreams = playData?.dash?.audio ?? [];
-    if (audioStreams.length > 0) {
-      const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]!;
-      const candidateUrls = sortBilibiliAudioUrls(bestAudio.baseUrl, bestAudio.backupUrl);
-      if (tvDirectUrl) {
-        candidateUrls.push(tvDirectUrl);
-      }
-      return this.client.fetchAudioStream(candidateUrls, range);
-    }
-
-    // 兜底尝试 TV 流或 durl
-    const durl = tvDirectUrl || playData?.durl?.[0]?.url;
-    if (durl) {
-      return this.client.fetchAudioStream([durl], range);
-    }
-
-    throw new NotFoundException(`Bilibili 视频无可用播放音频流: ${bvid}`);
+    const { candidateUrls } = await this.getResolvedAudioCandidates(bvid, cid);
+    return this.client.fetchAudioStream(candidateUrls, range);
   }
 
   async getLyrics(bvid: string, cid?: number): Promise<ProviderLyrics> {

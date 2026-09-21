@@ -53,6 +53,7 @@ import type {
   TrackMeta,
   UpdateRoomRequest
 } from "@music-room/shared";
+import { apiBaseUrl } from "./api-client";
 import {
   downloadWithDirectFallback,
   notifyPlaylistsChanged,
@@ -556,21 +557,18 @@ export const musicRoomApi = {
   },
   getBilibiliRanking: (subType = "3", signal?: AbortSignal) =>
     request<BilibiliTrackCandidate[]>(`/v1/providers/bilibili/ranking?subType=${encodeURIComponent(subType)}`, { signal }),
+  getBilibiliAudioStreamUrl: (trackId: string) =>
+    `${apiBaseUrl}/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
   resolveBilibiliAudio: (trackId: string, signal?: AbortSignal) =>
     request<{ url: string; urls: string[]; mimeType: string; fileType: string; bvid: string; cid: number }>(
       `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio-url`,
       { signal }
     ),
   downloadBilibiliTrack: (trackId: string, signal?: AbortSignal) =>
-    downloadWithDirectFallback({
-      resolve: () => musicRoomApi.resolveBilibiliAudio(trackId, signal),
-      fallback: () =>
-        requestBlob(
-          `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
-          { signal }
-        ),
-      signal
-    }),
+    requestBlob(
+      `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
+      { signal }
+    ),
   testAlistConnection: (config: { url: string; mountPath: string; token?: string }) =>
     request<AlistTestResponse>("/v1/storage/alist/test", {
       method: "POST",
