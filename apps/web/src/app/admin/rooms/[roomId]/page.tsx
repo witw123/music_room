@@ -23,7 +23,6 @@ export default function AdminRoomDetailPage() {
 
   // 聊天审查
   const [chatMessages, setChatMessages] = useState<RoomChatMessage[]>([]);
-  const [chatLoading, setChatLoading] = useState(false);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
 
   const loadingRef = useRef(false);
