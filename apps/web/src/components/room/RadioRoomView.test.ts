@@ -5,9 +5,9 @@ const radioRoomSource = readFileSync(new URL("./RadioRoomView.tsx", import.meta.
 const chatSource = readFileSync(new URL("./RoomChatOverlay.tsx", import.meta.url), "utf8");
 
 describe("RadioRoomView layout", () => {
-  it("removes the giant RoomStage turntable and provides a compact on-air banner", () => {
+  it("removes the giant RoomStage turntable and provides a balanced split layout", () => {
     expect(radioRoomSource).not.toContain("<RoomStage");
-    expect(radioRoomSource).toContain('data-testid="radio-now-playing-banner"');
+    expect(radioRoomSource).not.toContain('data-testid="radio-now-playing-banner"');
     expect(radioRoomSource).toContain("lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]");
   });
 

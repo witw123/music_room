@@ -76,8 +76,8 @@ export type RoomControlHeaderProps = {
 
 export function RoomControlHeader({
   roomSnapshot,
-  mediaConnectionState = "live",
-  currentTrack = null,
+  mediaConnectionState: _mediaConnectionState = "live",
+  currentTrack: _currentTrack = null,
   host: propHost,
   canDeleteRoom = false,
   canDisbandRoom = false,
@@ -109,7 +109,6 @@ export function RoomControlHeader({
   const onlineMemberCount = roomSnapshot.room.members.filter(
     (member) => member.presenceState !== "offline"
   ).length;
-  const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
   const handleCopyJoinCode = async () => {
     if (isCopying || !onCopyJoinCode) return;
@@ -243,7 +242,7 @@ export function RoomControlHeader({
                       className="fixed inset-0 z-[65]"
                       onClick={() => setShowSettings(false)}
                     />
-                    <div className="animate-fade-in absolute right-0 top-9 z-[70] flex w-52 origin-top-right flex-col rounded-2xl border border-surface-border bg-surface p-1 shadow-2xl backdrop-blur-xl">
+                    <div className="animate-fade-in absolute right-0 top-9 z-[70] flex w-52 origin-top-right flex-col rounded-2xl border border-surface-border bg-background-secondary p-1.5 shadow-2xl">
                       {canDeleteRoom && onUpdateRoom ? (
                         <button
                           data-testid="mobile-edit-room-button"
@@ -303,7 +302,6 @@ export function RoomControlHeader({
             <div className="flex items-center gap-1.5 text-[10px] text-foreground-muted truncate">
               <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
               {host ? <span>· 房主 {host.nickname}</span> : null}
-              <span>· {sourceModeLabel}</span>
             </div>
           ) : null}
         </div>
@@ -381,8 +379,6 @@ export function RoomControlHeader({
                   <span className="truncate max-w-[7.5rem]" title={host.nickname}>房主 {host.nickname}</span>
                 </>
               ) : null}
-              <span>·</span>
-              <span className="text-[11px] opacity-75">{sourceModeLabel}</span>
             </div>
           </div>
         )}
@@ -429,7 +425,7 @@ export function RoomControlHeader({
                   className="fixed inset-0 z-[65]"
                   onClick={() => setShowSettings(false)}
                 />
-                <div className="animate-fade-in absolute right-0 top-10 z-[70] flex w-56 origin-top-right flex-col rounded-2xl border border-surface-border bg-surface p-1 shadow-2xl backdrop-blur-xl">
+                <div className="animate-fade-in absolute right-0 top-10 z-[70] flex w-56 origin-top-right flex-col rounded-2xl border border-surface-border bg-background-secondary p-1.5 shadow-2xl">
                   {canDeleteRoom && onUpdateRoom ? (
                     <button
                       data-testid="edit-room-button"
