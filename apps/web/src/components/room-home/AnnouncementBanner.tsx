@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { SystemAnnouncement } from "@music-room/shared";
@@ -91,22 +91,42 @@ export function AnnouncementBanner() {
     setIsDismissed(allDismissed);
   }, [announcements]);
 
-  // Construct text for marquee loop (title: content)
-  const marqueeText = useMemo(() => {
-    if (!announcements.length) return "";
-    return announcements
-      .map((item) => {
-        const cleanContent = item.content.replace(/\r?\n+/g, " ").trim();
-        return `${item.title}：${cleanContent}`;
-      })
-      .join("        ✦        ");
-  }, [announcements]);
+  // Track scroll cycle count to advance announcements smoothly one by one
+  const [cycle, setCycle] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(700);
 
-  // Dynamic animation duration based on character length
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(Math.round(entry.contentRect.width));
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isDismissed, announcements.length]);
+
+  // Current announcement: displays exactly one announcement per cycle, cycling through all active ones
+  const activeIndex = announcements.length > 0 ? cycle % announcements.length : 0;
+  const currentAnnouncement = announcements[activeIndex] ?? announcements[0];
+
+  const currentAnnouncementText = useMemo(() => {
+    if (!currentAnnouncement) return "";
+    const cleanContent = currentAnnouncement.content.replace(/\r?\n+/g, " ").trim();
+    return `${currentAnnouncement.title}：${cleanContent}`;
+  }, [currentAnnouncement]);
+
+  // Uniform velocity: duration scales with travel distance (container width + text width)
   const marqueeDuration = useMemo(() => {
-    const len = marqueeText.length;
-    return Math.max(16, Math.min(60, Math.round(len * 0.35)));
-  }, [marqueeText]);
+    const textLength = currentAnnouncementText.length;
+    const textWidth = Math.max(textLength * 14, 120);
+    const totalDistance = containerWidth + textWidth;
+    return Math.max(12, Math.min(60, Math.round(totalDistance / 60)));
+  }, [containerWidth, currentAnnouncementText]);
 
   function handleDismissMarquee() {
     const dismissed = readDismissedIds();
@@ -158,22 +178,23 @@ export function AnnouncementBanner() {
           </button>
         </div>
       ) : (
-        /* 发布通知时：从右向左循环滚动显示内容文字，点击内容后展开图2的界面 */
+        /* 发布通知时：从最右侧开始，从右向左循环滚动显示内容文字，一次循环只显示一个 */
         <aside
           aria-label="系统通知"
           className="group relative flex w-full items-center justify-between gap-2.5 overflow-hidden rounded-xl border border-surface-border bg-surface px-3 py-1.5 text-xs text-foreground shadow-xs animate-fade-in"
         >
-          {/* 左侧通知图标标牌 */}
+          {/* 左侧通知图标（纯图标，无文字） */}
           <button
             type="button"
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-1.5 shrink-0 text-accent hover:opacity-80 transition-opacity cursor-pointer select-none"
+            className="flex h-5 w-5 items-center justify-center shrink-0 text-accent hover:opacity-80 transition-opacity cursor-pointer select-none"
             title="查看所有公告"
+            aria-label="查看所有公告"
           >
             <svg
               aria-hidden="true"
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -184,25 +205,22 @@ export function AnnouncementBanner() {
               <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
               <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
             </svg>
-            <span className="font-semibold text-xs">通知</span>
           </button>
 
-          {/* 中间跑马灯：从右向左循环滚动显示内容文字 */}
+          {/* 中间跑马灯：循环从右向左移动，从最右侧出现，一次循环只显示一个 */}
           <div
-            onClick={() => handleOpenModal(announcements[0])}
-            className="relative flex-1 min-w-0 overflow-hidden h-5 flex items-center cursor-pointer select-none"
+            ref={containerRef}
+            onClick={() => handleOpenModal(currentAnnouncement)}
+            className="announcement-marquee-container relative flex-1 min-w-0 h-5 overflow-hidden flex items-center cursor-pointer select-none"
             title="点击查看公告详情"
           >
             <div
-              className="announcement-marquee flex items-center whitespace-nowrap group-hover:[animation-play-state:paused]"
+              key={cycle}
+              className="announcement-marquee-track text-xs font-normal text-foreground/90 group-hover:[animation-play-state:paused]"
               style={{ animationDuration: `${marqueeDuration}s` }}
+              onAnimationEnd={() => setCycle((c) => c + 1)}
             >
-              <span className="inline-block pr-12 text-xs font-normal text-foreground/90">
-                {marqueeText}
-              </span>
-              <span aria-hidden="true" className="inline-block pr-12 text-xs font-normal text-foreground/90">
-                {marqueeText}
-              </span>
+              {currentAnnouncementText}
             </div>
           </div>
 
