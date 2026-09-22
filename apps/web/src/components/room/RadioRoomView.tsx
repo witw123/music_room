@@ -9,10 +9,18 @@ import { PlayerQueueList } from "@/components/bottom-player";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { RoomControlHeader } from "./RoomControlHeader";
-import { RoomStage } from "./RoomStage";
-import { buildRoomStageProps, type RoomDashboardViewProps } from "./RoomDashboardView";
+import type { RoomDashboardViewProps } from "./RoomDashboardView";
 import { useRadioAutopilot, type RadioAutopilotNextTrack } from "./hooks/use-radio-autopilot";
-import { RadioIcon, MusicIcon, UsersIcon } from "@/components/icons/DiscoverIcons";
+import {
+  AudioWaveIcon,
+  FolderIcon,
+  ListMusicIcon,
+  MessageSquareIcon,
+  MusicIcon,
+  RadioIcon,
+  UsersIcon,
+  ZapIcon
+} from "@/components/icons/DiscoverIcons";
 import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
 import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
 
@@ -26,12 +34,20 @@ const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
+type HostLeftTab = "desk" | "queue" | "library";
+type ListenerLeftTab = "queue" | "library";
+type RadioLeftTab = HostLeftTab | ListenerLeftTab;
+type RadioRightTab = "chat" | "members";
+type RadioMobileTab = "desk" | "queue" | "chat" | "library" | "members";
+
 export function RadioRoomView(props: RoomDashboardViewProps) {
-  const { stageReady, panelsReady } = useProgressiveRoomLoading();
+  const { panelsReady } = useProgressiveRoomLoading();
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
-  const [leftTab, setLeftTab] = useState<RadioLeftTab>("queue");
+
+  const [leftTab, setLeftTab] = useState<RadioLeftTab>(isHost ? "desk" : "queue");
   const [rightTab, setRightTab] = useState<RadioRightTab>("chat");
+  const [mobileTab, setMobileTab] = useState<RadioMobileTab>(isHost ? "desk" : "queue");
 
   const targetMembers = useMemo(() => {
     return props.roomSnapshot.room.members.map((m) => ({
@@ -46,10 +62,43 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
     return () => window.clearInterval(timer);
   }, []);
 
+  const queueCount = props.roomSnapshot.queue.length;
+  const memberCount = props.roomSnapshot.room.members.length;
+
+  const hostLeftTabs = useMemo(() => [
+    { id: "desk" as const, label: "电台发射台", icon: ZapIcon },
+    { id: "queue" as const, label: `节目单 (${queueCount})`, icon: ListMusicIcon },
+    { id: "library" as const, label: "曲库", icon: FolderIcon }
+  ], [queueCount]);
+
+  const listenerLeftTabs = useMemo(() => [
+    { id: "queue" as const, label: `节目单 (${queueCount})`, icon: ListMusicIcon },
+    { id: "library" as const, label: "曲库", icon: FolderIcon }
+  ], [queueCount]);
+
+  const rightTabs = useMemo(() => [
+    { id: "chat" as const, label: "互动聊天", icon: MessageSquareIcon },
+    { id: "members" as const, label: `在场听众 (${memberCount})`, icon: UsersIcon }
+  ], [memberCount]);
+
+  const mobileTabs = useMemo(() => {
+    const base: Array<{ id: RadioMobileTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [];
+    if (isHost) {
+      base.push({ id: "desk", label: "发射台", icon: ZapIcon });
+    }
+    base.push(
+      { id: "queue", label: `节目单 (${queueCount})`, icon: ListMusicIcon },
+      { id: "chat", label: "聊天", icon: MessageSquareIcon },
+      { id: "library", label: "曲库", icon: FolderIcon },
+      { id: "members", label: `听众 (${memberCount})`, icon: UsersIcon }
+    );
+    return base;
+  }, [isHost, queueCount, memberCount]);
+
   return (
-    <div className="hide-scrollbar h-full min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain pb-6 lg:pb-0" data-room-view="radio">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background" data-room-view="radio">
       {/* Mobile Top Room Control Header */}
-      <div className="px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
+      <div className="shrink-0 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
         <RoomControlHeader
           isMobile
           roomSnapshot={props.roomSnapshot}
@@ -67,67 +116,76 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         />
       </div>
 
-      <section className="mx-auto grid min-h-0 w-full max-w-[1600px] shrink-0 gap-2 px-2.5 pt-0 lg:h-[calc(100*var(--app-dvh)-var(--room-desktop-bottom-inset))] lg:min-h-0 lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)] lg:gap-0 lg:px-0 lg:pt-0" data-testid="radio-room-hero">
-        <div className="relative z-10 hidden lg:flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-transparent lg:z-auto lg:h-full lg:min-h-0 lg:rounded-none">
-          <div className="min-h-0 flex-1">
-            {stageReady ? (
-              <RoomStage {...buildRoomStageProps(props, { hideRoomMetadata: true, mobileControlsOnly: true })} />
+      {/* Desktop Top Room Control Header */}
+      <div className="hidden lg:block shrink-0 border-b border-surface-border/40 bg-surface/30 px-4 py-2 sm:px-6 backdrop-blur-md">
+        <RoomControlHeader
+          roomSnapshot={props.roomSnapshot}
+          mediaConnectionState={props.mediaConnectionState}
+          currentTrack={props.currentTrack}
+          host={props.host}
+          canDeleteRoom={props.canDeleteRoom}
+          canDisbandRoom={props.canDisbandRoom}
+          onCopyJoinCode={props.onCopyJoinCode}
+          onShareRoom={props.onShareRoom}
+          onAwayRoom={props.onAwayRoom}
+          onLeaveRoom={props.onLeaveRoom}
+          onDeleteRoom={props.onDeleteRoom}
+          onUpdateRoom={props.onUpdateRoom}
+        />
+      </div>
+
+      {/* Compact Mini On-Air Bar (replaces giant vinyl RoomStage) */}
+      {props.currentTrack ? (
+        <div className="shrink-0 px-3 pt-2 lg:px-6" data-testid="radio-now-playing-banner">
+          <div className="flex items-center gap-3 rounded-xl border border-surface-border/50 bg-surface/50 p-2 sm:p-2.5 backdrop-blur-sm">
+            {props.currentTrack.artworkUrl ? (
+              <img
+                src={props.currentTrack.artworkUrl}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs"
+              />
             ) : (
-              <div className="h-full min-h-[22rem] w-full rounded-2xl bg-surface/[0.04] animate-pulse" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-accent">
+                <MusicIcon className="w-5 h-5" />
+              </div>
             )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                  <AudioWaveIcon className={`w-2.5 h-2.5 ${props.isPlaying ? "animate-pulse" : "opacity-60"}`} />
+                  <span>正在播出</span>
+                </span>
+                <span className="truncate text-xs sm:text-sm font-semibold text-foreground" title={props.currentTrack.title}>
+                  {props.currentTrack.title}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
+                {props.currentTrack.artist} {props.currentTrack.album ? `· ${props.currentTrack.album}` : ""}
+              </p>
+            </div>
+            <span className="shrink-0 font-mono text-xs text-foreground-muted">
+              {formatDuration(props.currentTrack.durationMs)}
+            </span>
           </div>
         </div>
-        <div className="relative z-0 flex h-[calc(100*var(--app-dvh)-var(--room-mobile-bottom-inset,6rem)-4.5rem)] min-h-[28rem] max-h-[38rem] min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-background lg:h-full lg:min-h-0 lg:max-h-none lg:rounded-none">
-          <RadioWorkspaceTabs
-            activeTab={rightTab}
-            ariaLabel="房间信息"
-            panelPrefix="radio-right"
-            onChange={setRightTab}
-            tabs={[{ id: "chat", label: "聊天", icon: MusicIcon }, { id: "members", label: "成员", icon: UsersIcon }]}
-          />
-          <div aria-labelledby={`radio-right-tab-${rightTab}`} className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden" id={`radio-right-panel-${rightTab}`} role="tabpanel">
-            {panelsReady ? (
-              rightTab === "chat" ? (
-                <RoomChatPanel
-                  activeSession={props.activeSession}
-                  isHost={isHost}
-                  roomId={props.roomSnapshot.room.id}
-                  scrollEnabled
-                  socket={props.socket}
-                />
-              ) : (
-                <RadioMembersPanel {...props} membershipNow={membershipNow} />
-              )
-            ) : (
-              <RoomPanelSkeleton />
-            )}
-          </div>
+      ) : null}
 
-          {/* Radio Dedicated Member Interaction Bar */}
-          <div className="p-2 sm:p-3 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
-            <RoomReactionToolbar
-              roomId={props.roomSnapshot.room.id}
-              socket={props.socket}
-              variant="radio"
-              targetMembers={targetMembers}
-              activeMemberId={props.roomSnapshot.room.hostId}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className={`mx-auto mt-3 min-h-0 w-full max-w-[1600px] shrink-0 gap-3 overflow-hidden px-3 lg:mt-3 lg:h-[calc(100*var(--app-dvh)-var(--room-desktop-bottom-inset))] lg:gap-0 lg:px-0 ${isHost ? "grid lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]" : "block"}`} data-testid="radio-room-workspace">
-        <div className="flex min-h-[22rem] sm:min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:min-h-0 lg:rounded-none">
+      {/* Desktop Balanced Split Layout */}
+      <div className="hidden lg:grid flex-1 min-h-0 w-full lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)] divide-x divide-surface-border/40 overflow-hidden pt-2">
+        {/* Left Column: Broadcast & Content Hub */}
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <RadioWorkspaceTabs
             activeTab={leftTab}
             ariaLabel="电台内容"
             panelPrefix="radio-left"
-            onChange={setLeftTab}
-            tabs={[{ id: "queue", label: "队列", icon: MusicIcon }, { id: "library", label: "曲库", icon: RadioIcon }]}
+            onChange={(tab) => setLeftTab(tab)}
+            tabs={isHost ? hostLeftTabs : listenerLeftTabs}
           />
-          <div aria-labelledby={`radio-left-tab-${leftTab}`} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto" id={`radio-left-panel-${leftTab}`} role="tabpanel">
+          <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
             {panelsReady ? (
-              leftTab === "queue" ? (
+              leftTab === "desk" && isHost ? (
+                <HostBroadcastDesk {...props} />
+              ) : leftTab === "queue" ? (
                 <div className="flex h-full min-h-0 flex-col p-3 sm:p-5" data-testid="radio-queue-panel">
                   <PlayerQueueList
                     canControlPlayback={props.canControlPlayback}
@@ -151,24 +209,138 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             )}
           </div>
         </div>
-        {isHost ? (
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl bg-background lg:rounded-none">
-            <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
-              {panelsReady ? (
-                <HostBroadcastDesk {...props} />
+
+        {/* Right Column: Interaction & Audience Hub */}
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+          <RadioWorkspaceTabs
+            activeTab={rightTab}
+            ariaLabel="房间信息"
+            panelPrefix="radio-right"
+            onChange={setRightTab}
+            tabs={rightTabs}
+          />
+          <div
+            aria-labelledby={`radio-right-tab-${rightTab}`}
+            className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden"
+            id={`radio-right-panel-${rightTab}`}
+            role="tabpanel"
+          >
+            {panelsReady ? (
+              rightTab === "chat" ? (
+                <RoomChatPanel
+                  activeSession={props.activeSession}
+                  isHost={isHost}
+                  roomId={props.roomSnapshot.room.id}
+                  scrollEnabled
+                  socket={props.socket}
+                />
               ) : (
-                <RoomPanelSkeleton />
-              )}
-            </div>
+                <RadioMembersPanel {...props} membershipNow={membershipNow} />
+              )
+            ) : (
+              <RoomPanelSkeleton />
+            )}
           </div>
-        ) : null}
-      </section>
+
+          {/* Radio Dedicated Member Interaction Bar */}
+          <div className="shrink-0 p-2 sm:p-3 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
+            <RoomReactionToolbar
+              roomId={props.roomSnapshot.room.id}
+              socket={props.socket}
+              variant="radio"
+              targetMembers={targetMembers}
+              activeMemberId={props.roomSnapshot.room.hostId}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Streamlined View */}
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:hidden pt-2">
+        <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0">
+          <div
+            aria-label="电台功能"
+            className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md overflow-x-auto hide-scrollbar"
+            role="tablist"
+          >
+            {mobileTabs.map((tab) => {
+              const isActive = mobileTab === tab.id;
+              const IconComp = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  aria-selected={isActive}
+                  className={`flex-1 flex min-h-8 min-w-fit items-center justify-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all duration-150 ${
+                    isActive
+                      ? "bg-accent text-white shadow-xs"
+                      : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+                  }`}
+                  onClick={() => setMobileTab(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  <IconComp className="w-3.5 h-3.5 shrink-0" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
+          {panelsReady ? (
+            mobileTab === "desk" && isHost ? (
+              <HostBroadcastDesk {...props} />
+            ) : mobileTab === "queue" ? (
+              <div className="flex h-full min-h-0 flex-col p-3">
+                <PlayerQueueList
+                  canControlPlayback={props.canControlPlayback}
+                  canRemoveQueue={props.canRemoveQueue}
+                  canReorderQueue={props.canReorderQueue}
+                  currentQueueItemId={props.roomSnapshot.room.playback.currentQueueItemId}
+                  nextQueueItemId={props.roomSnapshot.room.playback.nextQueueItemId ?? null}
+                  onPlayNextQueueItem={props.onPlayNextQueueItem}
+                  onPlayQueueItem={props.onPlayQueueItem}
+                  onRemoveQueueItem={props.onRemoveQueueItem}
+                  onReorderQueue={props.onReorderQueue}
+                  queue={props.roomSnapshot.queue}
+                  tracks={props.roomSnapshot.tracks}
+                />
+              </div>
+            ) : mobileTab === "chat" ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <RoomChatPanel
+                    activeSession={props.activeSession}
+                    isHost={isHost}
+                    roomId={props.roomSnapshot.room.id}
+                    scrollEnabled
+                    socket={props.socket}
+                  />
+                </div>
+                <div className="shrink-0 p-2 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
+                  <RoomReactionToolbar
+                    roomId={props.roomSnapshot.room.id}
+                    socket={props.socket}
+                    variant="radio"
+                    targetMembers={targetMembers}
+                    activeMemberId={props.roomSnapshot.room.hostId}
+                  />
+                </div>
+              </div>
+            ) : mobileTab === "library" ? (
+              <RadioLibraryList isHost={isHost} props={props} />
+            ) : (
+              <RadioMembersPanel {...props} membershipNow={membershipNow} />
+            )
+          ) : (
+            <RoomPanelSkeleton />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
-
-type RadioLeftTab = "queue" | "library";
-type RadioRightTab = "chat" | "members";
 
 function RadioWorkspaceTabs<T extends string>({
   activeTab,
@@ -184,7 +356,7 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0 sm:px-5 lg:pt-2.5 lg:pb-2.5" data-testid={`radio-${ariaLabel === "电台内容" ? "content" : "management"}-tabs`}>
+    <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0 sm:px-5 lg:pt-2.5 lg:pb-2.5">
       <div
         aria-label={ariaLabel}
         className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md"
@@ -209,7 +381,7 @@ function RadioWorkspaceTabs<T extends string>({
               tabIndex={isActive ? 0 : -1}
               type="button"
             >
-              {IconComp && <IconComp className="w-3.5 h-3.5" />}
+              {IconComp && <IconComp className="w-3.5 h-3.5 shrink-0" />}
               <span>{tab.label}</span>
             </button>
           );
@@ -226,10 +398,8 @@ function RadioLibraryList({
   props: RoomDashboardViewProps;
   isHost: boolean;
 }) {
-  const [_visibleCount] = useState(10);
-
   return (
-    <div className="flex h-full min-h-0 flex-col p-3 sm:p-5 lg:max-h-[min(42rem,calc(100*var(--app-dvh)-10rem))]">
+    <div className="flex h-full min-h-0 flex-col p-3 sm:p-5">
       <LibraryTabPanel
         activeSession={props.activeSession}
         canAddToQueue={isHost}
@@ -246,7 +416,6 @@ function RadioLibraryList({
         tracks={props.roomSnapshot.tracks}
         uploadedTracks={props.uploadedTracks}
       />
-      {/* Compatibility test anchors: data-testid="radio-track-add-queue-button" data-testid="radio-track-delete-button" */}
     </div>
   );
 }

@@ -5,24 +5,20 @@ const radioRoomSource = readFileSync(new URL("./RadioRoomView.tsx", import.meta.
 const chatSource = readFileSync(new URL("./RoomChatOverlay.tsx", import.meta.url), "utf8");
 
 describe("RadioRoomView layout", () => {
-  it("uses the larger player and chat split for the first desktop viewport", () => {
-    expect(radioRoomSource).toContain('data-testid="radio-room-hero"');
-    expect(radioRoomSource).toContain("lg:grid-cols-[minmax(0,64fr)_minmax(22rem,36fr)]");
-    expect(radioRoomSource).toContain("hideRoomMetadata: true, mobileControlsOnly: true");
-    expect(radioRoomSource).toContain('data-testid="radio-track-add-queue-button"');
-    expect(radioRoomSource).toContain('data-testid="radio-track-delete-button"');
-    expect(radioRoomSource.indexOf("<RoomStage")).toBeLessThan(radioRoomSource.indexOf("<RoomChatPanel"));
+  it("removes the giant RoomStage turntable and provides a compact on-air banner", () => {
+    expect(radioRoomSource).not.toContain("<RoomStage");
+    expect(radioRoomSource).toContain('data-testid="radio-now-playing-banner"');
+    expect(radioRoomSource).toContain("lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]");
   });
 
-  it("moves the library, host console, and members into the second viewport", () => {
-    expect(radioRoomSource).toContain('data-testid="radio-room-workspace"');
-    expect(radioRoomSource.indexOf("<RadioLibraryList")).toBeGreaterThan(radioRoomSource.indexOf('data-testid="radio-room-workspace"'));
+  it("organizes broadcast desk, queue, library, and audience interactions cleanly", () => {
     expect(radioRoomSource).toContain("<HostBroadcastDesk");
+    expect(radioRoomSource).toContain("<PlayerQueueList");
+    expect(radioRoomSource).toContain("<RadioLibraryList");
+    expect(radioRoomSource).toContain("<RoomChatPanel");
     expect(radioRoomSource).toContain("<RadioMembersPanel");
-    expect(radioRoomSource).not.toContain("RadioCommunityPanels");
-    expect(radioRoomSource).toContain("useState(10)");
-    expect(radioRoomSource).toContain("lg:max-h-[min(42rem,calc(100*var(--app-dvh)-10rem))]");
-    expect(radioRoomSource).not.toContain("lg:border-t lg:border-surface-border");
+    expect(radioRoomSource).toContain("<RoomReactionToolbar");
+    expect(radioRoomSource).toContain('data-testid="radio-queue-panel"');
   });
 
   it("lets chat scrolling hand control back to the room page at its boundary", () => {

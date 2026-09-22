@@ -4,33 +4,22 @@ import { describe, expect, it } from "vitest";
 const requestRoomSource = readFileSync(new URL("./RequestRoomView.tsx", import.meta.url), "utf8");
 
 describe("RequestRoomView layout", () => {
-  it("keeps the player and request desk in the first desktop viewport", () => {
-    expect(requestRoomSource).toContain('data-testid="request-room-hero"');
-    expect(requestRoomSource).toContain("lg:h-full lg:min-h-full lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)]");
-    expect(requestRoomSource).toContain("buildRoomStageProps(props, { mobileControlsOnly: true })");
-    expect(requestRoomSource.indexOf("<RoomStage")).toBeLessThan(requestRoomSource.indexOf("点歌台"));
+  it("removes the giant RoomStage turntable and provides a compact now-playing credit banner", () => {
+    expect(requestRoomSource).not.toContain("<RoomStage");
+    expect(requestRoomSource).toContain('data-testid="request-now-playing-banner"');
+    expect(requestRoomSource).toContain("点播");
+    expect(requestRoomSource).toContain("lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]");
   });
 
-  it("removes the redundant request desk explanation and pending count", () => {
-    expect(requestRoomSource).not.toContain("审核成员点歌，自己的点歌会直接加入队列。");
-    expect(requestRoomSource).not.toContain("首待处理");
-  });
-
-  it("reuses library, playlist, and member components in the second viewport", () => {
-    expect(requestRoomSource).toContain('data-testid="request-room-workspace"');
+  it("integrates request search, inbox, queue, and library into a unified station", () => {
+    expect(requestRoomSource).toContain("<RequestInbox");
+    expect(requestRoomSource).toContain("<RequestHistory");
+    expect(requestRoomSource).toContain("<RoomProviderTrackSearch");
+    expect(requestRoomSource).toContain("<PlayerQueueList");
     expect(requestRoomSource).toContain("<LibraryTabPanel");
     expect(requestRoomSource).toContain("<LocalStorageTabPanel");
     expect(requestRoomSource).toContain("<MembersPanel");
-    expect(requestRoomSource).not.toContain('id="request-workspace-queue"');
-    expect(requestRoomSource).toContain('id="request-workspace-playlists"');
-  });
-
-  it("removes the duplicate hero search bar and preserves request desk and workspace search", () => {
-    expect(requestRoomSource).not.toContain("request-room-host-search");
-    expect(requestRoomSource).not.toContain("request-room-search");
-    expect(requestRoomSource).not.toContain("<RoomProviderTrackSearch");
-    expect(requestRoomSource).toContain("<RequestInbox");
-    expect(requestRoomSource).toContain("<RequestHistory");
-    expect(requestRoomSource).toContain("onRequestTrack={props.onSubmitRequest}");
+    expect(requestRoomSource).toContain("<RoomReactionToolbar");
+    expect(requestRoomSource).toContain('data-testid="request-queue-panel"');
   });
 });
