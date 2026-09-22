@@ -68,4 +68,13 @@ export class AdminController {
   @Get("system") system() { return this.admin.overview(); }
   @UseGuards(AdminGuard)
   @Get("system/providers") systemProviders() { return this.admin.checkProvidersHealth(); }
+  @UseGuards(AdminGuard)
+  @Get("announcements") announcements() { return this.admin.listAnnouncements(); }
+  @UseGuards(AdminGuard)
+  @Post("announcements") createAnnouncement(@Body() body: unknown, @Req() request: Request & { admin?: AdminPrincipal }) { return this.admin.createAnnouncement(request.admin!, body, request); }
+  @UseGuards(AdminGuard)
+  @Patch("announcements/:id") updateAnnouncement(@Param("id") id: string, @Body() body: unknown, @Req() request: Request & { admin?: AdminPrincipal }) { return this.admin.updateAnnouncement(request.admin!, id, body, request); }
+  @UseGuards(AdminGuard)
+  @Delete("announcements/:id") deleteAnnouncement(@Param("id") id: string, @Req() request: Request & { admin?: AdminPrincipal }) { return this.admin.deleteAnnouncement(request.admin!, id, request); }
 }
+

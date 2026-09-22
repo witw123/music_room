@@ -6,7 +6,8 @@ import type {
   AdminRoomSummary,
   AdminSession,
   AdminUserSummary,
-  RoomChatMessage
+  RoomChatMessage,
+  SystemAnnouncement
 } from "@music-room/shared";
 
 const csrfStorageKey = "music-room-admin-csrf";
@@ -105,5 +106,12 @@ export const adminApi = {
     request<{ ok: boolean; count: number }>("/v1/admin/incidents/resolve-all", { method: "POST", body: JSON.stringify({ reason }) }),
   audit: () => request<{ data: Array<{ id: string; actorUserId: string; action: string; targetType: string; targetId: string | null; reason: string | null; result: string; createdAt: string }>; nextCursor: string | null; generatedAt: string }>("/v1/admin/audit-logs"),
   system: () => request<AdminOverview>("/v1/admin/system"),
-  providerHealth: () => request<{ data: AdminProviderHealth[] }>("/v1/admin/system/providers")
+  providerHealth: () => request<{ data: AdminProviderHealth[] }>("/v1/admin/system/providers"),
+  announcements: () => request<{ data: SystemAnnouncement[] }>("/v1/admin/announcements"),
+  createAnnouncement: (payload: { title: string; content: string; isActive?: boolean }) =>
+    request<SystemAnnouncement>("/v1/admin/announcements", { method: "POST", body: JSON.stringify(payload) }),
+  updateAnnouncement: (id: string, payload: { title?: string; content?: string; isActive?: boolean }) =>
+    request<SystemAnnouncement>(`/v1/admin/announcements/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteAnnouncement: (id: string) =>
+    request<{ ok: boolean; id: string }>(`/v1/admin/announcements/${encodeURIComponent(id)}`, { method: "DELETE" })
 };

@@ -20,6 +20,7 @@ import { AwayRoomReturnButton } from "./AwayRoomReturnButton";
 import { RoomDirectoryCard } from "@/components/room-card";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useWorkspacePageActive } from "@/features/workspace/page-activity";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 import { CreateRoomDialogModal } from "./CreateRoomDialogModal";
 import { JoinCodeDialogModal } from "./JoinCodeDialogModal";
 import { SelectedRoomDialogModal } from "./SelectedRoomDialogModal";
@@ -241,6 +242,8 @@ export function RoomsHomePage({
 
 
       <section className="workspace-page__inner home-centered-workspace relative flex w-full shrink-0 flex-col gap-4 pt-[calc(0.75rem+env(safe-area-inset-top))] md:gap-5">
+        <AnnouncementBanner />
+
         {/* Mobile Header: aligned with desktop actions, restrained & compact without divider */}
         <header className="flex items-center justify-between gap-3 md:hidden">
           <div>

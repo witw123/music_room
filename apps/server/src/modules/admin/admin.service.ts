@@ -1,7 +1,7 @@
 import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, Optional, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
-import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema } from "@music-room/shared";
+import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema, createAnnouncementRequestSchema, updateAnnouncementRequestSchema } from "@music-room/shared";
 import type { RoomMember } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -553,6 +553,113 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async listIncidents(limit = 50) { return { data: await this.prisma.operationalIncident.findMany({ orderBy: { lastSeenAt: "desc" }, take: Math.min(limit, 100) }), nextCursor: null, generatedAt: new Date().toISOString() }; }
   async listAudit(limit = 50) { return { data: await this.prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(limit, 100), select: { id: true, actorUserId: true, action: true, targetType: true, targetId: true, reason: true, result: true, createdAt: true } }), nextCursor: null, generatedAt: new Date().toISOString() }; }
+
+  async listAnnouncements() {
+    if (!(await this.prisma.ensureAvailable())) return { data: [] };
+    const items = await this.prisma.systemAnnouncement.findMany({
+      orderBy: { createdAt: "desc" }
+    });
+    return {
+      data: items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        content: item.content,
+        isActive: item.isActive,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString()
+      }))
+    };
+  }
+
+  async createAnnouncement(admin: AdminPrincipal, body: unknown, request: Request) {
+    if (!(await this.prisma.ensureAvailable())) {
+      throw new HttpException("数据库暂不可用", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    const parsed = createAnnouncementRequestSchema.parse(body);
+    const id = randomUUID();
+    const item = await this.prisma.systemAnnouncement.create({
+      data: {
+        id,
+        title: parsed.title,
+        content: parsed.content,
+        isActive: parsed.isActive ?? true
+      }
+    });
+    await this.writeAudit(
+      admin.userId,
+      "announcement.create",
+      "announcement",
+      item.id,
+      `创建系统公告: ${item.title}`,
+      "success",
+      request
+    );
+    return {
+      id: item.id,
+      title: item.title,
+      content: item.content,
+      isActive: item.isActive,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString()
+    };
+  }
+
+  async updateAnnouncement(admin: AdminPrincipal, id: string, body: unknown, request: Request) {
+    if (!(await this.prisma.ensureAvailable())) {
+      throw new HttpException("数据库暂不可用", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    const parsed = updateAnnouncementRequestSchema.parse(body);
+    const existing = await this.prisma.systemAnnouncement.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException("公告不存在");
+    }
+    const updated = await this.prisma.systemAnnouncement.update({
+      where: { id },
+      data: {
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.content !== undefined ? { content: parsed.content } : {}),
+        ...(parsed.isActive !== undefined ? { isActive: parsed.isActive } : {})
+      }
+    });
+    await this.writeAudit(
+      admin.userId,
+      "announcement.update",
+      "announcement",
+      id,
+      `更新系统公告: ${updated.title} (启用状态: ${updated.isActive})`,
+      "success",
+      request
+    );
+    return {
+      id: updated.id,
+      title: updated.title,
+      content: updated.content,
+      isActive: updated.isActive,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString()
+    };
+  }
+
+  async deleteAnnouncement(admin: AdminPrincipal, id: string, request: Request) {
+    if (!(await this.prisma.ensureAvailable())) {
+      throw new HttpException("数据库暂不可用", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    const existing = await this.prisma.systemAnnouncement.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException("公告不存在");
+    }
+    await this.prisma.systemAnnouncement.delete({ where: { id } });
+    await this.writeAudit(
+      admin.userId,
+      "announcement.delete",
+      "announcement",
+      id,
+      `删除系统公告: ${existing.title}`,
+      "success",
+      request
+    );
+    return { ok: true, id };
+  }
 
   private async roomSummary(row: { id: string; joinCode: string; name?: string | null; description?: string | null; createdAt?: Date; visibility: string; hostId: string; members: unknown; tracks?: unknown; playback: unknown; updatedAt: Date }, livePresence?: Map<string, { peerId: string | null; presenceState: string }>) {
     const members = Array.isArray(row.members) ? row.members as Array<{ id?: string; nickname?: string; presenceState?: string; peerId?: string | null }> : [];

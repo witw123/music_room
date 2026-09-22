@@ -110,6 +110,27 @@ export const adminProviderHealthSchema = z.object({
   checkedAt: z.string().datetime()
 });
 
+export const systemAnnouncementSchema = z.object({
+  id: z.string(),
+  title: z.string().trim().min(1).max(200),
+  content: z.string().trim().min(1).max(5000),
+  isActive: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const createAnnouncementRequestSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  content: z.string().trim().min(1).max(5000),
+  isActive: z.boolean().default(true)
+});
+
+export const updateAnnouncementRequestSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  content: z.string().trim().min(1).max(5000).optional(),
+  isActive: z.boolean().optional()
+});
+
 export type AdminRole = z.infer<typeof adminRoleSchema>;
 export type AdminUserStatus = z.infer<typeof adminUserStatusSchema>;
 export type AdminSession = z.infer<typeof adminSessionSchema>;
@@ -123,3 +144,7 @@ export type AdminRoleChangeRequest = z.infer<typeof adminRoleChangeRequestSchema
 export type AdminResetPasswordRequest = z.infer<typeof adminResetPasswordRequestSchema>;
 export type AdminResolveIncidentRequest = z.infer<typeof adminResolveIncidentRequestSchema>;
 export type AdminProviderHealth = z.infer<typeof adminProviderHealthSchema>;
+export type SystemAnnouncement = z.infer<typeof systemAnnouncementSchema>;
+export type CreateAnnouncementRequest = z.infer<typeof createAnnouncementRequestSchema>;
+export type UpdateAnnouncementRequest = z.infer<typeof updateAnnouncementRequestSchema>;
+

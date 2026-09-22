@@ -22,6 +22,7 @@ import { AdminModule } from "./modules/admin/admin.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
 import { SecurityModule } from "./common/security/security.module";
 import { PersonalizationModule } from "./modules/personalization/personalization.module";
+import { AnnouncementModule } from "./modules/announcement/announcement.module";
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { PersonalizationModule } from "./modules/personalization/personalization
     BilibiliModule,
     AlistModule,
     PersonalizationModule,
+    AnnouncementModule,
     AdminModule,
     FavoritesModule
   ]

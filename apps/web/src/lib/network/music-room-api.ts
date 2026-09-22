@@ -50,6 +50,7 @@ import type {
   ColdStartTasteInput,
   RecordPersonalizationEvent,
   RoomSyncResponse,
+  SystemAnnouncement,
   TrackMeta,
   UpdateRoomRequest
 } from "@music-room/shared";
@@ -592,5 +593,7 @@ export const musicRoomApi = {
       body: JSON.stringify(payload)
     }),
   getAlistStreamUrl: (rawUrl: string) =>
-    `/v1/storage/alist/stream?url=${encodeURIComponent(rawUrl)}`
+    `/v1/storage/alist/stream?url=${encodeURIComponent(rawUrl)}`,
+  getActiveAnnouncements: (signal?: AbortSignal) =>
+    request<{ data: SystemAnnouncement[] }>("/v1/announcements/active", { signal })
 }

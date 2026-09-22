@@ -383,3 +383,15 @@ model RoomTrackDeletion {
   @@index([roomId, roomRevision])
   @@index([expiresAt])
 }
+
+model SystemAnnouncement {
+  id        String   @id
+  title     String
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, createdAt])
+}
+

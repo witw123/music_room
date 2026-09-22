@@ -80,4 +80,56 @@ describe("AdminService directories", () => {
     }));
     expect(result.data.map((user) => user.id)).toEqual(["user_old-match"]);
   });
+
+  it("creates, lists, updates, and deletes announcements with audit logging", async () => {
+    const mockCreated = {
+      id: "anno_test",
+      title: "新功能通知",
+      content: "测试内容说明",
+      isActive: true,
+      createdAt: new Date("2026-09-22T10:00:00.000Z"),
+      updatedAt: new Date("2026-09-22T10:00:00.000Z")
+    };
+    const mockAuditCreate = jest.fn().mockResolvedValue({});
+    const service = buildService(
+      {
+        ensureAvailable: jest.fn().mockResolvedValue(true),
+        systemAnnouncement: {
+          create: jest.fn().mockResolvedValue(mockCreated),
+          findMany: jest.fn().mockResolvedValue([mockCreated]),
+          findUnique: jest.fn().mockResolvedValue(mockCreated),
+          update: jest.fn().mockResolvedValue({ ...mockCreated, title: "更新标题", isActive: false }),
+          delete: jest.fn().mockResolvedValue(mockCreated)
+        },
+        adminAuditLog: {
+          create: mockAuditCreate
+        }
+      },
+      { isAvailable: () => false },
+      { getPresenceSnapshot: jest.fn().mockResolvedValue(new Map()) }
+    );
+
+    const admin = { userId: "admin_1", username: "admin", nickname: "Admin", role: "ADMIN" as const, csrfToken: "csrf123456789012", expiresAt: new Date() };
+    const fakeReq = { ip: "127.0.0.1", headers: {} } as never;
+
+    // Create
+    const created = await service.createAnnouncement(admin, { title: "新功能通知", content: "测试内容说明" }, fakeReq);
+    expect(created.title).toBe("新功能通知");
+    expect(mockAuditCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "announcement.create" })
+    }));
+
+    // List
+    const list = await service.listAnnouncements();
+    expect(list.data).toHaveLength(1);
+
+    // Update
+    const updated = await service.updateAnnouncement(admin, "anno_test", { title: "更新标题", isActive: false }, fakeReq);
+    expect(updated.title).toBe("更新标题");
+    expect(updated.isActive).toBe(false);
+
+    // Delete
+    const deleted = await service.deleteAnnouncement(admin, "anno_test", fakeReq);
+    expect(deleted.ok).toBe(true);
+  });
 });
