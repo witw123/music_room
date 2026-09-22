@@ -9,7 +9,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className = "", variant = "default", size = "default", ...props }, ref) => {
     let variantStyles = ""
     if (variant === "default") {
-      variantStyles = "bg-accent hover:bg-accent-hover text-white shadow-[0_6px_18px_var(--accent-glow)]"
+      variantStyles = "bg-accent hover:bg-accent-hover text-white shadow-xs"
     } else if (variant === "ghost") {
       variantStyles = "hover:bg-surface-hover text-foreground-muted hover:text-foreground"
     } else if (variant === "outline") {

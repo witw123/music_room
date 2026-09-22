@@ -225,7 +225,7 @@ function LocalPlaylistDetail({
                 type="button"
                 disabled={!canManageLibrary || selectedTracks.length === 0 || isImportBusy}
                 onClick={() => void importSelectedTracks()}
-                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-surface-border bg-surface px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isImportBusy ? "导入中…" : "导入所选歌曲"}
               </button>
@@ -266,7 +266,7 @@ function LocalPlaylistDetail({
                       isInRoom
                         ? "cursor-default border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
                         : canImport
-                          ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          ? "border-surface-border bg-surface text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                           : "cursor-default border-surface-border text-foreground-muted"
                     }`}
                   >

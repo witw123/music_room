@@ -5,7 +5,6 @@ import { TopBar } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { buildAppEntryHref } from "@/lib/domain/client-shell";
 import {
-  SparklesIcon,
   RadioIcon,
   ZapIcon,
   ShieldCheckIcon,
@@ -83,11 +82,8 @@ function ProductRoomPreview() {
 
   return (
     <div className="relative mx-auto w-full max-w-5xl animate-in fade-in zoom-in-95 duration-500 select-none">
-      {/* Ambient Celestial Glow */}
-      <div className="absolute -inset-6 rounded-[2.5rem] bg-[radial-gradient(circle_at_35%_20%,rgba(0,112,243,0.25),transparent_40%),radial-gradient(circle_at_80%_45%,rgba(192,38,211,0.18),transparent_35%),radial-gradient(circle_at_50%_90%,rgba(16,185,129,0.15),transparent_30%)] blur-3xl pointer-events-none" />
-
       {/* Main Console Box */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#07090e]/95 shadow-[0_30px_100px_rgba(0,0,0,0.8)] backdrop-blur-2xl">
+      <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07090e]/95 shadow-lg">
         {/* Window Title Bar */}
         <div className="flex h-12 items-center justify-between border-b border-white/[0.06] px-5 bg-white/[0.02]">
           <div className="flex gap-2">
@@ -123,7 +119,7 @@ function ProductRoomPreview() {
                     key={track.title}
                     className={`rounded-xl border p-3 transition-all ${
                       track.active
-                        ? "border-accent/40 bg-accent/[0.12] shadow-[0_4px_16px_var(--accent-glow)]"
+                        ? "border-accent/40 bg-accent/[0.08] shadow-xs"
                         : "border-transparent bg-white/[0.03] hover:bg-white/[0.05]"
                     }`}
                   >
@@ -180,9 +176,9 @@ function ProductRoomPreview() {
 
             {/* Rotating Vinyl Record Mockup */}
             <div className="group relative self-center my-4 flex items-center justify-center">
-              <div className="relative flex h-[12rem] w-[12rem] items-center justify-center overflow-hidden rounded-full border border-white/10 bg-gradient-to-tr from-[#050505] via-[#121212] to-[#1c1c1c] shadow-[0_24px_80px_rgba(0,112,243,0.2)] animate-spin-slow sm:h-[14rem] sm:w-[14rem]">
+              <div className="relative flex h-[12rem] w-[12rem] items-center justify-center overflow-hidden rounded-full border border-white/10 bg-gradient-to-tr from-[#050505] via-[#121212] to-[#1c1c1c] shadow-xl animate-spin-slow sm:h-[14rem] sm:w-[14rem]">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.12),transparent_40%)]" />
-                <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.15)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.15)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.15)_360deg)]" />
+                <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(255,255,255,0.06)_0deg,rgba(0,0,0,0)_90deg,rgba(255,255,255,0.06)_180deg,rgba(0,0,0,0)_270deg,rgba(255,255,255,0.06)_360deg)]" />
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div
                     key={index}
@@ -190,7 +186,7 @@ function ProductRoomPreview() {
                     style={{ width: `${100 - index * 14}%`, height: `${100 - index * 14}%` }}
                   />
                 ))}
-                <div className="relative z-10 flex h-[4rem] w-[4rem] items-center justify-center rounded-full border border-white/15 bg-gradient-to-br from-accent/30 to-blue-500/30 shadow-inner">
+                <div className="relative z-10 flex h-[4rem] w-[4rem] items-center justify-center rounded-full border border-white/15 bg-[#18181b] shadow-inner">
                   <div className="h-[1.2rem] w-[1.2rem] rounded-full border border-white/10 bg-black shadow-inner" />
                 </div>
               </div>
@@ -200,16 +196,14 @@ function ProductRoomPreview() {
                 className="absolute right-[-1.8rem] top-[0.5rem] flex h-[8.5rem] w-[1.75rem] origin-[14px_14px] rotate-[22deg] flex-col items-center sm:right-[-2.4rem] sm:h-[9.5rem] sm:w-[1.8rem]"
                 style={{ zIndex: 30 }}
               >
-                <div className="absolute top-0 z-10 flex h-[1.8rem] w-[1.8rem] items-center justify-center rounded-full border-2 border-[#181818] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl">
+                <div className="absolute top-0 z-10 flex h-[1.8rem] w-[1.8rem] items-center justify-center rounded-full border-2 border-[#181818] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-md">
                   <div className="h-[0.8rem] w-[0.8rem] rounded-full bg-[#111] shadow-inner" />
                 </div>
-                <div className="h-full w-[0.6rem] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[1.8rem] shadow-lg" />
-                <div className="relative ml-[-0.8rem] h-[2.3rem] w-[1.3rem] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#1a1a1a] shadow-2xl">
-                  <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+                <div className="h-full w-[0.6rem] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[1.8rem] shadow-sm" />
+                <div className="relative ml-[-0.8rem] h-[2.3rem] w-[1.3rem] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#1a1a1a] shadow-md">
+                  <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500" />
                 </div>
               </div>
-
-              <div className="absolute bottom-[-1.5rem] left-1/2 h-[2.5rem] w-[80%] -translate-x-1/2 bg-accent/20 blur-[50px]" />
             </div>
 
             {/* Progress & Controls */}
@@ -280,9 +274,8 @@ export function ProductLandingPage() {
 
       {/* Hero Section */}
       <section id="project" className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-5 pb-20 pt-16 text-center sm:px-6 md:pb-28 md:pt-24">
-        <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent backdrop-blur-md shadow-sm">
-          <SparklesIcon className="w-3.5 h-3.5" />
-          <span>Next-Generation Spatial Co-listening</span>
+        <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface/50 px-4 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-foreground-muted backdrop-blur-md">
+          <span>Spatial Co-listening Room</span>
         </p>
         <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white via-white/95 to-white/60 sm:text-6xl md:text-8xl">
           Music Room
@@ -292,7 +285,7 @@ export function ProductLandingPage() {
         </p>
         <div className="mt-9 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
           <Link href={appHref as Route}>
-            <Button size="lg" className="h-13 w-full rounded-2xl px-8 text-base font-semibold bg-accent hover:bg-accent-hover text-white shadow-[0_4px_24px_var(--accent-glow)] transition-all sm:w-auto active:scale-95">
+            <Button size="lg" className="h-13 w-full rounded-2xl px-8 text-base font-semibold bg-accent hover:bg-accent-hover text-white shadow-xs transition-all sm:w-auto active:scale-95">
               立即开始免费使用
             </Button>
           </Link>
@@ -319,7 +312,7 @@ export function ProductLandingPage() {
         {projectStats.map((stat) => (
           <div
             key={stat.label}
-            className="rounded-3xl border border-white/[0.06] bg-[#10121a]/80 p-6 text-center backdrop-blur-xl shadow-lg hover:border-white/[0.12] transition-all"
+            className="rounded-2xl border border-white/[0.08] bg-[#10121a]/80 p-5 text-center shadow-xs hover:border-white/20 transition-colors"
           >
             <p className={`text-2xl font-black ${stat.tone} md:text-3xl tracking-tight`}>{stat.value}</p>
             <p className="mt-2 text-xs font-bold text-white">{stat.label}</p>
@@ -343,7 +336,7 @@ export function ProductLandingPage() {
           {capabilities.map((section) => (
             <article
               key={section.title}
-              className="rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#12141c]/80 to-[#0c0e15]/90 p-8 sm:p-10 shadow-xl backdrop-blur-2xl grid gap-6 md:grid-cols-[0.5fr_1fr]"
+              className="rounded-2xl border border-white/[0.08] bg-[#10121a]/80 p-6 sm:p-8 shadow-xs grid gap-6 md:grid-cols-[0.5fr_1fr]"
             >
               <div>
                 <span className="inline-block font-mono text-2xl font-black text-accent mb-2">
@@ -397,13 +390,13 @@ export function ProductLandingPage() {
               return (
                 <div
                   key={item.title}
-                  className="rounded-2xl border border-white/[0.06] bg-[#10121a]/80 p-6 backdrop-blur-xl shadow-lg hover:border-white/[0.12] transition-all"
+                  className="rounded-xl border border-white/[0.08] bg-[#10121a]/80 p-5 shadow-xs hover:border-white/20 transition-colors"
                 >
-                  <div className="h-10 w-10 rounded-xl bg-accent/15 border border-accent/20 flex items-center justify-center text-accent mb-4">
-                    <IconComp className="w-5 h-5" />
+                  <div className="h-9 w-9 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center text-accent mb-3.5">
+                    <IconComp className="w-4 h-4" />
                   </div>
                   <h3 className="text-base font-bold text-white tracking-tight">{item.title}</h3>
-                  <p className="mt-2.5 text-xs sm:text-sm leading-relaxed text-white/50">{item.body}</p>
+                  <p className="mt-2 text-xs sm:text-sm leading-relaxed text-white/50">{item.body}</p>
                 </div>
               );
             })}
@@ -415,7 +408,7 @@ export function ProductLandingPage() {
       <footer className="border-t border-white/[0.06] bg-[#06070a] py-12 sm:py-16">
         <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center justify-between gap-6 px-5 sm:flex-row sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent shadow-[0_0_16px_rgba(0,112,243,0.4)]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent shadow-xs">
               <MusicIcon className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold tracking-tight text-white text-base">Music Room</span>

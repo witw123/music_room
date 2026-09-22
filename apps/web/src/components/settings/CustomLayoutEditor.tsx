@@ -260,7 +260,7 @@ export function CustomLayoutEditor({ value, onApply, onReset, onClose }: CustomL
           {customLayoutPageIds.map((item) => (
             <button
               aria-current={pageId === item ? "page" : undefined}
-              className={`flex h-10 shrink-0 items-center rounded-lg px-3 text-left text-xs font-medium transition-colors ${pageId === item ? "bg-accent text-white shadow-[0_6px_18px_var(--accent-glow)]" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
+              className={`flex h-10 shrink-0 items-center rounded-lg px-3 text-left text-xs font-medium transition-colors ${pageId === item ? "bg-accent text-white shadow-xs" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"}`}
               key={item}
               onClick={() => selectPage(item)}
               type="button"

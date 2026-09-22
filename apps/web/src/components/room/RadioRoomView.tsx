@@ -525,7 +525,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
     <aside className="min-w-0 px-4 pb-6 pt-4 sm:px-5 lg:pb-7" data-testid="radio-host-console">
       <div className="flex items-center justify-between pb-3">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent/20 text-accent border border-accent/25">
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-surface text-foreground-muted border border-surface-border">
             <RadioIcon className="w-4 h-4" />
           </span>
           <h2 className="text-sm sm:text-base font-bold text-foreground tracking-tight">电台搜歌与曲目导入</h2>
@@ -622,14 +622,14 @@ function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-bold text-accent uppercase tracking-wider">下一首自动续播</p>
+        <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">下一首自动续播</p>
         <p className="mt-0.5 truncate text-xs font-semibold text-foreground" title={track.title}>{track.title}</p>
         <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist} · ${track.album ?? "未标注专辑"}`}>
           {track.artist} · {track.album ?? "未标注专辑"}
         </p>
         <p className="text-[10px] text-foreground-muted/70">{formatDuration(track.durationMs)} · {track.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
       </div>
-      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold border ${track.preloadStatus === "ready" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400" : "border-accent/30 bg-accent/15 text-accent"}`}>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold border ${track.preloadStatus === "ready" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400" : "border-surface-border bg-surface text-foreground-muted"}`}>
         {track.preloadStatus === "ready" ? "已预加载" : "预加载中"}
       </span>
     </article>

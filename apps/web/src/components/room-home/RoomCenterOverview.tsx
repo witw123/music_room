@@ -9,7 +9,7 @@ import {
   UsersIcon,
   HeartIcon,
   ActivityIcon,
-  SparklesIcon,
+  ApplauseIcon,
   ExternalLinkIcon
 } from "@/components/icons/DiscoverIcons";
 import { roomTypeLabel } from "./room-home-types";
@@ -50,7 +50,7 @@ export function RoomCenterOverview({ activeSession }: { activeSession: AuthSessi
           <StatCard
             label="发出鼓掌"
             value={stats?.sentApplause ?? 0}
-            icon={<SparklesIcon className="w-4 h-4 text-accent" />}
+            icon={<ApplauseIcon className="w-4 h-4 text-accent" />}
           />
           <StatCard
             label="收到互动"

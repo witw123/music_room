@@ -93,14 +93,13 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
             {theme.label}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/90 dark:bg-black/60 border border-black/5 dark:border-white/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 dark:text-white/90 shadow-xs">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             {room.directoryOnlineMemberCount} 人在线
           </span>
         </div>
 
         {nowPlaying?.title ? (
           <RoomNowPlayingStageScene
-            accentColor={theme.accent}
             nowPlaying={nowPlaying}
             roomType={room.roomType}
           />
@@ -140,11 +139,9 @@ export function RoomDirectoryCard({ room: directoryItem, onOpen }: RoomDirectory
 
 function RoomNowPlayingStageScene({
   nowPlaying,
-  accentColor,
   roomType
 }: {
   nowPlaying: NonNullable<RoomDirectoryItem["room"]["directoryNowPlaying"]>;
-  accentColor: string;
   roomType: RoomType;
 }) {
   const artworkSrc = nowPlaying.artworkUrl ? getArtworkSourceUrl(nowPlaying.artworkUrl) : null;
@@ -166,14 +163,8 @@ function RoomNowPlayingStageScene({
       ) : null}
       <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/40 to-transparent dark:from-[#07090e]/90 dark:via-black/20 dark:to-black/40" />
 
-      {/* Surrounding Ambient Breathing Halo */}
+      {/* Central Album Artwork Cover */}
       <div className="relative flex items-center justify-center pt-2">
-        <div
-          className="absolute -inset-6 rounded-full blur-xl opacity-20 dark:opacity-35 animate-pulse"
-          style={{ backgroundColor: accentColor }}
-        />
-
-        {/* Central Album Artwork Cover */}
         <div className="relative z-10 h-16 w-16 sm:h-20 sm:w-20 shrink-0 overflow-hidden rounded-xl bg-white dark:bg-black/60 border border-black/5 dark:border-white/10 shadow-[0_8px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105">
           {artworkSrc ? (
             <img

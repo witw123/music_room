@@ -88,7 +88,7 @@ export function CreateRoomDialogModal({
               aria-pressed={form.roomType === roomType}
               className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border px-4 py-3 text-left transition cursor-pointer ${
                 form.roomType === roomType
-                  ? "border-accent bg-accent/10 shadow-[0_10px_30px_rgba(0,112,243,0.12)]"
+                  ? "border-accent bg-accent/10 shadow-xs"
                   : "border-surface-border bg-surface/20 hover:border-white/20 hover:bg-surface-hover"
               }`}
               key={roomType}

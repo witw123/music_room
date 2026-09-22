@@ -26,8 +26,8 @@ export function LocalAudioImport({
   };
 
   return (
-    <label className={`group relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-accent/20 bg-accent/5 p-4 text-center transition-[background-color,border-color,box-shadow] duration-200 ease-out sm:p-5 ${disabled || isImporting ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-accent/40 hover:bg-accent/10"}`}>
-      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:bg-accent group-hover:text-white">
+    <label className={`group relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-surface-border bg-surface/30 p-4 text-center transition-[background-color,border-color] duration-200 ease-out sm:p-5 ${disabled || isImporting ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-foreground-muted/40 hover:bg-surface/60"}`}>
+      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-surface-border bg-surface text-foreground-muted shadow-xs transition-[background-color,color,transform] duration-200 ease-out group-hover:scale-105 group-hover:text-foreground">
         <svg
           width="21"
           height="21"

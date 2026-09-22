@@ -128,14 +128,11 @@ export function CachePlaybackPromptModal({
     >
       <div
         ref={dialogRef}
-        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#12141e]/95 p-6 shadow-2xl backdrop-blur-xl"
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-background-secondary p-6 shadow-2xl"
       >
-        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-accent/20 blur-3xl" />
-        <div className="pointer-events-none absolute -left-12 -bottom-12 h-40 w-40 rounded-full bg-amber-500/10 blur-3xl" />
-
         <button
           aria-label="关闭"
-          className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+          className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors cursor-pointer"
           onClick={onClose}
           type="button"
         >
@@ -147,7 +144,7 @@ export function CachePlaybackPromptModal({
 
         <div className="relative z-10 flex flex-col gap-4">
           <div className="flex items-center gap-3 pr-6">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-accent/30 bg-accent/15 text-accent shadow-[0_0_20px_var(--accent-glow)]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-surface-border bg-surface text-accent">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
                 <path d="M12 12v9" />
@@ -214,7 +211,6 @@ export function CachePlaybackPromptModal({
                 onClick={handleGoToBind}
                 size="sm"
                 type="button"
-                className="bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20"
               >
                 前往设置绑定账号
               </Button>
@@ -225,7 +221,6 @@ export function CachePlaybackPromptModal({
                 onClick={handleEnableCache}
                 size="sm"
                 type="button"
-                className="bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20"
               >
                 {checking ? "正在检查账号..." : "开启缓存播放"}
               </Button>

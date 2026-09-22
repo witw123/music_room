@@ -26,7 +26,7 @@ export function PlaylistsLibraryPage() {
         <header className="flex justify-center mb-6">
           <div
             aria-label="歌单分类"
-            className="flex items-center gap-1 rounded-2xl border border-white/[0.06] p-1 sm:p-1.5 bg-[#10121a]/80 backdrop-blur-2xl shadow-lg max-w-full overflow-x-auto hide-scrollbar touch-pan-x"
+            className="flex items-center gap-1 rounded-2xl border border-surface-border p-1 bg-surface-elevated/80 shadow-xs max-w-full overflow-x-auto hide-scrollbar touch-pan-x"
             role="tablist"
           >
             {tabs.map(({ id, label, icon: IconComp }) => {
@@ -37,8 +37,8 @@ export function PlaylistsLibraryPage() {
                   aria-selected={isActive}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                     isActive
-                      ? "bg-white/10 text-white font-semibold shadow-sm"
-                      : "text-foreground-muted hover:text-white hover:bg-white/[0.04]"
+                      ? "bg-surface-elevated text-foreground font-semibold shadow-xs"
+                      : "text-foreground-muted hover:text-foreground hover:bg-surface-hover"
                   }`}
                   onClick={() => setActiveTab(id)}
                   role="tab"

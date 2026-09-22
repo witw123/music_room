@@ -30,25 +30,25 @@ const reactionConfig = {
   like: {
     icon: HeartIcon,
     color: "text-[#fa233b]",
-    glow: "drop-shadow-[0_0_12px_rgba(250,35,59,0.7)]",
+    glow: "drop-shadow-sm",
     bgGradient: "from-[#fa233b]/20 to-transparent"
   },
   applause: {
     icon: ApplauseIcon,
     color: "text-[#f59e0b]",
-    glow: "drop-shadow-[0_0_12px_rgba(245,158,11,0.7)]",
+    glow: "drop-shadow-sm",
     bgGradient: "from-[#f59e0b]/20 to-transparent"
   },
   fire: {
     icon: FlameIcon,
     color: "text-[#ff5722]",
-    glow: "drop-shadow-[0_0_12px_rgba(255,87,34,0.7)]",
+    glow: "drop-shadow-sm",
     bgGradient: "from-[#ff5722]/20 to-transparent"
   },
   sparkle: {
     icon: SparklesIcon,
     color: "text-[#a855f7]",
-    glow: "drop-shadow-[0_0_12px_rgba(168,85,247,0.7)]",
+    glow: "drop-shadow-sm",
     bgGradient: "from-[#a855f7]/20 to-transparent"
   }
 } as const;
@@ -211,7 +211,7 @@ export function RoomReactionOverlay({
             ) : null}
 
             {isHighCombo && (
-              <span className="font-extrabold text-[11px] sm:text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-[0_2px_8px_var(--accent-glow)] animate-bounce">
+              <span className="font-extrabold text-[11px] sm:text-xs tabular-nums text-white bg-accent px-1.5 py-0.5 rounded-full shadow-xs animate-bounce">
                 x{particle.comboCount}
               </span>
             )}

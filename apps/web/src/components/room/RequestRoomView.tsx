@@ -746,7 +746,7 @@ function RequestTicket({
           size="sm"
           type="button"
           variant="outline"
-          className="rounded-xl text-xs hidden sm:inline-flex bg-accent/15 hover:bg-accent/25 text-accent border-accent/30"
+          className="rounded-xl text-xs hidden sm:inline-flex border border-surface-border hover:bg-surface-hover text-foreground"
           title="优先插播为下一首"
         >
           插播

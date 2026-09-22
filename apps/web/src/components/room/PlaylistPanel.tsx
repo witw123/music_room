@@ -399,7 +399,8 @@ function PlaylistCard({
         {onPlay ? (
           <Button
             aria-label={`在房间播放歌单 ${playlist.title}`}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-2.5 text-xs font-semibold text-accent transition-all hover:bg-accent hover:text-white active:scale-95 disabled:cursor-wait disabled:opacity-50"
+            variant="outline"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-foreground hover:bg-surface-hover active:scale-95 disabled:cursor-wait disabled:opacity-50"
             disabled={isLoading}
             onClick={(event) => {
               event.stopPropagation();
@@ -416,7 +417,7 @@ function PlaylistCard({
               </>
             ) : (
               <>
-                <PlayIcon className="h-3 w-3 fill-current" />
+                <PlayIcon className="h-3 w-3 fill-current text-foreground-muted" />
                 <span className="text-[11px]">播放</span>
               </>
             )}
@@ -676,7 +677,8 @@ function PlaylistDetail({
               disabled={selectedTracks.length === 0 || isImportBusy}
               onClick={() => void importSelectedTracks()}
               size="sm"
-              className="rounded-lg h-7 px-2.5 text-xs font-semibold bg-accent/15 text-accent hover:bg-accent/25 border border-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+              variant="outline"
+              className="rounded-lg h-7 px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
             >
               {isImportBusy ? "导入中…" : "导入所选歌曲"}

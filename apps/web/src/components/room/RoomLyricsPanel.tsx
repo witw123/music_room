@@ -316,7 +316,7 @@ export function RoomLyricsPanel({
                       );
                     }) : line.text}
                     {!isChineseLyrics && showTranslation && translatedLine && translatedLine !== line.text ? (
-                      <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "text-accent opacity-90" : "opacity-40"}`}>
+                      <span className={`mt-1 block text-[0.72em] font-medium leading-[1.35] ${isActive ? "opacity-80" : "opacity-40"}`}>
                         {translatedLine}
                       </span>
                     ) : null}

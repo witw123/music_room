@@ -69,11 +69,8 @@ export function ProviderAlbumDetailView({
         <span>返回</span>
       </button>
 
-      {/* Atmospheric Album Hero Stage */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl grid gap-5 sm:gap-8 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] items-center sm:items-end">
-        {/* Ambient Glow Aura */}
-        <div className="absolute -top-12 -right-12 w-64 h-64 rounded-full bg-[radial-gradient(circle,#38bdf818_0%,transparent_70%)] blur-2xl pointer-events-none" />
-
+      {/* Album Hero Stage */}
+      <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-surface/50 p-4 sm:p-6 md:p-8 backdrop-blur-xl grid gap-5 sm:gap-8 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] items-center sm:items-end">
         <div className="w-36 sm:w-44 md:w-full max-w-[240px] mx-auto sm:mx-0 shrink-0">
           <AlbumArtwork alt={album.title} src={album.artworkUrl} />
         </div>

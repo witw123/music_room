@@ -488,7 +488,7 @@ export function DesktopLyricsBar({
               aria-label="切换翻译"
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold border transition cursor-pointer ${
                 showTranslation
-                  ? "border-blue-400/80 bg-blue-500/35 text-blue-200 shadow-[0_0_12px_rgba(0,122,255,0.5)]"
+                  ? "border-white/35 bg-white/20 text-white shadow-xs"
                   : "border-white/10 bg-black/20 text-white/70 hover:bg-white/15 hover:text-white"
               }`}
               onClick={onToggleTranslation}
@@ -505,7 +505,7 @@ export function DesktopLyricsBar({
               aria-label="切换罗马音"
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold border transition cursor-pointer ${
                 showRomanized
-                  ? "border-purple-400/80 bg-purple-500/35 text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.5)]"
+                  ? "border-white/35 bg-white/20 text-white shadow-xs"
                   : "border-white/10 bg-black/20 text-white/70 hover:bg-white/15 hover:text-white"
               }`}
               onClick={onToggleRomanized}

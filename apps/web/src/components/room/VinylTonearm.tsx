@@ -27,7 +27,7 @@ export function VinylTonearm({ isPlaying, frozen = false, accentColor }: VinylTo
         className="relative ml-[-35%] h-[24%] w-[105%] skew-x-[15deg] rounded-b-md border-accent border-b-2 bg-[#222] shadow-2xl"
         style={accentColor ? { borderBottomColor: accentColor } : undefined}
       >
-        <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+        <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80" />
       </div>
     </div>
   );

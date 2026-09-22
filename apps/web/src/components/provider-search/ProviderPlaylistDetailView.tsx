@@ -11,7 +11,6 @@ import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import {
   PlayIcon,
   HeartIcon,
-  SparklesIcon,
   ChevronLeftIcon
 } from "@/components/icons/DiscoverIcons";
 
@@ -46,19 +45,15 @@ export function ProviderPlaylistDetailView({
         <span>返回</span>
       </button>
 
-      {/* Atmospheric Playlist Hero Stage */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl grid gap-5 sm:gap-8 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] items-center sm:items-end">
-        {/* Ambient Glow Aura */}
-        <div className="absolute -top-12 -right-12 w-64 h-64 rounded-full bg-[radial-gradient(circle,#c026d318_0%,transparent_70%)] blur-2xl pointer-events-none" />
-
+      {/* Playlist Hero Stage */}
+      <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-surface/50 p-4 sm:p-6 md:p-8 backdrop-blur-xl grid gap-5 sm:gap-8 grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] items-center sm:items-end">
         <div className="w-36 sm:w-44 md:w-full max-w-[240px] mx-auto sm:mx-0 shrink-0">
           <PlaylistArtwork alt={playlist.title} src={playlist.artworkUrl} />
         </div>
         <div className="relative z-10 flex min-w-0 flex-col justify-end text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent/15 text-accent border border-accent/20">
-              <SparklesIcon className="w-3 h-3" />
-              <span>PLAYLIST</span>
+            <span className="inline-flex items-center rounded-md bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-foreground-muted">
+              歌单
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white">{playlist.title}</h1>
@@ -77,7 +72,7 @@ export function ProviderPlaylistDetailView({
                     trackActions?.onPlay?.(playlist.tracks[0]);
                   }
                 }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-[0_4px_16px_var(--accent-glow)] transition-all active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold shadow-xs transition-all active:scale-95"
               >
                 <PlayIcon className="w-3.5 h-3.5" />
                 <span>播放全部</span>
