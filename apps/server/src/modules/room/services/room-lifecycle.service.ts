@@ -256,6 +256,25 @@ export class RoomLifecycleService {
     });
   }
 
+  removeMemberByAdmin(roomId: string, memberId: string) {
+    return this.presenceOrchestrator.enqueuePresenceUpdate(roomId, `admin_${memberId}`, async () => {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      const member = record.room.members.find((candidate) => candidate.id === memberId);
+      if (!member) {
+        throw new Error("Room member not found.");
+      }
+      await this.roomPresenceService.clear(roomId, memberId);
+      await this.roomActivityService.stop(memberId, roomId, record.room);
+      record.room.members = record.room.members.filter((candidate) => candidate.id !== memberId);
+      await this.roomPlaybackService.handleSourceDeparture(record, memberId);
+      incrementPresenceRevision(record.room);
+      incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(memberId, roomId);
+      return { memberId, room: record.room };
+    });
+  }
+
   async deleteRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId, { allowTerminated: true });
     await this.assertCanDeleteRoomRecord(record, sessionId);

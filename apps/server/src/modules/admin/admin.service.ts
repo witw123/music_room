@@ -9,6 +9,7 @@ import { AuthService } from "../auth/auth.service";
 import { TurnstileService } from "../auth/turnstile.service";
 import { RoomService } from "../room/room.service";
 import { RoomPresenceService } from "../room/services/room-presence.service";
+import { RoomChatService } from "../room/services/room-chat.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { getCorsOrigins, getRequestOrigin, isAllowedOrigin } from "../../common/cors/get-cors-origins";
@@ -35,7 +36,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly playlistService: PlaylistService,
     private readonly roomPublisher: RoomRealtimePublisher,
     @Optional()
-    private readonly turnstile?: TurnstileService
+    private readonly turnstile?: TurnstileService,
+    @Optional()
+    private readonly roomChatService?: RoomChatService
   ) {}
 
   onModuleInit() {
@@ -320,6 +323,232 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private assertMutationsEnabled() {
     if (process.env.ADMIN_MUTATIONS_ENABLED === "false") throw new ConflictException("管理动作当前已关闭。");
+  }
+
+  // ── Incident Lifecycle ────────────────────────────────────────────────────────
+
+  async resolveIncident(actor: AdminPrincipal, incidentId: string, reason: string | null, request: Request) {
+    const incident = await this.prisma.operationalIncident.findUnique({ where: { id: incidentId } });
+    if (!incident) throw new NotFoundException("异常事件不存在。");
+    if (incident.status === "RECOVERED") return { ok: true, alreadyResolved: true };
+    const now = new Date();
+    await this.prisma.operationalIncident.update({
+      where: { id: incidentId },
+      data: { status: "RECOVERED", recoveredAt: now }
+    });
+    await this.writeAudit(actor.userId, "incident.resolve", "incident", incidentId, reason, "SUCCEEDED", request);
+    return { ok: true, id: incidentId, status: "RECOVERED", recoveredAt: now.toISOString() };
+  }
+
+  async resolveAllIncidents(actor: AdminPrincipal, reason: string | null, request: Request) {
+    const now = new Date();
+    const result = await this.prisma.operationalIncident.updateMany({
+      where: { status: "OPEN" },
+      data: { status: "RECOVERED", recoveredAt: now }
+    });
+    await this.writeAudit(actor.userId, "incident.resolve_all", "incident", null, reason, "SUCCEEDED", request);
+    return { ok: true, count: result.count, recoveredAt: now.toISOString() };
+  }
+
+  // ── Room Moderation & Playback Control ──────────────────────────────────────
+
+  async controlRoomPlayback(
+    actor: AdminPrincipal,
+    roomId: string,
+    action: "pause" | "play" | "next" | "clear-queue",
+    reason: string | null,
+    request: Request
+  ) {
+    this.assertMutationsEnabled();
+    const room = await this.prisma.roomState.findUnique({ where: { id: roomId } });
+    if (!room) throw new NotFoundException("房间不存在。");
+    const result = await this.roomService.controlPlaybackByAdmin(roomId, action);
+    await this.writeAudit(
+      actor.userId,
+      "room.playback_control",
+      "room",
+      roomId,
+      `${action}${reason ? `: ${reason}` : ""}`,
+      "SUCCEEDED",
+      request
+    );
+    return result;
+  }
+
+  async kickRoomMember(
+    actor: AdminPrincipal,
+    roomId: string,
+    memberId: string,
+    reason: string | null,
+    request: Request
+  ) {
+    this.assertMutationsEnabled();
+    const room = await this.prisma.roomState.findUnique({ where: { id: roomId } });
+    if (!room) throw new NotFoundException("房间不存在。");
+    await this.roomService.removeMemberByAdmin(roomId, memberId);
+    this.roomPublisher.emitTopologySnapshot(roomId);
+    this.roomPublisher.emitMemberRemoved(roomId, memberId);
+    await this.writeAudit(
+      actor.userId,
+      "room.kick_member",
+      "room",
+      roomId,
+      `member=${memberId}${reason ? `, reason=${reason}` : ""}`,
+      "SUCCEEDED",
+      request
+    );
+    return { ok: true, memberId, roomId };
+  }
+
+  async listRoomChat(roomId: string, limit = 50) {
+    if (!this.roomChatService) return { data: [] };
+    const data = await this.roomChatService.listHistoryForAdmin(roomId, limit);
+    return { data };
+  }
+
+  async deleteRoomChatMessage(
+    actor: AdminPrincipal,
+    roomId: string,
+    messageId: string,
+    reason: string | null,
+    request: Request
+  ) {
+    this.assertMutationsEnabled();
+    if (!this.roomChatService) throw new ConflictException("聊天服务暂未挂载。");
+    const deleted = await this.roomChatService.deleteMessageByAdmin(roomId, messageId);
+    this.roomPublisher.emitChatDeleted(roomId, messageId);
+    await this.writeAudit(
+      actor.userId,
+      "room.delete_chat",
+      "room",
+      roomId,
+      `messageId=${messageId}${reason ? `, reason=${reason}` : ""}`,
+      "SUCCEEDED",
+      request
+    );
+    return { ok: true, ...deleted };
+  }
+
+  // ── User Governance ─────────────────────────────────────────────────────────
+
+  async setUserRole(
+    actor: AdminPrincipal,
+    userId: string,
+    newRole: "ADMIN" | "USER",
+    reason: string,
+    request: Request
+  ) {
+    this.assertMutationsEnabled();
+    if (userId === actor.userId) throw new ConflictException("不能修改当前管理员自身的角色。");
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("用户不存在。");
+    if (user.role === newRole) return { ok: true, role: newRole };
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { role: newRole }
+    });
+    if (newRole === "USER") {
+      await this.prisma.adminSession.deleteMany({ where: { userId } }).catch(() => undefined);
+    }
+    await this.writeAudit(
+      actor.userId,
+      "user.set_role",
+      "user",
+      userId,
+      `${reason} (${user.role} -> ${newRole})`,
+      "SUCCEEDED",
+      request
+    );
+    return { ok: true, role: newRole };
+  }
+
+  async resetUserPassword(
+    actor: AdminPrincipal,
+    userId: string,
+    newPasswordInput: string | undefined,
+    reason: string,
+    request: Request
+  ) {
+    this.assertMutationsEnabled();
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("用户不存在。");
+    if (user.id === actor.userId) throw new ConflictException("管理员重置自身密码请在设置页进行。");
+    const plainPassword = newPasswordInput?.trim() || randomBytes(6).toString("hex");
+    const passwordHash = this.auth.hashPassword(plainPassword);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash }
+    });
+    await this.prisma.userSession.deleteMany({ where: { userId } }).catch(() => undefined);
+    await this.prisma.adminSession.deleteMany({ where: { userId } }).catch(() => undefined);
+    await this.auth.invalidateSessionsForUser(userId);
+    await this.publishUserInvalidated(userId);
+    await this.writeAudit(
+      actor.userId,
+      "user.reset_password",
+      "user",
+      userId,
+      reason,
+      "SUCCEEDED",
+      request
+    );
+    return { ok: true, temporaryPassword: plainPassword };
+  }
+
+  // ── Provider Health Diagnostics ─────────────────────────────────────────────
+
+  async checkProvidersHealth(): Promise<{ data: import("@music-room/shared").AdminProviderHealth[] }> {
+    const now = new Date().toISOString();
+
+    const probe = async (
+      provider: "bilibili" | "netease" | "qqmusic",
+      name: string,
+      url: string,
+      hasCredentials: boolean,
+      headers: Record<string, string> = {}
+    ): Promise<import("@music-room/shared").AdminProviderHealth> => {
+      const start = Date.now();
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(url, { method: "HEAD", headers, signal: controller.signal });
+        clearTimeout(timeout);
+        const latencyMs = Date.now() - start;
+        return {
+          provider,
+          name,
+          status: res.status < 500 ? (latencyMs > 1500 ? "degraded" : "healthy") : "down",
+          latencyMs,
+          message: res.status < 500 ? "接口正常响应" : `HTTP 状态异常 (${res.status})`,
+          hasCredentials,
+          checkedAt: now
+        };
+      } catch (error) {
+        return {
+          provider,
+          name,
+          status: "down",
+          latencyMs: null,
+          message: error instanceof Error ? error.message : "连接超时或网络异常",
+          hasCredentials,
+          checkedAt: now
+        };
+      }
+    };
+
+    const hasBiliCookie = !!(process.env.BILIBILI_COOKIE?.trim());
+    const hasNeteaseCookie = !!(process.env.NETEASE_COOKIE?.trim());
+    const hasQqMusicCookie = !!(process.env.QQMUSIC_COOKIE?.trim());
+
+    const results = await Promise.all([
+      probe("bilibili", "哔哩哔哩 (Bilibili)", "https://api.bilibili.com/x/frontend/finger/spi", hasBiliCookie, {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+      }),
+      probe("netease", "网易云音乐 (Netease)", "https://music.163.com/api/v1/resource/comments/R_SO_4_1", hasNeteaseCookie),
+      probe("qqmusic", "QQ音乐 (QQMusic)", "https://u.y.qq.com/cgi-bin/musicu.fcg", hasQqMusicCookie)
+    ]);
+
+    return { data: results };
   }
 
   async listIncidents(limit = 50) { return { data: await this.prisma.operationalIncident.findMany({ orderBy: { lastSeenAt: "desc" }, take: Math.min(limit, 100) }), nextCursor: null, generatedAt: new Date().toISOString() }; }

@@ -121,6 +121,26 @@ export class RoomChatService {
     return { roomId, messageId };
   }
 
+  async listHistoryForAdmin(roomId: string, limit = 50): Promise<RoomChatMessage[]> {
+    const messages = this.getMessages();
+    const rows = await messages.findMany({
+      where: { roomId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: Math.min(limit, 100)
+    });
+    return rows.map(toChatMessage);
+  }
+
+  async deleteMessageByAdmin(roomId: string, messageId: string): Promise<RoomChatDeletedPayload> {
+    const messages = this.getMessages();
+    const message = await messages.findUnique({ where: { id: messageId } });
+    if (!message || message.roomId !== roomId) {
+      throw new NotFoundException("聊天消息不存在。");
+    }
+    await messages.deleteMany({ where: { id: { in: [messageId] } } });
+    return { roomId, messageId };
+  }
+
   private async assertRadioMember(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     assertMember(record, sessionId);

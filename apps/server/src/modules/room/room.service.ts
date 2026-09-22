@@ -670,6 +670,22 @@ export class RoomService {
     return this.lifecycleService.removeMember(roomId, actorSessionId, memberId);
   }
 
+  removeMemberByAdmin(roomId: string, memberId: string) {
+    return this.lifecycleService.removeMemberByAdmin(roomId, memberId);
+  }
+
+  async controlPlaybackByAdmin(roomId: string, action: "pause" | "play" | "next" | "clear-queue") {
+    if (action === "clear-queue") {
+      const record = await this.roomRecordRepository.getRoomRecord(roomId);
+      record.queue = [];
+      incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      return { ok: true, action };
+    }
+    const snapshot = await this.updatePlayback(roomId, { action });
+    return { ok: true, action, playback: snapshot };
+  }
+
   deleteRoom(roomId: string, sessionId: string) {
     return this.lifecycleService.deleteRoom(roomId, sessionId);
   }

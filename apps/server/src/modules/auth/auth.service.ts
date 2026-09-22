@@ -105,6 +105,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     void this.unsubscribeUserInvalidated?.();
   }
 
+  hashPassword(password: string): string {
+    return hashPassword(password);
+  }
+
   /**
    * Drop every in-memory session belonging to the user. Admin revocation calls
    * this directly on the handling instance; other instances are reached through

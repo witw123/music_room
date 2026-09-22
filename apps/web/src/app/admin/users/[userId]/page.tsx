@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { adminApi, AdminApiError, ADMIN_CONFIRM_REASON, type AdminUserDetail } from "@/lib/network/admin-api";
-import styles from "../../admin.module.css";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ userId: string }>();
@@ -11,9 +10,13 @@ export default function AdminUserDetailPage() {
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [action, setAction] = useState<"status" | "revoke" | null>(null);
+  const [action, setAction] = useState<"status" | "revoke" | "role" | "reset-password" | null>(null);
+  const [actionReason, setActionReason] = useState(ADMIN_CONFIRM_REASON);
+  const [customPassword, setCustomPassword] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -51,54 +54,404 @@ export default function AdminUserDetailPage() {
     setActionBusy(true);
     try {
       if (action === "status") {
-        await adminApi.setUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", ADMIN_CONFIRM_REASON);
-      } else {
-        await adminApi.revokeSessions(user.id, ADMIN_CONFIRM_REASON);
+        await adminApi.setUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", actionReason.trim() || ADMIN_CONFIRM_REASON);
+      } else if (action === "revoke") {
+        await adminApi.revokeSessions(user.id, actionReason.trim() || ADMIN_CONFIRM_REASON);
+      } else if (action === "role") {
+        const nextRole = user.role === "ADMIN" ? "USER" : "ADMIN";
+        await adminApi.setUserRole(user.id, nextRole, actionReason.trim() || ADMIN_CONFIRM_REASON);
+      } else if (action === "reset-password") {
+        const res = await adminApi.resetPassword(user.id, actionReason.trim() || ADMIN_CONFIRM_REASON, customPassword.trim() || undefined);
+        if (res.temporaryPassword) {
+          setGeneratedPassword(res.temporaryPassword);
+        }
       }
-      setAction(null);
+      if (action !== "reset-password") {
+        setAction(null);
+      }
       await load();
     } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : "管理操作失败，请刷新后重试。");
+      setActionError(cause instanceof Error ? cause.message : "管理操作失败，请重试。");
     } finally {
       setActionBusy(false);
     }
   }
 
-  if (error) return <main className={styles.shell}><div className={styles.content}><div className={styles.error}>{error}<button onClick={() => void load()}>重新尝试</button></div></div></main>;
-  if (!user) return <main className={styles.shell}><div className={styles.content}><div className={styles.empty}>正在加载用户详情...</div></div></main>;
+  function copyPassword() {
+    if (!generatedPassword) return;
+    void navigator.clipboard.writeText(generatedPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-xs text-red-400 flex flex-col gap-2 max-w-md">
+          <p>{error}</p>
+          <button className="underline hover:no-underline text-left text-foreground font-medium" onClick={() => void load()}>
+            重新尝试
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background text-foreground">
+        <div className="text-xs text-foreground-muted">正在加载用户详情...</div>
+      </main>
+    );
+  }
 
   const isAdmin = user.role === "ADMIN";
-  const actionLabel = action === "status" ? (user.status === "ACTIVE" ? "禁用账号" : "启用账号") : "撤销全部会话";
-  return <main className={styles.shell}><div className={styles.main}>
-    <header className={styles.topbar}><button className={styles.topButton} onClick={() => router.back()}>← 返回用户目录</button><div className={styles.topActions}><span className={styles.liveState}><span className={styles.liveDot} />{refreshing ? "同步中" : "实时数据"}</span><button className={styles.topButton} onClick={() => void load()} disabled={refreshing}>刷新</button></div></header>
-    <div className={styles.content}>
-      <div className={styles.pageHeader}><div><div className={styles.eyebrow}>用户目录 / 详情</div><h1 className={styles.title}>{user.nickname}</h1><p className={styles.subtitle}>{user.username} · 用户 ID {user.id}</p></div></div>
-      <section className={styles.metricGrid}><Metric label="账号状态" value={user.status === "ACTIVE" ? "正常" : "已禁用"} /><Metric label="有效会话" value={String(user.sessions.length)} /><Metric label="当前房间" value={String(user.rooms.length)} /><Metric label="账号角色" value={user.role === "ADMIN" ? "管理员" : "普通用户"} /></section>
 
-      <section className={`${styles.panel} ${styles.fullPanel}`}>
-        <PanelHeader title="账号控制" hint={isAdmin ? "管理员账号不可由面板修改" : "操作会立即同步到所有实例"} />
-        <div className={styles.controlBody}>
-          {isAdmin ? <p className={styles.controlHint}>管理员角色和管理员账号状态只能通过服务端 CLI 管理。</p> : action ? <div className={styles.confirmPanel}>
-            <div><strong>确认{actionLabel}</strong><p className={styles.controlHint}>{action === "status" ? (user.status === "ACTIVE" ? "禁用后会撤销该用户的全部普通会话并断开实时连接。" : "启用后不会恢复旧会话，用户需要重新登录。") : "撤销后该用户需要重新登录，账号状态不会改变。"}</p></div>
-            <p className={styles.confirmTarget}>目标用户：<span className={styles.mono}>{user.nickname}</span> · {user.username}</p>
-            {actionError ? <p className={styles.inlineError}>{actionError}</p> : null}
-            <div className={styles.actionRow}><button className={styles.secondaryButton} onClick={() => { setAction(null); setActionError(""); }} disabled={actionBusy}>取消</button><button className={styles.dangerButton} onClick={() => void confirmAction()} disabled={actionBusy}>{actionBusy ? "处理中..." : `确认${actionLabel}`}</button></div>
-          </div> : <div className={styles.controlRow}><div><strong>账号操作</strong><p className={styles.controlHint}>每次操作只需在此处确认一次，不使用浏览器弹窗。</p></div><div className={styles.actionRow}><button className={user.status === "ACTIVE" ? styles.dangerButton : styles.secondaryButton} onClick={() => { setAction("status"); setActionError(""); }}>{user.status === "ACTIVE" ? "禁用账号" : "启用账号"}</button><button className={styles.secondaryButton} onClick={() => { setAction("revoke"); setActionError(""); }}>撤销全部会话</button></div></div>}
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <header className="h-12 border-b border-surface-border px-6 flex items-center justify-between bg-surface/50 backdrop-blur-sm sticky top-0 z-20">
+        <button
+          className="inline-flex items-center gap-1.5 text-xs text-foreground-muted hover:text-foreground transition-colors"
+          onClick={() => router.back()}
+        >
+          <span>←</span> 返回用户目录
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground-muted">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {refreshing ? "同步中" : "实时数据"}
+          </span>
+          <button
+            className="h-7 px-2.5 rounded border border-surface-border bg-surface hover:bg-surface-border/40 text-xs text-foreground transition-colors disabled:opacity-50"
+            onClick={() => void load()}
+            disabled={refreshing}
+          >
+            刷新
+          </button>
         </div>
-      </section>
+      </header>
 
-      <section className={styles.detailGrid}><InfoPanel title="账号信息"><DetailRow label="用户 ID" value={user.id} mono /><DetailRow label="用户名" value={user.username} mono /><DetailRow label="昵称" value={user.nickname} /><DetailRow label="状态" value={user.status === "ACTIVE" ? "正常" : "已禁用"} /><DetailRow label="注册时间" value={formatDateTime(user.createdAt)} /><DetailRow label="最近登录" value={formatDateTime(user.lastLoginAt)} /><DetailRow label="禁用时间" value={formatDateTime(user.disabledAt)} /><DetailRow label="禁用原因" value={user.disabledReason ?? "-"} /></InfoPanel><InfoPanel title="当前房间"><DataList rows={user.rooms} empty="当前没有加入任何房间。" render={(room) => <><a className={`${styles.linkButton} ${styles.roomCodeLink}`} href={`/admin/rooms/${encodeURIComponent(room.id)}`}>{room.joinCode}</a><span>{room.name || "未命名房间"} · {room.role === "host" ? "房主" : "成员"}</span></>} /></InfoPanel></section>
-      <DataPanel title="有效会话" hint={`${user.sessions.length} 个`}><table className={styles.table}><thead><tr><th>会话 ID</th><th>创建时间</th><th>过期时间</th></tr></thead><tbody>{user.sessions.length ? user.sessions.map((session) => <tr key={session.id}><td className={styles.mono}>{session.id}</td><td className={styles.mono}>{formatDateTime(session.createdAt)}</td><td className={styles.mono}>{formatDateTime(session.expiresAt)}</td></tr>) : <tr><td colSpan={3}><div className={styles.empty}>没有有效普通会话。</div></td></tr>}</tbody></table></DataPanel>
-      <DataPanel title="相关审计" hint={`${user.audits.length} 条`}><table className={styles.table}><thead><tr><th>时间</th><th>动作</th><th>结果</th><th>原因</th></tr></thead><tbody>{user.audits.length ? user.audits.map((audit) => <tr key={audit.id}><td className={styles.mono}>{formatDateTime(audit.createdAt)}</td><td className={styles.mono}>{translateAction(audit.action)}</td><td>{audit.result === "SUCCEEDED" ? "成功" : audit.result}</td><td className={styles.mono}>{audit.reason ?? "-"}</td></tr>) : <tr><td colSpan={4}><div className={styles.empty}>暂无相关审计记录。</div></td></tr>}</tbody></table></DataPanel>
-    </div>
-  </div></main>;
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        <div>
+          <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--accent,#3b82f6)]">用户治理 / 账户档案</span>
+          <div className="flex items-baseline gap-3 mt-1">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">{user.nickname}</h1>
+            <span className="text-sm font-mono text-foreground-muted">{user.username}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-mono border ${isAdmin ? "border-[var(--accent,#3b82f6)]/40 bg-[var(--accent,#3b82f6)]/10 text-[var(--accent,#3b82f6)]" : "border-surface-border bg-surface-border/20 text-foreground-muted"}`}>
+              {isAdmin ? "管理员" : "普通用户"}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs font-mono text-foreground-muted">用户全局 ID: {user.id}</p>
+        </div>
+
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Metric label="账号状态" value={user.status === "ACTIVE" ? "正常" : "已禁用"} />
+          <Metric label="有效会话" value={String(user.sessions.length)} />
+          <Metric label="当前关联房间" value={String(user.rooms.length)} />
+          <Metric label="账号角色" value={user.role === "ADMIN" ? "系统管理员" : "标准用户"} />
+        </section>
+
+        {/* 账号控制台 */}
+        <section className="rounded-lg border border-surface-border bg-surface p-4">
+          <PanelHeader title="账号治理与权限控制" hint="状态流转、角色调整与凭据重置" />
+          <div className="mt-3.5 space-y-3">
+            {generatedPassword ? (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <strong className="text-emerald-400 font-medium">密码已成功重置并清空全部旧会话</strong>
+                  <button
+                    className="text-xs text-foreground underline hover:no-underline"
+                    onClick={() => { setGeneratedPassword(null); setAction(null); }}
+                  >
+                    关闭提示
+                  </button>
+                </div>
+                <p className="text-foreground-muted">请妥善保存临时密码并交由用户：</p>
+                <div className="flex items-center gap-2">
+                  <code className="px-3 py-1.5 rounded bg-surface border border-surface-border font-mono text-sm text-foreground select-all">
+                    {generatedPassword}
+                  </code>
+                  <button
+                    className="h-7 px-3 rounded border border-surface-border bg-surface hover:bg-surface-border/40 text-xs transition-colors"
+                    onClick={copyPassword}
+                  >
+                    {copied ? "已复制！" : "复制密码"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {action ? (
+              <div className="rounded-md border border-surface-border bg-surface-border/10 p-3.5 flex flex-col gap-3 text-xs">
+                <div>
+                  <strong className="font-semibold text-foreground">
+                    {action === "status"
+                      ? (user.status === "ACTIVE" ? "确认禁用账号" : "确认解除禁用")
+                      : action === "role"
+                      ? (user.role === "ADMIN" ? "确认将此管理员降级为普通用户" : "确认将此用户提升为系统管理员")
+                      : action === "reset-password"
+                      ? "确认重置用户登录密码"
+                      : "确认撤销全部活跃会话"}
+                  </strong>
+                  <p className="mt-1 text-foreground-muted">
+                    {action === "status"
+                      ? (user.status === "ACTIVE" ? "禁用后会立即注销用户全部会话并断开其实时网络连接。" : "启用后用户可重新凭账号密码登录。")
+                      : action === "role"
+                      ? (user.role === "ADMIN" ? "降级后该用户将立即失去管理台访问权限并注销管理员会话。" : "提权后该用户将获得管理后台全部运维权限。")
+                      : action === "reset-password"
+                      ? "重置密码后会强制踢出用户在所有设备上的有效会话，需使用新密码重新登录。"
+                      : "撤销后账号状态不变，用户需要在各设备重新输入密码登录。"}
+                  </p>
+                </div>
+
+                {action === "status" && user.status === "ACTIVE" ? (
+                  <div>
+                    <label className="block text-foreground-muted mb-1">封禁原因（记录至审计日志）</label>
+                    <input
+                      className="w-full max-w-md h-7 rounded border border-surface-border bg-surface px-2 text-xs text-foreground placeholder:text-foreground-muted"
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      placeholder="输入封禁原因，例如：发布违规低俗内容"
+                    />
+                  </div>
+                ) : null}
+
+                {action === "reset-password" ? (
+                  <div>
+                    <label className="block text-foreground-muted mb-1">自定义新密码（留空则自动生成高强度随机密码）</label>
+                    <input
+                      type="password"
+                      className="w-full max-w-md h-7 rounded border border-surface-border bg-surface px-2 text-xs text-foreground placeholder:text-foreground-muted"
+                      value={customPassword}
+                      onChange={(e) => setCustomPassword(e.target.value)}
+                      placeholder="留空自动生成 12 位随机密码"
+                    />
+                  </div>
+                ) : null}
+
+                {actionError ? <p className="text-red-400">{actionError}</p> : null}
+
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    className="h-7 px-3 rounded border border-surface-border bg-surface hover:bg-surface-border/40 transition-colors"
+                    onClick={() => { setAction(null); setActionError(""); }}
+                    disabled={actionBusy}
+                  >
+                    取消
+                  </button>
+                  <button
+                    className={`h-7 px-3 rounded text-white font-medium transition-colors disabled:opacity-50 ${
+                      (action === "status" && user.status === "ACTIVE") || (action === "role" && user.role === "ADMIN")
+                        ? "bg-red-600 hover:bg-red-700"
+                        : "bg-[var(--accent,#3b82f6)] hover:opacity-90"
+                    }`}
+                    onClick={() => void confirmAction()}
+                    disabled={actionBusy}
+                  >
+                    {actionBusy ? "处理中..." : "确认执行"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <strong className="text-xs font-medium text-foreground">快速治理动作</strong>
+                  <p className="text-xs text-foreground-muted mt-0.5">即时生效，全部操作强制写入系统 HMAC 审计记录。</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    className={`h-7 px-3 rounded border text-xs font-medium transition-colors ${
+                      user.status === "ACTIVE"
+                        ? "border-red-500/30 hover:bg-red-500/10 text-red-400"
+                        : "border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400"
+                    }`}
+                    onClick={() => { setAction("status"); setActionError(""); }}
+                  >
+                    {user.status === "ACTIVE" ? "禁用账号" : "解除禁用"}
+                  </button>
+
+                  <button
+                    className="h-7 px-3 rounded border border-surface-border bg-surface hover:bg-surface-border/40 text-xs font-medium text-foreground transition-colors"
+                    onClick={() => { setAction("role"); setActionError(""); }}
+                  >
+                    {user.role === "ADMIN" ? "降为普通用户" : "提升为管理员"}
+                  </button>
+
+                  <button
+                    className="h-7 px-3 rounded border border-surface-border bg-surface hover:bg-surface-border/40 text-xs font-medium text-foreground transition-colors"
+                    onClick={() => { setAction("reset-password"); setActionError(""); setCustomPassword(""); }}
+                  >
+                    重置登录密码
+                  </button>
+
+                  <button
+                    className="h-7 px-3 rounded border border-surface-border bg-surface hover:bg-surface-border/40 text-xs font-medium text-foreground transition-colors"
+                    onClick={() => { setAction("revoke"); setActionError(""); }}
+                  >
+                    撤销全部会话
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <InfoPanel title="账号信息">
+            <DetailRow label="用户 ID" value={user.id} mono />
+            <DetailRow label="用户名" value={user.username} mono />
+            <DetailRow label="昵称" value={user.nickname} />
+            <DetailRow label="状态" value={user.status === "ACTIVE" ? "正常" : "已禁用"} />
+            <DetailRow label="角色" value={user.role === "ADMIN" ? "管理员" : "普通用户"} />
+            <DetailRow label="注册时间" value={formatDateTime(user.createdAt)} />
+            <DetailRow label="最近登录" value={formatDateTime(user.lastLoginAt)} />
+            {user.disabledAt ? <DetailRow label="禁用时间" value={formatDateTime(user.disabledAt)} /> : null}
+            {user.disabledReason ? <DetailRow label="禁用原因" value={user.disabledReason} /> : null}
+          </InfoPanel>
+          <InfoPanel title="当前加入房间">
+            <DataList
+              rows={user.rooms}
+              empty="当前没有加入任何房间。"
+              render={(room) => (
+                <div className="flex items-center justify-between py-2 text-xs" key={room.id}>
+                  <a className="font-mono text-[var(--accent,#3b82f6)] hover:underline font-medium" href={`/admin/rooms/${encodeURIComponent(room.id)}`}>
+                    {room.joinCode}
+                  </a>
+                  <span className="text-foreground-muted">
+                    {room.name || "未命名房间"} · {room.role === "host" ? "房主" : "成员"}
+                  </span>
+                </div>
+              )}
+            />
+          </InfoPanel>
+        </section>
+
+        <DataPanel title="有效会话" hint={`${user.sessions.length} 个`}>
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-surface-border text-foreground-muted font-mono text-[11px]">
+                <th className="py-2.5 px-3 font-normal">会话 ID</th>
+                <th className="py-2.5 px-3 font-normal">创建时间</th>
+                <th className="py-2.5 px-3 font-normal">过期时间</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-border/50">
+              {user.sessions.length ? (
+                user.sessions.map((session) => (
+                  <tr key={session.id} className="hover:bg-surface-border/15 transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-foreground-muted">{session.id}</td>
+                    <td className="py-2.5 px-3 font-mono text-foreground-muted">{formatDateTime(session.createdAt)}</td>
+                    <td className="py-2.5 px-3 font-mono text-foreground-muted">{formatDateTime(session.expiresAt)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="py-8 text-center text-xs text-foreground-muted">没有有效普通会话。</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </DataPanel>
+
+        <DataPanel title="相关审计" hint={`${user.audits.length} 条`}>
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-surface-border text-foreground-muted font-mono text-[11px]">
+                <th className="py-2.5 px-3 font-normal">时间</th>
+                <th className="py-2.5 px-3 font-normal">操作</th>
+                <th className="py-2.5 px-3 font-normal">原因说明</th>
+                <th className="py-2.5 px-3 font-normal">结果</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-border/50">
+              {user.audits.length ? (
+                user.audits.map((audit) => (
+                  <tr key={audit.id} className="hover:bg-surface-border/15 transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-foreground-muted">{formatDateTime(audit.createdAt)}</td>
+                    <td className="py-2.5 px-3 font-medium text-foreground">{translateAction(audit.action)}</td>
+                    <td className="py-2.5 px-3 text-foreground-muted">{audit.reason ?? "-"}</td>
+                    <td className="py-2.5 px-3"><span className="text-emerald-400 font-medium">成功</span></td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-xs text-foreground-muted">没有针对此用户的审计记录。</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </DataPanel>
+      </div>
+    </main>
+  );
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className={styles.metric}><div className={styles.metricLabel}>{label}</div><div className={styles.metricRow}><strong className={styles.metricValue}>{value}</strong></div></div>; }
-function PanelHeader({ title, hint }: { title: string; hint?: string }) { return <div className={styles.panelHeader}><div><div className={styles.panelTitle}>{title}</div>{hint ? <div className={styles.panelHint}>{hint}</div> : null}</div></div>; }
-function InfoPanel({ title, children }: { title: string; children: ReactNode }) { return <section className={styles.panel}><PanelHeader title={title} /><div className={styles.detailList}>{children}</div></section>; }
-function DataPanel({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) { return <section className={`${styles.panel} ${styles.fullPanel}`}><PanelHeader title={title} hint={hint} /><div className={styles.tableWrap}>{children}</div></section>; }
-function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) { return <div className={styles.detailRow}><span className={styles.detailLabel}>{label}</span><span className={mono ? styles.mono : styles.detailValue}>{value}</span></div>; }
-function DataList({ rows, empty, render }: { rows: Array<Record<string, string>>; empty: string; render: (row: Record<string, string>) => ReactNode }) { return rows.length ? <div className={styles.dataList}>{rows.map((row) => <div className={styles.dataListItem} key={row.id}>{render(row)}</div>)}</div> : <div className={styles.empty}>{empty}</div>; }
-function formatDateTime(value: string | null | undefined) { if (!value) return "-"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString(); }
-function translateAction(value: string) { const labels: Record<string, string> = { "user.disable": "禁用账号", "user.enable": "启用账号", "user.sessions.revoke": "撤销会话" }; return labels[value] ?? value; }
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-surface-border bg-surface p-3.5">
+      <div className="text-[11px] font-mono text-foreground-muted uppercase tracking-wider">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-foreground tracking-tight">{value}</div>
+    </div>
+  );
+}
+
+function PanelHeader({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-surface-border pb-3">
+      <h2 className="text-xs font-semibold text-foreground tracking-tight">{title}</h2>
+      {hint ? <span className="text-[11px] font-mono text-foreground-muted">{hint}</span> : null}
+    </div>
+  );
+}
+
+function InfoPanel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-surface-border bg-surface p-4">
+      <PanelHeader title={title} />
+      <div className="mt-3 divide-y divide-surface-border/50">{children}</div>
+    </section>
+  );
+}
+
+function DataPanel({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-surface-border bg-surface p-4 overflow-hidden">
+      <PanelHeader title={title} hint={hint} />
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function DetailRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-2 text-xs">
+      <span className="text-foreground-muted">{label}</span>
+      <span className={`text-foreground font-medium ${mono ? "font-mono" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function DataList<T>({ rows, empty, render }: { rows: T[]; empty: string; render: (item: T, index: number) => ReactNode }) {
+  if (!rows.length) {
+    return <div className="p-6 text-center text-xs text-foreground-muted">{empty}</div>;
+  }
+  return <div className="divide-y divide-surface-border/50">{rows.map((row, index) => render(row, index))}</div>;
+}
+
+function translateAction(value: string) {
+  const labels: Record<string, string> = {
+    "user.disable": "禁用用户",
+    "user.enable": "启用用户",
+    "user.set_role": "修改用户角色",
+    "user.reset_password": "重置密码",
+    "user.sessions.revoke": "撤销会话",
+    "admin.login": "管理员登录"
+  };
+  return labels[value] ?? value;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}

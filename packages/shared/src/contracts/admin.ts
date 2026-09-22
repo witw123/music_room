@@ -35,6 +35,8 @@ export const adminUserSummarySchema = z.object({
   nickname: z.string(),
   role: adminRoleSchema,
   status: adminUserStatusSchema,
+  disabledReason: z.string().nullable().optional(),
+  disabledAt: z.string().datetime().nullable().optional(),
   createdAt: z.string().datetime(),
   lastLoginAt: z.string().datetime().nullable(),
   activeSessionCount: z.number().int().nonnegative(),
@@ -92,6 +94,22 @@ export const adminActionRequestSchema = z.object({ reason: adminReasonSchema });
 export const adminTerminateRoomRequestSchema = z.object({ reason: adminReasonSchema, expectedJoinCode: z.string().trim().min(1).max(32) });
 export const adminUserStatusRequestSchema = z.object({ reason: adminReasonSchema, status: adminUserStatusSchema });
 
+export const adminPlaybackActionSchema = z.enum(["pause", "play", "next", "clear-queue"]);
+export const adminRoomPlaybackRequestSchema = z.object({ action: adminPlaybackActionSchema, reason: adminReasonSchema.optional() });
+export const adminRoleChangeRequestSchema = z.object({ role: adminRoleSchema, reason: adminReasonSchema });
+export const adminResetPasswordRequestSchema = z.object({ newPassword: z.string().min(6).max(128).optional(), reason: adminReasonSchema });
+export const adminResolveIncidentRequestSchema = z.object({ reason: adminReasonSchema.optional() });
+
+export const adminProviderHealthSchema = z.object({
+  provider: z.enum(["bilibili", "netease", "qqmusic"]),
+  name: z.string(),
+  status: z.enum(["healthy", "degraded", "down"]),
+  latencyMs: z.number().nullable(),
+  message: z.string().nullable(),
+  hasCredentials: z.boolean(),
+  checkedAt: z.string().datetime()
+});
+
 export type AdminRole = z.infer<typeof adminRoleSchema>;
 export type AdminUserStatus = z.infer<typeof adminUserStatusSchema>;
 export type AdminSession = z.infer<typeof adminSessionSchema>;
@@ -99,3 +117,9 @@ export type AdminUserSummary = z.infer<typeof adminUserSummarySchema>;
 export type AdminRoomSummary = z.infer<typeof adminRoomSummarySchema>;
 export type AdminIncident = z.infer<typeof adminIncidentSchema>;
 export type AdminOverview = z.infer<typeof adminOverviewSchema>;
+export type AdminPlaybackAction = z.infer<typeof adminPlaybackActionSchema>;
+export type AdminRoomPlaybackRequest = z.infer<typeof adminRoomPlaybackRequestSchema>;
+export type AdminRoleChangeRequest = z.infer<typeof adminRoleChangeRequestSchema>;
+export type AdminResetPasswordRequest = z.infer<typeof adminResetPasswordRequestSchema>;
+export type AdminResolveIncidentRequest = z.infer<typeof adminResolveIncidentRequestSchema>;
+export type AdminProviderHealth = z.infer<typeof adminProviderHealthSchema>;
