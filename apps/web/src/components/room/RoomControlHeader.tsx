@@ -63,6 +63,7 @@ export type RoomControlHeaderProps = {
   hideRoomMetadata?: boolean;
   className?: string;
   isMobile?: boolean;
+  centerContent?: React.ReactNode;
 };
 
 export function RoomControlHeader({
@@ -80,7 +81,8 @@ export function RoomControlHeader({
   onUpdateRoom,
   hideRoomMetadata = false,
   className = "",
-  isMobile = false
+  isMobile = false,
+  centerContent
 }: RoomControlHeaderProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -160,9 +162,9 @@ export function RoomControlHeader({
 
   return (
     <>
-      <div className={`flex w-full items-start justify-between gap-3 ${className}`}>
+      <div className={`flex w-full items-center justify-between gap-3 ${className}`}>
         {hideRoomMetadata ? null : (
-          <div className="min-w-0 space-y-1.5">
+          <div className="min-w-0 space-y-1.5 shrink-0">
             <div className="flex max-w-full items-center gap-2">
               <button
                 data-testid={isMobile ? "mobile-room-code-button" : "room-code-button"}
@@ -254,6 +256,12 @@ export function RoomControlHeader({
             </div>
           </div>
         )}
+
+        {centerContent ? (
+          <div className="hidden lg:flex min-w-0 flex-1 justify-center px-2">
+            {centerContent}
+          </div>
+        ) : null}
 
         <div className="relative ml-auto shrink-0 pointer-events-auto">
           <Button

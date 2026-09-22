@@ -74,9 +74,9 @@ export function LocalPlaylistPanel({
           })}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-surface-border px-4 py-4">
+        <div className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center">
           <p className="text-xs text-foreground-muted">当前没有本地歌单。</p>
-          <Link className="mt-3 inline-flex items-center border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/20" href="/app/profile/playlists">
+          <Link className="mt-3 inline-flex items-center border border-accent/35 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/20 rounded-md" href="/app/profile/playlists">
             创建本地歌单
           </Link>
         </div>

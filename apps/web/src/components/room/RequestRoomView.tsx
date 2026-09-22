@@ -251,6 +251,51 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
     return list;
   }, [isHost, pendingRequests.length, queueCount, memberCount, myRequests.length]);
 
+  const desktopNowPlayingBanner = props.currentTrack ? (
+    <div className="flex items-center gap-2.5 max-w-md min-w-0 rounded-xl border border-surface-border/50 bg-surface/60 px-3 py-1.5 shadow-xs" data-testid="request-now-playing-banner">
+      {props.currentTrack.artworkUrl ? (
+        <img
+          src={props.currentTrack.artworkUrl}
+          alt=""
+          className="h-8 w-8 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs"
+        />
+      ) : (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-accent">
+          <MusicIcon className="w-4 h-4" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          {currentPlayingRequester ? (
+            <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent shrink-0">
+              <MusicIcon className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">@{currentPlayingRequester} 点播</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent shrink-0">
+              <AudioWaveIcon className={`w-2.5 h-2.5 ${props.isPlaying ? "animate-pulse" : "opacity-60"}`} />
+              <span>正在播放</span>
+            </span>
+          )}
+          <span className="truncate text-xs font-semibold text-foreground" title={props.currentTrack.title}>
+            {props.currentTrack.title}
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
+          {props.currentTrack.artist} {props.currentTrack.album ? `· ${props.currentTrack.album}` : ""}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="rounded-full bg-surface border border-surface-border/60 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+          {queueCount} 首
+        </span>
+        <span className="font-mono text-xs text-foreground-muted">
+          {formatDuration(props.currentTrack.durationMs)}
+        </span>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background" data-room-view="request">
       {/* Mobile Top Room Control Header */}
@@ -270,9 +315,49 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           onDeleteRoom={props.onDeleteRoom}
           onUpdateRoom={props.onUpdateRoom}
         />
+        {/* Mobile Mini On-Air & Request Credit Banner */}
+        {props.currentTrack ? (
+          <div className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-surface-border/50 bg-surface/50 p-2 backdrop-blur-sm">
+            {props.currentTrack.artworkUrl ? (
+              <img
+                src={props.currentTrack.artworkUrl}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-lg object-cover border border-surface-border/60"
+              />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-accent">
+                <MusicIcon className="w-4 h-4" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                {currentPlayingRequester ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent shrink-0">
+                    <MusicIcon className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">@{currentPlayingRequester} 点播</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent shrink-0">
+                    <AudioWaveIcon className={`w-2.5 h-2.5 ${props.isPlaying ? "animate-pulse" : "opacity-60"}`} />
+                    <span>正在播放</span>
+                  </span>
+                )}
+                <span className="truncate text-xs font-semibold text-foreground" title={props.currentTrack.title}>
+                  {props.currentTrack.title}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-[10px] text-foreground-muted">
+                {props.currentTrack.artist} {props.currentTrack.album ? `· ${props.currentTrack.album}` : ""}
+              </p>
+            </div>
+            <span className="shrink-0 font-mono text-[11px] text-foreground-muted">
+              {formatDuration(props.currentTrack.durationMs)}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      {/* Desktop Top Room Control Header */}
+      {/* Desktop Unified Header Bar (Merged Room Controls + Now-Playing Brief) */}
       <div className="hidden lg:block shrink-0 border-b border-surface-border/40 bg-surface/30 px-4 py-2 sm:px-6 backdrop-blur-md">
         <RoomControlHeader
           roomSnapshot={props.roomSnapshot}
@@ -287,56 +372,9 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           onLeaveRoom={props.onLeaveRoom}
           onDeleteRoom={props.onDeleteRoom}
           onUpdateRoom={props.onUpdateRoom}
+          centerContent={desktopNowPlayingBanner}
         />
       </div>
-
-      {/* Compact Mini On-Air & Request Credit Banner (replaces giant vinyl RoomStage) */}
-      {props.currentTrack ? (
-        <div className="shrink-0 px-3 pt-2 lg:px-6" data-testid="request-now-playing-banner">
-          <div className="flex items-center gap-3 rounded-xl border border-surface-border/50 bg-surface/50 p-2 sm:p-2.5 backdrop-blur-sm">
-            {props.currentTrack.artworkUrl ? (
-              <img
-                src={props.currentTrack.artworkUrl}
-                alt=""
-                className="h-10 w-10 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs"
-              />
-            ) : (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-accent">
-                <MusicIcon className="w-5 h-5" />
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                {currentPlayingRequester ? (
-                  <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
-                    <MusicIcon className="w-2.5 h-2.5 shrink-0" />
-                    <span className="truncate">@{currentPlayingRequester} 点播</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
-                    <AudioWaveIcon className={`w-2.5 h-2.5 ${props.isPlaying ? "animate-pulse" : "opacity-60"}`} />
-                    <span>正在播放</span>
-                  </span>
-                )}
-                <span className="truncate text-xs sm:text-sm font-semibold text-foreground" title={props.currentTrack.title}>
-                  {props.currentTrack.title}
-                </span>
-              </div>
-              <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
-                {props.currentTrack.artist} {props.currentTrack.album ? `· ${props.currentTrack.album}` : ""}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="hidden sm:inline-block rounded-full bg-surface border border-surface-border/60 px-2 py-0.5 text-[10px] text-foreground-muted">
-                队列中 {queueCount} 首
-              </span>
-              <span className="font-mono text-xs text-foreground-muted">
-                {formatDuration(props.currentTrack.durationMs)}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {/* Desktop Balanced Split Layout */}
       <div className="hidden lg:grid flex-1 min-h-0 w-full lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)] divide-x divide-surface-border/40 overflow-hidden pt-2">
