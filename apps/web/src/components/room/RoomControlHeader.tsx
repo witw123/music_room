@@ -12,6 +12,14 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  CopyIcon,
+  MoreVerticalIcon,
+  MusicIcon,
+  RadioIcon,
+  ShareIcon,
+  UsersIcon
+} from "@/components/icons/DiscoverIcons";
 import { MemberPermissionControls } from "./MembersPanel";
 
 export function getSourceModeLabel(
@@ -160,178 +168,305 @@ export function RoomControlHeader({
     }
   };
 
-  return (
-    <>
-      <div className={`flex w-full items-center justify-between gap-3 ${className}`}>
-        {hideRoomMetadata ? null : (
-          <div className="min-w-0 space-y-1.5 shrink-0">
-            <div className="flex max-w-full items-center gap-2">
+  const roomType = roomSnapshot.room.roomType;
+  const roomTypeConfig = roomType === "radio"
+    ? { label: "电台广播", icon: RadioIcon }
+    : roomType === "request"
+    ? { label: "点歌互动", icon: MusicIcon }
+    : { label: "共听互动", icon: UsersIcon };
+  const RoomTypeIcon = roomTypeConfig.icon;
+
+  if (isMobile) {
+    return (
+      <>
+        {/* Mobile Streamlined Room Control Header */}
+        <div className={`flex w-full flex-col gap-2 ${className}`}>
+          <div className="flex w-full items-center justify-between gap-2">
+            {/* Mobile Left: Tag + Join Code + Member count */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-1 rounded-full bg-accent/10 border border-accent/25 px-2 py-0.5 text-[11px] font-semibold text-accent shrink-0">
+                <RoomTypeIcon className="w-3 h-3 shrink-0" />
+                <span>{roomTypeConfig.label}</span>
+              </div>
+
               <button
-                data-testid={isMobile ? "mobile-room-code-button" : "room-code-button"}
+                data-testid="mobile-room-code-button"
                 aria-label="复制房间码"
-                className="group flex min-w-0 max-w-full items-center gap-2"
+                className="group flex items-center gap-1.5 rounded-full border border-surface-border/70 bg-surface/80 px-2 py-0.5 text-[11px] font-mono font-bold tracking-wider text-foreground hover:bg-surface-hover transition-colors shrink-0"
                 disabled={isCopying || !onCopyJoinCode}
                 onClick={() => void handleCopyJoinCode()}
                 type="button"
               >
-                <div className="flex min-w-0 items-center gap-2 rounded-full border border-surface-border/60 bg-surface/80 px-3 py-1.5 shadow-xs transition-colors group-hover:bg-surface-hover">
-                  <span className="h-2 w-2 rounded-full bg-accent" />
-                  <span className="truncate font-mono text-[11px] font-bold tracking-[0.28em] text-foreground">
-                    {roomSnapshot.room.joinCode}
-                  </span>
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="shrink-0 text-foreground-muted group-hover:text-foreground"
-                    aria-hidden="true"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                </div>
-                {isCopying ? <span className="text-[10px] font-medium text-accent">已复制</span> : null}
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span>{roomSnapshot.room.joinCode}</span>
+                <CopyIcon className="w-2.5 h-2.5 text-foreground-muted shrink-0" />
+                {isCopying ? <span className="text-[9px] font-sans font-medium text-accent">已复制</span> : null}
               </button>
 
-              {onShareRoom ? (
-                <button
-                  data-testid={isMobile ? "mobile-share-room-button" : "share-room-button"}
-                  aria-label="分享房间"
-                  className="inline-flex h-8 min-w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full border border-surface-border/60 bg-surface/80 px-2.5 text-[11px] font-semibold text-foreground-muted shadow-xs transition-[background-color,color,border-color,transform] duration-150 hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
-                  disabled={isSharing}
-                  onClick={() => void handleShareRoom()}
-                  title="分享房间"
-                  type="button"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden="true"
-                  >
-                    <circle cx="18" cy="5" r="3" />
-                    <circle cx="6" cy="12" r="3" />
-                    <circle cx="18" cy="19" r="3" />
-                    <path d="m8.6 13.5 6.8 4" />
-                    <path d="m15.4 6.5-6.8 4" />
-                  </svg>
-                  <span>{isSharing ? "已复制" : "分享房间"}</span>
-                </button>
-              ) : null}
+              <span className="flex items-center gap-0.5 text-[11px] text-foreground-muted shrink-0">
+                <UsersIcon className="w-3 h-3" />
+                <span data-testid="mobile-online-member-count">{onlineMemberCount}</span>
+              </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-foreground-muted">
-              <span className="flex items-center gap-1">
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+            {/* Mobile Right: Share + Settings */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {onShareRoom ? (
+                <button
+                  data-testid="mobile-share-room-button"
+                  aria-label="分享房间"
+                  className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-surface-border/70 bg-surface/80 px-2 text-[11px] font-medium text-foreground-muted hover:text-foreground"
+                  disabled={isSharing}
+                  onClick={() => void handleShareRoom()}
+                  type="button"
                 >
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-                <span data-testid={isMobile ? "mobile-online-member-count" : "online-member-count"}>{onlineMemberCount}</span> 人在线
+                  <ShareIcon className="w-3 h-3" />
+                  <span>{isSharing ? "已复制" : "分享"}</span>
+                </button>
+              ) : null}
+
+              <div className="relative pointer-events-auto">
+                <Button
+                  data-testid="mobile-room-settings-button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full border border-surface-border/70 bg-surface/80 text-foreground-muted hover:text-foreground"
+                  onClick={() => setShowSettings((value) => !value)}
+                  type="button"
+                >
+                  <MoreVerticalIcon className="w-3.5 h-3.5" />
+                </Button>
+
+                {showSettings ? (
+                  <>
+                    <div
+                      className="fixed inset-0 z-[65]"
+                      onClick={() => setShowSettings(false)}
+                    />
+                    <div className="animate-fade-in absolute right-0 top-9 z-[70] flex w-52 origin-top-right flex-col rounded-2xl border border-surface-border bg-surface p-1 shadow-2xl backdrop-blur-xl">
+                      {canDeleteRoom && onUpdateRoom ? (
+                        <button
+                          data-testid="mobile-edit-room-button"
+                          className="w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-surface-hover"
+                          onClick={openEditRoom}
+                          type="button"
+                        >
+                          编辑房间
+                        </button>
+                      ) : null}
+                      {onAwayRoom ? (
+                        <button
+                          data-testid="mobile-away-room-button"
+                          className="w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-amber-500 transition-colors hover:bg-amber-500/10"
+                          onClick={() => {
+                            setShowSettings(false);
+                            onAwayRoom();
+                          }}
+                          type="button"
+                        >
+                          暂离房间
+                        </button>
+                      ) : null}
+                      <button
+                        data-testid="mobile-leave-room-button"
+                        className="w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                        onClick={() => {
+                          setShowSettings(false);
+                          void onLeaveRoom?.();
+                        }}
+                        type="button"
+                      >
+                        离开房间
+                      </button>
+                      {(canDeleteRoom || canDisbandRoom) && onDeleteRoom ? (
+                        <button
+                          data-testid="mobile-delete-room-button"
+                          className="my-1 w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-red-500 transition-colors hover:bg-red-500/10"
+                          onClick={() => {
+                            setShowSettings(false);
+                            setShowDeleteConfirmation(true);
+                          }}
+                          type="button"
+                        >
+                          解散房间
+                        </button>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Sub-line Metadata */}
+          {!hideRoomMetadata ? (
+            <div className="flex items-center gap-1.5 text-[10px] text-foreground-muted truncate">
+              <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
+              {host ? <span>· 房主 {host.nickname}</span> : null}
+              <span>· {sourceModeLabel}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <ConfirmDialog
+          confirmLabel="解散房间"
+          description="房间、队列和共享曲库状态将被删除，所有成员都会离开。此操作无法撤销。"
+          destructive
+          onCancel={() => setShowDeleteConfirmation(false)}
+          onConfirm={() => void handleDeleteRoom()}
+          open={showDeleteConfirmation}
+          pending={isDeletingRoom}
+          title="确认解散房间？"
+        />
+
+        {onUpdateRoom ? (
+          <RoomEditDialog
+            form={editRoomForm}
+            roomType={roomSnapshot.room.roomType}
+            onChange={setEditRoomForm}
+            onClose={() => {
+              if (!isUpdatingRoom) setShowEditRoom(false);
+            }}
+            onSubmit={handleUpdateRoom}
+            open={showEditRoom}
+            pending={isUpdatingRoom}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/* Desktop Fused Cockpit Bar */}
+      <div className={`flex w-full items-center justify-between gap-3 h-14 ${className}`}>
+        {hideRoomMetadata ? null : (
+          <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+            {/* Room Type Tag */}
+            <div className="flex items-center gap-1.5 rounded-full bg-accent/10 border border-accent/25 px-2.5 py-1 text-xs font-semibold text-accent shrink-0 select-none">
+              <RoomTypeIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>{roomTypeConfig.label}</span>
+            </div>
+
+            {/* Room Code Button */}
+            <button
+              data-testid="room-code-button"
+              aria-label="复制房间码"
+              className="group flex items-center gap-2 rounded-full border border-surface-border/70 bg-surface/70 px-2.5 py-1 text-xs font-mono font-bold tracking-[0.16em] text-foreground hover:bg-surface-hover hover:border-surface-border transition-colors cursor-pointer shrink-0 shadow-xs"
+              disabled={isCopying || !onCopyJoinCode}
+              onClick={() => void handleCopyJoinCode()}
+              type="button"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span>{roomSnapshot.room.joinCode}</span>
+              <CopyIcon className="w-3 h-3 text-foreground-muted group-hover:text-foreground shrink-0" />
+              {isCopying ? <span className="text-[10px] font-sans font-medium text-accent">已复制</span> : null}
+            </button>
+
+            {/* Separator */}
+            <span className="h-3.5 w-px bg-surface-border/60 shrink-0" />
+
+            {/* Room Status Metadata */}
+            <div className="flex items-center gap-2 text-xs text-foreground-muted truncate shrink-0">
+              <span className="flex items-center gap-1">
+                <UsersIcon className="w-3.5 h-3.5 shrink-0" />
+                <span data-testid="online-member-count">{onlineMemberCount}</span>
+                <span>人在线</span>
               </span>
               <span>·</span>
-              <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
+              <span>{roomSnapshot.room.visibility === "public" ? "公开" : "私密"}</span>
               {host ? (
                 <>
                   <span>·</span>
-                  <span>房主 {host.nickname}</span>
+                  <span className="truncate max-w-[7.5rem]" title={host.nickname}>房主 {host.nickname}</span>
                 </>
               ) : null}
               <span>·</span>
-              <span>{sourceModeLabel}</span>
+              <span className="text-[11px] opacity-75">{sourceModeLabel}</span>
             </div>
           </div>
         )}
 
+        {/* Center Slot (Integrated On-Air Media Console) */}
         {centerContent ? (
-          <div className="hidden lg:flex min-w-0 flex-1 justify-center px-2">
+          <div className="flex min-w-0 flex-1 justify-center px-3">
             {centerContent}
           </div>
         ) : null}
 
-        <div className="relative ml-auto shrink-0 pointer-events-auto">
-          <Button
-            data-testid={isMobile ? "mobile-room-settings-button" : "room-settings-button"}
-            variant="ghost"
-            size="icon"
-            className="h-8.5 w-8.5 sm:h-9 sm:w-9 rounded-full border border-surface-border/60 bg-surface/80 text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            onClick={() => setShowSettings((value) => !value)}
-            type="button"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+        {/* Right Action Hub */}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {onShareRoom ? (
+            <button
+              data-testid="share-room-button"
+              aria-label="分享房间"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-surface-border/70 bg-surface/70 px-3 text-xs font-semibold text-foreground-muted shadow-xs transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-wait disabled:opacity-60"
+              disabled={isSharing}
+              onClick={() => void handleShareRoom()}
+              title="分享房间"
+              type="button"
             >
-              <circle cx="12" cy="12" r="1" />
-              <circle cx="12" cy="5" r="1" />
-              <circle cx="12" cy="19" r="1" />
-            </svg>
-          </Button>
+              <ShareIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>{isSharing ? "已复制" : "分享房间"}</span>
+            </button>
+          ) : null}
 
-          {showSettings ? (
-            <>
-              <div
-                className="fixed inset-0 z-[55]"
-                onClick={() => setShowSettings(false)}
-              />
-              <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-surface-border bg-surface p-1 shadow-xl backdrop-blur-xl">
-                {canDeleteRoom && onUpdateRoom ? (
+          <div className="relative pointer-events-auto">
+            <Button
+              data-testid="room-settings-button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full border border-surface-border/70 bg-surface/70 text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+              onClick={() => setShowSettings((value) => !value)}
+              type="button"
+            >
+              <MoreVerticalIcon className="w-4 h-4" />
+            </Button>
+
+            {showSettings ? (
+              <>
+                <div
+                  className="fixed inset-0 z-[65]"
+                  onClick={() => setShowSettings(false)}
+                />
+                <div className="animate-fade-in absolute right-0 top-10 z-[70] flex w-56 origin-top-right flex-col rounded-2xl border border-surface-border bg-surface p-1 shadow-2xl backdrop-blur-xl">
+                  {canDeleteRoom && onUpdateRoom ? (
+                    <button
+                      data-testid="edit-room-button"
+                      className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                      onClick={openEditRoom}
+                      type="button"
+                    >
+                      编辑房间
+                    </button>
+                  ) : null}
+                  {onAwayRoom ? (
+                    <button
+                      data-testid="away-room-button"
+                      className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+                      onClick={() => {
+                        setShowSettings(false);
+                        onAwayRoom();
+                      }}
+                      type="button"
+                    >
+                      暂离房间
+                    </button>
+                  ) : null}
                   <button
-                    data-testid={isMobile ? "mobile-edit-room-button" : "edit-room-button"}
-                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                    onClick={openEditRoom}
-                    type="button"
-                  >
-                    编辑房间
-                  </button>
-                ) : null}
-                {onAwayRoom ? (
-                  <button
-                    data-testid={isMobile ? "mobile-away-room-button" : "away-room-button"}
-                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+                    data-testid="leave-room-button"
+                    className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                     onClick={() => {
                       setShowSettings(false);
-                      onAwayRoom();
+                      void onLeaveRoom?.();
                     }}
                     type="button"
                   >
-                    暂离房间
+                    离开房间
                   </button>
-                ) : null}
-                <button
-                  data-testid={isMobile ? "mobile-leave-room-button" : "leave-room-button"}
-                  className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                  onClick={() => {
-                    setShowSettings(false);
-                    void onLeaveRoom?.();
-                  }}
-                  type="button"
-                >
-                  离开房间
-                </button>
-
-                {(canDeleteRoom || canDisbandRoom) && onDeleteRoom ? (
-                  <>
+                  {(canDeleteRoom || canDisbandRoom) && onDeleteRoom ? (
                     <button
-                      data-testid={isMobile ? "mobile-delete-room-button" : "delete-room-button"}
+                      data-testid="delete-room-button"
                       className="my-1 w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-red-500 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30"
                       onClick={() => {
                         setShowSettings(false);
@@ -342,11 +477,11 @@ export function RoomControlHeader({
                     >
                       解散房间
                     </button>
-                  </>
-                ) : null}
-              </div>
-            </>
-          ) : null}
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 

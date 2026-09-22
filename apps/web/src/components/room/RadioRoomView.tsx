@@ -97,42 +97,61 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
   }, [isHost, queueCount, memberCount]);
 
   const desktopNowPlayingBanner = props.currentTrack ? (
-    <div className="flex items-center gap-2.5 max-w-md min-w-0 rounded-xl border border-surface-border/50 bg-surface/60 px-3 py-1.5 shadow-xs" data-testid="radio-now-playing-banner">
+    <div
+      className="flex items-center gap-2.5 max-w-lg min-w-0 rounded-full border border-surface-border/70 bg-surface/70 hover:bg-surface/90 hover:border-surface-border px-3 py-1 shadow-xs transition-all backdrop-blur-sm"
+      data-testid="radio-now-playing-banner"
+    >
       {props.currentTrack.artworkUrl ? (
         <img
           src={props.currentTrack.artworkUrl}
           alt=""
-          className="h-8 w-8 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs"
+          className="h-7 w-7 shrink-0 rounded-full object-cover border border-surface-border/60 shadow-xs"
         />
       ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-accent">
-          <MusicIcon className="w-4 h-4" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-surface-border/60 bg-surface text-accent">
+          <MusicIcon className="w-3.5 h-3.5" />
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent shrink-0">
             <AudioWaveIcon className={`w-2.5 h-2.5 ${props.isPlaying ? "animate-pulse" : "opacity-60"}`} />
             <span>正在播出</span>
           </span>
           <span className="truncate text-xs font-semibold text-foreground" title={props.currentTrack.title}>
             {props.currentTrack.title}
           </span>
+          <span className="text-foreground-muted/40 text-[10px] shrink-0">·</span>
+          <span className="truncate text-[11px] text-foreground-muted max-w-[8rem]" title={props.currentTrack.artist}>
+            {props.currentTrack.artist}
+          </span>
         </div>
-        <p className="mt-0.5 truncate text-[11px] text-foreground-muted">
-          {props.currentTrack.artist} {props.currentTrack.album ? `· ${props.currentTrack.album}` : ""}
-        </p>
       </div>
-      <span className="shrink-0 font-mono text-xs text-foreground-muted">
-        {formatDuration(props.currentTrack.durationMs)}
-      </span>
+      <div className="flex shrink-0 items-center gap-2 pl-1 border-l border-surface-border/50 text-foreground-muted">
+        <span className="rounded-full bg-surface border border-surface-border/60 px-1.5 py-0.5 text-[10px] font-medium">
+          {queueCount} 首
+        </span>
+        <span className="font-mono text-xs">
+          {formatDuration(props.currentTrack.durationMs)}
+        </span>
+      </div>
     </div>
-  ) : null;
+  ) : (
+    <div
+      className="flex items-center gap-2 rounded-full border border-surface-border/40 bg-surface/30 px-3.5 py-1 text-xs text-foreground-muted select-none"
+      data-testid="radio-now-playing-banner"
+    >
+      <RadioIcon className="w-3.5 h-3.5 text-accent/70 shrink-0" />
+      <span>电台广播待命中</span>
+      <span className="text-surface-border">·</span>
+      <span className="text-[11px] text-foreground-muted/80">节目单暂无播放曲目，可智能续播</span>
+    </div>
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background" data-room-view="radio">
       {/* Mobile Top Room Control Header */}
-      <div className="shrink-0 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
+      <div className="relative z-30 shrink-0 px-3 pt-[calc(0.45rem+env(safe-area-inset-top,0px))] pb-2 lg:hidden">
         <RoomControlHeader
           isMobile
           roomSnapshot={props.roomSnapshot}
@@ -184,7 +203,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Desktop Unified Header Bar (Merged Room Controls + Now-Playing Brief) */}
-      <div className="hidden lg:block shrink-0 border-b border-surface-border/40 bg-surface/30 px-4 py-2 sm:px-6 backdrop-blur-md">
+      <div className="relative z-30 hidden lg:block shrink-0 border-b border-surface-border/50 bg-surface/40 px-4 sm:px-6 backdrop-blur-xl">
         <RoomControlHeader
           roomSnapshot={props.roomSnapshot}
           mediaConnectionState={props.mediaConnectionState}
