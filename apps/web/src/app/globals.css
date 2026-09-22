@@ -844,6 +844,26 @@
     display: none;
   }
 
+  @keyframes announcement-marquee-scroll {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    100% {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  .announcement-marquee {
+    display: flex;
+    width: max-content;
+    will-change: transform;
+    animation: announcement-marquee-scroll 25s linear infinite;
+  }
+
+  .announcement-marquee:hover {
+    animation-play-state: paused;
+  }
+
   /* A few legacy surfaces still use fixed dark utility classes. Map those
      classes to the active palette so the theme applies consistently. */
   html[data-theme="light"] [class~="bg-black"] {

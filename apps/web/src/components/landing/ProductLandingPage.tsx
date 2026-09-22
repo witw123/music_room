@@ -5,428 +5,406 @@ import { TopBar } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { buildAppEntryHref } from "@/lib/domain/client-shell";
 import {
-  RadioIcon,
-  ZapIcon,
-  ShieldCheckIcon,
   LaptopIcon,
-  MusicIcon
+  MusicIcon,
+  FolderIcon
 } from "@/components/icons/DiscoverIcons";
 
 const githubRepositoryUrl = "https://github.com/witw123/music_room";
 
-const projectStats = [
-  { label: "实时对齐延迟", value: "< 50ms", note: "WebRTC 毫秒级同步", tone: "text-sky-400" },
-  { label: "声学链路", value: "RTP Opus", note: "高保真音频编码", tone: "text-emerald-400" },
-  { label: "隐私模型", value: "Local-First", note: "本地文件零上云", tone: "text-fuchsia-400" },
-  { label: "运行平台", value: "Browser 优先", note: "免安装多端互通", tone: "text-amber-400" }
-];
-
-const capabilities = [
+/**
+ * Three distinct room collaboration modes
+ */
+const roomModes = [
   {
-    index: "01",
-    eyebrow: "Spatial Co-listening Room",
-    title: "一站式全景音乐空间，随时开启协作派对",
-    body: "在同一个现代化声学工作台中自由探索。支持互动点歌、DJ 电台广播与专属点播策展。房间码一键直达，全员共享同一条实时低延迟播放流与互动打 Call。",
-    points: ["沉浸式黑胶主舞台", "一键邀请加入", "房间实时打 Call 互动", "流光逐字歌词"]
+    type: "standard",
+    title: "标准协作房",
+    subtitle: "Standard Collaborative Room",
+    badge: "全员共建",
+    badgeTone: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+    description: "适合好友小聚、团队听歌与共同构建曲库。房间成员共享同一条播放队列，授权成员均可自由点歌、切歌与调整排队顺序，播放状态毫秒级无感知对齐。",
+    highlights: [
+      "共享实时播放队列，全员同步更新",
+      "细粒度播控权限分配，保障房间秩序",
+      "无感知毫秒级时钟对齐与瞬时同步"
+    ]
   },
   {
-    index: "02",
-    eyebrow: "Ultra-Low Latency Engine",
-    title: "毫秒级 WebRTC 状态对齐与无损音频链路",
-    body: "基于先进的 WebRTC 点对点通信与 RTP Opus 流传输机制。播放、暂停、进度微调全员实时瞬时响应，自适应弱网抖动补偿，绝非简单的单机播放器加文字聊天室。",
-    points: ["全员状态毫秒级对齐", "48kHz 高保真 Opus 流", "智能断线静默重连"]
+    type: "request",
+    title: "点歌点播房",
+    subtitle: "Request / Inbox Room",
+    badge: "主理把控",
+    badgeTone: "border-purple-500/30 bg-purple-500/10 text-purple-400",
+    description: "专为主播聚会、歌友互动与主题派对打造。主理人牢牢把控核心播放流，听众搜索曲库并提交点歌申请至专属待办箱，由房主一键审批入队或置顶插播。",
+    highlights: [
+      "专属点歌待办箱，主理人一键审核",
+      "支持置顶插播与有序排队播放",
+      "听众随时探索多源曲库发起点播"
+    ]
   },
   {
-    index: "03",
-    eyebrow: "Local-First Privacy Architecture",
-    title: "本地音乐库，全球好友无缝共享",
-    body: "无需将本地珍藏的 FLAC/无损音频上传至第三方云端服务器。音频资产全程保留在您的浏览器本地目录中，由曲目拥有者通过 P2P 链路直接向房间成员广播播放。",
-    points: ["本地文件零云端留存", "端到端媒体流传输", "网易云/QQ音乐多源互通"]
+    type: "radio",
+    title: "自由电台房",
+    subtitle: "Radio / On-Air Broadcast",
+    badge: "广播策展",
+    badgeTone: "border-teal-500/30 bg-teal-500/10 text-teal-400",
+    description: "适合个人音乐广播、深夜声波漫游与策展分享。房主独占播控权并开启自动续播探索，全员沉浸在连续不间断的流动声波中，支持实时打 Call 互动互动。",
+    highlights: [
+      "主理人广播策展，智能自动续播",
+      "轻量打 Call 浮动粒子实时同屏反馈",
+      "极简广播流，专注声学氛围沉浸"
+    ]
   }
 ];
 
-const architectureItems = [
+/**
+ * Real technical architecture and pipeline stages
+ */
+const architectureStages = [
+  {
+    step: "01",
+    label: "本地资产与分段转码",
+    role: "客户端本地沙盒 (Client Storage)",
+    description: "用户的本地无损音频（FLAC / WAV / MP3 / Ogg）或第三方平台导入曲目在浏览器端完成分段 Opus 预编码，写入 IndexedDB 本地沙盒。音频源文件 100% 留在本机，零上传至服务器。",
+    tags: ["IndexedDB 缓存", "本地分段 Opus", "零云端上传"]
+  },
+  {
+    step: "02",
+    label: "权威房间状态与信令中心",
+    role: "服务端协同 (NestJS + Socket.IO)",
+    description: "服务端负责维护权威播放基准时钟（startAt）、成员在线感知、播放权限调度与队列排队状态。服务端仅保存房间元数据与协同信令，不中继、不解析、不截留任何音频数据。",
+    tags: ["毫秒级基准时钟", "Socket.IO 双工信令", "无音频沉淀"]
+  },
+  {
+    step: "03",
+    label: "WebRTC RTP Opus 实时广播",
+    role: "点对点媒体传输 (WebRTC Media Stream)",
+    description: "曲目拥有者作为单一广播源，向房间成员建立低延迟 WebRTC 媒体通道，直接推流 48kHz 高保真 RTP Opus 音频。避免成员间互传庞大原始文件，节约带宽且实时响应。",
+    tags: ["48kHz 高保真", "单一广播源", "弱网丢包补偿"]
+  },
+  {
+    step: "04",
+    label: "听众端单一输出总线播放",
+    role: "监听端渲染 (AudioContext Pipeline)",
+    description: "监听端接收单一 RTP 媒体流，通过共享 AudioContext 统一调度播放，全员保持精准声学对齐。拥有者离线时本地曲目静默暂停，第三方曲目支持端侧自动回退继续播放。",
+    tags: ["共享 AudioContext", "毫秒级同步", "离线静默容灾"]
+  }
+];
+
+/**
+ * Ecosystem capabilities (Lyrics, Multi-Client, Hybrid Library)
+ */
+const ecosystemCards = [
+  {
+    icon: MusicIcon,
+    title: "全景精准歌词系统",
+    description: "支持标准 LRC 滚动歌词与网易云 YRC 逐字动效（Word-by-Word）。提供双语对照翻译与罗马音发音标注，移动端支持一触全屏沉浸歌词，桌面端支持系统级悬浮窗口置顶显示。"
+  },
+  {
+    icon: FolderIcon,
+    title: "本地与在线多源曲库打通",
+    description: "原生支持本地音频文件与整个文件夹批量导入（借助 File System Access API 自动监听）。无缝打通网易云音乐与 QQ 音乐账号绑定、曲目搜索、歌单导入与专辑收藏。"
+  },
   {
     icon: LaptopIcon,
-    title: "现代前端声学体验",
-    body: "基于 Next.js 与顶级现代设计系统，提供极致流畅的 120 FPS 视觉、物理黑胶转盘与声学交互。"
-  },
-  {
-    icon: RadioIcon,
-    title: "高可靠房间信令网",
-    body: "基于 Socket.IO 的全双工信令总线，负责毫秒级状态同步、成员在线感知与 WebRTC 自动协商。"
-  },
-  {
-    icon: ZapIcon,
-    title: "WebRTC 媒体流传输",
-    body: "点对点 RTP Opus 高保真音频通道，确保声音在跨网络传输中保持极低抖动与纯净音质。"
-  },
-  {
-    icon: ShieldCheckIcon,
-    title: "Local-First 隐私防线",
-    body: "浏览器端本地存储沙盒与 File System Access API，保护用户私有曲库免受任何第三方泄露。"
+    title: "全平台多端原生支持",
+    description: "响应式 Web 网页端随时开箱即用；Tauri 2 桌面端极小体积占用，深度集成 Windows SMTC 系统快捷键；Capacitor 7 移动端集成原生 Android MediaSession 后台播放服务与锁屏控制。"
   }
 ];
-
-function ProductRoomPreview() {
-  const queue = [
-    { title: "Night Drive (Synthwave)", owner: "Host local FLAC", active: true },
-    { title: "City Lights & Neon Rain", owner: "Alice · 网易云", active: false },
-    { title: "Midnight Horizon", owner: "Ben · QQ 音乐", active: false }
-  ];
-  const members = [
-    { name: "HOST", color: "bg-accent/20 text-accent border-accent/30" },
-    { name: "AL", color: "bg-emerald-400/20 text-emerald-300 border-emerald-400/30" },
-    { name: "BE", color: "bg-amber-400/20 text-amber-300 border-amber-400/30" }
-  ];
-
-  return (
-    <div className="relative mx-auto w-full max-w-5xl animate-in fade-in zoom-in-95 duration-500 select-none">
-      {/* Main Console Box */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#07090e]/95 shadow-lg">
-        {/* Window Title Bar */}
-        <div className="flex h-12 items-center justify-between border-b border-white/[0.06] px-5 bg-white/[0.02]">
-          <div className="flex gap-2">
-            <span className="h-3 w-3 rounded-full bg-[#fa233b]/70 border border-[#fa233b]/40" />
-            <span className="h-3 w-3 rounded-full bg-[#f59e0b]/70 border border-[#f59e0b]/40" />
-            <span className="h-3 w-3 rounded-full bg-[#10b981]/70 border border-[#10b981]/40" />
-          </div>
-          <div className="rounded-full border border-white/[0.06] bg-white/[0.04] px-5 py-1 font-mono text-[11px] text-white/50 shadow-inner flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>music-room / live_stage_27A4</span>
-          </div>
-          <div className="w-12 text-right">
-            <span className="text-[10px] font-mono text-white/30 uppercase">v2.0</span>
-          </div>
-        </div>
-
-        {/* 3-Column Studio Body */}
-        <div className="grid min-h-[440px] gap-5 p-5 md:grid-cols-[250px_1fr_240px]">
-          {/* Left: Shared Queue */}
-          <aside className="hidden rounded-2xl border border-white/[0.06] bg-[#10121a]/80 p-4 md:flex flex-col justify-between">
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-white/50">
-                  Shared Queue
-                </p>
-                <span className="rounded-full bg-emerald-400/15 border border-emerald-400/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                  LIVE 3 首
-                </span>
-              </div>
-              <div className="space-y-2">
-                {queue.map((track, index) => (
-                  <div
-                    key={track.title}
-                    className={`rounded-xl border p-3 transition-all ${
-                      track.active
-                        ? "border-accent/40 bg-accent/[0.08] shadow-xs"
-                        : "border-transparent bg-white/[0.03] hover:bg-white/[0.05]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg font-mono text-xs ${
-                          track.active ? "bg-accent text-white font-bold" : "bg-white/[0.06] text-white/40"
-                        }`}
-                      >
-                        {track.active ? (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        ) : (
-                          index + 1
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-white">{track.title}</p>
-                        <p className="truncate text-[10px] text-foreground-muted mt-0.5">{track.owner}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="pt-3 border-t border-white/[0.06] text-[11px] text-foreground-muted flex items-center justify-between">
-              <span>全员队列同步</span>
-              <span className="text-emerald-400 font-mono">0ms 偏差</span>
-            </div>
-          </aside>
-
-          {/* Center: Stage Record */}
-          <section className="relative flex min-h-[350px] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#131622]/90 to-[#0b0d14]/95 p-6 shadow-inner">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent font-bold">
-                  NOW PLAYING
-                </p>
-                <h2 className="mt-1 text-2xl font-extrabold text-white md:text-3xl tracking-tight">Night Drive</h2>
-                <p className="text-xs text-foreground-muted">Synthwave Collective · Cyber Odyssey</p>
-              </div>
-              <div className="flex -space-x-2">
-                {members.map((member) => (
-                  <span
-                    key={member.name}
-                    className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-[10px] font-bold ${member.color}`}
-                  >
-                    {member.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Rotating Vinyl Record Mockup */}
-            <div className="group relative self-center my-4 flex items-center justify-center">
-              <div className="relative flex h-[12rem] w-[12rem] items-center justify-center overflow-hidden rounded-full border border-white/10 bg-gradient-to-tr from-[#050505] via-[#121212] to-[#1c1c1c] shadow-xl animate-spin-slow sm:h-[14rem] sm:w-[14rem]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.12),transparent_40%)]" />
-                <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(255,255,255,0.06)_0deg,rgba(0,0,0,0)_90deg,rgba(255,255,255,0.06)_180deg,rgba(0,0,0,0)_270deg,rgba(255,255,255,0.06)_360deg)]" />
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="absolute rounded-full border border-white/[0.03]"
-                    style={{ width: `${100 - index * 14}%`, height: `${100 - index * 14}%` }}
-                  />
-                ))}
-                <div className="relative z-10 flex h-[4rem] w-[4rem] items-center justify-center rounded-full border border-white/15 bg-[#18181b] shadow-inner">
-                  <div className="h-[1.2rem] w-[1.2rem] rounded-full border border-white/10 bg-black shadow-inner" />
-                </div>
-              </div>
-
-              {/* Tonearm */}
-              <div
-                className="absolute right-[-1.8rem] top-[0.5rem] flex h-[8.5rem] w-[1.75rem] origin-[14px_14px] rotate-[22deg] flex-col items-center sm:right-[-2.4rem] sm:h-[9.5rem] sm:w-[1.8rem]"
-                style={{ zIndex: 30 }}
-              >
-                <div className="absolute top-0 z-10 flex h-[1.8rem] w-[1.8rem] items-center justify-center rounded-full border-2 border-[#181818] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-md">
-                  <div className="h-[0.8rem] w-[0.8rem] rounded-full bg-[#111] shadow-inner" />
-                </div>
-                <div className="h-full w-[0.6rem] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[1.8rem] shadow-sm" />
-                <div className="relative ml-[-0.8rem] h-[2.3rem] w-[1.3rem] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#1a1a1a] shadow-md">
-                  <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500" />
-                </div>
-              </div>
-            </div>
-
-            {/* Progress & Controls */}
-            <div>
-              <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] text-white/50">
-                <span>01:46</span>
-                <span className="text-accent font-semibold">● 实时同步中</span>
-                <span>04:12</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full w-[43%] rounded-full bg-gradient-to-r from-accent to-sky-400" />
-              </div>
-              <div className="mt-4 flex items-center justify-center gap-6 text-white/50">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 20L9 12l10-8v16zM5 19V5" />
-                </svg>
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                  </svg>
-                </span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 4l10 8-10 8V4zM19 5v14" />
-                </svg>
-              </div>
-            </div>
-          </section>
-
-          {/* Right: Telemetry Chips */}
-          <aside className="grid gap-3 sm:grid-cols-3 md:grid-cols-1">
-            {[
-              { label: "Source Host", value: "@主理人", tone: "text-accent" },
-              { label: "P2P 传输状态", value: "WebRTC 极速就绪", tone: "text-emerald-400" },
-              { label: "音频编码", value: "RTP Opus 48kHz", tone: "text-sky-400" }
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-white/[0.06] bg-[#10121a]/80 p-4">
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
-                  {item.label}
-                </p>
-                <p className={`mt-2 text-base font-bold ${item.tone}`}>{item.value}</p>
-              </div>
-            ))}
-            <div className="hidden rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 md:block">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
-                本地音频保护
-              </p>
-              <p className="mt-2 truncate text-xs font-semibold text-white">night_drive.flac</p>
-              <p className="mt-1 text-[11px] text-foreground-muted">音频源文件全程留在本机，零泄露</p>
-            </div>
-          </aside>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function ProductLandingPage() {
   const appHref = buildAppEntryHref();
 
   return (
-    <main className="relative min-h-[calc(100*var(--app-dvh))] overflow-hidden bg-[#06070a] font-sans selection:bg-accent/30 selection:text-white">
+    <main className="relative min-h-[calc(100*var(--app-dvh))] bg-[#090a0f] text-foreground font-sans selection:bg-accent/30 selection:text-white">
+      {/* Navigation TopBar */}
       <TopBar activeSession={null} variant="marketing" />
 
-      {/* Cosmic Background Grid */}
-      <div className="fixed inset-0 -z-10 bg-[#06070a]">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_70%_55%_at_50%_0%,#000_60%,transparent_100%)]" />
+      {/* Subtle Background Grid */}
+      <div aria-hidden="true" className="fixed inset-0 -z-10 pointer-events-none bg-[#090a0f]">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
       </div>
 
       {/* Hero Section */}
-      <section id="project" className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-5 pb-20 pt-16 text-center sm:px-6 md:pb-28 md:pt-24">
-        <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface/50 px-4 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-foreground-muted backdrop-blur-md">
-          <span>Spatial Co-listening Room</span>
-        </p>
-        <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white via-white/95 to-white/60 sm:text-6xl md:text-8xl">
-          Music Room
+      <section className="mx-auto flex w-full max-w-5xl flex-col items-center px-4 pt-16 pb-20 text-center sm:px-6 sm:pt-24 sm:pb-24">
+        {/* Eyebrow badge */}
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1 text-xs font-medium text-white/80">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <span>开源 · 本地优先 · WebRTC 低延迟同步</span>
+        </div>
+
+        {/* Headline */}
+        <h1 className="max-w-4xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl leading-[1.12]">
+          与好友实时同步收听音乐
+          <span className="block text-white/60 font-semibold mt-2 text-2xl sm:text-4xl md:text-5xl">
+            音频资产全程留在本地
+          </span>
         </h1>
-        <p className="mt-7 max-w-3xl text-base leading-8 text-white/60 md:text-xl font-normal">
-          与好友实时同步收听本地高保真音乐。通过房间状态同步和 WebRTC RTP Opus 媒体链路，获得浏览器优先的协作听歌体验。
+
+        {/* Subtitle */}
+        <p className="mt-6 max-w-2xl text-sm sm:text-base leading-relaxed text-white/65">
+          Music Room 是一款开源的多端协作听歌平台。采用 WebRTC RTP Opus 媒体流传输与房间状态机对齐，实现毫秒级同频收听。无需将私有音频文件上传至云端服务器，保护个人曲库隐私。
         </p>
-        <div className="mt-9 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
+
+        {/* Action CTAs */}
+        <div className="mt-8 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
           <Link href={appHref as Route}>
-            <Button size="lg" className="h-13 w-full rounded-2xl px-8 text-base font-semibold bg-accent hover:bg-accent-hover text-white shadow-xs transition-all sm:w-auto active:scale-95">
-              立即开始免费使用
+            <Button
+              size="lg"
+              className="w-full sm:w-auto h-11 px-6 rounded-xl text-sm font-semibold bg-accent hover:bg-accent-hover text-white shadow-xs"
+            >
+              进入房间大厅
             </Button>
           </Link>
 
-          <Link href="#features">
+          <Link href={githubRepositoryUrl} target="_blank" rel="noreferrer">
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full sm:w-auto h-11 px-6 rounded-xl text-sm font-medium border-white/15 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-2">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+              </svg>
+              GitHub 源码
+            </Button>
+          </Link>
+
+          <Link href="#architecture">
             <Button
               size="lg"
               variant="ghost"
-              className="h-13 w-full rounded-2xl border border-white/[0.08] bg-white/[0.04] px-8 text-base font-medium text-white/80 hover:bg-white/[0.08] hover:text-white sm:w-auto"
+              className="w-full sm:w-auto h-11 px-5 rounded-xl text-sm font-medium text-white/70 hover:text-white hover:bg-white/[0.05]"
             >
-              了解核心特性
+              技术架构
             </Button>
           </Link>
         </div>
-
-        {/* Hero Interactive Preview */}
-        <div className="mt-14 w-full md:mt-18">
-          <ProductRoomPreview />
-        </div>
       </section>
 
-      {/* 4 Hardcore Metrics Grid */}
-      <section className="mx-auto grid w-full max-w-[1120px] grid-cols-2 gap-3 px-5 sm:px-6 md:grid-cols-4">
-        {projectStats.map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-2xl border border-white/[0.08] bg-[#10121a]/80 p-5 text-center shadow-xs hover:border-white/20 transition-colors"
-          >
-            <p className={`text-2xl font-black ${stat.tone} md:text-3xl tracking-tight`}>{stat.value}</p>
-            <p className="mt-2 text-xs font-bold text-white">{stat.label}</p>
-            <p className="mt-1 text-[11px] text-foreground-muted">{stat.note}</p>
-          </div>
-        ))}
-      </section>
-
-      {/* Core Capabilities */}
-      <section id="features" className="mx-auto w-full max-w-[1120px] px-5 py-24 sm:px-6 md:py-32">
-        <div className="mb-14 max-w-2xl">
-          <p className="font-mono text-xs font-bold uppercase tracking-[0.24em] text-accent">
-            Core Capabilities
+      {/* Real Architecture & Data Pipeline Section */}
+      <section id="architecture" className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
+        <div className="mb-8 text-center sm:text-left">
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+            Architecture & Pipeline
           </p>
-          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-white md:text-5xl">
-            把本地音乐变成一个可协作的实时房间
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            端到端声学架构：本地优先，零云端音频留存
           </h2>
+          <p className="mt-2 text-sm text-white/60 max-w-3xl leading-relaxed">
+            曲目拥有者作为单一音频广播源，直接向房间成员推流。服务端只负责权威信令协同与播放快照，不中继、不截留任何私有音频文件。
+          </p>
         </div>
 
-        <div className="grid gap-6">
-          {capabilities.map((section) => (
-            <article
-              key={section.title}
-              className="rounded-2xl border border-white/[0.08] bg-[#10121a]/80 p-6 sm:p-8 shadow-xs grid gap-6 md:grid-cols-[0.5fr_1fr]"
+        {/* Architecture Flow Timeline Grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {architectureStages.map((stage) => (
+            <div
+              key={stage.step}
+              className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-xs transition-colors hover:border-white/15"
             >
               <div>
-                <span className="inline-block font-mono text-2xl font-black text-accent mb-2">
-                  {section.index}
-                </span>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/40">
-                  {section.eyebrow}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="font-mono text-xs font-bold text-accent px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20">
+                    STAGE {stage.step}
+                  </span>
+                  <span className="text-[11px] font-mono text-white/40">{stage.role}</span>
+                </div>
+                <h3 className="text-base font-semibold text-white tracking-tight">
+                  {stage.label}
+                </h3>
+                <p className="mt-2.5 text-xs text-white/60 leading-relaxed">
+                  {stage.description}
                 </p>
               </div>
+              <div className="mt-4 pt-3 border-t border-white/[0.06] flex flex-wrap gap-1.5">
+                {stage.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-block rounded-md bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/50"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Audio Flow Diagram Callout */}
+        <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-xs font-mono text-white/70 overflow-x-auto hide-scrollbar">
+          <p className="text-[11px] font-bold text-white/50 uppercase tracking-wider mb-2 font-sans">
+            权威音频传输链路（Single-Source Broadcast Path）
+          </p>
+          <div className="flex items-center gap-2 whitespace-nowrap text-white/80">
+            <span className="text-accent font-semibold">IndexedDB 本地分段 Opus</span>
+            <span className="text-white/30">→</span>
+            <span>SegmentedOpusEngine</span>
+            <span className="text-white/30">→</span>
+            <span>共享 AudioContext 总线</span>
+            <span className="text-white/30">→</span>
+            <span className="text-emerald-400 font-semibold">WebRTC RTP Opus 广播</span>
+            <span className="text-white/30">→</span>
+            <span>听众单一 audio.srcObject 极速输出</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Room Modes Section */}
+      <section id="room-modes" className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6">
+        <div className="mb-8 text-center sm:text-left">
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+            Room Modes
+          </p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            为真实音乐社交场景定制的房间形态
+          </h2>
+          <p className="mt-2 text-sm text-white/60 max-w-2xl leading-relaxed">
+            不同的听歌场景需要截然不同的权限与交互逻辑。Music Room 提供了三种经过严谨打磨的房间类型。
+          </p>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-3">
+          {roomModes.map((mode) => (
+            <article
+              key={mode.type}
+              className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 shadow-xs hover:border-white/15 transition-colors"
+            >
               <div>
-                <h3 className="text-2xl font-bold leading-tight text-white md:text-3xl tracking-tight">
-                  {section.title}
-                </h3>
-                <p className="mt-4 max-w-3xl text-sm sm:text-base leading-relaxed text-white/60">
-                  {section.body}
-                </p>
-                <div className="mt-6 flex flex-wrap gap-2.5">
-                  {section.points.map((point) => (
-                    <span
-                      key={point}
-                      className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-xs font-medium text-white/80"
-                    >
-                      {point}
-                    </span>
-                  ))}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${mode.badgeTone}`}>
+                    {mode.badge}
+                  </span>
+                  <span className="text-[11px] font-mono text-white/40">{mode.subtitle}</span>
                 </div>
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  {mode.title}
+                </h3>
+                <p className="mt-3 text-xs text-white/65 leading-relaxed">
+                  {mode.description}
+                </p>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-white/[0.06] space-y-2">
+                {mode.highlights.map((item) => (
+                  <div key={item} className="flex items-start gap-2 text-xs text-white/70">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+                    <span>{item}</span>
+                  </div>
+                ))}
               </div>
             </article>
           ))}
         </div>
       </section>
 
-      {/* Architecture Matrix */}
-      <section id="architecture" className="mx-auto w-full max-w-[1120px] px-5 pb-24 sm:px-6 md:pb-32">
-        <div className="grid gap-10 md:grid-cols-[0.85fr_1.15fr] md:items-start">
-          <div className="md:sticky md:top-24">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.24em] text-accent">
-              Architecture
-            </p>
-            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-white md:text-5xl">
-              专为性能与隐私设计的底层架构
-            </h2>
-            <p className="mt-5 text-sm sm:text-base leading-relaxed text-white/60">
-              Music Room 让音频文件留在用户浏览器，通过房间状态同步和 WebRTC RTP Opus 媒体链路，提供稳定、安全、纯粹的协作收听体验。
-            </p>
+      {/* Core Ecosystem & Capabilities */}
+      <section id="features" className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
+        <div className="mb-8 text-center sm:text-left">
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+            Ecosystem & Capabilities
+          </p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            完整的现代数字音乐体验
+          </h2>
+          <p className="mt-2 text-sm text-white/60 max-w-2xl leading-relaxed">
+            不仅是多人同步，从逐字歌词、多源曲库融合到跨平台原生媒体控制，每一个细节都精细调校。
+          </p>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-3">
+          {ecosystemCards.map((card) => {
+            const IconComponent = card.icon;
+            return (
+              <div
+                key={card.title}
+                className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 shadow-xs hover:border-white/15 transition-colors"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.08] text-accent mb-4">
+                  <IconComponent className="h-4.5 w-4.5" />
+                </div>
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  {card.title}
+                </h3>
+                <p className="mt-2.5 text-xs sm:text-sm text-white/60 leading-relaxed">
+                  {card.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Quick Start & Self-Hosting Guide */}
+      <section id="self-host" className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6">
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 sm:p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-xl">
+              <span className="font-mono text-xs font-semibold text-accent uppercase tracking-wider">
+                Open Source & Self-Hosting
+              </span>
+              <h3 className="mt-2 text-xl sm:text-2xl font-bold text-white tracking-tight">
+                完全开源，支持自主搭建与私有部署
+              </h3>
+              <p className="mt-2 text-xs sm:text-sm text-white/60 leading-relaxed">
+                代码仓库采用标准 pnpm monorepo 组织，服务端基于 NestJS + PostgreSQL + Redis，搭配标准 coturn WebRTC 中继即可轻松完成私有化部署。
+              </p>
+            </div>
+
+            <div className="flex shrink-0 gap-3">
+              <Link href={appHref as Route}>
+                <Button className="h-10 px-5 rounded-xl text-xs font-semibold bg-accent hover:bg-accent-hover text-white shadow-xs">
+                  直接体验
+                </Button>
+              </Link>
+              <Link href={githubRepositoryUrl} target="_blank" rel="noreferrer">
+                <Button variant="outline" className="h-10 px-5 rounded-xl text-xs font-medium border-white/15 bg-white/[0.03] text-white hover:bg-white/[0.08]">
+                  查看 README 部署文档
+                </Button>
+              </Link>
+            </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {architectureItems.map((item) => {
-              const IconComp = item.icon;
-              return (
-                <div
-                  key={item.title}
-                  className="rounded-xl border border-white/[0.08] bg-[#10121a]/80 p-5 shadow-xs hover:border-white/20 transition-colors"
-                >
-                  <div className="h-9 w-9 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center text-accent mb-3.5">
-                    <IconComp className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-base font-bold text-white tracking-tight">{item.title}</h3>
-                  <p className="mt-2 text-xs sm:text-sm leading-relaxed text-white/50">{item.body}</p>
-                </div>
-              );
-            })}
+          <div className="mt-6 rounded-xl border border-white/[0.08] bg-black/40 p-4 font-mono text-xs text-white/80 overflow-x-auto hide-scrollbar">
+            <div className="text-white/40 select-none mb-1"># 快速本地启动 Monorepo 全栈工作区</div>
+            <div className="text-emerald-400">git clone https://github.com/witw123/music_room.git</div>
+            <div>cd music_room && pnpm install</div>
+            <div className="text-accent">pnpm dev</div>
           </div>
         </div>
       </section>
 
-      {/* Minimalist Footer */}
-      <footer className="border-t border-white/[0.06] bg-[#06070a] py-12 sm:py-16">
-        <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center justify-between gap-6 px-5 sm:flex-row sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent shadow-xs">
-              <MusicIcon className="w-4 h-4 text-white" />
+      {/* Footer */}
+      <footer className="border-t border-white/[0.08] bg-[#07080c] py-10">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-xs">
+              <MusicIcon className="w-3.5 h-3.5" />
             </div>
-            <span className="font-bold tracking-tight text-white text-base">Music Room</span>
+            <span className="font-bold text-sm text-white tracking-tight">Music Room</span>
+            <span className="text-xs text-white/40">· 开源多人协作同步听歌平台</span>
           </div>
 
           <p className="text-xs text-white/40">
-            &copy; {new Date().getFullYear()} Music Room. Open Source on GitHub.
+            &copy; {new Date().getFullYear()} Music Room Contributors. Open source under MIT License.
           </p>
 
-          <div className="flex items-center gap-6 text-xs font-medium text-white/50">
-            <Link href={githubRepositoryUrl} target="_blank" rel="noreferrer" className="transition-colors hover:text-white">
-              GitHub
+          <div className="flex items-center gap-5 text-xs text-white/60">
+            <Link
+              href={githubRepositoryUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-white transition-colors"
+            >
+              GitHub 仓库
             </Link>
-            <Link href="#" className="transition-colors hover:text-white">
-              Privacy
-            </Link>
-            <Link href="#" className="transition-colors hover:text-white">
-              Terms
+            <Link
+              href={`${githubRepositoryUrl}#documentation`}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-white transition-colors"
+            >
+              架构文档
             </Link>
           </div>
         </div>
