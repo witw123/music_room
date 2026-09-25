@@ -42,7 +42,7 @@ export default function NotFoundPage() {
           页面不存在，返回首页继续创建或加入房间。
         </p>
         <a
-          href="/"
+          href="/app"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -58,7 +58,7 @@ export default function NotFoundPage() {
             transition: "transform 220ms ease, box-shadow 220ms ease"
           }}
         >
-          返回首页
+          返回大厅
         </a>
       </div>
     </main>

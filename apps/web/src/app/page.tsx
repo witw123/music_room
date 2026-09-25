@@ -1,5 +1,6 @@
-import { ProductLandingPage } from "@/components/landing";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <ProductLandingPage />;
+  redirect("/app");
 }
+

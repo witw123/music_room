@@ -17,7 +17,16 @@ const nextConfig: NextConfig = {
     ]
   },
   typedRoutes: true,
-  transpilePackages: ["@music-room/shared"]
+  transpilePackages: ["@music-room/shared"],
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/app",
+        permanent: false
+      }
+    ];
+  }
 };
 
 export default nextConfig;
