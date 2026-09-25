@@ -25,18 +25,19 @@ Users enter a room from the lobby with a room code or public listing. Hosts crea
 ## Capabilities and Constraints
 
 - Interactive rooms are collaborative workspaces with shared library, queue, and playback controls.
-- Request rooms let members submit provider tracks while the host imports and accepts them into the queue.
-- Radio rooms are host-curated listening spaces; listeners cannot control the broadcast.
+- Request rooms let members submit provider tracks (NetEase, QQ Music, Bilibili) while the host reviews and accepts them into the queue.
+- Radio rooms are host-curated listening spaces with automated radio autoplay options; listeners cannot control the broadcast.
 - Room type is chosen at creation and cannot be changed later.
-- The first radio release does not provide recommendation-driven auto-fill.
+- Audio assets remain client-local; the room streams live WebRTC RTP Opus audio rather than downloading files to listener devices.
 
 ## Brand Commitments
 
-Music Room remains a dark, precise, low-light listening workspace with electric blue as its primary signal color.
+Music Room remains a dark, precise, low-light listening workspace with electric blue as its primary signal color, strictly adhering to restrained, conventional, and anti-AI-slop design principles.
 
 ## Product Principles
 
 - Playback state is always legible before secondary controls.
 - Room format changes the workflow, not just the label.
 - Hosts retain authority where a listening format depends on curation.
+- UI elements remain restrained and information-dense; no decorative neon glows or marketing noise.
 - Collaboration controls appear only where participants can use them.

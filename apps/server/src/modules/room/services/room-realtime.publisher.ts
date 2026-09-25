@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { PlaybackSnapshot, Playlist, RoomTrackDeletedPayload } from "@music-room/shared";
+import type { PlaybackSnapshot, Playlist, RoomTrackAssetReadyPayload, RoomTrackAssetUnavailablePayload, RoomTrackDeletedPayload } from "@music-room/shared";
 import { RoomService } from "../room.service";
 import { RoomRealtimeBroadcaster } from "../../realtime/room-realtime.broadcaster";
 
@@ -71,6 +71,14 @@ export class RoomRealtimePublisher {
 
   emitTrackDeleted(roomId: string, payload: Omit<RoomTrackDeletedPayload, "roomId">) {
     this.roomRealtimeBroadcaster.emitTrackDeleted(roomId, payload);
+  }
+
+  emitTrackAssetReady(roomId: string, payload: Omit<RoomTrackAssetReadyPayload, "roomId">) {
+    this.roomRealtimeBroadcaster.emitTrackAssetReady(roomId, payload);
+  }
+
+  emitTrackAssetUnavailable(roomId: string, payload: Omit<RoomTrackAssetUnavailablePayload, "roomId">) {
+    this.roomRealtimeBroadcaster.emitTrackAssetUnavailable(roomId, payload);
   }
 
   emitMemberRemoved(roomId: string, memberId: string) {

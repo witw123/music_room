@@ -1,83 +1,61 @@
 # Music Room Design System
 
-Last updated: `2026-08-12`
+Last updated: `2026-09-24`
 
 ## Purpose
 
-This document defines how Music Room should look and feel across the marketing site and the web workspace.
+This document defines how Music Room looks and feels across the marketing landing page, responsive web workspace, desktop app, and mobile interfaces.
 
-Music Room is not a generic streaming product. It is a real-time collaborative listening workspace for local music. The UI should feel like a hybrid of:
+Music Room is not a generic streaming product. It is a real-time collaborative listening workspace for local and multi-source music. The UI feels like a hybrid of:
 
-- a focused music stage
+- a focused, low-distraction audio stage
 - a precise collaboration console
-- a low-light technical dashboard
+- a high-contrast, technical audio dashboard
 
-The product should feel calm, exact, and immersive. Avoid playful consumer music-app tropes.
+The product feels calm, exact, and immersive. Avoid playful consumer tropes and AI-generated decorative visual clutter.
 
-## Brand Core
+## Core Design Mandate (Anti-AI-Slop & Restraint)
 
-### Product Keywords
+The UI must follow strict principles of restraint, clarity, and convention:
 
-- synchronized
-- collaborative
-- immersive
-- precise
-- low-latency
-- local-first
-- technical but not cold
-
-### Emotional Direction
-
-- The room should feel dark and spatial, like a shared late-night listening booth.
-- Controls should feel reliable and deliberate, not noisy or decorative.
-- Technical status should feel legible and trustworthy, not intimidating.
-- Playback should remain the visual center of gravity.
-
-## Visual Identity
-
-### Overall Look
-
-- Base theme is near-black, not gray-heavy.
-- Surfaces are translucent or softly elevated, with thin white borders and restrained blur.
-- Accent color is a sharp electric blue used as signal, not as a wash.
-- Bright color appears mainly in playback progress, active states, join code indicators, and system emphasis.
-- The interface should feel clean and premium, with a subtle cyber-acoustic mood.
-
-### Things This UI Is Not
-
-- Not skeuomorphic hi-fi hardware.
-- Not neon hacker RGB overload.
-- Not a cheerful social app.
-- Not a playlist-first streaming catalog.
-- Not a dense enterprise admin dashboard.
+1. **Restrained, Conventional, and Minimalist by Default**:
+   - Element sizing and spacing are derived from interface type, information density, platform conventions, and visual hierarchy. Never arbitrarily enlarge components.
+   - Secondary actions, settings, toggles, and tool buttons must never fight for visual focus with primary playback controls.
+2. **Universal Icon Metaphors**:
+   - Core functions must use universally recognizable icons from established icon sets or platform standards (Lucide, system iconography). Never invent idiosyncratic glyphs just for false differentiation.
+3. **Hierarchy via Structure over Noise**:
+   - Express hierarchy through positioning, logical grouping, subtle contrast, hover interactions, tooltips, dividers, and discrete state feedback.
+   - **Strictly eliminate**: exaggerated dimensions, heavy saturated color blocks, neon aura glows (`--accent-glow`), decorative radial gradient blobs (`blur-2xl/3xl`), artificial sparkles/starbursts, thick borders, heavy drop-shadows, and marketing-template layouts.
+4. **Opaque & Contrast-First Overlays**:
+   - Menus, dropdowns, dialogs, and popovers must use 100% solid, opaque surfaces (`bg-background-secondary border-surface-border`) to prevent text from blending into dynamic stage backgrounds or visualizers.
+5. **Self-Auditing for Density**:
+   - After implementing UI elements, compare them against adjacent screen elements. If anything feels loud, heavy, oversized, or dilutes information density, actively scale it down.
 
 ## Color Tokens
 
-Use these as the default palette.
+Default palette tokens:
 
 | Token | Value | Usage |
 | --- | --- | --- |
 | `--background` | `#09090b` | global app background |
-| `--background-secondary` | `#121215` | bottom player, stronger containers |
+| `--background-secondary` | `#121215` | bottom player, opaque menus, dialog containers |
 | `--foreground` | `#fafafa` | primary text |
 | `--foreground-muted` | `#a1a1aa` | secondary text |
-| `--surface` | `rgba(255,255,255,0.03)` | glass cards, overlays |
+| `--surface` | `rgba(255,255,255,0.03)` | subtle elevated cards, list items |
 | `--surface-hover` | `rgba(255,255,255,0.08)` | hover surfaces |
-| `--surface-border` | `rgba(255,255,255,0.10)` | default borders |
-| `--accent` | `#0070f3` | active controls, progress, key emphasis |
+| `--surface-border` | `rgba(255,255,255,0.10)` | default crisp borders |
+| `--accent` | `#0070f3` | active controls, playback progress, key signal |
 | `--accent-hover` | `#3291ff` | hover state for accent actions |
-| `--accent-glow` | `rgba(0,112,243,0.5)` | glows, aura, focus signal |
 | `--success` | `#4ade80` | connected/live states |
 | `--warning` | `#facc15` | degraded link states |
 | `--danger` | `#f87171` | destructive actions |
 
 ### Color Rules
 
-- Keep the canvas predominantly black.
-- Use blue as a signal line, pulse, glow, or active edge.
-- Prefer opacity and blur over solid gray blocks.
-- Use green and yellow sparingly for diagnostics only.
-- Avoid large purple gradients and rainbow visual noise.
+- Keep the canvas deep black (`#09090b`).
+- Use blue as a functional signal line, active edge, or playback indicator—never as a broad neon glow or background wash.
+- Completely avoid decorative neon glows (`--accent-glow`), rainbow gradients, and saturated color washouts.
+- Use green and yellow strictly for live diagnostics, link status, and state telemetry.
 
 ## Typography
 
@@ -127,10 +105,10 @@ The stage should dominate attention first. The workspace should feel structured 
 
 ### Top Bar
 
-- Thin, understated, sticky, translucent black
-- Small logo mark with accent glow
-- Minimal action count
-- Should never compete with playback content
+- Thin, understated, sticky, dark solid surface
+- Clean, crisp logo mark without decorative glow
+- Minimal action count; secondary controls must never fight with playback
+- Announcement notification: minimal bell icon by default; unread items trigger a single-item marquee entering strictly from the container's rightmost edge (`100cqw`) across to the left
 
 ### Room Join Code
 
@@ -140,61 +118,63 @@ The stage should dominate attention first. The workspace should feel structured 
 
 ### Vinyl / Playback Hero
 
-- Central circular visual with aura and restrained motion
-- Motion should imply active playback, not become a novelty animation
-- Use concentric rings, soft conic highlight, and accent glow
-- The center object should feel tactile but abstract
+- Central circular visual with realistic vinyl surface texture and mechanical tonearm
+- Motion indicates active playback state (smooth rotational spin when playing, tonearm parked when stopped)
+- Background scenery uses clean geometric soundwave vectors or concentric radio broadcast arcs—strictly without neon edge glows, blur auras, or floating particle sprites
+
+### Menus, Dialogs & Overlays
+
+- All action menus (e.g. room edit menu), dialog modals, and dropdowns use 100% solid, opaque surfaces (`bg-background-secondary border-surface-border`)
+- Never use semi-transparent backdrops for interactive menus, ensuring high text contrast and zero bleed-through from underlying canvases
 
 ### Bottom Player
 
 - Fixed global control rail
 - Dense, stable, always available
 - Progress line is a strong accent signal
-- Mobile and desktop should share the same visual logic, not diverge into separate styles
+- Mobile and desktop share identical control semantics and visual logic
 
 ### Tabs and Panels
 
-- Tabs should look like segmented controls, not browser tabs
-- Active tab uses subtle fill and strong text contrast
-- Panels use soft borders and glass-like surfaces
-- Lists should be easy to scan in low light
+- Tabs look like segmented controls, not browser tabs
+- Active tab uses subtle fill and crisp contrast
+- Panels use clean borders and opaque/semi-opaque neutral surfaces
+- Lists must remain fast and comfortable to scan in low-light environments
 
 ### Queue Items
 
-- Active item receives accent tint and clearer contrast
+- Active item receives subtle accent tint and crisp foreground contrast
 - Metadata remains compact
-- Controls should appear deliberate and lightweight
-- Reordering should feel tool-like, not playful
+- Controls appear deliberate and lightweight; reordering feels tool-like
 
 ### Diagnostics
 
 - Diagnostics are a first-class product surface
 - Present health, transport, and media state with calm hierarchy
-- Use color for severity, not decoration
-- Monospace is encouraged for states, timestamps, and event streams
+- Use color strictly for status/severity, never for decoration
+- Monospace instrumentation for states, timestamps, and packet metrics
 
 ### Empty States
 
-- Keep them quiet and directional
-- Focus on the next action: import audio, add to queue, join room, unlock audio
-- Avoid illustrations unless they support the same dark technical language
+- Keep them quiet, uncluttered, and directional
+- Focus on the immediate next action: import audio, add to queue, join room
+- Avoid marketing illustrations; prefer clean system iconography
 
 ## Motion
 
 ### General Motion Rules
 
-- Motion should support playback, transition, and system feedback.
+- Motion must serve playback, transition, and system feedback.
 - Animations must be smooth, brief, and deliberate.
-- Prefer fades, slides, glow shifts, and slow rotation.
-- Avoid bounce-heavy, gamified, or overly elastic motion.
+- Prefer linear progress transitions, crisp opacity fades, and container-query marquee scrolls.
+- Avoid bounce-heavy, gamified, overly elastic, or decorative pulsing motion.
 
 ### Approved Motion Patterns
 
-- slow vinyl rotation while playing
-- soft aura pulsing around active playback
-- fade-in for overlays and lazy-loaded panels
-- short slide-up for first-render surfaces
-- linear progress transitions for playback
+- Smooth vinyl rotation while playing (mechanical feedback)
+- Container-query single-item loop marquee for notifications (`@keyframes announcement-marquee-single`)
+- Subtle fade-in for overlays and lazy-loaded panels
+- Linear progress transitions for playback time scrubbers
 
 ## Responsive Behavior
 
@@ -272,21 +252,13 @@ The stage should dominate attention first. The workspace should feel structured 
 
 ## AI Implementation Notes
 
-When generating UI for Music Room:
+When generating or refactoring UI for Music Room:
 
-- start from a black canvas
-- use glass panels and thin borders
-- preserve the stage-versus-workspace composition
-- keep the playback surface visually central
-- use monospace for system detail and room identity
-- prefer electric blue as the single primary accent
-- keep diagnostic UI readable, compact, and technically credible
-- avoid adding unrelated product areas such as discovery feeds, charts, social reactions, or recommendation carousels
-
-If the requested screen is new, it should still feel like it belongs next to:
-
-- the dark landing page
-- the room stage with the vinyl hero
-- the bottom playback rail
-- the library/personal-playlist/members workspace
+- Default to restraint, convention, and high information density
+- Start from a solid black canvas (`#09090b`) with crisp, subtle borders
+- Secondary actions, settings, and toggles must not compete with the primary playback canvas
+- Never generate artificial AI decor: no neon glow aura filters, no 4-point sparkle badges, no radial blurred rainbow bubbles, no fake Mac buttons, and no novelty CSS physics toys
+- All interactive menus and modal overlays must be 100% opaque (`bg-background-secondary border-surface-border`)
+- Use universally standard icons from mature libraries (e.g. Lucide) with clear metaphorical semantics
+- Audit new components against existing UI: if an element feels loud, oversized, or dilutes information density, actively scale it down
 

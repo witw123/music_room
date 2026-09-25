@@ -9,7 +9,9 @@ import type {
   RoomQueuePatchPayload,
   RoomMemberRemovedPayload,
   RoomSnapshot,
-  RoomTrackDeletedPayload
+  RoomTrackDeletedPayload,
+  RoomTrackAssetReadyPayload,
+  RoomTrackAssetUnavailablePayload
 } from "@music-room/shared";
 import type { Server } from "socket.io";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -24,7 +26,9 @@ import {
   roomQueuePatchChannel,
   roomSnapshotChannel,
   roomSnapshotMissingChannel,
-  roomTrackDeletedChannel
+  roomTrackDeletedChannel,
+  roomTrackAssetReadyChannel,
+  roomTrackAssetUnavailableChannel
 } from "./room-realtime.channels";
 
 @Injectable()
@@ -158,6 +162,26 @@ export class RoomRealtimeBroadcaster {
     const message: RoomTrackDeletedPayload = { roomId, ...payload };
     this.server?.to(roomId).emit("room.track.deleted", message);
     this.publish(roomTrackDeletedChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitTrackAssetReady(roomId: string, payload: Omit<RoomTrackAssetReadyPayload, "roomId">) {
+    const message: RoomTrackAssetReadyPayload = { roomId, ...payload };
+    this.server?.to(roomId).emit("room.track.asset.ready", message);
+    this.publish(roomTrackAssetReadyChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitTrackAssetUnavailable(roomId: string, payload: Omit<RoomTrackAssetUnavailablePayload, "roomId">) {
+    const message: RoomTrackAssetUnavailablePayload = { roomId, ...payload };
+    this.server?.to(roomId).emit("room.track.asset.unavailable", message);
+    this.publish(roomTrackAssetUnavailableChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message

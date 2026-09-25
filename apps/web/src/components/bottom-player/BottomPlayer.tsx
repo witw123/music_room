@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
+import type { PlaybackSnapshot, ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
@@ -42,6 +42,7 @@ import {
 } from "@/features/playback/room-playback-clock";
 
 type BottomPlayerProps = {
+  roomId?: string | null;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null;
   playbackBarrier?: RoomPlaybackBarrierClock | null;
@@ -64,6 +65,8 @@ type BottomPlayerProps = {
   onCyclePlaybackMode: () => void | Promise<void>;
   queue: QueueItem[];
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
+  currentSessionId?: string | null;
   currentQueueItemId: string | null;
   nextQueueItemId: string | null;
   canReorderQueue: boolean;
@@ -102,6 +105,7 @@ function resolveBarrierProgressMs(
 }
 
 function BottomPlayerBase({
+  roomId,
   audioRef,
   playback,
   playbackBarrier,
@@ -124,6 +128,8 @@ function BottomPlayerBase({
   onCyclePlaybackMode,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canReorderQueue,
@@ -530,6 +536,7 @@ function BottomPlayerBase({
         data-custom-layout-player-content="true"
       >
       <MobileBottomPlayerLayout
+        roomId={roomId}
         isPlaying={isPlaying}
         canControlPlayback={playerControlsEnabled}
         canSeekPlayback={canSeekPlayback && playerControlsEnabled}
@@ -550,6 +557,8 @@ function BottomPlayerBase({
         onCyclePlaybackMode={onCyclePlaybackMode}
         queue={queue}
         tracks={tracks}
+        members={members}
+        currentSessionId={currentSessionId}
         currentQueueItemId={currentQueueItemId}
         nextQueueItemId={nextQueueItemId}
         canReorderQueue={canReorderQueue}
@@ -571,6 +580,7 @@ function BottomPlayerBase({
         mobileVariant={mobileVariant}
       />
       <DesktopBottomPlayerLayout
+        roomId={roomId}
         isPlaying={isPlaying}
         canControlPlayback={playerControlsEnabled}
         canSeekPlayback={canSeekPlayback && playerControlsEnabled}
@@ -591,6 +601,8 @@ function BottomPlayerBase({
         onCyclePlaybackMode={onCyclePlaybackMode}
         queue={queue}
         tracks={tracks}
+        members={members}
+        currentSessionId={currentSessionId}
         currentQueueItemId={currentQueueItemId}
         nextQueueItemId={nextQueueItemId}
         canReorderQueue={canReorderQueue}
@@ -643,6 +655,7 @@ function BottomPlayerBase({
       ) : null}
     </footer>
     <ImmersivePlayerOverlay
+      roomId={roomId}
       isOpen={isImmersiveOpen}
       isPlaying={isPlaying}
       playbackBarrierBlocked={isPlaybackBarrierBlocked}
@@ -664,6 +677,8 @@ function BottomPlayerBase({
       onCyclePlaybackMode={onCyclePlaybackMode}
       queue={queue}
       tracks={tracks}
+      members={members}
+      currentSessionId={currentSessionId}
       currentQueueItemId={currentQueueItemId}
       nextQueueItemId={nextQueueItemId}
       canReorderQueue={canReorderQueue}

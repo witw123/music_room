@@ -14,7 +14,7 @@ Documentation snapshot: `2026-09`
 
 The server owns accounts, rooms, permissions, queues, playback, realtime state, and track metadata. Audio files are not persisted by the server. Each client stores the files and generated playback assets for that user's own imports locally in IndexedDB (with optional local directory backup via the File System Access API where supported).
 
-The room does not download or exchange audio assets between members. A track owner publishes the already prepared segmented Opus playback asset over the room's WebRTC media connection; listeners receive one RTP Opus stream. NetEase and QQ Music imports are temporarily proxied by the server, then converted into the same client-local playback flow.
+The room does not download or exchange audio assets between members. A track owner publishes the already prepared segmented Opus playback asset over the room's WebRTC media connection; listeners receive one RTP Opus stream. NetEase, QQ Music, and Bilibili (video/audio tracks and parts) imports are temporarily proxied by the server, then converted into the same client-local playback flow.
 
 ## Current Status
 
@@ -30,15 +30,20 @@ The core product loop is stable and runnable across Web, desktop, and mobile pla
   - Request Room / Radio Mode: host controls playback; guests search tracks and submit song requests to the host inbox for approval
   - Live Interaction: real-time floating emoji reactions toolbar synchronized across room members
   - Multi-Device Playback Source Isolation: media sources are isolated by device session to prevent audio stalls when the same user logs in on multiple devices
+- **Design System & System Announcements**:
+  - Strict anti-AI-slop design principles: eliminated neon glows (`--accent-glow`), decorative starbursts, and radial blur bubbles; room stage features crisp geometric soundwaves and concentric radio broadcast arcs
+  - 100% opaque, high-contrast menus and modal surfaces (`bg-background-secondary border-surface-border`), preventing readability loss and text bleed-through over dynamic visualizers
+  - Engineering-grade homepage (`/`): transparent architectural walkthrough of the 4-stage acoustic stream topology, interactive room mode comparisons, and zero-bullshit local self-hosting instructions
+  - Top notification bar: minimalist bell icon by default; unread announcements loop smoothly from the container's rightmost edge (`100cqw`) one announcement per cycle with hover pause, opening into a structured announcement center
 - **Lyrics System**:
   - Standard LRC scrolling lyrics and NetEase YRC verbatim/word-by-word lyrics (via `lyric_new`)
-  - Bilingual translated lyrics and romanized pronunciation lyrics displayed in parallel
+  - Bilingual translated lyrics and romanized pronunciation lyrics displayed in parallel with separated line-level highlights
   - Mobile immersive fullscreen lyrics (tap outside to smoothly toggle album artwork) and desktop floating lyrics overlay
   - Unified multi-tier lyrics caching in IndexedDB
 - **Search & Discovery**:
   - Universal `SearchBar` component with robust mobile Chinese IME composition handling, resolving text overwrites and clobbering issues
   - Real-time search suggestions (autocomplete), hot search keywords, and local search history
-  - Cross-platform search across local library, NetEase Cloud Music, and QQ Music (songs, albums, playlists)
+  - Cross-platform search across local library, NetEase Cloud Music, QQ Music, and Bilibili (multi-part browsing and direct playback/import)
 - **Playback Architecture**:
   - SegmentedOpusEngine + shared AudioContext + WebRTC RTP broadcast (track owner is the single media source)
   - Seamless offline fallback for provider tracks when the track owner disconnects
@@ -96,7 +101,7 @@ Recommended reading order:
 - **Playback Control & Sync**: Shared playback queue, player permission control, WebRTC RTP broadcast, and provider offline fallback
 - **Lyrics Experience**: Synced LRC, NetEase YRC verbatim lyrics, bilingual translations, romanized lyrics, mobile immersive view, and desktop floating lyrics
 - **Audio Asset Management**: Local audio import, personal library recovery, playlist management, and local directory sync
-- **Online Provider Integration**: Optional NetEase and QQ Music account binding, search, playlists, albums, and local import
+- **Online Provider Integration**: Optional NetEase, QQ Music, and Bilibili account binding, search, playlists, albums, and local library import
 - **Personalization**: Favorite albums, listening-profile page (taste-tag radio, top tracks, now-playing), provider account binding, dedicated settings workspace, themes, away-room resume, and client update checker
 - **End-to-End Diagnostics**: Connection, signaling, ICE state, Web Audio scheduling, and RTP stream quality metrics
 - **Resilient Traversal**: Server-issued short-lived TURN credentials with static ICE configuration fallback

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
-import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
+import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
 import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { getNextPlaybackMode, type PlaybackMode } from "./playback-mode";
@@ -19,6 +19,7 @@ import {
 } from "@/features/settings/settings-store";
 
 type LayoutProps = {
+  roomId?: string | null;
   isPlaying: boolean;
   canControlPlayback: boolean;
   canSeekPlayback: boolean;
@@ -39,6 +40,8 @@ type LayoutProps = {
   onCyclePlaybackMode: () => void;
   queue: QueueItem[];
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
+  currentSessionId?: string | null;
   currentQueueItemId: string | null;
   nextQueueItemId: string | null;
   canReorderQueue: boolean;
@@ -348,6 +351,7 @@ function VolumeControl({
 }
 
 export function MobileBottomPlayerLayout({
+  roomId,
   isPlaying,
   canControlPlayback,
   playbackTrackId,
@@ -356,6 +360,8 @@ export function MobileBottomPlayerLayout({
   onTogglePlay,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canReorderQueue,
@@ -448,8 +454,11 @@ export function MobileBottomPlayerLayout({
           </button>
 
           <PlayerQueueDrawer
+            roomId={roomId}
             queue={queue}
             tracks={tracks}
+            members={members}
+            currentSessionId={currentSessionId}
             currentQueueItemId={currentQueueItemId}
             nextQueueItemId={nextQueueItemId}
             accentColor={artworkAccent}
@@ -780,6 +789,7 @@ export function QualityBadge({
 }
 
 export function DesktopBottomPlayerLayout({
+  roomId,
   isPlaying,
   canControlPlayback,
   canSeekPlayback,
@@ -799,6 +809,8 @@ export function DesktopBottomPlayerLayout({
   onCyclePlaybackMode,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canReorderQueue,
@@ -956,8 +968,11 @@ export function DesktopBottomPlayerLayout({
         </Button>
 
         <PlayerQueueDrawer
+          roomId={roomId}
           queue={queue}
           tracks={tracks}
+          members={members}
+          currentSessionId={currentSessionId}
           currentQueueItemId={currentQueueItemId}
           nextQueueItemId={nextQueueItemId}
           accentColor={artworkAccent}

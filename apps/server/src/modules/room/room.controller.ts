@@ -22,10 +22,13 @@ import {
   insertRadioAutopilotNextTrackRequestSchema,
   registerTrackRequestSchema,
   registerTracksRequestSchema,
+  prepareTrackAssetRequestSchema,
+  reportTrackAssetUnavailableRequestSchema,
   updateRoomMemberPermissionsRequestSchema,
   updateRadioAutopilotRequestSchema,
   updateRoomRequestSchema,
   type Playlist,
+  type PrepareTrackAssetRequest,
   type RegisterTrackRequest,
   type RegisterTracksRequest,
   type RoomJoinResponse,
@@ -485,7 +488,65 @@ export class RoomController {
     return tracks;
   }
 
-  private async validateTrackAssets(payload: RegisterTrackRequest) {
+  @Post(":roomId/tracks/:trackId/asset")
+  async prepareTrackAsset(
+    @Param("roomId") roomId: string,
+    @Param("trackId") trackId: string,
+    @Body() body: unknown,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:track-write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    const payload = parseRequestBody(prepareTrackAssetRequestSchema, body);
+    if (payload.trackId !== trackId) {
+      throw new BadRequestException("Track ID in path does not match request body.");
+    }
+    await this.validateTrackAssets(payload);
+    const result = await this.roomService.prepareTrackAsset(roomId, userId, payload);
+    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    this.roomRealtimePublisher.emitTrackAssetReady(roomId, {
+      trackId: result.track.id,
+      fileHash: result.track.fileHash,
+      assetId: result.track.playbackAsset!.assetId,
+      roomRevision: result.roomRevision
+    });
+    return result.track;
+  }
+
+  @Post(":roomId/tracks/:trackId/asset/unavailable")
+  async reportTrackAssetUnavailable(
+    @Param("roomId") roomId: string,
+    @Param("trackId") trackId: string,
+    @Body() body: unknown,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Ip() ipAddress?: string
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    await this.abuseProtection?.enforce("room:track-write", [
+      { name: "ip", value: ipAddress },
+      { name: "user", value: userId }
+    ], { limit: 120, windowMs: 10 * 60 * 1000 });
+    const payload = parseRequestBody(reportTrackAssetUnavailableRequestSchema, body);
+    if (payload.trackId !== trackId) {
+      throw new BadRequestException("Track ID in path does not match request body.");
+    }
+    const result = await this.roomService.reportTrackAssetUnavailable(roomId, userId, payload);
+    if (result.playbackChanged) {
+      this.roomRealtimePublisher.emitPlaybackPatch(roomId, result.playback, result.roomRevision);
+    }
+    this.roomRealtimePublisher.emitTrackAssetUnavailable(roomId, {
+      trackId: result.track.id,
+      reason: result.reason,
+      roomRevision: result.roomRevision
+    });
+    return { ok: true, trackId: result.track.id, reason: result.reason };
+  }
+
+  private async validateTrackAssets(payload: RegisterTrackRequest | PrepareTrackAssetRequest) {
     if (!payload.originalAsset || !payload.playbackAsset) {
       throw new BadRequestException("P2P v4 tracks require original and playback assets.");
     }

@@ -59,7 +59,7 @@ export function resolveRoomAudioPositionMs(
 
 export function resolveLocalAudioTrackKey(
   track: TrackMeta | null | undefined,
-  forceProviderCache: boolean
+  forceProviderCache = false
 ) {
   if (!track) {
     return null;
@@ -119,7 +119,7 @@ export function resolveRemoteAudioTimelineKey(playback: Pick<
 export function resolveRoomAudioPath(input: {
   isCurrentSource: boolean;
   nativeLocalAudio: boolean;
-  localFallback: boolean;
+  localFallback?: boolean;
 }): PlaybackAudioPath {
   if (input.nativeLocalAudio) {
     return "local-file";

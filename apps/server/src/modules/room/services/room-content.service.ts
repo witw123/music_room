@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { QueueItem, RadioAutopilot, RoomTrackDeletion, TrackMeta } from "@music-room/shared";
+import type { PrepareTrackAssetRequest, QueueItem, RadioAutopilot, ReportTrackAssetUnavailableRequest, RoomTrackDeletion, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import {
   assertHost,
@@ -15,6 +15,7 @@ import {
   maxTrackDurationMs,
   maxTrackSizeBytes
 } from "../room-mutation";
+import { getEffectivePlaybackPositionMs, pausePlaybackAt } from "./room-playback.helpers";
 import { AuthService } from "../../auth/auth.service";
 import { RoomPlaybackService } from "./room-playback.service";
 import { RoomRecordRepository } from "../repositories/room-record.repository";
@@ -156,6 +157,104 @@ export class RoomContentService {
     incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return registered;
+  }
+
+  async prepareTrackAsset(
+    roomId: string,
+    sessionId: string,
+    input: PrepareTrackAssetRequest
+  ) {
+    await this.authService.getUserOrThrow(sessionId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+
+    const trackIndex = record.tracks.findIndex((item) => item.id === input.trackId);
+    if (trackIndex < 0) {
+      throw new BadRequestException(`房间中不存在该曲目: ${input.trackId}`);
+    }
+
+    const track = record.tracks[trackIndex];
+    if (track.ownerSessionId !== sessionId && record.room.hostId !== sessionId) {
+      throw new BadRequestException("只有曲目源成员或房主可以为该曲目准备分发资产。");
+    }
+
+    const updatedTrack: TrackMeta = {
+      ...track,
+      fileHash: input.fileHash,
+      originalAsset: input.originalAsset,
+      playbackAsset: input.playbackAsset
+    };
+    this.assertTrackLimits(updatedTrack);
+
+    record.tracks[trackIndex] = updatedTrack;
+    incrementRoomRevision(record.room);
+
+    let playbackChanged = false;
+    if (
+      record.room.playback.currentTrackId === track.id &&
+      record.room.playback.status === "paused"
+    ) {
+      await this.roomPlaybackService.applyTrackPlayback(
+        record,
+        track.id,
+        record.room.playback.positionMs ?? 0,
+        record.room.playback.currentQueueItemId,
+        input.playbackAsset.assetId
+      );
+      playbackChanged = true;
+    }
+
+    await this.roomRecordRepository.persistRecord(record);
+
+    return {
+      track: updatedTrack,
+      playbackChanged,
+      roomRevision: record.room.roomRevision ?? 0
+    };
+  }
+
+  async reportTrackAssetUnavailable(
+    roomId: string,
+    sessionId: string,
+    input: ReportTrackAssetUnavailableRequest
+  ) {
+    await this.authService.getUserOrThrow(sessionId);
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, sessionId);
+
+    const trackIndex = record.tracks.findIndex((item) => item.id === input.trackId);
+    if (trackIndex < 0) {
+      throw new BadRequestException(`房间中不存在该曲目: ${input.trackId}`);
+    }
+
+    const track = record.tracks[trackIndex];
+    if (track.ownerSessionId !== sessionId && record.room.hostId !== sessionId) {
+      throw new BadRequestException("只有曲目源成员或房主可以报告该曲目资产状态。");
+    }
+
+    let playbackChanged = false;
+    if (record.room.playback.currentTrackId === track.id) {
+      const pausePositionMs = getEffectivePlaybackPositionMs(record, record.room.playback);
+      pausePlaybackAt(record, pausePositionMs, {
+        sourceCandidate: null,
+        clearSourcePeer: true,
+        keepSourceSessionId: true,
+        bumpMediaEpoch: true
+      });
+      incrementPlaybackRevision(record.room.playback);
+      playbackChanged = true;
+    }
+
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+
+    return {
+      track,
+      reason: input.reason,
+      playbackChanged,
+      playback: record.room.playback,
+      roomRevision: record.room.roomRevision ?? 0
+    };
   }
 
   async removeTrack(roomId: string, sessionId: string, trackId: string) {

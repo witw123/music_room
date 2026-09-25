@@ -129,7 +129,7 @@ describe("RoomPlaybackService gapless playback", () => {
     expect(snapshot.gaplessNext).toBeNull();
   });
 
-  it("keeps provider playback available while its owner is offline", async () => {
+  it("pauses provider playback when its owner departs and no other source is available", async () => {
     const room = record(0);
     room.tracks[0] = {
       ...room.tracks[0]!,
@@ -137,7 +137,7 @@ describe("RoomPlaybackService gapless playback", () => {
       sourceRef: { provider: "netease", trackId: "123" }
     };
     const service = new RoomPlaybackService({
-      getActivePresence: async () => new Map()
+      getActivePresence: async () => new Map([["owner", "peer-owner"]])
     } as never);
 
     await service.updatePlayback(room, {
@@ -147,10 +147,10 @@ describe("RoomPlaybackService gapless playback", () => {
 
     expect(room.room.playback.status).toBe("playing");
     expect(room.room.playback.sourceSessionId).toBe("owner");
-    expect(room.room.playback.sourcePeerId).toBeNull();
+    expect(room.room.playback.sourcePeerId).toBe("peer-owner");
 
     service.handleSourceDeparture(room, "owner");
-    expect(room.room.playback.status).toBe("playing");
+    expect(room.room.playback.status).toBe("paused");
     expect(room.room.playback.sourcePeerId).toBeNull();
   });
 

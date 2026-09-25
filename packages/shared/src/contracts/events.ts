@@ -25,6 +25,8 @@ export const websocketEventSchema = z.union([
   z.literal("room.presence.patch"),
   z.literal("room.library.patch"),
   z.literal("room.track.deleted"),
+  z.literal("room.track.asset.ready"),
+  z.literal("room.track.asset.unavailable"),
   z.literal("room.member.removed"),
   z.literal("room.session.replaced"),
   z.literal("peer.signal"),
@@ -214,6 +216,31 @@ export const roomTrackDeletedEventSchema = z.object({
   payload: roomTrackDeletedPayloadSchema
 });
 
+export const roomTrackAssetReadyPayloadSchema = z.object({
+  roomId: z.string(),
+  trackId: z.string(),
+  fileHash: z.string(),
+  assetId: z.string(),
+  roomRevision: z.number().int().nonnegative().optional()
+});
+
+export const roomTrackAssetReadyEventSchema = z.object({
+  event: z.literal("room.track.asset.ready"),
+  payload: roomTrackAssetReadyPayloadSchema
+});
+
+export const roomTrackAssetUnavailablePayloadSchema = z.object({
+  roomId: z.string(),
+  trackId: z.string(),
+  reason: z.enum(["source-missing", "asset-corrupt", "permission-denied"]),
+  roomRevision: z.number().int().nonnegative().optional()
+});
+
+export const roomTrackAssetUnavailableEventSchema = z.object({
+  event: z.literal("room.track.asset.unavailable"),
+  payload: roomTrackAssetUnavailablePayloadSchema
+});
+
 export const roomMemberRemovedEventSchema = z.object({
   event: z.literal("room.member.removed"),
   payload: roomMemberRemovedPayloadSchema
@@ -290,6 +317,8 @@ export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
 export type RoomTrackDeletedPayload = z.infer<typeof roomTrackDeletedPayloadSchema>;
+export type RoomTrackAssetReadyPayload = z.infer<typeof roomTrackAssetReadyPayloadSchema>;
+export type RoomTrackAssetUnavailablePayload = z.infer<typeof roomTrackAssetUnavailablePayloadSchema>;
 export type RoomMemberRemovedPayload = z.infer<typeof roomMemberRemovedPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
@@ -310,6 +339,8 @@ export type ServerToClientEvents = {
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
   "room.track.deleted": (payload: RoomTrackDeletedPayload) => void;
+  "room.track.asset.ready": (payload: RoomTrackAssetReadyPayload) => void;
+  "room.track.asset.unavailable": (payload: RoomTrackAssetUnavailablePayload) => void;
   "room.member.removed": (payload: RoomMemberRemovedPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;

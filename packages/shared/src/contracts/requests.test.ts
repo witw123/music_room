@@ -8,7 +8,8 @@ import {
   registerTrackRequestSchema,
   updateRadioAutopilotRequestSchema,
   updateRoomRequestSchema,
-  updatePlaybackRequestSchema
+  updatePlaybackRequestSchema,
+  reportTrackAssetUnavailableRequestSchema
 } from "./requests";
 
 describe("request contracts", () => {
@@ -239,6 +240,45 @@ describe("request contracts", () => {
         action: "play",
         playbackAssetId: "not-an-asset-id",
         expectedVersion: 1
+      })
+    ).toThrow();
+  });
+
+  it("validates reportTrackAssetUnavailableRequestSchema", () => {
+    expect(
+      reportTrackAssetUnavailableRequestSchema.parse({
+        trackId: "track_123",
+        reason: "source-missing"
+      })
+    ).toEqual({
+      trackId: "track_123",
+      reason: "source-missing"
+    });
+
+    expect(
+      reportTrackAssetUnavailableRequestSchema.parse({
+        trackId: "track_123",
+        reason: "asset-corrupt"
+      })
+    ).toEqual({
+      trackId: "track_123",
+      reason: "asset-corrupt"
+    });
+
+    expect(
+      reportTrackAssetUnavailableRequestSchema.parse({
+        trackId: "track_123",
+        reason: "permission-denied"
+      })
+    ).toEqual({
+      trackId: "track_123",
+      reason: "permission-denied"
+    });
+
+    expect(() =>
+      reportTrackAssetUnavailableRequestSchema.parse({
+        trackId: "track_123",
+        reason: "invalid-reason"
       })
     ).toThrow();
   });

@@ -58,6 +58,46 @@ function createRedisMock() {
   };
 }
 
+function createPlaybackAssetMock(assetId: string, durationMs = 180_000, sourceFileHash = "b".repeat(64)) {
+  const normalizedAssetId = assetId.padEnd(64, "0").slice(0, 64);
+  const normalizedSourceFileHash = sourceFileHash.padEnd(64, "0").slice(0, 64);
+  return {
+    assetId: normalizedAssetId,
+    kind: "playback" as const,
+    sourceFileHash: normalizedSourceFileHash,
+    profileId: "opus-music-v4" as const,
+    codec: "opus" as const,
+    container: "audio/ogg" as const,
+    sampleRate: 48_000 as const,
+    channels: 2 as const,
+    bitrate: 256_000 as const,
+    durationMs,
+    segmentDurationMs: 2_000 as const,
+    seekPrerollMs: 80 as const,
+    unitCount: Math.ceil(durationMs / 2_000),
+    merkleRoot: "c".repeat(64),
+    encoder: {
+      name: "@audio/opus-encode" as const,
+      version: "3.4.0" as const
+    }
+  };
+}
+
+function createOriginalAssetMock(assetId: string, fileHash = "b".repeat(64), sizeBytes = 1024 * 1024) {
+  const normalizedAssetId = assetId.padEnd(64, "0").slice(0, 64);
+  const normalizedFileHash = fileHash.padEnd(64, "0").slice(0, 64);
+  return {
+    assetId: normalizedAssetId,
+    kind: "original" as const,
+    fileHash: normalizedFileHash,
+    mimeType: "audio/mp3",
+    sizeBytes,
+    unitSize: 1048576 as const,
+    unitCount: 1,
+    merkleRoot: "c".repeat(64)
+  };
+}
+
 describe("RoomService", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -72,6 +112,7 @@ describe("RoomService", () => {
     const member = await authService.createGuestSession("Member");
     const snapshot = await roomService.createRoom(host.id, "public", { roomType: "radio" });
     await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host", "online");
 
     const registerProviderTrack = (
       trackId: string,
@@ -93,7 +134,8 @@ describe("RoomService", () => {
         ownerSessionId: host.id,
         ownerNickname: host.nickname,
         sourceType: provider,
-        sourceRef: { provider, trackId }
+        sourceRef: { provider, trackId },
+        playbackAsset: createPlaybackAssetMock(`asset_${trackId}`, 180_000)
       });
 
     const seed = await registerProviderTrack("1001", "Seed", "Seed Artist");
@@ -2758,7 +2800,8 @@ describe("RoomService", () => {
       ownerSessionId: host.id,
       ownerNickname: host.nickname,
       sourceType: "netease",
-      sourceRef: { provider: "netease", trackId: "999888" }
+      sourceRef: { provider: "netease", trackId: "999888" },
+      playbackAsset: createPlaybackAssetMock("provider-track-recovery", 120000)
     });
 
     const initialPlayback = await roomService.updatePlayback(snapshot.room.id, {
@@ -2769,28 +2812,132 @@ describe("RoomService", () => {
     expect(initialPlayback.status).toBe("playing");
     expect(initialPlayback.sourcePeerId).toBe("peer-host");
 
-    // Host goes offline. For provider tracks, playback stays playing, but sourcePeerId becomes null.
+    // Host goes offline. For all tracks including provider tracks, playback pauses.
     const roomAfterDeparture = await roomService.updatePeerPresence(
       snapshot.room.id,
       host.id,
       null,
       "offline"
     );
-    expect(roomAfterDeparture.playback.status).toBe("playing");
+    expect(roomAfterDeparture.playback.status).toBe("paused");
     expect(roomAfterDeparture.playback.sourcePeerId).toBeNull();
-    const departureEpoch = roomAfterDeparture.playback.mediaEpoch;
+  });
 
-    // Host comes back online with new peer id.
-    const roomAfterReconnect = await roomService.updatePeerPresence(
+  it("updates track assets and starts playback when asset is prepared for waiting track", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+    const host = await authService.createGuestSession("AssetHost");
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
+
+    await roomService.updatePeerPresence(
       snapshot.room.id,
       host.id,
-      "peer-host-new",
+      "peer-asset-host",
       "online"
     );
 
-    // Verify sourcePeerId is restored to new peer and mediaEpoch is bumped!
-    expect(roomAfterReconnect.playback.status).toBe("playing");
-    expect(roomAfterReconnect.playback.sourcePeerId).toBe("peer-host-new");
-    expect(roomAfterReconnect.playback.mediaEpoch).toBe(departureEpoch + 1);
+    // Register a provider track without assets
+    const [track] = await roomService.registerTracks(snapshot.room.id, host.id, [
+      {
+        title: "Waiting Track",
+        artist: "Test Artist",
+        album: "Test Album",
+        durationMs: 180000,
+        bitrate: null,
+        fileHash: "hash-without-asset",
+        artworkUrl: null,
+        ownerSessionId: host.id,
+        ownerNickname: host.nickname,
+        sourceType: "netease",
+        sourceRef: { provider: "netease", trackId: "123456" }
+      }
+    ]);
+
+    // Try to play track without assets -> fails to find source candidate and clears/pauses
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: track.id,
+        actorSessionId: host.id
+      })
+    ).rejects.toThrow();
+
+    // Now set playback currentTrackId to track.id with status "paused"
+    const record = await (roomService as any).roomRecordRepository.getRoomRecord(snapshot.room.id);
+    record.room.playback.currentTrackId = track.id;
+    record.room.playback.status = "paused";
+    await (roomService as any).roomRecordRepository.persistRecord(record);
+
+    const newFileHash = "a".repeat(64);
+    const originalAsset = createOriginalAssetMock("1".repeat(64), newFileHash);
+    const playbackAsset = createPlaybackAssetMock("2".repeat(64), 180000, newFileHash);
+
+    const result = await roomService.prepareTrackAsset(snapshot.room.id, host.id, {
+      trackId: track.id,
+      fileHash: newFileHash,
+      originalAsset,
+      playbackAsset
+    });
+
+    expect(result.track.fileHash).toBe(newFileHash);
+    expect(result.track.playbackAsset?.assetId).toBe("2".repeat(64));
+    expect(result.playbackChanged).toBe(true);
+
+    const updatedSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(updatedSnapshot.room.playback.status).toBe("playing");
+    expect(updatedSnapshot.room.playback.currentTrackId).toBe(track.id);
+    expect(updatedSnapshot.room.playback.playbackAssetId).toBe("2".repeat(64));
+  });
+
+  it("pauses playback and increments revision when current track asset is reported unavailable", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+    const host = await authService.createGuestSession("AssetHost2");
+    const snapshot = await roomService.createRoom(host.id, "public", { roomType: "interactive" });
+    const fileHash = "b".repeat(64);
+    const originalAsset = createOriginalAssetMock("3".repeat(64), fileHash);
+    const playbackAsset = createPlaybackAssetMock("4".repeat(64), 180000, fileHash);
+    const [track] = await roomService.registerTracks(snapshot.room.id, host.id, [
+      {
+        title: "Playing Song",
+        artist: "Artist",
+        album: null,
+        durationMs: 180000,
+        bitrate: null,
+        fileHash,
+        artworkUrl: null,
+        ownerSessionId: host.id,
+        ownerNickname: host.nickname,
+        sourceType: "local_upload",
+        originalAsset,
+        playbackAsset
+      }
+    ]);
+    await roomService.addQueueItem(snapshot.room.id, host.id, track.id);
+
+    const record = await (roomService as any).roomRecordRepository.getRoomRecord(snapshot.room.id);
+    record.room.playback.status = "playing";
+    record.room.playback.currentTrackId = track.id;
+    record.room.playback.sourceSessionId = host.id;
+    record.room.playback.sourcePeerId = "peer_host";
+    const initialEpoch = record.room.playback.mediaEpoch;
+    await (roomService as any).roomRecordRepository.persistRecord(record);
+
+    const result = await roomService.reportTrackAssetUnavailable(snapshot.room.id, host.id, {
+      trackId: track.id,
+      reason: "source-missing"
+    });
+
+    expect(result.playbackChanged).toBe(true);
+    expect(result.reason).toBe("source-missing");
+
+    const updatedSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(updatedSnapshot.room.playback.status).toBe("paused");
+    expect(updatedSnapshot.room.playback.sourcePeerId).toBeNull();
+    expect(updatedSnapshot.room.playback.mediaEpoch).toBe(initialEpoch + 1);
   });
 });

@@ -142,6 +142,7 @@ function BottomPlayerControllerBase({
 
   return (
     <BottomPlayer
+      roomId={roomSnapshot?.room.id}
       desktopLyricsSource="room"
       mobileVariant={mobileVariant}
       audioRef={audioRef}
@@ -166,6 +167,8 @@ function BottomPlayerControllerBase({
       onCyclePlaybackMode={onCyclePlaybackMode}
       queue={roomSnapshot?.queue ?? []}
       tracks={roomSnapshot?.tracks ?? []}
+      members={roomSnapshot?.room.members ?? []}
+      currentSessionId={activeSession?.userId ?? null}
       currentQueueItemId={playback?.currentQueueItemId ?? null}
       nextQueueItemId={playback?.nextQueueItemId ?? null}
       canReorderQueue={canReorderQueue}

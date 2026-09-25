@@ -720,6 +720,22 @@ export class RoomService {
     return this.contentService.registerTracks(roomId, sessionId, inputs);
   }
 
+  prepareTrackAsset(
+    roomId: string,
+    sessionId: string,
+    input: import("@music-room/shared").PrepareTrackAssetRequest
+  ) {
+    return this.contentService.prepareTrackAsset(roomId, sessionId, input);
+  }
+
+  reportTrackAssetUnavailable(
+    roomId: string,
+    sessionId: string,
+    input: import("@music-room/shared").ReportTrackAssetUnavailableRequest
+  ) {
+    return this.contentService.reportTrackAssetUnavailable(roomId, sessionId, input);
+  }
+
   removeTrack(roomId: string, sessionId: string, trackId: string) {
     return this.contentService.removeTrack(roomId, sessionId, trackId);
   }

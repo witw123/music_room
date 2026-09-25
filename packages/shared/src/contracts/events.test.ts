@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { roomChatDeletedEventSchema, roomChatEventSchema, roomChatInputPayloadSchema, websocketEventSchema } from "./events";
+import { roomChatDeletedEventSchema, roomChatEventSchema, roomChatInputPayloadSchema, roomTrackAssetUnavailableEventSchema, websocketEventSchema } from "./events";
 
 describe("websocket event contracts", () => {
   it("accepts room.chat as a declared websocket event", () => {
@@ -60,5 +60,24 @@ describe("websocket event contracts", () => {
         content: ""
       })
     ).toThrow();
+  });
+  it("parses a room.track.asset.unavailable event payload", () => {
+    expect(
+      roomTrackAssetUnavailableEventSchema.parse({
+        event: "room.track.asset.unavailable",
+        payload: {
+          roomId: "room_1",
+          trackId: "track_1",
+          reason: "source-missing"
+        }
+      })
+    ).toEqual({
+      event: "room.track.asset.unavailable",
+      payload: {
+        roomId: "room_1",
+        trackId: "track_1",
+        reason: "source-missing"
+      }
+    });
   });
 });

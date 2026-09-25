@@ -50,6 +50,8 @@ import type {
   ColdStartTasteInput,
   RecordPersonalizationEvent,
   RoomSyncResponse,
+  PrepareTrackAssetRequest,
+  ReportTrackAssetUnavailableRequest,
   SystemAnnouncement,
   TrackMeta,
   UpdateRoomRequest
@@ -216,6 +218,16 @@ export const musicRoomApi = {
     }),
   registerTracks: (roomId: string, payload: { tracks: object[] }) =>
     request<TrackMeta[]>(`/v1/rooms/${roomId}/tracks/batch`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  prepareTrackAsset: (roomId: string, trackId: string, payload: PrepareTrackAssetRequest) =>
+    request<TrackMeta>(`/v1/rooms/${roomId}/tracks/${trackId}/asset`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  reportTrackAssetUnavailable: (roomId: string, trackId: string, payload: ReportTrackAssetUnavailableRequest) =>
+    request<{ ok: boolean; trackId: string; reason: string }>(`/v1/rooms/${roomId}/tracks/${trackId}/asset/unavailable`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),

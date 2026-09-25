@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { playbackSnapshotSchema } from "../playback/models";
-import { playlistSchema, queueItemSchema, trackMetaSchema } from "../playlist/models";
+import { playlistSchema, queueItemSchema, trackMetaSchema, type TrackMeta } from "../playlist/models";
 
 export const roomPresenceStateSchema = z.enum(["online", "reconnecting", "offline"]);
 export const roomTypeSchema = z.enum(["interactive", "request", "radio"]);
@@ -170,6 +170,27 @@ export const roomJoinResponseSchema = z.object({
   room: roomSchema
 }).strict();
 
+export const roomTrackDistributionStateSchema = z.enum([
+  "unknown",
+  "preparing",
+  "ready",
+  "source-missing",
+  "source-offline",
+  "failed"
+]);
+
+export const roomTrackDistributionStatusSchema = z.object({
+  trackId: z.string(),
+  state: roomTrackDistributionStateSchema,
+  sourceSessionId: z.string().nullable(),
+  assetId: z.string().nullable(),
+  errorCode: z.string().nullable().optional(),
+  updatedAt: z.string()
+});
+
+export type RoomTrackDistributionState = z.infer<typeof roomTrackDistributionStateSchema>;
+export type RoomTrackDistributionStatus = z.infer<typeof roomTrackDistributionStatusSchema>;
+
 export type RoomMember = z.infer<typeof roomMemberSchema>;
 export type Room = z.infer<typeof roomSchema>;
 export type RoomSnapshot = z.infer<typeof roomSnapshotSchema>;
@@ -197,5 +218,71 @@ export function getNewMemberPermissions(
   return {
     ...defaultRoomMemberPermissions,
     ...room.newMemberPermissions
+  };
+}
+
+export function isProviderTrackMeta(track: TrackMeta | undefined): boolean {
+  return !!(
+    track &&
+    (track.sourceType === "netease" || track.sourceType === "qqmusic") &&
+    track.sourceRef &&
+    track.sourceRef.provider === track.sourceType
+  );
+}
+
+export function hasCompleteRoomAsset(track: TrackMeta | undefined): boolean {
+  if (!track) return false;
+  if (isProviderTrackMeta(track)) {
+    return Boolean(track.playbackAsset?.assetId && track.fileHash);
+  }
+  return Boolean(track.fileHash);
+}
+
+export function resolveTrackDistributionStatus(input: {
+  track: TrackMeta | undefined;
+  members: Array<Pick<RoomMember, "id" | "presenceState">>;
+  currentSessionId?: string | null;
+  localFileAvailable?: boolean;
+  assetUnavailableReason?: "source-missing" | "asset-corrupt" | "permission-denied" | null;
+}): RoomTrackDistributionStatus {
+  const { track, members, currentSessionId, localFileAvailable, assetUnavailableReason } = input;
+  if (!track) {
+    return {
+      trackId: "",
+      state: "unknown",
+      sourceSessionId: null,
+      assetId: null,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  const isOwner = !!currentSessionId && currentSessionId === track.ownerSessionId;
+  const ownerMember = members.find((m) => m.id === track.ownerSessionId);
+  const isOwnerOnline = ownerMember?.presenceState === "online";
+  const hasAsset = hasCompleteRoomAsset(track);
+
+  let state: RoomTrackDistributionState = "unknown";
+  let errorCode: string | null = assetUnavailableReason ?? null;
+
+  if (!isOwnerOnline) {
+    state = "source-offline";
+  } else if (assetUnavailableReason === "source-missing" || (isOwner && localFileAvailable === false)) {
+    state = "source-missing";
+    errorCode = "source-missing";
+  } else if (assetUnavailableReason === "asset-corrupt" || assetUnavailableReason === "permission-denied") {
+    state = "failed";
+  } else if (!hasAsset) {
+    state = "preparing";
+  } else {
+    state = "ready";
+  }
+
+  return {
+    trackId: track.id,
+    state,
+    sourceSessionId: track.ownerSessionId,
+    assetId: track.playbackAsset?.assetId ?? null,
+    errorCode,
+    updatedAt: new Date().toISOString()
   };
 }

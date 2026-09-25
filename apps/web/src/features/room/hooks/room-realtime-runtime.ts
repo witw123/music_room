@@ -26,6 +26,10 @@ import {
   notifyRoomChatMessage,
   notifyRoomMemberPresence
 } from "@/features/playback/system-notifications";
+import {
+  setTrackAssetPreparationState,
+  setTrackUnavailableReason
+} from "@/features/room/playback/room-track-asset-preparation";
 import type {
   PlaybackRecoveryRecommendation,
   RoomDataMeshDiagnosticsRefs,
@@ -711,6 +715,29 @@ function notifyMemberPresenceChanges(input: {
       return;
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
+  });
+
+  socket.on("room.track.asset.ready", (payload) => {
+    if (
+      payload.roomId !== input.roomId ||
+      input.activeRouteRoomIdRef.current !== input.roomId
+    ) {
+      return;
+    }
+    setTrackAssetPreparationState(payload.trackId, "ready");
+    setTrackUnavailableReason(payload.trackId, null);
+  });
+
+  socket.on("room.track.asset.unavailable", (payload) => {
+    if (
+      payload.roomId !== input.roomId ||
+      input.activeRouteRoomIdRef.current !== input.roomId
+    ) {
+      return;
+    }
+    const state = payload.reason === "source-missing" ? "source-missing" : "failed";
+    setTrackAssetPreparationState(payload.trackId, state);
+    setTrackUnavailableReason(payload.trackId, payload.reason);
   });
 
   socket.on("room.chat", (message: RoomChatMessage) => {

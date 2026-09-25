@@ -1,12 +1,14 @@
 "use client";
 
 import { memo } from "react";
-import type { AuthSession, TrackMeta } from "@music-room/shared";
+import type { AuthSession, RoomMember, TrackMeta } from "@music-room/shared";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 import { TrackListSection } from "./TrackListSection";
 
 type LibraryTabPanelProps = {
+  roomId?: string | null;
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
   uploadedTracks: Record<string, UploadedTrack>;
   localFolderName: string | null;
   localSavedFileHashes: string[];
@@ -23,7 +25,9 @@ type LibraryTabPanelProps = {
 };
 
 function LibraryTabPanelBase({
+  roomId,
   tracks,
+  members,
   uploadedTracks,
   localFolderName,
   localSavedFileHashes,
@@ -41,7 +45,9 @@ function LibraryTabPanelBase({
   return (
     <div className="animate-fade-in flex w-full flex-col gap-4">
       <TrackListSection
+        roomId={roomId}
         tracks={tracks}
+        members={members}
         uploadedTracks={uploadedTracks}
         localFolderName={localFolderName}
         localSavedFileHashes={localSavedFileHashes}

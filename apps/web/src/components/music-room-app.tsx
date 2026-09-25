@@ -19,6 +19,7 @@ import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipbo
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 import { useRoomSegmentedPlaybackRuntime } from "@/features/room/hooks/use-room-segmented-playback-runtime";
+import { useRoomTrackAssetAutoPreparation } from "@/features/room/playback/room-track-asset-preparation";
 import { getCurrentRoomMemberPermissions, isRoomHost } from "@/features/room/room-permissions";
 import type { Route } from "next";
 import type { RoomPlaybackReadinessInputPayload } from "@music-room/shared";
@@ -336,6 +337,12 @@ export function MusicRoomApp({
     audibleRef: localAudibleRef,
     playbackReadiness: pageState.playbackReadiness,
     publishPlaybackReadiness,
+    activeSessionId: activeSession?.userId ?? null
+  });
+  useRoomTrackAssetAutoPreparation({
+    roomId: roomSnapshot?.room.id,
+    roomSnapshot,
+    currentTrack: pageDerived.currentTrack,
     activeSessionId: activeSession?.userId ?? null
   });
   const playbackActions = useRoomPlaybackActions({

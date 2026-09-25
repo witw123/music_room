@@ -10,7 +10,9 @@ import type {
   RoomPresencePatchPayload,
   RoomQueuePatchPayload,
   RoomSnapshot,
-  RoomTrackDeletedPayload
+  RoomTrackDeletedPayload,
+  RoomTrackAssetReadyPayload,
+  RoomTrackAssetUnavailablePayload
 } from "@music-room/shared";
 import {
   peerSignalMessageSchema,
@@ -24,7 +26,9 @@ import {
   roomQueuePatchPayloadSchema,
   roomSnapshotMissingPayloadSchema,
   roomSnapshotSchema,
-  roomTrackDeletedPayloadSchema
+  roomTrackDeletedPayloadSchema,
+  roomTrackAssetReadyPayloadSchema,
+  roomTrackAssetUnavailablePayloadSchema
 } from "@music-room/shared";
 import { RedisService } from "../../infra/redis/redis.service";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -41,6 +45,8 @@ import {
   roomSnapshotChannel,
   roomSnapshotMissingChannel,
   roomTrackDeletedChannel,
+  roomTrackAssetReadyChannel,
+  roomTrackAssetUnavailableChannel,
   sessionReplacementChannel
 } from "../realtime/room-realtime.channels";
 import { RoomRealtimeBroadcaster } from "../realtime/room-realtime.broadcaster";
@@ -306,6 +312,48 @@ export class RealtimeRedisSubscriber {
       }
 
       this.server!.to(message.roomId).emit("room.track.deleted", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
+    void this.redisService.subscribe(roomTrackAssetReadyChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomTrackAssetReadyPayload;
+      };
+
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+
+      const parsed = roomTrackAssetReadyPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server!.to(message.roomId).emit("room.track.asset.ready", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
+    void this.redisService.subscribe(roomTrackAssetUnavailableChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomTrackAssetUnavailablePayload;
+      };
+
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+
+      const parsed = roomTrackAssetUnavailablePayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server!.to(message.roomId).emit("room.track.asset.unavailable", parsed.data);
     }).then((unsubscribe) => {
       this.redisUnsubscribers.push(unsubscribe);
     });

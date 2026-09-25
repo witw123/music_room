@@ -163,6 +163,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                       onReorderQueue={props.onReorderQueue}
                       queue={props.roomSnapshot.queue}
                       tracks={props.roomSnapshot.tracks}
+                      members={props.roomSnapshot.room.members}
+                      currentSessionId={props.activeSession?.userId ?? null}
                     />
                   </div>
                 </div>
@@ -272,6 +274,8 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                     onReorderQueue={props.onReorderQueue}
                     queue={props.roomSnapshot.queue}
                     tracks={props.roomSnapshot.tracks}
+                    members={props.roomSnapshot.room.members}
+                    currentSessionId={props.activeSession?.userId ?? null}
                   />
                 </div>
               </div>
@@ -384,6 +388,7 @@ function RadioLibraryList({
         onPlayTrack={props.onPlayTrack}
         onSaveTrackToLocal={props.onSaveTrackToLocal}
         tracks={props.roomSnapshot.tracks}
+        members={props.roomSnapshot.room.members}
         uploadedTracks={props.uploadedTracks}
       />
     </div>

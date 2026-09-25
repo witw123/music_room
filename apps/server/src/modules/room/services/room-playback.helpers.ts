@@ -1,4 +1,9 @@
-import type { GaplessTransition, PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import {
+  hasCompleteRoomAsset,
+  type GaplessTransition,
+  type PlaybackSnapshot,
+  type TrackMeta
+} from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 
 export type SourceCandidate = {
@@ -154,6 +159,11 @@ export function pickTrackSourceCandidate(
     excludedSessionIds?: Set<string>;
   }
 ): SourceCandidate | null {
+  // Provider tracks must have a complete room distribution asset to be broadcast.
+  if (isProviderTrack(track) && !hasCompleteRoomAsset(track)) {
+    return null;
+  }
+
   const excludedSessionIds = options?.excludedSessionIds ?? new Set<string>();
   const preferredSessionId = options?.preferredSessionId ?? null;
   const isSessionAvailable = (sessionId: string | null | undefined) =>
@@ -178,15 +188,7 @@ export function pickTrackSourceCandidate(
     };
   }
 
-  // Provider tracks can be reconstructed by listeners when the uploader is
-  // offline. Keep the uploader as the logical source for room state, but do
-  // not invent a peer id or turn a listener into a broadcast source.
-  if (isProviderTrack(track) && !excludedSessionIds.has(track.ownerSessionId)) {
-    return {
-      sessionId: track.ownerSessionId,
-      peerId: null
-    };
-  }
+  // If the owner is not online, there is no broadcast source. Never return a fake peerId: null.
   return null;
 }
 

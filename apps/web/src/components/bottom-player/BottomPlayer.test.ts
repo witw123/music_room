@@ -199,4 +199,19 @@ describe("BottomPlayer source", () => {
       "canControlPlayback: active && Boolean(currentRecord || queueRecords.length > 0 || libraryRecords.length > 0)"
     );
   });
+
+  it("cascades roomId down to player layouts and queue drawers for asset recovery actions", () => {
+    const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+    const layoutSource = readFileSync(new URL("./bottom-player-layout.tsx", import.meta.url), "utf8");
+    const immersiveSource = readFileSync(new URL("./ImmersivePlayerOverlay.tsx", import.meta.url), "utf8");
+    const queueSource = readFileSync(new URL("./PlayerQueueDrawer.tsx", import.meta.url), "utf8");
+
+    expect(playerSource).toContain("roomId?: string | null;");
+    expect(playerSource).toContain("roomId={roomId}");
+    expect(layoutSource).toContain("roomId?: string | null;");
+    expect(layoutSource).toContain("roomId={roomId}");
+    expect(immersiveSource).toContain("roomId?: string | null;");
+    expect(immersiveSource).toContain("roomId={roomId}");
+    expect(queueSource).toContain("roomId?: string | null;");
+  });
 });

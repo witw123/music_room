@@ -160,6 +160,22 @@ export const registerTracksRequestSchema = z
   })
   .strict();
 
+export const prepareTrackAssetRequestSchema = z
+  .object({
+    trackId: stringId,
+    fileHash: trimmedString(256),
+    originalAsset: originalAssetManifestSchema,
+    playbackAsset: playbackAssetManifestSchema
+  })
+  .strict();
+
+export const reportTrackAssetUnavailableRequestSchema = z
+  .object({
+    trackId: stringId,
+    reason: z.enum(["source-missing", "asset-corrupt", "permission-denied"])
+  })
+  .strict();
+
 export const addQueueItemRequestSchema = z
   .object({
     trackId: stringId
@@ -254,6 +270,8 @@ export type UpdateRoomRequest = z.infer<typeof updateRoomRequestSchema>;
 export type JoinRoomByCodeRequest = z.infer<typeof joinRoomByCodeRequestSchema>;
 export type RegisterTrackRequest = z.infer<typeof registerTrackRequestSchema>;
 export type RegisterTracksRequest = z.infer<typeof registerTracksRequestSchema>;
+export type PrepareTrackAssetRequest = z.infer<typeof prepareTrackAssetRequestSchema>;
+export type ReportTrackAssetUnavailableRequest = z.infer<typeof reportTrackAssetUnavailableRequestSchema>;
 export type AddQueueItemRequest = z.infer<typeof addQueueItemRequestSchema>;
 export type UpdateRadioAutopilotRequest = z.infer<typeof updateRadioAutopilotRequestSchema>;
 export type InsertRadioAutopilotNextTrackRequest = z.infer<typeof insertRadioAutopilotNextTrackRequestSchema>;

@@ -11,7 +11,6 @@ import {
   getEffectivePlaybackPositionMs,
   getGaplessTransitionAt,
   getTrackDurationMs,
-  isProviderTrack,
   pausePlaybackAt,
   pickTrackSourceCandidate
 } from "./room-playback.helpers";
@@ -587,14 +586,6 @@ export class RoomPlaybackService {
       return false;
     }
 
-    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
-    if (isProviderTrack(currentTrack)) {
-      playback.sourcePeerId = null;
-      playback.mediaEpoch += 1;
-      bumpPlaybackVersion(playback);
-      return true;
-    }
-
     const positionMs = getEffectivePlaybackPositionMs(record, playback);
     pausePlaybackAt(record, positionMs, {
       sourceCandidate: null,
@@ -627,14 +618,6 @@ export class RoomPlaybackService {
     const playback = record.room.playback;
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
       return false;
-    }
-
-    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
-    if (isProviderTrack(currentTrack)) {
-      playback.sourcePeerId = null;
-      playback.mediaEpoch += 1;
-      bumpPlaybackVersion(playback);
-      return true;
     }
 
     const positionMs = getEffectivePlaybackPositionMs(record, playback);

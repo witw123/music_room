@@ -355,6 +355,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onPlayTrack={props.onPlayTrack}
                     onSaveTrackToLocal={props.onSaveTrackToLocal}
                     tracks={props.roomSnapshot.tracks}
+                    members={props.roomSnapshot.room.members}
                     uploadedTracks={props.uploadedTracks}
                   />
                 </div>
@@ -422,6 +423,8 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onReorderQueue={props.onReorderQueue}
                     queue={props.roomSnapshot.queue}
                     tracks={props.roomSnapshot.tracks}
+                    members={props.roomSnapshot.room.members}
+                    currentSessionId={props.activeSession?.userId ?? null}
                   />
                 </div>
               ) : (
@@ -540,6 +543,8 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onReorderQueue={props.onReorderQueue}
                     queue={props.roomSnapshot.queue}
                     tracks={props.roomSnapshot.tracks}
+                    members={props.roomSnapshot.room.members}
+                    currentSessionId={props.activeSession?.userId ?? null}
                   />
                 </div>
                 <div className="shrink-0 p-2 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
@@ -568,6 +573,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   onPlayTrack={props.onPlayTrack}
                   onSaveTrackToLocal={props.onSaveTrackToLocal}
                   tracks={props.roomSnapshot.tracks}
+                  members={props.roomSnapshot.room.members}
                   uploadedTracks={props.uploadedTracks}
                 />
               </div>

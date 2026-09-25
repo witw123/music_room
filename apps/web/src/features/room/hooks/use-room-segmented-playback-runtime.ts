@@ -18,10 +18,6 @@ import { roomMediaPlaybackStore } from "@/features/room/playback/room-media-play
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
-import {
-  ensureOfflineProviderPlaybackAsset,
-  resolveOfflineProviderSource
-} from "@/features/playback/offline-source-fallback";
 import { getRoomLocalAudioFile } from "@/features/library/local-audio-storage";
 import { resolveRoomPlaybackStrategy } from "@/features/room/playback/room-playback-strategy";
 import { resolveProviderTrackSource } from "@/features/library/provider-track-identity";
@@ -105,7 +101,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   setStatusMessage: (message: string) => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   audibleRef: MutableRefObject<boolean | null>;
-  localFallbackAsset?: TrackMeta["playbackAsset"] | null;
   playbackReadiness: RoomPlaybackReadinessPayload[];
   publishPlaybackReadiness: (payload: RoomPlaybackReadinessInputPayload) => void;
   activeSessionId: string | null;
@@ -146,67 +141,19 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   // the provider-cache preference when multiple strategies are enabled.
   const sharedCacheEnabled = playbackStrategy.cache === "shared-library-and-provider";
   const segmentedStreamEnabled = playbackStrategy.stream === "segmented-opus-with-rtp-fallback";
-  const forceProviderCache = sharedCacheEnabled &&
-    segmentedStreamEnabled &&
-    !preventOfflineAutoLoad &&
-    !streamingOnlyPlayback &&
-    fullyCachedPlayback &&
-    isProviderTrack(input.currentTrack);
   const cacheBarrierEnabled = sharedCacheEnabled &&
     segmentedStreamEnabled &&
     fullyCachedPlayback &&
     !preventOfflineAutoLoad &&
     !streamingOnlyPlayback &&
     isProviderTrack(input.currentTrack);
-  const offlineSource = resolveOfflineProviderSource({
-    roomSnapshot: input.roomSnapshot,
-    track: input.currentTrack,
-    forceProviderCache
-  });
-  const sourceMemberPresenceState = input.roomSnapshot?.room.members.find(
-    (member) => member.id === (input.roomSnapshot?.room.playback.sourceSessionId ?? input.currentTrack?.ownerSessionId)
-  )?.presenceState ?? null;
-  const fallbackPresenceDependency = forceProviderCache
-    ? null
-    : sourceMemberPresenceState;
-  const offlineFallbackInputRef = useRef({
-    roomSnapshot: input.roomSnapshot,
-    track: input.currentTrack,
-    source: offlineSource
-  });
-  offlineFallbackInputRef.current = {
-    roomSnapshot: input.roomSnapshot,
-    track: input.currentTrack,
-    source: offlineSource
-  };
-  const [offlineFallback, setOfflineFallback] = useState<{
-    key: string;
-    asset: NonNullable<TrackMeta["playbackAsset"]>;
-  } | null>(null);
-  const [isPreparingProviderCache, setIsPreparingProviderCache] = useState(false);
-  const localAudioTrackKey = resolveLocalAudioTrackKey(
-    input.currentTrack,
-    forceProviderCache
-  );
+  const localAudioTrackKey = resolveLocalAudioTrackKey(input.currentTrack);
   const [localAudioResolution, setLocalAudioResolution] = useState<LocalAudioResolution>({
     key: null,
     status: "idle",
     file: null,
     error: null
   });
-  const providerCacheAttemptKey = offlineSource && localAudioTrackKey
-    ? `${input.roomSnapshot?.room.id ?? "none"}:${input.roomSnapshot?.room.playback.currentTrackId ?? "none"}:${input.roomSnapshot?.room.playback.mediaEpoch ?? 0}:${localAudioTrackKey}`
-    : null;
-  const offlineFallbackAsset = offlineFallback?.key === providerCacheAttemptKey
-    ? offlineFallback.asset
-    : null;
-  const [failedProviderCacheKey, setFailedProviderCacheKey] = useState<string | null>(null);
-  const providerCacheFailed = !!providerCacheAttemptKey &&
-    failedProviderCacheKey === providerCacheAttemptKey;
-  const providerCacheAttemptPending = forceProviderCache &&
-    !!offlineSource &&
-    localAudioResolution.status === "missing" &&
-    !providerCacheFailed;
   const [barrierClockMs, setBarrierClockMs] = useState(() => getRoomPlaybackClockNowMs());
   const readinessWaitingSinceRef = useRef<Map<string, {
     timelineKey: string;
@@ -305,22 +252,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       ? resolveLocalAudioTimelineKey(roomPlayback, playbackBarrier)
       : null;
   }, [input.roomSnapshot?.room.playback, playbackBarrier]);
-  const effectiveOfflineFallbackAsset = streamingOnlyPlayback
-    ? null
-    : offlineFallbackAsset;
-  // A resolved original local file is the only local playback source. Never
-  // run the segmented fallback alongside it, otherwise both decoders output
-  // the same room timeline at once.
-  const activeLocalFallbackAsset = usesNativeLocalAudio
-    ? null
-    : effectiveOfflineFallbackAsset;
   const runtimeInputRef = useRef({
     ...input,
     playbackAsset: null as TrackMeta["playbackAsset"] | null,
-    localFallbackAsset: null as TrackMeta["playbackAsset"] | null,
     streamingOnlyPlayback: false,
     usesNativeLocalAudio: false,
-    forceProviderCache: false,
     cacheBarrierEnabled: false,
     playbackBarrier,
     loudnessGainDb: 0,
@@ -334,11 +270,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   runtimeInputRef.current = {
     ...input,
     playbackAsset: currentPlaybackAsset,
-    localFallbackAsset: activeLocalFallbackAsset,
     streamingOnlyPlayback,
     usesNativeLocalAudio,
     localAudioResolution,
-    forceProviderCache,
     cacheBarrierEnabled,
     playbackBarrier,
     loudnessGainDb
@@ -459,7 +393,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return;
     }
 
-    if (streamingOnlyPlayback && !forceProviderCache) {
+    if (streamingOnlyPlayback) {
       setLocalAudioResolution({
         key: localAudioTrackKey,
         status: "missing",
@@ -551,8 +485,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.currentTrack?.originalAsset?.assetId,
     input.currentTrack?.title,
     localAudioTrackKey,
-    streamingOnlyPlayback,
-    forceProviderCache
+    streamingOnlyPlayback
   ]);
 
   useEffect(() => {
@@ -583,11 +516,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return;
     }
 
-    const localReady = currentLocalAudioAvailable || !!offlineFallbackAsset;
+    const localReady = currentLocalAudioAvailable;
     const report = resolveCacheReadinessReport({
       cacheRequested,
       localReady,
-      cacheAttemptPending: providerCacheAttemptPending || isPreparingProviderCache,
+      cacheAttemptPending: false,
       localAudioStatus: localAudioResolution.status
     });
     cacheBarrierParticipationRef.current = report.cacheEnabled;
@@ -628,113 +561,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     readinessPlaybackStatus,
     readinessPlaybackRevision,
     localAudioResolution.status,
-    currentLocalAudioAvailable,
-    offlineFallbackAsset,
-    isPreparingProviderCache,
-    providerCacheAttemptPending
-  ]);
-
-  useEffect(() => {
-    const fallbackInput = offlineFallbackInputRef.current;
-    if (
-      (!forceProviderCache && (
-        input.isCurrentSource ||
-        preventOfflineAutoLoad ||
-        streamingOnlyPlayback
-      )) ||
-      localAudioResolution.status !== "missing" ||
-      providerCacheFailed ||
-      !fallbackInput.source ||
-      !fallbackInput.roomSnapshot ||
-      !fallbackInput.track
-    ) {
-      setIsPreparingProviderCache(false);
-      setOfflineFallback(null);
-      return;
-    }
-
-    let cancelled = false;
-    const abortController = new AbortController();
-    const activeProviderCacheAttemptKey = providerCacheAttemptKey;
-    setIsPreparingProviderCache(true);
-    setOfflineFallback(null);
-    setStatusMessage(forceProviderCache
-      ? `正在从${fallbackInput.source.label}获取《${fallbackInput.track.title}》并缓存播放…`
-      : `成员不在线，正在从${fallbackInput.source.label}获取歌曲并缓存播放…`);
-    void ensureOfflineProviderPlaybackAsset({
-      roomSnapshot: fallbackInput.roomSnapshot,
-      track: fallbackInput.track,
-      source: fallbackInput.source,
-      forceDownload: forceProviderCache,
-      onStatus: setStatusMessage,
-      signal: abortController.signal
-    }).then((result) => {
-      if (!cancelled) {
-        setIsPreparingProviderCache(false);
-        setFailedProviderCacheKey((current) => current === activeProviderCacheAttemptKey
-          ? null
-          : current);
-        if (result.file) {
-          setOfflineFallback(null);
-          setLocalAudioResolution({
-            key: localAudioTrackKey,
-            status: "available",
-            file: result.file,
-            ...(fallbackInput.track?.loudness || result.loudness
-              ? { loudness: fallbackInput.track?.loudness ?? result.loudness }
-              : {}),
-            error: null
-          });
-          if (!fallbackInput.track?.loudness && !result.loudness) {
-            void analyzeAudioBlobLoudness(result.file).then((loudness) => {
-              if (cancelled || !loudness) return;
-              setLocalAudioResolution((current) => current.key === localAudioTrackKey
-                ? { ...current, loudness }
-                : current);
-            });
-          }
-        }
-      }
-    }).catch((error) => {
-      if (cancelled) return;
-      setIsPreparingProviderCache(false);
-      setFailedProviderCacheKey(activeProviderCacheAttemptKey);
-      const detail = error instanceof Error && error.message.trim()
-        ? error.message
-        : "平台音频暂时不可用，请稍后重试。";
-      setStatusMessage(forceProviderCache
-        ? `无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》，已回退到流式播放：${detail}`
-        : `成员不在线，无法从${fallbackInput.source?.label ?? "音乐平台"}下载并缓存《${fallbackInput.track?.title ?? "当前歌曲"}》：${detail}`);
-    });
-
-    return () => {
-      cancelled = true;
-      abortController.abort();
-    };
-  }, [
-    input.currentTrack?.id,
-    input.currentTrack?.title,
-    input.currentTrack?.ownerSessionId,
-    input.currentTrack?.sourceRef?.provider,
-    input.currentTrack?.sourceRef?.trackId,
-    input.currentTrack?.sourceType,
-    input.isCurrentSource,
-    input.roomSnapshot?.room.id,
-    input.roomSnapshot?.room.playback.currentTrackId,
-    input.roomSnapshot?.room.playback.sourceSessionId,
-    localAudioTrackKey,
-    localAudioResolution.status,
-    offlineSource?.label,
-    offlineSource?.provider,
-    offlineSource?.trackId,
-    preventOfflineAutoLoad,
-    setStatusMessage,
-    fallbackPresenceDependency,
-    streamingOnlyPlayback,
-    fullyCachedPlayback,
-    forceProviderCache,
-    providerCacheAttemptKey,
-    providerCacheFailed
+    currentLocalAudioAvailable
   ]);
 
   const ensureListenerMediaConnection = useCallback((input: {
@@ -827,9 +654,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
   const markLocalAudioUnavailable = useCallback((key: string, error: string) => {
     failedLocalAudioKeysRef.current.add(key);
-    if (providerCacheAttemptKey) {
-      setFailedProviderCacheKey(providerCacheAttemptKey);
-    }
     setLocalAudioResolution((current) => current.key === key
       ? {
         key,
@@ -838,13 +662,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         error
       }
       : current);
-  }, [providerCacheAttemptKey]);
+  }, []);
 
   const playback = useSegmentedOpusPlayback({
     roomSnapshot: input.roomSnapshot,
     currentTrack: input.currentTrack,
     playbackAsset: currentPlaybackAsset,
-    localFallbackAsset: activeLocalFallbackAsset,
     peerId: input.peerId,
     isCurrentSource: input.isCurrentSource,
     disableSourcePlayback: shouldDisableSourcePlayback({
@@ -856,9 +679,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     loudnessGainDb,
     audioUnlocked: input.audioUnlocked,
   });
-  const usesOfflineFallback = !input.isCurrentSource && !!activeLocalFallbackAsset;
-  const usesSegmentedPlayback = (input.isCurrentSource && !usesNativeLocalAudio) ||
-    usesOfflineFallback;
+  const usesSegmentedPlayback = input.isCurrentSource && !usesNativeLocalAudio;
   const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
 
   useEffect(() => {
@@ -933,9 +754,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const remote = sourcePeerId ? runtime.getPeerMediaState(sourcePeerId) : null;
     const usesNativeLocalAudio = runtime.usesNativeLocalAudio;
     const usesLocalAudio = !runtime.isCurrentSource && usesNativeLocalAudio;
-    const usesOfflineFallback = !runtime.isCurrentSource &&
-      !!runtime.localFallbackAsset && !usesLocalAudio;
-    const usesSegmentedPlayback = (runtime.isCurrentSource && !usesNativeLocalAudio) || usesOfflineFallback;
+    const usesSegmentedPlayback = runtime.isCurrentSource && !usesNativeLocalAudio;
     const visiblePlayback = usesSegmentedPlayback ? playback : mediaPlayback;
     const mediaSession =
       roomPlayback?.currentTrackId && runtime.playbackAsset
@@ -1004,7 +823,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     input.roomSnapshot?.room.id,
     input.recordPeerDiagnostic,
     localAudioResolution.status,
-    activeLocalFallbackAsset?.assetId,
     mediaPlayback.audioContextState,
     mediaPlayback.bufferedMs,
     mediaPlayback.lastError,
@@ -1531,25 +1349,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           markLocalAudioUnavailable(localAudioKey, detail);
           clearLocalAudioSource(audio);
         }
-        return;
-      }
-
-      if (runtime.localFallbackAsset) {
-        runtime.setMediaPlaybackEnabled(false);
-        missingMediaSinceRef.current = null;
-        mediaEnsureKeyRef.current = null;
-        if (localMediaBindingRef.current !== "listener:local-fallback") {
-          localMediaBindingRef.current = "listener:local-fallback";
-          roomAudioOutput.releaseRoomAudioSession();
-        }
-        runtime.setLocalAudioStream(null, null, null, false);
-        if (audio && localAudioObjectUrlRef.current) {
-          clearLocalAudioSource(audio);
-        } else if (audio) {
-          audio.pause();
-          audio.srcObject = null;
-        }
-        boundMediaKeyRef.current = null;
         return;
       }
 
@@ -2183,7 +1982,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   ]);
 
   useEffect(() => {
-    if (playback.state !== "ended" || (!isCurrentSource && !activeLocalFallbackAsset)) return;
+    if (playback.state !== "ended" || !isCurrentSource) return;
     const room = roomSnapshot?.room;
     const activePlayback = room?.playback;
     if (!room || !activePlayback?.currentTrackId) return;
@@ -2199,7 +1998,6 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [
     isCurrentSource,
     localPeerId,
-    activeLocalFallbackAsset,
     onPlaybackEnded,
     playback.state,
     roomSnapshot,
@@ -2208,8 +2006,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
   const audioPath = resolveRoomAudioPath({
     isCurrentSource: input.isCurrentSource,
-    nativeLocalAudio: usesNativeLocalAudio,
-    localFallback: !!activeLocalFallbackAsset
+    nativeLocalAudio: usesNativeLocalAudio
   });
   const effectivePlayback = visiblePlayback;
   const coarsePlayback: RoomCoarsePlaybackState = useMemo(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { ProviderTrackCandidate, QueueItem, TrackMeta } from "@music-room/shared";
+import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { VinylTonearm } from "@/components/room/VinylTonearm";
 import { RoomLyricsPanel } from "@/components/room/RoomLyricsPanel";
@@ -19,6 +19,7 @@ import { FavoriteTrackButton } from "@/components/ui/FavoriteTrackButton";
 import { QualityBadge, PlaybackModeIcon } from "./bottom-player-layout";
 
 type ImmersivePlayerOverlayProps = {
+  roomId?: string | null;
   isOpen: boolean;
   isPlaying: boolean;
   playbackBarrierBlocked?: boolean;
@@ -40,6 +41,8 @@ type ImmersivePlayerOverlayProps = {
   onCyclePlaybackMode: () => void | Promise<void>;
   queue: QueueItem[];
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
+  currentSessionId?: string | null;
   currentQueueItemId: string | null;
   nextQueueItemId: string | null;
   canReorderQueue: boolean;
@@ -57,6 +60,7 @@ type ImmersivePlayerOverlayProps = {
 };
 
 export function ImmersivePlayerOverlay({
+  roomId,
   isOpen,
   isPlaying,
   playbackBarrierBlocked = false,
@@ -78,6 +82,8 @@ export function ImmersivePlayerOverlay({
   onCyclePlaybackMode,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canReorderQueue,
@@ -238,6 +244,7 @@ export function ImmersivePlayerOverlay({
       />
 
       <MobileImmersivePlayer
+        roomId={roomId}
         artworkPalette={artworkPalette}
         artworkUrl={artworkUrl}
         playbackBarrierBlocked={playbackBarrierBlocked}
@@ -247,6 +254,8 @@ export function ImmersivePlayerOverlay({
         canSeekPlayback={canSeekPlayback}
         currentQueueItemId={currentQueueItemId}
         nextQueueItemId={nextQueueItemId}
+        members={members}
+        currentSessionId={currentSessionId}
         currentTrack={currentTrack}
         durationMs={durationMs}
         isOpen={isOpen}
@@ -295,6 +304,7 @@ export function ImmersivePlayerOverlay({
       <main className="relative z-10 mx-auto hidden h-[calc(100*var(--app-dvh))] min-h-0 w-full max-w-[1560px] grid-cols-2 items-center gap-12 overflow-hidden px-10 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-16 md:grid lg:gap-16 lg:px-14 xl:gap-24 xl:px-20">
         <div className="relative flex min-h-0 w-full min-w-0 items-center justify-center">
           <DesktopImmersivePlayer
+            roomId={roomId}
             artworkPalette={artworkPalette}
             artworkUrl={artworkUrl}
             playbackBarrierBlocked={playbackBarrierBlocked}
@@ -317,6 +327,8 @@ export function ImmersivePlayerOverlay({
             positionMs={positionMs}
             queue={queue}
             tracks={tracks}
+            members={members}
+            currentSessionId={currentSessionId}
             currentQueueItemId={currentQueueItemId}
             nextQueueItemId={nextQueueItemId}
             canReorderQueue={canReorderQueue}
@@ -351,6 +363,7 @@ type MobileImmersivePlayerProps = ImmersivePlayerOverlayProps & {
 };
 
 function MobileImmersivePlayer({
+  roomId,
   artworkPalette,
   artworkUrl,
   canControlPlayback,
@@ -360,6 +373,8 @@ function MobileImmersivePlayer({
   commitSeek,
   currentQueueItemId,
   nextQueueItemId,
+  members,
+  currentSessionId,
   currentTrack,
   durationMs,
   favoriteTrack,
@@ -504,6 +519,7 @@ function MobileImmersivePlayer({
           <button aria-label="歌词" className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" data-testid="immersive-player-lyrics-button" onClick={() => onSetMobileView("lyrics")} title="歌词" type="button"><LyricsGlyph /></button>
           <button aria-label="播放顺序" className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-foreground-muted transition-colors hover:bg-white/10 active:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-35" data-testid="immersive-player-playback-mode-button" disabled={!canControlPlayback} onClick={() => void onCyclePlaybackMode()} style={{ color: artworkPalette.accent }} title="播放顺序" type="button"><PlaybackModeIcon mode={playbackMode} /></button>
           <PlayerQueueDrawer
+            roomId={roomId}
             accentColor={artworkPalette.accent}
             accentSoft={artworkPalette.accentSoft}
             canControlPlayback={canControlPlayback}
@@ -518,6 +534,8 @@ function MobileImmersivePlayer({
             onReorderQueue={onReorderQueue}
             queue={queue}
             tracks={tracks}
+            members={members}
+            currentSessionId={currentSessionId}
             testId="immersive-player-queue-button"
           />
         </div>
@@ -527,6 +545,7 @@ function MobileImmersivePlayer({
 }
 
 type DesktopImmersivePlayerProps = {
+  roomId?: string | null;
   artworkPalette: ArtworkPalette;
   artworkUrl: string | null;
   playbackBarrierBlocked: boolean;
@@ -549,6 +568,8 @@ type DesktopImmersivePlayerProps = {
   positionMs: number;
   queue: QueueItem[];
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
+  currentSessionId?: string | null;
   currentQueueItemId: string | null;
   nextQueueItemId: string | null;
   canReorderQueue: boolean;
@@ -564,6 +585,7 @@ type DesktopImmersivePlayerProps = {
 };
 
 function DesktopImmersivePlayer({
+  roomId,
   artworkPalette,
   artworkUrl,
   playbackBarrierBlocked,
@@ -586,6 +608,8 @@ function DesktopImmersivePlayer({
   positionMs,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canReorderQueue,
@@ -674,6 +698,7 @@ function DesktopImmersivePlayer({
           <svg aria-hidden="true" fill="currentColor" height="20" viewBox="0 0 24 24" width="20"><path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" /></svg>
         </TransportButton>
         <PlayerQueueDrawer
+          roomId={roomId}
           accentColor={artworkPalette.accent}
           accentSoft={artworkPalette.accentSoft}
           canControlPlayback={canControlPlayback}
@@ -687,6 +712,8 @@ function DesktopImmersivePlayer({
           onReorderQueue={onReorderQueue}
           queue={queue}
           tracks={tracks}
+          members={members}
+          currentSessionId={currentSessionId}
           testId="immersive-player-queue-button"
         />
       </div>

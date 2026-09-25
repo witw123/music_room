@@ -91,7 +91,6 @@ export function useSegmentedOpusPlayback(input: {
   roomSnapshot: RoomSnapshot | null;
   currentTrack: TrackMeta | null;
   playbackAsset: TrackMeta["playbackAsset"] | null;
-  localFallbackAsset?: TrackMeta["playbackAsset"] | null;
   peerId: string;
   isCurrentSource: boolean;
   disableSourcePlayback?: boolean;
@@ -138,13 +137,8 @@ export function useSegmentedOpusPlayback(input: {
     });
   }, [setSnapshotState]);
   const roomId = roomSnapshot?.room.id ?? null;
-  const localFallbackAsset = input.localFallbackAsset ?? null;
-  const isLocalFallback = !isCurrentSource && !!localFallbackAsset;
-  const playbackBarrierBlocked = input.playbackBarrier?.blocked === true;
   const disableSourcePlayback = isCurrentSource && input.disableSourcePlayback === true;
-  const activePlaybackAsset = isLocalFallback
-    ? localFallbackAsset
-    : input.playbackAsset;
+  const activePlaybackAsset = input.playbackAsset;
   const sourcePlaybackAssetUnavailable = isCurrentSource &&
     !disableSourcePlayback &&
     roomSnapshot?.room.playback.status === "playing" &&
@@ -154,7 +148,6 @@ export function useSegmentedOpusPlayback(input: {
     isCurrentSource,
     currentTrackId: roomSnapshot?.room.playback.currentTrackId,
     hasPlaybackAsset: isSupportedPlaybackAsset(activePlaybackAsset),
-    isLocalFallback: isLocalFallback && !playbackBarrierBlocked,
     disableSourcePlayback
   });
   const playbackIdentity = resolveSegmentedPlaybackIdentity({
@@ -190,10 +183,7 @@ export function useSegmentedOpusPlayback(input: {
       let generation = playbackGenerationRef.current;
       try {
         const runtime = runtimeRef.current;
-        const currentPlaybackAsset = runtime.isCurrentSource
-          ? runtime.playbackAsset
-          : runtime.localFallbackAsset;
-        const currentLocalFallback = !runtime.isCurrentSource && !!runtime.localFallbackAsset;
+        const currentPlaybackAsset = runtime.playbackAsset;
         const currentRoomPlayback = runtime.roomSnapshot?.room.playback;
         const currentPlayback = resolveBarrierPlaybackSnapshot(
           currentRoomPlayback,
@@ -213,8 +203,7 @@ export function useSegmentedOpusPlayback(input: {
         });
         const currentPlaybackEngineIdentity = resolveSegmentedPlaybackEngineIdentity({
           playback: currentPlayback,
-          playbackAssetId: currentPlaybackAsset?.assetId,
-          localOnly: currentLocalFallback
+          playbackAssetId: currentPlaybackAsset?.assetId
         });
         if (runtime.playbackBarrier?.blocked === true) {
           setSnapshot({ ...idleSnapshot, playbackIdentity: currentPlaybackIdentity });
@@ -242,7 +231,7 @@ export function useSegmentedOpusPlayback(input: {
           !currentPlaybackAsset ||
           !currentPlayback ||
           currentPlayback.currentTrackId !== runtime.currentTrack?.id
-          || (!runtime.isCurrentSource && !currentLocalFallback)
+          || !runtime.isCurrentSource
         ) {
           setSnapshot({ ...idleSnapshot, playbackIdentity: currentPlaybackIdentity });
           return;
@@ -269,21 +258,21 @@ export function useSegmentedOpusPlayback(input: {
           return;
         }
         engineRef.current ??= new SegmentedOpusEngine();
-        engineRef.current.setBroadcastEnabled(!currentLocalFallback);
+        engineRef.current.setBroadcastEnabled(true);
         const result = await engineRef.current.sync({
           manifest: currentPlaybackAsset,
           playback: currentPlayback,
           serverNowMs,
           volume: runtime.volume,
           loudnessGainDb: runtime.loudnessGainDb,
-          broadcast: !currentLocalFallback,
+          broadcast: true,
           getUnit: (unitIndex, signal) => getPlayableAssetUnit(
             currentPlaybackAsset.assetId,
             unitIndex,
             signal
           ),
           gaplessNext:
-            !currentLocalFallback && nextTransition && nextPlaybackAsset
+            nextTransition && nextPlaybackAsset
               ? {
                   transition: nextTransition,
                   manifest: nextPlaybackAsset,
@@ -326,15 +315,11 @@ export function useSegmentedOpusPlayback(input: {
         storedManifestAssetIdRef.current = null;
         failedEngine?.destroy();
         const runtime = runtimeRef.current;
-        const totalUnitCount = (runtime.isCurrentSource
-          ? runtime.playbackAsset
-          : runtime.localFallbackAsset)?.unitCount ?? 0;
+        const totalUnitCount = runtime.playbackAsset?.unitCount ?? 0;
         const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
         const failedPlaybackIdentity = resolveSegmentedPlaybackIdentity({
           playback: runtime.roomSnapshot?.room.playback,
-          playbackAssetId: (runtime.isCurrentSource
-            ? runtime.playbackAsset
-            : runtime.localFallbackAsset)?.assetId
+          playbackAssetId: runtime.playbackAsset?.assetId
         });
         if (!cancelled && generation === playbackGenerationRef.current) {
           setSnapshot((current) => buildSegmentedPlaybackFailureSnapshot({
@@ -351,6 +336,7 @@ export function useSegmentedOpusPlayback(input: {
     };
 
     void tick();
+    const playbackBarrierBlocked = input.playbackBarrier?.blocked === true;
     if (playbackBarrierBlocked) {
       return () => {
         cancelled = true;
@@ -369,9 +355,8 @@ export function useSegmentedOpusPlayback(input: {
     roomId,
     peerId,
     isCurrentSource,
-    localFallbackAsset,
     disableSourcePlayback,
-    playbackBarrierBlocked,
+    input.playbackBarrier?.blocked,
     setSnapshot,
     releaseEngine
   ]);
@@ -475,7 +460,6 @@ export function resolveSegmentedPlaybackEngineIdentity(input: {
     | null
     | undefined;
   playbackAssetId: string | null | undefined;
-  localOnly?: boolean;
 }) {
   if (!input.playbackAssetId || !input.playback?.currentTrackId) {
     return null;
@@ -484,7 +468,7 @@ export function resolveSegmentedPlaybackEngineIdentity(input: {
   return [
     input.playback.mediaEpoch,
     input.playbackAssetId,
-    input.localOnly ? "local" : "broadcast"
+    "broadcast"
   ].join(":");
 }
 
@@ -492,12 +476,10 @@ export function hasActiveSegmentedPlayback(input: {
   isCurrentSource: boolean;
   currentTrackId: string | null | undefined;
   hasPlaybackAsset: boolean;
-  isLocalFallback?: boolean;
   disableSourcePlayback?: boolean;
 }) {
   return Boolean(input.currentTrackId) && input.hasPlaybackAsset && (
-    (input.isCurrentSource && input.disableSourcePlayback !== true) ||
-    input.isLocalFallback === true
+    input.isCurrentSource && input.disableSourcePlayback !== true
   );
 }
 

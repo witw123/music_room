@@ -51,7 +51,10 @@ function createRoomRealtimePublisherMock() {
     emitTopologySnapshot: jest.fn(),
     emitRoomDeleted: jest.fn(),
     emitRoomMissing: jest.fn(),
-    emitLibrarySnapshot: jest.fn()
+    emitLibrarySnapshot: jest.fn(),
+    emitPlaybackPatch: jest.fn(),
+    emitTrackAssetReady: jest.fn(),
+    emitTrackAssetUnavailable: jest.fn()
   };
 }
 
@@ -485,5 +488,109 @@ describe("RoomController", () => {
     expect(roomService.deleteRoom).not.toHaveBeenCalled();
     expect(roomRealtimePublisher.emitRoomDeleted).not.toHaveBeenCalled();
     expect(roomRealtimePublisher.emitRoomMissing).not.toHaveBeenCalled();
+  });
+
+  it("validates assets and prepares track asset via POST :roomId/tracks/:trackId/asset", async () => {
+    const reg = await buildTrackRegistration();
+    const preparedTrack = {
+      id: "track_1",
+      title: "Song",
+      artist: "Artist",
+      album: null,
+      durationMs: 2_000,
+      bitrate: 192_000,
+      sizeBytes: 1_000,
+      fileHash: reg.fileHash,
+      artworkUrl: null,
+      sourceType: "netease" as const,
+      originalAsset: reg.originalAsset,
+      playbackAsset: reg.playbackAsset
+    };
+    const roomService = {
+      prepareTrackAsset: jest.fn().mockResolvedValue({
+        track: preparedTrack,
+        playbackChanged: true,
+        roomRevision: 5
+      })
+    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
+    const authService = createAuthServiceMock();
+    const playlistService = createPlaylistServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      authService as never,
+      playlistService as never
+    );
+
+    const result = await controller.prepareTrackAsset(
+      "room_1",
+      "track_1",
+      {
+        trackId: "track_1",
+        fileHash: reg.fileHash,
+        originalAsset: reg.originalAsset,
+        playbackAsset: reg.playbackAsset
+      },
+      "token"
+    );
+
+    expect(result).toEqual(preparedTrack);
+    expect(roomService.prepareTrackAsset).toHaveBeenCalledWith("room_1", "guest_host", {
+      trackId: "track_1",
+      fileHash: reg.fileHash,
+      originalAsset: reg.originalAsset,
+      playbackAsset: reg.playbackAsset
+    });
+    expect(roomRealtimePublisher.emitLibrarySnapshot).toHaveBeenCalledWith("room_1");
+    expect(roomRealtimePublisher.emitTrackAssetReady).toHaveBeenCalledWith("room_1", {
+      trackId: "track_1",
+      fileHash: reg.fileHash,
+      assetId: reg.playbackAsset.assetId,
+      roomRevision: 5
+    });
+  });
+
+  it("reports track asset unavailable and broadcasts patch and unavailable event", async () => {
+    const roomService = {
+      reportTrackAssetUnavailable: jest.fn().mockResolvedValue({
+        track: { id: "track_1", title: "Song" },
+        reason: "source-missing",
+        playbackChanged: true,
+        playback: { status: "paused" },
+        roomRevision: 6
+      })
+    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
+    const authService = createAuthServiceMock();
+    const playlistService = createPlaylistServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      authService as never,
+      playlistService as never
+    );
+
+    const result = await controller.reportTrackAssetUnavailable(
+      "room_1",
+      "track_1",
+      {
+        trackId: "track_1",
+        reason: "source-missing"
+      },
+      "token"
+    );
+
+    expect(result).toEqual({ ok: true, trackId: "track_1", reason: "source-missing" });
+    expect(roomService.reportTrackAssetUnavailable).toHaveBeenCalledWith("room_1", "guest_host", {
+      trackId: "track_1",
+      reason: "source-missing"
+    });
+    expect(roomRealtimePublisher.emitPlaybackPatch).toHaveBeenCalledWith("room_1", { status: "paused" }, 6);
+    expect(roomRealtimePublisher.emitTrackAssetUnavailable).toHaveBeenCalledWith("room_1", {
+      trackId: "track_1",
+      reason: "source-missing",
+      roomRevision: 6
+    });
   });
 });

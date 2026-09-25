@@ -1,15 +1,18 @@
 "use client";
 
 import { memo, useEffect, useState } from "react";
-import type { AuthSession, TrackMeta } from "@music-room/shared";
+import type { AuthSession, RoomMember, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 import { LocalAudioImport } from "./LocalAudioImport";
+import { TrackDistributionBadge } from "./TrackDistributionBadge";
 
 type TrackListSectionProps = {
+  roomId?: string | null;
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
   uploadedTracks: Record<string, UploadedTrack>;
   localFolderName: string | null;
   localSavedFileHashes: string[];
@@ -42,7 +45,9 @@ export function filterLibraryTracks<T extends Pick<TrackMeta, "ownerSessionId">>
 }
 
 function TrackListSectionBase({
+  roomId,
   tracks,
+  members,
   uploadedTracks,
   localFolderName,
   localSavedFileHashes,
@@ -182,8 +187,14 @@ function TrackListSectionBase({
                   data-track-id={track.id}
                   className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2.5 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-3.5"
                 >
-                  <div className="row-span-2">
+                  <div className="relative row-span-2 shrink-0">
                     <TrackArtwork artworkUrl={artworkUrl} title={track.title} />
+                    <TrackDistributionBadge
+                      roomId={roomId}
+                      track={track}
+                      members={members}
+                      currentSessionId={activeSession?.userId ?? null}
+                    />
                   </div>
 
                   <div className="min-w-0">

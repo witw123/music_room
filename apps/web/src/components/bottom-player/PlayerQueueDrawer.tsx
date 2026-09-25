@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
-import type { QueueItem, TrackMeta } from "@music-room/shared";
+import type { QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { getArtworkSourceUrl } from "./artwork-colors";
+import { TrackDistributionBadge } from "@/components/room/TrackDistributionBadge";
 
 export type PlayerQueueListProps = {
+  roomId?: string | null;
   queue: QueueItem[];
   tracks: TrackMeta[];
+  members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
+  currentSessionId?: string | null;
   currentQueueItemId: string | null;
   nextQueueItemId: string | null;
   canControlPlayback: boolean;
@@ -43,8 +47,11 @@ const touchReorderDelayMs = 420;
 const touchReorderMoveTolerancePx = 10;
 
 export function PlayerQueueDrawer({
+  roomId,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canControlPlayback,
@@ -128,6 +135,7 @@ export function PlayerQueueDrawer({
               <div className="h-1 w-10 rounded-full bg-white/25" />
             </div>
             <PlayerQueueList
+              roomId={roomId}
               accentColor={accentColor}
               canControlPlayback={canControlPlayback}
               canRemoveQueue={canRemoveQueue}
@@ -140,6 +148,8 @@ export function PlayerQueueDrawer({
               onReorderQueue={onReorderQueue}
               queue={queue}
               tracks={tracks}
+              members={members}
+              currentSessionId={currentSessionId}
             />
           </aside>
         </>
@@ -149,8 +159,11 @@ export function PlayerQueueDrawer({
 }
 
 export function PlayerQueueList({
+  roomId,
   queue,
   tracks,
+  members,
+  currentSessionId,
   currentQueueItemId,
   nextQueueItemId,
   canControlPlayback,
@@ -345,7 +358,15 @@ export function PlayerQueueList({
                     <span className={`w-5 text-center font-mono text-xs font-semibold tabular-nums ${isCurrent ? "text-accent font-bold" : "text-foreground-muted"}`}>
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <QueueArtwork artworkUrl={track?.artworkUrl ?? null} title={title} />
+                    <div className="relative shrink-0">
+                      <QueueArtwork artworkUrl={track?.artworkUrl ?? null} title={title} />
+                      <TrackDistributionBadge
+                        roomId={roomId}
+                        track={track}
+                        members={members}
+                        currentSessionId={currentSessionId}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1 pr-2">
                        <strong className={`block truncate text-sm ${isCurrent ? "text-accent font-bold" : "text-foreground font-semibold"}`}>
                          {title}
