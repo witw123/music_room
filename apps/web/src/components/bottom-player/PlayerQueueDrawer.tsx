@@ -326,7 +326,7 @@ export function PlayerQueueList({
                   <div
                     key={item.id}
                     data-testid="queue-item"
-                    className={`group flex items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5 transition-all ${
+                    className={`group flex items-center gap-2 sm:gap-2.5 rounded-lg px-2 py-1.5 sm:px-2.5 sm:py-1.5 transition-all ${
                       isCurrent
                         ? "border border-accent/35 bg-accent/10"
                         : "border border-transparent hover:bg-surface-hover/60 hover:border-surface-border/40"
@@ -368,15 +368,15 @@ export function PlayerQueueList({
                       />
                     </div>
                     <div className="min-w-0 flex-1 pr-2">
-                       <strong className={`block truncate text-sm ${isCurrent ? "text-accent font-bold" : "text-foreground font-semibold"}`}>
+                       <strong className={`block truncate text-xs sm:text-sm ${isCurrent ? "text-accent font-bold" : "text-foreground font-semibold"}`}>
                          {title}
                        </strong>
-                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-foreground-muted">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-foreground-muted">
                          <span className="min-w-0 truncate">{artistName}</span>
                          <span aria-hidden="true" className="shrink-0 opacity-40">·</span>
                          <span className="min-w-0 truncate">{albumName}</span>
                        </p>
-                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-foreground-muted/70">
+                       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-foreground-muted/70">
                          <span className="shrink-0 tabular-nums">{formatDuration(track?.durationMs ?? 0)}</span>
                          <span aria-hidden="true" className="shrink-0 opacity-30">·</span>
                          <span className="min-w-0 truncate">{memberName}上传</span>
@@ -387,7 +387,7 @@ export function PlayerQueueList({
                         <Button
                           aria-label={`将《${title}》设为下一首播放`}
                           aria-pressed={isNext}
-                          className={`h-9 w-9 disabled:opacity-100 sm:h-8 sm:w-8 ${
+                          className={`h-7 w-7 disabled:opacity-100 sm:h-7 sm:w-7 ${
                             isNext
                               ? "bg-accent/15 text-accent hover:bg-accent/25"
                               : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground"
@@ -404,10 +404,10 @@ export function PlayerQueueList({
                             className="block shrink-0"
                             data-testid="queue-item-next-icon"
                             fill="currentColor"
-                            height="16"
+                            height="15"
                             style={{ color: isNext ? accentColor : "currentColor" }}
                             viewBox="0 0 24 24"
-                            width="16"
+                            width="15"
                           >
                             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
                           </svg>
@@ -417,7 +417,7 @@ export function PlayerQueueList({
                         variant="ghost"
                         size="icon"
                         data-testid="queue-item-play-button"
-                        className="h-9 w-9 text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground sm:h-8 sm:w-8"
+                        className="h-7 w-7 text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground sm:h-7 sm:w-7"
                         disabled={!canControlPlayback || isCurrent}
                         onClick={() => void onPlayQueueItem(item.id)}
                         title="播放"
@@ -427,7 +427,7 @@ export function PlayerQueueList({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 text-foreground-muted hover:bg-red-500/15 hover:text-red-400 sm:h-8 sm:w-8"
+                        className="h-7 w-7 text-foreground-muted hover:bg-red-500/15 hover:text-red-400 sm:h-7 sm:w-7"
                         disabled={!canRemove}
                         onClick={() => startTransition(() => void onRemoveQueueItem(item.id))}
                         title="移除"
@@ -467,7 +467,7 @@ function QueueArtwork({ artworkUrl, title }: { artworkUrl: string | null; title:
   return (
     <div
       aria-label={`${title} 封面`}
-      className="light-player-queue-artwork flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-surface-border bg-[#252832] text-sm font-semibold text-white/45"
+      className="light-player-queue-artwork flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-[#252832] text-xs font-semibold text-white/45"
       data-testid="queue-item-artwork"
     >
       {source && !hasError ? (

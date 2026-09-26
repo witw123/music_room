@@ -272,7 +272,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Desktop Unified Header Bar */}
-      <div className="relative z-30 hidden lg:block shrink-0 border-b border-surface-border/50 bg-surface/40 px-4 sm:px-6 backdrop-blur-xl">
+      <div className="relative z-30 hidden lg:block shrink-0 border-b border-surface-border/50 bg-surface/40 px-3 sm:px-4 backdrop-blur-xl">
         <RoomControlHeader
           roomSnapshot={props.roomSnapshot}
           mediaConnectionState={props.mediaConnectionState}
@@ -290,7 +290,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Desktop Balanced Split Layout */}
-      <div className="hidden lg:grid flex-1 min-h-0 w-full lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)] divide-x divide-surface-border/40 overflow-hidden pt-2">
+      <div className="hidden lg:grid flex-1 min-h-0 w-full lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)] divide-x divide-surface-border/40 overflow-hidden">
         {/* Left Column: Request & Review Station */}
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <RequestWorkspaceTabs
@@ -302,15 +302,15 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           />
           <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
             {message ? (
-              <div className="px-4 pt-3">
-                <p className="rounded-xl border border-surface-border/60 bg-surface/80 px-3.5 py-2 text-xs text-foreground backdrop-blur-md shadow-xs" role="status">
+              <div className="px-3 pt-2">
+                <p className="rounded-xl border border-surface-border/60 bg-surface/80 px-3 py-1.5 text-xs text-foreground backdrop-blur-md shadow-xs" role="status">
                   {message}
                 </p>
               </div>
             ) : null}
             {panelsReady ? (
               leftTab === "inbox" && isHost ? (
-                <div className="p-3 sm:p-5">
+                <div className="p-2 sm:p-2.5">
                   <RequestInbox
                     pendingRequestId={pendingRequestId}
                     pendingRequests={pendingRequests}
@@ -320,7 +320,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   />
                 </div>
               ) : leftTab === "search" ? (
-                <div className="p-3 sm:p-5" data-testid={isHost ? "request-room-host-search" : "request-room-search"}>
+                <div className="p-2 sm:p-2.5" data-testid={isHost ? "request-room-host-search" : "request-room-search"}>
                   <RoomProviderTrackSearch
                     canManageLibrary={isHost}
                     hideUnavailableProvidersNotice
@@ -331,7 +331,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   />
                 </div>
               ) : leftTab === "my-requests" ? (
-                <div className="p-3 sm:p-5">
+                <div className="p-2 sm:p-2.5">
                   <RequestHistory
                     queue={props.roomSnapshot.queue}
                     requests={myRequests}
@@ -340,7 +340,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   />
                 </div>
               ) : leftTab === "library" ? (
-                <div className="flex h-full min-h-0 flex-col p-3 sm:p-5">
+                <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5">
                   <LibraryTabPanel
                     activeSession={props.activeSession}
                     canAddToQueue={isHost}
@@ -360,7 +360,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   />
                 </div>
               ) : (
-                <div className="flex h-full min-h-0 flex-col p-3 sm:p-5">
+                <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5">
                   <LocalStorageTabPanel
                     activeSession={props.activeSession}
                     canManageLibrary={isHost}
@@ -410,7 +410,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           >
             {panelsReady ? (
               rightTab === "queue" ? (
-                <div className="flex h-full min-h-0 flex-col p-3 sm:p-5" data-testid="request-queue-panel">
+                <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5" data-testid="request-queue-panel">
                   <PlayerQueueList
                     canControlPlayback={props.canControlPlayback}
                     canRemoveQueue={props.canRemoveQueue}
@@ -428,7 +428,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   />
                 </div>
               ) : (
-                <div className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden px-3 pb-5 pt-3 sm:px-4" data-testid="request-members-panel">
+                <div className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden p-2 sm:p-2.5" data-testid="request-members-panel">
                   <MembersPanel
                     activeSessionId={props.activeSession?.userId ?? null}
                     isHost={isHost}
@@ -445,7 +445,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
           </div>
 
           {/* Request Room Dedicated Song Interaction Bar */}
-          <div className="shrink-0 p-2 sm:p-3 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
+          <div className="shrink-0 px-2.5 py-1.5 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
             <RoomReactionToolbar
               roomId={roomId}
               socket={props.socket}
@@ -458,11 +458,11 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Mobile Streamlined View */}
-      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:hidden pt-2">
-        <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:hidden pt-1">
+        <div className="material-surface-header shrink-0 px-2 pb-1 pt-0">
           <div
             aria-label="点歌功能"
-            className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md overflow-x-auto hide-scrollbar"
+            className="flex items-center gap-0.5 rounded-lg bg-surface/70 p-0.5 border border-surface-border/40 backdrop-blur-md overflow-x-auto hide-scrollbar"
             role="tablist"
           >
             {mobileTabs.map((tab) => {
@@ -472,7 +472,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 <button
                   key={tab.id}
                   aria-selected={isActive}
-                  className={`flex-1 flex min-h-8 min-w-fit items-center justify-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all duration-150 ${
+                  className={`flex-1 flex min-h-7 min-w-fit items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
                     isActive
                       ? "bg-accent text-white shadow-xs"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
@@ -492,14 +492,14 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
           {message ? (
             <div className="px-3 pt-2">
-              <p className="rounded-xl border border-surface-border/60 bg-surface/80 px-3 py-2 text-xs text-foreground backdrop-blur-md shadow-xs" role="status">
+              <p className="rounded-xl border border-surface-border/60 bg-surface/80 px-3 py-1.5 text-xs text-foreground backdrop-blur-md shadow-xs" role="status">
                 {message}
               </p>
             </div>
           ) : null}
           {panelsReady ? (
             mobileTab === "inbox" && isHost ? (
-              <div className="p-3">
+              <div className="p-2">
                 <RequestInbox
                   pendingRequestId={pendingRequestId}
                   pendingRequests={pendingRequests}
@@ -509,7 +509,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 />
               </div>
             ) : mobileTab === "search" ? (
-              <div className="p-3">
+              <div className="p-2">
                 <RoomProviderTrackSearch
                   canManageLibrary={isHost}
                   hideUnavailableProvidersNotice
@@ -520,7 +520,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 />
               </div>
             ) : mobileTab === "my-requests" ? (
-              <div className="p-3">
+              <div className="p-2">
                 <RequestHistory
                   queue={props.roomSnapshot.queue}
                   requests={myRequests}
@@ -530,7 +530,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
               </div>
             ) : mobileTab === "queue" ? (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex-1 min-h-0 p-3">
+                <div className="flex-1 min-h-0 p-2">
                   <PlayerQueueList
                     canControlPlayback={props.canControlPlayback}
                     canRemoveQueue={props.canRemoveQueue}
@@ -547,7 +547,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     currentSessionId={props.activeSession?.userId ?? null}
                   />
                 </div>
-                <div className="shrink-0 p-2 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
+                <div className="shrink-0 px-2 py-1 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
                   <RoomReactionToolbar
                     roomId={roomId}
                     socket={props.socket}
@@ -558,7 +558,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 </div>
               </div>
             ) : mobileTab === "library" ? (
-              <div className="flex h-full min-h-0 flex-col p-3">
+              <div className="flex h-full min-h-0 flex-col p-2">
                 <LibraryTabPanel
                   activeSession={props.activeSession}
                   canAddToQueue={isHost}
@@ -578,7 +578,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 />
               </div>
             ) : (
-              <div className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden px-3 pb-5 pt-3">
+              <div className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden p-2">
                 <MembersPanel
                   activeSessionId={props.activeSession?.userId ?? null}
                   isHost={isHost}
@@ -612,10 +612,10 @@ function RequestWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0 sm:px-5 lg:pt-2.5 lg:pb-2.5">
+    <div className="material-surface-header shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5">
       <div
         aria-label={ariaLabel}
-        className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md"
+        className="flex items-center gap-0.5 rounded-lg bg-surface/70 p-0.5 border border-surface-border/40 backdrop-blur-md"
         role="tablist"
       >
         {tabs.map((tab) => {
@@ -627,7 +627,7 @@ function RequestWorkspaceTabs<T extends string>({
               id={`${panelPrefix}-tab-${tab.id}`}
               aria-controls={`${panelPrefix}-panel-${tab.id}`}
               aria-selected={isActive}
-              className={`flex-1 flex min-h-8 sm:min-h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+              className={`flex-1 flex min-h-7 sm:min-h-7.5 items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
                 isActive
                   ? "bg-accent text-white shadow-xs"
                   : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
@@ -661,12 +661,12 @@ function RequestInbox({
   onApproveAll?: () => Promise<void>;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs" data-testid="request-room-inbox">
-      <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
-        <div className="flex items-center gap-2">
-          <h2 className="font-bold text-foreground text-sm sm:text-base">待审核点歌</h2>
+    <section className="overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs" data-testid="request-room-inbox">
+      <div className="flex items-center justify-between px-3 py-2 sm:px-3.5">
+        <div className="flex items-center gap-1.5">
+          <h2 className="font-bold text-foreground text-xs sm:text-sm">待审核点歌</h2>
           {pendingRequests.length > 0 ? (
-            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-400">
+            <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2 py-0.2 text-[10px] font-bold text-amber-400">
               {pendingRequests.length}
             </span>
           ) : null}
@@ -677,7 +677,7 @@ function RequestInbox({
             onClick={() => void onApproveAll()}
             size="sm"
             type="button"
-            className="rounded-xl text-xs bg-accent hover:bg-accent-hover text-white shadow-xs transition-all active:scale-95"
+            className="h-7 rounded-lg text-xs bg-accent hover:bg-accent-hover text-white shadow-xs transition-all active:scale-95 px-2.5"
           >
             全部接纳入队
           </Button>
@@ -695,12 +695,12 @@ function RequestInbox({
           ))}
         </div>
       ) : (
-        <div className="px-4 py-8 text-center text-xs text-foreground-muted">还没有等待审核的点歌。</div>
+        <div className="px-3 py-4 text-center text-xs text-foreground-muted">还没有等待审核的点歌。</div>
       )}
       {handledRequests.length ? (
-        <div className="border-t border-surface-border/40 px-4 py-3 sm:px-5">
-          <p className="text-xs font-bold text-foreground-muted uppercase tracking-wider">最近处理记录</p>
-          <div className="mt-2 divide-y divide-surface-border/30">
+        <div className="border-t border-surface-border/40 px-3 py-2 sm:px-3.5">
+          <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">最近处理记录</p>
+          <div className="mt-1.5 divide-y divide-surface-border/30">
             {handledRequests.slice(0, 4).map((request) => (
               <RequestHistoryRow key={request.id} request={request} />
             ))}
@@ -721,14 +721,14 @@ function RequestTicket({
   onDecide: (request: RoomRequest, decision: "approved" | "rejected", options?: { playNext?: boolean }) => Promise<void>;
 }) {
   return (
-    <article className="flex min-w-0 items-center gap-3.5 px-4 py-3 sm:px-5 transition-colors hover:bg-surface-hover/60">
+    <article className="flex min-w-0 items-center gap-2.5 px-3 py-2 sm:px-3.5 transition-colors hover:bg-surface-hover/60">
       <Artwork artworkUrl={request.artworkUrl} title={request.title} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground" title={request.title}>{request.title}</p>
-        <p className="mt-0.5 truncate text-xs text-foreground-muted" title={`${request.artist}${request.album ? ` · ${request.album}` : ""}`}>
+        <p className="truncate text-xs sm:text-sm font-semibold text-foreground" title={request.title}>{request.title}</p>
+        <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${request.artist}${request.album ? ` · ${request.album}` : ""}`}>
           {request.artist}{request.album ? ` · ${request.album}` : ""}
         </p>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground-muted/70">
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-foreground-muted/70">
           <span className="font-medium text-accent">@{request.requesterName}</span>
           <span>·</span>
           <span className="font-mono">{formatDuration(request.durationMs)}</span>
@@ -736,13 +736,13 @@ function RequestTicket({
           <span className="capitalize">{request.provider === "netease" ? "网易云" : request.provider === "qqmusic" ? "QQ 音乐" : "Bilibili"}</span>
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
         <Button
           disabled={pending}
           onClick={() => void onDecide(request, "approved")}
           size="sm"
           type="button"
-          className="rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30"
+          className="h-7 rounded-lg px-2.5 text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30"
         >
           {pending ? "处理中…" : "接纳入队"}
         </Button>
@@ -752,7 +752,7 @@ function RequestTicket({
           size="sm"
           type="button"
           variant="outline"
-          className="rounded-xl text-xs hidden sm:inline-flex border border-surface-border hover:bg-surface-hover text-foreground"
+          className="h-7 rounded-lg px-2 text-xs hidden sm:inline-flex border border-surface-border hover:bg-surface-hover text-foreground"
           title="优先插播为下一首"
         >
           插播
@@ -763,7 +763,7 @@ function RequestTicket({
           size="sm"
           type="button"
           variant="ghost"
-          className="rounded-xl text-xs text-foreground-muted hover:text-rose-400 hover:bg-rose-500/10"
+          className="h-7 rounded-lg px-2 text-xs text-foreground-muted hover:text-rose-400 hover:bg-rose-500/10"
         >
           婉拒
         </Button>
@@ -784,10 +784,10 @@ function RequestHistory({
   tracks?: TrackMeta[];
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs">
-      <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
-        <h2 className="font-bold text-foreground text-sm sm:text-base">{title}</h2>
-        <span className="text-xs font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
+    <section className="overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50 backdrop-blur-xl shadow-xs">
+      <div className="flex items-center justify-between px-3 py-2 sm:px-3.5">
+        <h2 className="font-bold text-foreground text-xs sm:text-sm">{title}</h2>
+        <span className="text-[11px] font-mono text-foreground-muted">{requests.length} 次点歌记录</span>
       </div>
       {requests.length ? (
         <div className="divide-y divide-surface-border/40">
@@ -806,7 +806,7 @@ function RequestHistory({
           })}
         </div>
       ) : (
-        <div className="px-4 py-8 text-center text-xs text-foreground-muted">还没有提交过点歌。</div>
+        <div className="px-3 py-4 text-center text-xs text-foreground-muted">还没有提交过点歌。</div>
       )}
     </section>
   );
@@ -832,12 +832,12 @@ function RequestHistoryRow({
       : "bg-amber-500/15 border-amber-500/30 text-amber-400";
 
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-5">
+    <div className="flex min-w-0 items-center justify-between gap-2.5 px-3 py-2 sm:px-3.5">
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs sm:text-sm font-semibold text-foreground">{request.title}</p>
-        <p className="truncate text-xs text-foreground-muted">{request.artist}</p>
+        <p className="truncate text-[11px] text-foreground-muted">{request.artist}</p>
       </div>
-      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${statusClass}`}>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium border ${statusClass}`}>
         {statusLabel}
       </span>
     </div>
@@ -846,9 +846,9 @@ function RequestHistoryRow({
 
 function Artwork({ artworkUrl, title }: { artworkUrl: string | null; title: string }) {
   if (!artworkUrl) {
-    return <span aria-label={title} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface border border-surface-border/60 text-xs text-foreground-muted"><MusicIcon className="w-5 h-5 text-accent" /></span>;
+    return <span aria-label={title} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface border border-surface-border/60 text-xs text-foreground-muted"><MusicIcon className="w-4 h-4 text-accent" /></span>;
   }
-  return <img alt={title} className="h-11 w-11 shrink-0 rounded-xl object-cover border border-surface-border/60 shadow-xs" src={artworkUrl} />;
+  return <img alt={title} className="h-9 w-9 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs" src={artworkUrl} />;
 }
 
 async function importRequestedTrack(

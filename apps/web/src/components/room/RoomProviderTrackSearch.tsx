@@ -37,7 +37,7 @@ const bilibiliDefaultHotWords: SearchSuggestionItem[] = [
   { label: "名侦探柯南", hint: "推荐", provider: "bilibili" }
 ];
 
-export type RoomProviderTrackSearchMode = "import" | "program" | "request" | "suggest";
+export type RoomProviderTrackSearchMode = "import" | "request" | "suggest";
 
 export type BilibiliPartDetail = {
   bvid: string;
@@ -166,8 +166,7 @@ export function RoomProviderTrackSearch({
 
   const providerName = provider === "netease" ? "网易云音乐" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩";
   const isConnected = account?.connected === true;
-  const isProgramMode = mode === "program";
-  const isManagedImport = mode === "import" || isProgramMode;
+  const isManagedImport = mode === "import";
 
   useEffect(() => {
     if (!searchSuggestionsOpen) {
@@ -327,7 +326,7 @@ export function RoomProviderTrackSearch({
         if (candidate.provider === "netease") await onImportNeteaseTrack?.(candidate as NeteaseTrackCandidate);
         else if (candidate.provider === "bilibili") await onImportBilibiliTrack?.(candidate as BilibiliTrackCandidate);
         else await onImportQqMusicTrack?.(candidate as QqMusicTrackCandidate);
-        setMessage(isProgramMode ? `《${candidate.title}》已加入节目单。` : `《${candidate.title}》已导入曲库。`);
+        setMessage(`《${candidate.title}》已加入曲库。`);
       } else {
         await onRequestTrack?.(candidate);
         setMessage(mode === "request" ? `已提交《${candidate.title}》点歌。` : "已提交点歌建议。");
@@ -340,7 +339,7 @@ export function RoomProviderTrackSearch({
     }
   };
 
-  const actionLabel = isProgramMode ? "加入节目单" : mode === "import" ? "导入曲库" : mode === "request" ? "点歌" : "建议点歌";
+  const actionLabel = mode === "import" ? "加入曲库" : mode === "request" ? "点歌" : "建议点歌";
 
   if (enabledSearchProviders.length === 0) {
     if (hideUnavailableProvidersNotice) return null;
@@ -351,10 +350,10 @@ export function RoomProviderTrackSearch({
 
   const hotPills = remoteHotWords.length > 0 ? remoteHotWords.slice(0, 6) : [];
 
-  return <section className="flex min-w-0 flex-col gap-3" data-testid={testId}>
-    <div className={surface === "framed" ? "flex min-w-0 flex-col gap-3 rounded-2xl border border-surface-border/60 bg-surface/40 p-3.5 backdrop-blur-md transition-all shadow-xs" : "flex min-w-0 flex-col gap-3"}>
+  return <section className="flex min-w-0 flex-col gap-2" data-testid={testId}>
+    <div className={surface === "framed" ? "flex min-w-0 flex-col gap-2 rounded-xl border border-surface-border/60 bg-surface/40 p-2.5 backdrop-blur-md transition-all shadow-xs" : "flex min-w-0 flex-col gap-2"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-flex rounded-xl border border-surface-border/60 bg-surface/70 p-1" role="tablist" aria-label="音乐平台">
+        <div className="inline-flex rounded-lg border border-surface-border/60 bg-surface/70 p-0.5" role="tablist" aria-label="音乐平台">
           {enabledSearchProviders.map((item) => {
             const isCurrent = provider === item;
             return (
@@ -364,7 +363,7 @@ export function RoomProviderTrackSearch({
                 role="tab"
                 aria-selected={isCurrent}
                 onClick={() => setProvider(item)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
                   isCurrent
                     ? "bg-accent text-white shadow-xs"
                     : "text-foreground-muted hover:bg-surface-hover/60 hover:text-foreground"
@@ -379,12 +378,12 @@ export function RoomProviderTrackSearch({
           })}
         </div>
         {provider === "bilibili" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-500/20 bg-pink-500/10 px-2.5 py-1 text-[11px] font-medium text-pink-300">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-500/20 bg-pink-500/10 px-2 py-0.5 text-[10px] font-medium text-pink-300">
             <span className="h-1.5 w-1.5 rounded-full bg-pink-400" />
             <span>免登录 · 公开检索</span>
           </span>
         ) : isConnected ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>已连接{account?.nickname ? ` · ${account.nickname}` : ""}</span>
           </span>
@@ -470,16 +469,16 @@ export function RoomProviderTrackSearch({
         </div>
       ) : null}
 
-      {errorMessage ? <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="status">{errorMessage}</p> : null}
-      {message ? <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300" role="status">{message}</p> : null}
+      {errorMessage ? <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300" role="status">{errorMessage}</p> : null}
+      {message ? <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-300" role="status">{message}</p> : null}
 
       {bilibiliPartDetail ? (
-        <div className="flex flex-col gap-2.5 rounded-xl border border-surface-border/60 bg-surface/50 p-2.5">
-          <div className="flex items-center justify-between gap-2 border-b border-surface-border/40 pb-2">
+        <div className="flex flex-col gap-2 rounded-lg border border-surface-border/60 bg-surface/50 p-2">
+          <div className="flex items-center justify-between gap-2 border-b border-surface-border/40 pb-1.5">
             <button
               type="button"
               onClick={() => setBilibiliPartDetail(null)}
-              className="inline-flex items-center gap-1 rounded-lg border border-surface-border/60 bg-surface/70 px-2.5 py-1 text-xs font-medium text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="inline-flex items-center gap-1 rounded-md border border-surface-border/60 bg-surface/70 px-2 py-0.5 text-xs font-medium text-foreground-muted hover:bg-surface-hover hover:text-foreground transition-colors"
             >
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
               <span>返回搜索</span>
@@ -496,7 +495,7 @@ export function RoomProviderTrackSearch({
                   type="button"
                   disabled={pending !== null}
                   onClick={() => void handleImportAllParts(bilibiliPartDetail.parts)}
-                  className="shrink-0 rounded-lg border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent hover:border-accent hover:bg-accent hover:text-white transition-all disabled:opacity-50"
+                  className="shrink-0 rounded-md border border-accent/40 bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent hover:border-accent hover:bg-accent hover:text-white transition-all disabled:opacity-50"
                 >
                   {pending === "import-all-parts" ? "导入中…" : "全部导入"}
                 </button>
@@ -504,7 +503,7 @@ export function RoomProviderTrackSearch({
             </div>
           </div>
 
-          <div className="max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-lg border border-surface-border/40 bg-surface/40">
+          <div className="max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-md border border-surface-border/40 bg-surface/40">
             {bilibiliPartDetail.parts.map((part, index) => {
               const isInLibrary = libraryTrackIds.has(part.providerTrackId);
               const isPending = pending === `${mode}:${part.providerTrackId}`;
@@ -513,16 +512,16 @@ export function RoomProviderTrackSearch({
               return (
                 <article
                   key={part.providerTrackId}
-                  className="flex min-w-0 items-center gap-2.5 p-2.5 transition-colors hover:bg-surface-hover/60"
+                  className="flex min-w-0 items-center gap-2 px-2.5 py-1.5 transition-colors hover:bg-surface-hover/60"
                 >
-                  <span className="w-6 shrink-0 text-center font-mono text-xs tabular-nums text-foreground-muted/70">
+                  <span className="w-5 shrink-0 text-center font-mono text-xs tabular-nums text-foreground-muted/70">
                     {String(index + 1).padStart(2, "0")}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-medium text-foreground" title={part.title}>
                       {part.title}
                     </p>
-                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-foreground-muted/70">
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-foreground-muted/70">
                       <span className="font-mono">{formatDuration(part.durationMs)}</span>
                       <span>·</span>
                       <span className="truncate">{part.artist || bilibiliPartDetail.artist}</span>
@@ -532,7 +531,7 @@ export function RoomProviderTrackSearch({
                     type="button"
                     disabled={disabled}
                     onClick={() => void handleTrackAction(part)}
-                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                    className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold transition-all ${
                       isManagedImport && isInLibrary
                         ? "cursor-default border border-surface-border/60 bg-surface text-foreground-muted/60"
                         : isPending
@@ -540,7 +539,7 @@ export function RoomProviderTrackSearch({
                           : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-xs"
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    {isManagedImport && isInLibrary ? (isProgramMode ? "已在节目单" : "已在曲库") : isPending ? "处理中…" : actionLabel}
+                    {isManagedImport && isInLibrary ? "已在曲库" : isPending ? "处理中…" : actionLabel}
                   </button>
                 </article>
               );
@@ -548,7 +547,7 @@ export function RoomProviderTrackSearch({
           </div>
         </div>
       ) : results.length > 0 ? (
-        <div className="divide-y divide-surface-border/40 overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50">
+        <div className="divide-y divide-surface-border/40 overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
           {results.map((track) => {
             const isInLibrary = libraryTrackIds.has(track.providerTrackId);
             const isPending = pending === `${mode}:${track.providerTrackId}`;
@@ -561,19 +560,19 @@ export function RoomProviderTrackSearch({
                 track.durationMs > 600000);
             const isPartsPending = bilibiliTrack && pending === `parts:${bilibiliTrack.bvid || track.providerTrackId.split(":")[0]}`;
 
-            return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-surface-hover/60">
+            return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-surface-hover/60">
               {track.artworkUrl ? (
                 <img
                   src={track.artworkUrl}
                   referrerPolicy="no-referrer"
                   alt=""
-                  className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs"
+                  className="h-9 w-9 shrink-0 rounded-md border border-surface-border/60 object-cover shadow-xs"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = "none";
                   }}
                 />
               ) : (
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -601,7 +600,7 @@ export function RoomProviderTrackSearch({
                 <p className="mt-0.5 truncate text-[11px] text-foreground-muted" title={`${track.artist}${track.album ? ` · ${track.album}` : ""}`}>
                   {track.artist}{track.album ? ` · ${track.album}` : ""}
                 </p>
-                <div className="mt-1 flex items-center gap-2 text-[10px] text-foreground-muted/70">
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-foreground-muted/70">
                   <span className="font-mono">{formatDuration(track.durationMs)}</span>
                   <span>·</span>
                   <span className="capitalize">{track.provider === "netease" ? "网易云" : track.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</span>
@@ -617,7 +616,7 @@ export function RoomProviderTrackSearch({
                       void handleOpenBilibiliParts(track);
                     }}
                     title="查看分P列表"
-                    className="shrink-0 rounded-lg border border-surface-border/60 bg-surface/80 px-2 py-1.5 text-xs font-medium text-foreground-muted hover:border-pink-500/40 hover:bg-pink-500/10 hover:text-pink-400 transition-all disabled:opacity-50"
+                    className="shrink-0 rounded-md border border-surface-border/60 bg-surface/80 px-2 py-1 text-xs font-medium text-foreground-muted hover:border-pink-500/40 hover:bg-pink-500/10 hover:text-pink-400 transition-all disabled:opacity-50"
                   >
                     {isPartsPending ? (
                       <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-pink-400 border-t-transparent align-middle" />
@@ -630,7 +629,7 @@ export function RoomProviderTrackSearch({
                   type="button"
                   disabled={disabled}
                   onClick={() => void handleTrackAction(track)}
-                  className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                  className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
                     isManagedImport && isInLibrary
                       ? "cursor-default border border-surface-border/60 bg-surface text-foreground-muted/60"
                       : isPending
@@ -638,7 +637,7 @@ export function RoomProviderTrackSearch({
                         : "border border-accent/40 bg-accent/15 text-accent hover:border-accent hover:bg-accent hover:text-white shadow-xs"
                   } disabled:cursor-not-allowed disabled:opacity-50`}
                 >
-                  {isManagedImport && isInLibrary ? (isProgramMode ? "已在节目单" : "已在曲库") : isPending ? "处理中…" : actionLabel}
+                  {isManagedImport && isInLibrary ? "已在曲库" : isPending ? "处理中…" : actionLabel}
                 </button>
               </div>
             </article>;

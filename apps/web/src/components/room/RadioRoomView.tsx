@@ -116,7 +116,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Desktop Unified Header Bar */}
-      <div className="relative z-30 hidden lg:block shrink-0 border-b border-surface-border/50 bg-surface/40 px-4 sm:px-6 backdrop-blur-xl">
+      <div className="relative z-30 hidden lg:block shrink-0 border-b border-surface-border/50 bg-surface/40 px-3 sm:px-4 backdrop-blur-xl">
         <RoomControlHeader
           roomSnapshot={props.roomSnapshot}
           mediaConnectionState={props.mediaConnectionState}
@@ -134,7 +134,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Desktop Balanced Split Layout */}
-      <div className="hidden lg:grid flex-1 min-h-0 w-full lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)] divide-x divide-surface-border/40 overflow-hidden pt-2">
+      <div className="hidden lg:grid flex-1 min-h-0 w-full lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)] divide-x divide-surface-border/40 overflow-hidden">
         {/* Left Column: Broadcast & Content Hub */}
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <RadioWorkspaceTabs
@@ -147,7 +147,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
             {panelsReady ? (
               leftTab === "queue" ? (
-                <div className="flex h-full min-h-0 flex-col p-3 sm:p-5 gap-3.5" data-testid="radio-queue-panel">
+                <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5 gap-2" data-testid="radio-queue-panel">
                   {/* Autopilot section placed directly at top of queue */}
                   <RadioAutopilotSection props={props} isHost={isHost} />
                   <div className="flex-1 min-h-0 overflow-y-auto">
@@ -212,7 +212,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           </div>
 
           {/* Radio Dedicated Member Interaction Bar */}
-          <div className="shrink-0 p-2 sm:p-3 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
+          <div className="shrink-0 px-2.5 py-1.5 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
             <RoomReactionToolbar
               roomId={props.roomSnapshot.room.id}
               socket={props.socket}
@@ -225,11 +225,11 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
       </div>
 
       {/* Mobile Streamlined View */}
-      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:hidden pt-2">
-        <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:hidden pt-1">
+        <div className="material-surface-header shrink-0 px-2 pb-1 pt-0">
           <div
             aria-label="电台功能"
-            className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md overflow-x-auto hide-scrollbar"
+            className="flex items-center gap-0.5 rounded-lg bg-surface/70 p-0.5 border border-surface-border/40 backdrop-blur-md overflow-x-auto hide-scrollbar"
             role="tablist"
           >
             {mobileTabs.map((tab) => {
@@ -239,7 +239,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                 <button
                   key={tab.id}
                   aria-selected={isActive}
-                  className={`flex-1 flex min-h-8 min-w-fit items-center justify-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all duration-150 ${
+                  className={`flex-1 flex min-h-7 min-w-fit items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
                     isActive
                       ? "bg-accent text-white shadow-xs"
                       : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
@@ -259,7 +259,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
         <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
           {panelsReady ? (
             mobileTab === "queue" ? (
-              <div className="flex h-full min-h-0 flex-col p-3 gap-3">
+              <div className="flex h-full min-h-0 flex-col p-2 gap-2">
                 <RadioAutopilotSection props={props} isHost={isHost} />
                 <div className="flex-1 min-h-0 overflow-y-auto">
                   <PlayerQueueList
@@ -292,7 +292,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                     socket={props.socket}
                   />
                 </div>
-                <div className="shrink-0 p-2 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
+                <div className="shrink-0 px-2 py-1 border-t border-surface-border/40 bg-surface/80 backdrop-blur-xl">
                   <RoomReactionToolbar
                     roomId={props.roomSnapshot.room.id}
                     socket={props.socket}
@@ -330,10 +330,10 @@ function RadioWorkspaceTabs<T extends string>({
   tabs: Array<{ id: T; label: string; icon?: React.ComponentType<{ className?: string }> }>;
 }) {
   return (
-    <div className="material-surface-header shrink-0 px-3 pb-1.5 pt-0 sm:px-5 lg:pt-2.5 lg:pb-2.5">
+    <div className="material-surface-header shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5">
       <div
         aria-label={ariaLabel}
-        className="flex items-center gap-1 rounded-xl bg-surface/70 p-1 border border-surface-border/40 backdrop-blur-md"
+        className="flex items-center gap-0.5 rounded-lg bg-surface/70 p-0.5 border border-surface-border/40 backdrop-blur-md"
         role="tablist"
       >
         {tabs.map((tab) => {
@@ -345,7 +345,7 @@ function RadioWorkspaceTabs<T extends string>({
               id={`${panelPrefix}-tab-${tab.id}`}
               aria-controls={`${panelPrefix}-panel-${tab.id}`}
               aria-selected={isActive}
-              className={`flex-1 flex min-h-8 sm:min-h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm font-semibold transition-all duration-150 ${
+              className={`flex-1 flex min-h-7 sm:min-h-7.5 items-center justify-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-all duration-150 ${
                 isActive
                   ? "bg-accent text-white shadow-xs"
                   : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
@@ -373,7 +373,7 @@ function RadioLibraryList({
   isHost: boolean;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col p-3 sm:p-5">
+    <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5">
       <LibraryTabPanel
         activeSession={props.activeSession}
         canAddToQueue={isHost}
@@ -397,8 +397,8 @@ function RadioLibraryList({
 
 function RadioMembersPanel(props: RoomDashboardViewProps & { membershipNow: number }) {
   return (
-    <section className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-2xl bg-background lg:rounded-none" data-testid="radio-members-panel">
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5 pt-3 sm:px-4">
+    <section className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl bg-background lg:rounded-none" data-testid="radio-members-panel">
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto p-2 sm:p-2.5">
         <MembersPanel
           activeSessionId={props.activeSession?.userId ?? null}
           isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId}
@@ -451,23 +451,23 @@ function RadioAutopilotSection({
   };
 
   return (
-    <section className="shrink-0 rounded-2xl border border-surface-border/60 bg-surface/50 p-3 sm:p-4 shadow-xs backdrop-blur-xl" data-testid="radio-autopilot">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isAutopilotEnabled ? "bg-emerald-400 animate-pulse" : "bg-foreground-muted/30"}`} />
+    <section className="shrink-0 rounded-xl border border-surface-border/60 bg-surface/50 p-2.5 sm:p-3 shadow-xs backdrop-blur-xl" data-testid="radio-autopilot">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${isAutopilotEnabled ? "bg-emerald-400 animate-pulse" : "bg-foreground-muted/30"}`} />
           <h3 className="text-xs sm:text-sm font-bold text-foreground truncate">智能续播流</h3>
-          <span className="text-[10px] sm:text-[11px] font-medium text-foreground-muted px-2 py-0.5 rounded-full bg-surface border border-surface-border/60 shrink-0">
+          <span className="text-[10px] sm:text-[11px] font-medium text-foreground-muted px-1.5 py-0.5 rounded-full bg-surface border border-surface-border/60 shrink-0">
             {isAutopilotEnabled ? "已启用个性化推荐" : "已暂停"}
           </span>
         </div>
         {isHost ? (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Button
               disabled={!isAutopilotEnabled && !canRefillNext}
               onClick={() => void toggleAutopilot()}
               size="sm"
               type="button"
-              className={`h-7 sm:h-8 rounded-lg text-xs font-medium border px-2.5 ${
+              className={`h-6 sm:h-7 rounded-md text-xs font-medium border px-2 ${
                 isAutopilotEnabled
                   ? "bg-surface hover:bg-surface-hover text-foreground border-surface-border"
                   : "bg-accent hover:bg-accent-hover text-white shadow-xs border-accent"
@@ -481,7 +481,7 @@ function RadioAutopilotSection({
               size="sm"
               type="button"
               variant="outline"
-              className="h-7 sm:h-8 rounded-lg text-xs bg-surface hover:bg-surface-hover text-foreground border-surface-border px-2.5"
+              className="h-6 sm:h-7 rounded-md text-xs bg-surface hover:bg-surface-hover text-foreground border-surface-border px-2"
             >
               {autopilot.state.kind === "refilling" ? "补充中…" : "补充下一首"}
             </Button>
@@ -498,7 +498,7 @@ function RadioAutopilotSection({
       {autopilot.nextTrack ? <RadioAutopilotNextTrackCard track={autopilot.nextTrack} /> : null}
 
       {message || autopilot.state.message ? (
-        <p className={`mt-2 text-[11px] leading-relaxed ${autopilot.state.kind === "paused" ? "text-amber-400" : "text-foreground-muted"}`} role="status">
+        <p className={`mt-1.5 text-[11px] leading-relaxed ${autopilot.state.kind === "paused" ? "text-amber-400" : "text-foreground-muted"}`} role="status">
           {message || autopilot.state.message}
         </p>
       ) : null}
@@ -510,7 +510,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [importTab, setImportTab] = useState<"local" | "playlists">("local");
 
-  const importAndQueue = async (candidate: ProviderCandidate) => {
+  const handleImportTrack = async (candidate: ProviderCandidate) => {
     setMessage(null);
     try {
       if (candidate.provider === "netease") {
@@ -520,47 +520,47 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
       } else {
         await props.onImportQqMusicTrack(candidate);
       }
-      setMessage(`已将《${candidate.title}》导入曲库并加入电台节目单。`);
+      setMessage(`已将《${candidate.title}》加入曲库。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "导入歌曲失败。请稍后重试。");
     }
   };
 
   return (
-    <aside className="min-w-0 px-4 pb-6 pt-4 sm:px-5 lg:pb-7" data-testid="radio-host-console">
-      <div className="flex items-center justify-between pb-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-surface text-foreground-muted border border-surface-border">
-            <RadioIcon className="w-4 h-4" />
+    <aside className="min-w-0 px-2.5 py-2.5 sm:px-3.5 sm:py-3" data-testid="radio-host-console">
+      <div className="flex items-center justify-between pb-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-surface text-foreground-muted border border-surface-border">
+            <RadioIcon className="w-3.5 h-3.5" />
           </span>
-          <h2 className="text-sm sm:text-base font-bold text-foreground tracking-tight">电台搜歌与曲目导入</h2>
+          <h2 className="text-xs sm:text-sm font-bold text-foreground tracking-tight">电台搜歌与曲目导入</h2>
         </div>
-        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-0.5 text-[11px] font-bold text-emerald-400">
+        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
           LIVE ON AIR
         </span>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-2.5">
         <RoomProviderTrackSearch
           canManageLibrary
           hideUnavailableProvidersNotice
-          mode="program"
-          onImportNeteaseTrack={importAndQueue}
-          onImportQqMusicTrack={importAndQueue}
-          onImportBilibiliTrack={importAndQueue}
+          mode="import"
+          onImportNeteaseTrack={handleImportTrack}
+          onImportQqMusicTrack={handleImportTrack}
+          onImportBilibiliTrack={handleImportTrack}
           roomTracks={props.roomSnapshot.tracks}
           surface="plain"
           testId="radio-room-program"
         />
       </div>
 
-      <section className="mt-5 pt-3" data-testid="radio-room-imports">
-        <h3 className="text-sm font-bold text-foreground mb-3">导入电台曲目</h3>
-        <div aria-label="导入歌曲方式" className="grid grid-cols-2 rounded-xl border border-surface-border/40 p-1 bg-surface/70" role="tablist">
+      <section className="mt-3 pt-2" data-testid="radio-room-imports">
+        <h3 className="text-xs sm:text-sm font-bold text-foreground mb-1.5">导入电台曲目</h3>
+        <div aria-label="导入歌曲方式" className="grid grid-cols-2 rounded-lg border border-surface-border/40 p-0.5 bg-surface/70" role="tablist">
           <button
             aria-controls="radio-import-local"
             aria-selected={importTab === "local"}
-            className={`min-h-8 sm:min-h-9 rounded-lg px-3 text-xs font-semibold transition-all ${
+            className={`min-h-7 sm:min-h-7.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
               importTab === "local" ? "bg-accent text-white shadow-xs" : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
             }`}
             onClick={() => setImportTab("local")}
@@ -572,7 +572,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
           <button
             aria-controls="radio-import-playlists"
             aria-selected={importTab === "playlists"}
-            className={`min-h-8 sm:min-h-9 rounded-lg px-3 text-xs font-semibold transition-all ${
+            className={`min-h-7 sm:min-h-7.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
               importTab === "playlists" ? "bg-accent text-white shadow-xs" : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
             }`}
             onClick={() => setImportTab("playlists")}
@@ -582,7 +582,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
             我的歌单
           </button>
         </div>
-        <div className="mt-3">
+        <div className="mt-2">
           {importTab === "local" ? (
             <div id="radio-import-local" role="tabpanel">
               <LocalAudioImport onFilesSelected={props.onFilesSelected} testId="radio-track-upload-input" />
@@ -613,18 +613,18 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
           )}
         </div>
       </section>
-      {message ? <p className="mt-3 text-xs text-foreground-muted" role="status">{message}</p> : null}
+      {message ? <p className="mt-2 text-xs text-foreground-muted" role="status">{message}</p> : null}
     </aside>
   );
 }
 
 function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack }) {
   return (
-    <article className="mt-2.5 flex min-w-0 items-center gap-3 rounded-xl border border-surface-border/60 bg-surface/60 p-2.5 shadow-xs" data-testid="radio-autopilot-next-track">
+    <article className="mt-1.5 flex min-w-0 items-center gap-2 rounded-lg border border-surface-border/60 bg-surface/60 p-2 shadow-xs" data-testid="radio-autopilot-next-track">
       {track.artworkUrl ? (
-        <img alt="" className="h-11 w-11 shrink-0 rounded-lg border border-surface-border/60 object-cover shadow-xs" src={track.artworkUrl} />
+        <img alt="" className="h-9 w-9 shrink-0 rounded-md border border-surface-border/60 object-cover shadow-xs" src={track.artworkUrl} />
       ) : (
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
       )}
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">下一首自动续播</p>

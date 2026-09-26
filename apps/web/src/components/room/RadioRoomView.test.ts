@@ -35,4 +35,11 @@ describe("RadioRoomView layout", () => {
     expect(chatSource).toContain("getFullYear()");
     expect(chatSource.indexOf("formatChatTime(message.timestamp)")).toBeLessThan(chatSource.indexOf("message.content"));
   });
+
+  it("uses '加入曲库' instead of '加入节目单' for broadcast desk track search", () => {
+    expect(radioRoomSource).toContain('mode="import"');
+    expect(radioRoomSource).not.toContain('mode="program"');
+    expect(radioRoomSource).toContain("加入曲库");
+    expect(radioRoomSource).not.toContain("加入电台节目单");
+  });
 });

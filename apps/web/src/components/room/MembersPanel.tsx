@@ -66,7 +66,7 @@ export function MemberPermissionControls({
         const checked = permissions[permission];
         const pending = pendingPermission === permission;
         return (
-                      <div key={permission} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2.5">
+                      <div key={permission} className="flex min-h-9 items-center justify-between gap-2.5 rounded-lg border border-surface-border px-2.5 py-1.5">
             <span className="min-w-0">
               <span className="block text-xs font-medium text-foreground">{label}</span>
               <span className="mt-0.5 block truncate text-[10px] text-foreground-muted">{description}</span>
@@ -414,7 +414,7 @@ function MembersPanelBase({
   };
 
   return (
-    <section className="flex w-full flex-col gap-3" data-testid="members-panel">
+    <section className="flex w-full flex-col gap-1.5" data-testid="members-panel">
       {normalizedMembers.length > 0 ? (
         <div className="divide-y divide-surface-border/40">
           {normalizedMembers.map((member) => {
@@ -428,45 +428,45 @@ function MembersPanelBase({
                   <button
                     aria-controls={`member-permissions-${member.id}`}
                     aria-expanded={isSettingsOpen}
-                    className="flex w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent sm:px-4"
+                    className="flex w-full min-w-0 items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent sm:px-3"
                     data-testid={`member-settings-${member.id}`}
                     onClick={() => setOpenSettingsMemberId(isSettingsOpen ? null : member.id)}
                     type="button"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-surface-border/60 bg-surface text-xs font-semibold text-foreground">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-surface-border/60 bg-surface text-xs font-semibold text-foreground">
                       {member.nickname.slice(0, 1).toUpperCase()}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-2">
-                        <strong className="truncate text-sm font-semibold text-foreground">{member.nickname}</strong>
+                        <strong className="truncate text-xs sm:text-sm font-semibold text-foreground">{member.nickname}</strong>
                         {member.id === activeSessionId ? <span className="shrink-0 text-[10px] text-foreground-muted">本机</span> : null}
                       </span>
-                      <span className="mt-0.5 block text-[11px] text-foreground-muted">
+                      <span className="block text-[10px] sm:text-[11px] text-foreground-muted">
                         {member.role === "host" ? "房主" : "成员"}
                       </span>
                     </span>
-                    <span className={`flex shrink-0 items-center gap-1.5 text-xs ${presence.text}`}>
+                    <span className={`flex shrink-0 items-center gap-1.5 text-[11px] ${presence.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />
                       {presence.label}
                     </span>
-                    <svg aria-hidden="true" className={`h-4 w-4 shrink-0 text-foreground-muted transition-transform duration-200 ${isSettingsOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
+                    <svg aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform duration-200 ${isSettingsOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
                 </article>
                 {isSettingsOpen ? (
-                  <div className="motion-safe:animate-fade-in border-t border-surface-border/40 bg-surface/30 px-3 py-3 sm:px-4" data-testid={`member-permissions-${member.id}`} id={`member-permissions-${member.id}`}>
-                    <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="motion-safe:animate-fade-in border-t border-surface-border/40 bg-surface/30 px-2.5 py-2 sm:px-3" data-testid={`member-permissions-${member.id}`} id={`member-permissions-${member.id}`}>
+                    <div className="mb-2 flex items-start justify-between gap-2.5">
                       <div>
                         <span className="block text-xs font-semibold text-foreground">房间权限</span>
-                        <span className="mt-1 block text-[10px] tabular-nums text-foreground-muted" data-testid={`member-duration-${member.id}`}>
+                        <span className="mt-0.5 block text-[10px] tabular-nums text-foreground-muted" data-testid={`member-duration-${member.id}`}>
                           已在房间 {formatMemberDuration(getMemberDurationMs(member, now))}
                         </span>
                       </div>
                       {canManageMember ? (
                         <Button
                           aria-label={`移除 ${member.nickname}`}
-                          className="min-h-10 px-3 text-xs text-red-300 hover:text-red-200"
+                          className="h-7 px-2 text-xs text-red-300 hover:text-red-200"
                           data-testid={`member-remove-${member.id}`}
                           onClick={() => setRemoveTarget(member)}
                           title="移除成员"

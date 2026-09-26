@@ -337,7 +337,7 @@ export function RoomControlHeader({
   return (
     <>
       {/* Desktop Fused Cockpit Bar */}
-      <div className={`flex w-full items-center justify-between gap-3 h-14 ${className}`}>
+      <div className={`flex w-full items-center justify-between gap-3 h-11 sm:h-12 ${className}`}>
         {hideRoomMetadata ? null : (
           <div className="flex items-center gap-2.5 min-w-0 shrink-0">
             {/* Room Type Tag */}

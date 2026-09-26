@@ -115,7 +115,7 @@ function TrackListSectionBase({
     }
   };
   return (
-    <section className="relative flex w-full flex-col gap-3">
+    <section className="relative flex w-full flex-col gap-2">
       <LocalAudioImport
         disabled={!canManageLibrary || pendingAction !== null}
         onFilesSelected={(files) => runAction("upload", () => onFilesSelected(files))}
@@ -124,7 +124,7 @@ function TrackListSectionBase({
       <div>
         <div
           aria-label="曲库来源筛选"
-          className="grid w-full grid-cols-3 gap-1 rounded-xl border border-surface-border/60 bg-surface/60 p-1"
+          className="grid w-full grid-cols-3 gap-0.5 rounded-lg border border-surface-border/60 bg-surface/60 p-0.5"
           role="group"
         >
           {[
@@ -136,7 +136,7 @@ function TrackListSectionBase({
               key={option.value}
               aria-pressed={trackFilter === option.value}
               data-testid={`library-filter-${option.value}`}
-              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-semibold transition-colors sm:px-2.5 ${
+              className={`flex min-w-0 whitespace-nowrap items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold transition-colors sm:px-2.5 ${
                 trackFilter === option.value
                   ? "bg-accent text-white shadow-xs"
                   : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
@@ -157,9 +157,9 @@ function TrackListSectionBase({
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {visibleTracks.length > 0 ? (
-          <div className="overflow-hidden rounded-xl border border-surface-border/60 bg-surface/50">
+          <div className="overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
             {renderedTracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
@@ -185,7 +185,7 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2.5 py-2.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-3.5"
+                  className="group grid grid-cols-[2.25rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2 py-1.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:gap-x-2.5 sm:px-3"
                 >
                   <div className="relative row-span-2 shrink-0">
                     <TrackArtwork artworkUrl={artworkUrl} title={track.title} />
@@ -198,7 +198,7 @@ function TrackListSectionBase({
                   </div>
 
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-foreground">{track.title}</h3>
+                    <h3 className="truncate text-xs sm:text-sm font-semibold text-foreground">{track.title}</h3>
                   </div>
 
                   <div className="col-start-3 row-span-2 flex min-w-max self-center justify-self-end flex-nowrap items-center justify-end gap-0.5 sm:gap-1">
@@ -206,7 +206,7 @@ function TrackListSectionBase({
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 !text-accent hover:bg-transparent hover:!text-accent disabled:opacity-100 disabled:!text-accent/45 sm:h-8 sm:w-8"
+                      className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 !text-accent hover:bg-transparent hover:!text-accent disabled:opacity-100 disabled:!text-accent/45 sm:h-7 sm:w-7"
                       disabled={!canControlPlayback || pendingAction !== null}
                       onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"
@@ -214,7 +214,7 @@ function TrackListSectionBase({
                       title="立即播放"
                       size="icon"
                     >
-                      <svg aria-hidden="true" fill="currentColor" height="18" viewBox="0 0 24 24" width="18">
+                      <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 24 24" width="16">
                         <path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10-6.8a1.1 1.1 0 0 0 0-1.8l-10-6.8C8.9 3.9 8 4.4 8 5.2Z" />
                       </svg>
                     </Button>
@@ -224,7 +224,7 @@ function TrackListSectionBase({
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:h-8 sm:w-8"
+                        className="h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 text-destructive hover:bg-transparent hover:text-destructive sm:h-7 sm:w-7"
                         disabled={!canManageLibrary || pendingAction !== null}
                         onClick={() =>
                           void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
@@ -234,7 +234,7 @@ function TrackListSectionBase({
                         type="button"
                         size="icon"
                       >
-                        <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                        <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
                       </Button>
                     ) : null}
 
@@ -243,7 +243,7 @@ function TrackListSectionBase({
                         data-testid="track-save-local-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className={`h-10 w-10 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent sm:h-8 sm:w-8 ${isSavedLocally ? "text-accent hover:text-accent" : canSaveToSelectedFolder ? "" : "text-foreground-muted/60"}`}
+                        className={`h-8 w-8 shrink-0 !rounded-none bg-transparent p-0 hover:bg-transparent sm:h-7 sm:w-7 ${isSavedLocally ? "text-accent hover:text-accent" : canSaveToSelectedFolder ? "" : "text-foreground-muted/60"}`}
                         disabled={pendingAction !== null}
                         onClick={() => void runAction(`save:${track.id}`, () => onSaveTrackToLocal(track))}
                         aria-label={isSavedLocally
@@ -256,7 +256,7 @@ function TrackListSectionBase({
                         size="icon"
                       >
                         {isSavedLocally ? (
-                          <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m5 12 4 4L19 6" /></svg>
+                          <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="m5 12 4 4L19 6" /></svg>
                         ) : (
                           <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h8V4" /><path d="M8 20v-5h8v5" /></svg>
                         )}
@@ -333,7 +333,7 @@ function TrackArtwork({ artworkUrl, title }: { artworkUrl: string | null; title:
   return (
     <div
       aria-label={`${title} 封面`}
-      className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-background text-sm font-semibold text-foreground-muted"
+      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-surface-border bg-background text-xs font-semibold text-foreground-muted"
       style={artworkUrl ? { backgroundImage: `url(${artworkUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
     >
       {!artworkUrl ? title.slice(0, 1).toUpperCase() : null}
