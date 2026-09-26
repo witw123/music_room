@@ -103,6 +103,36 @@ export class RoomPresenceService {
     return presence;
   }
 
+  /**
+   * 单成员 presence 读取(心跳续期快速路径专用):先查进程内缓存,
+   * 未命中再读单个 Redis 键。避免 getPresenceSnapshot 需要完整成员列表的开销。
+   */
+  async getPresenceFor(roomId: string, sessionId: string): Promise<StoredPresenceEntry | null> {
+    this.pruneExpiredInMemoryPresence(roomId);
+    const localPresence = this.inMemoryPresence.get(roomId)?.get(sessionId);
+    if (localPresence && localPresence.expiresAt > Date.now()) {
+      return { peerId: localPresence.peerId, presenceState: localPresence.presenceState };
+    }
+
+    const redisWithAvailability = this.redis as RedisService & {
+      isAvailable?: () => boolean;
+    };
+    if (typeof redisWithAvailability.isAvailable === "function" && !redisWithAvailability.isAvailable()) {
+      return null;
+    }
+
+    try {
+      const rawValue = await this.redis.getString(this.realtimePresenceKey(roomId, sessionId));
+      const parsed = this.parseStoredPresence(rawValue);
+      if (parsed) {
+        this.setInMemoryPresence(roomId, sessionId, parsed);
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
   async getActivePresence(roomId: string, members: RoomMember[]) {
     const presence = await this.getPresenceSnapshot(roomId, members);
     const activePresence = new Map<string, string>();

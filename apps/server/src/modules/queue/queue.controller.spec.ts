@@ -77,7 +77,8 @@ describe("QueueController", () => {
     const controller = new QueueController(
       roomService as never,
       roomRealtimePublisher as never,
-      createAuthServiceMock() as never
+      createAuthServiceMock() as never,
+      undefined as never
     );
 
     await expect(

@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import type { RoomRecord } from "./room.types";
 import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { PrismaService } from "../../infra/prisma/prisma.service";
@@ -8,7 +7,6 @@ import { AuthService } from "../auth/auth.service";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomPresenceService } from "./services/room-presence.service";
-import { realtimePresenceTtlSeconds } from "./services/room-presence.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomActivityService } from "./services/room-activity.service";
@@ -16,106 +14,70 @@ import { RoomContentService } from "./services/room-content.service";
 import { RoomChatService } from "./services/room-chat.service";
 import { RoomLifecycleService } from "./services/room-lifecycle.service";
 import { RoomPresenceOrchestratorService } from "./services/room-presence-orchestrator.service";
+import { buildRoomCoreServices, type RoomCoreServices } from "./room-graph";
 import { RoomService } from "./room.service";
 
-const ROOM_RECORDS = Symbol("ROOM_RECORDS");
-const ROOM_PRESENCE = Symbol("ROOM_PRESENCE");
+const ROOM_CORE_SERVICES = Symbol("ROOM_CORE_SERVICES");
 
-type RoomPresenceStore = Map<
-  string,
-  Map<
-    string,
-    {
-      peerId: string | null;
-      presenceState: "online" | "reconnecting" | "offline";
-      expiresAt: number;
-    }
-  >
->;
-
+/**
+ * 房间域装配:全部子服务经 `buildRoomCoreServices` 一次性构造
+ * (与单测的装配是同一个函数),再以各自的 class token 暴露给框架注入。
+ */
 @Module({
   imports: [AuthModule, RealtimeModule],
   providers: [
     {
-      provide: ROOM_RECORDS,
-      useFactory: () => new Map<string, RoomRecord>()
-    },
-    {
-      provide: ROOM_PRESENCE,
-      useFactory: () => new Map() satisfies RoomPresenceStore
+      provide: ROOM_CORE_SERVICES,
+      inject: [AuthService, PrismaService, RedisService],
+      useFactory: (auth: AuthService, prisma: PrismaService, redis: RedisService) =>
+        buildRoomCoreServices({ authService: auth, prisma, redis })
     },
     {
       provide: RoomRecordRepository,
-      inject: [ROOM_RECORDS, PrismaService, RedisService],
-      useFactory: (
-        rooms: Map<string, RoomRecord>,
-        prisma: PrismaService,
-        redis: RedisService
-      ) => new RoomRecordRepository(rooms, prisma, redis, "music-room:rooms", 43_200, 604_800)
+      useFactory: (core: RoomCoreServices) => core.roomRecordRepository,
+      inject: [ROOM_CORE_SERVICES]
     },
     {
       provide: RoomPresenceService,
-      inject: [RedisService, ROOM_PRESENCE],
-      useFactory: (redis: RedisService, presence: RoomPresenceStore) =>
-        new RoomPresenceService(redis, presence, realtimePresenceTtlSeconds)
+      useFactory: (core: RoomCoreServices) => core.roomPresenceService,
+      inject: [ROOM_CORE_SERVICES]
     },
     {
       provide: RoomPlaybackService,
-      inject: [RoomPresenceService],
-      useFactory: (presence: RoomPresenceService) => new RoomPlaybackService(presence)
+      useFactory: (core: RoomCoreServices) => core.roomPlaybackService,
+      inject: [ROOM_CORE_SERVICES]
     },
-    RoomActivityService,
     {
       provide: RoomSnapshotService,
-      inject: [RoomPresenceService, RoomPlaybackService],
-      useFactory: (presence: RoomPresenceService, playback: RoomPlaybackService) =>
-        new RoomSnapshotService(presence, playback)
+      useFactory: (core: RoomCoreServices) => core.roomSnapshotService,
+      inject: [ROOM_CORE_SERVICES]
+    },
+    {
+      provide: RoomActivityService,
+      useFactory: (core: RoomCoreServices) => core.roomActivityService,
+      inject: [ROOM_CORE_SERVICES]
+    },
+    {
+      provide: RoomPresenceOrchestratorService,
+      useFactory: (core: RoomCoreServices) => core.presenceOrchestrator,
+      inject: [ROOM_CORE_SERVICES]
+    },
+    {
+      provide: RoomContentService,
+      useFactory: (core: RoomCoreServices) => core.contentService,
+      inject: [ROOM_CORE_SERVICES]
+    },
+    {
+      provide: RoomLifecycleService,
+      useFactory: (core: RoomCoreServices) => core.lifecycleService,
+      inject: [ROOM_CORE_SERVICES]
     },
     {
       provide: RoomService,
-      inject: [
-        AuthService,
-        PrismaService,
-        RedisService,
-        RoomRecordRepository,
-        RoomPresenceService,
-        RoomPlaybackService,
-        RoomSnapshotService,
-        RoomActivityService,
-        RoomPresenceOrchestratorService,
-        RoomContentService,
-        RoomLifecycleService
-      ],
-      useFactory: (
-        auth: AuthService,
-        prisma: PrismaService,
-        redis: RedisService,
-        roomRecordRepository: RoomRecordRepository,
-        roomPresenceService: RoomPresenceService,
-        roomPlaybackService: RoomPlaybackService,
-        roomSnapshotService: RoomSnapshotService,
-        roomActivityService: RoomActivityService,
-        presenceOrchestrator: RoomPresenceOrchestratorService,
-        contentService: RoomContentService,
-        lifecycleService: RoomLifecycleService
-      ) => new RoomService(
-        auth,
-        prisma,
-        redis,
-        roomRecordRepository,
-        roomPresenceService,
-        roomPlaybackService,
-        roomSnapshotService,
-        roomActivityService,
-        presenceOrchestrator,
-        contentService,
-        lifecycleService
-      )
+      useFactory: (core: RoomCoreServices) => core.roomService,
+      inject: [ROOM_CORE_SERVICES]
     },
-    RoomPresenceOrchestratorService,
-    RoomContentService,
     RoomChatService,
-    RoomLifecycleService,
     RoomRealtimePublisher
   ],
   exports: [

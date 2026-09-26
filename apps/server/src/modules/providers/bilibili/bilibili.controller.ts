@@ -12,7 +12,6 @@ import {
   Res
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { Readable } from "node:stream";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   bilibiliBvidSchema,
@@ -21,6 +20,7 @@ import {
   bilibiliResolveAudioQuerySchema,
   bilibiliSearchQuerySchema
 } from "./bilibili.schemas";
+import { pipeWebStreamToResponse } from "../provider-stream";
 import { BilibiliService } from "./bilibili.service";
 
 @Controller("v1/providers/bilibili")
@@ -146,28 +146,19 @@ export class BilibiliController {
       res.setHeader("Content-Range", streamResult.headers["content-range"]);
     }
 
-    if (!streamResult.body) {
-      res.end();
-      return;
-    }
-
     // 将 Fetch ReadableStream 桥接到 Node.js Response
-    const nodeStream = Readable.fromWeb(streamResult.body as import("node:stream/web").ReadableStream);
-    nodeStream.on("error", (err) => {
-      if (!res.headersSent) {
-        res.status(502).end();
-      } else if (!res.destroyed) {
-        res.destroy(err);
+    await pipeWebStreamToResponse({
+      request: _req,
+      response: res,
+      body: streamResult.body,
+      onError: (error) => {
+        if (!res.headersSent) {
+          res.status(502).end();
+        } else if (!res.destroyed) {
+          res.destroy(error instanceof Error ? error : undefined);
+        }
       }
     });
-
-    _req.on("close", () => {
-      if (!res.writableEnded) {
-        void streamResult.body?.cancel().catch(() => undefined);
-      }
-    });
-
-    nodeStream.pipe(res);
   }
 
   private parseTrackId(trackId: string, fallbackCid?: string): { bvid: string; cid?: number } {

@@ -1,7 +1,16 @@
+# 防止 json-file 日志无限增长打满磁盘。
+x-default-logging: &default_logging
+  driver: json-file
+  options:
+    logging: *default_logging
+    max-size: "50m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: music-room-postgres
+    logging: *default_logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-music_room}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -17,6 +26,7 @@ services:
       retries: 10
 
   redis:
+    logging: *default_logging
     image: redis:7-alpine
     container_name: music-room-redis
     environment:
@@ -33,6 +43,7 @@ services:
       retries: 10
 
   coturn:
+    logging: *default_logging
     image: coturn/coturn:4.6.3
     container_name: music-room-coturn
     # host networking avoids mapping dozens of relay ports individually.
@@ -55,6 +66,7 @@ services:
       - --tls-listening-port=${TURN_TLS_PORT:-5349}
 
   server:
+    logging: *default_logging
     build:
       context: .
       dockerfile: Dockerfile.server
@@ -123,6 +135,7 @@ services:
       retries: 10
 
   web:
+    logging: *default_logging
     build:
       context: .
       dockerfile: Dockerfile.web

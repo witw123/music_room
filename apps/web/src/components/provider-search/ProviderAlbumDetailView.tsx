@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ProviderAlbumDetail,
   ProviderTrackCandidate
@@ -173,6 +173,20 @@ export function ProviderAlbumTrackTable({
     ? tracks.filter((track) => `${track.title} ${track.artist} ${track.album ?? ""}`.toLowerCase().includes(normalizedQuery))
     : tracks;
 
+  // 大歌单(数百行)一次性渲染会卡顿;按批渐进渲染,与 TrackListSection 相同策略。
+  const [renderedCount, setRenderedCount] = useState(50);
+  useEffect(() => {
+    if (renderedCount >= visibleTracks.length) return;
+    const timer = window.setTimeout(() => {
+      setRenderedCount((prev) => Math.min(prev + 50, visibleTracks.length));
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [renderedCount, visibleTracks.length]);
+  useEffect(() => {
+    setRenderedCount(50);
+  }, [normalizedQuery]);
+  const renderedTracks = visibleTracks.slice(0, renderedCount);
+
   return (
     <section className={showToolbar ? "mt-6" : "mt-1"}>
       {showToolbar ? (
@@ -200,8 +214,8 @@ export function ProviderAlbumTrackTable({
 
       {/* Borderless Smooth Tracklist Rows */}
       <div className="space-y-0.5">
-        {visibleTracks.length ? (
-          visibleTracks.map((track, index) => {
+        {renderedTracks.length ? (
+          renderedTracks.map((track, index) => {
             const trackKey = `${track.provider}:${track.providerTrackId}`;
             const isSelected = selectedTrackIds?.includes(trackKey) ?? false;
             const isSelectable = selectablePredicate ? selectablePredicate(track) : true;

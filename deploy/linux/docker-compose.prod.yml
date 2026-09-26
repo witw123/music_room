@@ -1,5 +1,14 @@
+# 防止 json-file 日志无限增长打满磁盘。
+x-default-logging: &default_logging
+  driver: json-file
+  options:
+    logging: *default_logging
+    max-size: "50m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *default_logging
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -15,6 +24,7 @@ services:
       retries: 10
 
   redis:
+    logging: *default_logging
     image: redis:7-alpine
     restart: unless-stopped
     environment:
@@ -29,6 +39,7 @@ services:
       retries: 10
 
   coturn:
+    logging: *default_logging
     image: coturn/coturn:4.6.3
     restart: unless-stopped
     network_mode: host
@@ -48,6 +59,7 @@ services:
       - --tls-listening-port=${TURN_TLS_PORT:-5349}
 
   server:
+    logging: *default_logging
     image: ghcr.io/${GHCR_OWNER}/music-room-server:${RELEASE_TAG}
     restart: unless-stopped
     depends_on:
@@ -119,6 +131,7 @@ services:
       retries: 10
 
   web:
+    logging: *default_logging
     image: ghcr.io/${GHCR_OWNER}/music-room-web:${RELEASE_TAG}
     restart: unless-stopped
     depends_on:
@@ -148,6 +161,7 @@ services:
       - "3000"
 
   nginx:
+    logging: *default_logging
     image: nginx:1.27-alpine
     restart: unless-stopped
     environment:
@@ -166,6 +180,7 @@ services:
       - certbot_certs:/etc/letsencrypt:ro
 
   prometheus:
+    logging: *default_logging
     profiles: [observability]
     image: prom/prometheus:v2.54.1
     restart: unless-stopped
@@ -179,6 +194,7 @@ services:
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
 
   grafana:
+    logging: *default_logging
     profiles: [observability]
     image: grafana/grafana:11.2.0
     restart: unless-stopped
@@ -196,6 +212,7 @@ services:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
   alertmanager:
+    logging: *default_logging
     profiles: [observability]
     image: prom/alertmanager:v0.27.0
     restart: unless-stopped

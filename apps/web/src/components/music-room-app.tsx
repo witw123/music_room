@@ -32,8 +32,6 @@ import {
   shouldCommitAwayRoomResume,
   storeAwayRoomId
 } from "@/lib/domain/away-room";
-export * from "@/features/room/hooks/use-room-page-derived";
-export * from "@/components/room/hooks/use-room-playback-actions";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";

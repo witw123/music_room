@@ -1,5 +1,4 @@
 import { apiBaseUrl } from "./api-client";
-import { importBandwidthGovernor } from "./import-bandwidth-governor";
 import {
   errorCodes,
   type ApiErrorResponse,
@@ -175,12 +174,10 @@ export async function request<T>(
 
 export async function requestBlob(
   path: string,
-  init?: RequestInit,
-  options?: { throttleImport?: boolean }
+  init?: RequestInit
 ) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
-    ...(options?.throttleImport ? { priority: "low" as const } : {}),
     headers: {
       ...(init?.headers ?? {})
     },
@@ -211,9 +208,7 @@ export async function requestBlob(
   }
 
   return {
-    blob: options?.throttleImport
-      ? await importBandwidthGovernor.readResponse(response, init?.signal ?? undefined)
-      : await response.blob(),
+    blob: await response.blob(),
     contentType: response.headers.get("content-type") ?? "application/octet-stream"
   };
 }

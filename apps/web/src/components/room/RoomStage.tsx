@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
+import { memo, useEffect, useState, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
 import type {
   RoomMediaConnectionState,
   RoomMember,
@@ -8,7 +8,7 @@ import type {
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { findRoomPlaylistTrackRecord } from "@/features/playlist/local-playlist";
-import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
+import { RoomLyricsPositionProvider, useRoomLyricsPositionMs } from "./room-lyrics-position";
 
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { VinylTonearm } from "./VinylTonearm";
@@ -107,11 +107,6 @@ function RoomStageBase({
     barrierHoldPositionMs ?? "",
     barrierResumeAtMs ?? ""
   ].join("|");
-  const playbackRef = useRef(playback);
-  playbackRef.current = playback;
-  const playbackBarrierRef = useRef(playbackBarrier);
-  playbackBarrierRef.current = playbackBarrier;
-  const [lyricsPositionMs, setLyricsPositionMs] = useState(playback.positionMs);
   const sourceProvider =
     currentTrack?.sourceRef?.provider ??
     (currentTrack?.sourceType === "netease" || currentTrack?.sourceType === "qqmusic"
@@ -160,36 +155,6 @@ function RoomStageBase({
       window.visualViewport?.removeEventListener("resize", updateViewportSize);
     };
   }, []);
-
-  useEffect(() => {
-    const updatePosition = () => {
-      const livePosition = currentPlaybackPositionRef?.current;
-      if (typeof livePosition === "number" && livePosition > 0) {
-        setLyricsPositionMs(livePosition);
-        return;
-      }
-      setLyricsPositionMs(
-        getPlaybackEffectivePositionMs(
-          playbackRef.current,
-          currentTrackDuration,
-          undefined,
-          playbackBarrierRef.current
-        )
-      );
-    };
-
-    updatePosition();
-    if (!isPlaying || playbackRef.current.status !== "playing") return;
-
-    const timer = window.setInterval(updatePosition, 100);
-    return () => window.clearInterval(timer);
-  }, [
-    currentPlaybackPositionRef,
-    currentTrackDuration,
-    isPlaying,
-    playbackPositionKey,
-    playbackBarrierKey
-  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -286,6 +251,15 @@ function RoomStageBase({
   ]);
 
   return (
+    <RoomLyricsPositionProvider
+      playback={playback}
+      currentPlaybackPositionRef={currentPlaybackPositionRef}
+      currentTrackDuration={currentTrackDuration}
+      isPlaying={isPlaying}
+      playbackBarrier={playbackBarrier}
+      playbackPositionKey={playbackPositionKey}
+      playbackBarrierKey={playbackBarrierKey}
+    >
     <section
       className={`relative flex h-auto w-full min-h-0 flex-col px-3 pb-3 ${hideRoomMetadata ? "pt-[calc(0.75rem+env(safe-area-inset-top))]" : "pt-[calc(2.25rem+env(safe-area-inset-top))]"} ${mobileControlsOnly ? "max-lg:pb-0 max-lg:pt-3" : ""} sm:px-5 md:px-8 lg:h-full ${
         ultraCompactStage ? "lg:py-2" : compactStage ? "lg:py-3" : "lg:py-4 xl:py-5"
@@ -315,7 +289,7 @@ function RoomStageBase({
       />
 
       {showMobilePlayer ? (
-        <MobileRoomStagePlayer
+        <ContextProgressMobileStagePlayer
           artworkPalette={artworkPalette}
           artworkUrl={artworkUrl}
           currentTrack={currentTrack}
@@ -323,7 +297,6 @@ function RoomStageBase({
           isPlaying={isPlaying}
           playbackBarrier={playbackBarrier}
           playerStyle={playerStyle}
-          progressMs={lyricsPositionMs}
         />
       ) : null}
 
@@ -469,7 +442,7 @@ function RoomStageBase({
                 )}
               </div>
 
-            <RoomLyricsPanel
+            <ContextPositionRoomLyricsPanel
               className="max-w-[36rem]"
               frozen={playbackBarrier?.blocked === true}
               visibleLines={3}
@@ -481,7 +454,6 @@ function RoomStageBase({
               showControls={false}
               showTranslation={false}
               showRomanized={false}
-              positionMs={lyricsPositionMs}
               status={lyricsStatus}
               onSeek={onSeek}
             />
@@ -503,10 +475,26 @@ function RoomStageBase({
         <RoomReactionOverlay roomId={roomSnapshot.room.id} socket={socket} />
       </div>
     </section>
+    </RoomLyricsPositionProvider>
   );
 }
 
 export const RoomStage = memo(RoomStageBase);
+
+/** 位置从 RoomLyricsPositionProvider 读取,避免宿主布局以 10Hz 跟随重渲染。 */
+const ContextProgressMobileStagePlayer = function ContextProgressMobileStagePlayer(
+  props: Omit<ComponentProps<typeof MobileRoomStagePlayer>, "progressMs">
+) {
+  const progressMs = useRoomLyricsPositionMs();
+  return <MobileRoomStagePlayer {...props} progressMs={progressMs} />;
+};
+
+const ContextPositionRoomLyricsPanel = memo(function ContextPositionRoomLyricsPanel(
+  props: Omit<ComponentProps<typeof RoomLyricsPanel>, "positionMs">
+) {
+  const positionMs = useRoomLyricsPositionMs();
+  return <RoomLyricsPanel {...props} positionMs={positionMs} />;
+});
 
 function MobileRoomStagePlayer({
   artworkPalette,

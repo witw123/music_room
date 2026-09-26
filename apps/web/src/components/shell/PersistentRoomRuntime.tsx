@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { LocalPlayerProvider } from "@/features/playback/local-player-context";
-import { MusicRoomApp } from "@/components/music-room-app";
 import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/domain/away-room";
-import { DesktopLyricsOverlay } from "@/components/desktop-lyrics";
 import { DesktopLyricsProvider } from "@/features/playback/desktop-lyrics-context";
 import { ShellBackButton } from "./ShellBackButton";
 
@@ -18,6 +17,17 @@ import { resolvePlaybackOwnership } from "@/features/playback/playback-ownership
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { WorkspaceQueryProvider } from "@/features/workspace/workspace-query-provider";
 import { StorageRootGate } from "./StorageRootGate";
+
+// 房间运行时(实时引擎/P2P/音频编码)体量很大且只在进房后渲染,
+// 动态加载让落地页/发现页/登录页等无需下载这 ~1MB 的运行时。
+const MusicRoomApp = dynamic(
+  () => import("@/components/music-room-app").then((mod) => mod.MusicRoomApp),
+  { ssr: false }
+);
+const DesktopLyricsOverlay = dynamic(
+  () => import("@/components/desktop-lyrics").then((mod) => mod.DesktopLyricsOverlay),
+  { ssr: false }
+);
 
 export function PersistentRoomRuntime({ children }: { children: ReactNode }) {
   return <StorageRootGate><RoomRuntime>{children}</RoomRuntime></StorageRootGate>;

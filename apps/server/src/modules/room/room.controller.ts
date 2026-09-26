@@ -1,19 +1,4 @@
-import {
-  Body,
-  BadRequestException,
-  Controller,
-  Delete,
-  Get,
-  Headers,
-  Ip,
-  Optional,
-  Query,
-  Patch,
-  Param,
-  Post,
-  ServiceUnavailableException,
-  UnauthorizedException
-} from "@nestjs/common";
+import { Body, BadRequestException, Controller, Delete, Get, Headers, Ip, Query, Patch, Param, Post, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import {
   computeAssetId,
   createRoomRequestSchema,
@@ -49,10 +34,8 @@ export class RoomController {
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService,
     private readonly playlistService: PlaylistService,
-    @Optional()
-    private readonly abuseProtection?: AbuseProtectionService,
-    @Optional()
-    private readonly roomChatService?: RoomChatService
+    private readonly abuseProtection: AbuseProtectionService,
+    private readonly roomChatService: RoomChatService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {

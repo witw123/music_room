@@ -1,21 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  ConflictException,
-  Controller,
-  Get,
-  Headers,
-  HttpException,
-  HttpStatus,
-  InternalServerErrorException,
-  Ip,
-  Optional,
-  Post,
-  Req,
-  Res,
-  ServiceUnavailableException,
-  UnauthorizedException
-} from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Get, Headers, HttpException, HttpStatus, InternalServerErrorException, Ip, Post, Req, Res, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
 import { loginRequestSchema, registerRequestSchema, type AuthSession } from "@music-room/shared";
 import type { Response } from "express";
@@ -40,10 +23,8 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly turnstileService: TurnstileService,
-    @Optional()
-    private readonly redisService?: RedisService,
-    @Optional()
-    private readonly abuseProtection?: AbuseProtectionService
+    private readonly redisService: RedisService,
+    private readonly abuseProtection: AbuseProtectionService
   ) {}
 
   @Get("config")

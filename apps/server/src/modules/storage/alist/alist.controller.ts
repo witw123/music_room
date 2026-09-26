@@ -9,7 +9,6 @@ import {
   Res
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { Readable } from "node:stream";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   alistGetFileBodySchema,
@@ -18,6 +17,7 @@ import {
   alistTestConfigBodySchema
 } from "./alist.schemas";
 import { AlistService } from "./alist.service";
+import { pipeWebStreamToResponse } from "../../providers/provider-stream";
 
 @Controller("v1/storage/alist")
 export class AlistController {
@@ -71,12 +71,10 @@ export class AlistController {
     }
     res.setHeader("Access-Control-Allow-Origin", "*");
 
-    if (!streamResult.body) {
-      res.end();
-      return;
-    }
-
-    const nodeStream = Readable.fromWeb(streamResult.body as import("node:stream/web").ReadableStream);
-    nodeStream.pipe(res);
+    await pipeWebStreamToResponse({
+      request: _req,
+      response: res,
+      body: streamResult.body
+    });
   }
 }

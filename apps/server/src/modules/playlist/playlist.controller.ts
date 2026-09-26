@@ -1,16 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Headers,
-  Ip,
-  Optional,
-  Param,
-  Patch,
-  Post,
-  UnauthorizedException
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Ip, Param, Patch, Post, UnauthorizedException } from "@nestjs/common";
 import {
   createPlaylistFromRoomRequestSchema,
   createPlaylistRequestSchema,
@@ -31,8 +19,7 @@ export class PlaylistController {
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService,
-    @Optional()
-    private readonly abuseProtection?: AbuseProtectionService
+    private readonly abuseProtection: AbuseProtectionService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {

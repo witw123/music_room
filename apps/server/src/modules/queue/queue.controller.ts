@@ -1,16 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Headers,
-  Ip,
-  Optional,
-  Patch,
-  Param,
-  Post,
-  UnauthorizedException
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Ip, Patch, Param, Post, UnauthorizedException } from "@nestjs/common";
 import {
   addQueueItemRequestSchema,
   reorderQueueRequestSchema,
@@ -28,8 +16,7 @@ export class QueueController {
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService,
-    @Optional()
-    private readonly abuseProtection?: AbuseProtectionService
+    private readonly abuseProtection: AbuseProtectionService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {

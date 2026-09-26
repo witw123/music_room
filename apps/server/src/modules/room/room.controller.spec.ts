@@ -140,7 +140,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       createAuthServiceMock() as never,
-      createPlaylistServiceMock() as never
+      createPlaylistServiceMock() as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.registerTrack("room_1", "token", payload)).resolves.toMatchObject({
@@ -166,7 +168,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.getRecentRoom("token")).resolves.toEqual(snapshot);
@@ -186,7 +190,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.recoverRoom("room_1", "token")).resolves.toEqual(snapshot);
@@ -206,7 +212,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     const result = await controller.leaveRoom("room_1", "token");
@@ -236,7 +244,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     const result = await controller.joinRoomByCode("token", {
@@ -265,7 +275,9 @@ describe("RoomController", () => {
       roomService as never,
       createRoomRealtimePublisherMock() as never,
       createAuthServiceMock() as never,
-      createPlaylistServiceMock() as never
+      createPlaylistServiceMock() as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(
@@ -306,7 +318,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     const result = await controller.leaveRoom("room_1", "token");
@@ -329,7 +343,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.deleteRoom("room_1", "token")).resolves.toEqual({
@@ -358,7 +374,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       createAuthServiceMock() as never,
-      createPlaylistServiceMock() as never
+      createPlaylistServiceMock() as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.updateRadioAutopilot("room_1", "token", {
@@ -389,7 +407,7 @@ describe("RoomController", () => {
       createRoomRealtimePublisherMock() as never,
       createAuthServiceMock() as never,
       createPlaylistServiceMock() as never,
-      undefined,
+      undefined as never,
       chatService as never
     );
 
@@ -421,7 +439,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       createAuthServiceMock() as never,
-      createPlaylistServiceMock() as never
+      createPlaylistServiceMock() as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.insertRadioAutopilotNextTrack("room_1", "token", {
@@ -452,7 +472,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.deleteRoom("room_1", "token")).resolves.toEqual({ ok: true });
@@ -475,7 +497,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     await expect(controller.deleteRoom("room_1", "token")).rejects.toThrow(
@@ -520,7 +544,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     const result = await controller.prepareTrackAsset(
@@ -568,7 +594,9 @@ describe("RoomController", () => {
       roomService as never,
       roomRealtimePublisher as never,
       authService as never,
-      playlistService as never
+      playlistService as never,
+      undefined as never,
+      undefined as never
     );
 
     const result = await controller.reportTrackAssetUnavailable(

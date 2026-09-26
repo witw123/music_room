@@ -20,7 +20,7 @@ describe("AuthService", () => {
 
   it("creates a real random token instead of the placeholder value", async () => {
     const prisma = createPrismaMock();
-    const service = new AuthService(prisma as never);
+    const service = new AuthService(prisma as never, {} as never);
 
     const session = await service.createGuestSession("Host");
 
@@ -30,7 +30,7 @@ describe("AuthService", () => {
 
   it("accepts the matching session token", async () => {
     const prisma = createPrismaMock();
-    const service = new AuthService(prisma as never);
+    const service = new AuthService(prisma as never, {} as never);
 
     const session = await service.createGuestSession("Host");
 
@@ -39,7 +39,7 @@ describe("AuthService", () => {
 
   it("rejects a missing or invalid session token", async () => {
     const prisma = createPrismaMock();
-    const service = new AuthService(prisma as never);
+    const service = new AuthService(prisma as never, {} as never);
 
     const session = await service.createGuestSession("Host");
 
@@ -51,7 +51,7 @@ describe("AuthService", () => {
 
   it("requires a non-empty nickname to create a guest session", async () => {
     const prisma = createPrismaMock();
-    const service = new AuthService(prisma as never);
+    const service = new AuthService(prisma as never, {} as never);
 
     await expect(service.createGuestSession("   ")).rejects.toThrow("Nickname is required.");
   });
@@ -60,7 +60,7 @@ describe("AuthService", () => {
     process.env.NODE_ENV = "production";
 
     const prisma = createPrismaMock();
-    const service = new AuthService(prisma as never);
+    const service = new AuthService(prisma as never, {} as never);
 
     await expect(service.createGuestSession("Host")).rejects.toThrow(
       "Account storage is temporarily unavailable. Please try again after the database is ready."

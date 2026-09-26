@@ -1,4 +1,4 @@
-import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, Optional, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { adminLoginRequestSchema, adminReasonSchema, adminUserStatusSchema, createAnnouncementRequestSchema, updateAnnouncementRequestSchema } from "@music-room/shared";
@@ -35,10 +35,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly roomPresence: RoomPresenceService,
     private readonly playlistService: PlaylistService,
     private readonly roomPublisher: RoomRealtimePublisher,
-    @Optional()
-    private readonly turnstile?: TurnstileService,
-    @Optional()
-    private readonly roomChatService?: RoomChatService
+    private readonly turnstile: TurnstileService,
+    private readonly roomChatService: RoomChatService
   ) {}
 
   onModuleInit() {
@@ -474,7 +472,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!user) throw new NotFoundException("用户不存在。");
     if (user.id === actor.userId) throw new ConflictException("管理员重置自身密码请在设置页进行。");
     const plainPassword = newPasswordInput?.trim() || randomBytes(6).toString("hex");
-    const passwordHash = this.auth.hashPassword(plainPassword);
+    const passwordHash = await this.auth.hashPassword(plainPassword);
     await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash }

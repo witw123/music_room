@@ -13,7 +13,7 @@ describe("AuthController", () => {
     const authService = {
       login: jest.fn().mockRejectedValue(new Error("Invalid username or password."))
     };
-    const controller = new AuthController(authService as never, new TurnstileService());
+    const controller = new AuthController(authService as never, new TurnstileService(), undefined as never, undefined as never);
 
     for (let index = 0; index < 6; index += 1) {
       await expect(
@@ -35,7 +35,7 @@ describe("AuthController", () => {
     const authService = {
       register: jest.fn().mockRejectedValue(new Error("Username already exists."))
     };
-    const controller = new AuthController(authService as never, new TurnstileService());
+    const controller = new AuthController(authService as never, new TurnstileService(), undefined as never, undefined as never);
 
     for (let index = 0; index < 4; index += 1) {
       await expect(
@@ -65,7 +65,7 @@ describe("AuthController", () => {
     const authService = {
       login: jest.fn().mockRejectedValue(new Error("Invalid username or password."))
     };
-    const controller = new AuthController(authService as never, new TurnstileService());
+    const controller = new AuthController(authService as never, new TurnstileService(), undefined as never, undefined as never);
     const spoofedRequest = {
       ...request,
       ip: "10.0.0.10",
@@ -107,7 +107,8 @@ describe("AuthController", () => {
     const controller = new AuthController(
       authService as never,
       new TurnstileService(),
-      redisService as never
+      redisService as never,
+      undefined as never
     );
 
     await expect(
@@ -132,7 +133,8 @@ describe("AuthController", () => {
     const controller = new AuthController(
       authService as never,
       turnstileService as never,
-      undefined
+      undefined as never,
+      undefined as never
     );
 
     await expect(
@@ -150,7 +152,7 @@ describe("AuthController", () => {
     const authService = {
       register: jest.fn().mockRejectedValue(new Error("PrismaClientKnownRequestError: table does not exist"))
     };
-    const controller = new AuthController(authService as never, new TurnstileService());
+    const controller = new AuthController(authService as never, new TurnstileService(), undefined as never, undefined as never);
 
     await expect(
       controller.register(
@@ -168,7 +170,7 @@ describe("AuthController", () => {
     const authService = {
       register: jest.fn().mockRejectedValue(new Error("Password must be at least 8 characters."))
     };
-    const controller = new AuthController(authService as never, new TurnstileService());
+    const controller = new AuthController(authService as never, new TurnstileService(), undefined as never, undefined as never);
 
     await expect(
       controller.register(

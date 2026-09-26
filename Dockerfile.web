@@ -47,6 +47,7 @@ COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/packages/opus-encode/node_modules ./packages/opus-encode/node_modules
 COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @music-room/shared build
 RUN pnpm --filter @music-room/web build
 
@@ -58,6 +59,8 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup -S app && adduser -S -G app app
 COPY --from=builder --chown=app:app /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=app:app /app/apps/web/.next/static ./apps/web/.next/static
+# standalone 输出不包含 public,PWA manifest/图标/房间封面必须显式拷贝。
+COPY --from=builder --chown=app:app /app/apps/web/public ./apps/web/public
 USER app
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

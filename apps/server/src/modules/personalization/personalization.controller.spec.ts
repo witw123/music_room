@@ -11,7 +11,7 @@ describe("PersonalizationController", () => {
     removeExclusion: jest.fn().mockResolvedValue({ ok: true }),
     clearProfile: jest.fn().mockResolvedValue({ ok: true })
   };
-  const controller = new PersonalizationController(personalization as never, auth as never, undefined);
+  const controller = new PersonalizationController(personalization as never, auth as never, undefined as never);
 
   beforeEach(() => jest.clearAllMocks());
 

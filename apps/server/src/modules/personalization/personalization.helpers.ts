@@ -1,11 +1,8 @@
 import type {
   PersonalizationTasteTag,
-  ProviderPlaylistSummary,
   ProviderTrackCandidate,
   RecordPersonalizationEvent
 } from "@music-room/shared";
-import type { NeteaseService } from "../providers/netease/netease.service";
-import type { QqMusicService } from "../providers/qqmusic/qqmusic.service";
 import { extractTasteEvidence } from "./taste-taxonomy";
 
 export const longTermHalfLifeMs = 120 * 24 * 60 * 60 * 1_000;
@@ -273,23 +270,3 @@ export function toStringList(value: unknown) {
     : [];
 }
 
-export async function keepMultiArtistPlaylists(
-  userId: string,
-  service: NeteaseService | QqMusicService,
-  playlists: ProviderPlaylistSummary[]
-) {
-  const details = await Promise.all(
-    playlists.map(async (playlist) => {
-      try {
-        const detail = await service.getPlaylist(userId, playlist.providerPlaylistId);
-        const artistCount = new Set(
-          detail.tracks.map((track) => normalizeText(track.artist)).filter(Boolean)
-        ).size;
-        return artistCount >= 2 ? playlist : null;
-      } catch {
-        return null;
-      }
-    })
-  );
-  return details.filter((playlist): playlist is ProviderPlaylistSummary => playlist !== null);
-}

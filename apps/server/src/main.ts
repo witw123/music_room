@@ -54,12 +54,18 @@ async function bootstrap() {
     origin: corsOrigins,
     credentials: true
   });
+  // SIGTERM 时触发各模块的 onModuleDestroy(watchdog 停表、Redis quit、
+  // prisma disconnect 等),保证发布/重启时在途状态落盘。
+  app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port);
   Logger.log(`Music Room server listening on port ${port}`);
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  Logger.error(`Failed to bootstrap server: ${error instanceof Error ? error.stack : String(error)}`);
+  process.exit(1);
+});
 
 function resolveTrustProxy() {
   const configured = process.env.TRUST_PROXY?.trim();

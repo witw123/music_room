@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Optional } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type {
   PlaybackSnapshot,
@@ -15,7 +15,7 @@ import { AuthService } from "../auth/auth.service";
 import { type RoomRecord } from "./room.types";
 import { assertMember, assertPermission, incrementRoomRevision } from "./room-mutation";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
-import { realtimePresenceTtlSeconds, RoomPresenceService } from "./services/room-presence.service";
+import { RoomPresenceService } from "./services/room-presence.service";
 import { isPlaybackAdvanceDue } from "./services/room-playback.helpers";
 import { RoomPlaybackService } from "./services/room-playback.service";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
@@ -32,115 +32,19 @@ import { RoomLifecycleService } from "./services/room-lifecycle.service";
  */
 @Injectable()
 export class RoomService {
-  private readonly rooms = new Map<string, RoomRecord>();
-  private readonly roomCacheTtlSeconds = 60 * 60 * 12;
-  private readonly sessionRecentRoomTtlSeconds = 60 * 60 * 24 * 7;
-  // Background tabs may have their timers coalesced into roughly one-minute
-  // ticks. Keep a few missed ticks from turning a still-connected room member
-  // offline; an actual socket disconnect still transitions through the
-  // signaling gateway's reconnect/offline cleanup path.
-  private readonly presenceTtlSeconds = realtimePresenceTtlSeconds;
-  private readonly roomRegistryKey = "music-room:rooms";
-  private readonly inMemoryPresence = new Map<
-    string,
-    Map<
-      string,
-      {
-        peerId: string | null;
-        presenceState: RoomMember["presenceState"];
-        expiresAt: number;
-      }
-    >
-  >();
-  private readonly roomRecordRepository: RoomRecordRepository;
-  private readonly roomPresenceService: RoomPresenceService;
-  private readonly roomPlaybackService: RoomPlaybackService;
-  private readonly roomSnapshotService: RoomSnapshotService;
-  private readonly roomActivityService: RoomActivityService;
-  private readonly presenceOrchestrator: RoomPresenceOrchestratorService;
-  private readonly contentService: RoomContentService;
-  private readonly lifecycleService: RoomLifecycleService;
-
   constructor(
     private readonly authService: AuthService,
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
-    @Optional()
-    roomRecordRepository?: RoomRecordRepository,
-    @Optional()
-    roomPresenceService?: RoomPresenceService,
-    @Optional()
-    roomPlaybackService?: RoomPlaybackService,
-    @Optional()
-    roomSnapshotService?: RoomSnapshotService,
-    @Optional()
-    roomActivityService?: RoomActivityService,
-    @Optional()
-    presenceOrchestrator?: RoomPresenceOrchestratorService,
-    @Optional()
-    contentService?: RoomContentService,
-    @Optional()
-    lifecycleService?: RoomLifecycleService
-  ) {
-    const hasProductionDependencies =
-      !!roomRecordRepository &&
-      !!roomPresenceService &&
-      !!roomPlaybackService &&
-      !!roomSnapshotService &&
-      !!roomActivityService &&
-      !!presenceOrchestrator &&
-      !!contentService &&
-      !!lifecycleService;
-    if (!hasProductionDependencies && process.env.NODE_ENV !== "test") {
-      throw new Error("RoomService must be created by RoomCoreModule.");
-    }
-
-    // Direct construction is retained only for unit tests. Production always
-    // receives the complete provider graph from RoomCoreModule, so a missing
-    // provider cannot silently create a second state model.
-    this.roomRecordRepository =
-      roomRecordRepository ??
-      new RoomRecordRepository(
-        this.rooms,
-        prisma,
-        redis,
-        this.roomRegistryKey,
-        this.roomCacheTtlSeconds,
-        this.sessionRecentRoomTtlSeconds
-      );
-    this.roomPresenceService =
-      roomPresenceService ??
-      new RoomPresenceService(redis, this.inMemoryPresence, this.presenceTtlSeconds);
-    this.roomPlaybackService =
-      roomPlaybackService ?? new RoomPlaybackService(this.roomPresenceService);
-    this.roomSnapshotService =
-      roomSnapshotService ??
-      new RoomSnapshotService(this.roomPresenceService, this.roomPlaybackService);
-    this.roomActivityService = roomActivityService ?? new RoomActivityService(prisma);
-    this.presenceOrchestrator =
-      presenceOrchestrator ??
-      new RoomPresenceOrchestratorService(
-        this.roomRecordRepository,
-        this.roomPresenceService,
-        this.roomPlaybackService,
-        this.roomActivityService,
-        this.redis
-      );
-    this.contentService =
-      contentService ??
-      new RoomContentService(this.authService, this.roomRecordRepository, this.roomPlaybackService);
-    this.lifecycleService =
-      lifecycleService ??
-      new RoomLifecycleService(
-        this.authService,
-        this.roomRecordRepository,
-        this.roomPresenceService,
-        this.roomPlaybackService,
-        this.roomActivityService,
-        this.roomSnapshotService,
-        this.presenceOrchestrator
-      );
-  }
+    private readonly roomRecordRepository: RoomRecordRepository,
+    private readonly roomPresenceService: RoomPresenceService,
+    private readonly roomPlaybackService: RoomPlaybackService,
+    private readonly roomSnapshotService: RoomSnapshotService,
+    private readonly roomActivityService: RoomActivityService,
+    private readonly presenceOrchestrator: RoomPresenceOrchestratorService,
+    private readonly contentService: RoomContentService,
+    private readonly lifecycleService: RoomLifecycleService
+  ) {}
 
   async findRoomByJoinCode(joinCode: string) {
     return this.roomRecordRepository.findByJoinCode(joinCode);
@@ -391,30 +295,36 @@ export class RoomService {
     const accessible = records.slice(0, 100);
 
     return Promise.all(accessible.map(async (record) => {
-      const snapshot = await this.roomSnapshotService.buildSnapshot(record, []);
+      // 目录场景只需要 presence 计数与播放状态,跳过完整快照构建
+      // (buildSnapshot 会为每个房间重建 playback 与全量成员列表)。
+      const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
+        record.room.id,
+        record.room.members
+      );
       const isMember =
         record.room.hostId === sessionId ||
         record.room.members.some((member) => member.id === sessionId);
-      const host = snapshot.room.members.find((member) => member.id === snapshot.room.hostId);
-      const onlineMemberCount = snapshot.room.members.filter(
-        (member) => member.presenceState === "online" && !!member.peerId
-      ).length;
-      const currentTrack = snapshot.room.playback.currentTrackId
-        ? record.tracks.find((track) => track.id === snapshot.room.playback.currentTrackId) ?? null
+      const host = record.room.members.find((member) => member.id === record.room.hostId);
+      const onlineMemberCount = record.room.members.reduce((count, member) => {
+        const presence = presenceSnapshot.get(member.id);
+        return presence?.presenceState === "online" && !!presence.peerId ? count + 1 : count;
+      }, 0);
+      const currentTrack = record.room.playback.currentTrackId
+        ? record.tracks.find((track) => track.id === record.room.playback.currentTrackId) ?? null
         : null;
       const isOnAir = record.room.roomType === "radio" &&
-        snapshot.room.playback.status === "playing" &&
+        record.room.playback.status === "playing" &&
         !!currentTrack;
 
       return {
         room: {
-          id: snapshot.room.id,
-          joinCode: snapshot.room.joinCode,
-          name: snapshot.room.name ?? "未命名房间",
-          description: snapshot.room.description ?? null,
-          hasPassword: snapshot.room.hasPassword === true,
-          visibility: snapshot.room.visibility,
-          roomType: snapshot.room.roomType,
+          id: record.room.id,
+          joinCode: record.room.joinCode,
+          name: record.room.name ?? "未命名房间",
+          description: record.room.description ?? null,
+          hasPassword: record.room.hasPassword === true,
+          visibility: record.room.visibility,
+          roomType: record.room.roomType,
           directoryHostNickname: host?.nickname ?? "",
           directoryMemberCount: record.room.members.length,
           directoryOnlineMemberCount: onlineMemberCount,
@@ -433,7 +343,7 @@ export class RoomService {
                 artworkUrl: currentTrack.artworkUrl
               }
             : null,
-          playbackStatus: snapshot.room.playback.status
+          playbackStatus: record.room.playback.status
         }
       };
     }));

@@ -2,9 +2,11 @@ import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import type { BilibiliSearchResponse, BilibiliTrackCandidate, BilibiliVideoDetail, ProviderLyrics } from "@music-room/shared";
 import { NeteaseApiClient } from "../netease/netease-api.client";
 import { QqMusicApiClient } from "../qqmusic/qqmusic-api.client";
-import { BilibiliApiClient, sortBilibiliAudioUrls, type BilibiliFavoriteItem, type BilibiliRankingItem, type BilibiliSearchItem } from "./bilibili-api.client";
+import { BilibiliApiClient, sortBilibiliAudioUrls } from "./bilibili-api.client";
 import { selectBestSubtitle, convertBilibiliSubtitlesToLrc, isValidLyricSubtitle } from "./bilibili-subtitle";
 import { cleanBilibiliTitle } from "./bilibili-title-cleaner";
+import { CrossPlatformLyricMatcher } from "./bilibili-lyric-matcher";
+import { mapFavoriteItemToCandidate, mapRankingItemToCandidate, mapSearchItemToCandidate } from "./bilibili.mappers";
 
 export function extractBilibiliMediaId(input: string): string {
   const trimmed = input.trim();
@@ -20,23 +22,19 @@ export function extractBilibiliMediaId(input: string): string {
   return trimmed;
 }
 
-type LyricCandidateSong = {
-  provider: "netease" | "qqmusic";
-  trackId: string;
-  name: string;
-  artistName?: string;
-  durationMs: number;
-};
-
 @Injectable()
 export class BilibiliService {
   private readonly logger = new Logger(BilibiliService.name);
 
+  private readonly lyricMatcher: CrossPlatformLyricMatcher;
+
   constructor(
     private readonly client: BilibiliApiClient,
-    @Optional() private readonly neteaseApiClient?: NeteaseApiClient,
-    @Optional() private readonly qqmusicApiClient?: QqMusicApiClient
-  ) {}
+    @Optional() neteaseApiClient?: NeteaseApiClient,
+    @Optional() qqmusicApiClient?: QqMusicApiClient
+  ) {
+    this.lyricMatcher = new CrossPlatformLyricMatcher(neteaseApiClient, qqmusicApiClient);
+  }
 
   async getVideoDetail(bvid: string): Promise<BilibiliVideoDetail> {
     const data = await this.client.getVideoView(bvid);
@@ -290,7 +288,7 @@ export class BilibiliService {
       const pageTitle = (targetPage && videoDetail.pages.length > 1 && targetPage.part) ? targetPage.part : videoDetail.title;
       const cleaned = cleanBilibiliTitle(pageTitle, videoDetail.ownerName);
 
-      const matchedLyrics = await this.matchCrossPlatformLyrics(
+      const matchedLyrics = await this.lyricMatcher.match(
         cleaned.fullQuery,
         targetPage?.duration ?? videoDetail.duration,
         cleaned.songTitle,
@@ -346,7 +344,7 @@ export class BilibiliService {
 
   async search(keyword: string, page = 1, pageSize = 10, tid?: number): Promise<BilibiliSearchResponse> {
     const { items, total } = await this.client.searchVideo(keyword, page, pageSize, tid);
-    const candidates = items.map((item) => this.mapSearchItemToCandidate(item));
+    const candidates = items.map((item) => mapSearchItemToCandidate(item));
     return {
       items: candidates,
       total,
@@ -373,7 +371,7 @@ export class BilibiliService {
     const res = await this.client.getFavoriteResources(mediaId, page, pageSize);
     const validItems = (res.items || [])
       .filter((item) => item.bvid && item.title !== "已失效视频" && item.attr === 0)
-      .map((item) => this.mapFavoriteItemToCandidate(item));
+      .map((item) => mapFavoriteItemToCandidate(item));
 
     return {
       title: res.title || "B 站导入歌单",
@@ -385,7 +383,7 @@ export class BilibiliService {
 
   async getRanking(subType = "3"): Promise<BilibiliTrackCandidate[]> {
     const list = await this.client.getMusicRanking(subType);
-    return (list || []).map((item) => this.mapRankingItemToCandidate(item));
+    return (list || []).map((item) => mapRankingItemToCandidate(item));
   }
 
   private async resolveFirstCid(bvid: string): Promise<number> {
@@ -395,345 +393,5 @@ export class BilibiliService {
       throw new NotFoundException(`Bilibili 视频不存在有效分P: ${bvid}`);
     }
     return firstCid;
-  }
-
-  /**
-   * 搜索网易云候选歌曲。旧版 search 接口返回 duration（毫秒），cloudsearch 才返回 dt，
-   * 两者兼容读取，避免时长校验被静默跳过。
-   */
-  private async searchNeteaseLyricCandidates(keywords: string): Promise<Omit<LyricCandidateSong, "provider">[]> {
-    if (!this.neteaseApiClient || !keywords.trim()) return [];
-    try {
-      const searchResult = await this.neteaseApiClient.searchTracks({
-        keywords: keywords.trim(),
-        limit: 8,
-        offset: 0,
-        cookie: ""
-      });
-      const songs = (searchResult?.result as {
-        songs?: Array<{
-          id: number;
-          name?: string;
-          dt?: number;
-          duration?: number;
-          artists?: Array<{ name: string }>;
-          ar?: Array<{ name: string }>;
-        }>;
-      })?.songs ?? [];
-      return songs
-        .filter((song) => typeof song?.id === "number")
-        .map((song) => ({
-          trackId: String(song.id),
-          name: song.name ?? "",
-          artistName: song.artists?.[0]?.name ?? song.ar?.[0]?.name,
-          durationMs: Number(song.dt ?? song.duration ?? 0) || 0
-        }));
-    } catch (err) {
-      this.logger.debug(`Netease lyric candidate search failed: ${err instanceof Error ? err.message : String(err)}`);
-      return [];
-    }
-  }
-
-  /** 搜索 QQ 音乐候选歌曲（interval 为秒）。 */
-  private async searchQqLyricCandidates(keywords: string): Promise<Omit<LyricCandidateSong, "provider">[]> {
-    if (!this.qqmusicApiClient || !keywords.trim()) return [];
-    try {
-      const searchRecords = await this.qqmusicApiClient.searchTracks({
-        keywords: keywords.trim(),
-        limit: 8,
-        offset: 0,
-        cookie: "",
-        kind: "song"
-      });
-      const list = (searchRecords as Array<{
-        songmid?: string;
-        mid?: string;
-        songname?: string;
-        name?: string;
-        singer?: Array<{ name: string }> | string;
-        interval?: number;
-      }>) ?? [];
-      return list
-        .map((item) => ({
-          trackId: item.songmid || item.mid || "",
-          name: item.songname || item.name || "",
-          artistName: Array.isArray(item.singer)
-            ? item.singer.map((singer) => singer.name).join("/")
-            : typeof item.singer === "string"
-              ? item.singer
-              : undefined,
-          durationMs: (item.interval ?? 0) * 1000
-        }))
-        .filter((song) => song.trackId && song.name);
-    } catch (err) {
-      this.logger.debug(`QQ music lyric candidate search failed: ${err instanceof Error ? err.message : String(err)}`);
-      return [];
-    }
-  }
-
-  /**
-   * 对候选打分排序。B站标题“歌名 - 歌手”与“歌手 - 歌名”两种顺序都常见，
-   * 清洗器无法 100% 区分，因此对两种目标朝向都打分并取较高者。
-   */
-  private scoreLyricMatchOrientation(
-    candidateName: string,
-    candidateArtist: string | undefined,
-    candidateDurationMs: number,
-    targetSongTitle?: string,
-    targetArtist?: string,
-    targetDurationMs = 0
-  ): number {
-    const forward = this.scoreLyricCandidate(
-      candidateName,
-      candidateArtist,
-      candidateDurationMs,
-      targetSongTitle,
-      targetArtist,
-      targetDurationMs
-    );
-    if (!targetSongTitle || !targetArtist) return forward;
-    const reversed = this.scoreLyricCandidate(
-      candidateName,
-      candidateArtist,
-      candidateDurationMs,
-      targetArtist,
-      targetSongTitle,
-      targetDurationMs
-    );
-    return Math.max(forward, reversed);
-  }
-
-  private async matchCrossPlatformLyrics(
-    query: string,
-    durationSeconds?: number,
-    targetSongTitle?: string,
-    targetArtist?: string
-  ): Promise<{
-    plainLyric: string | null;
-    wordSyncedLyric: string | null;
-    translatedLyric: string | null;
-    romanizedLyric: string | null;
-  } | null> {
-    const durationMs = durationSeconds ? durationSeconds * 1000 : 0;
-
-    // 各平台版权目录不同（如周杰伦在网易云已下架、正版只在 QQ 音乐），
-    // 因此两平台并发搜索并全局打分，避免“网易云只剩翻唱也照单全收”。
-    const searchUnified = async (keywords: string): Promise<LyricCandidateSong[]> => {
-      const [neteaseCandidates, qqCandidates] = await Promise.all([
-        this.searchNeteaseLyricCandidates(keywords),
-        this.searchQqLyricCandidates(keywords)
-      ]);
-      return [
-        ...neteaseCandidates.map((song) => ({ ...song, provider: "netease" as const })),
-        ...qqCandidates.map((song) => ({ ...song, provider: "qqmusic" as const }))
-      ];
-    };
-
-    const rankUnified = (candidates: LyricCandidateSong[]) =>
-      candidates
-        .map((song) => ({
-          song,
-          score: this.scoreLyricMatchOrientation(
-            song.name,
-            song.artistName,
-            song.durationMs,
-            targetSongTitle,
-            targetArtist,
-            durationMs
-          )
-        }))
-        .sort((a, b) => b.score - a.score);
-
-    try {
-      let ranked = rankUnified(await searchUnified(query));
-      let best = ranked[0];
-
-      // 首查结果不自信（B站标题常带宣传语，污染搜索词；精确歌名+时长也可能命中
-      // 同名假封面）时，改用清洗出的纯歌名补搜一轮。90 分 ≈ 歌名精确命中 + 歌手/时长佐证。
-      if ((!best || best.score < 90) && targetSongTitle && targetSongTitle.trim() !== query.trim()) {
-        const retryCandidates = await searchUnified(targetSongTitle);
-        if (retryCandidates.length > 0) {
-          const merged = new Map<string, LyricCandidateSong>();
-          // netease 候选在前，同分时稳定排序优先网易云（其可能携带逐字 YRC 与译文）
-          for (const song of [...ranked.map((entry) => entry.song), ...retryCandidates]) {
-            const key = `${song.provider}:${song.trackId}`;
-            if (!merged.has(key)) merged.set(key, song);
-          }
-          ranked = rankUnified([...merged.values()]);
-          best = ranked[0];
-        }
-      }
-
-      if (best && best.score >= 0) {
-        if (best.song.provider === "netease") {
-          const lyricsData = await this.neteaseApiClient?.getLyrics({
-            trackId: best.song.trackId,
-            cookie: ""
-          });
-          const plain = (lyricsData?.lrc as { lyric?: string })?.lyric?.trim() || null;
-          const wordSynced = (lyricsData?.yrc as { lyric?: string })?.lyric?.trim() || null;
-          const trans = (lyricsData?.tlyric as { lyric?: string })?.lyric?.trim() || null;
-          const roma = (lyricsData?.romalrc as { lyric?: string })?.lyric?.trim() || null;
-          if (plain || wordSynced) {
-            return {
-              plainLyric: plain,
-              wordSyncedLyric: wordSynced,
-              translatedLyric: trans,
-              romanizedLyric: roma
-            };
-          }
-        } else {
-          const lyricsBody = await this.qqmusicApiClient?.getLyrics({
-            trackId: best.song.trackId,
-            cookie: ""
-          });
-          const plain = lyricsBody?.lyric?.trim() || null;
-          const trans = lyricsBody?.trans?.trim() || null;
-          const roma = lyricsBody?.roma?.trim() || null;
-          if (plain) {
-            return {
-              plainLyric: plain,
-              wordSyncedLyric: null,
-              translatedLyric: trans,
-              romanizedLyric: roma
-            };
-          }
-        }
-      }
-    } catch (err) {
-      this.logger.debug(`Cross-platform lyric match error: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    return null;
-  }
-
-  private scoreLyricCandidate(
-    candidateName: string,
-    candidateArtist: string | undefined,
-    candidateDurationMs: number,
-    targetSongTitle?: string,
-    targetArtist?: string,
-    targetDurationMs = 0
-  ): number {
-    let score = 0;
-    const candNameNorm = (candidateName || "").toLowerCase().replace(/\s+/g, "");
-    const targetTitleNorm = (targetSongTitle || "").toLowerCase().replace(/\s+/g, "");
-
-    // 1. 歌名匹配权重
-    if (targetTitleNorm) {
-      if (candNameNorm === targetTitleNorm) {
-        score += 50;
-      } else if (candNameNorm.includes(targetTitleNorm) || targetTitleNorm.includes(candNameNorm)) {
-        score += 30;
-      } else {
-        score -= 40;
-      }
-    } else {
-      score += 10;
-    }
-
-    // 2. 歌手匹配权重
-    if (targetArtist && candidateArtist) {
-      const candArtistNorm = candidateArtist.toLowerCase().replace(/\s+/g, "");
-      const targetArtistNorm = targetArtist.toLowerCase().replace(/\s+/g, "");
-      if (candArtistNorm.includes(targetArtistNorm) || targetArtistNorm.includes(candArtistNorm)) {
-        score += 30;
-      }
-    }
-
-    // 3. 时长贴合度权重（考虑视频片头片尾留白，容差扩展至 25 秒）
-    if (targetDurationMs > 0 && candidateDurationMs > 0) {
-      const diff = Math.abs(candidateDurationMs - targetDurationMs);
-      if (diff <= 5000) {
-        score += 30;
-      } else if (diff <= 15000) {
-        score += 20;
-      } else if (diff <= 25000) {
-        score += 10;
-      } else if (diff > 90000) {
-        score -= 30;
-      }
-    }
-
-    return score;
-  }
-
-  private mapSearchItemToCandidate(item: BilibiliSearchItem): BilibiliTrackCandidate {
-    const cleanTitle = (item.title || "").replace(/<[^>]+>/g, "").trim();
-    const cleanAuthor = (item.author || "").replace(/<[^>]+>/g, "").trim();
-    const durationMs = this.parseDurationToMs(item.duration);
-    const pic = item.pic ? (item.pic.startsWith("//") ? `https:${item.pic}` : item.pic) : null;
-
-    const cleaned = cleanBilibiliTitle(cleanTitle, cleanAuthor);
-    const title = cleaned.songTitle || cleanTitle;
-    const artist = cleaned.artist || cleanAuthor || "未知UP主";
-
-    // 智能推断分 P 数量
-    let inferredPageCount: number | undefined;
-    const pMatch = cleanTitle.match(/(?:全|\s)?(\d+)\s*[pP篇首集]/i);
-    if (pMatch && pMatch[1]) {
-      const parsed = parseInt(pMatch[1], 10);
-      if (parsed > 1 && parsed < 1000) inferredPageCount = parsed;
-    } else if (durationMs > 600000 || /合集|精选|收录|教学/i.test(cleanTitle)) {
-      inferredPageCount = 2;
-    }
-
-    return {
-      provider: "bilibili",
-      providerTrackId: item.bvid,
-      bvid: item.bvid,
-      title,
-      artist,
-      album: null,
-      durationMs,
-      artworkUrl: pic,
-      access: "free",
-      quality: "exhigh",
-      pageCount: inferredPageCount
-    };
-  }
-
-  private mapFavoriteItemToCandidate(item: BilibiliFavoriteItem): BilibiliTrackCandidate {
-    const pic = item.cover ? (item.cover.startsWith("//") ? `https:${item.cover}` : item.cover) : null;
-    return {
-      provider: "bilibili",
-      providerTrackId: item.bvid,
-      bvid: item.bvid,
-      title: item.title,
-      artist: item.upper?.name || "未知UP主",
-      album: null,
-      durationMs: item.duration * 1000,
-      artworkUrl: pic,
-      access: "free",
-      quality: "exhigh"
-    };
-  }
-
-  private mapRankingItemToCandidate(item: BilibiliRankingItem): BilibiliTrackCandidate {
-    const pic = item.pic ? (item.pic.startsWith("//") ? `https:${item.pic}` : item.pic) : null;
-    return {
-      provider: "bilibili",
-      providerTrackId: item.bvid,
-      bvid: item.bvid,
-      title: item.title,
-      artist: item.owner?.name || "未知UP主",
-      album: null,
-      durationMs: item.duration * 1000,
-      artworkUrl: pic,
-      access: "free",
-      quality: "exhigh"
-    };
-  }
-
-  private parseDurationToMs(durationStr: string): number {
-    if (!durationStr) return 0;
-    const parts = durationStr.split(":").map((p) => parseInt(p, 10));
-    if (parts.length === 2 && !isNaN(parts[0]!) && !isNaN(parts[1]!)) {
-      return (parts[0]! * 60 + parts[1]!) * 1000;
-    }
-    if (parts.length === 3 && !isNaN(parts[0]!) && !isNaN(parts[1]!) && !isNaN(parts[2]!)) {
-      return (parts[0]! * 3600 + parts[1]! * 60 + parts[2]!) * 1000;
-    }
-    return 0;
   }
 }

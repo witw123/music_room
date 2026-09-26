@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import type { AuthSession, UserProfile } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -42,10 +43,18 @@ type FallbackAuthStore = {
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const sessionCleanupIntervalMs = 60 * 60 * 1000;
 const userInvalidatedChannel = "music-room:auth:user-invalidated";
+// libuv 线程池执行的异步 scrypt;同步版会在登录突发时阻塞事件循环并卡住
+// 同进程的 WS 信令与房间操作。
+const scrypt = promisify(scryptCallback) as (
+  password: string,
+  salt: string,
+  keylen: number
+) => Promise<Buffer>;
+
 // A valid scrypt hash of an unpublishable random value. Verifying against it
 // for unknown usernames keeps the login path's timing indistinguishable from
 // the known-user path, closing the response-time username oracle.
-const dummyPasswordHash = hashPassword(randomBytes(32).toString("hex"));
+const dummyPasswordHash: Promise<string> = hashPassword(randomBytes(32).toString("hex"));
 
 @Injectable()
 export class AuthService implements OnModuleInit, OnModuleDestroy {
@@ -65,8 +74,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Optional()
-    private readonly redisService?: RedisService
+    private readonly redisService: RedisService
   ) {}
 
   onModuleInit() {
@@ -105,7 +113,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     void this.unsubscribeUserInvalidated?.();
   }
 
-  hashPassword(password: string): string {
+  hashPassword(password: string): Promise<string> {
     return hashPassword(password);
   }
 
@@ -163,7 +171,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       id: `user_${randomUUID()}`,
       username,
       nickname,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       createdAt: now,
       updatedAt: now,
       role: "USER",
@@ -243,10 +251,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       // Unknown username: still run one scrypt verification so the response
       // time and error text match the known-user path exactly.
-      verifyPassword(password, dummyPasswordHash);
+      await verifyPassword(password, await dummyPasswordHash);
       throw new Error("Invalid username or password.");
     }
-    if (!verifyPassword(password, user.passwordHash)) {
+    if (!(await verifyPassword(password, user.passwordHash))) {
       throw new Error("Invalid username or password.");
     }
     // Disabled state is only revealed after the password check, so the login
@@ -275,10 +283,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       user = null;
     }
     if (!user) {
-      verifyPassword(input.password, dummyPasswordHash);
+      await verifyPassword(input.password, await dummyPasswordHash);
       throw new Error("Invalid username or password.");
     }
-    if (!verifyPassword(input.password, user.passwordHash)) {
+    if (!(await verifyPassword(input.password, user.passwordHash))) {
       throw new Error("Invalid username or password.");
     }
     return {
@@ -712,19 +720,19 @@ function toUserProfile(user: StoredUser): UserProfile {
   };
 }
 
-function hashPassword(password: string) {
+async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
+  const hash = (await scrypt(password, salt, 64)).toString("hex");
   return `${salt}:${hash}`;
 }
 
-function verifyPassword(password: string, storedHash: string) {
+async function verifyPassword(password: string, storedHash: string) {
   const [salt, expectedHash] = storedHash.split(":");
   if (!salt || !expectedHash) {
     return false;
   }
 
-  const actual = scryptSync(password, salt, 64);
+  const actual = await scrypt(password, salt, 64);
   const expected = Buffer.from(expectedHash, "hex");
 
   if (actual.length !== expected.length) {

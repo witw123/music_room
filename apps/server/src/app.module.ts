@@ -9,7 +9,6 @@ import { QueueModule } from "./modules/queue/queue.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
 import { RoomModule } from "./modules/room/room.module";
 import { SignalingModule } from "./modules/signaling/signaling.module";
-import { TrackModule } from "./modules/track/track.module";
 import { ConfigFactoryModule } from "./infra/config/config.module";
 import { PrismaModule } from "./infra/prisma/prisma.module";
 import { RedisModule } from "./infra/redis/redis.module";
@@ -46,7 +45,6 @@ import { AnnouncementModule } from "./modules/announcement/announcement.module";
     RealtimeModule,
     RoomModule,
     SignalingModule,
-    TrackModule,
     NeteaseModule,
     QqMusicModule,
     BilibiliModule,

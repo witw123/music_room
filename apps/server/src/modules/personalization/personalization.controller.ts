@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Optional, Param, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
 import {
   coldStartTasteInputSchema,
   personalizationFeedbackSchema,
@@ -17,8 +17,7 @@ export class PersonalizationController {
   constructor(
     private readonly personalization: PersonalizationService,
     private readonly auth: AuthService,
-    @Optional()
-    private readonly abuseProtection?: AbuseProtectionService
+    private readonly abuseProtection: AbuseProtectionService
   ) {}
 
   private async assertRateLimit(

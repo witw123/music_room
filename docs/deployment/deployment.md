@@ -51,9 +51,23 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml up -d
 ```
 
-Server 容器会在 API 进程启动前执行 `prisma db push --skip-generate`，将镜像内的
-`schema.prisma` 同步到目标 PostgreSQL。同步失败时 Server 不会启动，因此发布后不应出现
-代码已经查询新模型、数据库却缺少对应表的半更新状态。
+Server 容器会在 API 进程启动前执行 `prisma migrate deploy`，按 `apps/server/prisma/migrations`
+里的迁移历史把数据库推进到镜像内 `schema.prisma` 的状态。执行失败时 Server 不会启动，因此发布后
+不应出现代码已经查询新模型、数据库却缺少对应表的半更新状态。今后修改 `schema.prisma` 必须配套
+生成迁移（`prisma migrate dev`），不要再使用 `db push` 直接改库。
+
+**从旧版本（db push 模式）升级的一次性基线步骤**：若目标数据库此前由 `db push` 初始化（没有
+`_prisma_migrations` 表），首次以 `migrate deploy` 启动会因表已存在而失败。先手动把全部既有迁移
+标记为已应用（不执行任何 SQL），再正常启动容器：
+
+```bash
+cd apps/server
+for d in prisma/migrations/*/; do
+  npx prisma migrate resolve --applied "$(basename "$d")"
+done
+```
+
+全新数据库无需此步骤，`migrate deploy` 会按顺序执行全部迁移。
 
 ## 发布前检查
 

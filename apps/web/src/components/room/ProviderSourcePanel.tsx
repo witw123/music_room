@@ -5,7 +5,10 @@ import Image from "next/image";
 import type {
   AuthSession,
   NeteaseAccountStatus,
-  NeteaseTrackCandidate
+  NeteaseTrackCandidate,
+  ProviderTrackCandidate,
+  QqMusicAccountStatus,
+  QqMusicTrackCandidate
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import {
@@ -33,19 +36,113 @@ const accessLabels = {
   paid: "付费"
 } as const;
 
-type NeteaseSourcePanelProps = {
+export type ProviderSourceKind = "netease" | "qqmusic";
+
+type ProviderAccountLike = NeteaseAccountStatus | QqMusicAccountStatus;
+
+/**
+ * 平台适配配置:两个 provider 面板的全部差异都收敛在这里。
+ * 面板主体(QR 绑定轮询、搜索、导入、解绑与完整 UI)只有这一份实现。
+ */
+type ProviderSourceAdapter<TrackT extends ProviderTrackCandidate, AccountT extends ProviderAccountLike> = {
+  label: string;
+  cssPrefix: string;
+  nicknameFallback: string;
+  qrHint: string;
+  cachedProvider: ProviderSourceKind;
+  disconnectedAccount: AccountT;
+  errorMessages: Record<string, string>;
+  stopQrPollingCodes: string[];
+  api: {
+    getAccount: () => Promise<AccountT>;
+    getQrStatus: (attemptId: string) => Promise<{ status: string; account?: AccountT; message?: string }>;
+    startQrLogin: () => Promise<{ attemptId: string; qrimg: string; expiresAt: string }>;
+    searchTracks: (query: string) => Promise<{ items: TrackT[] }>;
+    disconnect: () => Promise<unknown>;
+  };
+};
+
+const neteaseAdapter: ProviderSourceAdapter<NeteaseTrackCandidate, NeteaseAccountStatus> = {
+  label: "网易云音乐",
+  cssPrefix: "netease",
+  nicknameFallback: "网易云账号",
+  qrHint: "请使用网易云音乐扫码确认。",
+  cachedProvider: "netease",
+  disconnectedAccount: {
+    connected: false,
+    neteaseUserId: null,
+    nickname: null,
+    avatarUrl: null,
+    lastValidatedAt: null
+  },
+  errorMessages: {
+    NETEASE_ACCOUNT_REQUIRED: "请先绑定网易云账号。",
+    NETEASE_AUTH_EXPIRED: "网易云登录已失效，请重新绑定。",
+    NETEASE_DISABLED: "网易云功能当前未启用。",
+    NETEASE_IMPORT_TOO_LARGE: "歌曲文件过大，无法导入。",
+    NETEASE_AUDIO_UNSUPPORTED: "网易云返回了当前播放器不支持的音频格式。"
+  },
+  stopQrPollingCodes: ["UNAUTHORIZED", "NETEASE_DISABLED", "NETEASE_AUTH_EXPIRED", "NETEASE_QR_EXPIRED"],
+  api: {
+    getAccount: () => musicRoomApi.getNeteaseAccount(),
+    getQrStatus: (attemptId) => musicRoomApi.getNeteaseQrStatus(attemptId),
+    startQrLogin: () => musicRoomApi.startNeteaseQrLogin(),
+    searchTracks: (query) => musicRoomApi.searchNeteaseTracks(query),
+    disconnect: () => musicRoomApi.disconnectNeteaseAccount()
+  }
+};
+
+const qqmusicAdapter: ProviderSourceAdapter<QqMusicTrackCandidate, QqMusicAccountStatus> = {
+  label: "QQ 音乐",
+  cssPrefix: "qqmusic",
+  nicknameFallback: "QQ 音乐账号",
+  qrHint: "请使用 QQ 音乐扫码确认。",
+  cachedProvider: "qqmusic",
+  disconnectedAccount: {
+    connected: false,
+    qqMusicUserId: null,
+    nickname: null,
+    avatarUrl: null,
+    lastValidatedAt: null
+  },
+  errorMessages: {
+    QQMUSIC_ACCOUNT_REQUIRED: "请先绑定 QQ 音乐账号。",
+    QQMUSIC_AUTH_EXPIRED: "QQ 音乐登录已失效，请重新绑定。",
+    QQMUSIC_DISABLED: "QQ 音乐功能当前未启用。",
+    QQMUSIC_TRACK_NOT_FOUND: "该歌曲没有可用的公开音频，可能受到 VIP 或版权限制，请换一首歌曲重试。",
+    QQMUSIC_UNAVAILABLE: "QQ 音乐服务暂时不可用，请稍后重试。",
+    QQMUSIC_IMPORT_TOO_LARGE: "歌曲文件过大，无法导入。",
+    QQMUSIC_AUDIO_UNSUPPORTED: "QQ 音乐返回了当前播放器不支持的音频格式。"
+  },
+  stopQrPollingCodes: ["UNAUTHORIZED", "QQMUSIC_DISABLED", "QQMUSIC_AUTH_EXPIRED", "QQMUSIC_QR_EXPIRED"],
+  api: {
+    getAccount: () => musicRoomApi.getQqMusicAccount(),
+    getQrStatus: (attemptId) => musicRoomApi.getQqMusicQrStatus(attemptId),
+    startQrLogin: () => musicRoomApi.startQqMusicQrLogin(),
+    searchTracks: (query) => musicRoomApi.searchQqMusicTracks(query),
+    disconnect: () => musicRoomApi.disconnectQqMusicAccount()
+  }
+};
+
+type ProviderSourcePanelProps<TrackT extends ProviderTrackCandidate> = {
   activeSession: AuthSession | null;
-  onImportTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportTrack?: (track: TrackT) => Promise<void>;
   mode?: "full" | "account";
 };
 
-export function NeteaseSourcePanel({
+function ProviderSourcePanelBase<TrackT extends ProviderTrackCandidate, AccountT extends ProviderAccountLike>({
+  adapter,
   activeSession,
   onImportTrack,
   mode = "full"
-}: NeteaseSourcePanelProps) {
-  const [account, setAccount] = useState<NeteaseAccountStatus | null>(() =>
-    activeSession ? getCachedProviderAccount(activeSession.userId, "netease") ?? null : null
+}: {
+  adapter: ProviderSourceAdapter<TrackT, AccountT>;
+  activeSession: AuthSession | null;
+  onImportTrack?: (track: TrackT) => Promise<void>;
+  mode?: "full" | "account";
+}) {
+  const [account, setAccount] = useState<ProviderAccountLike | null>(() =>
+    activeSession ? getCachedProviderAccount(activeSession.userId, adapter.cachedProvider) ?? null : null
   );
   const [qrSession, setQrSession] = useState<{
     attemptId: string;
@@ -53,7 +150,7 @@ export function NeteaseSourcePanel({
     expiresAt: string;
   } | null>(null);
   const [keywords, setKeywords] = useState("");
-  const [results, setResults] = useState<NeteaseTrackCandidate[]>([]);
+  const [results, setResults] = useState<TrackT[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -64,24 +161,24 @@ export function NeteaseSourcePanel({
     }
 
     let cancelled = false;
-    void musicRoomApi.getNeteaseAccount()
+    void adapter.api.getAccount()
       .then((nextAccount) => {
         if (!cancelled) {
-          setCachedProviderAccount(activeSession.userId, "netease", nextAccount);
+          setCachedProviderAccount(activeSession.userId, adapter.cachedProvider, nextAccount);
           setAccount(nextAccount);
           setErrorMessage(null);
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          setErrorMessage(toProviderErrorMessage(error));
+          setErrorMessage(toProviderErrorMessage(adapter, error));
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeSession]);
+  }, [activeSession, adapter]);
 
   useEffect(() => {
     if (!qrSession || !activeSession) {
@@ -92,11 +189,11 @@ export function NeteaseSourcePanel({
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       try {
-        const status = await musicRoomApi.getNeteaseQrStatus(qrSession.attemptId);
+        const status = await adapter.api.getQrStatus(qrSession.attemptId);
         if (cancelled) return;
         if (status.status === "connected" && status.account) {
           setAccount(status.account);
-          setCachedProviderAccount(activeSession.userId, "netease", status.account);
+          setCachedProviderAccount(activeSession.userId, adapter.cachedProvider, status.account);
           setQrSession(null);
           setErrorMessage(null);
           setPendingAction(null);
@@ -112,8 +209,8 @@ export function NeteaseSourcePanel({
         timer = setTimeout(() => void poll(), 2000);
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(toProviderErrorMessage(error));
-          if (shouldStopQrPolling(error)) {
+          setErrorMessage(toProviderErrorMessage(adapter, error));
+          if (shouldStopQrPolling(adapter, error)) {
             setQrSession(null);
             setPendingAction(null);
             return;
@@ -128,24 +225,24 @@ export function NeteaseSourcePanel({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [activeSession, qrSession]);
+  }, [activeSession, qrSession, adapter]);
 
   if (!activeSession) {
     return null;
   }
 
   const displayedAccount = account ?? (
-    activeSession ? getCachedProviderAccount(activeSession.userId, "netease") ?? null : null
+    activeSession ? getCachedProviderAccount(activeSession.userId, adapter.cachedProvider) ?? null : null
   );
 
   const startQrLogin = async () => {
     setPendingAction("qr");
     setErrorMessage(null);
     try {
-      setQrSession(await musicRoomApi.startNeteaseQrLogin());
+      setQrSession(await adapter.api.startQrLogin());
     } catch (error) {
       setPendingAction(null);
-      setErrorMessage(toProviderErrorMessage(error));
+      setErrorMessage(toProviderErrorMessage(adapter, error));
     }
   };
 
@@ -155,16 +252,16 @@ export function NeteaseSourcePanel({
     setPendingAction("search");
     setErrorMessage(null);
     try {
-      const response = await musicRoomApi.searchNeteaseTracks(query);
+      const response = await adapter.api.searchTracks(query);
       setResults(response.items);
     } catch (error) {
-      setErrorMessage(toProviderErrorMessage(error));
+      setErrorMessage(toProviderErrorMessage(adapter, error));
     } finally {
       setPendingAction(null);
     }
   };
 
-  const importTrack = async (track: NeteaseTrackCandidate) => {
+  const importTrack = async (track: TrackT) => {
     if (pendingAction) return;
     setPendingAction(`import:${track.providerTrackId}`);
     setErrorMessage(null);
@@ -172,7 +269,7 @@ export function NeteaseSourcePanel({
       if (!onImportTrack) return;
       await onImportTrack(track);
     } catch (error) {
-      setErrorMessage(toProviderErrorMessage(error));
+      setErrorMessage(toProviderErrorMessage(adapter, error));
     } finally {
       setPendingAction(null);
     }
@@ -183,24 +280,12 @@ export function NeteaseSourcePanel({
     setPendingAction("disconnect");
     setErrorMessage(null);
     try {
-      await musicRoomApi.disconnectNeteaseAccount();
-      setAccount({
-        connected: false,
-        neteaseUserId: null,
-        nickname: null,
-        avatarUrl: null,
-        lastValidatedAt: null
-      });
-      setCachedProviderAccount(activeSession.userId, "netease", {
-        connected: false,
-        neteaseUserId: null,
-        nickname: null,
-        avatarUrl: null,
-        lastValidatedAt: null
-      });
+      await adapter.api.disconnect();
+      setAccount(adapter.disconnectedAccount);
+      setCachedProviderAccount(activeSession.userId, adapter.cachedProvider, adapter.disconnectedAccount);
       setResults([]);
     } catch (error) {
-      setErrorMessage(toProviderErrorMessage(error));
+      setErrorMessage(toProviderErrorMessage(adapter, error));
     } finally {
       setPendingAction(null);
     }
@@ -209,13 +294,13 @@ export function NeteaseSourcePanel({
   return (
     <section
       className="flex w-full min-w-0 flex-col gap-4 rounded-xl border border-surface-border bg-surface/40 p-3 sm:p-4"
-      data-testid="netease-source-panel"
+      data-testid={`${adapter.cssPrefix}-source-panel`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">网易云音乐</h2>
+          <h2 className="text-sm font-semibold text-foreground">{adapter.label}</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            {displayedAccount?.connected ? `已绑定 ${displayedAccount.nickname ?? "网易云账号"}` : "未绑定网易云账号"}
+            {displayedAccount?.connected ? `已绑定 ${displayedAccount.nickname ?? adapter.nicknameFallback}` : `未绑定${adapter.label}账号`}
           </p>
         </div>
         {displayedAccount?.connected ? (
@@ -243,7 +328,7 @@ export function NeteaseSourcePanel({
       {qrSession ? (
         <div className="flex flex-col items-center gap-3 border-t border-surface-border pt-4 sm:flex-row sm:items-start">
           <Image
-            alt="网易云登录二维码"
+            alt={`${adapter.label}登录二维码`}
             className="h-40 w-40 rounded-lg bg-white p-2"
             height={160}
             unoptimized
@@ -251,7 +336,7 @@ export function NeteaseSourcePanel({
             width={160}
           />
           <div className="flex min-w-0 flex-col gap-2 text-xs text-foreground-muted">
-            <span>请使用网易云音乐扫码确认。</span>
+            <span>{adapter.qrHint}</span>
             <span>二维码有效期至 {new Date(qrSession.expiresAt).toLocaleTimeString()}</span>
             <Button
               className="self-start"
@@ -272,7 +357,7 @@ export function NeteaseSourcePanel({
       {mode !== "account" ? (
         <>
           <SearchBar
-            id="netease-search-input"
+            id={`${adapter.cssPrefix}-search-input`}
             value={keywords}
             onChange={setKeywords}
             onSubmit={(query) => void searchTracks(query)}
@@ -290,7 +375,7 @@ export function NeteaseSourcePanel({
           ) : null}
 
           {results.length > 0 ? (
-            <div className="netease-results-scroll max-h-[min(28rem,calc(52*var(--app-dvh)))] overflow-y-auto overscroll-contain rounded-lg border border-surface-border sm:max-h-[min(32rem,calc(58*var(--app-dvh)))]">
+            <div className={`${adapter.cssPrefix}-results-scroll max-h-[min(28rem,calc(52*var(--app-dvh)))] overflow-y-auto overscroll-contain rounded-lg border border-surface-border sm:max-h-[min(32rem,calc(58*var(--app-dvh)))]`}>
               <div className="flex flex-col divide-y divide-surface-border">
               {results.map((track) => {
                 const isImporting = pendingAction === `import:${track.providerTrackId}`;
@@ -299,7 +384,7 @@ export function NeteaseSourcePanel({
                 return (
                   <article
                     className="flex min-h-[76px] min-w-0 flex-col gap-3 bg-background/40 px-3 py-3 transition-colors hover:bg-surface-hover/60 sm:flex-row sm:items-center sm:justify-between"
-                    data-testid="netease-search-result"
+                    data-testid={`${adapter.cssPrefix}-search-result`}
                     data-track-id={track.providerTrackId}
                     key={track.providerTrackId}
                   >
@@ -343,28 +428,30 @@ export function NeteaseSourcePanel({
   );
 }
 
-function toProviderErrorMessage(error: unknown) {
+function toProviderErrorMessage(adapter: { errorMessages: Record<string, string>; label: string }, error: unknown) {
   if (error instanceof MusicRoomApiError) {
-    if (error.code === "NETEASE_ACCOUNT_REQUIRED") return "请先绑定网易云账号。";
-    if (error.code === "NETEASE_AUTH_EXPIRED") return "网易云登录已失效，请重新绑定。";
-    if (error.code === "NETEASE_DISABLED") return "网易云功能当前未启用。";
+    const mapped = error.code ? adapter.errorMessages[error.code] : undefined;
+    if (mapped) return mapped;
     if (error.code === "RATE_LIMITED") return "二维码请求过于频繁，请一分钟后再试。";
-    if (error.code === "NETEASE_IMPORT_TOO_LARGE") return "歌曲文件过大，无法导入。";
-    if (error.code === "NETEASE_AUDIO_UNSUPPORTED") return "网易云返回了当前播放器不支持的音频格式。";
     return error.message;
   }
-  return error instanceof Error ? error.message : "网易云操作失败，请稍后重试。";
+  return error instanceof Error ? error.message : `${adapter.label}操作失败，请稍后重试。`;
 }
 
-function shouldStopQrPolling(error: unknown) {
+function shouldStopQrPolling(adapter: { stopQrPollingCodes: string[] }, error: unknown) {
   if (!(error instanceof MusicRoomApiError)) {
     return false;
   }
 
-  return [
-    "UNAUTHORIZED",
-    "NETEASE_DISABLED",
-    "NETEASE_AUTH_EXPIRED",
-    "NETEASE_QR_EXPIRED"
-  ].includes(error.code ?? "");
+  return adapter.stopQrPollingCodes.includes(error.code ?? "");
+}
+
+/** 网易云面板:类型安全的薄包装,行为全部在 ProviderSourcePanelBase。 */
+export function NeteaseSourcePanel(props: ProviderSourcePanelProps<NeteaseTrackCandidate>) {
+  return <ProviderSourcePanelBase adapter={neteaseAdapter} {...props} />;
+}
+
+/** QQ 音乐面板:类型安全的薄包装,行为全部在 ProviderSourcePanelBase。 */
+export function QqMusicSourcePanel(props: ProviderSourcePanelProps<QqMusicTrackCandidate>) {
+  return <ProviderSourcePanelBase adapter={qqmusicAdapter} {...props} />;
 }

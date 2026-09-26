@@ -2,7 +2,9 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { RoomService } from "../room/room.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 
-const WATCHDOG_INTERVAL_MS = 100;
+// 客户端(音源 peer)会在曲目结束时本地推进,watchdog 只兜底
+// 无活跃客户端的房间,1s 粒度足够;原 100ms 会以 10Hz 空转打 DB。
+const WATCHDOG_INTERVAL_MS = 1000;
 
 @Injectable()
 export class PlaybackService implements OnModuleInit, OnModuleDestroy {

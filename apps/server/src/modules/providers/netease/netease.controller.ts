@@ -14,7 +14,6 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { Transform } from "node:stream";
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import { AuthService } from "../../auth/auth.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
@@ -27,6 +26,7 @@ import {
   neteaseSearchSuggestQuerySchema,
   neteaseTrackIdSchema
 } from "./netease.schemas";
+import { pipeWebStreamToResponse } from "../provider-stream";
 import { NeteaseService } from "./netease.service";
 
 @Controller("v1/providers/netease")
@@ -208,32 +208,11 @@ export class NeteaseController {
     const contentRange = upstream.headers.get("content-range");
     if (contentRange) response.setHeader("Content-Range", contentRange);
 
-    if (!upstream.body) {
-      response.end();
-      return;
-    }
-
-    const { Readable } = await import("node:stream");
-    let transferredBytes = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        transferredBytes += chunk.byteLength;
-        if (transferredBytes > result.maxBytes) {
-          callback(new Error("NetEase audio exceeded the configured import size."));
-          return;
-        }
-        callback(null, chunk);
-      }
-    });
-    limiter.on("error", () => {
-      void upstream.body?.cancel().catch(() => undefined);
-      if (!response.destroyed) response.destroy();
-    });
-    Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response);
-    request.on("close", () => {
-      if (!response.writableEnded) {
-        void upstream.body?.cancel().catch(() => undefined);
-      }
+    await pipeWebStreamToResponse({
+      request,
+      response,
+      body: upstream.body,
+      maxBytes: { limit: result.maxBytes, message: "NetEase audio exceeded the configured import size." }
     });
   }
 

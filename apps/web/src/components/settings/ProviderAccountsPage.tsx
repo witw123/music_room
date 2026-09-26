@@ -9,8 +9,7 @@ import { musicRoomApi } from "@/lib/network/music-room-api";
 import { PersonalOverview } from "./PersonalOverview";
 import { ListeningProfileOverview } from "./ListeningProfileOverview";
 import { RoomCenterOverview } from "@/components/room-home";
-import { NeteaseSourcePanel } from "@/components/room/NeteaseSourcePanel";
-import { QqMusicSourcePanel } from "@/components/room/QqMusicSourcePanel";
+import { NeteaseSourcePanel, QqMusicSourcePanel } from "@/components/room/ProviderSourcePanel";
 import { ProviderDataImportSection } from "./ProviderDataImportSection";
 import { TasteColdStartDialog } from "@/components/discovery/TasteColdStartDialog";
 import {

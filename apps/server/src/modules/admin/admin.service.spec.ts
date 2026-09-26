@@ -8,6 +8,8 @@ function buildService(prisma: Record<string, unknown>, redis: Record<string, unk
     {} as never,
     presence as never,
     {} as never,
+    {} as never,
+    {} as never,
     {} as never
   );
 }

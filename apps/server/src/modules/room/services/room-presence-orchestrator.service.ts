@@ -43,46 +43,93 @@ export class RoomPresenceOrchestratorService {
     });
   }
 
-  refreshRealtimePresence(roomId: string, sessionId: string, peerId: string) {
-    return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
-      const record = await this.roomRecordRepository.getRoomRecord(roomId);
-      assertMember(record, sessionId);
-      const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
-        roomId,
-        record.room.members
-      );
-      const currentPresence = presenceSnapshot.get(sessionId) ?? {
-        peerId: null,
-        presenceState: "offline" as const
-      };
-
-      if (
-        currentPresence.peerId === peerId &&
-        currentPresence.presenceState === "online"
-      ) {
-        await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
-        await this.roomActivityService.startOrTouch(
-          sessionId,
-          record.room
-        );
-        return {
-          room: record.room,
-          changed: false
-        };
+  refreshRealtimePresence(
+    roomId: string,
+    sessionId: string,
+    peerId: string
+  ): Promise<{ room: RoomRecord["room"] | null; changed: boolean }> {
+    // 心跳续期快速路径:绝大多数心跳都是“仍在线、同一 peerId”的重复续期,
+    // 走同一条房间级 promise 链(与状态翻转保持串行,避免迟到续期复活已清离的
+    // presence),但不进分布式锁、不读房间记录、不构建快照。
+    return this.enqueuePresenceRenewal(roomId, sessionId, peerId).then(async (renewed) => {
+      if (renewed) {
+        return { room: null, changed: false };
       }
-
-      return {
-        room: await this.applyPeerPresenceUpdate(
-          record,
+      return this.enqueuePresenceUpdate(roomId, sessionId, async () => {
+        const record = await this.roomRecordRepository.getRoomRecord(roomId);
+        assertMember(record, sessionId);
+        const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
           roomId,
-          sessionId,
-          peerId,
-          "online",
-          currentPresence
-        ),
-        changed: true
-      };
+          record.room.members
+        );
+        const currentPresence = presenceSnapshot.get(sessionId) ?? {
+          peerId: null,
+          presenceState: "offline" as const
+        };
+
+        if (
+          currentPresence.peerId === peerId &&
+          currentPresence.presenceState === "online"
+        ) {
+          await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+          await this.roomActivityService.startOrTouch(
+            sessionId,
+            record.room
+          );
+          return {
+            room: record.room,
+            changed: false
+          };
+        }
+
+        return {
+          room: await this.applyPeerPresenceUpdate(
+            record,
+            roomId,
+            sessionId,
+            peerId,
+            "online",
+            currentPresence
+          ),
+          changed: true
+        };
+      });
     });
+  }
+
+  /**
+   * 在房间级 promise 链上尝试纯续期(仅 Redis TTL + 节流的 activity 触碰)。
+   * 返回 false 表示 presence 与心跳不一致(掉线/重连/换 peerId)或读取失败,
+   * 由调用方回落到完整链路。读与写在同一条链内,天然与断连清理互斥。
+   */
+  private enqueuePresenceRenewal(roomId: string, sessionId: string, peerId: string) {
+    const run = async (): Promise<boolean> => {
+      try {
+        const current = await this.roomPresenceService.getPresenceFor(roomId, sessionId);
+        if (!current || current.presenceState !== "online" || current.peerId !== peerId) {
+          return false;
+        }
+        await this.roomPresenceService.setOnline(roomId, sessionId, peerId);
+        await this.roomActivityService.touchThrottled(sessionId, roomId);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const key = roomId;
+    const previous = this.presenceUpdateChains.get(key) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(run);
+    const settled = result.then(
+      () => undefined,
+      () => undefined
+    );
+    this.presenceUpdateChains.set(key, settled);
+    void settled.finally(() => {
+      if (this.presenceUpdateChains.get(key) === settled) {
+        this.presenceUpdateChains.delete(key);
+      }
+    });
+    return result;
   }
 
   refreshPresenceLease(roomId: string, sessionId: string, peerId: string) {

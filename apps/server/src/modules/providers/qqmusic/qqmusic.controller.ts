@@ -1,21 +1,5 @@
-import {
-  Controller,
-  Delete,
-  Get,
-  Header,
-  Headers,
-  HttpException,
-  HttpStatus,
-  Param,
-  Post,
-  Query,
-  Req,
-  Res,
-  Optional,
-  UnauthorizedException
-} from "@nestjs/common";
+import { Controller, Delete, Get, Header, Headers, HttpException, HttpStatus, Param, Post, Query, Req, Res, UnauthorizedException } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { Transform } from "node:stream";
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import { AuthService } from "../../auth/auth.service";
 import { AbuseProtectionService } from "../../../common/security/abuse-protection.service";
@@ -29,6 +13,7 @@ import {
   qqMusicSearchSuggestQuerySchema,
   qqMusicTrackIdSchema
 } from "./qqmusic.schemas";
+import { pipeWebStreamToResponse } from "../provider-stream";
 import { QqMusicService } from "./qqmusic.service";
 
 @Controller("v1/providers/qqmusic")
@@ -36,8 +21,7 @@ export class QqMusicController {
   constructor(
     private readonly service: QqMusicService,
     private readonly auth: AuthService,
-    @Optional()
-    private readonly abuseProtection?: AbuseProtectionService
+    private readonly abuseProtection: AbuseProtectionService
   ) {}
 
   @Get("account")
@@ -156,32 +140,11 @@ export class QqMusicController {
       (result.contentLength ? String(result.contentLength) : null);
     if (length) response.setHeader("Content-Length", length);
 
-    if (!upstream.body) {
-      response.end();
-      return;
-    }
-
-    const { Readable } = await import("node:stream");
-    let bytes = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        bytes += chunk.byteLength;
-        if (bytes > result.maxBytes) {
-          callback(new Error("QQ Music artwork exceeded the configured proxy size."));
-          return;
-        }
-        callback(null, chunk);
-      }
-    });
-    limiter.on("error", () => {
-      void upstream.body?.cancel().catch(() => undefined);
-      if (!response.destroyed) response.destroy();
-    });
-    Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response);
-    request.on("close", () => {
-      if (!response.writableEnded) {
-        void upstream.body?.cancel().catch(() => undefined);
-      }
+    await pipeWebStreamToResponse({
+      request,
+      response,
+      body: upstream.body,
+      maxBytes: { limit: result.maxBytes, message: "QQ Music artwork exceeded the configured proxy size." }
     });
   }
 
@@ -311,32 +274,11 @@ export class QqMusicController {
     const contentRange = upstream.headers.get("content-range");
     if (contentRange) response.setHeader("Content-Range", contentRange);
 
-    if (!upstream.body) {
-      response.end();
-      return;
-    }
-
-    const { Readable } = await import("node:stream");
-    let bytes = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        bytes += chunk.byteLength;
-        if (bytes > result.maxBytes) {
-          callback(new Error("QQ Music audio exceeded the configured import size."));
-          return;
-        }
-        callback(null, chunk);
-      }
-    });
-    limiter.on("error", () => {
-      void upstream.body?.cancel().catch(() => undefined);
-      if (!response.destroyed) response.destroy();
-    });
-    Readable.fromWeb(upstream.body as never).pipe(limiter).pipe(response);
-    request.on("close", () => {
-      if (!response.writableEnded) {
-        void upstream.body?.cancel().catch(() => undefined);
-      }
+    await pipeWebStreamToResponse({
+      request,
+      response,
+      body: upstream.body,
+      maxBytes: { limit: result.maxBytes, message: "QQ Music audio exceeded the configured import size." }
     });
   }
 
