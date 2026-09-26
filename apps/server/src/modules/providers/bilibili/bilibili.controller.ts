@@ -23,6 +23,8 @@ import {
 import { pipeWebStreamToResponse } from "../provider-stream";
 import { BilibiliService } from "./bilibili.service";
 
+const BILIBILI_STREAM_MAX_BYTES = Number(process.env.BILIBILI_MAX_STREAM_BYTES ?? 209_715_200);
+
 @Controller("v1/providers/bilibili")
 export class BilibiliController {
   constructor(private readonly service: BilibiliService) {}
@@ -151,6 +153,7 @@ export class BilibiliController {
       request: _req,
       response: res,
       body: streamResult.body,
+      maxBytes: { limit: BILIBILI_STREAM_MAX_BYTES, message: "Bilibili audio stream exceeded the configured proxy size." },
       onError: (error) => {
         if (!res.headersSent) {
           res.status(502).end();

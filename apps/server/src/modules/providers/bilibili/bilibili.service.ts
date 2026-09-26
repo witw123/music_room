@@ -149,6 +149,14 @@ export class BilibiliService {
     { candidateUrls: string[]; mimeType: string; fileType: string; expiresAt: number }
   >();
 
+  /** 写入前顺手淘汰过期项,缓存只增不减的历史问题在此收口。 */
+  private pruneAudioStreamCache(now: number) {
+    if (this.audioStreamCache.size < 128) return;
+    for (const [key, entry] of this.audioStreamCache) {
+      if (entry.expiresAt <= now) this.audioStreamCache.delete(key);
+    }
+  }
+
   private async getResolvedAudioCandidates(bvid: string, cid?: number): Promise<{
     candidateUrls: string[];
     mimeType: string;
@@ -195,6 +203,7 @@ export class BilibiliService {
           fileType: "m4a",
           expiresAt: now + 30 * 60 * 1000 // 缓存 30 分钟
         };
+        this.pruneAudioStreamCache(now);
         this.audioStreamCache.set(cacheKey, result);
         return {
           candidateUrls,
@@ -226,7 +235,8 @@ export class BilibiliService {
         fileType: "mp4",
         expiresAt: now + 15 * 60 * 1000 // 兜底缓存 15 分钟
       };
-      this.audioStreamCache.set(cacheKey, result);
+      this.pruneAudioStreamCache(now);
+        this.audioStreamCache.set(cacheKey, result);
       return {
         candidateUrls: [fallbackUrl],
         mimeType: result.mimeType,

@@ -100,13 +100,18 @@ export class RoomService {
       return { like: 0, applause: 0, fire: 0, sparkle: 0 };
     }
     const reactionModel = this.prisma.roomReaction;
-    const [like, applause, fire, sparkle] = await Promise.all([
-      reactionModel.count({ where: { roomId, trackId, reactionType: "like" } }),
-      reactionModel.count({ where: { roomId, trackId, reactionType: "applause" } }),
-      reactionModel.count({ where: { roomId, trackId, reactionType: "fire" } }),
-      reactionModel.count({ where: { roomId, trackId, reactionType: "sparkle" } })
-    ]);
-    return { like, applause, fire, sparkle };
+    const grouped = await reactionModel.groupBy({
+      by: ["reactionType"],
+      where: { roomId, trackId },
+      _count: { _all: true }
+    });
+    const counts = { like: 0, applause: 0, fire: 0, sparkle: 0 };
+    for (const row of grouped) {
+      if (row.reactionType in counts) {
+        counts[row.reactionType as keyof typeof counts] = row._count._all;
+      }
+    }
+    return counts;
   }
 
   async createRoomRequest(roomId: string, sessionId: string, input: Omit<RoomRequest, "id" | "roomId" | "requesterId" | "requesterName" | "status" | "createdAt">) {

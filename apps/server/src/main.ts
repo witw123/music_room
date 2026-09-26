@@ -11,6 +11,7 @@ import { validateRuntimeConfig } from "./common/config/runtime-config";
 import { getCorsOrigins, getRequestOrigin, isAllowedOrigin } from "./common/cors/get-cors-origins";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
 import { readUserSessionCookie } from "./modules/auth/auth.cookies";
+import { createGlobalRateLimitMiddleware } from "./common/http/global-rate-limit.middleware";
 
 async function bootstrap() {
   validateRuntimeConfig();
@@ -49,6 +50,7 @@ async function bootstrap() {
     }
     next();
   });
+  app.use(createGlobalRateLimitMiddleware());
   app.useGlobalFilters(new ApiExceptionFilter());
   app.enableCors({
     origin: corsOrigins,

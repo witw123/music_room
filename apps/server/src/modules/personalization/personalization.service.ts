@@ -168,8 +168,9 @@ export class PersonalizationService {
   async getProfile(userId: string): Promise<PersonalizationProfileResponse> {
     this.assertDatabaseAvailable();
     const [entities, events, playlists] = await Promise.all([
-      this.prisma.userTasteEntity.findMany({ where: { userId } }),
-      this.prisma.userTasteEvent.findMany({ where: { userId } }),
+      // 画像聚合有界化:按最近排序取上限,防止老用户历史无界增长拖垮查询。
+      this.prisma.userTasteEntity.findMany({ where: { userId }, orderBy: { lastOccurredAt: "desc" }, take: 2_000 }),
+      this.prisma.userTasteEvent.findMany({ where: { userId }, orderBy: { occurredAt: "desc" }, take: 5_000 }),
       this.prisma.playlist.findMany({ where: { ownerId: userId }, select: { title: true, description: true, tags: true, trackIds: true } })
     ]);
     const playbackEvents = events.filter((event) => event.eventType === "playback");
@@ -251,13 +252,14 @@ export class PersonalizationService {
   ): Promise<PersonalizationRecommendationsResponse> {
     this.assertDatabaseAvailable();
     const [entities, events, exclusions, listenedTracks] = await Promise.all([
-      this.prisma.userTasteEntity.findMany({ where: { userId } }),
+      this.prisma.userTasteEntity.findMany({ where: { userId }, orderBy: { lastOccurredAt: "desc" }, take: 2_000 }),
       this.prisma.userTasteEvent.findMany({ where: { userId }, orderBy: { occurredAt: "desc" }, take: 50 }),
       this.prisma.userRecommendationExclusion.findMany({ where: { userId } }),
       query.surface === "discover"
         ? this.prisma.userTasteEvent.findMany({
             where: { userId, eventType: "playback" },
             distinct: ["entityKey"],
+            take: 1_000,
             select: { entityKey: true, title: true, artist: true }
           })
         : query.surface === "radio"
@@ -708,7 +710,9 @@ export class PersonalizationService {
     const cutoff = new Date(Date.now() - compactionCutoffDays * 24 * 60 * 60 * 1_000);
     const rows = await this.prisma.userTasteEvent.findMany({
       where: { userId, eventType: "playback", occurredAt: { lt: cutoff } },
-      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }]
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+      // 单轮压缩有界,历史遗留由后续轮次继续收敛
+      take: 2_000
     });
     if (rows.length < 2) return;
 

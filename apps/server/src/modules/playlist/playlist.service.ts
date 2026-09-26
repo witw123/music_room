@@ -234,6 +234,9 @@ export class PlaylistService {
     const playlists = await this.listPlaylists();
     const affectedPlaylists = playlists.filter((playlist) => playlist.trackIds.includes(trackId));
 
+    const databaseAvailable = this.prisma.isAvailable();
+    const databaseUpdates: Array<{ id: string; trackIds: string[] }> = [];
+
     for (const playlist of affectedPlaylists) {
       const nextTrackIds = playlist.trackIds.filter((id) => id !== trackId);
       const updated: Playlist = {
@@ -242,16 +245,22 @@ export class PlaylistService {
         updatedAt: new Date().toISOString()
       };
 
-      if (this.prisma.isAvailable()) {
-        await this.prisma.playlist.update({
-          where: { id: updated.id },
-          data: {
-            trackIds: updated.trackIds
-          }
-        });
+      if (databaseAvailable) {
+        databaseUpdates.push({ id: updated.id, trackIds: updated.trackIds });
       }
 
       this.playlists.set(updated.id, updated);
+    }
+
+    if (databaseUpdates.length > 0) {
+      await Promise.all(
+        databaseUpdates.map((update) =>
+          this.prisma.playlist.update({
+            where: { id: update.id },
+            data: { trackIds: update.trackIds }
+          })
+        )
+      );
     }
   }
 

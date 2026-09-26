@@ -85,10 +85,12 @@ export class RoomChatService {
       }
     });
 
+    // 单次清理有界(1000 条):残留溢出由后续消息追加清理逐步收敛。
     const expired = await messages.findMany({
       where: { roomId: input.roomId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      skip: historyRetentionLimit
+      skip: historyRetentionLimit,
+      take: 1_000
     });
     if (expired.length) {
       await messages.deleteMany({ where: { id: { in: expired.map((item) => item.id) } } });

@@ -35,5 +35,20 @@ export class ProviderRateLimiter {
     }
     live.push(now);
     this.buckets.set(key, live);
+    if (this.buckets.size > MAX_BUCKETS) {
+      this.sweep(now, windowMs);
+    }
+  }
+
+  /** 桶总量超阈值时,清掉整个窗口内没有任何访问的 key,防止 Map 随历史用户无界增长。 */
+  private sweep(now: number, windowMs: number) {
+    for (const [key, timestamps] of this.buckets) {
+      const newest = timestamps[timestamps.length - 1] ?? 0;
+      if (now - newest >= windowMs) {
+        this.buckets.delete(key);
+      }
+    }
   }
 }
+
+const MAX_BUCKETS = 5_000;

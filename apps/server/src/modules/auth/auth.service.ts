@@ -43,6 +43,8 @@ type FallbackAuthStore = {
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const sessionCleanupIntervalMs = 60 * 60 * 1000;
 const userInvalidatedChannel = "music-room:auth:user-invalidated";
+const MAX_CACHED_USERS = 20_000;
+const MAX_CACHED_SESSIONS = 50_000;
 // libuv 线程池执行的异步 scrypt;同步版会在登录突发时阻塞事件循环并卡住
 // 同进程的 WS 信令与房间操作。
 const scrypt = promisify(scryptCallback) as (
@@ -134,6 +136,25 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       }
       if (session.persistence === "fallback") {
         fallbackChanged = true;
+      }
+    }
+
+    // 缓存总量上限:超出时按插入序裁剪最老条目(等价 LRU 近似)。
+    // DB 是权威数据源,缓存缺失只会退化为一次 DB 读。
+    while (this.userIdByUsername.size > MAX_CACHED_USERS) {
+      const oldestUsername = this.userIdByUsername.keys().next().value;
+      if (oldestUsername === undefined) break;
+      const userId = this.userIdByUsername.get(oldestUsername);
+      this.userIdByUsername.delete(oldestUsername);
+      if (userId) this.usersById.delete(userId);
+    }
+    while (this.sessionsByTokenHash.size > MAX_CACHED_SESSIONS) {
+      const oldestHash = this.sessionsByTokenHash.keys().next().value;
+      if (oldestHash === undefined) break;
+      const session = this.sessionsByTokenHash.get(oldestHash);
+      this.sessionsByTokenHash.delete(oldestHash);
+      if (session && session.token) {
+        this.sessionsByToken.delete(session.token);
       }
     }
 
