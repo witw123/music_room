@@ -158,7 +158,10 @@ export const roomSyncResponseSchema = z.object({
   roomDeleted: z.boolean(),
   roomRevision: z.number().int().nonnegative(),
   snapshot: roomSnapshotSchema.nullable(),
-  deletedTracks: z.array(roomTrackDeletionSchema)
+  deletedTracks: z.array(roomTrackDeletionSchema),
+  // true 表示自 sinceRevision 以来房间没有任何变化,snapshot 为 null,
+  // 客户端应沿用本地现有状态(省掉全量快照的序列化与传输)。
+  unchanged: z.boolean().optional()
 });
 
 // Joining only needs the room metadata and route id. Tracks, queue and

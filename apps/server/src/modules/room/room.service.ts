@@ -218,6 +218,21 @@ export class RoomService {
       throw new Error("Room not found.");
     }
 
+    // 未变化短路:客户端 revision 未落后时跳过全量快照构建与序列化。
+    // 房间任何内容变更(含曲库删除)都会推进 roomRevision,因此 revision
+    // 未变即 deletedTracks 也为空。
+    const currentRevision = record.room.roomRevision ?? 0;
+    if (sinceRevision > 0 && currentRevision <= Math.floor(sinceRevision)) {
+      return {
+        roomId,
+        roomDeleted: false,
+        roomRevision: currentRevision,
+        snapshot: null,
+        deletedTracks: [],
+        unchanged: true
+      };
+    }
+
     const snapshot = await this.roomSnapshotService.buildSnapshot(record, []);
     const deletedTracks = await this.roomRecordRepository.listTrackDeletions(
       roomId,

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { ConcurrencyGate } from "../provider-concurrency";
 import {
   checkQQLoginQr,
   getAlbumInfo,
@@ -323,11 +324,13 @@ export class QqMusicApiClient {
       };
     });
   }
+  private readonly concurrencyGate = new ConcurrencyGate(
+    Number(process.env.QQMUSIC_MAX_CONCURRENCY ?? 16),
+    "QQ Music"
+  );
+
   private async call<T>(operation: () => Promise<T>) {
-    try { return await operation(); } catch (error) {
-      if (error instanceof QqMusicApiError) throw error;
-      throw new QqMusicApiError("unavailable");
-    }
+    return this.concurrencyGate.run(operation);
   }
 }
 function readCookie(session: Record<string, unknown>) {

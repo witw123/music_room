@@ -5,6 +5,7 @@ import type {
   BilibiliSubtitleMeta
 } from "./bilibili-subtitle";
 import { BilibiliWbiSigner } from "./bilibili-wbi";
+import { ConcurrencyGate } from "../provider-concurrency";
 
 const BILIBILI_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
@@ -18,21 +19,28 @@ const BILIBILI_TV_UA = "Bilibili/7.20.0 (Android; 10)";
 // 保证代理流式转发（Range 透传）不会被计时器中断。
 const UPSTREAM_HEADER_TIMEOUT_MS = 6000;
 
+const upstreamGate = new ConcurrencyGate(
+  Number(process.env.BILIBILI_MAX_CONCURRENCY ?? 16),
+  "Bilibili"
+);
+
 async function fetchUpstream(
   url: string,
   init: RequestInit = {},
   headerTimeoutMs = UPSTREAM_HEADER_TIMEOUT_MS
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(new Error(`Bilibili upstream header timeout (${headerTimeoutMs}ms)`)),
-    headerTimeoutMs
-  );
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  return upstreamGate.run(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error(`Bilibili upstream header timeout (${headerTimeoutMs}ms)`)),
+      headerTimeoutMs
+    );
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 }
 
 export type BilibiliViewData = {

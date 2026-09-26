@@ -68,14 +68,26 @@ export class RoomRecordRepository {
     }
 
     if (this.isRedisAvailable()) {
-      const redisRecord = await this.redis.getJson<unknown>(this.joinCodeCacheKey(code));
-      const parsedRedisRecord = parseRoomRecord(redisRecord);
-      if (parsedRedisRecord && parsedRedisRecord.room.joinCode === code) {
-        if (await this.isRoomTerminated(parsedRedisRecord.room.id)) {
-          throw new Error(`Room not found for join code: ${joinCode}`);
+      // joinCode 缓存只存 roomId(瘦身):房间本体按 roomId 走内存/roomCache。
+      const cachedRoomId = await this.redis.getString(this.joinCodeCacheKey(code));
+      if (cachedRoomId) {
+        const cached = this.rooms.get(cachedRoomId);
+        if (cached && cached.room.joinCode === code) {
+          if (await this.isRoomTerminated(cachedRoomId)) {
+            throw new Error(`Room not found for join code: ${joinCode}`);
+          }
+          return cloneRoomRecord(cached).room;
         }
-        this.rooms.set(parsedRedisRecord.room.id, cloneRoomRecord(parsedRedisRecord));
-        return cloneRoomRecord(parsedRedisRecord).room;
+        const redisRecord = await this.redis.getJson<unknown>(this.roomCacheKey(cachedRoomId));
+        const parsedRedisRecord = parseRoomRecord(redisRecord);
+        if (parsedRedisRecord && parsedRedisRecord.room.joinCode === code) {
+          if (await this.isRoomTerminated(cachedRoomId)) {
+            throw new Error(`Room not found for join code: ${joinCode}`);
+          }
+          this.rooms.set(cachedRoomId, cloneRoomRecord(parsedRedisRecord));
+          return cloneRoomRecord(parsedRedisRecord).room;
+        }
+        await this.redis.delete(this.joinCodeCacheKey(code)).catch(() => undefined);
       }
     } else if (!this.prisma.isAvailable()) {
       const inMemoryRecord = [...this.rooms.values()].find(({ room }) => room.joinCode === code);
@@ -199,9 +211,9 @@ export class RoomRecordRepository {
             )
           ]
         : []),
-      this.redis.setJson(
+      this.redis.setString(
         this.joinCodeCacheKey(record.room.joinCode),
-        record,
+        record.room.id,
         this.roomCacheTtlSeconds
       )
     ]);

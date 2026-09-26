@@ -38,6 +38,7 @@ import {
   neteaseSongDetailBodySchema
 } from "./netease.schemas";
 import { z } from "zod";
+import { ConcurrencyGate } from "../provider-concurrency";
 
 type NeteaseApiResponse = {
   status?: unknown;
@@ -312,15 +313,22 @@ export class NeteaseApiClient {
     });
   }
 
+  private readonly concurrencyGate = new ConcurrencyGate(
+    Number(process.env.NETEASE_MAX_CONCURRENCY ?? 16),
+    "NetEase"
+  );
+
   private async call<T>(operation: () => Promise<T>) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (error instanceof NeteaseApiError) {
-        throw error;
+    return this.concurrencyGate.run(async () => {
+      try {
+        return await operation();
+      } catch (error) {
+        if (error instanceof NeteaseApiError) {
+          throw error;
+        }
+        throw new NeteaseApiError("unavailable");
       }
-      throw new NeteaseApiError("unavailable");
-    }
+    });
   }
 
   private async checkQrCodeWithCrypto(key: string, crypto?: NeteaseCrypto) {

@@ -77,7 +77,44 @@ describe("RoomRecordRepository", () => {
 
     await repository.persistRecord(createRoomRecord(1));
 
-    expect(redis.setString).not.toHaveBeenCalled();
+    // persistRecord 只写一次 joinCode 键(现为 roomId 字符串),不改写任何 recent-room key。
+    expect(redis.setString).toHaveBeenCalledTimes(1);
+    expect(redis.setString).toHaveBeenCalledWith("music-room:join-code:ABC123", "room_1", 60);
+  });
+  it("resolves rooms by join code through the slimmed roomId cache in redis-only mode", async () => {
+    const prisma = { isAvailable: jest.fn(() => false) };
+    const redisStore = new Map<string, string>();
+    const redis = {
+      ...createRedisMock(),
+      setJsonIfRevisionMatches: jest.fn(async (_key: string, value: unknown) => {
+        const record = value as RoomRecord;
+        redisStore.set(`music-room:room:${record.room.id}`, JSON.stringify(value));
+        return true;
+      }),
+      setString: jest.fn(async (key: string, value: string) => {
+        redisStore.set(key, value);
+      }),
+      getString: jest.fn(async (key: string) => redisStore.get(key) ?? null),
+      getJson: jest.fn(async (key: string) => {
+        const raw = redisStore.get(key);
+        return raw ? JSON.parse(raw) : null;
+      })
+    };
+    const repository = new RoomRecordRepository(
+      new Map(),
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    // joinCode 缓存写的是 roomId 字符串,不是全量 JSON
+    await repository.persistRecord(createRoomRecord(1));
+    expect(redis.setString).toHaveBeenCalledWith("music-room:join-code:ABC123", "room_1", 60);
+
+    const room = await repository.findByJoinCode("abc123");
+    expect(room.id).toBe("room_1");
   });
 
   it("rejects stale Redis-only writes before refreshing cache projections", async () => {
