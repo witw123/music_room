@@ -69,6 +69,20 @@ done
 
 全新数据库无需此步骤，`migrate deploy` 会按顺序执行全部迁移。
 
+## 构建期地址与 TURN（实测结论 2026-09-26）
+
+- **裸机路线（当前生产，PM2 + deploy.sh）**：deploy.sh 将 `.env` 拷到 `apps/web/.env` 后构建，
+  `NEXT_PUBLIC_*` 在构建期内联进产物（已实测域名出现在 chunk 中）。此路线已解决。
+- **容器路线（CI 镜像 / compose web）**：`server-web-ci.yml` 已把全部地址类 `NEXT_PUBLIC_*`
+  接入仓库 Variables（未配置时为空）。空值行为：API/WS 走 `resolveApiBaseUrl()` 相对路径回退；
+  TURN 主链路由服务端 `/v1/realtime/ice-config` 签发临时凭据，静态 `NEXT_PUBLIC_TURN_*` 仅是
+  ice-config 不可用时的兜底（空值时静态部分只剩 STUN）。要让镜像完全自足，在仓库
+  Variables 配置 `NEXT_PUBLIC_*` 后重新构建即可。
+- **coturn TLS**：裸机已配好（`/etc/coturn/certs/` 证书 + conf 的 cert/pkey + 5349 对公网可达）。
+  compose 未挂载证书，因此两份 compose 的 `TURN_PROTOCOLS` 默认值已降为 `udp,tcp`，
+  避免"声明 tls 却无证书"产生不可用候选；容器路线要启用 `turns:`，需挂载证书并在
+  `.env` 显式设置 `TURN_PROTOCOLS=udp,tcp,tls`。
+
 ## 发布前检查
 
 ```bash

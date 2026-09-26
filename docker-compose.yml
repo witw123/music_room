@@ -106,7 +106,10 @@ services:
       TURN_MAX_PORT: ${TURN_MAX_PORT:-49415}
       TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:?TURN_SHARED_SECRET must be set}
       TURN_REALM: ${TURN_REALM:-localhost}
-      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp,tls}
+      # 默认不签发 turns: 候选——compose 未挂载证书(--cert/--pkey),
+      # 声明 tls 会产生连不上的候选(裸机路线证书在 /etc/coturn/certs/ 已配好)。
+      # 容器路线挂载证书后,在 .env 里显式设 TURN_PROTOCOLS=udp,tcp,tls。
+      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp}
       TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-3600}
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-127.0.0.1}
       NETEASE_ENABLED: ${NETEASE_ENABLED:-false}
