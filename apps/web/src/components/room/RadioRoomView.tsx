@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState } from "react";
+import { RoomTabPanelPlaceholder, preloadRoomPanelChunks } from "./RoomTabPanelPlaceholder";
 import dynamic from "next/dynamic";
 import type { BilibiliTrackCandidate, NeteaseTrackCandidate, QqMusicTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
@@ -22,13 +23,27 @@ import {
 import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
 import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
 
-const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel));
-const RoomChatPanel = dynamic(() => import("./RoomChatOverlay").then((m) => m.RoomChatPanel));
-const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch));
-const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar));
-const LocalAudioImport = dynamic(() => import("./LocalAudioImport").then((m) => m.LocalAudioImport));
-const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel));
-const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel));
+const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const RoomChatPanel = dynamic(() => import("./RoomChatOverlay").then((m) => m.RoomChatPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch), {
+  loading: RoomTabPanelPlaceholder
+});
+const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar), {
+  loading: RoomTabPanelPlaceholder
+});
+const LocalAudioImport = dynamic(() => import("./LocalAudioImport").then((m) => m.LocalAudioImport), {
+  loading: RoomTabPanelPlaceholder
+});
+const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel), {
+  loading: RoomTabPanelPlaceholder
+});
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
@@ -39,6 +54,20 @@ type RadioRightTab = "chat" | "members";
 type RadioMobileTab = "queue" | "desk" | "chat" | "library" | "members";
 
 export function RadioRoomView(props: RoomDashboardViewProps) {
+  // 房间内各面板迟早会被点到:空闲时预取,避免首次切换出现加载占位。
+  useEffect(
+    () =>
+      preloadRoomPanelChunks([
+        () => import("./MembersPanel"),
+        () => import("./RoomChatOverlay"),
+        () => import("./RoomProviderTrackSearch"),
+        () => import("./RoomReactionToolbar"),
+        () => import("./LocalAudioImport"),
+        () => import("./LocalStorageTabPanel"),
+        () => import("./LibraryTabPanel")
+      ]),
+    []
+  );
   const { panelsReady } = useProgressiveRoomLoading();
   const [membershipNow, setMembershipNow] = useState(() => Date.now());
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;

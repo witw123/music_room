@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { RoomTabPanelPlaceholder, preloadRoomPanelChunks } from "./RoomTabPanelPlaceholder";
 import dynamic from "next/dynamic";
 import type {
   BilibiliTrackCandidate,
@@ -29,11 +30,21 @@ import {
 import { useProgressiveRoomLoading } from "./hooks/use-progressive-room-loading";
 import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
 
-const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel));
-const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel));
-const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel));
-const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch));
-const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar));
+const LibraryTabPanel = dynamic(() => import("./LibraryTabPanel").then((m) => m.LibraryTabPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const LocalStorageTabPanel = dynamic(() => import("./LocalStorageTabPanel").then((m) => m.LocalStorageTabPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const MembersPanel = dynamic(() => import("./MembersPanel").then((m) => m.MembersPanel), {
+  loading: RoomTabPanelPlaceholder
+});
+const RoomProviderTrackSearch = dynamic(() => import("./RoomProviderTrackSearch").then((m) => m.RoomProviderTrackSearch), {
+  loading: RoomTabPanelPlaceholder
+});
+const RoomReactionToolbar = dynamic(() => import("./RoomReactionToolbar").then((m) => m.RoomReactionToolbar), {
+  loading: RoomTabPanelPlaceholder
+});
 
 type ProviderCandidate = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
 
@@ -46,6 +57,18 @@ type MemberMobileTab = "search" | "my-requests" | "queue" | "library" | "members
 type RequestMobileTab = HostMobileTab | MemberMobileTab;
 
 export function RequestRoomView(props: RoomDashboardViewProps) {
+  // 房间内各面板迟早会被点到:空闲时预取,避免首次切换出现加载占位。
+  useEffect(
+    () =>
+      preloadRoomPanelChunks([
+        () => import("./LibraryTabPanel"),
+        () => import("./LocalStorageTabPanel"),
+        () => import("./MembersPanel"),
+        () => import("./RoomProviderTrackSearch"),
+        () => import("./RoomReactionToolbar")
+      ]),
+    []
+  );
   const { panelsReady } = useProgressiveRoomLoading();
   const roomId = props.roomSnapshot.room.id;
   const isHost = props.roomSnapshot.room.hostId === props.activeSession?.userId;
