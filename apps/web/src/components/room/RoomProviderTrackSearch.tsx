@@ -127,6 +127,8 @@ export function RoomProviderTrackSearch({
   const [results, setResults] = useState<ProviderTrack[]>([]);
   const [bilibiliPartDetail, setBilibiliPartDetail] = useState<BilibiliPartDetail | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(() => new Set());
+  const pendingTrackIdsRef = useRef<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
@@ -136,6 +138,15 @@ export function RoomProviderTrackSearch({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const skipKeywordResetRef = useRef(false);
   const isInteractingWithDropdownRef = useRef(false);
+  const actionQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (enabledSearchProviders.length === 0) return;
@@ -290,54 +301,76 @@ export function RoomProviderTrackSearch({
   }, []);
 
   const handleImportAllParts = useCallback(async (parts: BilibiliTrackCandidate[]) => {
-    const unimported = parts.filter((part) => !libraryTrackIds.has(part.providerTrackId));
+    const unimported = parts.filter(
+      (part) => !libraryTrackIds.has(part.providerTrackId) && !pendingTrackIdsRef.current.has(part.providerTrackId)
+    );
     if (unimported.length === 0) {
       setMessage("所有分P单曲均已在曲库中。");
       return;
     }
     setPending("import-all-parts");
+    for (const p of unimported) pendingTrackIdsRef.current.add(p.providerTrackId);
+    setPendingTrackIds(new Set(pendingTrackIdsRef.current));
     setErrorMessage(null);
     setMessage(null);
-    try {
-      if (onImportBilibiliTracks) {
-        await onImportBilibiliTracks(unimported);
-      } else if (onImportBilibiliTrack) {
-        for (const track of unimported) {
-          await onImportBilibiliTrack(track);
+
+    const runTask = async () => {
+      try {
+        if (onImportBilibiliTracks) {
+          await onImportBilibiliTracks(unimported);
+        } else if (onImportBilibiliTrack) {
+          for (const track of unimported) {
+            await onImportBilibiliTrack(track);
+          }
+        }
+        if (mountedRef.current) setMessage(`已成功导入 ${unimported.length} 首分P单曲到曲库。`);
+      } catch (error) {
+        if (mountedRef.current) setErrorMessage(toSearchErrorMessage(error));
+      } finally {
+        if (mountedRef.current) {
+          setPending((current) => (current === "import-all-parts" ? null : current));
+          for (const p of unimported) pendingTrackIdsRef.current.delete(p.providerTrackId);
+          setPendingTrackIds(new Set(pendingTrackIdsRef.current));
         }
       }
-      setMessage(`已成功导入 ${unimported.length} 首分P单曲到曲库。`);
-    } catch (error) {
-      setErrorMessage(toSearchErrorMessage(error));
-    } finally {
-      setPending((current) => (current === "import-all-parts" ? null : current));
-    }
+    };
+
+    actionQueueRef.current = actionQueueRef.current.then(runTask, runTask);
   }, [libraryTrackIds, onImportBilibiliTrack, onImportBilibiliTracks]);
 
-  const handleTrackAction = async (candidate: ProviderTrack) => {
-    const actionKey = `${mode}:${candidate.providerTrackId}`;
-    if (pending) return;
+  const handleTrackAction = useCallback(async (candidate: ProviderTrack) => {
+    const trackId = candidate.providerTrackId;
+    if (pendingTrackIdsRef.current.has(trackId)) return;
     if (isManagedImport && !canManageLibrary) return;
-    setPending(actionKey);
+
+    pendingTrackIdsRef.current.add(trackId);
+    setPendingTrackIds(new Set(pendingTrackIdsRef.current));
     setErrorMessage(null);
-    setMessage(null);
-    try {
-      if (isManagedImport) {
-        if (candidate.provider === "netease") await onImportNeteaseTrack?.(candidate as NeteaseTrackCandidate);
-        else if (candidate.provider === "bilibili") await onImportBilibiliTrack?.(candidate as BilibiliTrackCandidate);
-        else await onImportQqMusicTrack?.(candidate as QqMusicTrackCandidate);
-        setMessage(`《${candidate.title}》已加入曲库。`);
-      } else {
-        await onRequestTrack?.(candidate);
-        setMessage(mode === "request" ? `已提交《${candidate.title}》点歌。` : "已提交点歌建议。");
-        onRequestSubmitted?.();
+
+    const runTask = async () => {
+      try {
+        if (isManagedImport) {
+          if (candidate.provider === "netease") await onImportNeteaseTrack?.(candidate as NeteaseTrackCandidate);
+          else if (candidate.provider === "bilibili") await onImportBilibiliTrack?.(candidate as BilibiliTrackCandidate);
+          else await onImportQqMusicTrack?.(candidate as QqMusicTrackCandidate);
+          if (mountedRef.current) setMessage(`《${candidate.title}》已加入曲库。`);
+        } else {
+          await onRequestTrack?.(candidate);
+          if (mountedRef.current) setMessage(mode === "request" ? `已提交《${candidate.title}》点歌。` : "已提交点歌建议。");
+          onRequestSubmitted?.();
+        }
+      } catch (error) {
+        if (mountedRef.current) setErrorMessage(toSearchErrorMessage(error));
+      } finally {
+        if (mountedRef.current) {
+          pendingTrackIdsRef.current.delete(trackId);
+          setPendingTrackIds(new Set(pendingTrackIdsRef.current));
+        }
       }
-    } catch (error) {
-      setErrorMessage(toSearchErrorMessage(error));
-    } finally {
-      setPending(null);
-    }
-  };
+    };
+
+    actionQueueRef.current = actionQueueRef.current.then(runTask, runTask);
+  }, [canManageLibrary, isManagedImport, mode, onImportBilibiliTrack, onImportNeteaseTrack, onImportQqMusicTrack, onRequestSubmitted, onRequestTrack]);
 
   const actionLabel = mode === "import" ? "加入曲库" : mode === "request" ? "点歌" : "建议点歌";
 
@@ -493,7 +526,7 @@ export function RoomProviderTrackSearch({
               {isManagedImport && canManageLibrary && (onImportBilibiliTracks || onImportBilibiliTrack) && bilibiliPartDetail.parts.length > 1 ? (
                 <button
                   type="button"
-                  disabled={pending !== null}
+                  disabled={pending === "import-all-parts" || bilibiliPartDetail.parts.every((p) => libraryTrackIds.has(p.providerTrackId))}
                   onClick={() => void handleImportAllParts(bilibiliPartDetail.parts)}
                   className="shrink-0 rounded-md border border-accent/40 bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent hover:border-accent hover:bg-accent hover:text-white transition-all disabled:opacity-50"
                 >
@@ -506,8 +539,8 @@ export function RoomProviderTrackSearch({
           <div className="max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-md border border-surface-border/40 bg-surface/40">
             {bilibiliPartDetail.parts.map((part, index) => {
               const isInLibrary = libraryTrackIds.has(part.providerTrackId);
-              const isPending = pending === `${mode}:${part.providerTrackId}`;
-              const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
+              const isPending = pendingTrackIds.has(part.providerTrackId);
+              const disabled = isPending || pending === "import-all-parts" || (isManagedImport && (!canManageLibrary || isInLibrary));
 
               return (
                 <article
@@ -550,15 +583,15 @@ export function RoomProviderTrackSearch({
         <div className="divide-y divide-surface-border/40 overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
           {results.map((track) => {
             const isInLibrary = libraryTrackIds.has(track.providerTrackId);
-            const isPending = pending === `${mode}:${track.providerTrackId}`;
-            const disabled = pending !== null || (isManagedImport && (!canManageLibrary || isInLibrary));
+            const isPending = pendingTrackIds.has(track.providerTrackId);
+            const disabled = isPending || pending === "import-all-parts" || (isManagedImport && (!canManageLibrary || isInLibrary));
             const bilibiliTrack = track.provider === "bilibili" ? (track as BilibiliTrackCandidate) : null;
             const isMultiPart =
               bilibiliTrack &&
               (Boolean(typeof bilibiliTrack.pageCount === "number" && bilibiliTrack.pageCount > 1) ||
                 /(?:全|\s)?(\d+)\s*[pP篇首集]|合集|精选|收录|教学/i.test(track.title) ||
                 track.durationMs > 600000);
-            const isPartsPending = bilibiliTrack && pending === `parts:${bilibiliTrack.bvid || track.providerTrackId.split(":")[0]}`;
+            const isPartsPending = Boolean(bilibiliTrack && pending === `parts:${bilibiliTrack.bvid || track.providerTrackId.split(":")[0]}`);
 
             return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-surface-hover/60">
               {track.artworkUrl ? (
@@ -580,7 +613,7 @@ export function RoomProviderTrackSearch({
                   {isMultiPart ? (
                     <button
                       type="button"
-                      disabled={pending !== null}
+                      disabled={isPartsPending}
                       onClick={(e) => {
                         e.stopPropagation();
                         void handleOpenBilibiliParts(track);
@@ -610,7 +643,7 @@ export function RoomProviderTrackSearch({
                 {bilibiliTrack ? (
                   <button
                     type="button"
-                    disabled={pending !== null}
+                    disabled={isPartsPending}
                     onClick={(e) => {
                       e.stopPropagation();
                       void handleOpenBilibiliParts(track);

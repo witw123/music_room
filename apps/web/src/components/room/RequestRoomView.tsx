@@ -212,7 +212,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
 
   const hostLeftTabs = useMemo(() => [
     { id: "inbox" as const, label: `待审核 (${pendingRequests.length})`, icon: InboxIcon },
-    { id: "search" as const, label: "搜歌入队", icon: SearchIcon },
+    { id: "search" as const, label: "搜歌导入", icon: SearchIcon },
     { id: "library" as const, label: "曲库", icon: FolderIcon },
     { id: "playlists" as const, label: "歌单", icon: LayersIcon }
   ], [pendingRequests.length]);
@@ -324,8 +324,12 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   <RoomProviderTrackSearch
                     canManageLibrary={isHost}
                     hideUnavailableProvidersNotice
-                    mode="request"
+                    mode={isHost ? "import" : "request"}
                     onRequestTrack={submitRequest}
+                    onImportNeteaseTrack={props.onImportNeteaseTrack}
+                    onImportQqMusicTrack={props.onImportQqMusicTrack}
+                    onImportBilibiliTrack={props.onImportBilibiliTrack}
+                    onImportBilibiliTracks={props.onImportBilibiliTracks}
                     roomTracks={props.roomSnapshot.tracks}
                     surface="plain"
                   />
@@ -513,8 +517,12 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                 <RoomProviderTrackSearch
                   canManageLibrary={isHost}
                   hideUnavailableProvidersNotice
-                  mode="request"
+                  mode={isHost ? "import" : "request"}
                   onRequestTrack={submitRequest}
+                  onImportNeteaseTrack={props.onImportNeteaseTrack}
+                  onImportQqMusicTrack={props.onImportQqMusicTrack}
+                  onImportBilibiliTrack={props.onImportBilibiliTrack}
+                  onImportBilibiliTracks={props.onImportBilibiliTracks}
                   roomTracks={props.roomSnapshot.tracks}
                   surface="plain"
                 />
