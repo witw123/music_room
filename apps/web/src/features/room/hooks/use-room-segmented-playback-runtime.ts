@@ -302,6 +302,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const localAudioObjectUrlRef = useRef<LocalAudioObjectUrl | null>(null);
   const localAudioReadyKeyRef = useRef<string | null>(null);
   const localAudioTimelineKeyRef = useRef<string | null>(null);
+  // 元素已应用的最新时间线权威版本(playbackRevision 单调递增)。
+  // 迟到/排队的旧快照比它旧时直接忽略,防止把刚播过的片段重seek回去重播。
+  const localAudioAppliedRevisionRef = useRef<{ trackId: string; revision: number } | null>(null);
   const nativeLocalAudioTimelineRef = useRef<string | null>(null);
   const remoteAudioTimelineKeyRef = useRef<string | null>(null);
   const skippedUnavailableStreamingTimelineRef = useRef<string | null>(null);
@@ -1121,6 +1124,20 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             activeRoomPlayback,
             activeRuntime.playbackBarrier
           );
+          // 单调性守卫:进入房间后,entry 期间排队的旧同步可能在 resume 之后才落地;
+          // 它携带的 playbackRevision 比元素已应用的更旧,若执行会把 currentTime
+          // 回卷到已播位置,造成“同一片段播放两次”。直接忽略过期快照。
+          const incomingRevision = Math.floor(activeRoomPlayback.playbackRevision ?? 0);
+          const applied = localAudioAppliedRevisionRef.current;
+          if (applied && applied.trackId === activeRoomPlayback.currentTrackId) {
+            if (incomingRevision < applied.revision) {
+              return;
+            }
+          }
+          localAudioAppliedRevisionRef.current = {
+            trackId: activeRoomPlayback.currentTrackId ?? "",
+            revision: incomingRevision
+          };
           const targetPositionMs = resolveRoomAudioPositionMs(
             activeRoomPlayback,
             getRoomPlaybackClockNowMs(),
