@@ -24,6 +24,8 @@ type ImmersivePlayerOverlayProps = {
   isPlaying: boolean;
   playbackBarrierBlocked?: boolean;
   positionMs: number;
+  /** seek 拖动中的草稿位置;非空时悬浮层直接展示草稿值,不自驱动推进。 */
+  seekDraftMs?: number | null;
   currentTrack: TrackMeta | null;
   artworkUrl: string | null;
   canControlPlayback: boolean;
@@ -59,12 +61,45 @@ type ImmersivePlayerOverlayProps = {
   onSeekToPosition?: (positionMs: number) => void;
 };
 
+/**
+ * 沉浸层自驱动进度:BottomPlayer 以低频(normal cadence)传入权威锚点,
+ * 这里在打开且播放中时以 50ms 自行推进显示值,
+ * 使 BottomPlayer 本体不再因沉浸模式而以 20fps 整树重渲染。
+ * seek 拖动 / barrier 阻塞 / 暂停时冻结,直接展示权威值。
+ */
+function useSelfDrivenPositionMs(input: {
+  positionMs: number;
+  isPlaying: boolean;
+  durationMs: number;
+  frozen: boolean;
+  active: boolean;
+}) {
+  const [tickMs, setTickMs] = useState(0);
+  const selfDriven = input.active && !input.frozen && input.isPlaying;
+  const anchorRef = useRef<{ ms: number; atMs: number } | null>(null);
+  if (!anchorRef.current || anchorRef.current.ms !== input.positionMs) {
+    anchorRef.current = { ms: input.positionMs, atMs: Date.now() };
+  }
+  useEffect(() => {
+    if (!selfDriven) return;
+    const timer = window.setInterval(() => setTickMs(Date.now()), 50);
+    return () => window.clearInterval(timer);
+  }, [selfDriven]);
+  if (!selfDriven) return input.positionMs;
+  void tickMs; // 50ms tick 触发重渲染以重算推进值
+  return Math.min(
+    input.durationMs > 0 ? input.durationMs : Number.POSITIVE_INFINITY,
+    anchorRef.current.ms + Math.max(0, Date.now() - anchorRef.current.atMs)
+  );
+}
+
 export function ImmersivePlayerOverlay({
   roomId,
   isOpen,
   isPlaying,
   playbackBarrierBlocked = false,
-  positionMs,
+  positionMs: anchorPositionMs,
+  seekDraftMs = null,
   currentTrack,
   artworkUrl,
   canControlPlayback,
@@ -99,6 +134,13 @@ export function ImmersivePlayerOverlay({
   onClose,
   onSeekToPosition
 }: ImmersivePlayerOverlayProps) {
+  const positionMs = useSelfDrivenPositionMs({
+    positionMs: anchorPositionMs,
+    isPlaying,
+    durationMs,
+    frozen: playbackBarrierBlocked || seekDraftMs !== null,
+    active: isOpen
+  });
   const [mobileView, setMobileView] = useState<"artwork" | "lyrics">("artwork");
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);

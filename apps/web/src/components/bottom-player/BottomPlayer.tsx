@@ -242,9 +242,9 @@ function BottomPlayerBase({
     backgroundColor: artworkPalette.surface,
     borderColor: artworkPalette.border
   };
-  const progressRenderIntervalMs = isImmersiveOpen && isPageVisible
-    ? 50
-    : resolveProgressRenderIntervalMs({ isPageVisible });
+  // 沉浸模式的高频进度推进已移交 ImmersivePlayerOverlay 自驱动,
+  // BottomPlayer 本体保持常态节奏,不再以 20fps 整树重渲染。
+  const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
   const progressCommitThresholdMs = isImmersiveOpen ? 30 : 200;
   const footerClassName =
     "fixed inset-x-2.5 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[80] box-border flex h-14 flex-col justify-center overflow-visible rounded-2xl border border-surface-border bg-[#121216]/97 px-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.45)] transition-[background-color,border-color,transform,opacity] duration-300 ease-out md:inset-x-0 md:bottom-0 md:h-16 md:rounded-none md:border-x-0 md:border-b-0 md:border-t md:border-surface-border md:bg-[#101216]/97 md:px-0 md:py-0";
@@ -660,6 +660,7 @@ function BottomPlayerBase({
       isPlaying={isPlaying}
       playbackBarrierBlocked={isPlaybackBarrierBlocked}
       positionMs={boundedProgressMs}
+      seekDraftMs={seekDraft}
       currentTrack={currentTrack}
       artworkUrl={artworkUrl}
       canControlPlayback={playerControlsEnabled}
