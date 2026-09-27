@@ -10,6 +10,7 @@ import {
   openExternalUrl,
   type UpdateCheckResult
 } from "@/features/update/update-checker";
+import { useInAppApkDownload } from "@/features/update/use-in-app-apk-download";
 
 interface UpdatePromptDialogProps {
   open: boolean;
@@ -33,13 +34,27 @@ export function UpdatePromptDialog({
 
   useBackHandler(onDismiss, open);
 
+  // hooks 必须在任何提前 return 之前调用
+  const downloadTarget = result?.matchedAsset ?? null;
+  const isAndroidNative =
+    result?.runtime === "mobile-native" && result?.platform === "android";
+  const inAppDownload = useInAppApkDownload({
+    url: downloadTarget?.browser_download_url ?? null,
+    versionName: result?.latestVersion ?? "",
+    enabled: open && isAndroidNative && downloadTarget !== null
+  });
+
   if (!open || !result || !result.hasUpdate) return null;
   if (typeof document === "undefined") return null;
 
-  const downloadTarget = result.matchedAsset;
   const platformName = getPlatformDisplayName(result.platform, result.runtime);
 
   const handleDownload = () => {
+    if (isAndroidNative && inAppDownload.hasPlugin) {
+      // 应用内下载已自动开始;此处仅兜底重试
+      inAppDownload.start();
+      return;
+    }
     if (downloadTarget) {
       void openExternalUrl(downloadTarget.browser_download_url);
     } else {
@@ -89,6 +104,32 @@ export function UpdatePromptDialog({
                 安装包大小: {formatFileSize(downloadTarget.size)}
               </div>
             ) : null}
+            {isAndroidNative && inAppDownload.state.phase !== "idle" ? (
+              <div className="mt-2" data-testid="in-app-download-progress">
+                {inAppDownload.state.phase === "downloading" ? (
+                  <>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-border/40">
+                      <div
+                        className="h-full rounded-full bg-accent transition-all duration-300"
+                        style={{ width: `${Math.max(4, inAppDownload.state.progress)}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 text-foreground-muted">
+                      正在下载更新包… {inAppDownload.state.progress}%
+                    </div>
+                  </>
+                ) : null}
+                {inAppDownload.state.phase === "installing" ? (
+                  <div className="text-foreground-muted">下载完成,正在打开安装器…</div>
+                ) : null}
+                {inAppDownload.state.phase === "needs-permission" ? (
+                  <div className="text-amber-400">{inAppDownload.state.message} 授权后点击下方按钮重试。</div>
+                ) : null}
+                {inAppDownload.state.phase === "failed" ? (
+                  <div className="text-red-400">{inAppDownload.state.message}</div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -105,8 +146,23 @@ export function UpdatePromptDialog({
           <Button onClick={onDismiss} size="sm" type="button" variant="ghost">
             稍后提醒
           </Button>
-          <Button onClick={handleDownload} size="sm" type="button" variant="default">
-            {downloadTarget ? "立即下载" : "前往下载"}
+          <Button
+            onClick={handleDownload}
+            size="sm"
+            type="button"
+            variant="default"
+            disabled={isAndroidNative && (inAppDownload.state.phase === "downloading" || inAppDownload.state.phase === "installing")}>
+            {isAndroidNative && inAppDownload.hasPlugin
+              ? inAppDownload.state.phase === "downloading"
+                ? `下载中 ${inAppDownload.state.progress}%`
+                : inAppDownload.state.phase === "installing"
+                  ? "打开安装器…"
+                  : inAppDownload.state.phase === "needs-permission" || inAppDownload.state.phase === "failed"
+                    ? "重试"
+                    : "下载并安装"
+              : downloadTarget
+                ? "立即下载"
+                : "前往下载"}
           </Button>
         </div>
       </div>
