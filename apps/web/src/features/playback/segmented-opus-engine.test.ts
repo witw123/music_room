@@ -987,4 +987,45 @@ describe("SegmentedOpusEngine", () => {
     expect(sources.length).toBeGreaterThan(5);
     engine.destroy();
   });
+
+  it("ignores an older playing timeline that arrives after resume", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    const initial = playback(serverNowMs);
+    const resumed = {
+      ...initial,
+      startAt: new Date(serverNowMs + 2_000).toISOString(),
+      startedAt: new Date(serverNowMs + 2_000).toISOString(),
+      playbackRevision: 2
+    };
+
+    await engine.sync({
+      manifest,
+      playback: initial,
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    await engine.sync({
+      manifest,
+      playback: resumed,
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    const sourceCountAfterResume = sources.length;
+
+    await engine.sync({
+      manifest,
+      playback: initial,
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    expect(sources).toHaveLength(sourceCountAfterResume);
+    engine.destroy();
+  });
 });

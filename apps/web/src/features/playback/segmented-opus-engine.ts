@@ -105,6 +105,8 @@ export class SegmentedOpusEngine {
   private timelineGeneration = 0;
   private wasmDecodeChain: Promise<void> = Promise.resolve();
   private broadcastEnabled = true;
+  private latestPlaybackRevision: number | null = null;
+  private lastSyncResult: SyncResult = { state: "idle", bufferedUnits: 0 };
 
   async sync(input: SyncInput): Promise<SyncResult> {
     if (this.syncInFlight) {
@@ -122,7 +124,9 @@ export class SegmentedOpusEngine {
     const run = this.runSyncLoop(input);
     this.syncInFlight = run;
     try {
-      return await run;
+      const result = await run;
+      this.lastSyncResult = result;
+      return result;
     } finally {
       if (this.syncInFlight === run) {
         this.syncInFlight = null;
@@ -158,6 +162,19 @@ export class SegmentedOpusEngine {
     if (this.destroyed || signal.aborted) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
+    const incomingPlaybackRevision = Math.floor(
+      input.playback.playbackRevision ?? input.playback.queueVersion ?? 0
+    );
+    if (
+      this.latestPlaybackRevision !== null &&
+      incomingPlaybackRevision < this.latestPlaybackRevision
+    ) {
+      return this.lastSyncResult;
+    }
+    this.latestPlaybackRevision = Math.max(
+      this.latestPlaybackRevision ?? incomingPlaybackRevision,
+      incomingPlaybackRevision
+    );
     const timelineId = input.playback.startAt;
     if (input.playback.status !== "playing" || !timelineId) {
       this.resetTimeline({ preserveCache: true });

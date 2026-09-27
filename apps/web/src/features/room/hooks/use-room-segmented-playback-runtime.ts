@@ -305,6 +305,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   // 元素已应用的最新时间线权威版本(playbackRevision 单调递增)。
   // 迟到/排队的旧快照比它旧时直接忽略,防止把刚播过的片段重seek回去重播。
   const localAudioAppliedRevisionRef = useRef<{ trackId: string; revision: number } | null>(null);
+  const appliedPlaybackRevisionRef = useRef<{
+    roomId: string;
+    revision: number;
+  } | null>(null);
   const nativeLocalAudioTimelineRef = useRef<string | null>(null);
   const remoteAudioTimelineKeyRef = useRef<string | null>(null);
   const skippedUnavailableStreamingTimelineRef = useRef<string | null>(null);
@@ -849,6 +853,24 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const runSyncMedia = async () => {
       const runtime = runtimeInputRef.current;
       const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
+      const roomId = runtime.roomSnapshot?.room.id ?? null;
+      if (roomPlayback && roomId) {
+        const incomingRevision = Math.floor(
+          roomPlayback.playbackRevision ?? roomPlayback.queueVersion ?? 0
+        );
+        const appliedRevision = appliedPlaybackRevisionRef.current;
+        if (
+          appliedRevision &&
+          appliedRevision.roomId === roomId &&
+          incomingRevision < appliedRevision.revision
+        ) {
+          return;
+        }
+        appliedPlaybackRevisionRef.current = {
+          roomId,
+          revision: Math.max(appliedRevision?.revision ?? incomingRevision, incomingRevision)
+        };
+      }
       const operationTimelineKey = roomPlayback
         ? resolveLocalAudioTimelineKey(roomPlayback, runtime.playbackBarrier)
         : null;
@@ -1755,6 +1777,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       mediaEnsureKeyRef.current = null;
       lastMediaEnsureAtRef.current = 0;
       localMediaBindingRef.current = null;
+      appliedPlaybackRevisionRef.current = null;
     };
   }, [
     audioRef,
