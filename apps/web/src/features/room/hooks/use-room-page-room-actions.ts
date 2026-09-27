@@ -26,8 +26,8 @@ import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { PlaybackStartRequest } from "@/features/playback/playback-start-request";
-import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
-import type { RoomRecoveryState } from "@/components/room/hooks/use-room-page-state";
+import { useRoomLifecycleActions } from "@/features/room/hooks/use-room-lifecycle-actions";
+import type { RoomRecoveryState } from "@/features/room/hooks/use-room-page-state";
 
 type RoomRouter = {
   push: (href: Route) => void;

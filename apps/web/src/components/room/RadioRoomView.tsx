@@ -11,7 +11,7 @@ import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { RoomControlHeader } from "./RoomControlHeader";
 import type { RoomDashboardViewProps } from "./RoomDashboardView";
-import { useRadioAutopilot, type RadioAutopilotNextTrack } from "./hooks/use-radio-autopilot";
+import { useRadioAutopilot, type RadioAutopilotNextTrack } from "@/features/room/hooks/use-radio-autopilot";
 import {
   FolderIcon,
   ListMusicIcon,

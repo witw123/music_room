@@ -10,9 +10,9 @@ import type {
 import type { RoomSocket } from "@/lib/network/ws-client";
 import type { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";
-import type { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
+import type { useRoomPageRoomActions } from "@/features/room/hooks/use-room-page-room-actions";
 import type { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
-import type { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
+import type { useRoomPageState } from "@/features/room/hooks/use-room-page-state";
 import type { RoomPlaybackBarrierClock } from "@/features/playback/room-playback-clock";
 import { RoomsHomePage } from "@/components/room-home";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";

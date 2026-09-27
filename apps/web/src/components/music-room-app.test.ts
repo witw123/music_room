@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { isSegmentedAudioOutputReady, startBestEffortPlaybackAudioUnlock } from "@/components/room/hooks/use-room-playback-actions";
+import { isSegmentedAudioOutputReady, startBestEffortPlaybackAudioUnlock } from "@/features/room/hooks/use-room-playback-actions";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 describe("MusicRoomApp segmented playback wiring", () => {

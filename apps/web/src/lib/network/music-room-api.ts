@@ -73,6 +73,64 @@ export * from "./music-room-api.base";
 
 export type ProviderAudioQuality = "standard" | "high" | "exhigh" | "lossless" | "hires";
 
+// ============ netease / qqmusic 同构端点的共享实现 ============
+// 两个平台的 search/suggestions/lyrics/resolve/download 路径与参数完全同构,
+// 差异只有 provider 名与响应类型;URL 构造收敛到这一处,方法保持可 grep 的薄包装。
+
+type QualityProvider = "netease" | "qqmusic";
+
+function providerTrackPath(provider: QualityProvider, trackId: string) {
+  return `/v1/providers/${provider}/tracks/${encodeURIComponent(trackId)}`;
+}
+
+async function searchProviderTracks<TResponse>(
+  provider: QualityProvider,
+  keywords: string,
+  options?: { limit?: number; offset?: number }
+): Promise<TResponse> {
+  const params = new URLSearchParams({
+    keywords,
+    limit: String(options?.limit ?? 20),
+    offset: String(options?.offset ?? 0)
+  });
+  return request<TResponse>(`/v1/providers/${provider}/search?${params.toString()}`);
+}
+
+async function searchProviderSuggestions<TResponse>(provider: QualityProvider, keywords: string) {
+  const params = new URLSearchParams({ keywords });
+  return request<TResponse>(`/v1/providers/${provider}/search/suggest?${params.toString()}`);
+}
+
+async function getProviderLyrics(provider: QualityProvider, trackId: string) {
+  return request<ProviderLyrics>(`${providerTrackPath(provider, trackId)}/lyrics`);
+}
+
+async function resolveQualityProviderAudio(
+  provider: QualityProvider,
+  trackId: string,
+  quality: ProviderAudioQuality,
+  signal?: AbortSignal
+) {
+  return request<ProviderAudioResolveResponse>(
+    `${providerTrackPath(provider, trackId)}/audio-url?quality=${quality}`,
+    { signal }
+  );
+}
+
+async function downloadQualityProviderTrack(
+  provider: QualityProvider,
+  trackId: string,
+  quality: ProviderAudioQuality,
+  signal?: AbortSignal
+) {
+  return downloadWithDirectFallback({
+    resolve: () => resolveQualityProviderAudio(provider, trackId, quality, signal),
+    fallback: () =>
+      requestBlob(`${providerTrackPath(provider, trackId)}/audio?quality=${quality}`, { signal }),
+    signal
+  });
+}
+
 export const musicRoomApi = {
   getAuthConfig: () => request<AuthConfig>("/v1/auth/config"),
   register: (
@@ -296,24 +354,15 @@ export const musicRoomApi = {
     request<{ ok: boolean }>("/v1/providers/netease/account", {
       method: "DELETE"
     }),
-  searchNeteaseTracks: (keywords: string, options?: { limit?: number; offset?: number }) => {
-    const params = new URLSearchParams({
-      keywords,
-      limit: String(options?.limit ?? 20),
-      offset: String(options?.offset ?? 0)
-    });
-    return request<NeteaseSearchResponse>(`/v1/providers/netease/search?${params.toString()}`);
-  },
-  searchNeteaseSuggestions: (keywords: string) => {
-    const params = new URLSearchParams({ keywords });
-    return request<ProviderSearchSuggestionListResponse>(`/v1/providers/netease/search/suggest?${params.toString()}`);
-  },
+  searchNeteaseTracks: (keywords: string, options?: { limit?: number; offset?: number }) =>
+    searchProviderTracks<NeteaseSearchResponse>("netease", keywords, options),
+  searchNeteaseSuggestions: (keywords: string) =>
+    searchProviderSuggestions<ProviderSearchSuggestionListResponse>("netease", keywords),
   getNeteaseSearchHot: () =>
     request<ProviderSearchSuggestionListResponse>("/v1/providers/netease/search/hot"),
   getNeteaseTrack: (trackId: string) =>
     request<NeteaseTrackCandidate>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}`),
-  getNeteaseLyrics: (trackId: string) =>
-    request<ProviderLyrics>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  getNeteaseLyrics: (trackId: string) => getProviderLyrics("netease", trackId),
   getNeteaseLibrary: () => request<ProviderLibrarySnapshot>("/v1/providers/netease/library"),
   listNeteaseRelatedPlaylists: (trackId: string) =>
     request<ProviderPlaylistListResponse>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/related-playlists`),
@@ -348,37 +397,20 @@ export const musicRoomApi = {
     trackId: string,
     quality: ProviderAudioQuality = "exhigh",
     signal?: AbortSignal
-  ) =>
-    request<ProviderAudioResolveResponse>(
-      `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`,
-      { signal }
-    ),
+  ) => resolveQualityProviderAudio("netease", trackId, quality, signal),
   downloadNeteaseTrack: (
     trackId: string,
     quality: ProviderAudioQuality = "exhigh",
     signal?: AbortSignal
-  ) =>
-    downloadWithDirectFallback({
-      resolve: () => musicRoomApi.resolveNeteaseAudio(trackId, quality, signal),
-      fallback: () => requestBlob(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }),
-      signal
-    }),
+  ) => downloadQualityProviderTrack("netease", trackId, quality, signal),
   getQqMusicAccount: () => request<QqMusicAccountStatus>("/v1/providers/qqmusic/account"),
   startQqMusicQrLogin: () => request<QqMusicQrStartResponse>("/v1/providers/qqmusic/account/qr/start", { method: "POST" }),
   getQqMusicQrStatus: (attemptId: string) => request<QqMusicQrStatusResponse>(`/v1/providers/qqmusic/account/qr/${encodeURIComponent(attemptId)}/status`),
   disconnectQqMusicAccount: () => request<{ ok: boolean }>("/v1/providers/qqmusic/account", { method: "DELETE" }),
-  searchQqMusicTracks: (keywords: string, options?: { limit?: number; offset?: number }) => {
-    const params = new URLSearchParams({
-      keywords,
-      limit: String(options?.limit ?? 20),
-      offset: String(options?.offset ?? 0)
-    });
-    return request<QqMusicSearchResponse>(`/v1/providers/qqmusic/search?${params.toString()}`);
-  },
-  searchQqMusicSuggestions: (keywords: string) => {
-    const params = new URLSearchParams({ keywords });
-    return request<ProviderSearchSuggestionListResponse>(`/v1/providers/qqmusic/search/suggest?${params.toString()}`);
-  },
+  searchQqMusicTracks: (keywords: string, options?: { limit?: number; offset?: number }) =>
+    searchProviderTracks<QqMusicSearchResponse>("qqmusic", keywords, options),
+  searchQqMusicSuggestions: (keywords: string) =>
+    searchProviderSuggestions<ProviderSearchSuggestionListResponse>("qqmusic", keywords),
   getQqMusicSearchHot: () =>
     request<ProviderSearchSuggestionListResponse>("/v1/providers/qqmusic/search/hot"),
   searchQqMusicPlaylists: (keywords: string, options?: { limit?: number; offset?: number }) => {
@@ -398,8 +430,7 @@ export const musicRoomApi = {
     return request<ProviderAlbumListResponse>(`/v1/providers/qqmusic/search/albums?${params.toString()}`);
   },
   getQqMusicTrack: (trackId: string) => request<QqMusicTrackCandidate>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}`),
-  getQqMusicLyrics: (trackId: string) =>
-    request<ProviderLyrics>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/lyrics`),
+  getQqMusicLyrics: (trackId: string) => getProviderLyrics("qqmusic", trackId),
   getQqMusicLibrary: () => request<ProviderLibrarySnapshot>("/v1/providers/qqmusic/library"),
   listQqMusicRelatedPlaylists: (trackId: string) =>
     request<ProviderPlaylistListResponse>(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/related-playlists`),
@@ -451,21 +482,12 @@ export const musicRoomApi = {
     trackId: string,
     quality: ProviderAudioQuality = "exhigh",
     signal?: AbortSignal
-  ) =>
-    request<ProviderAudioResolveResponse>(
-      `/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio-url?quality=${quality}`,
-      { signal }
-    ),
+  ) => resolveQualityProviderAudio("qqmusic", trackId, quality, signal),
   downloadQqMusicTrack: (
     trackId: string,
     quality: ProviderAudioQuality = "exhigh",
     signal?: AbortSignal
-  ) =>
-    downloadWithDirectFallback({
-      resolve: () => musicRoomApi.resolveQqMusicAudio(trackId, quality, signal),
-      fallback: () => requestBlob(`/v1/providers/qqmusic/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`, { signal }),
-      signal
-    }),
+  ) => downloadQualityProviderTrack("qqmusic", trackId, quality, signal),
   downloadQqMusicArtwork: (artworkUrl: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ url: artworkUrl });
     return requestBlob(`/v1/providers/qqmusic/artwork?${params.toString()}`, { signal });
