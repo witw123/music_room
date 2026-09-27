@@ -40,17 +40,38 @@ export function runBackHandler() {
  */
 const homePaths = ["/app", "/rooms"];
 
+export type BackNavigationDecision =
+  | { action: "exit" }
+  | { action: "history" }
+  | { action: "navigate"; target: string };
+
 /**
  * Decides where a back press goes once no overlay has claimed it.
  *
- * `canGoBack` cannot answer this on its own: it stays true once anything has
- * been visited, so on the home page it would keep rewinding history instead of
- * ever quitting. A start destination quits instead.
+ * 返回走“逻辑父级”而不是 WebView 历史:历史栈里混着重定向(/ → /app)、
+ * 上一个房间、auth 链路等条目,history.back() 会回到与当前页面无关的
+ * “上一界面”,造成各处返回互相干扰。已知路由一律映射到确定的父级,
+ * 仅未知路由才回退到历史,无历史可退时双击退出。
  */
 export function resolveBackNavigation(input: {
   pathname: string | null | undefined;
   canGoBack: boolean | undefined;
-}): "history" | "exit" {
-  const onHomePath = typeof input.pathname === "string" && homePaths.includes(input.pathname);
-  return !onHomePath && input.canGoBack ? "history" : "exit";
+}): BackNavigationDecision {
+  const pathname = typeof input.pathname === "string" ? input.pathname : null;
+  if (pathname === null) {
+    return { action: "history" };
+  }
+  if (homePaths.includes(pathname)) {
+    return { action: "exit" };
+  }
+  // 房间与 /app 子页的父级都是大厅:进房/切房/深链之后,返回永远回到大厅,
+  // 而不是历史里的上一个房间或登录前的页面。
+  if (pathname.startsWith("/room/") || pathname.startsWith("/app/")) {
+    return { action: "navigate", target: "/app" };
+  }
+  if (pathname === "/auth") {
+    // 登录/注册页没有“上一界面”:历史里是重定向或外部来源。
+    return { action: "exit" };
+  }
+  return input.canGoBack ? { action: "history" } : { action: "exit" };
 }

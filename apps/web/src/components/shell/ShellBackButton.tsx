@@ -53,10 +53,17 @@ export function ShellBackButton() {
     const handleBack = (payload: BackButtonPayload | undefined) => {
       if (runBackHandler()) return;
 
-      if (
-        resolveBackNavigation({ pathname: pathnameRef.current, canGoBack: payload?.canGoBack }) ===
-        "history"
-      ) {
+      const decision = resolveBackNavigation({
+        pathname: pathnameRef.current,
+        canGoBack: payload?.canGoBack
+      });
+      if (decision.action === "navigate") {
+        // 逻辑父级导航:房间/子页返回大厅,而不是历史里的上一界面。
+        // typedRoutes 把 target 收窄为字符串字面量,这里显式放宽。
+        router.push(decision.target as Parameters<typeof router.push>[0]);
+        return;
+      }
+      if (decision.action === "history") {
         router.back();
         return;
       }
