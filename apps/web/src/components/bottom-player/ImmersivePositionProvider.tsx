@@ -46,7 +46,7 @@ export function ImmersivePositionProvider({
 
   useEffect(() => {
     if (!active || frozen || !isPlaying) {
-      if (positionMs !== anchorRef.current.ms) setPositionMs(anchorRef.current.ms);
+      setPositionMs(anchorPositionMs);
       return;
     }
     const timer = window.setInterval(() => {
