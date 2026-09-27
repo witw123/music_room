@@ -29,8 +29,8 @@
       "csp": null
     }
   },
-  "createUpdaterArtifacts": true,
   "bundle": {
+    "createUpdaterArtifacts": true,
     "active": true,
     "targets": "all",
     "icon": [
