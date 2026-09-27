@@ -349,7 +349,7 @@ function RoomStageBase({
                               className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 shadow-[0_0_24px_rgba(0,0,0,0.35)]"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
+                              <img loading="lazy"
                                 alt=""
                                 className="h-full w-full object-cover"
                                 referrerPolicy="no-referrer"
@@ -533,7 +533,7 @@ function MobileRoomStagePlayer({
             <div className="absolute inset-[7%] overflow-hidden rounded-full border border-white/10 bg-white/[0.04]">
               {artworkUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <img loading="lazy"
                   alt=""
                   className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"

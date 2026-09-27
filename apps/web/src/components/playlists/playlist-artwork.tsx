@@ -44,7 +44,7 @@ export function Artwork({
       className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden border border-surface-border bg-surface text-lg font-bold text-foreground-muted`}
     >
       {activeArtworkUrl ? (
-        <img
+        <img loading="lazy"
           alt=""
           className="h-full w-full object-cover"
           decoding="async"

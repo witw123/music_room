@@ -124,6 +124,7 @@ model RoomState {
   queue            Json
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  @@index([updatedAt])
 }
 
 model Playlist {

@@ -115,7 +115,7 @@ export function VinylBadge({
             className="absolute z-10 aspect-square w-[55%] overflow-hidden rounded-full border border-white/10 shadow-[0_0_12px_rgba(0,0,0,0.4)]"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <img loading="lazy"
               alt=""
               className="h-full w-full object-cover"
               referrerPolicy="no-referrer"

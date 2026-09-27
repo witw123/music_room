@@ -2931,10 +2931,10 @@ describe("RoomService", () => {
     ).rejects.toThrow();
 
     // Now set playback currentTrackId to track.id with status "paused"
-    const record = await (roomService as any).roomRecordRepository.getRoomRecord(snapshot.room.id);
+    const record = await roomCoreroomService.roomRecordRepository.getRoomRecord(snapshot.room.id);
     record.room.playback.currentTrackId = track.id;
     record.room.playback.status = "paused";
-    await (roomService as any).roomRecordRepository.persistRecord(record);
+    await roomCoreroomService.roomRecordRepository.persistRecord(record);
 
     const newFileHash = "a".repeat(64);
     const originalAsset = createOriginalAssetMock("1".repeat(64), newFileHash);
@@ -2986,13 +2986,13 @@ describe("RoomService", () => {
     ]);
     await roomService.addQueueItem(snapshot.room.id, host.id, track.id);
 
-    const record = await (roomService as any).roomRecordRepository.getRoomRecord(snapshot.room.id);
+    const record = await roomCoreroomService.roomRecordRepository.getRoomRecord(snapshot.room.id);
     record.room.playback.status = "playing";
     record.room.playback.currentTrackId = track.id;
     record.room.playback.sourceSessionId = host.id;
     record.room.playback.sourcePeerId = "peer_host";
     const initialEpoch = record.room.playback.mediaEpoch;
-    await (roomService as any).roomRecordRepository.persistRecord(record);
+    await roomCoreroomService.roomRecordRepository.persistRecord(record);
 
     const result = await roomService.reportTrackAssetUnavailable(snapshot.room.id, host.id, {
       trackId: track.id,

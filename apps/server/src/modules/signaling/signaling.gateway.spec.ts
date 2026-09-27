@@ -218,9 +218,8 @@ describe("SignalingGateway chat", () => {
       const emit = jest.fn();
       const server = { to: jest.fn().mockReturnValue({ emit }) };
       const roomService = {
-        getRoomSnapshot: jest.fn().mockResolvedValue({
-          room: { playback: { currentTrackId: "track_current" } }
-        }),
+        getRoomSnapshot: jest.fn(),
+    getRoomCurrentTrackId: jest.fn().mockResolvedValue("track_current"),
         recordRoomReaction: jest.fn().mockResolvedValue(5)
       };
       const gateway = Object.assign(Object.create(SignalingGateway.prototype), {
@@ -262,9 +261,8 @@ describe("SignalingGateway chat", () => {
     it("converts recording error to WsException", async () => {
       const server = { to: jest.fn().mockReturnValue({ emit: jest.fn() }) };
       const roomService = {
-        getRoomSnapshot: jest.fn().mockResolvedValue({
-          room: { playback: { currentTrackId: null } }
-        }),
+        getRoomSnapshot: jest.fn(),
+    getRoomCurrentTrackId: jest.fn().mockResolvedValue(null),
         recordRoomReaction: jest.fn().mockRejectedValue(new Error("曲目不属于该房间。"))
       };
       const gateway = Object.assign(Object.create(SignalingGateway.prototype), {

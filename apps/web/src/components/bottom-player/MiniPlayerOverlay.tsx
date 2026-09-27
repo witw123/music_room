@@ -227,7 +227,7 @@ export function MiniPlayerOverlay({
           {artworkSource ? (
             // External provider artwork is intentionally rendered without Next image optimization.
             // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <img loading="lazy"
               alt=""
               className="absolute left-1/2 top-1/2 h-full w-auto max-w-full -translate-x-1/2 -translate-y-1/2 object-cover"
               src={artworkSource}

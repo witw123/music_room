@@ -595,7 +595,7 @@ export function RoomProviderTrackSearch({
 
             return <article key={`${track.provider}:${track.providerTrackId}`} className="flex min-w-0 items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-surface-hover/60">
               {track.artworkUrl ? (
-                <img
+                <img loading="lazy"
                   src={track.artworkUrl}
                   referrerPolicy="no-referrer"
                   alt=""

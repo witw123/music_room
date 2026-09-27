@@ -788,7 +788,7 @@ function Artwork({ artworkUrl, artworkUrls, title, size = "sm" }: {
     >
       {activeArtworkUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <img loading="lazy"
           alt=""
           className="h-full w-full object-cover"
           decoding="async"

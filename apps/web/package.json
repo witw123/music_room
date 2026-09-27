@@ -26,11 +26,11 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.55.0",
     "socket.io-client": "^4.8.1",
-    "tailwindcss": "^3.4.17",
     "wave-resampler": "1.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "tailwindcss": "^3.4.17",
     "@music-room/config-eslint": "workspace:*",
     "@music-room/config-typescript": "workspace:*",
     "@playwright/test": "^1.52.0",

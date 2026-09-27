@@ -50,6 +50,12 @@ export class RoomService {
     return this.roomRecordRepository.findByJoinCode(joinCode);
   }
 
+  /** 信令热路径专用:只取当前曲目 id,避免为一条表情构建完整快照。 */
+  async getRoomCurrentTrackId(roomId: string): Promise<string | null> {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    return record.room.playback.currentTrackId ?? null;
+  }
+
   async getRoomSnapshot(roomId: string, playlists: Playlist[]): Promise<RoomSnapshot> {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     return this.roomSnapshotService.buildSnapshot(record, playlists);

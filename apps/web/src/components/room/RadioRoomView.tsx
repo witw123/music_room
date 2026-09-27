@@ -651,7 +651,7 @@ function RadioAutopilotNextTrackCard({ track }: { track: RadioAutopilotNextTrack
   return (
     <article className="mt-1.5 flex min-w-0 items-center gap-2 rounded-lg border border-surface-border/60 bg-surface/60 p-2 shadow-xs" data-testid="radio-autopilot-next-track">
       {track.artworkUrl ? (
-        <img alt="" className="h-9 w-9 shrink-0 rounded-md border border-surface-border/60 object-cover shadow-xs" src={track.artworkUrl} />
+        <img loading="lazy" alt="" className="h-9 w-9 shrink-0 rounded-md border border-surface-border/60 object-cover shadow-xs" src={track.artworkUrl} />
       ) : (
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-surface-border/60 bg-surface text-[10px] text-foreground-muted">音乐</span>
       )}

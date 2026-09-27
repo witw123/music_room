@@ -320,9 +320,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     const sessionId = client.data.sessionId as string | undefined;
     if (!sessionId) throw new WsException("Unauthorized realtime request.");
     const user = await this.authService.getUserOrThrow(sessionId);
-    const snapshot = await this.roomService.getRoomSnapshot(parsed.data.roomId, []);
     const rawTrackId = parsed.data.trackId?.trim() || null;
-    const trackId = rawTrackId ?? snapshot.room.playback.currentTrackId ?? null;
+    const trackId = rawTrackId ?? (await this.roomService.getRoomCurrentTrackId(parsed.data.roomId)) ?? null;
     let totalCount = 0;
     try {
       totalCount = await this.roomService.recordRoomReaction({

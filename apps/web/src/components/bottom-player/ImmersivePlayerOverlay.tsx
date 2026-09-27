@@ -264,7 +264,7 @@ export function ImmersivePlayerOverlay({
           className="pointer-events-none absolute -inset-[8%] z-0 overflow-hidden scale-110 opacity-35 blur-3xl transition-[opacity,transform] duration-700 motion-reduce:transition-none"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <img loading="lazy"
             alt=""
             className="h-full w-full object-cover"
             referrerPolicy="no-referrer"
@@ -812,7 +812,7 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying
               {artworkUrl ? (
                 <div className="absolute z-10 aspect-square w-[48%] overflow-hidden rounded-full border border-white/10 shadow-[0_0_24px_rgba(0,0,0,0.35)]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <img loading="lazy"
                     alt=""
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"

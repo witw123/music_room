@@ -879,7 +879,7 @@ function Artwork({ artworkUrl, title }: { artworkUrl: string | null; title: stri
   if (!artworkUrl) {
     return <span aria-label={title} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface border border-surface-border/60 text-xs text-foreground-muted"><MusicIcon className="w-4 h-4 text-accent" /></span>;
   }
-  return <img alt={title} className="h-9 w-9 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs" src={artworkUrl} />;
+  return <img loading="lazy" alt={title} className="h-9 w-9 shrink-0 rounded-lg object-cover border border-surface-border/60 shadow-xs" src={artworkUrl} />;
 }
 
 async function importRequestedTrack(
