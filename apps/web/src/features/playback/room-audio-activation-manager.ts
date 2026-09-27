@@ -35,6 +35,10 @@ export class RoomAudioActivationManager {
   private lifecycleListenersInstalled = false;
   private resumeInFlight: Promise<boolean> | null = null;
   private readonly playedElementSourceKeys = new WeakMap<HTMLAudioElement, string>();
+  private readonly playInFlight = new WeakMap<
+    HTMLAudioElement,
+    { sourceKey: string; promise: Promise<RoomAudioElementPlayResult> }
+  >();
   private readonly sourceObjectIds = new WeakMap<object, number>();
   private nextSourceObjectId = 1;
 
@@ -90,6 +94,10 @@ export class RoomAudioActivationManager {
         };
       }
       const sourceKey = this.getElementSourceKey(element);
+      const pendingPlay = this.playInFlight.get(element);
+      if (pendingPlay?.sourceKey === sourceKey) {
+        return pendingPlay.promise;
+      }
       // If the same concrete media source is already playing, skip play() to
       // avoid a potential NotAllowedError when the user gesture that started
       // playback has expired.  When track switching replaces src/srcObject,
@@ -113,9 +121,34 @@ export class RoomAudioActivationManager {
           error: "play-obsolete"
         };
       }
+      const promise = this.startElementPlayback(element, sourceKey, options);
+      this.playInFlight.set(element, { sourceKey, promise });
+      try {
+        return await promise;
+      } finally {
+        if (this.playInFlight.get(element)?.promise === promise) {
+          this.playInFlight.delete(element);
+        }
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "play-rejected"
+      };
+    }
+  }
+
+  private async startElementPlayback(
+    element: HTMLAudioElement,
+    sourceKey: string,
+    options: RoomAudioElementPlayOptions
+  ): Promise<RoomAudioElementPlayResult> {
+    try {
       await element.play();
       this.activated = true;
-      this.playedElementSourceKeys.set(element, sourceKey);
+      if (this.getElementSourceKey(element) === sourceKey) {
+        this.playedElementSourceKeys.set(element, sourceKey);
+      }
       return {
         ok: true,
         error: null

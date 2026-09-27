@@ -124,6 +124,32 @@ describe("RoomAudioActivationManager", () => {
     expect(audio.play).not.toHaveBeenCalled();
   });
 
+  it("shares a pending play request for the same media source", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    let resolvePlay!: () => void;
+    audio.play = vi.fn(() => new Promise<void>((resolve) => {
+      resolvePlay = resolve;
+    }));
+
+    const first = manager.playElement(audio, { force: true });
+    const second = manager.playElement(audio, { force: true });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    resolvePlay();
+
+    await expect(first).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+    await expect(second).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+  });
+
   it("does not start playback when a request becomes obsolete during context resume", async () => {
     let notifyResumeStarted!: () => void;
     let finishResume!: () => void;
