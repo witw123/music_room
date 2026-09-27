@@ -123,7 +123,7 @@ modules/<domain>/
 | ~~P2~~ | ~~provider 面板合并~~ 已完成(2026-09-26) | `ProviderSourcePanel.tsx` 单一实现,平台差异收敛为 adapter 配置;原两个文件名保留为类型安全的薄包装,调用方零改动 |
 | P2 | room 视图脚手架 | RadioRoomView/RequestRoomView/RoomDashboardView 327 行相同 props 接线,抽 `RoomPageScaffold` |
 | P2 | room hooks 归位 | 含业务/API 的 hooks 从 `components/room/hooks/` 迁 `features/room/`,纯视图态留下 |
-| P3 | BottomPlayer 进度外部化 | 沉浸模式 50ms 整树重渲染;方案:进度 store + `useSyncExternalStore` 叶子订阅 |
+| ~~P3~~ | ~~BottomPlayer 进度外部化~~ 已完成(2026-09-27) | 沉浸模式高频推进移交 `ImmersivePlayerOverlay` 自驱动(useSelfDrivenPositionMs,锚点由 BottomPlayer 低频重置),BottomPlayer 不再 20fps 整树重渲染;seek/barrier/暂停时冻结展示权威值 |
 | P3 | 4MB base64 wasm 懒 chunk | @wasm-audio-decoders/flac 的打包方式;需改库/fork,懒加载不影响首屏 |
-| P3 | prisma 生成物出 src | `src/generated/prisma`(3.6 万行 index.d.ts)应移出 src 并 gitignore |
-| P3 | migrate-p2p-v4.ts 归档 | 一次性迁移脚本,确认线上执行完毕后删除 |
+| ~~P3~~ | ~~prisma 生成物出 src~~ 已关闭(2026-09-27 核实) | 生成物本就未被 git 跟踪(`.gitignore` 已含 `apps/server/src/generated/prisma/`),审查结论过时;仅存于本地磁盘 src 内,无仓库影响 |
+| ~~P3~~ | ~~migrate-p2p-v4.ts 归档~~ 已完成(2026-09-27) | 脚本与 npm script 已删,需要时从 git 历史找回 |
