@@ -24,6 +24,7 @@ import {
 } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
 type ProviderTrack = ProviderTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
@@ -64,6 +65,7 @@ export function PlaylistPanel({
   onDeletePlaylist
 }: PlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  useBackHandler(() => setSelectedPlaylistId(null), selectedPlaylistId !== null);
   const [loadingPlaylistId, setLoadingPlaylistId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");

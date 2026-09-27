@@ -66,7 +66,14 @@ export function resolveBackNavigation(input: {
   }
   // 房间与 /app 子页的父级都是大厅:进房/切房/深链之后,返回永远回到大厅,
   // 而不是历史里的上一个房间或登录前的页面。
-  if (pathname.startsWith("/room/") || pathname.startsWith("/app/")) {
+  if (pathname.startsWith("/room/")) {
+    return { action: "navigate", target: "/app" };
+  }
+  if (pathname === "/app/profile/playlists") {
+    // 二级页的父级是它所在的板块,不是大厅。
+    return { action: "navigate", target: "/app/profile" };
+  }
+  if (pathname.startsWith("/app/")) {
     return { action: "navigate", target: "/app" };
   }
   if (pathname === "/auth") {

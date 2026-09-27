@@ -57,6 +57,7 @@ import {
   type Track
 } from "./index";
 import { BilibiliPartDetailView, type BilibiliPartDetail } from "./BilibiliPartDetailView";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
@@ -124,6 +125,7 @@ export function ProviderSearchPage({
   const [results, setResults] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<ProviderPlaylistSummary[]>([]);
   const [playlist, setPlaylist] = useState<ProviderPlaylistDetail | null>(null);
+  useBackHandler(() => setPlaylist(null), playlist !== null);
   const [albums, setAlbums] = useState<ProviderAlbumSummary[]>([]);
   const [album, setAlbum] = useState<ProviderAlbumDetail | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("songs");

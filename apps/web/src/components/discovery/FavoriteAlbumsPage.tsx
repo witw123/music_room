@@ -39,6 +39,7 @@ import {
 } from "@/features/playlist/local-playlist";
 import { type AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { useFavoriteTracks, favoriteTrackToCandidate } from "@/features/favorites/use-favorite-tracks";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
 type Track = ProviderTrackCandidate;
 
@@ -76,6 +77,7 @@ export function FavoriteAlbumsPage({
     Boolean(activeSession && getCachedFavorites(activeSession.userId))
   );
   const [detail, setDetail] = useState<ProviderAlbumDetail | null>(null);
+  useBackHandler(() => setDetail(null), detail !== null);
   const [pending, setPending] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);

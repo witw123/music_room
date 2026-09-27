@@ -21,6 +21,7 @@ import {
   type PlaylistSelection
 } from "./index";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { buildWorkspaceAuthHref } from "@/lib/domain/client-shell";
 import {
   createLocalPlaylist,
@@ -108,6 +109,7 @@ export function PlaylistsWorkspacePage({
       : cachedPageData?.networkLoaded === true
   );
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSelection | null>(null);
+  useBackHandler(() => setSelectedPlaylist(null), selectedPlaylist !== null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);

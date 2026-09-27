@@ -44,6 +44,7 @@ import {
   SlidersIcon,
   PlayIcon
 } from "@/components/icons/DiscoverIcons";
+import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import {
   TasteColdStartDialog,
   DiscoverSection,
@@ -92,6 +93,7 @@ export function DiscoverPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
+  useBackHandler(() => setDetail(null), detail !== null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const [favoritePlaylistKeys, setFavoritePlaylistKeys] = useState<Set<string>>(new Set());
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
