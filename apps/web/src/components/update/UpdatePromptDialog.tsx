@@ -11,6 +11,7 @@ import {
   type UpdateCheckResult
 } from "@/features/update/update-checker";
 import { useInAppApkDownload } from "@/features/update/use-in-app-apk-download";
+import { useDesktopUpdater } from "@/features/update/use-desktop-updater";
 
 interface UpdatePromptDialogProps {
   open: boolean;
@@ -38,18 +39,28 @@ export function UpdatePromptDialog({
   const downloadTarget = result?.matchedAsset ?? null;
   const isAndroidNative =
     result?.runtime === "mobile-native" && result?.platform === "android";
+  const isDesktopNative = result?.runtime === "desktop";
   const inAppDownload = useInAppApkDownload({
     url: downloadTarget?.browser_download_url ?? null,
     versionName: result?.latestVersion ?? "",
     enabled: open && isAndroidNative && downloadTarget !== null
   });
+  const desktopUpdater = useDesktopUpdater(open && isDesktopNative);
 
   if (!open || !result || !result.hasUpdate) return null;
   if (typeof document === "undefined") return null;
 
   const platformName = getPlatformDisplayName(result.platform, result.runtime);
+  const isDesktopDownloading =
+    desktopUpdater.state.phase === "checking" ||
+    desktopUpdater.state.phase === "downloading" ||
+    desktopUpdater.state.phase === "installing";
 
   const handleDownload = () => {
+    if (isDesktopNative) {
+      void desktopUpdater.start();
+      return;
+    }
     if (isAndroidNative && inAppDownload.hasPlugin) {
       // 应用内下载已自动开始;此处仅兜底重试
       inAppDownload.start();
@@ -104,6 +115,35 @@ export function UpdatePromptDialog({
                 安装包大小: {formatFileSize(downloadTarget.size)}
               </div>
             ) : null}
+            {isDesktopNative && desktopUpdater.state.phase !== "idle" ? (
+              <div className="mt-2" data-testid="desktop-updater-progress">
+                {desktopUpdater.state.phase === "checking" ? (
+                  <div className="text-foreground-muted">正在检查更新…</div>
+                ) : null}
+                {desktopUpdater.state.phase === "downloading" ? (
+                  <>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-border/40">
+                      <div
+                        className="h-full rounded-full bg-accent transition-all duration-300"
+                        style={{ width: `${Math.max(4, desktopUpdater.state.progress)}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 text-foreground-muted">
+                      正在下载更新… {desktopUpdater.state.progress}%
+                    </div>
+                  </>
+                ) : null}
+                {desktopUpdater.state.phase === "installing" ? (
+                  <div className="text-foreground-muted">下载完成,正在静默安装…</div>
+                ) : null}
+                {desktopUpdater.state.phase === "done" ? (
+                  <div className="text-emerald-400">安装完成,应用即将重启。</div>
+                ) : null}
+                {desktopUpdater.state.phase === "failed" ? (
+                  <div className="text-red-400">{desktopUpdater.state.message}</div>
+                ) : null}
+              </div>
+            ) : null}
             {isAndroidNative && inAppDownload.state.phase !== "idle" ? (
               <div className="mt-2" data-testid="in-app-download-progress">
                 {inAppDownload.state.phase === "downloading" ? (
@@ -151,18 +191,33 @@ export function UpdatePromptDialog({
             size="sm"
             type="button"
             variant="default"
-            disabled={isAndroidNative && (inAppDownload.state.phase === "downloading" || inAppDownload.state.phase === "installing")}>
-            {isAndroidNative && inAppDownload.hasPlugin
-              ? inAppDownload.state.phase === "downloading"
-                ? `下载中 ${inAppDownload.state.progress}%`
-                : inAppDownload.state.phase === "installing"
-                  ? "打开安装器…"
-                  : inAppDownload.state.phase === "needs-permission" || inAppDownload.state.phase === "failed"
-                    ? "重试"
-                    : "下载并安装"
-              : downloadTarget
-                ? "立即下载"
-                : "前往下载"}
+            disabled={
+              (isAndroidNative &&
+                (inAppDownload.state.phase === "downloading" ||
+                  inAppDownload.state.phase === "installing")) ||
+              (isDesktopNative && isDesktopDownloading)
+            }>
+            {isDesktopNative
+              ? desktopUpdater.state.phase === "checking"
+                ? "检查中…"
+                : desktopUpdater.state.phase === "downloading"
+                  ? `下载中 ${desktopUpdater.state.progress}%`
+                  : desktopUpdater.state.phase === "installing"
+                    ? "安装中…"
+                    : desktopUpdater.state.phase === "failed"
+                      ? "重试"
+                      : "下载并安装"
+              : isAndroidNative && inAppDownload.hasPlugin
+                ? inAppDownload.state.phase === "downloading"
+                  ? `下载中 ${inAppDownload.state.progress}%`
+                  : inAppDownload.state.phase === "installing"
+                    ? "打开安装器…"
+                    : inAppDownload.state.phase === "needs-permission" || inAppDownload.state.phase === "failed"
+                      ? "重试"
+                      : "下载并安装"
+                : downloadTarget
+                  ? "立即下载"
+                  : "前往下载"}
           </Button>
         </div>
       </div>
