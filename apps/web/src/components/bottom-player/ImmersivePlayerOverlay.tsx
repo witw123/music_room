@@ -1,4 +1,5 @@
 "use client";
+import { ImmersivePositionProvider, useImmersivePositionMs } from "./ImmersivePositionProvider";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ProviderTrackCandidate, QueueItem, RoomMember, TrackMeta } from "@music-room/shared";
@@ -67,32 +68,6 @@ type ImmersivePlayerOverlayProps = {
  * 使 BottomPlayer 本体不再因沉浸模式而以 20fps 整树重渲染。
  * seek 拖动 / barrier 阻塞 / 暂停时冻结,直接展示权威值。
  */
-function useSelfDrivenPositionMs(input: {
-  positionMs: number;
-  isPlaying: boolean;
-  durationMs: number;
-  frozen: boolean;
-  active: boolean;
-}) {
-  const [tickMs, setTickMs] = useState(0);
-  const selfDriven = input.active && !input.frozen && input.isPlaying;
-  const anchorRef = useRef<{ ms: number; atMs: number } | null>(null);
-  if (!anchorRef.current || anchorRef.current.ms !== input.positionMs) {
-    anchorRef.current = { ms: input.positionMs, atMs: Date.now() };
-  }
-  useEffect(() => {
-    if (!selfDriven) return;
-    const timer = window.setInterval(() => setTickMs(Date.now()), 50);
-    return () => window.clearInterval(timer);
-  }, [selfDriven]);
-  if (!selfDriven) return input.positionMs;
-  void tickMs; // 50ms tick 触发重渲染以重算推进值
-  return Math.min(
-    input.durationMs > 0 ? input.durationMs : Number.POSITIVE_INFINITY,
-    anchorRef.current.ms + Math.max(0, Date.now() - anchorRef.current.atMs)
-  );
-}
-
 export function ImmersivePlayerOverlay({
   roomId,
   isOpen,
@@ -134,13 +109,6 @@ export function ImmersivePlayerOverlay({
   onClose,
   onSeekToPosition
 }: ImmersivePlayerOverlayProps) {
-  const positionMs = useSelfDrivenPositionMs({
-    positionMs: anchorPositionMs,
-    isPlaying,
-    durationMs,
-    frozen: playbackBarrierBlocked || seekDraftMs !== null,
-    active: isOpen
-  });
   const [mobileView, setMobileView] = useState<"artwork" | "lyrics">("artwork");
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -236,6 +204,13 @@ export function ImmersivePlayerOverlay({
   const playerStyle = usePlayerStyle();
 
   return (
+    <ImmersivePositionProvider
+      positionMs={anchorPositionMs}
+      isPlaying={isPlaying}
+      durationMs={durationMs}
+      frozen={playbackBarrierBlocked || seekDraftMs !== null}
+      active={isOpen}
+    >
     <div
       aria-hidden={!isOpen}
       aria-label="沉浸式播放"
@@ -321,7 +296,6 @@ export function ImmersivePlayerOverlay({
         playbackMode={playbackMode}
         playbackTrackId={playbackTrackId}
         playerStyle={playerStyle}
-        positionMs={positionMs}
         queue={queue}
         setSeekDraft={setSeekDraft}
         sourceProvider={sourceProvider}
@@ -366,7 +340,6 @@ export function ImmersivePlayerOverlay({
             playbackMode={playbackMode}
             playbackTrackId={playbackTrackId}
             playerStyle={playerStyle}
-            positionMs={positionMs}
             queue={queue}
             tracks={tracks}
             members={members}
@@ -386,14 +359,15 @@ export function ImmersivePlayerOverlay({
           />
         </div>
         <section className="flex h-[min(78vh,52rem)] min-h-0 w-full max-w-[36rem] min-w-0 flex-col justify-center justify-self-center overflow-hidden" aria-label="歌曲信息与歌词">
-          <ImmersiveLyrics desktop frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} onSeekToPosition={onSeekToPosition} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} translatedLyrics={currentTrack?.translatedLyrics ?? null} romanizedLyrics={currentTrack?.romanizedLyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+          <ImmersiveLyrics desktop frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} onSeekToPosition={onSeekToPosition} roomLyrics={currentTrack?.lyrics ?? null} translatedLyrics={currentTrack?.translatedLyrics ?? null} romanizedLyrics={currentTrack?.romanizedLyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
         </section>
       </main>
     </div>
+    </ImmersivePositionProvider>
   );
 }
 
-type MobileImmersivePlayerProps = ImmersivePlayerOverlayProps & {
+type MobileImmersivePlayerProps = Omit<ImmersivePlayerOverlayProps, "positionMs"> & {
   artworkPalette: ArtworkPalette;
   artworkUrl: string | null;
   mobileView: "artwork" | "lyrics";
@@ -441,7 +415,6 @@ function MobileImmersivePlayer({
   playbackMode,
   playbackTrackId,
   playerStyle,
-  positionMs,
   queue,
   setSeekDraft,
   sourceProvider,
@@ -450,6 +423,7 @@ function MobileImmersivePlayer({
   volume,
   applyVolume
 }: MobileImmersivePlayerProps) {
+  const positionMs = useImmersivePositionMs();
   const controlsDisabled = !canControlPlayback || !playbackTrackId;
 
   return (
@@ -502,7 +476,7 @@ function MobileImmersivePlayer({
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{currentTrack?.title ?? "等待选择歌曲"}</span><span className="mt-0.5 block truncate text-xs text-white/55">{currentTrack?.artist ?? "从歌单中选择一首歌曲"}</span></span>
               </button>
               <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
-                <ImmersiveLyrics frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} mobile onSeekToPosition={onSeekToPosition} positionMs={positionMs} roomLyrics={currentTrack?.lyrics ?? null} translatedLyrics={currentTrack?.translatedLyrics ?? null} romanizedLyrics={currentTrack?.romanizedLyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
+                <ImmersiveLyrics frozen={playbackBarrierBlocked} isOpen={isOpen} isPlaying={isPlaying} mobile onSeekToPosition={onSeekToPosition} roomLyrics={currentTrack?.lyrics ?? null} translatedLyrics={currentTrack?.translatedLyrics ?? null} romanizedLyrics={currentTrack?.romanizedLyrics ?? null} sourceProvider={sourceProvider} sourceTrackId={sourceTrackId} />
               </div>
             </div>
           )}
@@ -607,7 +581,6 @@ type DesktopImmersivePlayerProps = {
   playbackMode: PlaybackMode;
   playbackTrackId: string | null | undefined;
   playerStyle: "vinyl" | "square-cover";
-  positionMs: number;
   queue: QueueItem[];
   tracks: TrackMeta[];
   members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
@@ -647,7 +620,6 @@ function DesktopImmersivePlayer({
   playbackMode,
   playbackTrackId,
   playerStyle,
-  positionMs,
   queue,
   tracks,
   members,
@@ -665,6 +637,7 @@ function DesktopImmersivePlayer({
   applyVolume,
   commitSeek
 }: DesktopImmersivePlayerProps) {
+  const positionMs = useImmersivePositionMs();
   const controlsDisabled = !canControlPlayback || !playbackTrackId;
 
   return (
@@ -829,7 +802,8 @@ function ImmersiveVinyl({ artworkUrl, desktop = false, frozen = false, isPlaying
   );
 }
 
-function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, mobile = false, onSeekToPosition, positionMs, roomLyrics, translatedLyrics: storedTranslatedLyrics, romanizedLyrics: storedRomanizedLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; frozen?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; onSeekToPosition?: (positionMs: number) => void; positionMs: number; roomLyrics: string | null; translatedLyrics?: string | null; romanizedLyrics?: string | null; sourceProvider: string | undefined; sourceTrackId: string | undefined }) {
+function ImmersiveLyrics({ desktop = false, frozen = false, isOpen, isPlaying, mobile = false, onSeekToPosition, roomLyrics, translatedLyrics: storedTranslatedLyrics, romanizedLyrics: storedRomanizedLyrics, sourceProvider, sourceTrackId }: { desktop?: boolean; frozen?: boolean; isOpen: boolean; isPlaying: boolean; mobile?: boolean; onSeekToPosition?: (positionMs: number) => void; roomLyrics: string | null; translatedLyrics?: string | null; romanizedLyrics?: string | null; sourceProvider: string | undefined; sourceTrackId: string | undefined }) {
+  const positionMs = useImmersivePositionMs();
   const [plainLyric, setPlainLyric] = useState<string | null>(null);
   const [translatedLyric, setTranslatedLyric] = useState<string | null>(null);
   const [romanizedLyric, setRomanizedLyric] = useState<string | null>(null);
