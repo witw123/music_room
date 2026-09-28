@@ -238,7 +238,26 @@ export function useSegmentedOpusPlayback(input: {
         }
         if (storedManifestAssetIdRef.current !== currentPlaybackAsset.assetId) {
           await putAssetManifest(currentPlaybackAsset);
+          if (cancelled || generation !== playbackGenerationRef.current) {
+            return;
+          }
           storedManifestAssetIdRef.current = currentPlaybackAsset.assetId;
+        }
+        // A local file can take over while manifest storage is pending. Never
+        // recreate the segmented output after that handoff, even before React
+        // has run the previous effect's cleanup.
+        const latest = runtimeRef.current;
+        if (
+          cancelled || generation !== playbackGenerationRef.current ||
+          !latest.isCurrentSource || latest.disableSourcePlayback ||
+          latest.playbackBarrier?.blocked ||
+          latest.peerId !== runtime.peerId ||
+          latest.roomSnapshot?.room.id !== runtime.roomSnapshot?.room.id ||
+          latest.roomSnapshot?.room.playback !== currentRoomPlayback ||
+          latest.currentTrack?.id !== runtime.currentTrack?.id ||
+          latest.playbackAsset?.assetId !== currentPlaybackAsset.assetId
+        ) {
+          return;
         }
         const serverNowMs = getRoomPlaybackClockNowMs();
         const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
@@ -258,8 +277,9 @@ export function useSegmentedOpusPlayback(input: {
           return;
         }
         engineRef.current ??= new SegmentedOpusEngine();
-        engineRef.current.setBroadcastEnabled(true);
-        const result = await engineRef.current.sync({
+        const engine = engineRef.current;
+        engine.setBroadcastEnabled(true);
+        const result = await engine.sync({
           manifest: currentPlaybackAsset,
           playback: currentPlayback,
           serverNowMs,
@@ -284,10 +304,10 @@ export function useSegmentedOpusPlayback(input: {
                 }
               : null
         });
-        const sourceHealth = engineRef.current?.getSourceHealth();
         if (cancelled || generation !== playbackGenerationRef.current) {
           return;
         }
+        const sourceHealth = engine.getSourceHealth();
         const activePlaybackError = result.state === "buffering" &&
           sourceHealth?.state === "source-underrun"
           ? sourceHealth.lastDecodeError
@@ -310,6 +330,9 @@ export function useSegmentedOpusPlayback(input: {
           lastDecodeError: sourceHealth?.lastDecodeError
         });
       } catch (error) {
+        if (cancelled || generation !== playbackGenerationRef.current) {
+          return;
+        }
         const failedEngine = engineRef.current;
         engineRef.current = null;
         storedManifestAssetIdRef.current = null;
