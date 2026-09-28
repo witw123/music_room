@@ -6,9 +6,10 @@ import {
 } from "@/features/room/playback/receiver-audio-health";
 import {
   isSegmentedPlaybackAudible,
-  resolvePlaybackBarrierState
+  uninterruptedRoomClock
 } from "@/features/room/playback/playback-barrier";
 import {
+  alignLocalAudioToRoom,
   resolveCacheReadinessReport,
   hasCurrentLocalAudio,
   resolveLocalAudioTimelineKey,
@@ -169,179 +170,15 @@ describe("receiver playback state", () => {
   });
 });
 
-describe("room playback cache barrier", () => {
-  const playback = {
-    currentTrackId: "track-1",
-    mediaEpoch: 4,
-    status: "playing"
-  } as never;
-  const member = (id: string) => ({
-    id,
-    peerId: `peer-${id}`,
-    presenceState: "online"
-  });
-  const readiness = (
-    sessionId: string,
-    state: "waiting" | "ready",
-    barrier: "waiting" | "open",
-    resumeAt: string | null = null,
-    holdPositionMs: number | null = null
-  ) => ({
-    roomId: "room-1",
-    sessionId,
-    peerId: `peer-${sessionId}`,
-    trackId: "track-1",
-    mediaEpoch: 4,
-    cacheEnabled: true,
-    state,
-    barrier,
-    resumeAt,
-    holdPositionMs,
-    updatedAt: `${sessionId === "one" ? "2026-07-27T00:00:01.000Z" : "2026-07-27T00:00:02.000Z"}`
-  });
-
-  it("blocks until every online member is ready", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [readiness("one", "ready", "open"), readiness("two", "waiting", "waiting")],
-      nowMs: Date.parse("2026-07-27T00:00:03.000Z")
-    }).blocked).toBe(true);
-  });
-
-  it("keeps the shared hold position while the barrier is waiting", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [
-        readiness("one", "ready", "waiting", null, 12_500),
-        readiness("two", "waiting", "waiting", null, 12_500)
-      ],
-      nowMs: Date.parse("2026-07-27T00:00:20.000Z")
-    })).toMatchObject({
-      blocked: true,
-      holdPositionMs: 12_500,
-      resumeAtMs: null
-    });
-  });
-
-  it("waits for the shared resume time after the barrier opens", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [
-        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500),
-        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)
-      ],
-      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    })).toMatchObject({ blocked: true, holdPositionMs: 12_500 });
-  });
-
-  it("opens after the shared resume time", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [
-        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500),
-        readiness("two", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)
-      ],
-      nowMs: Date.parse("2026-07-27T00:00:06.000Z")
-    })).toMatchObject({ blocked: false, holdPositionMs: 12_500 });
-  });
-
-  it("ignores an open barrier from an older playback timeline", () => {
-    expect(resolvePlaybackBarrierState({
-      playback: {
-        currentTrackId: "track-1",
-        mediaEpoch: 4,
-        status: "playing",
-        positionMs: 24_000,
-        startAt: "2026-07-27T00:00:10.000Z",
-        startedAt: "2026-07-27T00:00:10.000Z"
-      } as never,
-      activeMembers: [member("one")] as never,
-      readiness: [readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z", 12_500)],
-      nowMs: Date.parse("2026-07-27T00:00:11.000Z")
-    })).toEqual({
-      blocked: false,
-      holdPositionMs: null,
-      resumeAtMs: null
-    });
-  });
-
-  it("waits for a solo cache participant while its cache is loading", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one")] as never,
-      readiness: [readiness("one", "waiting", "waiting")],
-      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    })).toMatchObject({
-      blocked: true,
-      holdPositionMs: 0,
-      resumeAtMs: null
-    });
-  });
-
-  it("excludes a cache participant that waited past the barrier timeout", () => {
-    const stalled = readiness("one", "waiting", "waiting");
-    const ready = readiness("two", "ready", "open");
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [stalled, ready],
-      nowMs: Date.parse("2026-07-27T00:00:04.000Z"),
-      staleWaitingSessionIds: new Set(["one"])
-    }).blocked).toBe(false);
-  });
-
-  it("releases the hold when the only cache participant times out", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one")] as never,
-      readiness: [readiness("one", "waiting", "waiting")],
-      nowMs: Date.parse("2026-07-27T00:00:04.000Z"),
-      staleWaitingSessionIds: new Set(["one"])
-    }).blocked).toBe(false);
-  });
-
-  it("does not create a barrier when every cache participant already has the track", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [
-        readiness("one", "ready", "open"),
-        readiness("two", "ready", "open")
-      ],
-      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    }).blocked).toBe(false);
-  });
-
-  it("does not wait for an online member using normal streaming playback", () => {
-    const streamingMember = {
-      ...readiness("two", "ready", "open"),
-      cacheEnabled: false
-    };
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two")] as never,
-      readiness: [
-        readiness("one", "ready", "open", "2026-07-27T00:00:05.000Z"),
-        streamingMember
-      ],
-      nowMs: Date.parse("2026-07-27T00:00:06.000Z")
-    }).blocked).toBe(false);
-  });
-
-  it("applies a cache barrier to streaming members without making them blockers", () => {
-    expect(resolvePlaybackBarrierState({
-      playback,
-      activeMembers: [member("one"), member("two"), member("three")] as never,
-      readiness: [
-        readiness("one", "waiting", "waiting", null, 12_500),
-        readiness("two", "waiting", "waiting", null, 12_500)
-      ],
-      nowMs: Date.parse("2026-07-27T00:00:04.000Z")
-    }).blocked).toBe(true);
+describe("cache-independent room clock", () => {
+  it("advances using the authoritative timeline without a cache hold", () => {
+    expect(resolveRoomAudioPositionMs({
+      status: "playing",
+      positionMs: 12_000,
+      startedAt: "2026-07-22T00:00:10.000Z",
+      startAt: "2026-07-22T00:00:10.000Z"
+    }, Date.parse("2026-07-22T00:00:13.500Z"), uninterruptedRoomClock)).toBe(15_500);
+    expect(uninterruptedRoomClock.blocked).toBe(false);
   });
 });
 
@@ -517,6 +354,37 @@ describe("listener audio output ownership", () => {
 });
 
 describe("local room audio clock", () => {
+  it("joins at the room's current position after caching and catches up after slow startup", () => {
+    const playback = {
+      status: "playing" as const,
+      positionMs: 12_000,
+      startedAt: new Date(10_000).toISOString(),
+      startAt: new Date(10_000).toISOString()
+    };
+    const audio = { currentTime: 0, duration: 60 };
+    alignLocalAudioToRoom(audio, playback, { force: true, nowMs: 20_000 });
+    expect(audio.currentTime).toBe(22);
+    alignLocalAudioToRoom(audio, playback, { nowMs: 23_000 });
+    expect(audio.currentTime).toBe(25);
+    audio.currentTime = 25.1;
+    alignLocalAudioToRoom(audio, playback, { nowMs: 23_200 });
+    expect(audio.currentTime).toBe(25.1);
+  });
+
+  it("keeps a completed cache paused at the room position and clamps track end", () => {
+    const audio = { currentTime: 0, duration: 60 };
+    const playback = {
+      status: "paused" as const, positionMs: 12_000,
+      startedAt: null, startAt: null
+    };
+    alignLocalAudioToRoom(audio, playback, { force: true, nowMs: 99_000 });
+    expect(audio.currentTime).toBe(12);
+    alignLocalAudioToRoom(audio, {
+      ...playback, status: "playing", startedAt: new Date(0).toISOString()
+    }, { force: true, nowMs: 99_000 });
+    expect(audio.currentTime).toBe(60);
+  });
+
   it("uses the room clock to advance a playing local file", () => {
     expect(resolveRoomAudioPositionMs({
       status: "playing",

@@ -78,6 +78,25 @@ function readinessInput(
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 describe("RoomPlaybackReadinessService", () => {
+  it("keeps the room clock unchanged across multiple members' cache states", async () => {
+    const roomService = createRoomService();
+    const snapshot = createSnapshot({}, [member("one"), member("two"), member("three")]);
+    const originalPlayback = { ...snapshot.room.playback };
+    roomService.getAccessibleRoomSnapshot.mockResolvedValue(snapshot);
+    const broadcaster = createBroadcaster();
+    const service = new RoomPlaybackReadinessService(roomService as never, broadcaster as never);
+    for (const report of [
+      readinessInput("one", "peer-one", "ready"),
+      readinessInput("two", "peer-two", "waiting"),
+      readinessInput("three", "peer-three", "ready", false),
+      readinessInput("two", "peer-two", "ready")
+    ]) {
+      expect(await service.handleReadiness(report)).toMatchObject({
+        barrier: "open", holdPositionMs: null, resumeAt: null
+      });
+      expect(snapshot.room.playback).toEqual(originalPlayback);
+    }
+  });
   it("ignores readiness from a superseded playback timeline", async () => {
     const roomService = createRoomService();
     roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({
@@ -93,7 +112,7 @@ describe("RoomPlaybackReadinessService", () => {
     expect(broadcaster.emitPlaybackReadiness).not.toHaveBeenCalled();
   });
 
-  it("holds the barrier while a cache participant is still waiting", async () => {
+  it("keeps playback open while a cache participant is still waiting", async () => {
     const roomService = createRoomService();
     roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({}, [member("one")]));
     const broadcaster = createBroadcaster();
@@ -101,15 +120,16 @@ describe("RoomPlaybackReadinessService", () => {
 
     const canonical = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
 
-    expect(canonical?.barrier).toBe("waiting");
-    expect(canonical?.holdPositionMs).toBeGreaterThan(0);
+    expect(canonical?.state).toBe("waiting");
+    expect(canonical?.barrier).toBe("open");
+    expect(canonical?.holdPositionMs).toBeNull();
     expect(broadcaster.emitPlaybackReadiness).toHaveBeenCalledWith(
       "room-1",
-      expect.objectContaining({ barrier: "waiting" })
+      expect.objectContaining({ barrier: "open" })
     );
   });
 
-  it("anchors a mid-song barrier at the current room playback position", async () => {
+  it("does not freeze the clock for a mid-song cache request", async () => {
     const roomService = createRoomService();
     roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({
       startAt: null,
@@ -121,10 +141,10 @@ describe("RoomPlaybackReadinessService", () => {
 
     const canonical = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
 
-    expect(canonical?.holdPositionMs).toBe(12_500);
+    expect(canonical?.holdPositionMs).toBeNull();
   });
 
-  it("re-anchors a waiting barrier when seek creates a newer playback timeline", async () => {
+  it("does not introduce cache clock anchors across a seek", async () => {
     jest.useFakeTimers().setSystemTime(new Date("2026-07-31T00:00:01.000Z"));
     try {
       const roomService = createRoomService();
@@ -144,11 +164,11 @@ describe("RoomPlaybackReadinessService", () => {
       const readiness = new RoomPlaybackReadinessService(roomService as never, broadcaster as never);
 
       const first = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
-      expect(first?.holdPositionMs).toBe(12_500);
+      expect(first?.holdPositionMs).toBeNull();
 
       jest.setSystemTime(new Date("2026-07-31T00:00:10.000Z"));
       const seeked = await readiness.handleReadiness(readinessInput("one", "peer-one", "waiting"));
-      expect(seeked?.holdPositionMs).toBe(42_000);
+      expect(seeked?.holdPositionMs).toBeNull();
     } finally {
       jest.useRealTimers();
     }
@@ -179,7 +199,7 @@ describe("RoomPlaybackReadinessService", () => {
     expect(canonical?.barrier).toBe("open");
   });
 
-  it("schedules a shared resume time when a held barrier opens", async () => {
+  it("does not schedule a shared resume when a member finishes caching", async () => {
     const roomService = createRoomService();
     roomService.getAccessibleRoomSnapshot.mockResolvedValue(createSnapshot({}, [member("one")]));
     const broadcaster = createBroadcaster();
@@ -189,7 +209,7 @@ describe("RoomPlaybackReadinessService", () => {
     const canonical = await readiness.handleReadiness(readinessInput("one", "peer-one", "ready"));
 
     expect(canonical?.barrier).toBe("open");
-    expect(canonical?.resumeAt).not.toBeNull();
+    expect(canonical?.resumeAt).toBeNull();
   });
 
   it("keeps a local copy of foreign readiness and emits it locally without republishing", () => {

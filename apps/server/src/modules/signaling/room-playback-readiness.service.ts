@@ -373,32 +373,10 @@ export class RoomPlaybackReadinessService {
         }
         return entry;
       });
-    const cacheParticipants = entries.filter((entry) => entry.cacheEnabled);
-    const allReady = input.snapshot.room.playback.status !== "playing" ||
-      cacheParticipants.every((entry) => entry.state !== "waiting");
-    const barrierState: PlaybackBarrier["state"] = allReady ? "open" : "waiting";
-    const playbackStartedAtMs = Date.parse(
-      input.snapshot.room.playback.startedAt ?? input.snapshot.room.playback.startAt ?? ""
-    );
-    const previousBarrierUpdatedAtMs = Date.parse(input.previousBarrier.updatedAt);
-    const previousBarrierMatchesTimeline = input.previousBarrier.key === input.key && (
-      !Number.isFinite(playbackStartedAtMs) ||
-      (Number.isFinite(previousBarrierUpdatedAtMs) && previousBarrierUpdatedAtMs >= playbackStartedAtMs)
-    );
-    const holdPositionMs = barrierState === "waiting"
-      ? previousBarrierMatchesTimeline && input.previousBarrier.state === "waiting"
-        ? input.previousBarrier.holdPositionMs
-        : this.resolvePlaybackPositionMs(input.snapshot, input.now.getTime())
-      : previousBarrierMatchesTimeline
-        ? input.previousBarrier.holdPositionMs
-        : null;
-    const resumeAt = barrierState === "open"
-      ? previousBarrierMatchesTimeline && input.previousBarrier.state === "waiting"
-        ? new Date(nowMs + 650).toISOString()
-        : previousBarrierMatchesTimeline && input.previousBarrier.state === "open"
-          ? input.previousBarrier.resumeAt
-          : null
-      : null;
+    // Readiness describes an individual member, never a room clock transition.
+    const barrierState = "open" as const;
+    const holdPositionMs = null;
+    const resumeAt = null;
     const barrier: PlaybackBarrier = {
       key: input.key,
       state: barrierState,
@@ -436,19 +414,6 @@ export class RoomPlaybackReadinessService {
       },
       updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : new Date(0).toISOString()
     };
-  }
-
-  private resolvePlaybackPositionMs(snapshot: RoomSnapshot, nowMs: number) {
-    const playback = snapshot.room.playback;
-    if (playback.status !== "playing") {
-      return playback.positionMs;
-    }
-    const anchorAt = playback.startedAt ?? playback.startAt ?? null;
-    const anchorMs = anchorAt ? Date.parse(anchorAt) : Number.NaN;
-    const elapsedMs = Number.isFinite(anchorMs) ? Math.max(0, nowMs - anchorMs) : 0;
-    const durationMs = snapshot.tracks.find((track) => track.id === playback.currentTrackId)?.durationMs ?? 0;
-    const positionMs = playback.positionMs + elapsedMs;
-    return durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs;
   }
 
   private isRedisAvailable() {

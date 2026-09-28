@@ -57,6 +57,28 @@ export function resolveRoomAudioPositionMs(
   return resolveRoomPlaybackPositionMs(playback, 0, nowMs, barrier);
 }
 
+export function alignLocalAudioToRoom(
+  audio: Pick<HTMLAudioElement, "currentTime" | "duration">,
+  playback: Pick<PlaybackSnapshot, "status" | "positionMs" | "startedAt" | "startAt">,
+  options: { force?: boolean; durationMs?: number; nowMs?: number } = {}
+) {
+  const durationMs = Number.isFinite(audio.duration) && audio.duration > 0
+    ? audio.duration * 1000
+    : options.durationMs ?? 0;
+  const targetSeconds = resolveRoomPlaybackPositionMs(
+    playback,
+    durationMs,
+    options.nowMs ?? getRoomPlaybackClockNowMs()
+  ) / 1000;
+  if (
+    options.force ||
+    !Number.isFinite(audio.currentTime) ||
+    Math.abs(audio.currentTime - targetSeconds) >= localAudioSeekToleranceSeconds
+  ) {
+    audio.currentTime = targetSeconds;
+  }
+}
+
 export function resolveLocalAudioTrackKey(
   track: TrackMeta | null | undefined,
   forceProviderCache = false

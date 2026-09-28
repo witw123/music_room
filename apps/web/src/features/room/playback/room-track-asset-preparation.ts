@@ -22,7 +22,8 @@ import {
   resolveImportedAudioMimeType,
   sanitizeFileName
 } from "@/features/upload/upload-import-helpers";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { getRoomQueuePreloadTracks } from "./room-queue-preload";
 
 export type TrackUnavailableReason = "source-missing" | "asset-corrupt" | "permission-denied";
 
@@ -381,6 +382,15 @@ export function useRoomTrackAssetAutoPreparation(input: {
   activeSessionId: string | null | undefined;
 }) {
   const { roomId, roomSnapshot, currentTrack, activeSessionId } = input;
+  const upcomingTracks = roomSnapshot
+    ? getRoomQueuePreloadTracks(roomSnapshot).filter((track) =>
+        track.ownerSessionId === activeSessionId && !hasCompleteRoomAsset(track))
+    : [];
+  const upcomingTracksRef = useRef(upcomingTracks);
+  upcomingTracksRef.current = upcomingTracks;
+  const upcomingPreparationKey = JSON.stringify(upcomingTracks.map((track) => [
+    track.id, track.fileHash, track.originalAsset?.assetId, track.playbackAsset?.assetId
+  ]));
 
   // 1. Current track auto-preparation (high priority)
   useEffect(() => {
@@ -402,26 +412,8 @@ export function useRoomTrackAssetAutoPreparation(input: {
 
   // 2. Upcoming queue tracks auto-preparation (background priority)
   useEffect(() => {
-    if (!roomId || !activeSessionId || !roomSnapshot?.queue || !roomSnapshot.tracks) return;
-
-    const queue = roomSnapshot.queue;
-    const tracks = roomSnapshot.tracks;
-    const currentQueueItemId = roomSnapshot.room.playback.currentQueueItemId;
-    const currentIndex = currentQueueItemId
-      ? queue.findIndex((item) => item.id === currentQueueItemId)
-      : -1;
-
-    const upcomingItems = currentIndex >= 0
-      ? queue.slice(currentIndex + 1, currentIndex + 3)
-      : queue.slice(0, 2);
-
-    const upcomingTracksToPrepare = upcomingItems
-      .map((item) => tracks.find((t) => t.id === item.trackId))
-      .filter((track): track is TrackMeta =>
-        !!track &&
-        track.ownerSessionId === activeSessionId &&
-        !hasCompleteRoomAsset(track)
-      );
+    if (!roomId || !activeSessionId) return;
+    const upcomingTracksToPrepare = upcomingTracksRef.current;
 
     if (upcomingTracksToPrepare.length === 0) return;
 
@@ -445,8 +437,6 @@ export function useRoomTrackAssetAutoPreparation(input: {
   }, [
     roomId,
     activeSessionId,
-    roomSnapshot?.room.playback.currentQueueItemId,
-    roomSnapshot?.queue,
-    roomSnapshot?.tracks
+    upcomingPreparationKey
   ]);
 }

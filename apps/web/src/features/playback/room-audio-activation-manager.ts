@@ -16,6 +16,8 @@ export type RoomAudioElementPlayOptions = {
   force?: boolean;
   /** Prevent an asynchronous play request from starting after its timeline was replaced. */
   isCurrent?: () => boolean;
+  /** Refresh a local file's room position after context resume, before play. */
+  beforePlay?: () => void;
   /** Remote MediaStream elements do not depend on the shared Web Audio graph. */
   resumeAudioContext?: boolean;
   /** Fail instead of reporting success when this element is routed through Web Audio but its context cannot run. */
@@ -144,6 +146,7 @@ export class RoomAudioActivationManager {
     options: RoomAudioElementPlayOptions
   ): Promise<RoomAudioElementPlayResult> {
     try {
+      options.beforePlay?.();
       await element.play();
       this.activated = true;
       if (this.getElementSourceKey(element) === sourceKey) {
@@ -181,6 +184,7 @@ export class RoomAudioActivationManager {
         // has expired. Start the concrete local source muted, then restore
         // its audible state without replacing or reloading the element again.
         element.muted = true;
+        options.beforePlay?.();
         await element.play();
         this.activated = true;
         this.playedElementSourceKeys.set(element, this.getElementSourceKey(element));

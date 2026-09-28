@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomAudioActivationManager } from "./room-audio-activation-manager";
+import { alignLocalAudioToRoom } from "@/features/room/playback/room-audio-path";
 
 function createAudioElementMock() {
   const audio = {
@@ -190,6 +191,43 @@ describe("RoomAudioActivationManager", () => {
       error: "play-obsolete"
     });
     expect(audio.play).not.toHaveBeenCalled();
+  });
+
+  it("aligns a completed cache to the room clock after asynchronous context resume", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    let finishResume!: (ready: boolean) => void;
+    vi.spyOn(manager, "resumeSharedAudioContext").mockImplementation(
+      () => new Promise<boolean>((resolve) => { finishResume = resolve; })
+    );
+    let nowMs = 10_000;
+    const playback = {
+      status: "playing" as const,
+      positionMs: 12_000,
+      startedAt: new Date(10_000).toISOString(),
+      startAt: new Date(10_000).toISOString()
+    };
+    audio.currentTime = 12;
+    const beforePlay = vi.fn(() => alignLocalAudioToRoom(audio, playback, {
+      force: true, durationMs: 60_000, nowMs
+    }));
+    audio.play = vi.fn(async () => { expect(audio.currentTime).toBe(15); });
+    const result = manager.playElement(audio, { beforePlay });
+    expect(beforePlay).not.toHaveBeenCalled();
+    nowMs = 13_000;
+    finishResume(true);
+    await expect(result).resolves.toEqual({ ok: true, error: null });
+    expect(beforePlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not realign an already-playing source on ordinary sync ticks", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    await manager.playElement(audio);
+    Object.defineProperty(audio, "paused", { configurable: true, value: false });
+    const beforePlay = vi.fn();
+    await manager.playElement(audio, { beforePlay });
+    expect(beforePlay).not.toHaveBeenCalled();
   });
 
   it("does not replay an already-playing element for the same source", async () => {
