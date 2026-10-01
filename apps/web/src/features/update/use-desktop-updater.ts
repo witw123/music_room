@@ -58,7 +58,10 @@ function createProgressChannel(onMessage: (message: UpdaterDownloadEvent) => voi
   return { toJSON: () => `__CHANNEL__:${id}` };
 }
 
-export function useDesktopUpdater(enabled: boolean) {
+export function useDesktopUpdater(
+  enabled: boolean,
+  onFailFallback?: () => void
+) {
   const [state, setState] = useState<DesktopUpdaterState>({ phase: "idle" });
   const busyRef = useRef(false);
 
@@ -113,10 +116,13 @@ export function useDesktopUpdater(enabled: boolean) {
         phase: "failed",
         message: error instanceof Error ? error.message : "自动更新失败,请到 Release 页手动下载。"
       });
+      // 旧壳没有编译 updater 插件时,check 会失败:自动回退浏览器下载,
+      // 保证用户总能拿到新版本(装上 v0.3.5+ 后后续更新走自动通道)。
+      onFailFallback?.();
     } finally {
       busyRef.current = false;
     }
-  }, []);
+  }, [onFailFallback]);
 
   useEffect(() => {
     if (enabled) return;

@@ -45,7 +45,10 @@ export function UpdatePromptDialog({
     versionName: result?.latestVersion ?? "",
     enabled: open && isAndroidNative && downloadTarget !== null
   });
-  const desktopUpdater = useDesktopUpdater(open && isDesktopNative);
+  const desktopUpdater = useDesktopUpdater(open && isDesktopNative, () => {
+    const url = downloadTarget?.browser_download_url ?? result?.release.html_url;
+    if (url) void openExternalUrl(url);
+  });
 
   if (!open || !result || !result.hasUpdate) return null;
   if (typeof document === "undefined") return null;
