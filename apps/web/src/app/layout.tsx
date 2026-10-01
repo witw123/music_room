@@ -19,15 +19,15 @@ const themeInitScript = `(() => {
     const isLyricsWindow = Boolean(typeof window !== "undefined" && window.location && (window.location.pathname === "/desktop-lyrics" || (window.location.search && window.location.search.indexOf("window=desktop-lyrics") !== -1)));
     if (!isLyricsWindow && value && value.layout && typeof value.layout.uiScale === "number" && isFinite(value.layout.uiScale)) {
       const scale = Math.min(2, Math.max(0.5, value.layout.uiScale));
+      var tauriInvoke = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) || window.__TAURI_INTERNALS__.invoke;
+      if (tauriInvoke) tauriInvoke("set_ui_zoom", { scale: scale }).catch(function() {});
       if (Math.abs(scale - 1) >= 0.001) {
-        if (window.__TAURI_INTERNALS__) {
-          window.__TAURI_INTERNALS__.core.invoke("set_ui_zoom", { scale: scale }).catch(function() {});
-        } else {
-          document.documentElement.style.fontSize = 16 * scale + "px";
-        }
-        document.documentElement.style.setProperty("--ui-scale", String(scale));
-        document.documentElement.dataset.uiScale = String(scale);
+        document.documentElement.style.fontSize = 16 * scale + "px";
+      } else {
+        document.documentElement.style.removeProperty("font-size");
       }
+      document.documentElement.style.setProperty("--ui-scale", String(scale));
+      document.documentElement.dataset.uiScale = String(scale);
     }
   } catch {
     document.documentElement.dataset.theme = "dark";
