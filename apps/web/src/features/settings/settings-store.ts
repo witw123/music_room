@@ -91,6 +91,7 @@ export type AppSettings = {
     sidebarCollapsed: boolean;
     reduceMotion: boolean;
     fullMotion: boolean;
+    uiScale: number;
     customLayout: CustomLayoutSettings;
   };
   playback: {
@@ -122,6 +123,7 @@ const defaultSettings: AppSettings = {
     sidebarCollapsed: true,
     reduceMotion: false,
     fullMotion: false,
+    uiScale: 1,
     customLayout: getDefaultCustomLayoutSettings()
   },
   playback: {
@@ -181,6 +183,7 @@ export function updateAppSettings(
     if (typeof document !== "undefined") {
       document.documentElement.dataset.reduceMotion = String(next.layout.reduceMotion);
       document.documentElement.dataset.fullMotion = String(next.layout.fullMotion);
+      applyUiScale(next.layout.uiScale);
     }
     window.dispatchEvent(new Event(appSettingsChangeEvent));
   }
@@ -193,6 +196,7 @@ export function resetAppSettings() {
     if (typeof document !== "undefined") {
       document.documentElement.dataset.reduceMotion = String(defaultSettings.layout.reduceMotion);
       document.documentElement.dataset.fullMotion = String(defaultSettings.layout.fullMotion);
+      applyUiScale(defaultSettings.layout.uiScale);
     }
     window.dispatchEvent(new Event(appSettingsChangeEvent));
   }
@@ -215,6 +219,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   const desktopLyricScale = typeof playback.desktopLyricScale === "number" && Number.isFinite(playback.desktopLyricScale)
     ? Math.min(2.5, Math.max(0.5, playback.desktopLyricScale))
     : defaultSettings.playback.desktopLyricScale;
+  const uiScale = typeof layout.uiScale === "number" && Number.isFinite(layout.uiScale)
+    ? Math.round(Math.min(2, Math.max(0.5, layout.uiScale)) * 100) / 100
+    : defaultSettings.layout.uiScale;
   const quality = playback.preferredAudioQuality;
   const preferredAudioQuality: AudioQualityPreference =
     quality === "standard" || quality === "high" || quality === "lossless" || quality === "hires"
@@ -228,6 +235,7 @@ export function normalizeSettings(value: unknown): AppSettings {
       sidebarCollapsed: layout.sidebarCollapsed !== false,
       reduceMotion: layout.reduceMotion === true,
       fullMotion: layout.fullMotion === true,
+      uiScale,
       customLayout: normalizeCustomLayoutSettings(layout.customLayout)
     },
     playback: {
@@ -261,6 +269,7 @@ function cloneSettings(settings: AppSettings): AppSettings {
       sidebarCollapsed: settings.layout.sidebarCollapsed,
       reduceMotion: settings.layout.reduceMotion,
       fullMotion: settings.layout.fullMotion,
+      uiScale: settings.layout.uiScale,
       customLayout: cloneCustomLayoutSettings(settings.layout.customLayout)
     },
     playback: { ...settings.playback }
@@ -416,6 +425,35 @@ export function applyAppTheme(preference: ThemePreference): ResolvedTheme {
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "light" ? "#f5f7fb" : "#09090b");
   }
   return resolved;
+}
+
+export function applyUiScale(scale: number): number {
+  if (typeof document !== "undefined") {
+    if (typeof window !== "undefined") {
+      const pathname = window.location?.pathname;
+      const search = window.location?.search;
+      const isLyricsWindow =
+        pathname === "/desktop-lyrics" ||
+        (typeof search === "string" && search.includes("window=desktop-lyrics"));
+      if (isLyricsWindow) {
+        return scale;
+      }
+    }
+    const normalized = Math.min(2, Math.max(0.5, scale));
+    const isDefault = Math.abs(normalized - 1) < 0.001;
+    if (isDefault) {
+      document.documentElement.style.removeProperty("zoom");
+      (document.documentElement.style as unknown as { zoom?: string }).zoom = "";
+      document.documentElement.style.removeProperty("--ui-scale");
+      delete document.documentElement.dataset.uiScale;
+    } else {
+      document.documentElement.style.setProperty("zoom", String(normalized));
+      (document.documentElement.style as unknown as { zoom?: string }).zoom = String(normalized);
+      document.documentElement.style.setProperty("--ui-scale", String(normalized));
+      document.documentElement.dataset.uiScale = String(normalized);
+    }
+  }
+  return scale;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

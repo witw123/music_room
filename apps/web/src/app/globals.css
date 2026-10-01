@@ -74,6 +74,7 @@
      each of the ~40 call sites. Consume as `calc(N * var(--app-dvh))`. */
   :root {
     --app-dvh: 1vh;
+    --ui-scale: 1;
   }
 
   @supports (height: 100dvh) {

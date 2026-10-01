@@ -7,6 +7,7 @@ import { LocalPlayerProvider } from "@/features/playback/local-player-context";
 import { awayRoomChangeEvent, readAwayRoomId } from "@/lib/domain/away-room";
 import { DesktopLyricsProvider } from "@/features/playback/desktop-lyrics-context";
 import { ShellBackButton } from "./ShellBackButton";
+import { applyUiScale, appSettingsChangeEvent, getAppSettings } from "@/features/settings/settings-store";
 
 import { isCapacitorRuntime } from "@/lib/desktop/tauri";
 import { requestNotificationPermission } from "@/features/playback/system-notifications";
@@ -59,6 +60,20 @@ function RoomRuntime({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener(awayRoomChangeEvent, syncAwayRoom);
       window.removeEventListener("storage", syncAwayRoom);
+    };
+  }, [isLyricsWindow]);
+
+  useEffect(() => {
+    if (isLyricsWindow) return;
+    const syncScale = () => {
+      applyUiScale(getAppSettings().layout.uiScale);
+    };
+    syncScale();
+    window.addEventListener(appSettingsChangeEvent, syncScale);
+    window.addEventListener("storage", syncScale);
+    return () => {
+      window.removeEventListener(appSettingsChangeEvent, syncScale);
+      window.removeEventListener("storage", syncScale);
     };
   }, [isLyricsWindow]);
 

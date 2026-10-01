@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appSettingsStorageKey,
+  applyUiScale,
   getDefaultAppSettings,
   getCustomLayoutItemIds,
   getDefaultCustomLayoutSettings,
@@ -187,6 +188,59 @@ describe("app settings store", () => {
     expect(getAppSettings().layout.sidebarCollapsed).toBe(true);
     expect(getAppSettings().layout.fullMotion).toBe(false);
     expect(dispatchEvent).toHaveBeenCalled();
+  });
+
+  it("normalizes and updates the ui scale setting within bounds", () => {
+    expect(normalizeSettings(null).layout.uiScale).toBe(1);
+    expect(normalizeSettings({ layout: { uiScale: 1.25 } }).layout.uiScale).toBe(1.25);
+    expect(normalizeSettings({ layout: { uiScale: 0.1 } }).layout.uiScale).toBe(0.5);
+    expect(normalizeSettings({ layout: { uiScale: 10 } }).layout.uiScale).toBe(2);
+    expect(normalizeSettings({ layout: { uiScale: "invalid" } }).layout.uiScale).toBe(1);
+
+    const values = new Map<string, string>();
+    const dispatchEvent = vi.fn();
+    const styleMap = new Map<string, string>();
+    const dataset: Record<string, string | undefined> = {};
+
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key)
+      },
+      dispatchEvent,
+      location: { pathname: "/app/settings", search: "" }
+    });
+
+    vi.stubGlobal("document", {
+      documentElement: {
+        dataset,
+        style: {
+          setProperty: (k: string, v: string) => styleMap.set(k, v),
+          getPropertyValue: (k: string) => styleMap.get(k) ?? "",
+          removeProperty: (k: string) => styleMap.delete(k)
+        }
+      }
+    });
+
+    updateAppSettings({ layout: { uiScale: 1.1 } });
+    expect(getAppSettings().layout.uiScale).toBe(1.1);
+    expect(dataset.uiScale).toBe("1.1");
+    expect(styleMap.get("--ui-scale")).toBe("1.1");
+
+    resetAppSettings();
+    expect(getAppSettings().layout.uiScale).toBe(1);
+    expect(dataset.uiScale).toBeUndefined();
+    expect(styleMap.get("--ui-scale")).toBeUndefined();
+
+    // Test applyUiScale
+    applyUiScale(1.25);
+    expect(dataset.uiScale).toBe("1.25");
+    expect(styleMap.get("--ui-scale")).toBe("1.25");
+
+    applyUiScale(1);
+    expect(dataset.uiScale).toBeUndefined();
+    expect(styleMap.get("--ui-scale")).toBeUndefined();
   });
 });
 

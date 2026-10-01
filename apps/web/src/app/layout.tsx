@@ -16,6 +16,15 @@ const themeInitScript = `(() => {
     document.documentElement.dataset.sidebarCollapsed = String(sidebarCollapsed);
     document.documentElement.style.colorScheme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#f5f5f7" : "#09090b");
+    const isLyricsWindow = Boolean(typeof window !== "undefined" && window.location && (window.location.pathname === "/desktop-lyrics" || (window.location.search && window.location.search.indexOf("window=desktop-lyrics") !== -1)));
+    if (!isLyricsWindow && value && value.layout && typeof value.layout.uiScale === "number" && isFinite(value.layout.uiScale)) {
+      const scale = Math.min(2, Math.max(0.5, value.layout.uiScale));
+      if (Math.abs(scale - 1) >= 0.001) {
+        document.documentElement.style.zoom = String(scale);
+        document.documentElement.style.setProperty("--ui-scale", String(scale));
+        document.documentElement.dataset.uiScale = String(scale);
+      }
+    }
   } catch {
     document.documentElement.dataset.theme = "dark";
     document.documentElement.style.colorScheme = "dark";

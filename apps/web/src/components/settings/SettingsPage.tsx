@@ -268,6 +268,51 @@ export function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="界面">
+            <SettingRow label="缩放比例" description="调整整个界面的显示大小，适配不同分辨率与显示器尺寸。">
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex w-44 items-center gap-2.5 sm:w-48">
+                  <input
+                    aria-label="缩放比例"
+                    className="min-w-0 flex-1 accent-accent cursor-pointer"
+                    max="1.5"
+                    min="0.75"
+                    onChange={(event) => patchSettings({ layout: { uiScale: Number(event.target.value) } })}
+                    step="0.05"
+                    type="range"
+                    value={settings.layout.uiScale}
+                  />
+                  <span className="w-10 text-right text-xs font-mono tabular-nums text-foreground-muted">
+                    {Math.round(settings.layout.uiScale * 100)}%
+                  </span>
+                  {settings.layout.uiScale !== 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => patchSettings({ layout: { uiScale: 1 } })}
+                      className="rounded px-1.5 py-0.5 text-[11px] text-accent hover:bg-accent/10 transition-colors"
+                      title="重置为 100%"
+                    >
+                      重置
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1">
+                  {[0.8, 0.9, 1, 1.1, 1.25].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => patchSettings({ layout: { uiScale: preset } })}
+                      className={`rounded px-1.5 py-0.5 text-[11px] transition-colors ${
+                        Math.abs(settings.layout.uiScale - preset) < 0.01
+                          ? "bg-accent text-white font-medium shadow-xs"
+                          : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+                      }`}
+                    >
+                      {Math.round(preset * 100)}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </SettingRow>
             <SettingRow label="自定义界面" description="在桌面画布中调整页面区域的位置和大小。">
               <button
                 aria-label="进入自定义界面编辑器"
