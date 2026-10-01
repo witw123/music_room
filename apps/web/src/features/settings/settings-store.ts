@@ -1,5 +1,5 @@
 import type { PlaybackMode } from "@music-room/shared";
-import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
+import { invokeTauri } from "@/lib/desktop/tauri";
 
 export const appSettingsStorageKey = "music-room-settings-v1";
 export const appSettingsChangeEvent = "music-room-settings-change";
@@ -430,43 +430,18 @@ export function applyAppTheme(preference: ThemePreference): ResolvedTheme {
 
 export function applyUiScale(scale: number): number {
   if (typeof document !== "undefined") {
-    if (typeof window !== "undefined") {
-      const pathname = window.location?.pathname;
-      const search = window.location?.search;
-      const isLyricsWindow =
-        pathname === "/desktop-lyrics" ||
-        (typeof search === "string" && search.includes("window=desktop-lyrics"));
-      if (isLyricsWindow) {
-        return scale;
-      }
-    }
     const normalized = Math.min(2, Math.max(0.5, scale));
     const isDefault = Math.abs(normalized - 1) < 0.001;
-
-    // 桌面端（Tauri）：调用原生 webview zoom（等效浏览器 Ctrl+滚轮），
-    // 等比缩放全部内容且 viewport 断点同步适应，与浏览器端缩放体验完全一致。
-    // 错误不吞：调不到就 throw，让上层感知并排查。
-    if (typeof window !== "undefined" && isTauriRuntime()) {
-      if (isDefault) {
-        // 回到默认缩放
-        void invokeTauri("set_ui_zoom", { scale: 1 }).catch((err: unknown) => {
-          console.error("[ui-scale] Failed to reset zoom:", err);
-        });
-      } else {
-        void invokeTauri("set_ui_zoom", { scale: normalized }).catch((err: unknown) => {
-          console.error("[ui-scale] Failed to set zoom:", err);
-        });
-      }
-      return normalized;
-    }
-
-    // 浏览器/安卓：根字号方案（Tailwind 全量 rem，改根 font-size 即等比缩放）
+    // CSS zoom scales the complete application surface, including fixed
+    // controls and pixel-sized layout primitives. Root font-size alone leaves
+    // those elements unchanged and makes the setting appear ineffective.
     if (isDefault) {
       document.documentElement.style.removeProperty("font-size");
+      document.documentElement.style.removeProperty("zoom");
       document.documentElement.style.removeProperty("--ui-scale");
       delete document.documentElement.dataset.uiScale;
     } else {
-      document.documentElement.style.fontSize = 16 * normalized + "px";
+      document.documentElement.style.zoom = String(normalized);
       document.documentElement.style.setProperty("--ui-scale", String(normalized));
       document.documentElement.dataset.uiScale = String(normalized);
     }

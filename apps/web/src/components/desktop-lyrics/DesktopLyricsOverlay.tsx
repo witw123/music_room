@@ -179,6 +179,7 @@ export function DesktopLyricsOverlay() {
           canControl={canControl}
           isPlaying={activePlayer.isPlaying}
           plainLyric={lyrics.plainLyric}
+          wordSyncedLyric={lyrics.wordSyncedLyric}
           translatedLyric={lyrics.translatedLyric}
           romanizedLyric={lyrics.romanizedLyric}
           showTranslation={showTranslation}

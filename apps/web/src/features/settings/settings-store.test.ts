@@ -200,6 +200,15 @@ describe("app settings store", () => {
     const values = new Map<string, string>();
     const dispatchEvent = vi.fn();
     const styleMap = new Map<string, string>();
+    const style = {
+      zoom: "",
+      setProperty: (k: string, v: string) => styleMap.set(k, v),
+      getPropertyValue: (k: string) => styleMap.get(k) ?? "",
+      removeProperty: (k: string) => {
+        styleMap.delete(k);
+        if (k === "zoom") style.zoom = "";
+      }
+    };
     const dataset: Record<string, string | undefined> = {};
 
     vi.stubGlobal("window", {
@@ -215,11 +224,7 @@ describe("app settings store", () => {
     vi.stubGlobal("document", {
       documentElement: {
         dataset,
-        style: {
-          setProperty: (k: string, v: string) => styleMap.set(k, v),
-          getPropertyValue: (k: string) => styleMap.get(k) ?? "",
-          removeProperty: (k: string) => styleMap.delete(k)
-        }
+        style
       }
     });
 
@@ -237,10 +242,12 @@ describe("app settings store", () => {
     applyUiScale(1.25);
     expect(dataset.uiScale).toBe("1.25");
     expect(styleMap.get("--ui-scale")).toBe("1.25");
+    expect(style.zoom).toBe("1.25");
 
     applyUiScale(1);
     expect(dataset.uiScale).toBeUndefined();
     expect(styleMap.get("--ui-scale")).toBeUndefined();
+    expect(style.zoom).toBe("");
   });
 });
 

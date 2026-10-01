@@ -19,8 +19,7 @@ const themeInitScript = `(() => {
     const isLyricsWindow = Boolean(typeof window !== "undefined" && window.location && (window.location.pathname === "/desktop-lyrics" || (window.location.search && window.location.search.indexOf("window=desktop-lyrics") !== -1)));
     if (!isLyricsWindow && value && value.layout && typeof value.layout.uiScale === "number" && isFinite(value.layout.uiScale)) {
       const scale = Math.min(2, Math.max(0.5, value.layout.uiScale));
-      var tauriInvoke = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) || window.__TAURI_INTERNALS__.invoke;
-      if (tauriInvoke) tauriInvoke("set_ui_zoom", { scale: scale }).catch(function(err) { console.error("[ui-scale]", err); });
+      document.documentElement.style.zoom = String(scale);
       document.documentElement.style.setProperty("--ui-scale", String(scale));
       document.documentElement.dataset.uiScale = String(scale);
     }

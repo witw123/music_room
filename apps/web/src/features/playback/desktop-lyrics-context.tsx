@@ -70,6 +70,7 @@ type DesktopLyricsContextValue = {
 type DesktopLyricsState = {
   status: "idle" | "loading" | "ready" | "error";
   plainLyric: string | null;
+  wordSyncedLyric: string | null;
   translatedLyric: string | null;
   romanizedLyric: string | null;
   currentLine: string | null;
@@ -113,6 +114,7 @@ export function closeDesktopLyricsNative() {
 const emptyLyrics: DesktopLyricsState = {
   status: "idle",
   plainLyric: null,
+  wordSyncedLyric: null,
   translatedLyric: null,
   romanizedLyric: null,
   currentLine: null,
@@ -231,6 +233,7 @@ export function DesktopLyricsProvider({
     setLyrics({
       status: directLyrics || localTranslated || localRomanized ? "ready" : provider && providerTrackId ? "loading" : "ready",
       plainLyric: directLyrics,
+      wordSyncedLyric: hasWordSyncedRoomLyrics(directLyrics) ? directLyrics : null,
       translatedLyric: localTranslated,
       romanizedLyric: localRomanized,
       currentLine: null,
@@ -268,6 +271,7 @@ export function DesktopLyricsProvider({
       setLyrics({
         status: resolvedPlain || resolvedTranslated || resolvedRomanized ? "ready" : "error",
         plainLyric: resolvedPlain,
+        wordSyncedLyric: result.wordSyncedLyric || (hasWordSyncedRoomLyrics(resolvedPlain) ? resolvedPlain : null),
         translatedLyric: resolvedTranslated,
         romanizedLyric: resolvedRomanized,
         currentLine: null,
@@ -381,14 +385,15 @@ export function DesktopLyricsProvider({
       artworkUrl: activePlayer?.artworkUrl ?? activeTrack.artworkUrl ?? null,
       durationMs: activeTrack.durationMs ?? null,
       plainLyric: lyrics.plainLyric,
+      wordSyncedLyric: lyrics.wordSyncedLyric,
       translatedLyric: lyrics.translatedLyric,
       romanizedLyric: lyrics.romanizedLyric
     };
-  }, [activeTrack, activePlayer?.artworkUrl, lyrics.plainLyric, lyrics.translatedLyric, lyrics.romanizedLyric]);
+  }, [activeTrack, activePlayer?.artworkUrl, lyrics.plainLyric, lyrics.wordSyncedLyric, lyrics.translatedLyric, lyrics.romanizedLyric]);
 
   // Progress anchors are throttled: the lyrics window interpolates between anchors
   // with rAF, so a 250ms cadence looks identical at a quarter of the bridge traffic.
-  const bridgeStructureKey = `${activeIsPlaying}|${activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId)}|${showTranslation}|${showRomanized}|${bridgeTrackPayload ? "t" : "n"}|${lyrics.plainLyric ?? ""}|${lyrics.translatedLyric ?? ""}|${lyrics.romanizedLyric ?? ""}`;
+  const bridgeStructureKey = `${activeIsPlaying}|${activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId)}|${showTranslation}|${showRomanized}|${bridgeTrackPayload ? "t" : "n"}|${lyrics.plainLyric ?? ""}|${lyrics.wordSyncedLyric ?? ""}|${lyrics.translatedLyric ?? ""}|${lyrics.romanizedLyric ?? ""}`;
   const lastBridgeStructureKeyRef = useRef<string | null>(null);
   const lastBridgePostAtRef = useRef(0);
 

@@ -32,6 +32,7 @@ export type DesktopLyricsBarProps = {
   artworkUrl: string | null;
   durationMs?: number | null;
   plainLyric: string | null;
+  wordSyncedLyric?: string | null;
   translatedLyric?: string | null;
   romanizedLyric?: string | null;
   showTranslation?: boolean;
@@ -67,6 +68,7 @@ export function DesktopLyricsBar({
   artworkUrl,
   durationMs,
   plainLyric,
+  wordSyncedLyric = null,
   translatedLyric = null,
   romanizedLyric = null,
   showTranslation = true,
@@ -152,7 +154,9 @@ export function DesktopLyricsBar({
   }, []);
 
   // Parse lyrics
-  const lines = useMemo(() => parseRoomLyrics(plainLyric), [plainLyric]);
+  const lines = useMemo(() => parseRoomLyrics(
+    wordSyncedLyric || plainLyric
+  ), [plainLyric, wordSyncedLyric]);
   const translatedLines = useMemo(() => parseRoomLyrics(translatedLyric), [translatedLyric]);
   const romanizedLines = useMemo(() => parseRoomLyrics(romanizedLyric), [romanizedLyric]);
 

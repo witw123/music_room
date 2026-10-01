@@ -18,6 +18,7 @@ type BridgeState = {
     artworkUrl: string | null;
     durationMs?: number | null;
     plainLyric: string | null;
+    wordSyncedLyric?: string | null;
     translatedLyric?: string | null;
     romanizedLyric?: string | null;
   } | null;
@@ -267,6 +268,7 @@ export function DesktopLyricsWindowApp() {
           canControl={canControl}
           isPlaying={state.isPlaying}
           plainLyric={track?.plainLyric ?? null}
+          wordSyncedLyric={track?.wordSyncedLyric ?? null}
           translatedLyric={track?.translatedLyric ?? null}
           romanizedLyric={track?.romanizedLyric ?? null}
           showTranslation={state.showTranslation}

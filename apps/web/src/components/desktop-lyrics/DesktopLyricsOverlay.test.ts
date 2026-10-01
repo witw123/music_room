@@ -29,12 +29,15 @@ describe("desktop lyrics integration", () => {
 
   it("renders the combined karaoke bar with transport and word-by-word fill", () => {
     const barSource = readFileSync(new URL("./DesktopLyricsBar.tsx", import.meta.url), "utf8");
+    const contextSource = readFileSync(new URL("../../features/playback/desktop-lyrics-context.tsx", import.meta.url), "utf8");
 
     expect(barSource).toContain("上一首");
     expect(barSource).toContain("下一首");
     expect(barSource).toContain("关闭桌面歌词");
     expect(barSource).toContain("getRoomLyricWordProgress");
     expect(barSource).toContain("backgroundClip");
+    expect(contextSource).toContain("wordSyncedLyric: lyrics.wordSyncedLyric");
+    expect(barSource).toContain("wordSyncedLyric || plainLyric");
   });
 
   it("hosts the lyrics window for the Tauri shell and hides the in-page overlay there", () => {
