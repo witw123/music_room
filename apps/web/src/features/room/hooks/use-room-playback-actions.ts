@@ -88,6 +88,19 @@ export function useRoomPlaybackActions({
       }
 
       try {
+        if (isCurrentSourceOwner) {
+          // The source path is driven by Web Audio. After a long pause the
+          // concrete media element used for priming may be stale or blocked,
+          // while the shared context can still be resumed immediately.
+          // Do not make room playback wait for that unrelated element promise.
+          const contextReady = await roomAudioOutput.resumeSharedAudioContext();
+          if (contextReady) {
+            setAudioUnlocked(true);
+            setLastSourceStartError(null);
+            void roomAudioOutput.primeOutputs({ localAudio: audioRef.current });
+            return true;
+          }
+        }
         await roomAudioOutput.primeOutputs({ localAudio: audioRef.current });
         const audioReady = isSegmentedAudioOutputReady();
         setAudioUnlocked(audioReady);
@@ -145,6 +158,7 @@ export function useRoomPlaybackActions({
     [
       recordPeerDiagnostic,
       audioRef,
+      isCurrentSourceOwner,
       setAudioUnlocked,
       setLastSourceStartError,
       setStatusMessage

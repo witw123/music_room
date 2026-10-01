@@ -49,6 +49,10 @@ export class RoomAudioOutput {
     return roomAudioActivationManager.activateOutputs(input);
   }
 
+  async resumeSharedAudioContext() {
+    return roomAudioActivationManager.resumeSharedAudioContext();
+  }
+
   async playElement(
     element: HTMLAudioElement | null | undefined,
     options?: RoomAudioElementPlayOptions
