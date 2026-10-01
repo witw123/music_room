@@ -441,14 +441,24 @@ export function applyUiScale(scale: number): number {
     }
     const normalized = Math.min(2, Math.max(0.5, scale));
     const isDefault = Math.abs(normalized - 1) < 0.001;
+
+    // 桌面端(Tauri):调用原生 webview zoom(等效浏览器 Ctrl+滚轮),
+    // 等比缩放全部内容且 viewport 断点同步适应,与浏览器端缩放体验完全一致。
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>; core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } } }).__TAURI_INTERNALS__;
+      void (internals?.core?.invoke ?? internals?.invoke)?.("set_ui_zoom", { scale: isDefault ? 1 : normalized })?.catch(() => undefined);
+      document.documentElement.style.setProperty("--ui-scale", String(normalized));
+      document.documentElement.dataset.uiScale = String(normalized);
+      return normalized;
+    }
+
+    // 浏览器/安卓:根字号方案(Tailwind 全量 rem,改根 font-size 即等比缩放)
     if (isDefault) {
       document.documentElement.style.removeProperty("font-size");
       document.documentElement.style.removeProperty("--ui-scale");
       delete document.documentElement.dataset.uiScale;
     } else {
-      // 根字号方案:Tailwind 全量使用 rem,改根 font-size 即等比缩放全部 UI,
-      // 且不影响 viewport 断点、fixed 定位和 dvh 单位(zoom 方案在这些场景下失效)。
-      document.documentElement.style.fontSize = `${16 * normalized}px`;
+      document.documentElement.style.fontSize = 16 * normalized + "px";
       document.documentElement.style.setProperty("--ui-scale", String(normalized));
       document.documentElement.dataset.uiScale = String(normalized);
     }

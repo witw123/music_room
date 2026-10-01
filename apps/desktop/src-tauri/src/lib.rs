@@ -156,6 +156,21 @@ async fn get_app_version(app: AppHandle) -> Result<String, String> {
     Ok(app.package_info().version.to_string())
 }
 
+/// 设置 webview 原生缩放(等效浏览器 Ctrl+滚轮缩放):
+/// 等比缩放全部内容(文字/图片/布局/fixed 元素),viewport 断点同步适应,
+/// 与浏览器端缩放体验完全一致。
+#[command]
+async fn set_ui_zoom(app: AppHandle, scale: f64) -> Result<(), String> {
+    let clamped = scale.clamp(0.5, 2.0);
+    if let Some(window) = app.get_webview_window("main") {
+        window
+            .set_zoom(clamped)
+            .map_err(|e| format!("Failed to set zoom: {e}"))
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
 #[command]
 async fn focus_main_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
@@ -235,6 +250,7 @@ pub fn run() {
             drag_desktop_lyrics_window,
             set_desktop_lyrics_size,
             get_app_version,
+            set_ui_zoom,
             focus_main_window,
             open_external_url
         ])
