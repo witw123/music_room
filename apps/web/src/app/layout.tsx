@@ -20,12 +20,7 @@ const themeInitScript = `(() => {
     if (!isLyricsWindow && value && value.layout && typeof value.layout.uiScale === "number" && isFinite(value.layout.uiScale)) {
       const scale = Math.min(2, Math.max(0.5, value.layout.uiScale));
       var tauriInvoke = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) || window.__TAURI_INTERNALS__.invoke;
-      if (tauriInvoke) tauriInvoke("set_ui_zoom", { scale: scale }).catch(function() {});
-      if (Math.abs(scale - 1) >= 0.001) {
-        document.documentElement.style.fontSize = 16 * scale + "px";
-      } else {
-        document.documentElement.style.removeProperty("font-size");
-      }
+      if (tauriInvoke) tauriInvoke("set_ui_zoom", { scale: scale }).catch(function(err) { console.error("[ui-scale]", err); });
       document.documentElement.style.setProperty("--ui-scale", String(scale));
       document.documentElement.dataset.uiScale = String(scale);
     }
