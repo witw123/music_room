@@ -1,5 +1,4 @@
 import type { PlaybackMode } from "@music-room/shared";
-import { invokeTauri } from "@/lib/desktop/tauri";
 
 export const appSettingsStorageKey = "music-room-settings-v1";
 export const appSettingsChangeEvent = "music-room-settings-change";
