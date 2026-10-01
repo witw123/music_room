@@ -265,22 +265,19 @@ export function DesktopLyricsBar({
       return;
     }
 
+    // 始终使用干净锚点(位置 + 时间戳对),与沉浸式播放器的 ImmersivePositionProvider
+    // 一致。旧实现用加权混合(0.7 * 插值 + 0.3 * 新进度)导致 baseMs 不是真实位置,
+    // rAF 从它推进时逐字填色出现两段跳变。
     const currentInterpolated =
       anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs);
     const drift = Math.abs(currentInterpolated - progressMs);
-
     if (drift > 200) {
-      anchorRef.current = {
-        baseMs: progressMs,
-        receivedAtMs: now
-      };
       applyProgress(progressMs);
-    } else {
-      anchorRef.current = {
-        baseMs: currentInterpolated * 0.7 + progressMs * 0.3,
-        receivedAtMs: now
-      };
     }
+    anchorRef.current = {
+      baseMs: progressMs,
+      receivedAtMs: now
+    };
   }, [applyProgress, anchorAt, isPlaying, progressMs]);
 
   useEffect(() => {
