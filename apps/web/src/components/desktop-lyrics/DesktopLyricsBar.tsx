@@ -381,7 +381,7 @@ export function DesktopLyricsBar({
     >
       {/* Left: Album Cover Thumbnail + Song Name, Artist, and Duration Time (Only visible when clicked) */}
       <div
-        className={`flex shrink-0 items-center overflow-hidden transition-all duration-300 ${
+        className={`flex shrink-0 items-center overflow-hidden transition-all duration-300 ease-out ${
           isExpanded ? "opacity-100 max-w-[20rem] mr-2" : "opacity-0 max-w-0 mr-0 pointer-events-none"
         }`}
       >
@@ -507,8 +507,8 @@ export function DesktopLyricsBar({
 
       {/* Right: Floating Controls (Only visible when clicked, NO dark pill background) */}
       <div
-        className={`flex shrink-0 items-center gap-1.5 cursor-default transition-all duration-200 ${
-          isExpanded ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-2"
+        className={`flex shrink-0 items-center gap-1.5 overflow-hidden cursor-default transition-all duration-300 ease-out ${
+          isExpanded ? "opacity-100 max-w-[16rem] translate-x-0" : "opacity-0 max-w-0 pointer-events-none translate-x-2"
         }`}
       >
         <div className="flex items-center gap-1.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">

@@ -442,13 +442,13 @@ export function applyUiScale(scale: number): number {
     const normalized = Math.min(2, Math.max(0.5, scale));
     const isDefault = Math.abs(normalized - 1) < 0.001;
     if (isDefault) {
-      document.documentElement.style.removeProperty("zoom");
-      (document.documentElement.style as unknown as { zoom?: string }).zoom = "";
+      document.documentElement.style.removeProperty("font-size");
       document.documentElement.style.removeProperty("--ui-scale");
       delete document.documentElement.dataset.uiScale;
     } else {
-      document.documentElement.style.setProperty("zoom", String(normalized));
-      (document.documentElement.style as unknown as { zoom?: string }).zoom = String(normalized);
+      // 根字号方案:Tailwind 全量使用 rem,改根 font-size 即等比缩放全部 UI,
+      // 且不影响 viewport 断点、fixed 定位和 dvh 单位(zoom 方案在这些场景下失效)。
+      document.documentElement.style.fontSize = `${16 * normalized}px`;
       document.documentElement.style.setProperty("--ui-scale", String(normalized));
       document.documentElement.dataset.uiScale = String(normalized);
     }

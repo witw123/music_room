@@ -20,7 +20,7 @@ const themeInitScript = `(() => {
     if (!isLyricsWindow && value && value.layout && typeof value.layout.uiScale === "number" && isFinite(value.layout.uiScale)) {
       const scale = Math.min(2, Math.max(0.5, value.layout.uiScale));
       if (Math.abs(scale - 1) >= 0.001) {
-        document.documentElement.style.zoom = String(scale);
+        document.documentElement.style.fontSize = 16 * scale + "px";
         document.documentElement.style.setProperty("--ui-scale", String(scale));
         document.documentElement.dataset.uiScale = String(scale);
       }
