@@ -78,6 +78,7 @@ export function AnnouncementBanner() {
   const [isDismissed, setIsDismissed] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<SystemAnnouncement | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => readDismissedIds());
 
   // Sync dismissed state when active announcements change
   useEffect(() => {
@@ -86,7 +87,7 @@ export function AnnouncementBanner() {
       return;
     }
     const dismissed = readDismissedIds();
-    // If all current announcements have already been dismissed, stay in default icon state
+    setDismissedIds(dismissed);
     const allDismissed = announcements.every((item) => dismissed.has(item.id));
     setIsDismissed(allDismissed);
   }, [announcements]);
@@ -129,10 +130,25 @@ export function AnnouncementBanner() {
   }, [containerWidth, currentAnnouncementText]);
 
   function handleDismissMarquee() {
-    const dismissed = readDismissedIds();
-    announcements.forEach((item) => dismissed.add(item.id));
-    writeDismissedIds(dismissed);
-    setIsDismissed(true);
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      announcements.forEach((item) => next.add(item.id));
+      writeDismissedIds(next);
+      setIsDismissed(true);
+      return next;
+    });
+  }
+
+  function handleMarkAsRead(id: string) {
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      writeDismissedIds(next);
+      if (announcements.every((item) => next.has(item.id))) {
+        setIsDismissed(true);
+      }
+      return next;
+    });
   }
 
   function handleOpenModal(item?: SystemAnnouncement) {
@@ -142,9 +158,8 @@ export function AnnouncementBanner() {
 
   const hasUnread = useMemo(() => {
     if (!announcements.length) return false;
-    const dismissed = readDismissedIds();
-    return announcements.some((item) => !dismissed.has(item.id));
-  }, [announcements]);
+    return announcements.some((item) => !dismissedIds.has(item.id));
+  }, [announcements, dismissedIds]);
 
   return (
     <>
@@ -255,7 +270,9 @@ export function AnnouncementBanner() {
         <AnnouncementDialogModal
           announcements={announcements}
           selectedAnnouncement={selectedAnnouncement}
+          dismissedIds={dismissedIds}
           onSelectAnnouncement={setSelectedAnnouncement}
+          onMarkAsRead={handleMarkAsRead}
           onClose={() => {
             setIsModalOpen(false);
             setSelectedAnnouncement(null);
@@ -272,12 +289,16 @@ export function AnnouncementBanner() {
 function AnnouncementDialogModal({
   announcements,
   selectedAnnouncement,
+  dismissedIds,
   onSelectAnnouncement,
+  onMarkAsRead,
   onClose
 }: {
   announcements: SystemAnnouncement[];
   selectedAnnouncement: SystemAnnouncement | null;
+  dismissedIds: Set<string>;
   onSelectAnnouncement: (item: SystemAnnouncement | null) => void;
+  onMarkAsRead: (id: string) => void;
   onClose: () => void;
 }) {
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(() =>
@@ -405,13 +426,24 @@ function AnnouncementDialogModal({
               </div>
 
               <div className="pt-2 flex justify-end">
-                <Button
-                  size="sm"
-                  onClick={() => onSelectAnnouncement(null)}
-                  className="rounded-xl px-4 text-xs h-8"
-                >
-                  返回列表
-                </Button>
+                {dismissedIds.has(selectedAnnouncement.id) ? (
+                  <Button
+                    size="sm"
+                    disabled
+                    variant="outline"
+                    className="rounded-xl px-4 text-xs h-8 border-surface-border text-foreground-muted/60 opacity-60 cursor-not-allowed"
+                  >
+                    已读
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => onMarkAsRead(selectedAnnouncement.id)}
+                    className="rounded-xl px-4 text-xs h-8"
+                  >
+                    已读
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -429,55 +461,73 @@ function AnnouncementDialogModal({
                 </div>
               ) : (
                 <div className="divide-y divide-surface-border/50">
-                  {announcements.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onSelectAnnouncement(item)}
-                      className="group flex w-full items-center justify-between gap-3 px-2 py-3 text-left transition-colors hover:bg-surface-hover/70 rounded-xl cursor-pointer"
-                    >
-                      {/* 左侧圆形图标与信息 */}
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface border border-surface-border text-foreground-muted group-hover:text-accent group-hover:border-accent/40 transition-colors">
-                          <svg
-                            aria-hidden="true"
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <circle cx="12" cy="12" r="9" />
-                            <polyline points="9 12 11 14 15 10" />
-                          </svg>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="truncate text-sm font-medium text-foreground group-hover:text-accent transition-colors">
-                            {item.title}
-                          </h4>
-                          <p className="text-[11px] text-foreground-muted mt-0.5">
-                            {formatRelativeTime(item.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* 右侧箭头 */}
-                      <svg
-                        className="h-4 w-4 text-foreground-muted/40 group-hover:text-foreground-muted shrink-0 transition-transform group-hover:translate-x-0.5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                  {announcements.map((item) => {
+                    const isRead = dismissedIds.has(item.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectAnnouncement(item)}
+                        className="group flex w-full items-center justify-between gap-3 px-2 py-3 text-left transition-colors hover:bg-surface-hover/70 rounded-xl cursor-pointer"
                       >
-                        <polyline points="9 18 15 12 9 6" />
-                      </svg>
-                    </button>
-                  ))}
+                        {/* 左侧圆形图标与信息 */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div
+                            className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface border transition-colors ${
+                              isRead
+                                ? "border-surface-border text-foreground-muted/60"
+                                : "border-accent/30 text-accent group-hover:border-accent/50"
+                            }`}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <circle cx="12" cy="12" r="9" />
+                              <polyline points="9 12 11 14 15 10" />
+                            </svg>
+                            {!isRead ? (
+                              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-background-secondary" />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4
+                              className={`truncate text-sm transition-colors ${
+                                isRead
+                                  ? "font-normal text-foreground/80 group-hover:text-foreground"
+                                  : "font-semibold text-foreground group-hover:text-accent"
+                              }`}
+                            >
+                              {item.title}
+                            </h4>
+                            <p className="text-[11px] text-foreground-muted mt-0.5">
+                              {formatRelativeTime(item.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* 右侧箭头 */}
+                        <svg
+                          className="h-4 w-4 text-foreground-muted/40 group-hover:text-foreground-muted shrink-0 transition-transform group-hover:translate-x-0.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
