@@ -4,12 +4,6 @@
  * and the Tauri desktop window.
  */
 
-type TauriGlobal = {
-  core?: {
-    invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
-  };
-};
-
 type CapacitorGlobal = {
   isNativePlatform?: () => boolean;
   Plugins?: Record<string, Record<string, (args?: Record<string, unknown>) => Promise<unknown>> | undefined>;
