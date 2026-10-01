@@ -55,6 +55,21 @@ export async function resolveCurrentAppVersion(): Promise<string> {
       return shellVersion.trim();
     }
   }
+  // Capacitor 安卓:APK 通过 server.url 加载远端 web,web 的构建版本
+  // 永远等于服务器的而不是 APK 自身的;必须读原生 App 插件的 versionName。
+  if (isCapacitorRuntime()) {
+    try {
+      const plugins = (window as unknown as {
+        Capacitor?: { Plugins?: { App?: { getInfo?: () => Promise<{ version?: string }> } } };
+      }).Capacitor?.Plugins;
+      const info = await plugins?.App?.getInfo?.();
+      if (info?.version && info.version.trim()) {
+        return info.version.trim();
+      }
+    } catch {
+      // 插件不可用时退回 web 版本
+    }
+  }
   return getCurrentAppVersion();
 }
 
