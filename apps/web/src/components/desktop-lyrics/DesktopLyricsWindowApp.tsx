@@ -65,7 +65,11 @@ function readSnapshot(): BridgeState {
     return {
       track: parsed.track ?? null,
       progressMs: typeof parsed.progressMs === "number" ? parsed.progressMs : 0,
-      anchorAt: typeof parsed.anchorAt === "number" ? parsed.anchorAt : Date.now(),
+      anchorAt: typeof parsed.anchorAt === "number"
+        ? parsed.anchorAt
+        : typeof (parsed as { at?: number }).at === "number"
+          ? (parsed as { at?: number }).at!
+          : Date.now(),
       isPlaying: parsed.isPlaying === true,
       canControl: parsed.canControl === true,
       showTranslation: parsed.showTranslation !== false,
@@ -132,12 +136,17 @@ export function DesktopLyricsWindowApp() {
 
     const channel = new BroadcastChannel(bridgeChannelName);
     channel.onmessage = (event) => {
-      const data = event.data as Partial<BridgeState> & { type?: string } | null;
+      const data = event.data as Partial<BridgeState> & { type?: string; at?: number; anchorAt?: number } | null;
       if (!data || data.type !== "state") return;
+      const anchorAt = typeof data.anchorAt === "number"
+        ? data.anchorAt
+        : typeof data.at === "number"
+          ? data.at
+          : Date.now();
       setState((prev) => ({
         track: data.track !== undefined ? data.track : prev.track,
         progressMs: typeof data.progressMs === "number" ? data.progressMs : prev.progressMs,
-        anchorAt: typeof data.anchorAt === "number" ? data.anchorAt : Date.now(),
+        anchorAt,
         isPlaying: data.isPlaying !== undefined ? data.isPlaying === true : prev.isPlaying,
         canControl: data.canControl !== undefined ? data.canControl === true : prev.canControl,
         showTranslation: data.showTranslation !== undefined ? data.showTranslation : prev.showTranslation,
@@ -152,7 +161,7 @@ export function DesktopLyricsWindowApp() {
     };
   }, []);
 
-  const postCommand = useCallback((action: "prev" | "toggle" | "next" | "toggleTranslation" | "toggleRomanized", extra?: Record<string, unknown>) => {
+  const postCommand = useCallback((action: "prev" | "toggle" | "next" | "toggleTranslation" | "toggleRomanized" | "close", extra?: Record<string, unknown>) => {
     channelRef.current?.postMessage({ type: "command", action, ...extra });
   }, []);
 
@@ -277,7 +286,10 @@ export function DesktopLyricsWindowApp() {
             channelRef.current?.postMessage({ type: "command", action: "setScale", scale });
           }}
           anchorAt={state.anchorAt}
-          onClose={() => void invokeTauri("hide_desktop_lyrics_window")}
+          onClose={() => {
+            postCommand("close");
+            void invokeTauri("hide_desktop_lyrics_window");
+          }}
           onPointerDown={handleBarPointerDown}
           onNext={() => postCommand("next")}
           onPrev={() => postCommand("prev")}

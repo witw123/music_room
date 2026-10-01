@@ -180,6 +180,7 @@ export function DesktopLyricsBar({
     [lines, activeIndex]
   );
   displayWordsRef.current = displayWords;
+  wordElsRef.current = new Array(displayWords.length);
   // Fresh line renders start unfilled; the rAF/paused apply below rewrites buckets
   // immediately, and resetting per render keeps stale buckets from leaking across lines.
   wordFillStatesRef.current = new Array(displayWords.length).fill("");
@@ -204,10 +205,27 @@ export function DesktopLyricsBar({
       const bucket = progress >= 1 ? "full" : progress <= 0 ? "empty" : "filling";
       if (bucket === states[index] && bucket !== "filling") continue;
       states[index] = bucket;
-      el.style.setProperty(
-        "--word-fill",
-        bucket === "full" ? "100%" : bucket === "empty" ? "0%" : `${(progress * 100).toFixed(1)}%`
-      );
+      if (bucket === "full") {
+        el.style.backgroundImage = "none";
+        el.style.removeProperty("background-clip");
+        el.style.removeProperty("-webkit-background-clip");
+        el.style.color = "rgb(255 255 255)";
+        el.style.opacity = "1";
+      } else if (bucket === "empty") {
+        el.style.backgroundImage = "none";
+        el.style.removeProperty("background-clip");
+        el.style.removeProperty("-webkit-background-clip");
+        el.style.color = "rgb(255 255 255 / 0.35)";
+        el.style.opacity = "0.35";
+      } else {
+        const fillPercent = `${(progress * 100).toFixed(1)}%`;
+        el.style.setProperty("--word-fill", fillPercent);
+        el.style.backgroundImage = `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${fillPercent}, rgb(255 255 255 / 0.35) ${fillPercent}, rgb(255 255 255 / 0.35) 100%)`;
+        el.style.setProperty("background-clip", "text");
+        el.style.setProperty("-webkit-background-clip", "text");
+        el.style.color = "transparent";
+        el.style.opacity = "1";
+      }
     }
 
     const container = containerRef.current;
@@ -237,12 +255,33 @@ export function DesktopLyricsBar({
   }, []);
 
   useEffect(() => {
-    anchorRef.current = {
-      baseMs: progressMs,
-      receivedAtMs: typeof performance !== "undefined" ? performance.now() : Date.now()
-    };
-    applyProgress(progressMs);
-  }, [applyProgress, anchorAt, progressMs]);
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!isPlaying) {
+      anchorRef.current = {
+        baseMs: progressMs,
+        receivedAtMs: now
+      };
+      applyProgress(progressMs);
+      return;
+    }
+
+    const currentInterpolated =
+      anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs);
+    const drift = Math.abs(currentInterpolated - progressMs);
+
+    if (drift > 200) {
+      anchorRef.current = {
+        baseMs: progressMs,
+        receivedAtMs: now
+      };
+      applyProgress(progressMs);
+    } else {
+      anchorRef.current = {
+        baseMs: currentInterpolated * 0.7 + progressMs * 0.3,
+        receivedAtMs: now
+      };
+    }
+  }, [applyProgress, anchorAt, isPlaying, progressMs]);
 
   useEffect(() => {
     applyProgress(anchorRef.current.baseMs);
@@ -254,12 +293,9 @@ export function DesktopLyricsBar({
       return;
     }
     let animationFrameId = 0;
-    let lastUpdateAt = 0;
     const tick = (now: number) => {
-      if (now - lastUpdateAt >= 32) {
-        lastUpdateAt = now;
-        applyProgress(anchorRef.current.baseMs + Math.max(0, now - anchorRef.current.receivedAtMs));
-      }
+      const elapsed = Math.max(0, now - anchorRef.current.receivedAtMs);
+      applyProgress(anchorRef.current.baseMs + elapsed);
       animationFrameId = window.requestAnimationFrame(tick);
     };
     animationFrameId = window.requestAnimationFrame(tick);
@@ -393,8 +429,8 @@ export function DesktopLyricsBar({
         {/* Main Lyric Line Wrapper (auto-scrolls horizontally if text is longer than viewport) */}
         <div
           ref={textContentRef}
-          className={`whitespace-nowrap transition-transform drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] ${
-            overflowPx > 0 ? "duration-200 ease-linear self-start text-left" : "self-center text-center"
+          className={`whitespace-nowrap drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] ${
+            overflowPx > 0 ? "self-start text-left" : "self-center text-center"
           } font-bold tracking-tight text-white leading-tight`}
           style={{
             fontSize: `${baseFontSize}px`
@@ -404,34 +440,47 @@ export function DesktopLyricsBar({
             displayWords.map((word, wordIndex) => {
               if (!word.text.trim()) {
                 return (
-                  <span className="inline whitespace-pre text-white/65 font-bold" key={wordIndex}>
+                  <span className="inline whitespace-pre text-white/35 font-bold" key={wordIndex}>
                     {word.text}
                   </span>
                 );
               }
               const progress = getRoomLyricWordProgress(word, lastPositionRef.current);
-              const fillPercent = progress >= 1
+              const isFull = progress >= 1;
+              const isEmpty = progress <= 0;
+              const fillPercent = isFull
                 ? "100%"
-                : progress <= 0
+                : isEmpty
                   ? "0%"
                   : `${(progress * 100).toFixed(1)}%`;
               return (
                 <span
-                  className="inline-block whitespace-pre font-bold"
+                  className="inline-block whitespace-pre font-bold will-change-[background-image,color,opacity]"
                   key={wordIndex}
                   ref={(el) => {
                     wordElsRef.current[wordIndex] = el;
                   }}
-                  style={{
-                    "--word-fill": fillPercent,
-                    backgroundImage:
-                      "linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) var(--word-fill, 0%), rgb(255 255 255 / 0.65) var(--word-fill, 0%), rgb(255 255 255 / 0.65) 100%)",
-                    backgroundClip: "text",
-                    WebkitBackgroundClip: "text",
-                    color: "transparent",
-                    WebkitBoxDecorationBreak: "clone",
-                    boxDecorationBreak: "clone"
-                  } as CSSProperties}
+                  style={
+                    isFull
+                      ? {
+                          color: "rgb(255 255 255)",
+                          opacity: 1
+                        }
+                      : isEmpty
+                        ? {
+                            color: "rgb(255 255 255 / 0.35)",
+                            opacity: 0.35
+                          }
+                        : ({
+                            "--word-fill": fillPercent,
+                            backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${fillPercent}, rgb(255 255 255 / 0.35) ${fillPercent}, rgb(255 255 255 / 0.35) 100%)`,
+                            backgroundClip: "text",
+                            WebkitBackgroundClip: "text",
+                            color: "transparent",
+                            WebkitBoxDecorationBreak: "clone",
+                            boxDecorationBreak: "clone"
+                          } as CSSProperties)
+                  }
                 >
                   {word.text}
                 </span>

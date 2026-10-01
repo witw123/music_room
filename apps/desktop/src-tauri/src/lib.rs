@@ -6,7 +6,7 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     webview::WebviewWindowBuilder,
-    AppHandle, Manager, PhysicalPosition, WebviewUrl, WindowEvent,
+    AppHandle, Manager, PhysicalPosition, Url, WebviewUrl, WindowEvent,
 };
 
 // The desktop lyrics window: a compact always-on-top bar that shows the
@@ -76,11 +76,18 @@ async fn toggle_desktop_lyrics(app: AppHandle) -> Result<bool, String> {
         return Ok(true);
     }
 
-    let Some(main) = app.get_webview_window("main") else {
-        return Ok(false);
-    };
-    let Ok(mut url) = main.url() else {
-        return Ok(false);
+    let mut url = match app.get_webview_window("main").and_then(|main| main.url().ok()) {
+        Some(url) => url,
+        None => {
+            #[cfg(debug_assertions)]
+            {
+                Url::parse("http://localhost:3000/desktop-lyrics").expect("valid dev fallback url")
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                Url::parse("https://musicroom.witw.top/desktop-lyrics").expect("valid fallback url")
+            }
+        }
     };
     url.set_path("/desktop-lyrics");
     url.set_query(Some("window=desktop-lyrics"));
@@ -167,15 +174,16 @@ async fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
 }
 
 fn position_lyrics_window(window: &tauri::WebviewWindow) {
-    let Some(main) = window.app_handle().get_webview_window("main") else {
+    let monitor = window
+        .app_handle()
+        .get_webview_window("main")
+        .and_then(|main| main.current_monitor().ok().flatten())
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
         return;
     };
-    let Ok(scale) = main.scale_factor() else {
-        return;
-    };
-    let Some(monitor) = main.current_monitor().ok().flatten() else {
-        return;
-    };
+    let scale = monitor.scale_factor();
     let monitor_size = monitor.size();
     let monitor_position = monitor.position();
     let width_px = (LYRICS_WIDTH * scale).round() as i32;

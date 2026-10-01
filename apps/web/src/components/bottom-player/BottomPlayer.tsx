@@ -486,14 +486,14 @@ function BottomPlayerBase({
     currentTrack,
     playbackTrackId: playback?.currentTrackId,
     isPlaying,
-    progressMs: boundedProgressMs,
+    progressMs: isPlaying ? getLiveProgressMs() : boundedProgressMs,
     anchorAt: Date.now(),
     artworkUrl,
     canControlPlayback: playerControlsEnabled,
     onPrev: playPrev,
     onTogglePlay: togglePlayback,
     onNext: playNext
-  }), [artworkUrl, boundedProgressMs, currentTrack, desktopLyricsSource, isPlaying, playback?.currentTrackId, playerControlsEnabled, playNext, playPrev, togglePlayback]);
+  }), [artworkUrl, boundedProgressMs, currentTrack, desktopLyricsSource, getLiveProgressMs, isPlaying, playback?.currentTrackId, playerControlsEnabled, playNext, playPrev, togglePlayback]);
   useDesktopLyricsRegistration(desktopLyricsPlayer);
 
   // System media surfaces (macOS Now Playing / Linux MPRIS / Android media

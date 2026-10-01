@@ -39,8 +39,21 @@ export async function invokeTauri<T = void>(
   if (!isTauriRuntime()) {
     return undefined;
   }
-  const tauri = (window as unknown as { __TAURI__?: TauriGlobal }).__TAURI__;
-  const invoke = tauri?.core?.invoke;
+  const win = window as unknown as {
+    __TAURI__?: {
+      core?: {
+        invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+      };
+      invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+    };
+    __TAURI_INTERNALS__?: {
+      invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+    };
+  };
+  const invoke =
+    win.__TAURI__?.core?.invoke ??
+    win.__TAURI__?.invoke ??
+    win.__TAURI_INTERNALS__?.invoke;
   if (!invoke) {
     return undefined;
   }
@@ -61,19 +74,32 @@ export async function listenTauri<T = unknown>(
   if (!isTauriRuntime()) {
     return undefined;
   }
-  const tauri = (
-    window as unknown as {
-      __TAURI__?: {
-        event?: {
-          listen?: (
-            event: string,
-            handler: (e: { payload: T }) => void
-          ) => Promise<() => void>;
-        };
+  const win = window as unknown as {
+    __TAURI__?: {
+      event?: {
+        listen?: (
+          event: string,
+          handler: (e: { payload: T }) => void
+        ) => Promise<() => void>;
       };
-    }
-  ).__TAURI__;
-  const listen = tauri?.event?.listen;
+      listen?: (
+        event: string,
+        handler: (e: { payload: T }) => void
+      ) => Promise<() => void>;
+    };
+    __TAURI_INTERNALS__?: {
+      event?: {
+        listen?: (
+          event: string,
+          handler: (e: { payload: T }) => void
+        ) => Promise<() => void>;
+      };
+    };
+  };
+  const listen =
+    win.__TAURI__?.event?.listen ??
+    win.__TAURI__?.listen ??
+    win.__TAURI_INTERNALS__?.event?.listen;
   if (!listen) {
     return undefined;
   }

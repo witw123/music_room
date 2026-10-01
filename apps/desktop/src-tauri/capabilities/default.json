@@ -3,6 +3,14 @@
   "identifier": "default",
   "description": "Default capability for Music Room desktop application",
   "windows": ["main", "lyrics"],
+  "remote": {
+    "urls": [
+      "https://musicroom.witw.top",
+      "https://musicroom.witw.top/*",
+      "http://localhost:*",
+      "http://localhost:*/*"
+    ]
+  },
   "permissions": [
     "core:default",
     "shell:default",
@@ -15,6 +23,9 @@
     "dialog:default",
     "global-shortcut:default",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "allow-desktop-lyrics",
+    "allow-app-management",
+    "allow-system-media"
   ]
 }

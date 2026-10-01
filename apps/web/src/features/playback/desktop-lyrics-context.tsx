@@ -358,6 +358,7 @@ export function DesktopLyricsProvider({
       if (data.action === "next" && player?.canControlPlayback) player.onNext();
       if (data.action === "toggleTranslation") toggleTranslation();
       if (data.action === "toggleRomanized") toggleRomanized();
+      if (data.action === "close") close();
       if (data.action === "setScale" && typeof data.scale === "number") {
         updateAppSettings({ playback: { desktopLyricScale: data.scale } });
       }
@@ -399,11 +400,14 @@ export function DesktopLyricsProvider({
     const now = Date.now();
     if (!structureChanged && now - lastBridgePostAtRef.current < 250) return;
     lastBridgeStructureKeyRef.current = bridgeStructureKey;
-    lastBridgePostAtRef.current = now;
+    const liveProgress = activePlayer && activeIsPlaying
+      ? Math.max(0, activePlayer.progressMs + (now - activePlayer.anchorAt))
+      : activeProgressMs;
     const payload = {
       type: "state" as const,
       at: now,
-      progressMs: activeProgressMs,
+      anchorAt: now,
+      progressMs: Math.round(liveProgress),
       isPlaying: activeIsPlaying,
       canControl: activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId),
       showTranslation,
@@ -468,7 +472,9 @@ export function DesktopLyricsProvider({
       // The async shell command reports the real post-toggle visibility;
       // optimistic state would drift when window creation fails.
       void invokeTauri<boolean>("toggle_desktop_lyrics").then((visible) => {
-        setIsOpen(visible === true);
+        if (typeof visible === "boolean") {
+          setIsOpen(visible);
+        }
       });
       return;
     }

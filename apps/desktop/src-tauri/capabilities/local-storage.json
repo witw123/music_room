@@ -4,7 +4,12 @@
   "description": "Fixed repository access for the main Music Room window",
   "windows": ["main"],
   "remote": {
-    "urls": ["https://musicroom.witw.top", "http://localhost:*"]
+    "urls": [
+      "https://musicroom.witw.top",
+      "https://musicroom.witw.top/*",
+      "http://localhost:*",
+      "http://localhost:*/*"
+    ]
   },
   "permissions": ["allow-local-storage"]
 }
