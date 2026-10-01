@@ -137,7 +137,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
       onClick={onActivateScroll}
     >
       <div
-        className={`hide-scrollbar min-h-0 flex-1 px-2.5 py-2 sm:px-3 sm:py-2.5 ${scrollEnabled ? "touch-pan-y overflow-y-auto overscroll-contain" : "overflow-hidden"}`}
+        className={`custom-scrollbar min-h-0 flex-1 px-2.5 py-2 sm:px-3 sm:py-2.5 ${scrollEnabled ? "touch-pan-y overflow-y-auto overscroll-contain" : "overflow-hidden"}`}
         onScroll={(event) => {
           if (event.currentTarget.scrollTop < 48) void loadOlder();
         }}

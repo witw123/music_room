@@ -536,7 +536,7 @@ export function RoomProviderTrackSearch({
             </div>
           </div>
 
-          <div className="max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-md border border-surface-border/40 bg-surface/40">
+          <div className="custom-scrollbar max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-md border border-surface-border/40 bg-surface/40">
             {bilibiliPartDetail.parts.map((part, index) => {
               const isInLibrary = libraryTrackIds.has(part.providerTrackId);
               const isPending = pendingTrackIds.has(part.providerTrackId);

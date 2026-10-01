@@ -397,7 +397,7 @@ function AnnouncementDialogModal({
         </div>
 
         {/* Modal Body: List View (Image 2) or Detail View */}
-        <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar pt-2">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pt-2">
           {selectedAnnouncement ? (
             /* 详情视图：展示单条公告完整内容与发布时间 */
             <div className="py-2 flex flex-col gap-3 animate-fade-in">
@@ -421,7 +421,7 @@ function AnnouncementDialogModal({
                 </p>
               </div>
 
-              <div className="rounded-xl border border-surface-border bg-surface/40 p-4 text-xs sm:text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed max-h-[46vh] overflow-y-auto hide-scrollbar font-sans select-text">
+              <div className="rounded-xl border border-surface-border bg-surface/40 p-4 text-xs sm:text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed max-h-[46vh] overflow-y-auto custom-scrollbar font-sans select-text">
                 {selectedAnnouncement.content}
               </div>
 

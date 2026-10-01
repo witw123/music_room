@@ -57,7 +57,7 @@ export function ConfirmDialog({
         aria-describedby="confirm-dialog-description"
         aria-labelledby="confirm-dialog-title"
         aria-modal="true"
-        className="light-dialog-surface max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-white/10 bg-surface p-5 shadow-2xl"
+        className="light-dialog-surface custom-scrollbar max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-lg border border-white/10 bg-surface p-5 shadow-2xl"
         role="alertdialog"
       >
         <h2 id="confirm-dialog-title" className="text-lg font-semibold text-foreground">{title}</h2>

@@ -173,13 +173,13 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             onChange={(tab) => setLeftTab(tab)}
             tabs={isHost ? hostLeftTabs : listenerLeftTabs}
           />
-          <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
             {panelsReady ? (
               leftTab === "queue" ? (
                 <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5 gap-2" data-testid="radio-queue-panel">
                   {/* Autopilot section placed directly at top of queue */}
                   <RadioAutopilotSection props={props} isHost={isHost} />
-                  <div className="flex-1 min-h-0 overflow-y-auto">
+                  <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                     <PlayerQueueList
                       canControlPlayback={props.canControlPlayback}
                       canRemoveQueue={props.canRemoveQueue}
@@ -285,12 +285,12 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
           </div>
         </div>
 
-        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
           {panelsReady ? (
             mobileTab === "queue" ? (
               <div className="flex h-full min-h-0 flex-col p-2 gap-2">
                 <RadioAutopilotSection props={props} isHost={isHost} />
-                <div className="flex-1 min-h-0 overflow-y-auto">
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                   <PlayerQueueList
                     canControlPlayback={props.canControlPlayback}
                     canRemoveQueue={props.canRemoveQueue}
@@ -427,7 +427,7 @@ function RadioLibraryList({
 function RadioMembersPanel(props: RoomDashboardViewProps & { membershipNow: number }) {
   return (
     <section className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl bg-background lg:rounded-none" data-testid="radio-members-panel">
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto p-2 sm:p-2.5">
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2 sm:p-2.5">
         <MembersPanel
           activeSessionId={props.activeSession?.userId ?? null}
           isHost={props.roomSnapshot.room.hostId === props.activeSession?.userId}

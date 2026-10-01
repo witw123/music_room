@@ -311,7 +311,7 @@ export function PlayerQueueList({
   }
 
   return (
-    <div className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-2 hide-scrollbar ${className}`}>
+    <div className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-2 custom-scrollbar ${className}`}>
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;

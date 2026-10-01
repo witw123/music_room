@@ -180,7 +180,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
   }, [handleTabChange]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain md:grid md:h-full md:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] md:overflow-hidden md:gap-0" data-custom-layout-room-root="true">
+    <div className="custom-scrollbar relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-y-auto overscroll-contain md:grid md:h-full md:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] md:overflow-hidden md:gap-0" data-custom-layout-room-root="true">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {props.isPlaying ? <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] md:left-[28%] md:top-1/4" /> : null}
       </div>
@@ -242,7 +242,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
             })}
           </div>
         </div>
-        <div aria-labelledby={`room-tab-${activeTab}`} className="hide-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
+        <div aria-labelledby={`room-tab-${activeTab}`} className="custom-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
           {panelsReady ? (
             <RoomManagementContent {...props} activeTab={activeTab} />
           ) : (

@@ -230,7 +230,7 @@ export function RoomLyricsPanel({
       <div className="relative min-h-0 flex-1 overflow-hidden" data-testid="room-lyrics-lines">
         <div
           ref={scrollContainerRef}
-          className={`hide-scrollbar h-full touch-pan-y overflow-y-auto ${lyricScrollPaddingClass}`}
+          className={`custom-scrollbar h-full touch-pan-y overflow-y-auto ${lyricScrollPaddingClass}`}
           style={{
             paddingTop: "clamp(2rem, 32%, 7.5rem)",
             paddingBottom: "clamp(2rem, 32%, 7.5rem)"

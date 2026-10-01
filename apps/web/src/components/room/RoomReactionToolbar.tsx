@@ -152,7 +152,7 @@ export function RoomReactionToolbar({
         {/* Dropdown Menu for choosing songs */}
         {showSelector && targetSongs.length > 0 && (
           <div
-            className={`absolute ${placementClass} w-72 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-surface border border-surface-border shadow-xl z-50 animate-fade-in hide-scrollbar`}
+            className={`absolute ${placementClass} w-72 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-surface border border-surface-border shadow-xl z-50 animate-fade-in custom-scrollbar`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-surface-border/40 mb-1">
@@ -251,7 +251,7 @@ export function RoomReactionToolbar({
         {/* Dropdown Menu for choosing members */}
         {showSelector && targetMembers.length > 0 && (
           <div
-            className={`absolute ${placementClass} w-64 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-surface border border-surface-border shadow-xl z-50 animate-fade-in hide-scrollbar`}
+            className={`absolute ${placementClass} w-64 max-h-64 overflow-y-auto overscroll-contain rounded-2xl p-2 bg-surface border border-surface-border shadow-xl z-50 animate-fade-in custom-scrollbar`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-surface-border/40 mb-1">
