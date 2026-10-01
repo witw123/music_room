@@ -371,7 +371,7 @@ export function DesktopLyricsProvider({
         bridgeChannelRef.current = null;
       }
     };
-  }, [hasActivePlayer, toggleRomanized, toggleTranslation]);
+  }, [close, hasActivePlayer, toggleRomanized, toggleTranslation]);
 
   const bridgeTrackPayload = useMemo(() => {
     if (!activeTrack) return null;
@@ -427,7 +427,7 @@ export function DesktopLyricsProvider({
         // Storage may be unavailable; the channel still keeps the window live.
       }
     }
-  }, [activeIsPlaying, activePlayer?.canControlPlayback, activePlayer?.playbackTrackId, activeProgressMs, bridgeStructureKey, bridgeTrackPayload, hasActivePlayer, showRomanized, showTranslation]);
+  }, [activeIsPlaying, activePlayer, activeProgressMs, bridgeStructureKey, bridgeTrackPayload, hasActivePlayer, showRomanized, showTranslation]);
 
   // ── Capacitor mobile shell: push anchors and char-level word timings to the
   // native SYSTEM_ALERT_WINDOW overlay; it interpolates and draws per frame. ──
