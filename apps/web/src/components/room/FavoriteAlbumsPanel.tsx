@@ -172,43 +172,22 @@ export function FavoriteAlbumsPanel({
         // Gracefully continue
       }
 
-      // 导入全部曲目到曲库
-      const missingNetease: NeteaseTrackCandidate[] = [];
-      const missingQqMusic: QqMusicTrackCandidate[] = [];
-      const missingBilibili: BilibiliTrackCandidate[] = [];
-
-      for (const track of albumTracks) {
+      // 默认先导入第 1 首歌曲资产，其余歌曲在曲库歌单详情中按需加载
+      const firstCandidate = albumTracks[0] ?? null;
+      if (firstCandidate) {
         const alreadyInRoom = roomTracks.some(
           (t) =>
-            (t.sourceRef?.provider === track.provider && t.sourceRef?.trackId === track.providerTrackId) ||
-            t.id === track.providerTrackId
+            (t.sourceRef?.provider === firstCandidate.provider && t.sourceRef?.trackId === firstCandidate.providerTrackId) ||
+            t.id === firstCandidate.providerTrackId
         );
         if (!alreadyInRoom) {
-          if (track.provider === "netease") missingNetease.push(track as NeteaseTrackCandidate);
-          else if (track.provider === "qqmusic") missingQqMusic.push(track as QqMusicTrackCandidate);
-          else if (track.provider === "bilibili") missingBilibili.push(track as BilibiliTrackCandidate);
-        }
-      }
-
-      if (missingNetease.length > 0) {
-        if (onImportNeteaseTracks) {
-          await onImportNeteaseTracks(missingNetease);
-        } else if (onImportNeteaseTrack) {
-          for (const t of missingNetease) await onImportNeteaseTrack(t);
-        }
-      }
-      if (missingQqMusic.length > 0) {
-        if (onImportQqMusicTracks) {
-          await onImportQqMusicTracks(missingQqMusic);
-        } else if (onImportQqMusicTrack) {
-          for (const t of missingQqMusic) await onImportQqMusicTrack(t);
-        }
-      }
-      if (missingBilibili.length > 0) {
-        if (onImportBilibiliTracks) {
-          await onImportBilibiliTracks(missingBilibili);
-        } else if (onImportBilibiliTrack) {
-          for (const t of missingBilibili) await onImportBilibiliTrack(t);
+          if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
+            await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
+          } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
+            await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
+          } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
+            await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
+          }
         }
       }
 
@@ -236,8 +215,7 @@ export function FavoriteAlbumsPanel({
         await onRefreshRoom();
       }
 
-      const count = albumTracks.length || album.trackCount;
-      setLibraryFeedback(`已将收藏《${album.title}》加入曲库（包含 ${count} 首歌曲）。`);
+      setLibraryFeedback(`已将收藏《${album.title}》加入曲库（已导入首曲资产，其余歌曲可在曲库歌单中按需加载）。`);
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {

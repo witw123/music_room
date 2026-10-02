@@ -280,6 +280,13 @@ export class RoomService {
     return this.roomActivityService.listRecent(sessionId);
   }
 
+  async touchRoomRevision(roomId: string): Promise<number> {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.room.roomRevision ?? 0;
+  }
+
   async listOwnedRoomSnapshotsForSession(sessionId: string) {
     const records = await this.roomRecordRepository.listRecoverableRecords();
     return Promise.all(

@@ -112,6 +112,15 @@ function shouldReplaceAuthoritativeSnapshot(
     return false;
   }
 
+  const currentPlaylists = current.snapshot.playlists ?? [];
+  const incomingPlaylists = incoming.playlists ?? [];
+  if (
+    incomingPlaylists.length !== currentPlaylists.length ||
+    incomingPlaylists.some((p, i) => p.id !== currentPlaylists[i]?.id)
+  ) {
+    return true;
+  }
+
   if (current.source !== "authoritative" && source === "authoritative") {
     return true;
   }

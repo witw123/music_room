@@ -71,6 +71,7 @@ export class PlaylistController {
       ownerId: userId
     });
     if (payload.roomId) {
+      await this.roomService.touchRoomRevision(payload.roomId);
       await this.roomRealtimePublisher.emitSnapshot(
         payload.roomId,
         await this.playlistService.listPlaylistsForRoom(payload.roomId)
@@ -113,6 +114,7 @@ export class PlaylistController {
     const roomId = await this.playlistService.getRoomIdForPlaylist(playlistId);
     const result = await this.playlistService.deletePlaylist(playlistId, userId);
     if (roomId) {
+      await this.roomService.touchRoomRevision(roomId);
       await this.roomRealtimePublisher.emitSnapshot(
         roomId,
         await this.playlistService.listPlaylistsForRoom(roomId)
@@ -165,6 +167,7 @@ export class PlaylistController {
       ...payload,
       ownerId: userId
     });
+    await this.roomService.touchRoomRevision(payload.roomId);
     await this.roomRealtimePublisher.emitSnapshot(
       payload.roomId,
       await this.playlistService.listPlaylistsForRoom(payload.roomId)

@@ -434,8 +434,13 @@ function RoomLibraryPlaylistDetail({
   const roomProviderTrackKeys = useMemo(() => {
     return new Set(
       roomTracks.flatMap((track) => {
+        const keys = [track.id];
         const s = track.sourceRef;
-        return s ? [`${s.provider}:${s.trackId}`, `provider:${s.provider}:${s.trackId}`] : [];
+        if (s) {
+          keys.push(`${s.provider}:${s.trackId}`);
+          keys.push(`provider:${s.provider}:${s.trackId}`);
+        }
+        return keys;
       })
     );
   }, [roomTracks]);
@@ -444,7 +449,10 @@ function RoomLibraryPlaylistDetail({
     if (remoteTracks.length > 0) {
       return remoteTracks.map((t) => {
         const key = `${t.provider}:${t.providerTrackId}`;
-        const inRoom = roomProviderTrackKeys.has(key) || roomProviderTrackKeys.has(`provider:${key}`);
+        const inRoom =
+          roomProviderTrackKeys.has(key) ||
+          roomProviderTrackKeys.has(`provider:${key}`) ||
+          roomProviderTrackKeys.has(t.providerTrackId);
         return {
           id: key,
           title: t.title,

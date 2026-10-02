@@ -57,15 +57,15 @@ export function LocalPlaylistPanel({
     setAddingToLibraryId(playlist.id);
     setLibraryFeedback(null);
     try {
-      // 导入全部本地曲目
-      const roomFileHashes = new Set(roomTracks.map((t) => t.fileHash));
-      for (const trackId of playlist.trackIds) {
-        const track = tracksById.get(trackId);
-        if (track && track.fileHash && !roomFileHashes.has(track.fileHash)) {
-          const cached = toCachedLibraryTrack(track);
+      // 默认先导入第 1 首本地歌曲资产，其余歌曲在曲库歌单详情中按需加载
+      const firstTrackId = playlist.trackIds[0] ?? null;
+      const firstTrack = firstTrackId ? tracksById.get(firstTrackId) : null;
+      if (firstTrack && firstTrack.fileHash) {
+        const alreadyInRoom = roomTracks.some((t) => t.fileHash === firstTrack.fileHash);
+        if (!alreadyInRoom) {
+          const cached = toCachedLibraryTrack(firstTrack);
           if (cached) {
             await onImportCachedTrack(cached);
-            roomFileHashes.add(track.fileHash);
           }
         }
       }
@@ -83,7 +83,7 @@ export function LocalPlaylistPanel({
         await onRefreshRoom();
       }
 
-      setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库（包含 ${playlist.trackIds.length} 首歌曲）。`);
+      setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库（已导入首曲资产，其余歌曲可在曲库歌单中按需加载）。`);
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {
