@@ -183,6 +183,7 @@ export function DesktopLyricsBar({
     () => (activeIndex >= 0 ? getRoomLyricDisplayWords(lines, activeIndex) : []),
     [lines, activeIndex]
   );
+  const displayLineKey = activeLine?.id ?? "empty";
   displayWordsRef.current = displayWords;
   wordElsRef.current = new Array(displayWords.length);
   // Fresh line renders start unfilled; the rAF/paused apply below rewrites buckets
@@ -286,7 +287,7 @@ export function DesktopLyricsBar({
 
   useEffect(() => {
     applyProgress(anchorRef.current.baseMs);
-  }, [applyProgress, lines]);
+  }, [applyProgress, displayLineKey, displayWords]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -441,7 +442,7 @@ export function DesktopLyricsBar({
             displayWords.map((word, wordIndex) => {
               if (!word.text.trim()) {
                 return (
-                  <span className="inline whitespace-pre text-white/35 font-bold" key={wordIndex}>
+                  <span className="inline whitespace-pre text-white/35 font-bold" key={`${displayLineKey}:${wordIndex}`}>
                     {word.text}
                   </span>
                 );
@@ -457,7 +458,7 @@ export function DesktopLyricsBar({
               return (
                 <span
                   className="inline-block whitespace-pre font-bold will-change-[background-image,color,opacity]"
-                  key={wordIndex}
+                  key={`${displayLineKey}:${wordIndex}`}
                   ref={(el) => {
                     wordElsRef.current[wordIndex] = el;
                   }}

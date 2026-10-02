@@ -1,4 +1,5 @@
 import type { PlaybackMode } from "@music-room/shared";
+import { invokeTauri, isTauriRuntime } from "@/lib/desktop/tauri";
 
 export const appSettingsStorageKey = "music-room-settings-v1";
 export const appSettingsChangeEvent = "music-room-settings-change";
@@ -431,6 +432,14 @@ export function applyUiScale(scale: number): number {
   if (typeof document !== "undefined") {
     const normalized = Math.min(2, Math.max(0.5, scale));
     const isDefault = Math.abs(normalized - 1) < 0.001;
+    if (typeof window !== "undefined" && isTauriRuntime()) {
+      void invokeTauri("set_ui_zoom", { scale: normalized });
+      document.documentElement.style.removeProperty("font-size");
+      document.documentElement.style.removeProperty("zoom");
+      document.documentElement.style.setProperty("--ui-scale", String(normalized));
+      document.documentElement.dataset.uiScale = String(normalized);
+      return normalized;
+    }
     // CSS zoom scales the complete application surface, including fixed
     // controls and pixel-sized layout primitives. Root font-size alone leaves
     // those elements unchanged and makes the setting appear ineffective.

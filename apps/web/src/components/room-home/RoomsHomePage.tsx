@@ -228,7 +228,7 @@ export function RoomsHomePage({
   }
 
   return (
-    <main className="workspace-page home-workspace-page hide-scrollbar relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-60">
+    <main className="workspace-page home-workspace-page hide-scrollbar relative flex flex-col overflow-y-auto selection:bg-accent/30 selection:text-white md:pb-[calc(12rem+env(safe-area-inset-bottom))] md:pl-[var(--app-sidebar-width)]">
 
       {showSidebar ? (
         <AppSidebar
@@ -370,7 +370,7 @@ export function RoomsHomePage({
             <span className="text-[11px] text-foreground-muted">{visibleRooms.length} 个</span>
           </div>
           {visibleRooms.length ? (
-            <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 xl:gap-4">
+            <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3 xl:gap-4">
               {visibleRooms.map((item) => (
                 <RoomDirectoryCard
                   key={item.room.id}
