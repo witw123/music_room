@@ -436,8 +436,10 @@ export function applyUiScale(scale: number): number {
       void invokeTauri("set_ui_zoom", { scale: normalized });
       document.documentElement.style.removeProperty("font-size");
       document.documentElement.style.removeProperty("zoom");
+      document.body?.style.removeProperty("zoom");
       document.documentElement.style.setProperty("--ui-scale", String(normalized));
       document.documentElement.dataset.uiScale = String(normalized);
+      document.documentElement.dataset.uiScaleNative = "true";
       return normalized;
     }
     // CSS zoom scales the complete application surface, including fixed
@@ -446,12 +448,16 @@ export function applyUiScale(scale: number): number {
     if (isDefault) {
       document.documentElement.style.removeProperty("font-size");
       document.documentElement.style.removeProperty("zoom");
+      document.body?.style.removeProperty("zoom");
       document.documentElement.style.removeProperty("--ui-scale");
       delete document.documentElement.dataset.uiScale;
+      delete document.documentElement.dataset.uiScaleNative;
     } else {
-      document.documentElement.style.zoom = String(normalized);
+      document.documentElement.style.removeProperty("zoom");
+      document.body?.style.setProperty("zoom", String(normalized));
       document.documentElement.style.setProperty("--ui-scale", String(normalized));
       document.documentElement.dataset.uiScale = String(normalized);
+      delete document.documentElement.dataset.uiScaleNative;
     }
   }
   return scale;

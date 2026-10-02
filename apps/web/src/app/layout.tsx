@@ -26,8 +26,13 @@ const themeInitScript = `(() => {
         tauriInvoke("set_ui_zoom", { scale }).catch(function (error) {
           console.error("[ui-scale] Failed to set desktop zoom:", error);
         });
+        document.documentElement.dataset.uiScaleNative = "true";
       } else {
-        document.documentElement.style.zoom = String(scale);
+        document.documentElement.style.removeProperty("zoom");
+        if (document.body) {
+          document.body.style.zoom = String(scale);
+        }
+        delete document.documentElement.dataset.uiScaleNative;
       }
       document.documentElement.style.setProperty("--ui-scale", String(scale));
       document.documentElement.dataset.uiScale = String(scale);

@@ -209,6 +209,15 @@ describe("app settings store", () => {
         if (k === "zoom") style.zoom = "";
       }
     };
+    const bodyStyle = {
+      zoom: "",
+      setProperty: (k: string, v: string) => {
+        if (k === "zoom") bodyStyle.zoom = v;
+      },
+      removeProperty: (k: string) => {
+        if (k === "zoom") bodyStyle.zoom = "";
+      }
+    };
     const dataset: Record<string, string | undefined> = {};
 
     vi.stubGlobal("window", {
@@ -225,7 +234,8 @@ describe("app settings store", () => {
       documentElement: {
         dataset,
         style
-      }
+      },
+      body: { style: bodyStyle }
     });
 
     updateAppSettings({ layout: { uiScale: 1.1 } });
@@ -242,12 +252,12 @@ describe("app settings store", () => {
     applyUiScale(1.25);
     expect(dataset.uiScale).toBe("1.25");
     expect(styleMap.get("--ui-scale")).toBe("1.25");
-    expect(style.zoom).toBe("1.25");
+    expect(bodyStyle.zoom).toBe("1.25");
 
     applyUiScale(1);
     expect(dataset.uiScale).toBeUndefined();
     expect(styleMap.get("--ui-scale")).toBeUndefined();
-    expect(style.zoom).toBe("");
+    expect(bodyStyle.zoom).toBe("");
   });
 
   it("uses the native desktop zoom command when the Tauri bridge is available", async () => {
