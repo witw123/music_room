@@ -362,24 +362,30 @@ export function PlaylistPanel({
         }
       }
 
-      const tags = [...(playlist.tags || [])];
+      const tags = (playlist.tags || [])
+        .filter((t) => typeof t === "string" && t.trim().length > 0)
+        .map((t) => t.trim().slice(0, 100));
+
       if (source && !tags.some((t) => t.startsWith("network:"))) {
-        tags.push(`network:${source.provider}:${source.playlistId}`);
+        tags.push(`network:${source.provider}:${source.playlistId}`.slice(0, 100));
       }
       if (!tags.includes(`source_playlist:${playlist.id}`)) {
-        tags.push(`source_playlist:${playlist.id}`);
+        tags.push(`source_playlist:${playlist.id}`.slice(0, 100));
       }
 
-      const trackIds = allCandidates.length > 0
+      const rawTrackIds = allCandidates.length > 0
         ? allCandidates.map((t) => providerTrackKey(t.provider, t.providerTrackId))
         : playlist.trackIds;
+      const trackIds = rawTrackIds
+        .filter((id) => typeof id === "string" && id.trim().length > 0)
+        .slice(0, 1000);
 
       await musicRoomApi.createPlaylist({
-        title: playlist.title,
-        description: playlist.description,
+        title: (playlist.title || "未命名歌单").trim().slice(0, 160),
+        description: playlist.description ? playlist.description.trim().slice(0, 4000) : null,
         trackIds,
-        tags,
-        coverUrl: playlist.coverUrl,
+        tags: tags.slice(0, 50),
+        coverUrl: playlist.coverUrl || null,
         roomId: currentRoomId
       });
 

@@ -196,18 +196,23 @@ export function FavoriteAlbumsPanel({
         "favorite_album",
         `album:${album.provider}:${album.providerAlbumId}`,
         `source_album:${album.id}`
-      ];
+      ]
+        .map((t) => t.trim().slice(0, 100))
+        .slice(0, 50);
 
-      const trackIds = albumTracks.length > 0
+      const rawTrackIds = albumTracks.length > 0
         ? albumTracks.map((t) => providerTrackKey(t.provider, t.providerTrackId))
         : Array.from({ length: album.trackCount }, (_, i) => `network:${album.provider}:${album.providerAlbumId}:${i}`);
+      const trackIds = rawTrackIds
+        .filter((id) => typeof id === "string" && id.trim().length > 0)
+        .slice(0, 1000);
 
       await musicRoomApi.createPlaylist({
-        title: album.title,
-        description: album.description ?? `收藏专辑 / ${providerName(album.provider)}`,
+        title: (album.title || "未命名专辑").trim().slice(0, 160),
+        description: (album.description ?? `收藏专辑 / ${providerName(album.provider)}`).trim().slice(0, 4000),
         trackIds,
         tags,
-        coverUrl: album.artworkUrl,
+        coverUrl: album.artworkUrl || null,
         roomId: currentRoomId
       });
 

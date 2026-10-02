@@ -19,7 +19,7 @@ type PersistedPlaylistRecord = {
 };
 
 const maxPlaylistsPerUser = 100;
-const maxPlaylistTracks = 500;
+const maxPlaylistTracks = 1000;
 
 @Injectable()
 export class PlaylistService {

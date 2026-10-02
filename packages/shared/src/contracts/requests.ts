@@ -22,7 +22,7 @@ const optionalNullableText = (max: number) =>
     .optional();
 
 const stringId = trimmedString(160);
-const trackIdListSchema = z.array(stringId).max(500);
+const trackIdListSchema = z.array(stringId).max(1000);
 
 export const registerRequestSchema = z
   .object({
@@ -231,9 +231,9 @@ export const updatePlaybackRequestSchema = z
 export const createPlaylistRequestSchema = z
   .object({
     title: trimmedString(160),
-    description: optionalNullableText(1000),
+    description: optionalNullableText(5000),
     trackIds: trackIdListSchema.optional(),
-    tags: z.array(trimmedString(40)).max(20).optional(),
+    tags: z.array(trimmedString(128)).max(50).optional(),
     coverUrl: z.string().trim().max(4096).nullable().optional(),
     isCollaborative: z.boolean().optional(),
     roomId: z.string().trim().min(1).nullable().optional()
@@ -243,8 +243,8 @@ export const createPlaylistRequestSchema = z
 export const updatePlaylistRequestSchema = z
   .object({
     title: trimmedString(160).optional(),
-    description: optionalNullableText(1000),
-    tags: z.array(trimmedString(40)).max(20).optional(),
+    description: optionalNullableText(5000),
+    tags: z.array(trimmedString(128)).max(50).optional(),
     coverUrl: z.string().trim().max(4096).nullable().optional(),
     trackIds: trackIdListSchema.optional()
   })

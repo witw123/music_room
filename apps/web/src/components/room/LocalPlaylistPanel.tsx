@@ -70,11 +70,18 @@ export function LocalPlaylistPanel({
         }
       }
 
+      const tags = ["local_playlist", `source_playlist:${playlist.id}`]
+        .map((t) => t.trim().slice(0, 100))
+        .slice(0, 50);
+      const trackIds = playlist.trackIds
+        .filter((id) => typeof id === "string" && id.trim().length > 0)
+        .slice(0, 1000);
+
       await musicRoomApi.createPlaylist({
-        title: playlist.title,
-        description: playlist.description,
-        trackIds: playlist.trackIds,
-        tags: ["local_playlist", `source_playlist:${playlist.id}`],
+        title: (playlist.title || "未命名歌单").trim().slice(0, 160),
+        description: playlist.description ? playlist.description.trim().slice(0, 4000) : null,
+        trackIds,
+        tags,
         coverUrl: null,
         roomId: currentRoomId
       });
