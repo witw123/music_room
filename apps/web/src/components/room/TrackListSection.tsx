@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
 import { reorderWithPosition } from "@/components/bottom-player/PlayerQueueDrawer";
+import { findScrollableContainer, useDragAutoScroll } from "@/features/room/hooks/use-drag-auto-scroll";
 import { LocalAudioImport } from "./LocalAudioImport";
 import { TrackDistributionBadge } from "./TrackDistributionBadge";
 
@@ -77,6 +78,11 @@ function TrackListSectionBase({
   } | null>(null);
   const canReorderTracks = canManageLibrary && Boolean(onReorderTracks);
 
+  const sectionRef = useRef<HTMLElement>(null);
+  const draggingTrackIdRef = useRef<string | null>(null);
+  draggingTrackIdRef.current = draggingTrackId;
+  const renderedTracksRef = useRef<TrackMeta[]>([]);
+
   const touchReorderRef = useRef<{
     trackId: string;
     pointerId: number;
@@ -89,6 +95,58 @@ function TrackListSectionBase({
   } | null>(null);
   const touchReorderTimerRef = useRef<number | null>(null);
 
+  const { updateAutoScroll, stopAutoScroll } = useDragAutoScroll({
+    getScrollContainer: () => findScrollableContainer(sectionRef.current),
+    onScrollFrame: (point) => {
+      const draggingId = draggingTrackIdRef.current;
+      if (!draggingId) return;
+
+      const target = document
+        .elementFromPoint(point.x, point.y)
+        ?.closest<HTMLElement>("[data-track-id]");
+      if (target && target.dataset.trackId) {
+        const targetId = target.dataset.trackId;
+        const rect = target.getBoundingClientRect();
+        const position = point.y < rect.top + rect.height / 2 ? "before" : "after";
+        if (touchReorderRef.current?.active) {
+          touchReorderRef.current.targetTrackId = targetId;
+          touchReorderRef.current.targetPosition = position;
+        }
+        if (targetId !== draggingId) {
+          setDragOverTarget((prev) => {
+            if (prev?.trackId === targetId && prev.position === position) return prev;
+            return { trackId: targetId, position };
+          });
+        }
+      } else {
+        const container = findScrollableContainer(sectionRef.current);
+        const currentRendered = renderedTracksRef.current;
+        if (container && currentRendered.length > 0) {
+          const rect = container.getBoundingClientRect();
+          if (point.y > rect.bottom - 64) {
+            const lastTrackId = currentRendered[currentRendered.length - 1].id;
+            if (touchReorderRef.current?.active) {
+              touchReorderRef.current.targetTrackId = lastTrackId;
+              touchReorderRef.current.targetPosition = "after";
+            }
+            if (lastTrackId !== draggingId) {
+              setDragOverTarget({ trackId: lastTrackId, position: "after" });
+            }
+          } else if (point.y < rect.top + 64) {
+            const firstTrackId = currentRendered[0].id;
+            if (touchReorderRef.current?.active) {
+              touchReorderRef.current.targetTrackId = firstTrackId;
+              touchReorderRef.current.targetPosition = "before";
+            }
+            if (firstTrackId !== draggingId) {
+              setDragOverTarget({ trackId: firstTrackId, position: "before" });
+            }
+          }
+        }
+      }
+    }
+  });
+
   useEffect(() => {
     return () => {
       if (touchReorderTimerRef.current !== null) {
@@ -98,6 +156,7 @@ function TrackListSectionBase({
   }, []);
 
   function cancelTouchReorderTimer() {
+    stopAutoScroll();
     if (touchReorderTimerRef.current !== null) {
       window.clearTimeout(touchReorderTimerRef.current);
       touchReorderTimerRef.current = null;
@@ -105,6 +164,7 @@ function TrackListSectionBase({
   }
 
   const handleTrackDrop = async (targetTrackId: string, position: "before" | "after") => {
+    stopAutoScroll();
     if (!draggingTrackId || !canReorderTracks || !onReorderTracks) {
       setDraggingTrackId(null);
       setDragOverTarget(null);
@@ -166,6 +226,8 @@ function TrackListSectionBase({
     }
 
     event.preventDefault();
+    updateAutoScroll(event.clientX, event.clientY);
+
     const target = document.elementFromPoint(event.clientX, event.clientY)
       ?.closest<HTMLElement>("[data-track-id]");
     const targetTrackId = target?.dataset.trackId ?? current.trackId;
@@ -184,6 +246,7 @@ function TrackListSectionBase({
   }
 
   function finishTouchReorder(event: React.PointerEvent<HTMLElement>) {
+    stopAutoScroll();
     const current = touchReorderRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
 
@@ -208,6 +271,12 @@ function TrackListSectionBase({
   const [renderedCount, setRenderedCount] = useState(35);
 
   useEffect(() => {
+    if (draggingTrackId && renderedCount < visibleTracks.length) {
+      setRenderedCount(visibleTracks.length);
+    }
+  }, [draggingTrackId, renderedCount, visibleTracks.length]);
+
+  useEffect(() => {
     if (renderedCount >= visibleTracks.length) return;
     const timer = window.setTimeout(() => {
       setRenderedCount((prev) => Math.min(prev + 40, visibleTracks.length));
@@ -220,6 +289,7 @@ function TrackListSectionBase({
   }, [trackFilter]);
 
   const renderedTracks = visibleTracks.slice(0, renderedCount);
+  renderedTracksRef.current = renderedTracks;
 
   useEffect(() => {
     let cancelled = false;
@@ -250,7 +320,28 @@ function TrackListSectionBase({
     }
   };
   return (
-    <section className="relative flex w-full flex-col gap-2">
+    <section
+      ref={sectionRef}
+      className="relative flex w-full flex-col gap-2"
+      onDragOver={(event) => {
+        if (!canReorderTracks || !draggingTrackId) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        updateAutoScroll(event.clientX, event.clientY);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+          stopAutoScroll();
+        }
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        stopAutoScroll();
+        if (dragOverTarget && draggingTrackId) {
+          void handleTrackDrop(dragOverTarget.trackId, dragOverTarget.position);
+        }
+      }}
+    >
       {!hideLocalAudioImport ? (
         <LocalAudioImport
           disabled={!canManageLibrary || pendingAction !== null}
@@ -333,6 +424,7 @@ function TrackListSectionBase({
                     if (!canReorderTracks || !draggingTrackId || draggingTrackId === track.id) return;
                     event.preventDefault();
                     event.dataTransfer.dropEffect = "move";
+                    updateAutoScroll(event.clientX, event.clientY);
                     const rect = event.currentTarget.getBoundingClientRect();
                     const midY = rect.top + rect.height / 2;
                     const position = event.clientY < midY ? "before" : "after";
@@ -348,6 +440,8 @@ function TrackListSectionBase({
                   }}
                   onDrop={(event) => {
                     event.preventDefault();
+                    event.stopPropagation();
+                    stopAutoScroll();
                     if (!draggingTrackId || !canReorderTracks) {
                       setDraggingTrackId(null);
                       setDragOverTarget(null);
@@ -360,6 +454,7 @@ function TrackListSectionBase({
                     void handleTrackDrop(track.id, position);
                   }}
                   onDragEnd={() => {
+                    stopAutoScroll();
                     setDraggingTrackId(null);
                     setDragOverTarget(null);
                   }}

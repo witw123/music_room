@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { getArtworkSourceUrl } from "./artwork-colors";
 import { TrackDistributionBadge } from "@/components/room/TrackDistributionBadge";
+import { findScrollableContainer, useDragAutoScroll } from "@/features/room/hooks/use-drag-auto-scroll";
 
 export type PlayerQueueListProps = {
   roomId?: string | null;
@@ -205,6 +206,9 @@ export function PlayerQueueList({
   const [isPending, startTransition] = useTransition();
   const touchReorderRef = useRef<TouchReorderState | null>(null);
   const touchReorderTimerRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingQueueItemIdRef = useRef<string | null>(null);
+  draggingQueueItemIdRef.current = draggingQueueItemId;
 
   const queueWithTracks = useMemo(
     () =>
@@ -215,6 +219,57 @@ export function PlayerQueueList({
     [queue, tracks]
   );
 
+  const { updateAutoScroll, stopAutoScroll } = useDragAutoScroll({
+    getScrollContainer: () => findScrollableContainer(containerRef.current),
+    onScrollFrame: (point) => {
+      const draggingId = draggingQueueItemIdRef.current;
+      if (!draggingId) return;
+
+      const target = document
+        .elementFromPoint(point.x, point.y)
+        ?.closest<HTMLElement>("[data-queue-item-id]");
+      if (target && target.dataset.queueItemId) {
+        const targetId = target.dataset.queueItemId;
+        const rect = target.getBoundingClientRect();
+        const position = point.y < rect.top + rect.height / 2 ? "before" : "after";
+        if (touchReorderRef.current?.active) {
+          touchReorderRef.current.targetItemId = targetId;
+          touchReorderRef.current.targetPosition = position;
+        }
+        if (targetId !== draggingId) {
+          setDragOverTarget((prev) => {
+            if (prev?.itemId === targetId && prev.position === position) return prev;
+            return { itemId: targetId, position };
+          });
+        }
+      } else {
+        const container = findScrollableContainer(containerRef.current);
+        if (container && queueWithTracks.length > 0) {
+          const rect = container.getBoundingClientRect();
+          if (point.y > rect.bottom - 64) {
+            const lastItemId = queueWithTracks[queueWithTracks.length - 1].item.id;
+            if (touchReorderRef.current?.active) {
+              touchReorderRef.current.targetItemId = lastItemId;
+              touchReorderRef.current.targetPosition = "after";
+            }
+            if (lastItemId !== draggingId) {
+              setDragOverTarget({ itemId: lastItemId, position: "after" });
+            }
+          } else if (point.y < rect.top + 64) {
+            const firstItemId = queueWithTracks[0].item.id;
+            if (touchReorderRef.current?.active) {
+              touchReorderRef.current.targetItemId = firstItemId;
+              touchReorderRef.current.targetPosition = "before";
+            }
+            if (firstItemId !== draggingId) {
+              setDragOverTarget({ itemId: firstItemId, position: "before" });
+            }
+          }
+        }
+      }
+    }
+  });
+
   useEffect(() => {
     return () => {
       if (touchReorderTimerRef.current !== null) {
@@ -224,6 +279,7 @@ export function PlayerQueueList({
   }, []);
 
   function cancelTouchReorderTimer() {
+    stopAutoScroll();
     if (touchReorderTimerRef.current !== null) {
       window.clearTimeout(touchReorderTimerRef.current);
       touchReorderTimerRef.current = null;
@@ -287,6 +343,8 @@ export function PlayerQueueList({
     }
 
     event.preventDefault();
+    updateAutoScroll(event.clientX, event.clientY);
+
     const target = document.elementFromPoint(event.clientX, event.clientY)
       ?.closest<HTMLElement>("[data-queue-item-id]");
     const targetItemId = target?.dataset.queueItemId ?? current.itemId;
@@ -305,6 +363,7 @@ export function PlayerQueueList({
   }
 
   function finishTouchReorder(event: ReactPointerEvent<HTMLDivElement>) {
+    stopAutoScroll();
     const current = touchReorderRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
 
@@ -322,6 +381,7 @@ export function PlayerQueueList({
   }
 
   async function handleDrop(targetQueueItemId: string, position: "before" | "after") {
+    stopAutoScroll();
     if (!draggingQueueItemId || !canReorderQueue) {
       setDraggingQueueItemId(null);
       setDragOverTarget(null);
@@ -345,7 +405,28 @@ export function PlayerQueueList({
   }
 
   return (
-    <div className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-2 custom-scrollbar ${className}`}>
+    <div
+      ref={containerRef}
+      className={`light-player-queue-content relative min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-2 custom-scrollbar ${className}`}
+      onDragOver={(event) => {
+        if (!canReorderQueue || !draggingQueueItemId) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        updateAutoScroll(event.clientX, event.clientY);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+          stopAutoScroll();
+        }
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        stopAutoScroll();
+        if (dragOverTarget && draggingQueueItemId) {
+          void handleDrop(dragOverTarget.itemId, dragOverTarget.position);
+        }
+      }}
+    >
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
                 const canRemove = canRemoveQueue;
@@ -378,6 +459,7 @@ export function PlayerQueueList({
                       if (!canReorderQueue || !draggingQueueItemId || draggingQueueItemId === item.id) return;
                       event.preventDefault();
                       event.dataTransfer.dropEffect = "move";
+                      updateAutoScroll(event.clientX, event.clientY);
                       const rect = event.currentTarget.getBoundingClientRect();
                       const midY = rect.top + rect.height / 2;
                       const position = event.clientY < midY ? "before" : "after";
@@ -393,6 +475,8 @@ export function PlayerQueueList({
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
+                      event.stopPropagation();
+                      stopAutoScroll();
                       if (!draggingQueueItemId || !canReorderQueue) {
                         setDraggingQueueItemId(null);
                         setDragOverTarget(null);
@@ -405,6 +489,7 @@ export function PlayerQueueList({
                       void handleDrop(item.id, position);
                     }}
                     onDragEnd={() => {
+                      stopAutoScroll();
                       setDraggingQueueItemId(null);
                       setDragOverTarget(null);
                     }}
