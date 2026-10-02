@@ -10,7 +10,12 @@ type CapacitorGlobal = {
 };
 
 export function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  if (typeof window === "undefined") return false;
+  const win = window as unknown as {
+    __TAURI__?: unknown;
+    __TAURI_INTERNALS__?: unknown;
+  };
+  return Boolean(win.__TAURI__ || win.__TAURI_INTERNALS__);
 }
 
 /** True inside the Capacitor Android/iOS shell (injected Capacitor global). */
@@ -105,4 +110,3 @@ export async function listenTauri<T = unknown>(
     return undefined;
   }
 }
-

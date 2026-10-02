@@ -249,5 +249,26 @@ describe("app settings store", () => {
     expect(styleMap.get("--ui-scale")).toBeUndefined();
     expect(style.zoom).toBe("");
   });
-});
 
+  it("uses the native desktop zoom command when the Tauri bridge is available", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const style = {
+      zoom: "",
+      setProperty: vi.fn(),
+      removeProperty: vi.fn()
+    };
+    vi.stubGlobal("window", {
+      __TAURI__: { core: { invoke } },
+      localStorage: { getItem: () => null },
+      location: { pathname: "/app/settings", search: "" }
+    });
+    vi.stubGlobal("document", { documentElement: { dataset: {}, style } });
+
+    applyUiScale(1.25);
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith("set_ui_zoom", { scale: 1.25 });
+    expect(style.setProperty).toHaveBeenCalledWith("--ui-scale", "1.25");
+    expect(style.zoom).toBe("");
+  });
+});
