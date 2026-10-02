@@ -455,19 +455,11 @@ export function applyUiScale(scale: number): number {
       }
       return normalized;
     }
-    // CSS zoom scales the complete application surface, including fixed
-    // controls and pixel-sized layout primitives. Root font-size alone leaves
-    // those elements unchanged and makes the setting appear ineffective.
-    if (isDefault) {
-      document.documentElement.style.removeProperty("font-size");
-      document.documentElement.style.removeProperty("zoom");
-      document.documentElement.style.removeProperty("--ui-scale");
-      delete document.documentElement.dataset.uiScale;
-    } else {
-      document.documentElement.style.zoom = String(normalized);
-      document.documentElement.style.setProperty("--ui-scale", String(normalized));
-      document.documentElement.dataset.uiScale = String(normalized);
-    }
+    // Web browsers use native browser zoom (Ctrl +/-); clean up any CSS zoom artifacts
+    document.documentElement.style.removeProperty("font-size");
+    document.documentElement.style.removeProperty("zoom");
+    document.documentElement.style.removeProperty("--ui-scale");
+    delete document.documentElement.dataset.uiScale;
   }
   return scale;
 }

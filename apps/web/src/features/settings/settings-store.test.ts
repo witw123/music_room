@@ -230,21 +230,20 @@ describe("app settings store", () => {
 
     updateAppSettings({ layout: { uiScale: 1.1 } });
     expect(getAppSettings().layout.uiScale).toBe(1.1);
-    expect(dataset.uiScale).toBe("1.1");
-    expect(styleMap.get("--ui-scale")).toBe("1.1");
+    expect(dataset.uiScale).toBeUndefined();
+    expect(styleMap.get("--ui-scale")).toBeUndefined();
 
     resetAppSettings();
     expect(getAppSettings().layout.uiScale).toBe(1);
     expect(dataset.uiScale).toBeUndefined();
     expect(styleMap.get("--ui-scale")).toBeUndefined();
 
-    // Test applyUiScale
-    applyUiScale(1.25);
-    expect(dataset.uiScale).toBe("1.25");
-    expect(styleMap.get("--ui-scale")).toBe("1.25");
-    expect(style.zoom).toBe("1.25");
+    // Test applyUiScale in web browser (cleans up any zoom styles)
+    style.zoom = "1.25";
+    styleMap.set("--ui-scale", "1.25");
+    dataset.uiScale = "1.25";
 
-    applyUiScale(1);
+    applyUiScale(1.25);
     expect(dataset.uiScale).toBeUndefined();
     expect(styleMap.get("--ui-scale")).toBeUndefined();
     expect(style.zoom).toBe("");
