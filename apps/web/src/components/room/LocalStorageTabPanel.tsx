@@ -41,6 +41,7 @@ type LocalStorageTabPanelProps = {
   onRequestTrack?: (track: ProviderTrack) => Promise<void>;
   currentRoomId?: string | null;
   roomPlaylists?: Playlist[];
+  onRefreshRoom?: () => Promise<unknown>;
 };
 
 function LocalStorageTabPanelBase({
@@ -65,7 +66,8 @@ function LocalStorageTabPanelBase({
   searchMode,
   onRequestTrack,
   currentRoomId,
-  roomPlaylists
+  roomPlaylists,
+  onRefreshRoom
 }: LocalStorageTabPanelProps) {
   const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"local" | "network" | "favorites">("local");
@@ -124,6 +126,7 @@ function LocalStorageTabPanelBase({
           pendingCachedImport={pendingCachedImport}
           roomPlaylists={roomPlaylists}
           roomTracks={tracks}
+          onRefreshRoom={onRefreshRoom}
         />
       </section> : null}
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
@@ -158,6 +161,7 @@ function LocalStorageTabPanelBase({
           playlists={playlists}
           roomPlaylists={roomPlaylists}
           tracks={tracks}
+          onRefreshRoom={onRefreshRoom}
         />
       </section> : null}
       {playlistTab === "favorites" ? <section className="flex flex-col gap-3" data-testid="favorite-albums-section">
@@ -173,6 +177,7 @@ function LocalStorageTabPanelBase({
           onImportQqMusicTracks={onImportQqMusicTracks}
           onImportBilibiliTracks={onImportBilibiliTracks}
           roomTracks={tracks}
+          onRefreshRoom={onRefreshRoom}
         />
       </section> : null}
     </div>

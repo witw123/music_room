@@ -55,6 +55,7 @@ type PlaylistPanelProps = {
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   currentRoomId?: string | null;
   roomPlaylists?: Playlist[];
+  onRefreshRoom?: () => Promise<unknown>;
 };
 
 export function PlaylistPanel({
@@ -73,7 +74,8 @@ export function PlaylistPanel({
   onImportBilibiliTracks,
   onDeletePlaylist,
   currentRoomId,
-  roomPlaylists
+  roomPlaylists,
+  onRefreshRoom
 }: PlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   useBackHandler(() => setSelectedPlaylistId(null), selectedPlaylistId !== null);
@@ -312,7 +314,7 @@ export function PlaylistPanel({
     setLibraryFeedback(null);
     try {
       const source = getNetworkPlaylistSource(playlist);
-      let firstCandidate: ProviderTrack | null = null;
+      let allCandidates: ProviderTrack[] = [];
       if (source) {
         try {
           const detail = source.provider === "netease"
@@ -322,27 +324,62 @@ export function PlaylistPanel({
               : await musicRoomApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
                   tracks: p.parts
                 }));
-          if (detail.tracks.length > 0) {
-            firstCandidate = detail.tracks[0];
-          }
+          allCandidates = detail.tracks;
         } catch {
           // Gracefully continue
         }
       }
 
-      // 默认仅导入第 1 首歌曲
-      if (firstCandidate) {
+      // If allCandidates is empty but we have cached tracks, try to find them
+      if (allCandidates.length === 0 && playlist.trackIds.length > 0) {
+        for (const trackId of playlist.trackIds) {
+          const cached = cachedTracks.get(trackId);
+          if (cached) {
+            const providerTrack = toCachedProviderTrack(cached);
+            if (providerTrack) {
+              allCandidates.push(providerTrack);
+            }
+          }
+        }
+      }
+
+      // 导入全部曲目到曲库
+      const missingNetease: NeteaseTrackCandidate[] = [];
+      const missingQqMusic: QqMusicTrackCandidate[] = [];
+      const missingBilibili: BilibiliTrackCandidate[] = [];
+
+      for (const candidate of allCandidates) {
         const alreadyInRoom = tracks.some(
-          (t) => t.sourceRef?.provider === firstCandidate!.provider && t.sourceRef?.trackId === firstCandidate!.providerTrackId
+          (t) =>
+            (t.sourceRef?.provider === candidate.provider && t.sourceRef?.trackId === candidate.providerTrackId) ||
+            t.id === candidate.providerTrackId
         );
         if (!alreadyInRoom) {
-          if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
-            await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
-          } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
-            await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
-          } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
-            await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
-          }
+          if (candidate.provider === "netease") missingNetease.push(candidate as NeteaseTrackCandidate);
+          else if (candidate.provider === "qqmusic") missingQqMusic.push(candidate as QqMusicTrackCandidate);
+          else if (candidate.provider === "bilibili") missingBilibili.push(candidate as BilibiliTrackCandidate);
+        }
+      }
+
+      if (missingNetease.length > 0) {
+        if (onImportNeteaseTracks) {
+          await onImportNeteaseTracks(missingNetease);
+        } else if (onImportNeteaseTrack) {
+          for (const t of missingNetease) await onImportNeteaseTrack(t);
+        }
+      }
+      if (missingQqMusic.length > 0) {
+        if (onImportQqMusicTracks) {
+          await onImportQqMusicTracks(missingQqMusic);
+        } else if (onImportQqMusicTrack) {
+          for (const t of missingQqMusic) await onImportQqMusicTrack(t);
+        }
+      }
+      if (missingBilibili.length > 0) {
+        if (onImportBilibiliTracks) {
+          await onImportBilibiliTracks(missingBilibili);
+        } else if (onImportBilibiliTrack) {
+          for (const t of missingBilibili) await onImportBilibiliTrack(t);
         }
       }
 
@@ -351,16 +388,25 @@ export function PlaylistPanel({
         tags.push(`source_playlist:${playlist.id}`);
       }
 
+      const trackIds = allCandidates.length > 0
+        ? allCandidates.map((t) => providerTrackKey(t.provider, t.providerTrackId))
+        : playlist.trackIds;
+
       await musicRoomApi.createPlaylist({
         title: playlist.title,
         description: playlist.description,
-        trackIds: playlist.trackIds,
+        trackIds,
         tags,
         coverUrl: playlist.coverUrl,
         roomId: currentRoomId
       });
 
-      setLibraryFeedback(`已将歌单《${playlist.title}》加入曲库（默认导入第 1 首）。`);
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
+
+      const count = allCandidates.length || playlist.trackIds.length;
+      setLibraryFeedback(`已将歌单《${playlist.title}》加入曲库（包含 ${count} 首歌曲）。`);
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {
@@ -543,7 +589,7 @@ function PlaylistCard({
                 onAddToLibrary?.();
               }}
               size="sm"
-              title="添加到曲库（默认导入第 1 首）"
+              title="添加到曲库"
               type="button"
               variant="outline"
             >
@@ -1011,7 +1057,7 @@ function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSource | n
   const sourceTag = playlist.tags.find((tag) => tag.startsWith("network:"));
   if (!sourceTag) return null;
   const [, provider, ...playlistIdParts] = sourceTag.split(":");
-  if (provider !== "netease" && provider !== "qqmusic") return null;
+  if (provider !== "netease" && provider !== "qqmusic" && provider !== "bilibili") return null;
   const playlistId = playlistIdParts.join(":").trim();
   return playlistId ? { provider, playlistId } : null;
 }

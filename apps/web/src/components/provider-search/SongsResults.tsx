@@ -43,7 +43,7 @@ export function SongsResults({
       {results.length ? (
         <div className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 backdrop-blur-sm">
           {/* Desktop Table Header */}
-          <div className="hidden grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_100px] gap-3 border-b border-white/[0.08] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 md:grid">
+          <div className="hidden grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_150px] gap-3 border-b border-white/[0.08] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 md:grid">
             <span>#</span>
             <span>单曲</span>
             <span>歌手</span>
@@ -223,7 +223,7 @@ export function SongsResults({
 
                   {/* Desktop Grid Layout */}
                   <div
-                    className="hidden cursor-pointer md:grid md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_130px] md:items-center md:gap-3 md:px-5 md:py-3.5"
+                    className="hidden cursor-pointer md:grid md:grid-cols-[42px_minmax(0,1.4fr)_minmax(120px,0.75fr)_minmax(140px,1fr)_90px_150px] md:items-center md:gap-3 md:px-5 md:py-3.5"
                     onClick={() => {
                       if (onPlay && pending === null) {
                         void onPlay(track);

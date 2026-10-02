@@ -22,8 +22,9 @@ export function FavoriteTrackButton({
   accentColor
 }: FavoriteTrackButtonProps) {
   if (!track) return null;
-  const dimension = size === "large" ? "h-11 w-11" : "h-9 w-9";
-  const iconSize = size === "large" ? 21 : 17;
+  const hasCustomSize = className.includes("h-") || className.includes("w-");
+  const dimension = size === "large" ? "h-11 w-11" : hasCustomSize ? "" : "h-9 w-9";
+  const iconSize = size === "large" ? 21 : 16;
 
   return (
     <button
@@ -31,7 +32,10 @@ export function FavoriteTrackButton({
       aria-pressed={isFavorite}
       className={`inline-flex ${dimension} shrink-0 items-center justify-center rounded-full text-foreground-muted transition-[background-color,color,transform] duration-200 hover:bg-surface-hover hover:text-accent active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait disabled:opacity-50 ${className} ${isFavorite ? "text-accent" : ""}`}
       disabled={pending}
-      onClick={() => void onToggle()}
+      onClick={(e) => {
+        e.stopPropagation();
+        void onToggle();
+      }}
       style={isFavorite && accentColor ? { color: accentColor } : undefined}
       title={isFavorite ? "取消收藏歌曲" : "收藏歌曲"}
       type="button"

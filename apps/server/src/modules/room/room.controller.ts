@@ -38,6 +38,14 @@ export class RoomController {
     private readonly roomChatService: RoomChatService
   ) {}
 
+  private async getPlaylistsForRoom(roomId: string): Promise<Playlist[]> {
+    try {
+      return await this.playlistService.listPlaylistsForRoom(roomId);
+    } catch {
+      return [];
+    }
+  }
+
   private async getCurrentUserId(sessionToken?: string) {
     try {
       const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
@@ -77,7 +85,8 @@ export class RoomController {
       roomType: payload.roomType
     };
     const snapshot = await this.roomService.createRoom(userId, payload.visibility ?? "public", metadata);
-    await this.roomRealtimePublisher.emitSnapshot(snapshot.room.id);
+    const playlists = await this.getPlaylistsForRoom(snapshot.room.id);
+    await this.roomRealtimePublisher.emitSnapshot(snapshot.room.id, playlists);
     return snapshot;
   }
 
@@ -183,7 +192,8 @@ export class RoomController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    return this.roomService.getAccessibleRoomSnapshot(roomId, [], userId);
+    const playlists = await this.getPlaylistsForRoom(roomId);
+    return this.roomService.getAccessibleRoomSnapshot(roomId, playlists, userId);
   }
 
   @Post("join-by-code")
@@ -257,12 +267,7 @@ export class RoomController {
     ], { limit: 10, windowMs: 60 * 60 * 1000 });
     const payload = parseRequestBody(updateRoomRequestSchema, body);
     await this.roomService.updateRoom(roomId, userId, payload);
-    let playlists: Playlist[] = [];
-    try {
-      playlists = await this.playlistService.listPlaylistsForRoom(roomId);
-    } catch {
-      // Room metadata updates do not depend on optional playlist storage.
-    }
+    const playlists = await this.getPlaylistsForRoom(roomId);
     return this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
   }
 
@@ -381,7 +386,8 @@ export class RoomController {
       album: payload.album ?? null,
       artworkUrl: payload.artworkUrl ?? null
     });
-    await this.roomRealtimePublisher.emitSnapshot(roomId);
+    const playlists = await this.getPlaylistsForRoom(roomId);
+    await this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
     return request;
   }
 
@@ -393,7 +399,8 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const request = await this.roomService.decideRoomRequest(roomId, userId, requestId, "approved");
-    await this.roomRealtimePublisher.emitSnapshot(roomId);
+    const playlists = await this.getPlaylistsForRoom(roomId);
+    await this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
     return request;
   }
 
@@ -405,7 +412,8 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const request = await this.roomService.decideRoomRequest(roomId, userId, requestId, "rejected");
-    await this.roomRealtimePublisher.emitSnapshot(roomId);
+    const playlists = await this.getPlaylistsForRoom(roomId);
+    await this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
     return request;
   }
 

@@ -122,7 +122,9 @@ export function useFavoriteTracks(userId: string | null | undefined) {
 
   const toggleFavorite = useCallback(
     async (track: ProviderTrackCandidate) => {
-      if (!entry) return;
+      if (!entry || !userId) {
+        throw new Error("请先登录项目账号后再收藏歌曲。");
+      }
       await ensureLoaded(entry);
       const key = trackKey(track);
       if (entry.pendingKey) return;
@@ -140,7 +142,8 @@ export function useFavoriteTracks(userId: string | null | undefined) {
               providerAlbumId: track.providerAlbumId ?? null,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
-            }
+            },
+            ...previousRecords
           ];
       refreshSnapshot(entry);
 

@@ -20,6 +20,7 @@ import {
   setCachedFavorites
 } from "@/features/workspace/page-data-cache";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
+import { providerTrackKey } from "@/features/playlist/local-playlist";
 
 type FavoriteTrack = ProviderTrackCandidate;
 
@@ -35,6 +36,7 @@ type FavoriteAlbumsPanelProps = {
   onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   currentRoomId?: string | null;
   roomPlaylists?: Playlist[];
+  onRefreshRoom?: () => Promise<unknown>;
 };
 
 export function FavoriteAlbumsPanel({
@@ -48,7 +50,8 @@ export function FavoriteAlbumsPanel({
   onImportQqMusicTracks,
   onImportBilibiliTracks,
   currentRoomId,
-  roomPlaylists
+  roomPlaylists,
+  onRefreshRoom
 }: FavoriteAlbumsPanelProps) {
   const [albums, setAlbums] = useState<ProviderAlbumFavorite[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -169,20 +172,43 @@ export function FavoriteAlbumsPanel({
         // Gracefully continue
       }
 
-      // 默认仅导入第 1 首歌曲到曲库
-      const firstCandidate = albumTracks[0] ?? null;
-      if (firstCandidate) {
+      // 导入全部曲目到曲库
+      const missingNetease: NeteaseTrackCandidate[] = [];
+      const missingQqMusic: QqMusicTrackCandidate[] = [];
+      const missingBilibili: BilibiliTrackCandidate[] = [];
+
+      for (const track of albumTracks) {
         const alreadyInRoom = roomTracks.some(
-          (t) => t.sourceRef?.provider === firstCandidate.provider && t.sourceRef?.trackId === firstCandidate.providerTrackId
+          (t) =>
+            (t.sourceRef?.provider === track.provider && t.sourceRef?.trackId === track.providerTrackId) ||
+            t.id === track.providerTrackId
         );
         if (!alreadyInRoom) {
-          if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
-            await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
-          } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
-            await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
-          } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
-            await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
-          }
+          if (track.provider === "netease") missingNetease.push(track as NeteaseTrackCandidate);
+          else if (track.provider === "qqmusic") missingQqMusic.push(track as QqMusicTrackCandidate);
+          else if (track.provider === "bilibili") missingBilibili.push(track as BilibiliTrackCandidate);
+        }
+      }
+
+      if (missingNetease.length > 0) {
+        if (onImportNeteaseTracks) {
+          await onImportNeteaseTracks(missingNetease);
+        } else if (onImportNeteaseTrack) {
+          for (const t of missingNetease) await onImportNeteaseTrack(t);
+        }
+      }
+      if (missingQqMusic.length > 0) {
+        if (onImportQqMusicTracks) {
+          await onImportQqMusicTracks(missingQqMusic);
+        } else if (onImportQqMusicTrack) {
+          for (const t of missingQqMusic) await onImportQqMusicTrack(t);
+        }
+      }
+      if (missingBilibili.length > 0) {
+        if (onImportBilibiliTracks) {
+          await onImportBilibiliTracks(missingBilibili);
+        } else if (onImportBilibiliTrack) {
+          for (const t of missingBilibili) await onImportBilibiliTrack(t);
         }
       }
 
@@ -194,7 +220,7 @@ export function FavoriteAlbumsPanel({
       ];
 
       const trackIds = albumTracks.length > 0
-        ? albumTracks.map((t) => `provider:${t.provider}:${t.providerTrackId}`)
+        ? albumTracks.map((t) => providerTrackKey(t.provider, t.providerTrackId))
         : Array.from({ length: album.trackCount }, (_, i) => `network:${album.provider}:${album.providerAlbumId}:${i}`);
 
       await musicRoomApi.createPlaylist({
@@ -206,7 +232,12 @@ export function FavoriteAlbumsPanel({
         roomId: currentRoomId
       });
 
-      setLibraryFeedback(`已将收藏《${album.title}》加入曲库（默认导入第 1 首）。`);
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
+
+      const count = albumTracks.length || album.trackCount;
+      setLibraryFeedback(`已将收藏《${album.title}》加入曲库（包含 ${count} 首歌曲）。`);
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {

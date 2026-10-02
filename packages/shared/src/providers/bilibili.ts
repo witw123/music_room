@@ -10,17 +10,16 @@ export const bilibiliTrackCandidateSchema = z
     cid: z.number().int().positive().optional(),
     title: z.string(),
     artist: z.string(),
-    album: z.string().nullable(),
+    album: z.string().nullable().default(null),
     tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
     providerAlbumId: z.string().trim().min(1).optional(),
     releaseTime: z.string().nullable().optional(),
     durationMs: z.number().int().nonnegative(),
-    artworkUrl: z.string().url().nullable(),
+    artworkUrl: z.string().nullable().default(null),
     access: z.enum(["free", "vip", "paid", "unknown"]).default("free"),
     quality: bilibiliQualitySchema.nullable().default("exhigh"),
     pageCount: z.number().int().positive().optional()
-  })
-  .strict();
+  });
 
 export const bilibiliPageSchema = z
   .object({

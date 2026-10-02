@@ -571,8 +571,9 @@ export function ProviderSearchPage({
       isFavorite: (track) => isFavoriteTrack(track),
       isTogglingFavorite: (track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`,
       onToggleFavorite: (track) => {
+        const willBeFavorite = !isFavoriteTrack(track);
         void toggleFavoriteTrack(track)
-          .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+          .then(() => setStatusMessage(`已${willBeFavorite ? "收藏" : "取消收藏"}《${track.title}》。`))
           .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
       }
     };
@@ -996,8 +997,9 @@ export function ProviderSearchPage({
               pendingTrackId={pending}
               isFavorite={isFavoriteTrack}
               onToggleFavorite={(track) => {
+                const willBeFavorite = !isFavoriteTrack(track);
                 void toggleFavoriteTrack(track)
-                  .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+                  .then(() => setStatusMessage(`已${willBeFavorite ? "收藏" : "取消收藏"}《${track.title}》。`))
                   .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
               }}
               isCollectionFavorite={favoriteAlbumIds.has(albumKey("bilibili", bilibiliPartDetail.bvid))}
@@ -1052,8 +1054,9 @@ export function ProviderSearchPage({
                 isFavorite={isFavoriteTrack}
                 isTogglingFavorite={(track) => pendingFavoriteKey === `${track.provider}:${track.providerTrackId}`}
                 onToggleFavorite={(track) => {
+                  const willBeFavorite = !isFavoriteTrack(track);
                   void toggleFavoriteTrack(track)
-                    .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
+                    .then(() => setStatusMessage(`已${willBeFavorite ? "收藏" : "取消收藏"}《${track.title}》。`))
                     .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
                 }}
                 onPlay={playProviderTrack}

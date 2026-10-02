@@ -21,6 +21,7 @@ type LocalPlaylistPanelProps = {
   pendingCachedImport: string | null;
   currentRoomId?: string | null;
   roomPlaylists?: Playlist[];
+  onRefreshRoom?: () => Promise<unknown>;
 };
 
 export function LocalPlaylistPanel({
@@ -32,7 +33,8 @@ export function LocalPlaylistPanel({
   onImportCachedTrack,
   pendingCachedImport,
   currentRoomId,
-  roomPlaylists
+  roomPlaylists,
+  onRefreshRoom
 }: LocalPlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(null);
@@ -55,15 +57,15 @@ export function LocalPlaylistPanel({
     setAddingToLibraryId(playlist.id);
     setLibraryFeedback(null);
     try {
-      // 默认仅导入第一首歌曲
-      const firstTrackId = playlist.trackIds[0];
-      const firstTrack = firstTrackId ? tracksById.get(firstTrackId) : null;
-      if (firstTrack && firstTrack.fileHash) {
-        const alreadyInRoom = roomTracks.some((t) => t.fileHash === firstTrack.fileHash);
-        if (!alreadyInRoom) {
-          const cached = toCachedLibraryTrack(firstTrack);
+      // 导入全部本地曲目
+      const roomFileHashes = new Set(roomTracks.map((t) => t.fileHash));
+      for (const trackId of playlist.trackIds) {
+        const track = tracksById.get(trackId);
+        if (track && track.fileHash && !roomFileHashes.has(track.fileHash)) {
+          const cached = toCachedLibraryTrack(track);
           if (cached) {
             await onImportCachedTrack(cached);
+            roomFileHashes.add(track.fileHash);
           }
         }
       }
@@ -77,7 +79,11 @@ export function LocalPlaylistPanel({
         roomId: currentRoomId
       });
 
-      setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库（默认导入第 1 首）。`);
+      if (onRefreshRoom) {
+        await onRefreshRoom();
+      }
+
+      setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库（包含 ${playlist.trackIds.length} 首歌曲）。`);
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {
@@ -199,7 +205,7 @@ function LocalPlaylistCard({
                 onAddToLibrary?.();
               }}
               size="sm"
-              title="添加到曲库（默认导入第 1 首）"
+              title="添加到曲库"
               type="button"
               variant="outline"
             >

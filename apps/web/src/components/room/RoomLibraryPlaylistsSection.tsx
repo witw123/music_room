@@ -58,7 +58,7 @@ type RoomPlaylistSource =
   | { type: "bilibili"; bvid: string };
 
 function getRoomPlaylistSource(playlist: Playlist): RoomPlaylistSource | null {
-  const albumTag = playlist.tags?.find((tag) => tag.startsWith("album:") || tag.startsWith("source_album:"));
+  const albumTag = playlist.tags?.find((tag) => tag.startsWith("album:"));
   if (albumTag) {
     const parts = albumTag.split(":");
     if (parts.length >= 3) {
@@ -126,7 +126,10 @@ export function RoomLibraryPlaylistsSection({
     return new Set(
       tracks.flatMap((t) => {
         const keys = [t.id];
-        if (t.sourceRef) keys.push(`${t.sourceRef.provider}:${t.sourceRef.trackId}`);
+        if (t.sourceRef) {
+          keys.push(`${t.sourceRef.provider}:${t.sourceRef.trackId}`);
+          keys.push(`provider:${t.sourceRef.provider}:${t.sourceRef.trackId}`);
+        }
         if (t.fileHash) keys.push(t.fileHash);
         return keys;
       })
@@ -432,7 +435,7 @@ function RoomLibraryPlaylistDetail({
     return new Set(
       roomTracks.flatMap((track) => {
         const s = track.sourceRef;
-        return s ? [`${s.provider}:${s.trackId}`] : [];
+        return s ? [`${s.provider}:${s.trackId}`, `provider:${s.provider}:${s.trackId}`] : [];
       })
     );
   }, [roomTracks]);
@@ -441,7 +444,7 @@ function RoomLibraryPlaylistDetail({
     if (remoteTracks.length > 0) {
       return remoteTracks.map((t) => {
         const key = `${t.provider}:${t.providerTrackId}`;
-        const inRoom = roomProviderTrackKeys.has(key);
+        const inRoom = roomProviderTrackKeys.has(key) || roomProviderTrackKeys.has(`provider:${key}`);
         return {
           id: key,
           title: t.title,
@@ -457,7 +460,11 @@ function RoomLibraryPlaylistDetail({
 
     return playlist.trackIds.map((trackId, index) => {
       const roomMatch = roomTracks.find(
-        (t) => t.id === trackId || (t.sourceRef && `${t.sourceRef.provider}:${t.sourceRef.trackId}` === trackId) || (t.fileHash && t.fileHash === trackId)
+        (t) =>
+          t.id === trackId ||
+          (t.sourceRef && `${t.sourceRef.provider}:${t.sourceRef.trackId}` === trackId) ||
+          (t.sourceRef && `provider:${t.sourceRef.provider}:${t.sourceRef.trackId}` === trackId) ||
+          (t.fileHash && t.fileHash === trackId)
       );
       return {
         id: trackId,

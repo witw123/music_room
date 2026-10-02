@@ -175,7 +175,7 @@ function toFavoriteArtist(record: {
 }): ProviderArtistFavorite {
   return {
     id: record.id,
-    provider: record.provider === "qqmusic" ? "qqmusic" : "netease",
+    provider: record.provider === "qqmusic" ? "qqmusic" : record.provider === "bilibili" ? "bilibili" : "netease",
     providerArtistId: record.providerArtistId,
     name: record.name,
     artworkUrl: record.artworkUrl,
@@ -202,7 +202,7 @@ function toFavoriteTrack(record: {
 }): ProviderTrackFavorite {
   return {
     id: record.id,
-    provider: record.provider === "qqmusic" ? "qqmusic" : "netease",
+    provider: record.provider === "qqmusic" ? "qqmusic" : record.provider === "bilibili" ? "bilibili" : "netease",
     providerTrackId: record.providerTrackId,
     access: record.access === "vip" || record.access === "paid" || record.access === "free" ? record.access : "unknown",
     quality: record.quality === "standard" || record.quality === "high" || record.quality === "exhigh" || record.quality === "lossless" || record.quality === "hires" ? record.quality : null,
@@ -232,7 +232,7 @@ function toFavoriteAlbum(record: {
 }): ProviderAlbumFavorite {
   return {
     id: record.id,
-    provider: record.provider === "qqmusic" ? "qqmusic" : "netease",
+    provider: record.provider === "qqmusic" ? "qqmusic" : record.provider === "bilibili" ? "bilibili" : "netease",
     providerAlbumId: record.providerAlbumId,
     title: record.title,
     artist: record.artist,

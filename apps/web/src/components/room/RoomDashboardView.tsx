@@ -309,6 +309,7 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         playlists={props.playlists}
         roomPlaylists={props.roomSnapshot.playlists}
         tracks={props.roomSnapshot.tracks}
+        onRefreshRoom={props.onRefreshRoom}
       />
     );
   }

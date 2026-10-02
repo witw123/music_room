@@ -654,6 +654,7 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
                 roomPlaylists={props.roomSnapshot.playlists}
                 currentRoomId={props.roomSnapshot.room.id}
                 tracks={props.roomSnapshot.tracks}
+                onRefreshRoom={props.onRefreshRoom}
               />
             </div>
           )}

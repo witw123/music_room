@@ -422,6 +422,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     roomPlaylists={props.roomSnapshot.playlists}
                     searchMode={isHost ? "import" : "request"}
                     tracks={props.roomSnapshot.tracks}
+                    onRefreshRoom={props.onRefreshRoom}
                   />
                 </div>
               )
