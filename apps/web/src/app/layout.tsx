@@ -19,23 +19,20 @@ const themeInitScript = `(() => {
     const isLyricsWindow = Boolean(typeof window !== "undefined" && window.location && (window.location.pathname === "/desktop-lyrics" || (window.location.search && window.location.search.indexOf("window=desktop-lyrics") !== -1)));
     if (!isLyricsWindow && value && value.layout && typeof value.layout.uiScale === "number" && isFinite(value.layout.uiScale)) {
       const scale = Math.min(2, Math.max(0.5, value.layout.uiScale));
-      const tauriInvoke =
-        (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) ||
-        window.__TAURI_INTERNALS__?.invoke;
-      if (tauriInvoke) {
-        tauriInvoke("set_ui_zoom", { scale }).catch(function (error) {
-          console.error("[ui-scale] Failed to set desktop zoom:", error);
-        });
-        document.documentElement.dataset.uiScaleNative = "true";
-      } else {
-        document.documentElement.style.removeProperty("zoom");
-        if (document.body) {
-          document.body.style.zoom = String(scale);
+      if (Math.abs(scale - 1) >= 0.001) {
+        const tauriInvoke =
+          (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) ||
+          window.__TAURI_INTERNALS__?.invoke;
+        if (tauriInvoke) {
+          tauriInvoke("set_ui_zoom", { scale }).catch(function (error) {
+            console.error("[ui-scale] Failed to set desktop zoom:", error);
+          });
+        } else {
+          document.documentElement.style.zoom = String(scale);
         }
-        delete document.documentElement.dataset.uiScaleNative;
+        document.documentElement.style.setProperty("--ui-scale", String(scale));
+        document.documentElement.dataset.uiScale = String(scale);
       }
-      document.documentElement.style.setProperty("--ui-scale", String(scale));
-      document.documentElement.dataset.uiScale = String(scale);
     }
   } catch {
     document.documentElement.dataset.theme = "dark";

@@ -14,7 +14,8 @@ description = "Allow app version and window controls"
 commands.allow = [
     "get_app_version",
     "focus_main_window",
-    "open_external_url"
+    "open_external_url",
+    "set_ui_zoom"
 ]
 
 [[permission]]

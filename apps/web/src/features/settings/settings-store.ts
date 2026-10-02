@@ -430,16 +430,29 @@ export function applyAppTheme(preference: ThemePreference): ResolvedTheme {
 
 export function applyUiScale(scale: number): number {
   if (typeof document !== "undefined") {
+    if (typeof window !== "undefined") {
+      const pathname = window.location?.pathname;
+      const search = window.location?.search;
+      const isLyricsWindow =
+        pathname === "/desktop-lyrics" ||
+        (typeof search === "string" && search.includes("window=desktop-lyrics"));
+      if (isLyricsWindow) {
+        return scale;
+      }
+    }
     const normalized = Math.min(2, Math.max(0.5, scale));
     const isDefault = Math.abs(normalized - 1) < 0.001;
     if (typeof window !== "undefined" && isTauriRuntime()) {
-      void invokeTauri("set_ui_zoom", { scale: normalized });
+      void invokeTauri("set_ui_zoom", { scale: isDefault ? 1 : normalized });
       document.documentElement.style.removeProperty("font-size");
       document.documentElement.style.removeProperty("zoom");
-      document.body?.style.removeProperty("zoom");
-      document.documentElement.style.setProperty("--ui-scale", String(normalized));
-      document.documentElement.dataset.uiScale = String(normalized);
-      document.documentElement.dataset.uiScaleNative = "true";
+      if (isDefault) {
+        document.documentElement.style.removeProperty("--ui-scale");
+        delete document.documentElement.dataset.uiScale;
+      } else {
+        document.documentElement.style.setProperty("--ui-scale", String(normalized));
+        document.documentElement.dataset.uiScale = String(normalized);
+      }
       return normalized;
     }
     // CSS zoom scales the complete application surface, including fixed
@@ -448,16 +461,12 @@ export function applyUiScale(scale: number): number {
     if (isDefault) {
       document.documentElement.style.removeProperty("font-size");
       document.documentElement.style.removeProperty("zoom");
-      document.body?.style.removeProperty("zoom");
       document.documentElement.style.removeProperty("--ui-scale");
       delete document.documentElement.dataset.uiScale;
-      delete document.documentElement.dataset.uiScaleNative;
     } else {
-      document.documentElement.style.removeProperty("zoom");
-      document.body?.style.setProperty("zoom", String(normalized));
+      document.documentElement.style.zoom = String(normalized);
       document.documentElement.style.setProperty("--ui-scale", String(normalized));
       document.documentElement.dataset.uiScale = String(normalized);
-      delete document.documentElement.dataset.uiScaleNative;
     }
   }
   return scale;

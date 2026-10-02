@@ -99,18 +99,6 @@
     letter-spacing: 0;
   }
 
-  /* CSS zoom shrinks the root box without expanding the layout viewport.
-     Expand the web layout by the inverse factor so scaled pages still fill
-     the available screen instead of leaving a blank strip on the right. */
-  html[data-ui-scale]:not([data-ui-scale-native]):not([data-ui-scale="1"]) {
-    width: calc(100% / var(--ui-scale));
-  }
-
-  html[data-ui-scale]:not([data-ui-scale-native]):not([data-ui-scale="1"]) body {
-    width: 100%;
-    min-width: calc(100vw / var(--ui-scale));
-  }
-
   button,
   input,
   select,
@@ -214,12 +202,6 @@
     max-width: 100vw;
     box-sizing: border-box;
     padding-bottom: calc(12rem + env(safe-area-inset-bottom));
-  }
-
-  html[data-ui-scale]:not([data-ui-scale-native]):not([data-ui-scale="1"]) .workspace-page {
-    max-width: none;
-    min-height: calc(100 * var(--app-dvh) / var(--ui-scale));
-    height: calc(100 * var(--app-dvh) / var(--ui-scale));
   }
 
   .workspace-page__inner {
