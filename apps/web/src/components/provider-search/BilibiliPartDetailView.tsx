@@ -5,7 +5,7 @@ import type { BilibiliTrackCandidate } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
-import { PlayIcon, ChevronLeftIcon } from "@/components/icons/DiscoverIcons";
+import { PlayIcon, ChevronLeftIcon, HeartIcon, ListMusicIcon } from "@/components/icons/DiscoverIcons";
 import { Icon } from "./search-ui-primitives";
 import type { AnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
 import { getAnchoredDialogAnchor } from "@/components/ui/anchored-dialog";
@@ -31,6 +31,10 @@ type BilibiliPartDetailViewProps = {
   pendingTrackId?: string | null;
   isFavorite?: (track: BilibiliTrackCandidate) => boolean;
   onToggleFavorite?: (track: BilibiliTrackCandidate) => void;
+  isCollectionFavorite?: boolean;
+  onToggleFavoriteCollection?: (detail: BilibiliPartDetail) => Promise<void> | void;
+  onSaveCollectionAsPlaylist?: (detail: BilibiliPartDetail) => Promise<void> | void;
+  onAddCollectionToPlaylist?: (detail: BilibiliPartDetail, anchor: AnchoredDialogAnchor) => void;
 };
 
 export function BilibiliPartDetailView({
@@ -43,7 +47,11 @@ export function BilibiliPartDetailView({
   onPlayAll,
   pendingTrackId,
   isFavorite,
-  onToggleFavorite
+  onToggleFavorite,
+  isCollectionFavorite,
+  onToggleFavoriteCollection,
+  onSaveCollectionAsPlaylist,
+  onAddCollectionToPlaylist
 }: BilibiliPartDetailViewProps) {
   const [imageError, setImageError] = useState(false);
   const totalDurationMs = detail.parts.reduce((acc, curr) => acc + (curr.durationMs || 0), 0);
@@ -114,6 +122,43 @@ export function BilibiliPartDetailView({
               <PlayIcon className="w-3.5 h-3.5 fill-current" />
               <span>播放全部</span>
             </Button>
+            {onToggleFavoriteCollection && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void onToggleFavoriteCollection(detail)}
+                className={`rounded-full px-4 py-2 text-xs font-medium flex items-center gap-2 border transition-all ${
+                  isCollectionFavorite
+                    ? "border-[#fa233b]/40 bg-[#fa233b]/15 text-[#fa233b] hover:bg-[#fa233b]/25"
+                    : "border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12]"
+                }`}
+              >
+                <HeartIcon className="w-3.5 h-3.5" />
+                <span>{isCollectionFavorite ? "已收藏合集" : "收藏合集"}</span>
+              </Button>
+            )}
+            {onSaveCollectionAsPlaylist && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void onSaveCollectionAsPlaylist(detail)}
+                className="rounded-full px-4 py-2 text-xs font-medium flex items-center gap-2 border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12] transition-all"
+              >
+                <ListMusicIcon className="w-3.5 h-3.5" />
+                <span>保存为歌单</span>
+              </Button>
+            )}
+            {onAddCollectionToPlaylist && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => onAddCollectionToPlaylist(detail, getAnchoredDialogAnchor(e.currentTarget))}
+                className="rounded-full px-4 py-2 text-xs font-medium flex items-center gap-2 border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.12] transition-all"
+              >
+                <Icon name="playlist-add" />
+                <span>添加到已有歌单</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>

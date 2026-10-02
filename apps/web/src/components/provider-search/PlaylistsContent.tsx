@@ -11,7 +11,8 @@ export function PlaylistsContent({
   onBack,
   onOpen,
   onSave,
-  trackActions
+  trackActions,
+  isFavorite = false
 }: {
   playlists: ProviderPlaylistSummary[];
   playlist: ProviderPlaylistDetail | null;
@@ -20,11 +21,12 @@ export function PlaylistsContent({
   onOpen: (item: ProviderPlaylistSummary) => Promise<void>;
   onSave: (playlist: ProviderPlaylistDetail) => Promise<void>;
   trackActions: ProviderAlbumTrackActions;
+  isFavorite?: boolean;
 }) {
   if (playlist) {
     return (
       <ProviderPlaylistDetailView
-        isFavorite={false}
+        isFavorite={isFavorite}
         onBack={onBack}
         onToggleFavorite={() => onSave(playlist)}
         pending={pending}

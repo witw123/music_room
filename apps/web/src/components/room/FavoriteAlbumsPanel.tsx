@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AuthSession,
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
+  Playlist,
   ProviderAlbumDetail,
   ProviderAlbumFavorite,
   ProviderTrackCandidate,
@@ -17,6 +19,7 @@ import {
   getCachedFavorites,
   setCachedFavorites
 } from "@/features/workspace/page-data-cache";
+import { CheckIcon } from "@/components/icons/DiscoverIcons";
 
 type FavoriteTrack = ProviderTrackCandidate;
 
@@ -26,6 +29,12 @@ type FavoriteAlbumsPanelProps = {
   canManageLibrary: boolean;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks?: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
+  currentRoomId?: string | null;
+  roomPlaylists?: Playlist[];
 };
 
 export function FavoriteAlbumsPanel({
@@ -33,7 +42,13 @@ export function FavoriteAlbumsPanel({
   roomTracks,
   canManageLibrary,
   onImportNeteaseTrack,
-  onImportQqMusicTrack
+  onImportQqMusicTrack,
+  onImportBilibiliTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
+  onImportBilibiliTracks,
+  currentRoomId,
+  roomPlaylists
 }: FavoriteAlbumsPanelProps) {
   const [albums, setAlbums] = useState<ProviderAlbumFavorite[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -41,6 +56,8 @@ export function FavoriteAlbumsPanel({
   const [detail, setDetail] = useState<ProviderAlbumDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(null);
+  const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
 
   const selectedAlbum = albums.find((album) => album.id === selectedAlbumId) ?? null;
   const roomTrackKeys = new Set(
@@ -94,7 +111,19 @@ export function FavoriteAlbumsPanel({
     setErrorMessage(null);
     const request = selectedAlbum.provider === "netease"
       ? musicRoomApi.getNeteaseAlbum(selectedAlbum.providerAlbumId)
-      : musicRoomApi.getQqMusicAlbum(selectedAlbum.providerAlbumId);
+      : selectedAlbum.provider === "qqmusic"
+        ? musicRoomApi.getQqMusicAlbum(selectedAlbum.providerAlbumId)
+        : musicRoomApi.getBilibiliVideoParts(selectedAlbum.providerAlbumId).then((partsDetail) => ({
+            provider: "bilibili" as const,
+            providerAlbumId: partsDetail.bvid,
+            title: partsDetail.title,
+            artist: partsDetail.artist,
+            description: partsDetail.rawTitle,
+            artworkUrl: partsDetail.artworkUrl,
+            releaseTime: null,
+            trackCount: partsDetail.parts.length,
+            tracks: partsDetail.parts
+          }));
     void request
       .then((nextDetail) => {
         if (!cancelled) setDetail(nextDetail);
@@ -111,6 +140,80 @@ export function FavoriteAlbumsPanel({
     };
   }, [selectedAlbum]);
 
+  const isAlbumInRoom = useCallback((targetAlbum: ProviderAlbumFavorite) => {
+    if (!roomPlaylists || roomPlaylists.length === 0) return false;
+    return roomPlaylists.some((rp) => {
+      if (rp.tags?.includes(`source_album:${targetAlbum.id}`)) return true;
+      if (rp.tags?.includes(`album:${targetAlbum.provider}:${targetAlbum.providerAlbumId}`)) return true;
+      if (rp.tags?.includes(`network:${targetAlbum.provider}:${targetAlbum.providerAlbumId}`)) return true;
+      return rp.title === targetAlbum.title && rp.trackIds.length === targetAlbum.trackCount;
+    });
+  }, [roomPlaylists]);
+
+  const handleAddToLibrary = async (album: ProviderAlbumFavorite) => {
+    if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
+    setAddingToLibraryId(album.id);
+    setLibraryFeedback(null);
+    try {
+      let albumTracks: ProviderTrackCandidate[] = [];
+      try {
+        const d = album.provider === "netease"
+          ? await musicRoomApi.getNeteaseAlbum(album.providerAlbumId)
+          : album.provider === "qqmusic"
+            ? await musicRoomApi.getQqMusicAlbum(album.providerAlbumId)
+            : await musicRoomApi.getBilibiliVideoParts(album.providerAlbumId).then((p) => ({
+                tracks: p.parts
+              }));
+        albumTracks = d.tracks;
+      } catch {
+        // Gracefully continue
+      }
+
+      // 默认仅导入第 1 首歌曲到曲库
+      const firstCandidate = albumTracks[0] ?? null;
+      if (firstCandidate) {
+        const alreadyInRoom = roomTracks.some(
+          (t) => t.sourceRef?.provider === firstCandidate.provider && t.sourceRef?.trackId === firstCandidate.providerTrackId
+        );
+        if (!alreadyInRoom) {
+          if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
+            await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
+          } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
+            await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
+          } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
+            await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
+          }
+        }
+      }
+
+      const tags = [
+        "network",
+        "favorite_album",
+        `album:${album.provider}:${album.providerAlbumId}`,
+        `source_album:${album.id}`
+      ];
+
+      const trackIds = albumTracks.length > 0
+        ? albumTracks.map((t) => `provider:${t.provider}:${t.providerTrackId}`)
+        : Array.from({ length: album.trackCount }, (_, i) => `network:${album.provider}:${album.providerAlbumId}:${i}`);
+
+      await musicRoomApi.createPlaylist({
+        title: album.title,
+        description: album.description ?? `收藏专辑 / ${providerName(album.provider)}`,
+        trackIds,
+        tags,
+        coverUrl: album.artworkUrl,
+        roomId: currentRoomId
+      });
+
+      setLibraryFeedback(`已将收藏《${album.title}》加入曲库（默认导入第 1 首）。`);
+    } catch (error) {
+      setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
+    } finally {
+      setAddingToLibraryId(null);
+    }
+  };
+
   if (selectedAlbum) {
     return (
       <FavoriteAlbumDetail
@@ -118,8 +221,16 @@ export function FavoriteAlbumsPanel({
         detailLoading={detailLoading}
         errorMessage={errorMessage}
         onBack={() => setSelectedAlbumId(null)}
+        canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
+        isInLibrary={isAlbumInRoom(selectedAlbum)}
+        isAddingToLibrary={addingToLibraryId === selectedAlbum.id}
+        onAddToLibrary={() => void handleAddToLibrary(selectedAlbum)}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
+        onImportBilibiliTrack={onImportBilibiliTrack}
+        onImportNeteaseTracks={onImportNeteaseTracks}
+        onImportQqMusicTracks={onImportQqMusicTracks}
+        onImportBilibiliTracks={onImportBilibiliTracks}
         canManageLibrary={canManageLibrary}
         roomTrackKeys={roomTrackKeys}
         tracks={detail?.tracks ?? []}
@@ -132,15 +243,28 @@ export function FavoriteAlbumsPanel({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-foreground">我的收藏</p>
-          <p className="mt-1 truncate text-[10px] text-foreground-muted">收藏的网易云音乐与 QQ 音乐专辑</p>
+          <p className="mt-1 truncate text-[10px] text-foreground-muted">收藏的网络音乐专辑与合集</p>
         </div>
-        <span className="shrink-0 font-mono text-[10px] text-foreground-muted">{albums.length} 张专辑</span>
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          {libraryFeedback ? (
+            <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
+          ) : null}
+          <span className="font-mono text-[10px] text-foreground-muted">{albums.length} 张专辑/合集</span>
+        </div>
       </div>
 
       {albums.length > 0 ? (
         <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
           {albums.map((album) => (
-            <FavoriteAlbumCard album={album} key={album.id} onOpen={() => setSelectedAlbumId(album.id)} />
+            <FavoriteAlbumCard
+              album={album}
+              key={album.id}
+              canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
+              isInLibrary={isAlbumInRoom(album)}
+              isAddingToLibrary={addingToLibraryId === album.id}
+              onAddToLibrary={() => void handleAddToLibrary(album)}
+              onOpen={() => setSelectedAlbumId(album.id)}
+            />
           ))}
         </div>
       ) : !loaded ? (
@@ -157,7 +281,21 @@ export function FavoriteAlbumsPanel({
   );
 }
 
-function FavoriteAlbumCard({ album, onOpen }: { album: ProviderAlbumFavorite; onOpen: () => void }) {
+function FavoriteAlbumCard({
+  album,
+  onOpen,
+  canAddToLibrary,
+  isInLibrary,
+  isAddingToLibrary,
+  onAddToLibrary
+}: {
+  album: ProviderAlbumFavorite;
+  onOpen: () => void;
+  canAddToLibrary?: boolean;
+  isInLibrary?: boolean;
+  isAddingToLibrary?: boolean;
+  onAddToLibrary?: () => void;
+}) {
   return (
     <article className="group flex min-w-0 items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-hover">
       <button
@@ -174,7 +312,35 @@ function FavoriteAlbumCard({ album, onOpen }: { album: ProviderAlbumFavorite; on
           </p>
         </div>
       </button>
-      <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
+      <div className="flex shrink-0 items-center gap-2">
+        {canAddToLibrary ? (
+          <button
+            type="button"
+            disabled={isInLibrary || isAddingToLibrary}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToLibrary?.();
+            }}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+              isInLibrary
+                ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                : "border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+            }`}
+          >
+            {isInLibrary ? (
+              <>
+                <CheckIcon className="h-3 w-3" />
+                <span>已在曲库</span>
+              </>
+            ) : isAddingToLibrary ? (
+              "添加中…"
+            ) : (
+              "加入曲库"
+            )}
+          </button>
+        ) : null}
+        <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
+      </div>
     </article>
   );
 }
@@ -186,8 +352,16 @@ function FavoriteAlbumDetail({
   detailLoading,
   errorMessage,
   onBack,
+  canAddToLibrary,
+  isInLibrary,
+  isAddingToLibrary,
+  onAddToLibrary,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
+  onImportBilibiliTracks,
   canManageLibrary
 }: {
   album: ProviderAlbumDetail | ProviderAlbumFavorite;
@@ -196,8 +370,16 @@ function FavoriteAlbumDetail({
   detailLoading: boolean;
   errorMessage: string | null;
   onBack: () => void;
+  canAddToLibrary?: boolean;
+  isInLibrary?: boolean;
+  isAddingToLibrary?: boolean;
+  onAddToLibrary?: () => void;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks?: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   canManageLibrary: boolean;
 }) {
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
@@ -229,9 +411,11 @@ function FavoriteAlbumDetail({
     setImportError(null);
     try {
       if (track.provider === "netease") {
-        await onImportNeteaseTrack(track);
+        await onImportNeteaseTrack(track as NeteaseTrackCandidate);
       } else if (track.provider === "qqmusic") {
-        await onImportQqMusicTrack(track);
+        await onImportQqMusicTrack(track as QqMusicTrackCandidate);
+      } else if (track.provider === "bilibili" && onImportBilibiliTrack) {
+        await onImportBilibiliTrack(track as BilibiliTrackCandidate);
       }
       setSelectedTrackIds((current) => current.filter((trackId) => trackId !== key));
     } catch (error) {
@@ -249,16 +433,33 @@ function FavoriteAlbumDetail({
   const importSelectedTracks = async () => {
     if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
     setIsImportingSelected(true);
-    let nextIndex = 0;
-    const worker = async () => {
-      while (nextIndex < selectedTracks.length) {
-        const track = selectedTracks[nextIndex++];
-        if (track) await importTrack(track);
-      }
-    };
+    const neteaseTracks = selectedTracks
+      .filter((t) => t.provider === "netease")
+      .map((t) => t as NeteaseTrackCandidate);
+    const qqTracks = selectedTracks
+      .filter((t) => t.provider === "qqmusic")
+      .map((t) => t as QqMusicTrackCandidate);
+    const biliTracks = selectedTracks
+      .filter((t) => t.provider === "bilibili")
+      .map((t) => t as BilibiliTrackCandidate);
+
+    for (const t of selectedTracks) {
+      pendingTrackIdsRef.current.add(trackKey(t));
+    }
+    setPendingTrackIds(new Set(pendingTrackIdsRef.current));
+
     try {
-      await Promise.all(Array.from({ length: Math.min(2, selectedTracks.length) }, () => worker()));
+      await Promise.allSettled([
+        neteaseTracks.length > 0 && onImportNeteaseTracks ? onImportNeteaseTracks(neteaseTracks) : Promise.resolve(),
+        qqTracks.length > 0 && onImportQqMusicTracks ? onImportQqMusicTracks(qqTracks) : Promise.resolve(),
+        biliTracks.length > 0 && onImportBilibiliTracks ? onImportBilibiliTracks(biliTracks) : Promise.resolve()
+      ]);
+      setSelectedTrackIds([]);
     } finally {
+      for (const t of selectedTracks) {
+        pendingTrackIdsRef.current.delete(trackKey(t));
+      }
+      setPendingTrackIds(new Set(pendingTrackIdsRef.current));
       setIsImportingSelected(false);
     }
   };
@@ -280,14 +481,41 @@ function FavoriteAlbumDetail({
         返回我的收藏
       </Button>
 
-      <div className="flex items-center gap-3 border-b border-surface-border pb-4">
-        <Artwork artworkUrl={album.artworkUrl} size="lg" title={album.title} />
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Favorite album</p>
-          <h2 className="mt-1 truncate text-xl font-bold text-foreground">{album.title}</h2>
-          <p className="mt-1 truncate text-xs text-foreground-muted">{album.artist} · {providerName(album.provider)}</p>
-          <p className="mt-2 text-[10px] text-foreground-muted">{detailLoading ? "正在加载歌曲…" : `${tracks.length} 首歌曲`}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface-border pb-4">
+        <div className="flex items-center gap-3">
+          <Artwork artworkUrl={album.artworkUrl} size="lg" title={album.title} />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">Favorite album</p>
+            <h2 className="mt-1 truncate text-xl font-bold text-foreground">{album.title}</h2>
+            <p className="mt-1 truncate text-xs text-foreground-muted">{album.artist} · {providerName(album.provider)}</p>
+            <p className="mt-2 text-[10px] text-foreground-muted">{detailLoading ? "正在加载歌曲…" : `${tracks.length} 首歌曲`}</p>
+          </div>
         </div>
+        {canAddToLibrary ? (
+          <div className="shrink-0 self-start sm:self-center">
+            <button
+              type="button"
+              disabled={isInLibrary || isAddingToLibrary}
+              onClick={onAddToLibrary}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                isInLibrary
+                  ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                  : "border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+              }`}
+            >
+              {isInLibrary ? (
+                <>
+                  <CheckIcon className="h-3.5 w-3.5" />
+                  <span>已在曲库</span>
+                </>
+              ) : isAddingToLibrary ? (
+                "添加中…"
+              ) : (
+                "加入曲库"
+              )}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {errorMessage ? <p className="text-xs text-amber-200" role="alert">{errorMessage}</p> : null}
@@ -385,7 +613,7 @@ function Artwork({ artworkUrl, title, size }: { artworkUrl: string | null; title
 }
 
 function providerName(provider: ProviderAlbumFavorite["provider"]) {
-  return provider === "netease" ? "网易云音乐" : "QQ 音乐";
+  return provider === "netease" ? "网易云音乐" : provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩";
 }
 
 function BackIcon() {

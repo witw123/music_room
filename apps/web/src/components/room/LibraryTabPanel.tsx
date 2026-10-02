@@ -3,6 +3,7 @@
 import { memo, useState } from "react";
 import type {
   AuthSession,
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   Playlist,
   QqMusicTrackCandidate,
@@ -37,8 +38,10 @@ export type LibraryTabPanelProps = {
   onLoadPlaylistIntoRoom?: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks?: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
   onSwitchToDesk?: () => void;
 };
@@ -65,8 +68,10 @@ function LibraryTabPanelBase({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   onImportCachedTrack,
   onSwitchToDesk
 }: LibraryTabPanelProps) {
@@ -135,6 +140,8 @@ function LibraryTabPanelBase({
           canAddToQueue={canAddToQueue}
           canManageLibrary={canManageLibrary}
           onDeletePlaylist={onDeletePlaylist ?? (() => Promise.resolve())}
+          onImportBilibiliTrack={onImportBilibiliTrack}
+          onImportBilibiliTracks={onImportBilibiliTracks}
           onImportCachedTrack={onImportCachedTrack}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportNeteaseTracks={onImportNeteaseTracks}

@@ -24,9 +24,20 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const initialScrolledRef = useRef(false);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const list = messagesRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+  }, []);
 
   useEffect(() => {
     let active = true;
+    initialScrolledRef.current = false;
     setMessages([]);
     setNextCursor(null);
     setErrorMessage(null);
@@ -37,22 +48,39 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
         if (!active) return;
         setMessages((current) => mergeMessages(current, history.messages));
         setNextCursor(history.nextCursor);
-        requestAnimationFrame(() => {
-          const list = messagesRef.current;
-          if (list) list.scrollTop = list.scrollHeight;
-        });
       })
       .catch((error) => {
         if (active) setErrorMessage(toChatErrorMessage(error));
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+          requestAnimationFrame(() => {
+            scrollToBottom("auto");
+          });
+        }
       });
 
     return () => {
       active = false;
     };
-  }, [roomId]);
+  }, [roomId, scrollToBottom]);
+
+  // Ensure scroll is positioned at bottom when initial history finishes loading or on open
+  useEffect(() => {
+    if (!isLoading && messages.length > 0 && !initialScrolledRef.current) {
+      initialScrolledRef.current = true;
+      scrollToBottom("auto");
+      const raf1 = requestAnimationFrame(() => {
+        scrollToBottom("auto");
+        const raf2 = requestAnimationFrame(() => {
+          scrollToBottom("auto");
+        });
+        return () => cancelAnimationFrame(raf2);
+      });
+      return () => cancelAnimationFrame(raf1);
+    }
+  }, [isLoading, messages.length, scrollToBottom]);
 
   useEffect(() => {
     if (!socket) return;
@@ -60,12 +88,11 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
     const handleChat = (message: RoomChatMessage) => {
       if (message.roomId !== roomId) return;
       const list = messagesRef.current;
-      const shouldFollow = !list || list.scrollHeight - list.scrollTop - list.clientHeight < 48;
+      const shouldFollow = !list || list.scrollHeight - list.scrollTop - list.clientHeight < 80;
       setMessages((current) => mergeMessages(current, [message]));
       if (shouldFollow) {
         requestAnimationFrame(() => {
-          const nextList = messagesRef.current;
-          if (nextList) nextList.scrollTop = nextList.scrollHeight;
+          scrollToBottom("smooth");
         });
       }
     };
@@ -81,7 +108,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
       socket.off("room.chat", handleChat);
       socket.off("room.chat.deleted", handleChatDeleted);
     };
-  }, [roomId, socket]);
+  }, [roomId, scrollToBottom, socket]);
 
   const loadOlder = useCallback(async () => {
     if (!nextCursor || isLoadingOlder) return;
@@ -112,6 +139,9 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
     if (!content || !socket || !activeSession) return;
     socket.emit("room.chat", { roomId, content });
     setInputValue("");
+    requestAnimationFrame(() => {
+      scrollToBottom("smooth");
+    });
   };
 
   const deleteMessage = async (messageId: string) => {
@@ -139,6 +169,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
       <div
         className={`custom-scrollbar min-h-0 flex-1 px-2.5 py-2 sm:px-3 sm:py-2.5 ${scrollEnabled ? "touch-pan-y overflow-y-auto overscroll-contain" : "overflow-hidden"}`}
         onScroll={(event) => {
+          if (!initialScrolledRef.current || isLoading || isLoadingOlder) return;
           if (event.currentTarget.scrollTop < 48) void loadOlder();
         }}
         ref={messagesRef}
@@ -166,6 +197,7 @@ export function RoomChatPanel({ roomId, activeSession, isHost, socket, scrollEna
             );
           })}
         </div>
+        <div ref={bottomRef} aria-hidden="true" className="h-0 w-0" />
       </div>
 
       <form className="flex shrink-0 gap-1.5 border-t border-surface-border/40 p-1.5 sm:p-2 bg-background/80 backdrop-blur-md" onSubmit={handleSend}>

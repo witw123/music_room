@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   Playlist,
   ProviderTrackCandidate,
@@ -32,8 +33,10 @@ export type RoomLibraryPlaylistsSectionProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks?: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
   onSwitchToDesk?: () => void;
 };
@@ -49,15 +52,48 @@ type PlaylistTrackItem = {
   isInRoom: boolean;
 };
 
-function getNetworkPlaylistSource(playlist: Playlist): { provider: "netease" | "qqmusic"; playlistId: string } | null {
-  const sourceTag = playlist.tags.find((tag) => tag.startsWith("network:"));
-  if (!sourceTag) return null;
-  const [, provider, ...playlistIdParts] = sourceTag.split(":");
-  if ((provider === "netease" || provider === "qqmusic") && playlistIdParts.length > 0) {
-    const playlistId = playlistIdParts.join(":").trim();
-    if (playlistId) return { provider, playlistId };
+type RoomPlaylistSource =
+  | { type: "playlist"; provider: "netease" | "qqmusic"; playlistId: string }
+  | { type: "album"; provider: "netease" | "qqmusic"; albumId: string }
+  | { type: "bilibili"; bvid: string };
+
+function getRoomPlaylistSource(playlist: Playlist): RoomPlaylistSource | null {
+  const albumTag = playlist.tags?.find((tag) => tag.startsWith("album:") || tag.startsWith("source_album:"));
+  if (albumTag) {
+    const parts = albumTag.split(":");
+    if (parts.length >= 3) {
+      const provider = parts[1];
+      const id = parts.slice(2).join(":");
+      if (provider === "bilibili") return { type: "bilibili", bvid: id };
+      if (provider === "netease" || provider === "qqmusic") return { type: "album", provider, albumId: id };
+    }
+  }
+
+  const networkTag = playlist.tags?.find((tag) => tag.startsWith("network:"));
+  if (networkTag) {
+    const [, provider, ...idParts] = networkTag.split(":");
+    const id = idParts.join(":");
+    if (provider === "bilibili") return { type: "bilibili", bvid: id };
+    if (provider === "netease" || provider === "qqmusic") return { type: "playlist", provider, playlistId: id };
   }
   return null;
+}
+
+async function fetchSourceTracks(source: RoomPlaylistSource): Promise<ProviderTrack[]> {
+  if (source.type === "bilibili") {
+    const detail = await musicRoomApi.getBilibiliVideoParts(source.bvid);
+    return detail.parts;
+  }
+  if (source.type === "album") {
+    const detail = source.provider === "netease"
+      ? await musicRoomApi.getNeteaseAlbum(source.albumId)
+      : await musicRoomApi.getQqMusicAlbum(source.albumId);
+    return detail.tracks;
+  }
+  const detail = source.provider === "netease"
+    ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+    : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+  return detail.tracks;
 }
 
 export function RoomLibraryPlaylistsSection({
@@ -69,8 +105,10 @@ export function RoomLibraryPlaylistsSection({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   onImportCachedTrack,
   onSwitchToDesk
 }: RoomLibraryPlaylistsSectionProps) {
@@ -111,17 +149,15 @@ export function RoomLibraryPlaylistsSection({
       setIsQueueBusyId(playlist.id);
       setStatusMessage(`正在准备将歌单《${playlist.title}》的全部歌曲加入节目单…`);
       try {
-        const source = getNetworkPlaylistSource(playlist);
+        const source = getRoomPlaylistSource(playlist);
         let remoteTracks: ProviderTrack[] = [];
         if (source) {
-          const detail = source.provider === "netease"
-            ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-            : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
-          remoteTracks = detail.tracks;
+          remoteTracks = await fetchSourceTracks(source);
         }
 
         const missingNetease: NeteaseTrackCandidate[] = [];
         const missingQqMusic: QqMusicTrackCandidate[] = [];
+        const missingBilibili: BilibiliTrackCandidate[] = [];
 
         for (const track of remoteTracks) {
           const inRoom = tracks.some(
@@ -132,16 +168,21 @@ export function RoomLibraryPlaylistsSection({
           if (!inRoom) {
             if (track.provider === "netease") missingNetease.push(track as NeteaseTrackCandidate);
             else if (track.provider === "qqmusic") missingQqMusic.push(track as QqMusicTrackCandidate);
+            else if (track.provider === "bilibili") missingBilibili.push(track as BilibiliTrackCandidate);
           }
         }
 
-        if (missingNetease.length > 0 || missingQqMusic.length > 0) {
-          setStatusMessage(`正在导入剩余的 ${missingNetease.length + missingQqMusic.length} 首歌曲到曲库…`);
+        const totalMissing = missingNetease.length + missingQqMusic.length + missingBilibili.length;
+        if (totalMissing > 0) {
+          setStatusMessage(`正在导入剩余的 ${totalMissing} 首歌曲到曲库…`);
           if (missingNetease.length > 0 && onImportNeteaseTracks) {
             await onImportNeteaseTracks(missingNetease);
           }
           if (missingQqMusic.length > 0 && onImportQqMusicTracks) {
             await onImportQqMusicTracks(missingQqMusic);
+          }
+          if (missingBilibili.length > 0 && onImportBilibiliTracks) {
+            await onImportBilibiliTracks(missingBilibili);
           }
         }
 
@@ -153,7 +194,7 @@ export function RoomLibraryPlaylistsSection({
         setIsQueueBusyId(null);
       }
     },
-    [canAddToQueue, isQueueBusyId, onLoadPlaylistIntoRoom, onImportNeteaseTracks, onImportQqMusicTracks, tracks]
+    [canAddToQueue, isQueueBusyId, onLoadPlaylistIntoRoom, onImportNeteaseTracks, onImportQqMusicTracks, onImportBilibiliTracks, tracks]
   );
 
   const handleDeletePlaylist = useCallback(
@@ -189,6 +230,8 @@ export function RoomLibraryPlaylistsSection({
         onImportNeteaseTracks={onImportNeteaseTracks}
         onImportQqMusicTrack={onImportQqMusicTrack}
         onImportQqMusicTracks={onImportQqMusicTracks}
+        onImportBilibiliTrack={onImportBilibiliTrack}
+        onImportBilibiliTracks={onImportBilibiliTracks}
         playlist={selectedPlaylist}
         roomTracks={tracks}
       />
@@ -216,8 +259,14 @@ export function RoomLibraryPlaylistsSection({
               imported: 0,
               isAllImported: false
             };
-            const source = getNetworkPlaylistSource(playlist);
-            const sourceLabel = source?.provider === "netease" ? "网易云音乐" : source?.provider === "qqmusic" ? "QQ 音乐" : "曲库歌单";
+            const source = getRoomPlaylistSource(playlist);
+            const sourceLabel = source?.type === "bilibili"
+              ? "哔哩哔哩"
+              : source?.provider === "netease"
+              ? (source.type === "album" ? "网易云专辑" : "网易云音乐")
+              : source?.provider === "qqmusic"
+              ? (source.type === "album" ? "QQ音乐专辑" : "QQ 音乐")
+              : "曲库歌单";
             const isBusy = isQueueBusyId === playlist.id;
             const isDeleting = pendingDeleteId === playlist.id;
 
@@ -327,8 +376,10 @@ function RoomLibraryPlaylistDetail({
   onDelete,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   onImportCachedTrack: _onImportCachedTrack
 }: {
   playlist: Playlist;
@@ -341,8 +392,10 @@ function RoomLibraryPlaylistDetail({
   onDelete: () => void;
   onImportNeteaseTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks?: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
 }) {
   const [remoteTracks, setRemoteTracks] = useState<ProviderTrack[]>([]);
@@ -352,7 +405,7 @@ function RoomLibraryPlaylistDetail({
   const [isImportingSelected, setIsImportingSelected] = useState(false);
   const pendingTrackIdsRef = useRef<Set<string>>(new Set());
 
-  const source = getNetworkPlaylistSource(playlist);
+  const source = useMemo(() => getRoomPlaylistSource(playlist), [playlist]);
 
   useEffect(() => {
     let cancelled = false;
@@ -361,13 +414,9 @@ function RoomLibraryPlaylistDetail({
       return;
     }
     setRemoteLoading(true);
-    const req = source.provider === "netease"
-      ? musicRoomApi.getNeteasePlaylist(source.playlistId)
-      : musicRoomApi.getQqMusicPlaylist(source.playlistId);
-
-    void req
-      .then((detail) => {
-        if (!cancelled) setRemoteTracks(detail.tracks);
+    void fetchSourceTracks(source)
+      .then((tracks) => {
+        if (!cancelled) setRemoteTracks(tracks);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -451,6 +500,8 @@ function RoomLibraryPlaylistDetail({
           await onImportNeteaseTrack(item.providerTrack as NeteaseTrackCandidate);
         } else if (item.providerTrack.provider === "qqmusic" && onImportQqMusicTrack) {
           await onImportQqMusicTrack(item.providerTrack as QqMusicTrackCandidate);
+        } else if (item.providerTrack.provider === "bilibili" && onImportBilibiliTrack) {
+          await onImportBilibiliTrack(item.providerTrack as BilibiliTrackCandidate);
         }
         setSelectedKeys((c) => c.filter((k) => k !== item.id));
       } finally {
@@ -462,7 +513,7 @@ function RoomLibraryPlaylistDetail({
         });
       }
     },
-    [canManageLibrary, onImportNeteaseTrack, onImportQqMusicTrack]
+    [canManageLibrary, onImportBilibiliTrack, onImportNeteaseTrack, onImportQqMusicTrack]
   );
 
   const importSelectedTracks = async () => {
@@ -475,6 +526,9 @@ function RoomLibraryPlaylistDetail({
     const qqmusic = selectedItems
       .filter((t) => t.providerTrack?.provider === "qqmusic")
       .map((t) => t.providerTrack) as QqMusicTrackCandidate[];
+    const bilibili = selectedItems
+      .filter((t) => t.providerTrack?.provider === "bilibili")
+      .map((t) => t.providerTrack) as BilibiliTrackCandidate[];
 
     try {
       if (netease.length > 0 && onImportNeteaseTracks) {
@@ -482,6 +536,9 @@ function RoomLibraryPlaylistDetail({
       }
       if (qqmusic.length > 0 && onImportQqMusicTracks) {
         await onImportQqMusicTracks(qqmusic);
+      }
+      if (bilibili.length > 0 && onImportBilibiliTracks) {
+        await onImportBilibiliTracks(bilibili);
       }
       setSelectedKeys([]);
     } finally {

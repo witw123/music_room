@@ -411,10 +411,27 @@ export function ProviderSearchPage({
     setPending("search-playlists");
     setErrorMessage(null);
     try {
-      const response = provider === "netease"
-        ? await musicRoomApi.searchNeteasePlaylists(query)
-        : await musicRoomApi.searchQqMusicPlaylists(query);
-      setPlaylists(response.items);
+      if (provider === "netease") {
+        const response = await musicRoomApi.searchNeteasePlaylists(query);
+        setPlaylists(response.items);
+      } else if (provider === "qqmusic") {
+        const response = await musicRoomApi.searchQqMusicPlaylists(query);
+        setPlaylists(response.items);
+      } else {
+        const searchKeyword = query.includes("歌单") || query.includes("合集") ? query : `${query} 歌单`;
+        const response = await musicRoomApi.searchBilibiliTracks(searchKeyword, { pageSize: 20 });
+        const summaries: ProviderPlaylistSummary[] = response.items.map((item) => ({
+          provider: "bilibili" as const,
+          providerPlaylistId: item.bvid || item.providerTrackId,
+          title: item.title,
+          description: item.artist,
+          tags: ["bilibili"],
+          artworkUrl: item.artworkUrl,
+          creatorName: item.artist,
+          trackCount: item.pageCount && item.pageCount > 1 ? item.pageCount : 1
+        }));
+        setPlaylists(summaries);
+      }
       setPlaylist(null);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
@@ -599,9 +616,21 @@ export function ProviderSearchPage({
     setPending(`playlist:${item.provider}:${item.providerPlaylistId}`);
     setErrorMessage(null);
     try {
-      const detail = item.provider === "netease"
+      const detail: ProviderPlaylistDetail = item.provider === "netease"
         ? await musicRoomApi.getNeteasePlaylist(item.providerPlaylistId)
-        : await musicRoomApi.getQqMusicPlaylist(item.providerPlaylistId);
+        : item.provider === "qqmusic"
+          ? await musicRoomApi.getQqMusicPlaylist(item.providerPlaylistId)
+          : await musicRoomApi.getBilibiliVideoParts(item.providerPlaylistId).then((partsDetail) => ({
+              provider: "bilibili" as const,
+              providerPlaylistId: partsDetail.bvid,
+              title: partsDetail.title,
+              description: partsDetail.rawTitle,
+              artworkUrl: partsDetail.artworkUrl,
+              creatorName: partsDetail.artist,
+              tags: ["bilibili"],
+              trackCount: partsDetail.parts.length,
+              tracks: partsDetail.parts
+            }));
       setPlaylist(detail);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, item.provider));
@@ -630,7 +659,26 @@ export function ProviderSearchPage({
           // The saved network playlist remains usable when local metadata storage is unavailable.
         }
       }));
-      setStatusMessage(`《${detail.title}》已保存到网络歌单。`);
+      // Also save to user favorite albums if not already favorited, so it appears in "我的收藏"
+      const favKey = albumKey(detail.provider, detail.providerPlaylistId);
+      if (!favoriteAlbumIds.has(favKey) && activeSession) {
+        try {
+          await musicRoomApi.saveFavoriteAlbum({
+            provider: detail.provider,
+            providerAlbumId: detail.providerPlaylistId,
+            title: detail.title,
+            artist: detail.creatorName ?? "网络歌单",
+            artworkUrl: detail.artworkUrl,
+            description: detail.description,
+            releaseTime: null,
+            trackCount: detail.trackCount
+          });
+          setFavoriteAlbumIds((prev) => new Set(prev).add(favKey));
+        } catch {
+          // Non-blocking
+        }
+      }
+      setStatusMessage(`《${detail.title}》已保存到网络歌单与我的收藏。`);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, provider));
     } finally {
@@ -646,7 +694,19 @@ export function ProviderSearchPage({
     try {
       const detail = itemProvider === "netease"
         ? await musicRoomApi.getNeteaseAlbum(id)
-        : await musicRoomApi.getQqMusicAlbum(id);
+        : itemProvider === "qqmusic"
+          ? await musicRoomApi.getQqMusicAlbum(id)
+          : await musicRoomApi.getBilibiliVideoParts(id).then((partsDetail) => ({
+              provider: "bilibili" as const,
+              providerAlbumId: partsDetail.bvid,
+              title: partsDetail.title,
+              artist: partsDetail.artist,
+              description: partsDetail.rawTitle,
+              artworkUrl: partsDetail.artworkUrl,
+              releaseTime: null,
+              trackCount: partsDetail.parts.length,
+              tracks: partsDetail.parts
+            }));
       setAlbum(detail);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, itemProvider));
@@ -863,45 +923,21 @@ export function ProviderSearchPage({
     <>
       {shouldShowSearchContent && enabledProviders.length > 0 ? (
         <>
-          {provider !== "bilibili" ? (
-            <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center gap-7 border-b border-surface-border`} role="tablist" aria-label="搜索结果类型">
+          <div className={`${embedded ? "mt-7" : "mt-10"} flex items-center justify-between border-b border-surface-border`}>
+            <div className="flex items-center gap-7" role="tablist" aria-label="搜索结果类型">
               <SearchTab active={contentTab === "songs"} onClick={() => setContentTab("songs")}>单曲</SearchTab>
               <SearchTab active={contentTab === "playlists"} onClick={() => void loadSearchPlaylists()}>歌单</SearchTab>
-              <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
+              {provider !== "bilibili" ? (
+                <SearchTab active={contentTab === "albums"} onClick={() => void loadSearchAlbums()}>专辑</SearchTab>
+              ) : null}
             </div>
-          ) : (
-            <div className={`${embedded ? "mt-4" : "mt-6"} flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3`}>
-              <div className="flex items-center gap-1.5 overflow-x-auto py-1" role="tablist" aria-label="B站音乐分区">
-                {bilibiliCategories.map((cat) => {
-                  const active = bilibiliSubCategory === cat.tid;
-                  return (
-                    <button
-                      key={cat.label}
-                      type="button"
-                      onClick={() => {
-                        setBilibiliSubCategory(cat.tid);
-                        if (keywords.trim()) {
-                          void searchTracksForQuery(keywords.trim(), cat.tid);
-                        }
-                      }}
-                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors select-none ${
-                        active
-                          ? "bg-foreground text-background font-semibold"
-                          : "bg-surface text-foreground-muted hover:bg-surface-hover hover:text-foreground border border-surface-border"
-                      }`}
-                    >
-                      {cat.label}
-                    </button>
-                  );
-                })}
-              </div>
-
+            {provider === "bilibili" ? (
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
                 onClick={() => setImportDialogOpen(true)}
-                className="text-xs text-foreground-muted hover:text-foreground flex items-center gap-1.5 border border-surface-border/80 px-2.5 py-1 rounded-md"
+                className="mb-1 text-xs text-foreground-muted hover:text-foreground flex items-center gap-1.5 border border-surface-border/80 px-2.5 py-1 rounded-md"
               >
                 <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -910,8 +946,35 @@ export function ProviderSearchPage({
                 </svg>
                 <span>导入收藏夹</span>
               </Button>
+            ) : null}
+          </div>
+
+          {provider === "bilibili" && contentTab === "songs" ? (
+            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto py-1" role="tablist" aria-label="B站音乐分区">
+              {bilibiliCategories.map((cat) => {
+                const active = bilibiliSubCategory === cat.tid;
+                return (
+                  <button
+                    key={cat.label}
+                    type="button"
+                    onClick={() => {
+                      setBilibiliSubCategory(cat.tid);
+                      if (keywords.trim()) {
+                        void searchTracksForQuery(keywords.trim(), cat.tid);
+                      }
+                    }}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors select-none ${
+                      active
+                        ? "bg-foreground text-background font-semibold"
+                        : "bg-surface text-foreground-muted hover:bg-surface-hover hover:text-foreground border border-surface-border"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                );
+              })}
             </div>
-          )}
+          ) : null}
 
           {!isConnected ? (
             <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100/90">
@@ -936,6 +999,45 @@ export function ProviderSearchPage({
                 void toggleFavoriteTrack(track)
                   .then(() => setStatusMessage(`已${isFavoriteTrack(track) ? "收藏" : "取消收藏"}《${track.title}》。`))
                   .catch((error) => setErrorMessage(error instanceof Error ? error.message : "更新歌曲收藏失败。"));
+              }}
+              isCollectionFavorite={favoriteAlbumIds.has(albumKey("bilibili", bilibiliPartDetail.bvid))}
+              onToggleFavoriteCollection={async (coll) => {
+                await toggleFavoriteAlbum({
+                  provider: "bilibili",
+                  providerAlbumId: coll.bvid,
+                  title: coll.title,
+                  artist: coll.artist,
+                  artworkUrl: coll.artworkUrl,
+                  description: coll.rawTitle,
+                  releaseTime: null,
+                  trackCount: coll.parts.length
+                });
+              }}
+              onSaveCollectionAsPlaylist={async (coll) => {
+                await saveProviderPlaylist({
+                  provider: "bilibili",
+                  providerPlaylistId: coll.bvid,
+                  title: coll.title,
+                  description: coll.rawTitle,
+                  artworkUrl: coll.artworkUrl,
+                  creatorName: coll.artist,
+                  tags: ["bilibili"],
+                  trackCount: coll.parts.length,
+                  tracks: coll.parts
+                });
+              }}
+              onAddCollectionToPlaylist={(coll, anchor) => {
+                openAlbumPlaylistPicker({
+                  provider: "bilibili",
+                  providerAlbumId: coll.bvid,
+                  title: coll.title,
+                  artist: coll.artist,
+                  artworkUrl: coll.artworkUrl,
+                  description: coll.rawTitle,
+                  releaseTime: null,
+                  trackCount: coll.parts.length,
+                  tracks: coll.parts
+                }, anchor);
               }}
             />
           ) : contentTab === "songs" && (hasSearched || Boolean(keywords.trim())) ? (
@@ -970,7 +1072,16 @@ export function ProviderSearchPage({
             </>
           ) : null}
            {contentTab === "playlists" ? (
-            <PlaylistsContent playlists={playlists} playlist={playlist} pending={pending} onBack={() => setPlaylist(null)} onOpen={loadPlaylist} onSave={saveProviderPlaylist} trackActions={providerTrackActions()} />
+            <PlaylistsContent
+              playlists={playlists}
+              playlist={playlist}
+              pending={pending}
+              onBack={() => setPlaylist(null)}
+              onOpen={loadPlaylist}
+              onSave={saveProviderPlaylist}
+              isFavorite={playlist ? favoriteAlbumIds.has(albumKey(playlist.provider, playlist.providerPlaylistId)) : false}
+              trackActions={providerTrackActions()}
+            />
            ) : null}
            {contentTab === "albums" ? (
             <AlbumsContent albums={albums} album={album} pending={pending} favoriteAlbumIds={favoriteAlbumIds} onOpen={(item) => loadAlbumById(item.providerAlbumId, item.provider)} onBack={() => setAlbum(null)} onToggleFavorite={toggleFavoriteAlbum} onAddAlbumToPlaylist={openAlbumPlaylistPicker} trackActions={providerTrackActions()} />

@@ -426,8 +426,10 @@ function RadioLibraryList({
         onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
         onImportNeteaseTrack={props.onImportNeteaseTrack}
         onImportQqMusicTrack={props.onImportQqMusicTrack}
+        onImportBilibiliTrack={props.onImportBilibiliTrack}
         onImportNeteaseTracks={props.onImportNeteaseTracks}
         onImportQqMusicTracks={props.onImportQqMusicTracks}
+        onImportBilibiliTracks={props.onImportBilibiliTracks}
         onImportCachedTrack={props.onImportCachedTrack}
         onSwitchToDesk={onSwitchToDesk}
       />
@@ -641,6 +643,8 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
                 onImportNeteaseTracks={props.onImportNeteaseTracks}
                 onImportQqMusicTrack={props.onImportQqMusicTrack}
                 onImportQqMusicTracks={props.onImportQqMusicTracks}
+                onImportBilibiliTrack={props.onImportBilibiliTrack}
+                onImportBilibiliTracks={props.onImportBilibiliTracks}
                 onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
                 onRefreshLocalStorage={props.onRefreshLocalStorage}
                 onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}

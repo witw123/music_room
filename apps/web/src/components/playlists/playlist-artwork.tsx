@@ -7,7 +7,7 @@ import type { LocalPlaylistRecord, LocalPlaylistTrackRecord } from "@/features/p
 import { toProviderTrackRecord, upsertLocalPlaylistTrack } from "@/features/playlist/local-playlist";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 
-export type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
+export type NetworkPlaylistSource = { provider: "netease" | "qqmusic" | "bilibili"; playlistId: string };
 
 export function Artwork({
   artworkUrl,
@@ -140,7 +140,7 @@ export function getNetworkPlaylistSource(playlist: Playlist): NetworkPlaylistSou
   const sourceTag = playlist.tags.find((tag) => tag.startsWith("network:"));
   if (!sourceTag) return null;
   const [, provider, ...playlistIdParts] = sourceTag.split(":");
-  if (provider !== "netease" && provider !== "qqmusic") return null;
+  if (provider !== "netease" && provider !== "qqmusic" && provider !== "bilibili") return null;
   const playlistId = playlistIdParts.join(":").trim();
   return playlistId ? { provider, playlistId } : null;
 }

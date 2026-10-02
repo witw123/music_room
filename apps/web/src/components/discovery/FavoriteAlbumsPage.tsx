@@ -183,7 +183,9 @@ export function FavoriteAlbumsPage({
     try {
       return track.provider === "netease"
         ? await musicRoomApi.getNeteaseTrack(track.providerTrackId)
-        : await musicRoomApi.getQqMusicTrack(track.providerTrackId);
+        : track.provider === "qqmusic"
+          ? await musicRoomApi.getQqMusicTrack(track.providerTrackId)
+          : track;
     } catch {
       return track;
     }
@@ -354,7 +356,19 @@ export function FavoriteAlbumsPage({
     try {
       const nextDetail = item.provider === "netease"
         ? await musicRoomApi.getNeteaseAlbum(item.providerAlbumId)
-        : await musicRoomApi.getQqMusicAlbum(item.providerAlbumId);
+        : item.provider === "qqmusic"
+          ? await musicRoomApi.getQqMusicAlbum(item.providerAlbumId)
+          : await musicRoomApi.getBilibiliVideoParts(item.providerAlbumId).then((partsDetail) => ({
+              provider: "bilibili" as const,
+              providerAlbumId: partsDetail.bvid,
+              title: partsDetail.title,
+              artist: partsDetail.artist,
+              description: partsDetail.rawTitle,
+              artworkUrl: partsDetail.artworkUrl,
+              releaseTime: null,
+              trackCount: partsDetail.parts.length,
+              tracks: partsDetail.parts
+            }));
       setDetail(nextDetail);
     } catch (error) {
       setErrorMessage(toErrorMessage(error));
@@ -452,7 +466,7 @@ export function FavoriteAlbumsPage({
                     </div>
                     <div className="min-w-0 px-1 pt-3">
                       <strong className="block truncate text-[15px] font-semibold text-foreground">{item.title}</strong>
-                      <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : "QQ 音乐"}</p>
+                      <p className="mt-1 truncate text-sm text-foreground-muted">{item.artist} · {item.provider === "netease" ? "网易云音乐" : item.provider === "qqmusic" ? "QQ 音乐" : "哔哩哔哩"}</p>
                     </div>
                   </button>
                   <Button aria-label={`取消收藏 ${item.title}`} className="absolute right-2 top-2 h-10 w-10 bg-black/60 text-white/80 opacity-100 backdrop-blur-sm transition-opacity hover:bg-red-500/80 hover:text-white sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100" disabled={pending !== null} onClick={() => void removeAlbum(item)} size="icon" title="取消收藏" variant="ghost" type="button"><HeartIcon filled /></Button>

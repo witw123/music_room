@@ -118,7 +118,19 @@ export function PlaylistDetailView({
     const load =
       networkProvider === "netease"
         ? musicRoomApi.getNeteasePlaylist(networkPlaylistId)
-        : musicRoomApi.getQqMusicPlaylist(networkPlaylistId);
+        : networkProvider === "qqmusic"
+          ? musicRoomApi.getQqMusicPlaylist(networkPlaylistId)
+          : musicRoomApi.getBilibiliVideoParts(networkPlaylistId).then((partsDetail) => ({
+              provider: "bilibili" as const,
+              providerPlaylistId: partsDetail.bvid,
+              title: partsDetail.title,
+              description: partsDetail.rawTitle,
+              artworkUrl: partsDetail.artworkUrl,
+              creatorName: partsDetail.artist,
+              trackCount: partsDetail.parts.length,
+              tags: ["bilibili"],
+              tracks: partsDetail.parts
+            }));
     void load
       .then((detail) => {
         if (cancelled) return;

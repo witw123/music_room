@@ -148,8 +148,10 @@ function LocalStorageTabPanelBase({
           onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
+          onImportBilibiliTrack={onImportBilibiliTrack}
           onImportNeteaseTracks={onImportNeteaseTracks}
           onImportQqMusicTracks={onImportQqMusicTracks}
+          onImportBilibiliTracks={onImportBilibiliTracks}
           onSavePlaylistFromQueue={onSavePlaylistFromQueue}
           onUpdatePlaylistTitle={onUpdatePlaylistTitle}
           onUpdatePlaylistTracks={onUpdatePlaylistTracks}
@@ -162,8 +164,14 @@ function LocalStorageTabPanelBase({
         <FavoriteAlbumsPanel
           activeSession={activeSession}
           canManageLibrary={canManageLibrary}
+          currentRoomId={currentRoomId}
+          roomPlaylists={roomPlaylists}
           onImportNeteaseTrack={onImportNeteaseTrack}
           onImportQqMusicTrack={onImportQqMusicTrack}
+          onImportBilibiliTrack={onImportBilibiliTrack}
+          onImportNeteaseTracks={onImportNeteaseTracks}
+          onImportQqMusicTracks={onImportQqMusicTracks}
+          onImportBilibiliTracks={onImportBilibiliTracks}
           roomTracks={tracks}
         />
       </section> : null}

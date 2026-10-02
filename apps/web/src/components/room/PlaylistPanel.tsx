@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { createPortal } from "react-dom";
 import type {
   AuthSession,
+  BilibiliTrackCandidate,
   NeteaseTrackCandidate,
   Playlist,
   ProviderTrackCandidate,
@@ -29,7 +30,7 @@ import { useBackHandler } from "@/lib/desktop/use-back-handler";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
 
 type ProviderTrack = ProviderTrackCandidate;
-type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
+type NetworkPlaylistSource = { provider: "netease" | "qqmusic" | "bilibili"; playlistId: string };
 type PlaylistTrackInfo = Pick<TrackMeta, "id" | "title" | "artist" | "album" | "durationMs" | "artworkUrl"> & {
   providerTrack: ProviderTrack | null;
   isInRoom: boolean;
@@ -45,8 +46,10 @@ type PlaylistPanelProps = {
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
@@ -64,8 +67,10 @@ export function PlaylistPanel({
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   onDeletePlaylist,
   currentRoomId,
   roomPlaylists
@@ -179,7 +184,12 @@ export function PlaylistPanel({
       try {
         const detail = source.provider === "netease"
           ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-          : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+          : source.provider === "qqmusic"
+            ? await musicRoomApi.getQqMusicPlaylist(source.playlistId)
+            : await musicRoomApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
+                artworkUrl: p.artworkUrl,
+                tracks: p.parts
+              }));
         const artworkUrls = uniqueArtworkUrls([
           detail.artworkUrl,
           ...detail.tracks.map((track) => track.artworkUrl)
@@ -218,7 +228,19 @@ export function PlaylistPanel({
     setRemoteLoading(true);
     const request = selectedProvider === "netease"
       ? musicRoomApi.getNeteasePlaylist(selectedProviderPlaylistId)
-      : musicRoomApi.getQqMusicPlaylist(selectedProviderPlaylistId);
+      : selectedProvider === "qqmusic"
+        ? musicRoomApi.getQqMusicPlaylist(selectedProviderPlaylistId)
+        : musicRoomApi.getBilibiliVideoParts(selectedProviderPlaylistId).then((partsDetail) => ({
+            provider: "bilibili" as const,
+            providerPlaylistId: partsDetail.bvid,
+            title: partsDetail.title,
+            description: partsDetail.rawTitle,
+            artworkUrl: partsDetail.artworkUrl,
+            creatorName: partsDetail.artist,
+            trackCount: partsDetail.parts.length,
+            tags: ["bilibili"],
+            tracks: partsDetail.parts
+          }));
     void request
       .then((detail) => {
         if (!cancelled) {
@@ -295,7 +317,11 @@ export function PlaylistPanel({
         try {
           const detail = source.provider === "netease"
             ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
-            : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+            : source.provider === "qqmusic"
+              ? await musicRoomApi.getQqMusicPlaylist(source.playlistId)
+              : await musicRoomApi.getBilibiliVideoParts(source.playlistId).then((p) => ({
+                  tracks: p.parts
+                }));
           if (detail.tracks.length > 0) {
             firstCandidate = detail.tracks[0];
           }
@@ -314,6 +340,8 @@ export function PlaylistPanel({
             await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
           } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
             await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
+          } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
+            await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
           }
         }
       }
@@ -364,8 +392,10 @@ export function PlaylistPanel({
         onAddToLibrary={() => void handleAddToLibrary(selectedPlaylist)}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
+        onImportBilibiliTrack={onImportBilibiliTrack}
         onImportNeteaseTracks={onImportNeteaseTracks}
         onImportQqMusicTracks={onImportQqMusicTracks}
+        onImportBilibiliTracks={onImportBilibiliTracks}
         canManageLibrary={canManageLibrary}
         playlist={selectedPlaylist}
         remoteError={remoteError}
@@ -588,8 +618,10 @@ function PlaylistDetail({
   onAddToLibrary,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
+  onImportBilibiliTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
+  onImportBilibiliTracks,
   canManageLibrary,
   tracks,
   remoteLoading,
@@ -605,8 +637,10 @@ function PlaylistDetail({
   onAddToLibrary?: () => void;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportBilibiliTrack?: (track: BilibiliTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
   onImportQqMusicTracks: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   canManageLibrary: boolean;
   tracks: Array<PlaylistTrackInfo | null>;
   remoteLoading: boolean;
@@ -623,7 +657,7 @@ function PlaylistDetail({
       if (track?.providerTrack) return track.providerTrack;
       const rawId = playlist.trackIds[index] || `network:${index}`;
       const parts = rawId.split(":");
-      const provider = (parts[1] === "qqmusic" ? "qqmusic" : "netease") as "netease" | "qqmusic";
+      const provider = (parts[1] === "qqmusic" ? "qqmusic" : parts[1] === "bilibili" ? "bilibili" : "netease") as "netease" | "qqmusic" | "bilibili";
       const providerTrackId = parts[2] || parts[1] || String(index);
       return {
         provider,
@@ -695,6 +729,8 @@ function PlaylistDetail({
         await onImportNeteaseTrack(track.providerTrack);
       } else if (track.providerTrack.provider === "qqmusic") {
         await onImportQqMusicTrack(track.providerTrack);
+      } else if (track.providerTrack.provider === "bilibili" && onImportBilibiliTrack) {
+        await onImportBilibiliTrack(track.providerTrack as BilibiliTrackCandidate);
       }
       setSelectedTrackKeys((current) => current.filter((k) => k !== trackKey && k !== track.id));
     } catch {
@@ -707,7 +743,7 @@ function PlaylistDetail({
         return next;
       });
     }
-  }, [canManageLibrary, onImportNeteaseTrack, onImportQqMusicTrack]);
+  }, [canManageLibrary, onImportBilibiliTrack, onImportNeteaseTrack, onImportQqMusicTrack]);
 
   const importSelectedTracks = async () => {
     if (!canManageLibrary || isImportBusy || selectedTracks.length === 0) return;
@@ -721,6 +757,9 @@ function PlaylistDetail({
     const qqMusicTracks = selectedTracks
       .filter((track: PlaylistTrackInfo) => track.providerTrack?.provider === "qqmusic")
       .map((track: PlaylistTrackInfo) => track.providerTrack) as QqMusicTrackCandidate[];
+    const bilibiliTracks = selectedTracks
+      .filter((track: PlaylistTrackInfo) => track.providerTrack?.provider === "bilibili")
+      .map((track: PlaylistTrackInfo) => track.providerTrack) as BilibiliTrackCandidate[];
     try {
       const results = await Promise.allSettled([
         neteaseTracks.length > 0
@@ -728,6 +767,9 @@ function PlaylistDetail({
           : Promise.resolve(),
         qqMusicTracks.length > 0
           ? onImportQqMusicTracks(qqMusicTracks)
+          : Promise.resolve(),
+        bilibiliTracks.length > 0 && onImportBilibiliTracks
+          ? onImportBilibiliTracks(bilibiliTracks)
           : Promise.resolve()
       ]);
       const failed = results.some((result) => result.status === "rejected");
