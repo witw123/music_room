@@ -286,6 +286,17 @@ export class PlaylistService {
     return this.getPlaylistOrThrow(playlistId);
   }
 
+  async getRoomIdForPlaylist(playlistId: string): Promise<string | null> {
+    if (this.prisma.isAvailable()) {
+      const persisted = await this.prisma.playlist.findUnique({
+        where: { id: playlistId },
+        select: { roomId: true }
+      });
+      return persisted?.roomId ?? null;
+    }
+    return this.playlistRoomIds.get(playlistId) ?? null;
+  }
+
   async getPlaylistForOwner(playlistId: string, ownerId: string) {
     const playlist = await this.getPlaylistOrThrow(playlistId);
 

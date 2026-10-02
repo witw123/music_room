@@ -1,11 +1,20 @@
 "use client";
 
-import { memo } from "react";
-import type { AuthSession, RoomMember, TrackMeta } from "@music-room/shared";
-import type { UploadedTrack } from "@/features/library/audio-utils";
+import { memo, useState } from "react";
+import type {
+  AuthSession,
+  NeteaseTrackCandidate,
+  Playlist,
+  QqMusicTrackCandidate,
+  RoomMember,
+  TrackMeta
+} from "@music-room/shared";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import { TrackListSection } from "./TrackListSection";
+import { RoomLibraryPlaylistsSection } from "./RoomLibraryPlaylistsSection";
+import { FolderIcon, MusicIcon } from "@/components/icons/DiscoverIcons";
 
-type LibraryTabPanelProps = {
+export type LibraryTabPanelProps = {
   roomId?: string | null;
   tracks: TrackMeta[];
   members?: Array<Pick<RoomMember, "id" | "presenceState">> | null;
@@ -22,6 +31,16 @@ type LibraryTabPanelProps = {
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
+  // Room Library Playlists
+  roomPlaylists?: Playlist[];
+  onDeletePlaylist?: (playlistId: string) => Promise<void>;
+  onLoadPlaylistIntoRoom?: (playlistId: string) => Promise<void>;
+  onImportNeteaseTrack?: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportQqMusicTrack?: (track: QqMusicTrackCandidate) => Promise<void>;
+  onImportNeteaseTracks?: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
+  onImportQqMusicTracks?: (tracks: QqMusicTrackCandidate[]) => Promise<void>;
+  onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
+  onSwitchToDesk?: () => void;
 };
 
 function LibraryTabPanelBase({
@@ -40,28 +59,93 @@ function LibraryTabPanelBase({
   onAddToQueue,
   onSaveTrackToLocal,
   onDeleteTrack,
-  onPlayTrack
+  onPlayTrack,
+  roomPlaylists,
+  onDeletePlaylist,
+  onLoadPlaylistIntoRoom,
+  onImportNeteaseTrack,
+  onImportQqMusicTrack,
+  onImportNeteaseTracks,
+  onImportQqMusicTracks,
+  onImportCachedTrack,
+  onSwitchToDesk
 }: LibraryTabPanelProps) {
+  const [subTab, setSubTab] = useState<"tracks" | "playlists">("tracks");
+
   return (
-    <div className="animate-fade-in flex w-full flex-col gap-4">
-      <TrackListSection
-        roomId={roomId}
-        tracks={tracks}
-        members={members}
-        uploadedTracks={uploadedTracks}
-        localFolderName={localFolderName}
-        localSavedFileHashes={localSavedFileHashes}
-        canControlPlayback={canControlPlayback}
-        canManageLibrary={canManageLibrary}
-        canManageAllTracks={canManageAllTracks}
-        canAddToQueue={canAddToQueue}
-        activeSession={activeSession}
-        onFilesSelected={onFilesSelected}
-        onAddToQueue={onAddToQueue}
-        onSaveTrackToLocal={onSaveTrackToLocal}
-        onDeleteTrack={onDeleteTrack}
-        onPlayTrack={onPlayTrack}
-      />
+    <div className="animate-fade-in flex w-full flex-col gap-3">
+      {roomPlaylists !== undefined ? (
+        <div
+          aria-label="曲库视图切换"
+          className="flex items-center gap-1 rounded-lg border border-surface-border/60 bg-surface/60 p-0.5"
+          role="tablist"
+        >
+          <button
+            aria-selected={subTab === "tracks"}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+              subTab === "tracks"
+                ? "bg-accent text-white shadow-xs"
+                : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+            }`}
+            onClick={() => setSubTab("tracks")}
+            role="tab"
+            type="button"
+          >
+            <MusicIcon className="w-3.5 h-3.5" />
+            <span>单曲 ({tracks.length})</span>
+          </button>
+          <button
+            aria-selected={subTab === "playlists"}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+              subTab === "playlists"
+                ? "bg-accent text-white shadow-xs"
+                : "text-foreground-muted hover:text-foreground hover:bg-surface-hover/60"
+            }`}
+            onClick={() => setSubTab("playlists")}
+            role="tab"
+            type="button"
+          >
+            <FolderIcon className="w-3.5 h-3.5" />
+            <span>歌单 ({roomPlaylists.length})</span>
+          </button>
+        </div>
+      ) : null}
+
+      {subTab === "tracks" || roomPlaylists === undefined ? (
+        <TrackListSection
+          activeSession={activeSession}
+          canAddToQueue={canAddToQueue}
+          canControlPlayback={canControlPlayback}
+          canManageAllTracks={canManageAllTracks}
+          canManageLibrary={canManageLibrary}
+          localFolderName={localFolderName}
+          localSavedFileHashes={localSavedFileHashes}
+          members={members}
+          onAddToQueue={onAddToQueue}
+          onDeleteTrack={onDeleteTrack}
+          onFilesSelected={onFilesSelected}
+          onPlayTrack={onPlayTrack}
+          onSaveTrackToLocal={onSaveTrackToLocal}
+          roomId={roomId}
+          tracks={tracks}
+          uploadedTracks={uploadedTracks}
+        />
+      ) : (
+        <RoomLibraryPlaylistsSection
+          canAddToQueue={canAddToQueue}
+          canManageLibrary={canManageLibrary}
+          onDeletePlaylist={onDeletePlaylist ?? (() => Promise.resolve())}
+          onImportCachedTrack={onImportCachedTrack}
+          onImportNeteaseTrack={onImportNeteaseTrack}
+          onImportNeteaseTracks={onImportNeteaseTracks}
+          onImportQqMusicTrack={onImportQqMusicTrack}
+          onImportQqMusicTracks={onImportQqMusicTracks}
+          onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom ?? (() => Promise.resolve())}
+          onSwitchToDesk={onSwitchToDesk}
+          roomPlaylists={roomPlaylists}
+          tracks={tracks}
+        />
+      )}
     </div>
   );
 }

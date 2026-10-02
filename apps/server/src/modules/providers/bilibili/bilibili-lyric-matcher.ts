@@ -86,7 +86,7 @@ export class CrossPlatformLyricMatcher {
         }
       }
 
-      if (best && best.score >= 0) {
+      if (best && best.score >= 40) {
         if (best.song.provider === "netease") {
           const lyricsData = await this.neteaseApiClient?.getLyrics({
             trackId: best.song.trackId,

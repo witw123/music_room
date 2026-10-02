@@ -333,9 +333,18 @@ export class RoomContentService {
     }
     assertPermission(record, sessionId, "queue");
 
-    const validTrackIds = trackIds.filter((trackId) =>
-      record.tracks.some((track) => track.id === trackId)
-    );
+    const validTrackIds = trackIds
+      .map((targetId) => {
+        const direct = record.tracks.find((track) => track.id === targetId);
+        if (direct) return direct.id;
+        const matched = record.tracks.find((track) => {
+          if (track.sourceRef && `${track.sourceRef.provider}:${track.sourceRef.trackId}` === targetId) return true;
+          if (track.fileHash && track.fileHash === targetId) return true;
+          return false;
+        });
+        return matched?.id ?? null;
+      })
+      .filter((id): id is string => !!id);
 
     if (validTrackIds.length === 0) {
       throw new Error("No tracks from this playlist are available in the current room.");

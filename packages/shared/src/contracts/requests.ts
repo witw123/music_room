@@ -235,7 +235,8 @@ export const createPlaylistRequestSchema = z
     trackIds: trackIdListSchema.optional(),
     tags: z.array(trimmedString(40)).max(20).optional(),
     coverUrl: z.string().trim().max(4096).nullable().optional(),
-    isCollaborative: z.boolean().optional()
+    isCollaborative: z.boolean().optional(),
+    roomId: z.string().trim().min(1).nullable().optional()
   })
   .strict();
 

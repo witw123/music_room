@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { TrackMeta } from "@music-room/shared";
+import type { Playlist, TrackMeta } from "@music-room/shared";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
+import { musicRoomApi } from "@/lib/network/music-room-api";
+import { CheckIcon } from "@/components/icons/DiscoverIcons";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
@@ -17,6 +19,8 @@ type LocalPlaylistPanelProps = {
   canManageLibrary: boolean;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
+  currentRoomId?: string | null;
+  roomPlaylists?: Playlist[];
 };
 
 export function LocalPlaylistPanel({
@@ -26,11 +30,60 @@ export function LocalPlaylistPanel({
   localFolderName,
   canManageLibrary,
   onImportCachedTrack,
-  pendingCachedImport
+  pendingCachedImport,
+  currentRoomId,
+  roomPlaylists
 }: LocalPlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(null);
+  const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
   const selectedPlaylist = localPlaylists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
   const tracksById = new Map(localTracks.map((track) => [track.id, track]));
+
+  const isPlaylistInRoom = (playlist: LocalPlaylistRecord) => {
+    if (!roomPlaylists || roomPlaylists.length === 0) return false;
+    return roomPlaylists.some(
+      (rp) =>
+        rp.id === playlist.id ||
+        rp.tags?.includes(`source_playlist:${playlist.id}`) ||
+        (rp.title === playlist.title && rp.trackIds.length === playlist.trackIds.length)
+    );
+  };
+
+  const handleAddToLibrary = async (playlist: LocalPlaylistRecord) => {
+    if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
+    setAddingToLibraryId(playlist.id);
+    setLibraryFeedback(null);
+    try {
+      // 默认仅导入第一首歌曲
+      const firstTrackId = playlist.trackIds[0];
+      const firstTrack = firstTrackId ? tracksById.get(firstTrackId) : null;
+      if (firstTrack && firstTrack.fileHash) {
+        const alreadyInRoom = roomTracks.some((t) => t.fileHash === firstTrack.fileHash);
+        if (!alreadyInRoom) {
+          const cached = toCachedLibraryTrack(firstTrack);
+          if (cached) {
+            await onImportCachedTrack(cached);
+          }
+        }
+      }
+
+      await musicRoomApi.createPlaylist({
+        title: playlist.title,
+        description: playlist.description,
+        trackIds: playlist.trackIds,
+        tags: ["local_playlist", `source_playlist:${playlist.id}`],
+        coverUrl: null,
+        roomId: currentRoomId
+      });
+
+      setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库（默认导入第 1 首）。`);
+    } catch (error) {
+      setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
+    } finally {
+      setAddingToLibraryId(null);
+    }
+  };
 
   useEffect(() => {
     if (selectedPlaylistId && !selectedPlaylist) {
@@ -41,6 +94,10 @@ export function LocalPlaylistPanel({
   if (selectedPlaylist) {
     return (
       <LocalPlaylistDetail
+        canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
+        isInLibrary={isPlaylistInRoom(selectedPlaylist)}
+        isAddingToLibrary={addingToLibraryId === selectedPlaylist.id}
+        onAddToLibrary={() => void handleAddToLibrary(selectedPlaylist)}
         localFolderName={localFolderName}
         canManageLibrary={canManageLibrary}
         onBack={() => setSelectedPlaylistId(null)}
@@ -57,6 +114,11 @@ export function LocalPlaylistPanel({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="local-playlist-panel">
+      {libraryFeedback ? (
+        <p className="text-xs text-accent truncate" role="status">
+          {libraryFeedback}
+        </p>
+      ) : null}
       {localPlaylists.length > 0 ? (
         <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
           {localPlaylists.map((playlist) => {
@@ -66,6 +128,10 @@ export function LocalPlaylistPanel({
             return (
               <LocalPlaylistCard
                 key={playlist.id}
+                canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
+                isInLibrary={isPlaylistInRoom(playlist)}
+                isAddingToLibrary={addingToLibraryId === playlist.id}
+                onAddToLibrary={() => void handleAddToLibrary(playlist)}
                 onOpen={() => setSelectedPlaylistId(playlist.id)}
                 playlist={playlist}
                 tracks={playlistTracks}
@@ -88,14 +154,22 @@ export function LocalPlaylistPanel({
 function LocalPlaylistCard({
   playlist,
   tracks,
-  onOpen
+  onOpen,
+  canAddToLibrary,
+  isInLibrary,
+  isAddingToLibrary,
+  onAddToLibrary
 }: {
   playlist: LocalPlaylistRecord;
   tracks: LocalPlaylistTrackRecord[];
   onOpen: () => void;
+  canAddToLibrary?: boolean;
+  isInLibrary?: boolean;
+  isAddingToLibrary?: boolean;
+  onAddToLibrary?: () => void;
 }) {
   return (
-    <article className="group flex min-w-0 items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-hover">
+    <article className="group flex min-w-0 items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-hover">
       <button
         aria-label={`打开本地歌单 ${playlist.title}`}
         className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70"
@@ -108,7 +182,33 @@ function LocalPlaylistCard({
           <p className="truncate text-[10px] text-foreground-muted">本地歌单 · {playlist.trackIds.length} 首歌曲</p>
         </div>
       </button>
-      <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
+      <div className="flex shrink-0 items-center gap-2">
+        {canAddToLibrary ? (
+          isInLibrary ? (
+            <span className="flex h-7.5 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+              <CheckIcon className="h-3 w-3" />
+              <span>已在曲库</span>
+            </span>
+          ) : (
+            <Button
+              aria-label={`将歌单 ${playlist.title} 加入曲库`}
+              className="flex h-7.5 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-foreground hover:bg-surface-hover active:scale-95 disabled:cursor-wait"
+              disabled={isAddingToLibrary}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddToLibrary?.();
+              }}
+              size="sm"
+              title="添加到曲库（默认导入第 1 首）"
+              type="button"
+              variant="outline"
+            >
+              {isAddingToLibrary ? "添加中…" : "加入曲库"}
+            </Button>
+          )
+        ) : null}
+        <span className="text-[10px] text-foreground-muted">查看</span>
+      </div>
     </article>
   );
 }
@@ -119,6 +219,10 @@ function LocalPlaylistDetail({
   roomTracks,
   localFolderName,
   canManageLibrary,
+  canAddToLibrary,
+  isInLibrary,
+  isAddingToLibrary,
+  onAddToLibrary,
   onBack,
   onImportCachedTrack,
   pendingCachedImport
@@ -128,6 +232,10 @@ function LocalPlaylistDetail({
   roomTracks: TrackMeta[];
   localFolderName: string | null;
   canManageLibrary: boolean;
+  canAddToLibrary?: boolean;
+  isInLibrary?: boolean;
+  isAddingToLibrary?: boolean;
+  onAddToLibrary?: () => void;
   onBack: () => void;
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
@@ -189,9 +297,30 @@ function LocalPlaylistDetail({
           <BackIcon />
           返回本地歌单
         </Button>
-        <Link className="text-xs font-semibold text-accent hover:text-accent/80" href="/app/profile/playlists">
-          管理歌单
-        </Link>
+        <div className="flex items-center gap-2">
+          {canAddToLibrary ? (
+            isInLibrary ? (
+              <span className="flex h-7.5 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+                <CheckIcon className="h-3.5 w-3.5" />
+                <span>已在曲库</span>
+              </span>
+            ) : (
+              <Button
+                className="gap-1 rounded-lg h-7.5 px-2.5 text-xs font-medium"
+                disabled={isAddingToLibrary}
+                onClick={onAddToLibrary}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {isAddingToLibrary ? "添加中…" : "加入曲库"}
+              </Button>
+            )
+          ) : null}
+          <Link className="text-xs font-semibold text-accent hover:text-accent/80" href="/app/profile/playlists">
+            管理歌单
+          </Link>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 border-b border-surface-border pb-4">

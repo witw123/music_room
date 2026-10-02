@@ -55,16 +55,28 @@ export class PlaylistController {
       tags?: string[];
       coverUrl?: string | null;
       isCollaborative?: boolean;
+      roomId?: string | null;
     },
     @Ip() ipAddress?: string
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.limitPlaylistWrite(userId, ipAddress);
     const payload = parseRequestBody(createPlaylistRequestSchema, body);
-    return this.playlistService.createPlaylist({
+    if (payload.roomId) {
+      await this.roomService.assertRoomMember(payload.roomId, userId);
+    }
+    const playlist = await this.playlistService.createPlaylist({
       ...payload,
+      roomId: payload.roomId ?? null,
       ownerId: userId
     });
+    if (payload.roomId) {
+      await this.roomRealtimePublisher.emitSnapshot(
+        payload.roomId,
+        await this.playlistService.listPlaylistsForRoom(payload.roomId)
+      );
+    }
+    return playlist;
   }
 
   @Patch(":playlistId")
@@ -98,7 +110,15 @@ export class PlaylistController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.limitPlaylistWrite(userId, ipAddress);
-    return this.playlistService.deletePlaylist(playlistId, userId);
+    const roomId = await this.playlistService.getRoomIdForPlaylist(playlistId);
+    const result = await this.playlistService.deletePlaylist(playlistId, userId);
+    if (roomId) {
+      await this.roomRealtimePublisher.emitSnapshot(
+        roomId,
+        await this.playlistService.listPlaylistsForRoom(roomId)
+      );
+    }
+    return result;
   }
 
   @Post(":playlistId/import-to-room")

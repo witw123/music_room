@@ -133,6 +133,8 @@ export function DesktopLyricsWindowApp() {
     const background = isMacintosh ? "#0c0e13" : "transparent";
     document.documentElement.style.background = background;
     document.body.style.background = background;
+    document.documentElement.dataset.lyricsWindow = "true";
+    document.body.dataset.lyricsWindow = "true";
     document.body.style.overflow = "hidden";
 
     const channel = new BroadcastChannel(bridgeChannelName);

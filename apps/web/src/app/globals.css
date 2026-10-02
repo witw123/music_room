@@ -87,6 +87,12 @@
     background-color: var(--background);
   }
 
+  html[data-lyrics-window="true"],
+  html[data-lyrics-window="true"] body {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
   body {
     margin: 0;
     background-color: var(--background);

@@ -169,16 +169,27 @@ export function selectRoomLyrics(input: {
   plainLyric?: string | null;
 }) {
   const localLyrics = normalizeRoomLyricsText(input.localLyrics);
+  const wordSyncedLyric = normalizeRoomLyricsText(input.wordSyncedLyric);
+  const plainLyric = normalizeRoomLyricsText(input.plainLyric);
+
   if (hasWordSyncedRoomLyrics(localLyrics)) {
     return localLyrics;
   }
 
-  const wordSyncedLyric = normalizeRoomLyricsText(input.wordSyncedLyric);
   if (hasWordSyncedRoomLyrics(wordSyncedLyric)) {
     return wordSyncedLyric;
   }
 
-  return wordSyncedLyric || normalizeRoomLyricsText(input.plainLyric) || localLyrics;
+  const isPureMusic = (text: string | null) =>
+    Boolean(text && /纯音乐[，,]?\s*请欣赏|此歌曲为纯音乐/i.test(text));
+
+  if (localLyrics && parseRoomLyrics(localLyrics).length > 1 && !isPureMusic(localLyrics)) {
+    if (isPureMusic(plainLyric) || !plainLyric) {
+      return localLyrics;
+    }
+  }
+
+  return wordSyncedLyric || plainLyric || localLyrics;
 }
 
 function normalizeRoomLyricsText(value: string | null | undefined) {

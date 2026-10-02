@@ -26,6 +26,8 @@ import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlis
 import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
+import { CheckIcon } from "@/components/icons/DiscoverIcons";
+
 type ProviderTrack = ProviderTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic"; playlistId: string };
 type PlaylistTrackInfo = Pick<TrackMeta, "id" | "title" | "artist" | "album" | "durationMs" | "artworkUrl"> & {
@@ -48,6 +50,8 @@ type PlaylistPanelProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
+  currentRoomId?: string | null;
+  roomPlaylists?: Playlist[];
 };
 
 export function PlaylistPanel({
@@ -62,11 +66,15 @@ export function PlaylistPanel({
   onImportQqMusicTrack,
   onImportNeteaseTracks,
   onImportQqMusicTracks,
-  onDeletePlaylist
+  onDeletePlaylist,
+  currentRoomId,
+  roomPlaylists
 }: PlaylistPanelProps) {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   useBackHandler(() => setSelectedPlaylistId(null), selectedPlaylistId !== null);
   const [loadingPlaylistId, setLoadingPlaylistId] = useState<string | null>(null);
+  const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(null);
+  const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
   const [isPending, startTransition] = useTransition();
@@ -260,6 +268,78 @@ export function PlaylistPanel({
     });
   };
 
+  const isPlaylistInRoom = useCallback((targetPlaylist: Playlist) => {
+    if (!roomPlaylists || roomPlaylists.length === 0) return false;
+    const targetSource = getNetworkPlaylistSource(targetPlaylist);
+    return roomPlaylists.some((rp) => {
+      if (rp.id === targetPlaylist.id) return true;
+      if (rp.tags?.includes(`source_playlist:${targetPlaylist.id}`)) return true;
+      if (targetSource) {
+        const rpSource = getNetworkPlaylistSource(rp);
+        if (rpSource && rpSource.provider === targetSource.provider && rpSource.playlistId === targetSource.playlistId) {
+          return true;
+        }
+      }
+      return rp.title === targetPlaylist.title && rp.trackIds.length === targetPlaylist.trackIds.length;
+    });
+  }, [roomPlaylists]);
+
+  const handleAddToLibrary = async (playlist: Playlist) => {
+    if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
+    setAddingToLibraryId(playlist.id);
+    setLibraryFeedback(null);
+    try {
+      const source = getNetworkPlaylistSource(playlist);
+      let firstCandidate: ProviderTrack | null = null;
+      if (source) {
+        try {
+          const detail = source.provider === "netease"
+            ? await musicRoomApi.getNeteasePlaylist(source.playlistId)
+            : await musicRoomApi.getQqMusicPlaylist(source.playlistId);
+          if (detail.tracks.length > 0) {
+            firstCandidate = detail.tracks[0];
+          }
+        } catch {
+          // Gracefully continue
+        }
+      }
+
+      // 默认仅导入第 1 首歌曲
+      if (firstCandidate) {
+        const alreadyInRoom = tracks.some(
+          (t) => t.sourceRef?.provider === firstCandidate!.provider && t.sourceRef?.trackId === firstCandidate!.providerTrackId
+        );
+        if (!alreadyInRoom) {
+          if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
+            await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
+          } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
+            await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
+          }
+        }
+      }
+
+      const tags = [...(playlist.tags || [])];
+      if (!tags.includes(`source_playlist:${playlist.id}`)) {
+        tags.push(`source_playlist:${playlist.id}`);
+      }
+
+      await musicRoomApi.createPlaylist({
+        title: playlist.title,
+        description: playlist.description,
+        trackIds: playlist.trackIds,
+        tags,
+        coverUrl: playlist.coverUrl,
+        roomId: currentRoomId
+      });
+
+      setLibraryFeedback(`已将歌单《${playlist.title}》加入曲库（默认导入第 1 首）。`);
+    } catch (error) {
+      setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
+    } finally {
+      setAddingToLibraryId(null);
+    }
+  };
+
   const handleLoadAndPlayPlaylist = async (playlistId: string) => {
     if (!onLoadPlaylistIntoRoom || loadingPlaylistId !== null) return;
     setLoadingPlaylistId(playlistId);
@@ -278,6 +358,10 @@ export function PlaylistPanel({
         }}
         onPlayPlaylist={() => void handleLoadAndPlayPlaylist(selectedPlaylist.id)}
         isPlaylistLoading={loadingPlaylistId === selectedPlaylist.id}
+        canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
+        isInLibrary={isPlaylistInRoom(selectedPlaylist)}
+        isAddingToLibrary={addingToLibraryId === selectedPlaylist.id}
+        onAddToLibrary={() => void handleAddToLibrary(selectedPlaylist)}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
         onImportNeteaseTracks={onImportNeteaseTracks}
@@ -299,6 +383,9 @@ export function PlaylistPanel({
           <p className="mt-1 truncate text-[10px] text-foreground-muted">保存的网易云音乐与 QQ 音乐歌单</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
+          {libraryFeedback ? (
+            <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
+          ) : null}
           <span className="font-mono text-[10px] text-foreground-muted">{playlists.length} 个歌单</span>
           <Button
             aria-label="保存当前队列为歌单"
@@ -321,6 +408,10 @@ export function PlaylistPanel({
             <PlaylistCard
               key={playlist.id}
               artworkUrls={networkArtworkById[playlist.id] ?? []}
+              canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
+              isInLibrary={isPlaylistInRoom(playlist)}
+              isAddingToLibrary={addingToLibraryId === playlist.id}
+              onAddToLibrary={() => void handleAddToLibrary(playlist)}
               onDelete={() => deletePlaylist(playlist.id)}
               onOpen={() => setSelectedPlaylistId(playlist.id)}
               onPlay={() => void handleLoadAndPlayPlaylist(playlist.id)}
@@ -364,7 +455,11 @@ function PlaylistCard({
   onOpen,
   onDelete,
   onPlay,
-  isLoading
+  isLoading,
+  canAddToLibrary,
+  isInLibrary,
+  isAddingToLibrary,
+  onAddToLibrary
 }: {
   playlist: Playlist;
   artworkUrls: readonly string[];
@@ -372,6 +467,10 @@ function PlaylistCard({
   onDelete: () => void;
   onPlay?: () => void;
   isLoading?: boolean;
+  canAddToLibrary?: boolean;
+  isInLibrary?: boolean;
+  isAddingToLibrary?: boolean;
+  onAddToLibrary?: () => void;
 }) {
   const source = getNetworkPlaylistSource(playlist);
   const providerName = source?.provider === "qqmusic" ? "QQ 音乐" : source?.provider === "netease" ? "网易云音乐" : "网络歌单";
@@ -398,6 +497,40 @@ function PlaylistCard({
         </div>
       </button>
       <div className="flex shrink-0 items-center gap-1.5">
+        {canAddToLibrary ? (
+          isInLibrary ? (
+            <span className="flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+              <CheckIcon className="h-3 w-3" />
+              <span>已在曲库</span>
+            </span>
+          ) : (
+            <Button
+              aria-label={`将歌单 ${playlist.title} 加入曲库`}
+              className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-foreground hover:bg-surface-hover active:scale-95 disabled:cursor-wait"
+              disabled={isAddingToLibrary}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddToLibrary?.();
+              }}
+              size="sm"
+              title="添加到曲库（默认导入第 1 首）"
+              type="button"
+              variant="outline"
+            >
+              {isAddingToLibrary ? (
+                <>
+                  <LoadingSpinner className="h-3 w-3 animate-spin" />
+                  <span className="text-[11px]">添加中…</span>
+                </>
+              ) : (
+                <>
+                  <PlusIcon />
+                  <span className="text-[11px]">加入曲库</span>
+                </>
+              )}
+            </Button>
+          )
+        ) : null}
         {onPlay ? (
           <Button
             aria-label={`在房间播放歌单 ${playlist.title}`}
@@ -449,6 +582,10 @@ function PlaylistDetail({
   onBack,
   onPlayPlaylist,
   isPlaylistLoading,
+  canAddToLibrary,
+  isInLibrary,
+  isAddingToLibrary,
+  onAddToLibrary,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
   onImportNeteaseTracks,
@@ -462,6 +599,10 @@ function PlaylistDetail({
   onBack: () => void;
   onPlayPlaylist?: () => void;
   isPlaylistLoading?: boolean;
+  canAddToLibrary?: boolean;
+  isInLibrary?: boolean;
+  isAddingToLibrary?: boolean;
+  onAddToLibrary?: () => void;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onImportQqMusicTrack: (track: QqMusicTrackCandidate) => Promise<void>;
   onImportNeteaseTracks: (tracks: NeteaseTrackCandidate[]) => Promise<void>;
@@ -636,28 +777,49 @@ function PlaylistDetail({
           <ArrowLeftIcon />
           <span>返回歌单</span>
         </Button>
-        {onPlayPlaylist ? (
-          <Button
-            className="gap-1.5 rounded-xl bg-accent text-white shadow-xs transition-all hover:bg-accent-hover active:scale-95 disabled:cursor-wait text-xs"
-            disabled={isPlaylistLoading}
-            onClick={onPlayPlaylist}
-            size="sm"
-            type="button"
-            title="将整张歌单载入房间并开始播放"
-          >
-            {isPlaylistLoading ? (
-              <>
-                <LoadingSpinner className="h-3.5 w-3.5 animate-spin" />
-                <span>载入播放中…</span>
-              </>
+        <div className="flex items-center gap-2">
+          {canAddToLibrary ? (
+            isInLibrary ? (
+              <span className="flex h-7.5 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+                <CheckIcon className="h-3.5 w-3.5" />
+                <span>已在曲库</span>
+              </span>
             ) : (
-              <>
-                <PlayIcon className="h-3.5 w-3.5 fill-current" />
-                <span>播放整张歌单</span>
-              </>
-            )}
-          </Button>
-        ) : null}
+              <Button
+                className="gap-1 rounded-lg h-7.5 px-2.5 text-xs font-medium"
+                disabled={isAddingToLibrary}
+                onClick={onAddToLibrary}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {isAddingToLibrary ? "添加中…" : "加入曲库"}
+              </Button>
+            )
+          ) : null}
+          {onPlayPlaylist ? (
+            <Button
+              className="gap-1.5 rounded-xl bg-accent text-white shadow-xs transition-all hover:bg-accent-hover active:scale-95 disabled:cursor-wait text-xs"
+              disabled={isPlaylistLoading}
+              onClick={onPlayPlaylist}
+              size="sm"
+              type="button"
+              title="将整张歌单载入房间并开始播放"
+            >
+              {isPlaylistLoading ? (
+                <>
+                  <LoadingSpinner className="h-3.5 w-3.5 animate-spin" />
+                  <span>载入播放中…</span>
+                </>
+              ) : (
+                <>
+                  <PlayIcon className="h-3.5 w-3.5 fill-current" />
+                  <span>播放整张歌单</span>
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/* Optional Batch Import Toolbar */}

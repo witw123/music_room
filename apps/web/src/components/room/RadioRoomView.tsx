@@ -200,7 +200,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
               ) : leftTab === "desk" && isHost ? (
                 <HostBroadcastDesk {...props} />
               ) : (
-                <RadioLibraryList isHost={isHost} props={props} />
+                <RadioLibraryList isHost={isHost} onSwitchToDesk={() => setLeftTab("desk")} props={props} />
               )
             ) : (
               <RoomPanelSkeleton />
@@ -332,7 +332,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
                 </div>
               </div>
             ) : mobileTab === "library" ? (
-              <RadioLibraryList isHost={isHost} props={props} />
+              <RadioLibraryList isHost={isHost} onSwitchToDesk={() => setMobileTab("desk")} props={props} />
             ) : (
               <RadioMembersPanel {...props} membershipNow={membershipNow} />
             )
@@ -396,10 +396,12 @@ function RadioWorkspaceTabs<T extends string>({
 
 function RadioLibraryList({
   props,
-  isHost
+  isHost,
+  onSwitchToDesk
 }: {
   props: RoomDashboardViewProps;
   isHost: boolean;
+  onSwitchToDesk?: () => void;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col p-2 sm:p-2.5">
@@ -419,6 +421,15 @@ function RadioLibraryList({
         tracks={props.roomSnapshot.tracks}
         members={props.roomSnapshot.room.members}
         uploadedTracks={props.uploadedTracks}
+        roomPlaylists={props.roomSnapshot.playlists}
+        onDeletePlaylist={props.onDeletePlaylist}
+        onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
+        onImportNeteaseTrack={props.onImportNeteaseTrack}
+        onImportQqMusicTrack={props.onImportQqMusicTrack}
+        onImportNeteaseTracks={props.onImportNeteaseTracks}
+        onImportQqMusicTracks={props.onImportQqMusicTracks}
+        onImportCachedTrack={props.onImportCachedTrack}
+        onSwitchToDesk={onSwitchToDesk}
       />
     </div>
   );
@@ -636,6 +647,8 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
                 onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
                 onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
                 playlists={props.playlists}
+                roomPlaylists={props.roomSnapshot.playlists}
+                currentRoomId={props.roomSnapshot.room.id}
                 tracks={props.roomSnapshot.tracks}
               />
             </div>

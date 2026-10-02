@@ -39,6 +39,8 @@ type LocalStorageTabPanelProps = {
   hideUnavailableProvidersNotice?: boolean;
   searchMode?: RoomProviderTrackSearchMode;
   onRequestTrack?: (track: ProviderTrack) => Promise<void>;
+  currentRoomId?: string | null;
+  roomPlaylists?: Playlist[];
 };
 
 function LocalStorageTabPanelBase({
@@ -61,7 +63,9 @@ function LocalStorageTabPanelBase({
   onDeletePlaylist,
   hideUnavailableProvidersNotice = false,
   searchMode,
-  onRequestTrack
+  onRequestTrack,
+  currentRoomId,
+  roomPlaylists
 }: LocalStorageTabPanelProps) {
   const [pendingCachedImport, setPendingCachedImport] = useState<string | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"local" | "network" | "favorites">("local");
@@ -112,12 +116,14 @@ function LocalStorageTabPanelBase({
       {playlistTab === "local" ? <section className="flex flex-col gap-3" data-testid="local-playlist-section">
       <LocalPlaylistPanel
           canManageLibrary={canManageLibrary}
+          currentRoomId={currentRoomId}
           localPlaylists={localStorageSummary.localPlaylists}
           localTracks={localStorageSummary.localPlaylistTracks}
-          roomTracks={tracks}
           localFolderName={localStorageSummary.localFolderName}
           onImportCachedTrack={handleImportCachedTrack}
           pendingCachedImport={pendingCachedImport}
+          roomPlaylists={roomPlaylists}
+          roomTracks={tracks}
         />
       </section> : null}
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
@@ -137,6 +143,7 @@ function LocalStorageTabPanelBase({
           activeSession={activeSession}
           canManageLibrary={canManageLibrary}
           canCreatePlaylist={!!activeSession}
+          currentRoomId={currentRoomId}
           onDeletePlaylist={onDeletePlaylist}
           onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
           onImportNeteaseTrack={onImportNeteaseTrack}
@@ -147,6 +154,7 @@ function LocalStorageTabPanelBase({
           onUpdatePlaylistTitle={onUpdatePlaylistTitle}
           onUpdatePlaylistTracks={onUpdatePlaylistTracks}
           playlists={playlists}
+          roomPlaylists={roomPlaylists}
           tracks={tracks}
         />
       </section> : null}

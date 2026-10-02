@@ -501,6 +501,7 @@ export const musicRoomApi = {
     tags?: string[];
     coverUrl?: string | null;
     isCollaborative?: boolean;
+    roomId?: string | null;
   }) =>
     request<Playlist>("/v1/playlists", {
       method: "POST",

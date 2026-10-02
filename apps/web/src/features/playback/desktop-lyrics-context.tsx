@@ -216,7 +216,7 @@ export function DesktopLyricsProvider({
   useEffect(() => {
     let cancelled = false;
     const track = activeTrack;
-    if (!isOpen || !track) {
+    if (!track) {
       setLyrics(emptyLyrics);
       return () => {
         cancelled = true;
@@ -241,9 +241,10 @@ export function DesktopLyricsProvider({
       romanizedLine: null
     });
 
+    const isSupportedProvider = provider === "netease" || provider === "qqmusic" || provider === "bilibili";
     const hasWordSynced = hasWordSyncedRoomLyrics(directLyrics);
     if (
-      (provider !== "netease" && provider !== "qqmusic") ||
+      !isSupportedProvider ||
       !providerTrackId ||
       (hasWordSynced && localTranslated && localRomanized)
     ) {
@@ -255,7 +256,7 @@ export function DesktopLyricsProvider({
     const cacheKey = `${provider}:${providerTrackId}`;
     let request = lyricRequestCache.get(cacheKey);
     if (!request) {
-      request = loadProviderLyrics(provider, providerTrackId);
+      request = loadProviderLyrics(provider as "netease" | "qqmusic" | "bilibili", providerTrackId);
       lyricRequestCache.set(cacheKey, request);
     }
 
@@ -283,7 +284,7 @@ export function DesktopLyricsProvider({
     return () => {
       cancelled = true;
     };
-  }, [activeTrack, activeTrackKey, isOpen]);
+  }, [activeTrack, activeTrackKey]);
 
   const lyricLines = useMemo(() => parseRoomLyrics(lyrics.plainLyric), [lyrics.plainLyric]);
   const translatedLines = useMemo(() => parseRoomLyrics(lyrics.translatedLyric), [lyrics.translatedLyric]);
@@ -393,7 +394,9 @@ export function DesktopLyricsProvider({
 
   // Progress anchors are throttled: the lyrics window interpolates between anchors
   // with rAF, so a 250ms cadence looks identical at a quarter of the bridge traffic.
-  const bridgeStructureKey = `${activeIsPlaying}|${activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId)}|${showTranslation}|${showRomanized}|${bridgeTrackPayload ? "t" : "n"}|${lyrics.plainLyric ?? ""}|${lyrics.wordSyncedLyric ?? ""}|${lyrics.translatedLyric ?? ""}|${lyrics.romanizedLyric ?? ""}`;
+  // Track identity ensures track changes immediately bypass the 250ms throttle.
+  const trackIdentity = activePlayer?.playbackTrackId ?? activeTrack?.id ?? "";
+  const bridgeStructureKey = `${trackIdentity}|${activeIsPlaying}|${activePlayer?.canControlPlayback === true && Boolean(activePlayer?.playbackTrackId)}|${showTranslation}|${showRomanized}|${bridgeTrackPayload ? "t" : "n"}|${lyrics.plainLyric ?? ""}|${lyrics.wordSyncedLyric ?? ""}|${lyrics.translatedLyric ?? ""}|${lyrics.romanizedLyric ?? ""}`;
   const lastBridgeStructureKeyRef = useRef<string | null>(null);
   const lastBridgePostAtRef = useRef(0);
 
@@ -515,6 +518,10 @@ export function useDesktopLyrics() {
     throw new Error("useDesktopLyrics must be used inside DesktopLyricsProvider");
   }
   return context;
+}
+
+export function useMaybeDesktopLyrics() {
+  return useContext(DesktopLyricsContext);
 }
 
 export function useDesktopLyricsRegistration(player: DesktopLyricsPlayer) {

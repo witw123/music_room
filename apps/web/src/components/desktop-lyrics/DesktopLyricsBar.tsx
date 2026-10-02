@@ -167,12 +167,16 @@ export function DesktopLyricsBar({
   });
 
   useEffect(() => {
+    const hostElapsed = anchorAt > 0 && isPlaying
+      ? Math.max(0, Math.min(500, Date.now() - anchorAt))
+      : 0;
+    const currentBaseMs = progressMs + hostElapsed;
     anchorRef.current = {
-      baseMs: progressMs,
+      baseMs: currentBaseMs,
       receivedAt: typeof performance !== "undefined" ? performance.now() : Date.now()
     };
-    setSmoothPositionMs(progressMs);
-  }, [progressMs, anchorAt]);
+    setSmoothPositionMs(currentBaseMs);
+  }, [progressMs, anchorAt, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -206,7 +210,7 @@ export function DesktopLyricsBar({
     () => (activeIndex >= 0 ? getRoomLyricDisplayWords(lines, activeIndex) : []),
     [lines, activeIndex]
   );
-  const displayLineKey = activeLine?.id ?? "empty";
+  const displayLineKey = `${title}:${activeLine?.id ?? "empty"}`;
 
   const lineText =
     displayWords.length > 0
@@ -337,7 +341,7 @@ export function DesktopLyricsBar({
         </div>
 
         {/* Track Title, Artist, and Playback Time */}
-        <div className="ml-2.5 flex min-w-0 flex-col justify-center text-left leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]">
+        <div className="ml-2.5 flex min-w-0 flex-col justify-center text-left leading-tight">
           <span className="truncate text-xs md:text-sm font-bold text-white max-w-[8.5rem] md:max-w-[11rem]">
             {title || "等待选择歌曲"}
           </span>
@@ -360,7 +364,7 @@ export function DesktopLyricsBar({
         {/* Main Lyric Line Wrapper */}
         <div
           ref={textContentRef}
-          className={`whitespace-nowrap drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] ${
+          className={`whitespace-nowrap ${
             overflowPx > 0 ? "self-start text-left" : "self-center text-center"
           } font-bold tracking-tight text-white leading-tight`}
           style={{
@@ -373,7 +377,7 @@ export function DesktopLyricsBar({
               if (!word.text.trim()) {
                 return (
                   <span
-                    className="inline whitespace-pre opacity-35 text-white font-bold"
+                    className="inline whitespace-pre opacity-30 text-white font-bold"
                     key={`${displayLineKey}:${wordIndex}`}
                   >
                     {word.text}
@@ -395,7 +399,7 @@ export function DesktopLyricsBar({
               if (progress <= 0) {
                 return (
                   <span
-                    className="inline-block whitespace-pre opacity-35 text-white font-bold"
+                    className="inline-block whitespace-pre opacity-30 text-white font-bold"
                     key={`${displayLineKey}:${wordIndex}`}
                   >
                     {word.text}
@@ -409,7 +413,7 @@ export function DesktopLyricsBar({
                   className="inline-block whitespace-pre text-transparent font-bold will-change-[background-image]"
                   key={`${displayLineKey}:${wordIndex}`}
                   style={{
-                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${fillPercent}, rgb(255 255 255 / 0.35) ${fillPercent}, rgb(255 255 255 / 0.35) 100%)`,
+                    backgroundImage: `linear-gradient(to right, rgb(255 255 255) 0%, rgb(255 255 255) ${fillPercent}, rgb(255 255 255 / 0.3) ${fillPercent}, rgb(255 255 255 / 0.3) 100%)`,
                     backgroundClip: "text",
                     WebkitBackgroundClip: "text",
                     WebkitBoxDecorationBreak: "clone",
@@ -434,7 +438,7 @@ export function DesktopLyricsBar({
         {/* Translation / Romanization Sub-line */}
         {hasSubLine ? (
           <div
-            className="mt-1 max-w-full truncate text-white/75 font-medium tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]"
+            className="mt-1 max-w-full truncate text-white/75 font-medium tracking-wide"
             style={{ fontSize: `${subFontSize}px` }}
           >
             {subLineText}
@@ -450,7 +454,7 @@ export function DesktopLyricsBar({
             : "opacity-0 scale-95 pointer-events-none translate-x-2"
         }`}
       >
-        <div className="flex items-center gap-1.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
+        <div className="flex items-center gap-1.5">
           {/* Playback Transport: Prev, Play/Pause, Next */}
           <TransportButton disabled={!canControl} label="上一首" onClick={onPrev}>
             <PrevIcon />
