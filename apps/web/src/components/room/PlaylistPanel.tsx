@@ -91,7 +91,16 @@ export function PlaylistPanel({
   const [cachedTracks, setCachedTracks] = useState<Map<string, LocalPlaylistTrackRecord>>(new Map());
   const [networkArtworkById, setNetworkArtworkById] = useState<Record<string, string[]>>({});
   const artworkRequestIdsRef = useRef(new Set<string>());
-  const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
+  const displayPlaylists = useMemo(() => {
+    const seen = new Set<string>();
+    return playlists.filter((p) => {
+      if (p.tags?.some((t) => t.startsWith("source_playlist:"))) return false;
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [playlists]);
+  const selectedPlaylist = displayPlaylists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
   const selectedSource = selectedPlaylist ? getNetworkPlaylistSource(selectedPlaylist) : null;
   const selectedProvider = selectedSource?.provider ?? null;
   const selectedProviderPlaylistId = selectedSource?.playlistId ?? null;
@@ -153,7 +162,7 @@ export function PlaylistPanel({
     let cancelled = false;
     const artworkRequestIds = artworkRequestIdsRef.current;
     const candidateById = new Map(
-      playlists.map((playlist) => [
+      displayPlaylists.map((playlist) => [
         playlist.id,
         getPlaylistArtworkCandidates(playlist, cachedTracks, tracks)
       ])
@@ -161,7 +170,7 @@ export function PlaylistPanel({
 
     setNetworkArtworkById((current) => {
       const next: Record<string, string[]> = {};
-      for (const playlist of playlists) {
+      for (const playlist of displayPlaylists) {
         const artworkUrls = uniqueArtworkUrls([
           ...(candidateById.get(playlist.id) ?? []),
           ...(current[playlist.id] ?? [])
@@ -171,7 +180,7 @@ export function PlaylistPanel({
       return next;
     });
 
-    const requests = playlists
+    const requests = displayPlaylists
       .map((playlist) => {
         const source = getNetworkPlaylistSource(playlist);
         if (!source || artworkRequestIds.has(playlist.id)) {
@@ -215,7 +224,7 @@ export function PlaylistPanel({
         artworkRequestIds.delete(playlist.id);
       }
     };
-  }, [cachedTracks, playlists, tracks]);
+  }, [cachedTracks, displayPlaylists, tracks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -343,25 +352,6 @@ export function PlaylistPanel({
         }
       }
 
-      // 默认先导入第 1 首歌曲资产，其余歌曲在曲库歌单详情中按需加载
-      const firstCandidate = allCandidates[0] ?? null;
-      if (firstCandidate) {
-        const alreadyInRoom = tracks.some(
-          (t) =>
-            (t.sourceRef?.provider === firstCandidate.provider && t.sourceRef?.trackId === firstCandidate.providerTrackId) ||
-            t.id === firstCandidate.providerTrackId
-        );
-        if (!alreadyInRoom) {
-          if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
-            await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
-          } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
-            await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
-          } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
-            await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
-          }
-        }
-      }
-
       const tags = (playlist.tags || [])
         .filter((t) => typeof t === "string" && t.trim().length > 0)
         .map((t) => t.trim().slice(0, 100));
@@ -394,6 +384,34 @@ export function PlaylistPanel({
       }
 
       setLibraryFeedback(`已将歌单《${playlist.title}》加入曲库（已导入首曲资产，其余歌曲可在曲库歌单中按需加载）。`);
+
+      // 默认先导入第 1 首歌曲资产（后台异步进行，不阻塞添加到曲库）
+      const firstCandidate = allCandidates[0] ?? null;
+      if (firstCandidate) {
+        const alreadyInRoom = tracks.some(
+          (t) =>
+            (t.sourceRef?.provider === firstCandidate.provider && t.sourceRef?.trackId === firstCandidate.providerTrackId) ||
+            t.id === firstCandidate.providerTrackId
+        );
+        if (!alreadyInRoom) {
+          void (async () => {
+            try {
+              if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
+                await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
+              } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
+                await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
+              } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
+                await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
+              }
+              if (onRefreshRoom) {
+                await onRefreshRoom();
+              }
+            } catch (error) {
+              console.warn("Background importing first playlist track failed:", error);
+            }
+          })();
+        }
+      }
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {
@@ -449,7 +467,7 @@ export function PlaylistPanel({
           {libraryFeedback ? (
             <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
           ) : null}
-          <span className="font-mono text-[10px] text-foreground-muted">{playlists.length} 个歌单</span>
+          <span className="font-mono text-[10px] text-foreground-muted">{displayPlaylists.length} 个歌单</span>
           <Button
             aria-label="保存当前队列为歌单"
             className="h-10 w-10 sm:h-8 sm:w-8"
@@ -465,9 +483,9 @@ export function PlaylistPanel({
         </div>
       </div>
 
-      {playlists.length > 0 ? (
+      {displayPlaylists.length > 0 ? (
         <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
-          {playlists.map((playlist) => (
+          {displayPlaylists.map((playlist) => (
             <PlaylistCard
               key={playlist.id}
               artworkUrls={networkArtworkById[playlist.id] ?? []}

@@ -57,19 +57,6 @@ export function LocalPlaylistPanel({
     setAddingToLibraryId(playlist.id);
     setLibraryFeedback(null);
     try {
-      // 默认先导入第 1 首本地歌曲资产，其余歌曲在曲库歌单详情中按需加载
-      const firstTrackId = playlist.trackIds[0] ?? null;
-      const firstTrack = firstTrackId ? tracksById.get(firstTrackId) : null;
-      if (firstTrack && firstTrack.fileHash) {
-        const alreadyInRoom = roomTracks.some((t) => t.fileHash === firstTrack.fileHash);
-        if (!alreadyInRoom) {
-          const cached = toCachedLibraryTrack(firstTrack);
-          if (cached) {
-            await onImportCachedTrack(cached);
-          }
-        }
-      }
-
       const tags = ["local_playlist", `source_playlist:${playlist.id}`]
         .map((t) => t.trim().slice(0, 100))
         .slice(0, 50);
@@ -91,6 +78,28 @@ export function LocalPlaylistPanel({
       }
 
       setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库（已导入首曲资产，其余歌曲可在曲库歌单中按需加载）。`);
+
+      // 默认先导入第 1 首本地歌曲资产（后台异步进行，不阻塞添加到曲库）
+      const firstTrackId = playlist.trackIds[0] ?? null;
+      const firstTrack = firstTrackId ? tracksById.get(firstTrackId) : null;
+      if (firstTrack && firstTrack.fileHash) {
+        const alreadyInRoom = roomTracks.some((t) => t.fileHash === firstTrack.fileHash);
+        if (!alreadyInRoom) {
+          const cached = toCachedLibraryTrack(firstTrack);
+          if (cached) {
+            void (async () => {
+              try {
+                await onImportCachedTrack(cached);
+                if (onRefreshRoom) {
+                  await onRefreshRoom();
+                }
+              } catch (error) {
+                console.warn("Background importing first local playlist track failed:", error);
+              }
+            })();
+          }
+        }
+      }
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {
