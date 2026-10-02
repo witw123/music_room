@@ -293,6 +293,11 @@ export const musicRoomApi = {
     request<{ ok: boolean }>(`/v1/rooms/${roomId}/tracks/${trackId}`, {
       method: "DELETE"
     }),
+  reorderTracks: (roomId: string, payload: { trackIds: string[] }) =>
+    request<TrackMeta[]>(`/v1/rooms/${roomId}/tracks/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   addQueueItem: (roomId: string, payload: { trackId: string }) =>
     request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue`, {
       method: "POST",

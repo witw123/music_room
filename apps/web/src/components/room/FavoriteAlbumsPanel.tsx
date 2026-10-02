@@ -201,35 +201,7 @@ export function FavoriteAlbumsPanel({
         await onRefreshRoom();
       }
 
-      setLibraryFeedback(`已将收藏《${album.title}》加入曲库（已导入首曲资产，其余歌曲可在曲库歌单中按需加载）。`);
-
-      // 默认先导入第 1 首歌曲资产（后台异步进行，不阻塞添加到曲库）
-      const firstCandidate = albumTracks[0] ?? null;
-      if (firstCandidate) {
-        const alreadyInRoom = roomTracks.some(
-          (t) =>
-            (t.sourceRef?.provider === firstCandidate.provider && t.sourceRef?.trackId === firstCandidate.providerTrackId) ||
-            t.id === firstCandidate.providerTrackId
-        );
-        if (!alreadyInRoom) {
-          void (async () => {
-            try {
-              if (firstCandidate.provider === "netease" && onImportNeteaseTrack) {
-                await onImportNeteaseTrack(firstCandidate as NeteaseTrackCandidate);
-              } else if (firstCandidate.provider === "qqmusic" && onImportQqMusicTrack) {
-                await onImportQqMusicTrack(firstCandidate as QqMusicTrackCandidate);
-              } else if (firstCandidate.provider === "bilibili" && onImportBilibiliTrack) {
-                await onImportBilibiliTrack(firstCandidate as BilibiliTrackCandidate);
-              }
-              if (onRefreshRoom) {
-                await onRefreshRoom();
-              }
-            } catch (error) {
-              console.warn("Background importing first album track failed:", error);
-            }
-          })();
-        }
-      }
+      setLibraryFeedback(`已将收藏《${album.title}》加入曲库，歌曲可在曲库歌单中按需加载。`);
     } catch (error) {
       setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
     } finally {

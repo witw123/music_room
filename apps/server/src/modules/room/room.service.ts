@@ -715,6 +715,10 @@ export class RoomService {
     return this.contentService.reorderQueue(roomId, actorSessionId, queueItemIds);
   }
 
+  reorderTracks(roomId: string, actorSessionId: string, trackIds: string[]) {
+    return this.contentService.reorderTracks(roomId, actorSessionId, trackIds);
+  }
+
   // ── Presence facade ────────────────────────────────────────────────────────
 
   updatePeerPresence(

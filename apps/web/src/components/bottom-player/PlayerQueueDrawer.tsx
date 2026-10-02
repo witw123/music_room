@@ -39,9 +39,30 @@ type TouchReorderState = {
   startX: number;
   startY: number;
   targetItemId: string | null;
+  targetPosition: "before" | "after";
   active: boolean;
   targetElement: HTMLElement | null;
 };
+
+export function reorderWithPosition<T>(
+  list: T[],
+  sourceId: string,
+  targetId: string,
+  position: "before" | "after",
+  getId: (item: T) => string
+): T[] {
+  if (sourceId === targetId) return list;
+  const fromIndex = list.findIndex((item) => getId(item) === sourceId);
+  const toIndex = list.findIndex((item) => getId(item) === targetId);
+  if (fromIndex === -1 || toIndex === -1) return list;
+
+  const result = [...list];
+  const [removed] = result.splice(fromIndex, 1);
+  const newTargetIndex = result.findIndex((item) => getId(item) === targetId);
+  const insertIndex = position === "before" ? newTargetIndex : newTargetIndex + 1;
+  result.splice(insertIndex, 0, removed);
+  return result;
+}
 
 const touchReorderDelayMs = 420;
 const touchReorderMoveTolerancePx = 10;
@@ -177,7 +198,10 @@ export function PlayerQueueList({
   className = ""
 }: PlayerQueueListProps) {
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
-  const [dragOverQueueItemId, setDragOverQueueItemId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{
+    itemId: string;
+    position: "before" | "after";
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const touchReorderRef = useRef<TouchReorderState | null>(null);
   const touchReorderTimerRef = useRef<number | null>(null);
@@ -206,15 +230,15 @@ export function PlayerQueueList({
     }
   }
 
-  function reorderQueueItem(sourceItemId: string, targetItemId: string) {
+  function reorderQueueItem(sourceItemId: string, targetItemId: string, position: "before" | "after") {
     if (sourceItemId === targetItemId || isPending) return;
-    const reorderedIds = queue.map((item) => item.id);
-    const fromIndex = reorderedIds.indexOf(sourceItemId);
-    const toIndex = reorderedIds.indexOf(targetItemId);
-    if (fromIndex < 0 || toIndex < 0) return;
-
-    reorderedIds.splice(fromIndex, 1);
-    reorderedIds.splice(toIndex, 0, sourceItemId);
+    const reorderedIds = reorderWithPosition(
+      queue.map((item) => item.id),
+      sourceItemId,
+      targetItemId,
+      position,
+      (id) => id
+    );
     void onReorderQueue(reorderedIds);
   }
 
@@ -232,6 +256,7 @@ export function PlayerQueueList({
       startX: event.clientX,
       startY: event.clientY,
       targetItemId: itemId,
+      targetPosition: "after",
       active: false,
       targetElement
     };
@@ -240,7 +265,7 @@ export function PlayerQueueList({
       if (!current || current.pointerId !== event.pointerId) return;
       current.active = true;
       setDraggingQueueItemId(current.itemId);
-      setDragOverQueueItemId(current.itemId);
+      setDragOverTarget(null);
       current.targetElement?.setPointerCapture(current.pointerId);
     }, touchReorderDelayMs);
   }
@@ -265,8 +290,18 @@ export function PlayerQueueList({
     const target = document.elementFromPoint(event.clientX, event.clientY)
       ?.closest<HTMLElement>("[data-queue-item-id]");
     const targetItemId = target?.dataset.queueItemId ?? current.itemId;
+    let position: "before" | "after" = "after";
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    }
     current.targetItemId = targetItemId;
-    setDragOverQueueItemId(targetItemId);
+    current.targetPosition = position;
+    if (targetItemId !== current.itemId) {
+      setDragOverTarget({ itemId: targetItemId, position });
+    } else {
+      setDragOverTarget(null);
+    }
   }
 
   function finishTouchReorder(event: ReactPointerEvent<HTMLDivElement>) {
@@ -274,39 +309,38 @@ export function PlayerQueueList({
     if (!current || current.pointerId !== event.pointerId) return;
 
     cancelTouchReorderTimer();
-    if (current.active) {
+    if (current.active && current.targetItemId && current.targetItemId !== current.itemId) {
       event.preventDefault();
-      reorderQueueItem(current.itemId, current.targetItemId ?? current.itemId);
+      reorderQueueItem(current.itemId, current.targetItemId, current.targetPosition);
       if (current.targetElement?.hasPointerCapture(current.pointerId)) {
         current.targetElement.releasePointerCapture(current.pointerId);
       }
     }
     touchReorderRef.current = null;
     setDraggingQueueItemId(null);
-    setDragOverQueueItemId(null);
+    setDragOverTarget(null);
   }
 
-  async function handleDrop(targetQueueItemId: string) {
-    if (!draggingQueueItemId || draggingQueueItemId === targetQueueItemId || !canReorderQueue) {
+  async function handleDrop(targetQueueItemId: string, position: "before" | "after") {
+    if (!draggingQueueItemId || !canReorderQueue) {
       setDraggingQueueItemId(null);
-      setDragOverQueueItemId(null);
+      setDragOverTarget(null);
       return;
     }
 
-    const reorderedIds = [...queue.map((item) => item.id)];
-    const fromIndex = reorderedIds.indexOf(draggingQueueItemId);
-    const toIndex = reorderedIds.indexOf(targetQueueItemId);
-
-    if (fromIndex < 0 || toIndex < 0) {
-      setDraggingQueueItemId(null);
-      setDragOverQueueItemId(null);
-      return;
-    }
-
-    reorderedIds.splice(fromIndex, 1);
-    reorderedIds.splice(toIndex, 0, draggingQueueItemId);
+    const sourceItemId = draggingQueueItemId;
     setDraggingQueueItemId(null);
-    setDragOverQueueItemId(null);
+    setDragOverTarget(null);
+
+    if (sourceItemId === targetQueueItemId) return;
+
+    const reorderedIds = reorderWithPosition(
+      queue.map((item) => item.id),
+      sourceItemId,
+      targetQueueItemId,
+      position,
+      (id) => id
+    );
     await onReorderQueue(reorderedIds);
   }
 
@@ -326,37 +360,91 @@ export function PlayerQueueList({
                   <div
                     key={item.id}
                     data-testid="queue-item"
-                    className={`group flex items-center gap-2 sm:gap-2.5 rounded-lg px-2 py-1.5 sm:px-2.5 sm:py-1.5 transition-all ${
+                    className={`group relative flex items-center gap-2 sm:gap-2.5 rounded-lg px-2 py-1.5 sm:px-2.5 sm:py-1.5 transition-all ${
                       isCurrent
                         ? "border border-accent/35 bg-accent/10"
                         : "border border-transparent hover:bg-surface-hover/60 hover:border-surface-border/40"
-                    } ${draggingQueueItemId === item.id ? "scale-95 touch-none opacity-50" : "touch-pan-y"} ${dragOverQueueItemId === item.id && draggingQueueItemId !== item.id ? "border-accent/60 bg-accent/10" : ""}`}
+                    } ${canReorderQueue ? "cursor-grab active:cursor-grabbing" : ""} ${
+                      draggingQueueItemId === item.id ? "scale-95 touch-none opacity-40 bg-surface-muted/40" : "touch-pan-y"
+                    }`}
                     data-queue-item-id={item.id}
                     draggable={canReorderQueue}
-                    onDragStart={() => {
+                    onDragStart={(event) => {
                       setDraggingQueueItemId(item.id);
-                      setDragOverQueueItemId(item.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", item.id);
                     }}
                     onDragOver={(event) => {
-                      if (canReorderQueue) {
-                        event.preventDefault();
+                      if (!canReorderQueue || !draggingQueueItemId || draggingQueueItemId === item.id) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const midY = rect.top + rect.height / 2;
+                      const position = event.clientY < midY ? "before" : "after";
+                      setDragOverTarget((prev) => {
+                        if (prev?.itemId === item.id && prev.position === position) return prev;
+                        return { itemId: item.id, position };
+                      });
+                    }}
+                    onDragLeave={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                        setDragOverTarget((prev) => (prev?.itemId === item.id ? null : prev));
                       }
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
-                      void handleDrop(item.id);
+                      if (!draggingQueueItemId || !canReorderQueue) {
+                        setDraggingQueueItemId(null);
+                        setDragOverTarget(null);
+                        return;
+                      }
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const position = dragOverTarget?.position ?? (
+                        event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                      );
+                      void handleDrop(item.id, position);
                     }}
                     onDragEnd={() => {
                       setDraggingQueueItemId(null);
-                      setDragOverQueueItemId(null);
+                      setDragOverTarget(null);
                     }}
                     onPointerCancel={finishTouchReorder}
                     onPointerDown={(event) => handleTouchReorderStart(event, item.id)}
                     onPointerMove={handleTouchReorderMove}
                     onPointerUp={finishTouchReorder}
                   >
-                    <span className={`w-5 text-center font-mono text-xs font-semibold tabular-nums ${isCurrent ? "text-accent font-bold" : "text-foreground-muted"}`}>
-                      {String(index + 1).padStart(2, "0")}
+                    {/* Visual drop indicator */}
+                    {dragOverTarget?.itemId === item.id && draggingQueueItemId !== item.id ? (
+                      <div
+                        className={`absolute left-1 right-1 z-20 h-0.5 bg-accent pointer-events-none ${
+                          dragOverTarget.position === "before" ? "-top-[1px]" : "-bottom-[1px]"
+                        }`}
+                      >
+                        <div className="absolute -left-1 -top-[3px] h-2 w-2 rounded-full bg-accent" />
+                      </div>
+                    ) : null}
+
+                    <span className={`w-5 shrink-0 text-center font-mono text-xs font-semibold tabular-nums ${isCurrent ? "text-accent font-bold" : "text-foreground-muted"}`}>
+                      {canReorderQueue ? (
+                        <>
+                          <span className="block group-hover:hidden">{String(index + 1).padStart(2, "0")}</span>
+                          <svg
+                            aria-hidden="true"
+                            className="hidden group-hover:block mx-auto h-3.5 w-3.5 text-foreground-muted/60"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle cx="9" cy="6" r="1.5" />
+                            <circle cx="15" cy="6" r="1.5" />
+                            <circle cx="9" cy="12" r="1.5" />
+                            <circle cx="15" cy="12" r="1.5" />
+                            <circle cx="9" cy="18" r="1.5" />
+                            <circle cx="15" cy="18" r="1.5" />
+                          </svg>
+                        </>
+                      ) : (
+                        String(index + 1).padStart(2, "0")
+                      )}
                     </span>
                     <div className="relative shrink-0">
                       <QueueArtwork artworkUrl={track?.artworkUrl ?? null} title={title} />

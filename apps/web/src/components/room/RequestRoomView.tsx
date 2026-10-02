@@ -388,6 +388,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onImportQqMusicTracks={props.onImportQqMusicTracks}
                     onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
                     onPlayTrack={props.onPlayTrack}
+                    onReorderTracks={props.onReorderTracks}
                     onSaveTrackToLocal={props.onSaveTrackToLocal}
                     roomId={props.roomSnapshot.room.id}
                     roomPlaylists={props.roomSnapshot.playlists}
@@ -401,7 +402,6 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     activeSession={props.activeSession}
                     canManageLibrary={isHost}
                     currentRoomId={props.roomSnapshot.room.id}
-                    hideUnavailableProvidersNotice
                     localStorageSummary={props.localStorageSummary}
                     onCleanLocalStorage={props.onCleanLocalStorage}
                     onDeletePlaylist={props.onDeletePlaylist}
@@ -414,13 +414,11 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                     onImportQqMusicTracks={props.onImportQqMusicTracks}
                     onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
                     onRefreshLocalStorage={props.onRefreshLocalStorage}
-                    onRequestTrack={submitRequest}
                     onSavePlaylistFromQueue={props.onSavePlaylistFromQueue}
                     onUpdatePlaylistTitle={props.onUpdatePlaylistTitle}
                     onUpdatePlaylistTracks={props.onUpdatePlaylistTracks}
                     playlists={props.playlists}
                     roomPlaylists={props.roomSnapshot.playlists}
-                    searchMode={isHost ? "import" : "request"}
                     tracks={props.roomSnapshot.tracks}
                     onRefreshRoom={props.onRefreshRoom}
                   />
@@ -622,6 +620,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
                   onImportQqMusicTracks={props.onImportQqMusicTracks}
                   onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
                   onPlayTrack={props.onPlayTrack}
+                  onReorderTracks={props.onReorderTracks}
                   onSaveTrackToLocal={props.onSaveTrackToLocal}
                   roomId={props.roomSnapshot.room.id}
                   roomPlaylists={props.roomSnapshot.playlists}

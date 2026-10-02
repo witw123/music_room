@@ -712,8 +712,14 @@ export function useRoomActions({
       }
 
       try {
-        await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
+        const result = await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
           queueItemIds
+        });
+        dispatchRoomStateEvent({
+          type: "server-queue-patch",
+          roomId: roomSnapshot.room.id,
+          queue: result.queue,
+          playback: result.playback
         });
         void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("播放队列顺序已更新。");
@@ -721,7 +727,33 @@ export function useRoomActions({
         setStatusMessage(toUserFacingError(error));
       }
     },
-    [roomSnapshot, activeSession, setStatusMessage, syncRoomSnapshot]
+    [roomSnapshot, activeSession, dispatchRoomStateEvent, setStatusMessage, syncRoomSnapshot]
+  );
+
+  const reorderTracks = useCallback(
+    async (trackIds: string[]) => {
+      if (!roomSnapshot || !activeSession || !hasRoomPermission(roomSnapshot, activeSession.userId, "library")) {
+        return;
+      }
+
+      try {
+        const nextTracks = await musicRoomApi.reorderTracks(roomSnapshot.room.id, {
+          trackIds
+        });
+        dispatchRoomStateEvent({
+          type: "server-library-patch",
+          roomId: roomSnapshot.room.id,
+          tracks: nextTracks,
+          queue: roomSnapshot.queue,
+          playback: roomSnapshot.room.playback
+        });
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
+        setStatusMessage("曲库歌曲顺序已更新。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [roomSnapshot, activeSession, dispatchRoomStateEvent, setStatusMessage, syncRoomSnapshot]
   );
 
   const setNextQueueItem = useCallback(
@@ -862,6 +894,7 @@ export function useRoomActions({
     loadPlaylistIntoRoom,
     removeQueueItem,
     reorderQueue,
+    reorderTracks,
     setNextQueueItem,
     setPlaybackMode,
     seekTrack,

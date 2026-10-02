@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { AuthSession, RoomMember, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/library/audio-utils";
 import { listRoomPlaylistTrackIndex, providerTrackKey } from "@/features/playlist/local-playlist";
+import { reorderWithPosition } from "@/components/bottom-player/PlayerQueueDrawer";
 import { LocalAudioImport } from "./LocalAudioImport";
 import { TrackDistributionBadge } from "./TrackDistributionBadge";
 
@@ -26,6 +27,8 @@ type TrackListSectionProps = {
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
+  onReorderTracks?: (trackIds: string[]) => Promise<void>;
+  hideLocalAudioImport?: boolean;
 };
 
 export type LibraryTrackFilter = "all" | "mine" | "others";
@@ -56,15 +59,147 @@ function TrackListSectionBase({
   canManageAllTracks,
   canAddToQueue,
   activeSession,
+  hideLocalAudioImport,
   onFilesSelected,
   onAddToQueue,
   onSaveTrackToLocal,
   onDeleteTrack,
-  onPlayTrack
+  onPlayTrack,
+  onReorderTracks
 }: TrackListSectionProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [trackFilter, setTrackFilter] = useState<LibraryTrackFilter>("all");
   const [cachedArtworkByTrackId, setCachedArtworkByTrackId] = useState<Map<string, string>>(new Map());
+  const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{
+    trackId: string;
+    position: "before" | "after";
+  } | null>(null);
+  const canReorderTracks = canManageLibrary && Boolean(onReorderTracks);
+
+  const touchReorderRef = useRef<{
+    trackId: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    targetTrackId: string | null;
+    targetPosition: "before" | "after";
+    active: boolean;
+    targetElement: HTMLElement | null;
+  } | null>(null);
+  const touchReorderTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (touchReorderTimerRef.current !== null) {
+        window.clearTimeout(touchReorderTimerRef.current);
+      }
+    };
+  }, []);
+
+  function cancelTouchReorderTimer() {
+    if (touchReorderTimerRef.current !== null) {
+      window.clearTimeout(touchReorderTimerRef.current);
+      touchReorderTimerRef.current = null;
+    }
+  }
+
+  const handleTrackDrop = async (targetTrackId: string, position: "before" | "after") => {
+    if (!draggingTrackId || !canReorderTracks || !onReorderTracks) {
+      setDraggingTrackId(null);
+      setDragOverTarget(null);
+      return;
+    }
+
+    const sourceTrackId = draggingTrackId;
+    setDraggingTrackId(null);
+    setDragOverTarget(null);
+
+    if (sourceTrackId === targetTrackId) return;
+
+    const nextTracks = reorderWithPosition(tracks, sourceTrackId, targetTrackId, position, (t) => t.id);
+    await onReorderTracks(nextTracks.map((t) => t.id));
+  };
+
+  function handleTouchReorderStart(event: React.PointerEvent<HTMLElement>, trackId: string) {
+    if (!canReorderTracks || (event.pointerType !== "touch" && event.pointerType !== "pen")) {
+      return;
+    }
+    if ((event.target as HTMLElement).closest("button")) return;
+
+    cancelTouchReorderTimer();
+    const targetElement = event.currentTarget;
+    touchReorderRef.current = {
+      trackId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      targetTrackId: trackId,
+      targetPosition: "after",
+      active: false,
+      targetElement
+    };
+    touchReorderTimerRef.current = window.setTimeout(() => {
+      const current = touchReorderRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      current.active = true;
+      setDraggingTrackId(current.trackId);
+      setDragOverTarget(null);
+      current.targetElement?.setPointerCapture(current.pointerId);
+    }, 420);
+  }
+
+  function handleTouchReorderMove(event: React.PointerEvent<HTMLElement>) {
+    const current = touchReorderRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+
+    if (!current.active) {
+      const movedDistance = Math.hypot(
+        event.clientX - current.startX,
+        event.clientY - current.startY
+      );
+      if (movedDistance > 10) {
+        cancelTouchReorderTimer();
+        touchReorderRef.current = null;
+      }
+      return;
+    }
+
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-track-id]");
+    const targetTrackId = target?.dataset.trackId ?? current.trackId;
+    let position: "before" | "after" = "after";
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    }
+    current.targetTrackId = targetTrackId;
+    current.targetPosition = position;
+    if (targetTrackId !== current.trackId) {
+      setDragOverTarget({ trackId: targetTrackId, position });
+    } else {
+      setDragOverTarget(null);
+    }
+  }
+
+  function finishTouchReorder(event: React.PointerEvent<HTMLElement>) {
+    const current = touchReorderRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+
+    cancelTouchReorderTimer();
+    if (current.active && current.targetTrackId && current.targetTrackId !== current.trackId) {
+      event.preventDefault();
+      void handleTrackDrop(current.targetTrackId, current.targetPosition);
+      if (current.targetElement?.hasPointerCapture(current.pointerId)) {
+        current.targetElement.releasePointerCapture(current.pointerId);
+      }
+    }
+    touchReorderRef.current = null;
+    setDraggingTrackId(null);
+    setDragOverTarget(null);
+  }
+
   const activeSessionUserId = activeSession?.userId;
   const ownTrackCount = tracks.filter((track) => track.ownerSessionId === activeSessionUserId).length;
   const otherTrackCount = tracks.length - ownTrackCount;
@@ -116,10 +251,12 @@ function TrackListSectionBase({
   };
   return (
     <section className="relative flex w-full flex-col gap-2">
-      <LocalAudioImport
-        disabled={!canManageLibrary || pendingAction !== null}
-        onFilesSelected={(files) => runAction("upload", () => onFilesSelected(files))}
-      />
+      {!hideLocalAudioImport ? (
+        <LocalAudioImport
+          disabled={!canManageLibrary || pendingAction !== null}
+          onFilesSelected={(files) => runAction("upload", () => onFilesSelected(files))}
+        />
+      ) : null}
 
       <div>
         <div
@@ -185,16 +322,93 @@ function TrackListSectionBase({
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group grid grid-cols-[2.25rem_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2 py-1.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:gap-x-2.5 sm:px-3"
+                  draggable={canReorderTracks}
+                  onDragStart={(event) => {
+                    if (!canReorderTracks) return;
+                    setDraggingTrackId(track.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", track.id);
+                  }}
+                  onDragOver={(event) => {
+                    if (!canReorderTracks || !draggingTrackId || draggingTrackId === track.id) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    const position = event.clientY < midY ? "before" : "after";
+                    setDragOverTarget((prev) => {
+                      if (prev?.trackId === track.id && prev.position === position) return prev;
+                      return { trackId: track.id, position };
+                    });
+                  }}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                      setDragOverTarget((prev) => (prev?.trackId === track.id ? null : prev));
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (!draggingTrackId || !canReorderTracks) {
+                      setDraggingTrackId(null);
+                      setDragOverTarget(null);
+                      return;
+                    }
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const position = dragOverTarget?.position ?? (
+                      event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                    );
+                    void handleTrackDrop(track.id, position);
+                  }}
+                  onDragEnd={() => {
+                    setDraggingTrackId(null);
+                    setDragOverTarget(null);
+                  }}
+                  onPointerCancel={finishTouchReorder}
+                  onPointerDown={(event) => handleTouchReorderStart(event, track.id)}
+                  onPointerMove={handleTouchReorderMove}
+                  onPointerUp={finishTouchReorder}
+                  className={`group relative grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-2 gap-y-0.5 border-b border-surface-border/30 px-2 py-1.5 transition-colors last:border-b-0 hover:bg-surface-hover sm:gap-x-2.5 sm:px-3 ${
+                    canReorderTracks ? "cursor-grab active:cursor-grabbing" : ""
+                  } ${
+                    draggingTrackId === track.id ? "scale-95 touch-none opacity-40 bg-surface-muted/40" : "touch-pan-y"
+                  }`}
                 >
-                  <div className="relative row-span-2 shrink-0">
-                    <TrackArtwork artworkUrl={artworkUrl} title={track.title} />
-                    <TrackDistributionBadge
-                      roomId={roomId}
-                      track={track}
-                      members={members}
-                      currentSessionId={activeSession?.userId ?? null}
-                    />
+                  {/* Visual drop indicator */}
+                  {dragOverTarget?.trackId === track.id && draggingTrackId !== track.id ? (
+                    <div
+                      className={`absolute left-1 right-1 z-20 h-0.5 bg-accent pointer-events-none ${
+                        dragOverTarget.position === "before" ? "-top-[1px]" : "-bottom-[1px]"
+                      }`}
+                    >
+                      <div className="absolute -left-1 -top-[3px] h-2 w-2 rounded-full bg-accent" />
+                    </div>
+                  ) : null}
+
+                  <div className="relative row-span-2 flex shrink-0 items-center gap-1 sm:gap-1.5">
+                    {canReorderTracks ? (
+                      <div
+                        aria-hidden="true"
+                        className="flex shrink-0 items-center text-foreground-muted/30 transition-colors group-hover:text-foreground-muted/70"
+                      >
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="9" cy="6" r="1.5" />
+                          <circle cx="15" cy="6" r="1.5" />
+                          <circle cx="9" cy="12" r="1.5" />
+                          <circle cx="15" cy="12" r="1.5" />
+                          <circle cx="9" cy="18" r="1.5" />
+                          <circle cx="15" cy="18" r="1.5" />
+                        </svg>
+                      </div>
+                    ) : null}
+                    <div className="relative shrink-0">
+                      <TrackArtwork artworkUrl={artworkUrl} title={track.title} />
+                      <TrackDistributionBadge
+                        roomId={roomId}
+                        track={track}
+                        members={members}
+                        currentSessionId={activeSession?.userId ?? null}
+                      />
+                    </div>
                   </div>
 
                   <div className="min-w-0">

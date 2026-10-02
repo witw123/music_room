@@ -32,6 +32,7 @@ export type LibraryTabPanelProps = {
   onSaveTrackToLocal: (track: TrackMeta) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
+  onReorderTracks?: (trackIds: string[]) => Promise<void>;
   // Room Library Playlists
   roomPlaylists?: Playlist[];
   onDeletePlaylist?: (playlistId: string) => Promise<void>;
@@ -44,6 +45,7 @@ export type LibraryTabPanelProps = {
   onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
   onSwitchToDesk?: () => void;
+  hideLocalAudioImport?: boolean;
 };
 
 function LibraryTabPanelBase({
@@ -63,6 +65,7 @@ function LibraryTabPanelBase({
   onSaveTrackToLocal,
   onDeleteTrack,
   onPlayTrack,
+  onReorderTracks,
   roomPlaylists,
   onDeletePlaylist,
   onLoadPlaylistIntoRoom,
@@ -73,7 +76,8 @@ function LibraryTabPanelBase({
   onImportQqMusicTracks,
   onImportBilibiliTracks,
   onImportCachedTrack,
-  onSwitchToDesk
+  onSwitchToDesk,
+  hideLocalAudioImport
 }: LibraryTabPanelProps) {
   const [subTab, setSubTab] = useState<"tracks" | "playlists">("tracks");
 
@@ -123,6 +127,7 @@ function LibraryTabPanelBase({
           canControlPlayback={canControlPlayback}
           canManageAllTracks={canManageAllTracks}
           canManageLibrary={canManageLibrary}
+          hideLocalAudioImport={hideLocalAudioImport}
           localFolderName={localFolderName}
           localSavedFileHashes={localSavedFileHashes}
           members={members}
@@ -130,6 +135,7 @@ function LibraryTabPanelBase({
           onDeleteTrack={onDeleteTrack}
           onFilesSelected={onFilesSelected}
           onPlayTrack={onPlayTrack}
+          onReorderTracks={onReorderTracks}
           onSaveTrackToLocal={onSaveTrackToLocal}
           roomId={roomId}
           tracks={tracks}

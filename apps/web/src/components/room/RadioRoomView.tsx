@@ -411,12 +411,14 @@ function RadioLibraryList({
         canControlPlayback={props.canControlPlayback}
         canManageAllTracks={isHost}
         canManageLibrary={isHost}
+        hideLocalAudioImport
         localFolderName={props.localStorageSummary.localFolderName}
         localSavedFileHashes={props.localStorageSummary.localSavedFileHashes}
         onAddToQueue={props.onAddToQueue}
         onDeleteTrack={props.onDeleteTrack}
         onFilesSelected={props.onFilesSelected}
         onPlayTrack={props.onPlayTrack}
+        onReorderTracks={props.onReorderTracks}
         onSaveTrackToLocal={props.onSaveTrackToLocal}
         tracks={props.roomSnapshot.tracks}
         members={props.roomSnapshot.room.members}
@@ -634,7 +636,6 @@ function HostBroadcastDesk(props: RoomDashboardViewProps) {
               <LocalStorageTabPanel
                 activeSession={props.activeSession}
                 canManageLibrary
-                hideUnavailableProvidersNotice
                 localStorageSummary={props.localStorageSummary}
                 onCleanLocalStorage={props.onCleanLocalStorage}
                 onDeletePlaylist={props.onDeletePlaylist}

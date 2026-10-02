@@ -92,6 +92,7 @@ export type RoomDashboardViewProps = {
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  onReorderTracks?: (trackIds: string[]) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
@@ -277,6 +278,7 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         onImportQqMusicTracks={props.onImportQqMusicTracks}
         onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
         onPlayTrack={props.onPlayTrack}
+        onReorderTracks={props.onReorderTracks}
         onSaveTrackToLocal={props.onSaveTrackToLocal}
         roomId={props.roomSnapshot.room.id}
         roomPlaylists={props.roomSnapshot.playlists}

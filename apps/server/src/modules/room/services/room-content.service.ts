@@ -555,6 +555,33 @@ export class RoomContentService {
     return record.queue;
   }
 
+  async reorderTracks(roomId: string, actorSessionId: string, trackIds: string[]) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    assertMember(record, actorSessionId);
+    if ((record.room.roomType === "request" || record.room.roomType === "radio") && record.room.hostId !== actorSessionId) {
+      throw new BadRequestException("只有房主可以调整当前房间曲库排序。");
+    }
+    assertPermission(record, actorSessionId, "library");
+
+    const existingIds = new Set(record.tracks.map((item) => item.id));
+    if (
+      trackIds.length !== existingIds.size ||
+      trackIds.some((id) => !existingIds.has(id))
+    ) {
+      throw new BadRequestException("曲目排序数据与当前曲库不一致。");
+    }
+
+    const trackMap = new Map(record.tracks.map((item) => [item.id, item]));
+    const nextTracks = trackIds
+      .map((trackId) => trackMap.get(trackId))
+      .filter((item): item is TrackMeta => !!item);
+
+    record.tracks = nextTracks;
+    incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return record.tracks;
+  }
+
   private removeTracksById(record: RoomRecord, trackIds: Set<string>) {
     if (trackIds.size === 0) {
       return;

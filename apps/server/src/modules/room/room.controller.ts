@@ -8,6 +8,7 @@ import {
   registerTrackRequestSchema,
   registerTracksRequestSchema,
   prepareTrackAssetRequestSchema,
+  reorderTracksRequestSchema,
   reportTrackAssetUnavailableRequestSchema,
   updateRoomMemberPermissionsRequestSchema,
   updateRadioAutopilotRequestSchema,
@@ -587,5 +588,18 @@ export class RoomController {
       });
     }
     return result;
+  }
+
+  @Patch(":roomId/tracks/reorder")
+  async reorderTracks(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: unknown
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(reorderTracksRequestSchema, body);
+    const tracks = await this.roomService.reorderTracks(roomId, userId, payload.trackIds);
+    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
+    return tracks;
   }
 }

@@ -200,6 +200,13 @@ export const reorderQueueRequestSchema = z
   })
   .strict();
 
+export const reorderTracksRequestSchema = z
+  .object({
+    trackIds: z.array(stringId).max(1000)
+  })
+  .strict();
+export type ReorderTracksRequest = z.infer<typeof reorderTracksRequestSchema>;
+
 export const setNextQueueItemRequestSchema = z
   .object({
     queueItemId: stringId

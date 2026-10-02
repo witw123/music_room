@@ -243,16 +243,13 @@ export function RoomLibraryPlaylistsSection({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="room-library-playlists-section">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] text-foreground-muted">
-          {roomPlaylists.length} 个曲库歌单
-        </span>
-        {statusMessage ? (
+      {statusMessage ? (
+        <div className="flex items-center justify-end">
           <p className="truncate text-xs text-accent" role="status">
             {statusMessage}
           </p>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {roomPlaylists.length > 0 ? (
         <div className="divide-y divide-surface-border/50 overflow-hidden rounded-xl border border-surface-border/60 bg-surface/40">

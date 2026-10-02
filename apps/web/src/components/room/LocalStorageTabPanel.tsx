@@ -14,7 +14,6 @@ import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { LocalPlaylistPanel } from "./LocalPlaylistPanel";
 import { FavoriteAlbumsPanel } from "./FavoriteAlbumsPanel";
-import { RoomProviderTrackSearch, type RoomProviderTrackSearchMode, type ProviderTrack } from "./RoomProviderTrackSearch";
 
 type LocalStorageTabPanelProps = {
   tracks: TrackMeta[];
@@ -36,9 +35,6 @@ type LocalStorageTabPanelProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
-  hideUnavailableProvidersNotice?: boolean;
-  searchMode?: RoomProviderTrackSearchMode;
-  onRequestTrack?: (track: ProviderTrack) => Promise<void>;
   currentRoomId?: string | null;
   roomPlaylists?: Playlist[];
   onRefreshRoom?: () => Promise<unknown>;
@@ -62,9 +58,6 @@ function LocalStorageTabPanelBase({
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onDeletePlaylist,
-  hideUnavailableProvidersNotice = false,
-  searchMode,
-  onRequestTrack,
   currentRoomId,
   roomPlaylists,
   onRefreshRoom
@@ -130,18 +123,6 @@ function LocalStorageTabPanelBase({
         />
       </section> : null}
       {playlistTab === "network" ? <section className="flex flex-col gap-3" data-testid="network-playlist-section">
-        <RoomProviderTrackSearch
-          roomTracks={tracks}
-          mode={searchMode ?? "import"}
-          canManageLibrary={canManageLibrary}
-          hideUnavailableProvidersNotice={hideUnavailableProvidersNotice}
-          onImportNeteaseTrack={onImportNeteaseTrack}
-          onImportQqMusicTrack={onImportQqMusicTrack}
-          onImportBilibiliTrack={onImportBilibiliTrack}
-          onImportBilibiliTracks={onImportBilibiliTracks}
-          onRequestTrack={onRequestTrack}
-          testId="network-playlist-search"
-        />
         <PlaylistPanel
           activeSession={activeSession}
           canManageLibrary={canManageLibrary}

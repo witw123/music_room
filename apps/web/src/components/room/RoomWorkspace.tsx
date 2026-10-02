@@ -89,6 +89,7 @@ type RoomWorkspaceProps = {
   onPlayNextQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
+  onReorderTracks?: (trackIds: string[]) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onRefreshRoom: () => Promise<RoomSnapshot | null>;
@@ -160,6 +161,7 @@ function RoomWorkspaceBase({
   onPlayNextQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
+  onReorderTracks,
   onDeleteTrack,
   onPlayTrack,
   onRefreshRoom,
@@ -275,6 +277,7 @@ function RoomWorkspaceBase({
               onPlayNextQueueItem={onPlayNextQueueItem}
               onRemoveQueueItem={onRemoveQueueItem}
               onReorderQueue={onReorderQueue}
+              onReorderTracks={onReorderTracks}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
               onRefreshRoom={onRefreshRoom}

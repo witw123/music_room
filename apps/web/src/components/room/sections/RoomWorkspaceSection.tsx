@@ -161,6 +161,7 @@ function RoomWorkspaceSectionComponent({
       onPlayNextQueueItem={roomActions.setNextQueueItem}
       onRemoveQueueItem={roomActions.removeQueueItem}
       onReorderQueue={roomActions.reorderQueue}
+      onReorderTracks={roomActions.reorderTracks}
       onDeleteTrack={roomActions.deleteTrack}
       onPlayTrack={onPlayTrack}
       onRefreshRoom={roomActions.refreshRoomSnapshot}
