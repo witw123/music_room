@@ -176,6 +176,10 @@ export async function importProviderTracks(input: {
   let nextPrefetchIndex = 0;
   let currentProcessingIndex = 0;
 
+  let lastProgressUpdateTime = 0;
+  let maxReportedLoaded = 0;
+  let streamBytesStarted = false;
+
   const fillPrefetchWindow = (lastIndex: number) => {
     while (nextPrefetchIndex < pendingCandidates.length && nextPrefetchIndex <= lastIndex) {
       const index = nextPrefetchIndex++;
@@ -184,13 +188,22 @@ export async function importProviderTracks(input: {
         index,
         prefetchProviderAudio(candidate, sourceType, (progress) => {
           if (currentProcessingIndex === index) {
+            streamBytesStarted = true;
+            maxReportedLoaded = Math.max(maxReportedLoaded, progress.loaded);
+
+            const now = Date.now();
+            if (now - lastProgressUpdateTime < 120 && progress.percent !== 100) {
+              return;
+            }
+            lastProgressUpdateTime = now;
+
             const fraction = progress.percent !== undefined
               ? progress.percent / 100
               : progress.total && progress.total > 0
-                ? progress.loaded / progress.total
-                : Math.min(0.9, progress.loaded / (1024 * 1024 * 5));
+                ? maxReportedLoaded / progress.total
+                : Math.min(0.95, maxReportedLoaded / (1024 * 1024 * 5));
             const dlPercent = Math.min(42, 5 + Math.round(fraction * 37));
-            const loadedMb = (progress.loaded / (1024 * 1024)).toFixed(1);
+            const loadedMb = (maxReportedLoaded / (1024 * 1024)).toFixed(1);
             const totalMb = progress.total ? (progress.total / (1024 * 1024)).toFixed(1) : null;
             const stageText = totalMb
               ? `正在下载音频 (${loadedMb}MB / ${totalMb}MB)`
@@ -215,6 +228,10 @@ export async function importProviderTracks(input: {
   try {
     for (let index = 0; index < pendingCandidates.length; index += 1) {
       currentProcessingIndex = index;
+      lastProgressUpdateTime = 0;
+      maxReportedLoaded = 0;
+      streamBytesStarted = false;
+
       const candidate = pendingCandidates[index];
       const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
       const activeItemKey = `${candidate.provider}:${candidate.providerTrackId}`;
@@ -232,20 +249,18 @@ export async function importProviderTracks(input: {
 
         let currentDlPercent = 5;
         const downloadTimer = setInterval(() => {
-          const currentTask = importTaskStore.getTasks().find((t) => t.id === taskId);
-          const currentP = currentTask?.currentStagePercent ?? currentDlPercent;
-          if (currentP < 42) {
-            const nextP = Math.min(42, currentP + 1);
-            currentDlPercent = nextP;
+          if (streamBytesStarted) return;
+          if (currentDlPercent < 15) {
+            currentDlPercent += 1;
             importTaskStore.updateTaskProgress(taskId, {
               currentTitle: candidate.title,
-              currentStage: `正在下载音频 (${nextP}%)`,
-              currentStagePercent: nextP,
+              currentStage: "正在连接音频服务器",
+              currentStagePercent: currentDlPercent,
               activeItemKey,
               activeItemAliasKeys: aliasKeys
             });
           }
-        }, 120);
+        }, 150);
 
         let prefetchResult: PrefetchedProviderAudioResult;
         try {
@@ -330,7 +345,7 @@ export async function importProviderTracks(input: {
         importTaskStore.updateTaskProgress(taskId, {
           currentTitle: candidate.title,
           currentStage: "解析歌词与封面",
-          currentStagePercent: 92,
+          currentStagePercent: 88,
           activeItemKey,
           activeItemAliasKeys: aliasKeys
         });
@@ -350,18 +365,8 @@ export async function importProviderTracks(input: {
           lyrics
         });
 
-        importTaskStore.updateTaskProgress(taskId, {
-          currentTitle: candidate.title,
-          currentStage: "正在提交到房间曲库",
-          currentStagePercent: 95,
-          activeItemKey,
-          activeItemAliasKeys: aliasKeys
-        });
-
-        // The candidate is still being committed below; keep the marker until
-        // the whole import finishes so a concurrent run cannot duplicate it.
+        // The candidate is ready to be committed with the batch
         heldInFlightKeys.push(key);
-        importTaskStore.completeItem(taskId, activeItemKey, aliasKeys);
       } catch (error) {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
         failures.push(error);
@@ -377,9 +382,9 @@ export async function importProviderTracks(input: {
     try {
       input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
       importTaskStore.updateTaskProgress(taskId, {
-        currentTitle: `提交 ${prepared.length} 首歌曲`,
-        currentStage: "正在注册到房间曲库",
-        currentStagePercent: 95
+        currentTitle: pendingCandidates.length === 1 ? pendingCandidates[0].title : undefined,
+        currentStage: "正在保存到房间曲库",
+        currentStagePercent: 90
       });
       let registered: TrackMeta[];
       try {
@@ -390,6 +395,12 @@ export async function importProviderTracks(input: {
         for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
         throw error;
       }
+
+      importTaskStore.updateTaskProgress(taskId, {
+        currentTitle: pendingCandidates.length === 1 ? pendingCandidates[0].title : undefined,
+        currentStage: "正在写入本地缓存",
+        currentStagePercent: 95
+      });
 
       const uploadEntries: Record<string, UploadedTrack> = {};
       const persistedObjectUrls = new Set<string>();
@@ -430,8 +441,15 @@ export async function importProviderTracks(input: {
       }
 
       input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
-      await input.syncRoomSnapshot(roomSnapshot.room.id);
+      void input.syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
       void input.refreshCacheLibrary().catch(() => undefined);
+
+      for (const item of prepared) {
+        const itemKey = `${item.candidate.provider}:${item.candidate.providerTrackId}`;
+        const aliasKeys = [item.candidate.providerTrackId];
+        importTaskStore.completeItem(taskId, itemKey, aliasKeys);
+      }
+
       const failedCount = failures.length + persistFailures.length;
       input.setStatusMessage(`已导入 ${Object.keys(uploadEntries).length} 首歌曲${failedCount ? `，${failedCount} 首失败` : ""}。`);
     } finally {
