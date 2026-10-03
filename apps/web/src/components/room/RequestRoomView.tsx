@@ -16,6 +16,7 @@ import { PlayerQueueList } from "@/components/bottom-player";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { RoomControlHeader } from "./RoomControlHeader";
+import { RoomImportProgressBar } from "./RoomImportProgressBar";
 import type { RoomDashboardViewProps } from "./RoomDashboardView";
 import {
   FolderIcon,
@@ -323,6 +324,9 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
             onChange={(tab) => setLeftTab(tab)}
             tabs={isHost ? hostLeftTabs : memberLeftTabs}
           />
+          <div className="px-2 shrink-0">
+            <RoomImportProgressBar />
+          </div>
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
             {message ? (
               <div className="px-3 pt-2">
@@ -524,6 +528,7 @@ export function RequestRoomView(props: RoomDashboardViewProps) {
               );
             })}
           </div>
+          <RoomImportProgressBar />
         </div>
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">

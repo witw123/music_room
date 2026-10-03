@@ -16,6 +16,7 @@ import {
   getReusableAudioAssets,
   prepareAudioAssets
 } from "@/features/library/audio-asset-builder";
+import { importTaskStore } from "./import-task-store";
 import { buildRegisterTrackPayload } from "./upload-pipeline";
 import { toCachedLibraryFile } from "@/features/library/cache-library";
 import { resolveLocalArtworkUrl } from "@/features/library/audio-metadata";
@@ -140,6 +141,25 @@ export async function importProviderTracks(input: {
   });
   if (pendingCandidates.length === 0) return;
 
+  const itemKeys = pendingCandidates.flatMap((c) => [
+    `${c.provider}:${c.providerTrackId}`,
+    c.providerTrackId
+  ]);
+  const taskTitle = pendingCandidates.length === 1
+    ? `导入《${pendingCandidates[0].title}》`
+    : pendingCandidates.every((c) => c.provider === "bilibili")
+      ? `导入 B 站音频 (${pendingCandidates.length} 首)`
+      : `导入网络歌曲 (${pendingCandidates.length} 首)`;
+
+  const taskId = importTaskStore.startTask({
+    type: pendingCandidates.length > 1 ? "provider_batch" : "provider_track",
+    title: taskTitle,
+    totalCount: pendingCandidates.length,
+    itemKeys,
+    currentTitle: pendingCandidates[0].title,
+    currentStage: "正在准备获取音频"
+  });
+
   const prepared: PreparedProviderImport[] = [];
   const failures: unknown[] = [];
   const heldInFlightKeys: string[] = [];
@@ -161,141 +181,172 @@ export async function importProviderTracks(input: {
   };
   fillPrefetchWindow(1);
 
-  for (let index = 0; index < pendingCandidates.length; index += 1) {
-    const candidate = pendingCandidates[index];
-    const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
-    let objectUrl: string | null = null;
-    try {
-      input.setStatusMessage(`正在按顺序导入 ${index + 1} / ${pendingCandidates.length}：《${candidate.title}》…`);
-      const prefetchPromise = prefetchedAudio.get(index);
-      if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
-      const prefetchResult = await prefetchPromise;
-      prefetchedAudio.delete(index);
-      fillPrefetchWindow(index + 2);
-      if (!prefetchResult.ok) throw prefetchResult.error;
-      const prefetched = prefetchResult.audio;
-      if (!prefetched) throw new Error(`歌曲预取结果无效：${candidate.title}`);
-
-      const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
-      const lyricsPayloadPromise = requestProviderLyricsPayload(sourceType, candidate.providerTrackId);
-      const artworkPromise = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
-        ? musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
-        : Promise.resolve(undefined);
-      const createdObjectUrl = URL.createObjectURL(prefetched.file);
-      objectUrl = createdObjectUrl;
-      const localArtworkPromise = artworkPromise.then((artworkBlob) =>
-        resolveLocalArtworkUrl(prefetched.file, candidate.artworkUrl, artworkBlob)
-      );
-      const assets = prefetched.assets ?? await prepareAudioAssets({
-        file: prefetched.file,
-        onProgress: ({ stage, completed, total }) => {
-          const stageLabel = {
-            inspecting: "检查音频",
-            hashing: "校验音频",
-            "persisting-original": "缓存源文件",
-            decoding: "解码音频",
-            encoding: "生成播放分片",
-            "persisting-playback": "缓存播放分片"
-          }[stage];
-          const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-          input.setStatusMessage(`${index + 1} / ${pendingCandidates.length}《${candidate.title}》· ${stageLabel} ${percent}%`);
-        }
-      });
-      const localArtworkUrl = await localArtworkPromise;
-      const draft = await buildTrackMeta(prefetched.file, createdObjectUrl, activeSession, assets, {
-        type: sourceType,
-        metadata: { ...candidate, artworkUrl: localArtworkUrl },
-        sourceRef
-      });
-      const lyricsPayload = await lyricsPayloadPromise;
-      const lyrics = lyricsPayload?.lyrics?.trim() || null;
-      const translatedLyrics = lyricsPayload?.translatedLyrics?.trim() || null;
-      const romanizedLyrics = lyricsPayload?.romanizedLyrics?.trim() || null;
-      prepared.push({
-        candidate,
-        file: prefetched.file,
-        objectUrl: createdObjectUrl,
-        draft: {
-          ...draft,
-          lyrics,
-          translatedLyrics,
-          romanizedLyrics,
-          artworkUrl: candidate.artworkUrl ?? null
-        },
-        localArtworkUrl,
-        lyrics
-      });
-      // The candidate is still being committed below; keep the marker until
-      // the whole import finishes so a concurrent run cannot duplicate it.
-      heldInFlightKeys.push(key);
-    } catch (error) {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      failures.push(error);
-      inFlightUploadHashesRef.current.delete(key);
-    }
-  }
-  if (prepared.length === 0) {
-    throw failures[0] ?? new Error("没有可导入的歌曲。");
-  }
-
   try {
-    input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
-    let registered: TrackMeta[];
-    try {
-      registered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
-        tracks: prepared.map((item) => buildRegisterTrackPayload(item.draft))
-      });
-    } catch (error) {
-      for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
-      throw error;
-    }
-
-    const uploadEntries: Record<string, UploadedTrack> = {};
-    const persistedObjectUrls = new Set<string>();
-    const persistFailures: Array<{ track: TrackMeta; error: unknown }> = [];
-    await Promise.all(registered.map(async (track, index) => {
-      const item = prepared[index];
-      if (!item) return;
+    for (let index = 0; index < pendingCandidates.length; index += 1) {
+      const candidate = pendingCandidates[index];
+      const key = `${activeSession.userId}:${candidate.provider}:${candidate.providerTrackId}`;
+      const activeItemKey = `${candidate.provider}:${candidate.providerTrackId}`;
+      const aliasKeys = [candidate.providerTrackId];
+      let objectUrl: string | null = null;
       try {
-        if (track.originalAsset && track.playbackAsset) {
-          await linkTrackAssets({ trackId: track.id, originalAssetId: track.originalAsset.assetId, playbackAssetId: track.playbackAsset.assetId });
-        }
-        await input.persistTrackIntoLibrary({ track: { ...track, artworkUrl: item.localArtworkUrl }, roomId: roomSnapshot.room.id, file: item.file, lyrics: item.lyrics, refreshCache: false });
-        uploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
-        persistedObjectUrls.add(item.objectUrl);
+        input.setStatusMessage(`正在按顺序导入 ${index + 1} / ${pendingCandidates.length}：《${candidate.title}》…`);
+        importTaskStore.updateTaskProgress(taskId, {
+          currentTitle: candidate.title,
+          currentStage: "获取音频数据",
+          currentStagePercent: 15,
+          activeItemKey,
+          activeItemAliasKeys: aliasKeys
+        });
+
+        const prefetchPromise = prefetchedAudio.get(index);
+        if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
+        const prefetchResult = await prefetchPromise;
+        prefetchedAudio.delete(index);
+        fillPrefetchWindow(index + 2);
+        if (!prefetchResult.ok) throw prefetchResult.error;
+        const prefetched = prefetchResult.audio;
+        if (!prefetched) throw new Error(`歌曲预取结果无效：${candidate.title}`);
+
+        const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
+        const lyricsPayloadPromise = requestProviderLyricsPayload(sourceType, candidate.providerTrackId);
+        const artworkPromise = sourceType === "qqmusic" && candidate.artworkUrl && /^https?:\/\//i.test(candidate.artworkUrl)
+          ? musicRoomApi.downloadQqMusicArtwork(candidate.artworkUrl).then((response) => response.blob).catch(() => undefined)
+          : Promise.resolve(undefined);
+        const createdObjectUrl = URL.createObjectURL(prefetched.file);
+        objectUrl = createdObjectUrl;
+        const localArtworkPromise = artworkPromise.then((artworkBlob) =>
+          resolveLocalArtworkUrl(prefetched.file, candidate.artworkUrl, artworkBlob)
+        );
+        const assets = prefetched.assets ?? await prepareAudioAssets({
+          file: prefetched.file,
+          onProgress: ({ stage, completed, total }) => {
+            const stageLabel = {
+              inspecting: "检查音频",
+              hashing: "校验音频",
+              "persisting-original": "缓存源文件",
+              decoding: "解码音频",
+              encoding: "生成播放分片",
+              "persisting-playback": "缓存播放分片"
+            }[stage];
+            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+            input.setStatusMessage(`${index + 1} / ${pendingCandidates.length}《${candidate.title}》· ${stageLabel} ${percent}%`);
+            importTaskStore.updateTaskProgress(taskId, {
+              currentTitle: candidate.title,
+              currentStage: stageLabel,
+              currentStagePercent: percent,
+              activeItemKey,
+              activeItemAliasKeys: aliasKeys
+            });
+          }
+        });
+        const localArtworkUrl = await localArtworkPromise;
+        const draft = await buildTrackMeta(prefetched.file, createdObjectUrl, activeSession, assets, {
+          type: sourceType,
+          metadata: { ...candidate, artworkUrl: localArtworkUrl },
+          sourceRef
+        });
+        const lyricsPayload = await lyricsPayloadPromise;
+        const lyrics = lyricsPayload?.lyrics?.trim() || null;
+        const translatedLyrics = lyricsPayload?.translatedLyrics?.trim() || null;
+        const romanizedLyrics = lyricsPayload?.romanizedLyrics?.trim() || null;
+        prepared.push({
+          candidate,
+          file: prefetched.file,
+          objectUrl: createdObjectUrl,
+          draft: {
+            ...draft,
+            lyrics,
+            translatedLyrics,
+            romanizedLyrics,
+            artworkUrl: candidate.artworkUrl ?? null
+          },
+          localArtworkUrl,
+          lyrics
+        });
+        // The candidate is still being committed below; keep the marker until
+        // the whole import finishes so a concurrent run cannot duplicate it.
+        heldInFlightKeys.push(key);
+        importTaskStore.completeItem(taskId, activeItemKey, aliasKeys);
       } catch (error) {
-        persistFailures.push({ track, error });
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        failures.push(error);
+        inFlightUploadHashesRef.current.delete(key);
+        const errDetail = error instanceof Error ? error.message : "获取音频失败";
+        importTaskStore.failItem(taskId, activeItemKey, errDetail, aliasKeys);
       }
-    }));
+    }
+    if (prepared.length === 0) {
+      throw failures[0] ?? new Error("没有可导入的歌曲。");
+    }
 
-    if (persistFailures.length > 0) {
-      // Roll back only the tracks whose local cache write failed; they would
-      // otherwise sit in the room library with no owner-side asset to stream.
-      const failedTrackIds = new Set(persistFailures.map((failure) => failure.track.id));
-      await Promise.allSettled(
-        [...failedTrackIds].flatMap((trackId) => [
-          input.deleteTrack?.(roomSnapshot.room.id, trackId),
-          input.deleteLocalTrackData?.([trackId])
-        ])
-      );
-      for (const item of prepared) {
-        if (!persistedObjectUrls.has(item.objectUrl)) {
-          URL.revokeObjectURL(item.objectUrl);
+    try {
+      input.setStatusMessage(`正在提交 ${prepared.length} 首歌曲到曲库…`);
+      importTaskStore.updateTaskProgress(taskId, {
+        currentTitle: `提交 ${prepared.length} 首歌曲`,
+        currentStage: "正在注册到房间曲库",
+        currentStagePercent: 95
+      });
+      let registered: TrackMeta[];
+      try {
+        registered = await musicRoomApi.registerTracks(roomSnapshot.room.id, {
+          tracks: prepared.map((item) => buildRegisterTrackPayload(item.draft))
+        });
+      } catch (error) {
+        for (const item of prepared) URL.revokeObjectURL(item.objectUrl);
+        throw error;
+      }
+
+      const uploadEntries: Record<string, UploadedTrack> = {};
+      const persistedObjectUrls = new Set<string>();
+      const persistFailures: Array<{ track: TrackMeta; error: unknown }> = [];
+      await Promise.all(registered.map(async (track, index) => {
+        const item = prepared[index];
+        if (!item) return;
+        try {
+          if (track.originalAsset && track.playbackAsset) {
+            await linkTrackAssets({ trackId: track.id, originalAssetId: track.originalAsset.assetId, playbackAssetId: track.playbackAsset.assetId });
+          }
+          await input.persistTrackIntoLibrary({ track: { ...track, artworkUrl: item.localArtworkUrl }, roomId: roomSnapshot.room.id, file: item.file, lyrics: item.lyrics, refreshCache: false });
+          uploadEntries[track.id] = { file: item.file, objectUrl: item.objectUrl, origin: input.origin };
+          persistedObjectUrls.add(item.objectUrl);
+        } catch (error) {
+          persistFailures.push({ track, error });
+        }
+      }));
+
+      if (persistFailures.length > 0) {
+        // Roll back only the tracks whose local cache write failed; they would
+        // otherwise sit in the room library with no owner-side asset to stream.
+        const failedTrackIds = new Set(persistFailures.map((failure) => failure.track.id));
+        await Promise.allSettled(
+          [...failedTrackIds].flatMap((trackId) => [
+            input.deleteTrack?.(roomSnapshot.room.id, trackId),
+            input.deleteLocalTrackData?.([trackId])
+          ])
+        );
+        for (const item of prepared) {
+          if (!persistedObjectUrls.has(item.objectUrl)) {
+            URL.revokeObjectURL(item.objectUrl);
+          }
+        }
+        if (Object.keys(uploadEntries).length === 0) {
+          throw persistFailures[0]!.error;
         }
       }
-      if (Object.keys(uploadEntries).length === 0) {
-        throw persistFailures[0]!.error;
+
+      input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
+      await input.syncRoomSnapshot(roomSnapshot.room.id);
+      void input.refreshCacheLibrary().catch(() => undefined);
+      const failedCount = failures.length + persistFailures.length;
+      input.setStatusMessage(`已导入 ${Object.keys(uploadEntries).length} 首歌曲${failedCount ? `，${failedCount} 首失败` : ""}。`);
+    } finally {
+      for (const heldKey of heldInFlightKeys) {
+        inFlightUploadHashesRef.current.delete(heldKey);
       }
     }
-
-    input.setUploadedTracks((current) => ({ ...current, ...uploadEntries }));
-    await input.syncRoomSnapshot(roomSnapshot.room.id);
-    void input.refreshCacheLibrary().catch(() => undefined);
-    const failedCount = failures.length + persistFailures.length;
-    input.setStatusMessage(`已导入 ${Object.keys(uploadEntries).length} 首歌曲${failedCount ? `，${failedCount} 首失败` : ""}。`);
   } finally {
-    for (const heldKey of heldInFlightKeys) {
-      inFlightUploadHashesRef.current.delete(heldKey);
-    }
+    importTaskStore.finishTask(taskId, {
+      error: failures.length > 0 && prepared.length === 0 ? "全部导入失败" : undefined
+    });
   }
 }

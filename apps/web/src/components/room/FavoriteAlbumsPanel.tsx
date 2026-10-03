@@ -21,6 +21,7 @@ import {
 } from "@/features/workspace/page-data-cache";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
 import { providerTrackKey } from "@/features/playlist/local-playlist";
+import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 
 type FavoriteTrack = ProviderTrackCandidate;
 
@@ -153,10 +154,18 @@ export function FavoriteAlbumsPanel({
     });
   }, [roomPlaylists]);
 
+  const activeTasks = useVisibleImportTasks();
   const handleAddToLibrary = async (album: ProviderAlbumFavorite) => {
     if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
     setAddingToLibraryId(album.id);
     setLibraryFeedback(null);
+    const taskId = importTaskStore.startTask({
+      type: "playlist_load",
+      title: `添加收藏《${album.title}》到曲库`,
+      totalCount: 1,
+      itemKeys: [album.id, `album:${album.provider}:${album.providerAlbumId}`],
+      currentStage: "正在解析曲目并添加"
+    });
     try {
       let albumTracks: ProviderTrackCandidate[] = [];
       try {
@@ -202,8 +211,11 @@ export function FavoriteAlbumsPanel({
       }
 
       setLibraryFeedback(`已将收藏《${album.title}》加入曲库，歌曲可在曲库歌单中按需加载。`);
+      importTaskStore.finishTask(taskId);
     } catch (error) {
-      setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
+      const errMsg = error instanceof Error ? error.message : "添加到曲库失败。";
+      setLibraryFeedback(errMsg);
+      importTaskStore.finishTask(taskId, { error: errMsg });
     } finally {
       setAddingToLibraryId(null);
     }
@@ -218,7 +230,11 @@ export function FavoriteAlbumsPanel({
         onBack={() => setSelectedAlbumId(null)}
         canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
         isInLibrary={isAlbumInRoom(selectedAlbum)}
-        isAddingToLibrary={addingToLibraryId === selectedAlbum.id}
+        isAddingToLibrary={
+          addingToLibraryId === selectedAlbum.id ||
+          importTaskStore.isItemImporting(selectedAlbum.id) ||
+          importTaskStore.isItemImporting(`album:${selectedAlbum.provider}:${selectedAlbum.providerAlbumId}`)
+        }
         onAddToLibrary={() => void handleAddToLibrary(selectedAlbum)}
         onImportNeteaseTrack={onImportNeteaseTrack}
         onImportQqMusicTrack={onImportQqMusicTrack}
@@ -256,7 +272,11 @@ export function FavoriteAlbumsPanel({
               key={album.id}
               canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
               isInLibrary={isAlbumInRoom(album)}
-              isAddingToLibrary={addingToLibraryId === album.id}
+              isAddingToLibrary={
+                addingToLibraryId === album.id ||
+                importTaskStore.isItemImporting(album.id) ||
+                importTaskStore.isItemImporting(`album:${album.provider}:${album.providerAlbumId}`)
+              }
               onAddToLibrary={() => void handleAddToLibrary(album)}
               onOpen={() => setSelectedAlbumId(album.id)}
             />
@@ -388,7 +408,10 @@ function FavoriteAlbumDetail({
   const selectableTrackIdsKey = JSON.stringify(selectableTrackIds);
   const selectedTracks = selectableTracks.filter((track) => selectedTrackIds.includes(trackKey(track)));
   const allSelectableSelected = selectableTracks.length > 0 && selectedTracks.length === selectableTracks.length;
-  const isImportBusy = pendingTrackIds.size > 0 || isImportingSelected;
+  const isImportBusy =
+    pendingTrackIds.size > 0 ||
+    isImportingSelected ||
+    selectableTrackIds.some((k) => importTaskStore.isItemImporting(k));
 
   useEffect(() => {
     const availableIds = new Set(JSON.parse(selectableTrackIdsKey) as string[]);
@@ -544,7 +567,10 @@ function FavoriteAlbumDetail({
             {tracks.map((track) => {
               const key = trackKey(track);
               const isInRoom = roomTrackKeys.has(key);
-              const isPending = pendingTrackIds.has(key);
+              const isPending =
+                pendingTrackIds.has(key) ||
+                importTaskStore.isItemImporting(key) ||
+                importTaskStore.isItemImporting(track.providerTrackId);
               return (
                 <article className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between" key={key}>
                   <div className="flex min-w-0 items-start gap-2">

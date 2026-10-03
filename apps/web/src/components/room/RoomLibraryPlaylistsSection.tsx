@@ -21,6 +21,7 @@ import {
   ListMusicIcon,
   TrashIcon
 } from "@/components/icons/DiscoverIcons";
+import { importTaskStore, useVisibleImportTasks, isCandidateImporting } from "@/features/upload/import-task-store";
 
 type ProviderTrack = ProviderTrackCandidate;
 
@@ -116,6 +117,8 @@ export function RoomLibraryPlaylistsSection({
   const [isQueueBusyId, setIsQueueBusyId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  useVisibleImportTasks();
 
   const selectedPlaylist = useMemo(
     () => roomPlaylists.find((p) => p.id === selectedPlaylistId) ?? null,
@@ -267,7 +270,10 @@ export function RoomLibraryPlaylistsSection({
               : source?.provider === "qqmusic"
               ? (source.type === "album" ? "QQ音乐专辑" : "QQ 音乐")
               : "曲库歌单";
-            const isBusy = isQueueBusyId === playlist.id;
+            const isBusy =
+              isQueueBusyId === playlist.id ||
+              importTaskStore.isItemImporting(playlist.id) ||
+              importTaskStore.isItemImporting(playlist.title);
             const isDeleting = pendingDeleteId === playlist.id;
 
             return (
@@ -398,12 +404,18 @@ function RoomLibraryPlaylistDetail({
   onImportBilibiliTracks?: (tracks: BilibiliTrackCandidate[]) => Promise<void>;
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
 }) {
+  useVisibleImportTasks();
   const [remoteTracks, setRemoteTracks] = useState<ProviderTrack[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(() => new Set());
   const [isImportingSelected, setIsImportingSelected] = useState(false);
   const pendingTrackIdsRef = useRef<Set<string>>(new Set());
+
+  const isQueueBusyComputed =
+    isQueueBusy ||
+    importTaskStore.isItemImporting(playlist.id) ||
+    importTaskStore.isItemImporting(playlist.title);
 
   const source = useMemo(() => getRoomPlaylistSource(playlist), [playlist]);
 
@@ -492,6 +504,19 @@ function RoomLibraryPlaylistDetail({
   const allSelectableSelected = selectableKeys.length > 0 && selectedKeys.length >= selectableKeys.length;
   const importedCount = displayTracks.filter((t) => t.isInRoom).length;
 
+  const isTrackItemImporting = useCallback(
+    (item: PlaylistTrackItem) => {
+      if (pendingTrackIds.has(item.id)) return true;
+      if (item.providerTrack && isCandidateImporting(item.providerTrack)) return true;
+      return importTaskStore.isItemImporting(item.id);
+    },
+    [pendingTrackIds]
+  );
+
+  const isImportBusy =
+    isImportingSelected ||
+    selectableTracks.some((t) => (t.providerTrack ? isCandidateImporting(t.providerTrack) : importTaskStore.isItemImporting(t.id)));
+
   const toggleSelectAll = () => {
     setSelectedKeys(allSelectableSelected ? [] : selectableKeys);
   };
@@ -575,13 +600,13 @@ function RoomLibraryPlaylistDetail({
           {canAddToQueue ? (
             <Button
               className="gap-1.5 rounded-lg bg-accent px-3 text-xs font-semibold text-white shadow-xs hover:bg-accent-hover active:scale-95 disabled:cursor-wait"
-              disabled={isQueueBusy}
+              disabled={isQueueBusyComputed}
               onClick={onAddAllToQueue}
               size="sm"
               type="button"
             >
               <ListMusicIcon className="h-3.5 w-3.5" />
-              <span>{isQueueBusy ? "正在导入并加入队列…" : "全部加入队列"}</span>
+              <span>{isQueueBusyComputed ? "正在导入并加入队列…" : "全部加入队列"}</span>
             </Button>
           ) : null}
           {canManageLibrary ? (
@@ -635,7 +660,7 @@ function RoomLibraryPlaylistDetail({
             <input
               checked={allSelectableSelected}
               className="h-4 w-4 accent-accent rounded"
-              disabled={isImportingSelected}
+              disabled={isImportBusy}
               onChange={toggleSelectAll}
               type="checkbox"
             />
@@ -647,13 +672,13 @@ function RoomLibraryPlaylistDetail({
             </span>
             <Button
               className="rounded-lg h-7 px-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={selectedKeys.length === 0 || isImportingSelected}
+              disabled={selectedKeys.length === 0 || isImportBusy}
               onClick={() => void importSelectedTracks()}
               size="sm"
               type="button"
               variant="outline"
             >
-              {isImportingSelected ? "导入中…" : "导入所选歌曲"}
+              {isImportBusy ? "导入中…" : "导入所选歌曲"}
             </Button>
           </div>
         </div>
@@ -665,7 +690,7 @@ function RoomLibraryPlaylistDetail({
           <p className="px-3 py-6 text-center text-xs text-foreground-muted">正在加载歌单歌曲信息…</p>
         ) : displayTracks.length > 0 ? (
           displayTracks.map((item, index) => {
-            const isImporting = pendingTrackIds.has(item.id);
+            const isImporting = isTrackItemImporting(item);
             const isSelected = selectedKeys.includes(item.id);
 
             return (
@@ -678,7 +703,7 @@ function RoomLibraryPlaylistDetail({
                     <input
                       checked={isSelected}
                       className="h-3.5 w-3.5 accent-accent rounded shrink-0 cursor-pointer"
-                      disabled={isImportingSelected}
+                      disabled={isImportBusy}
                       onChange={() => toggleTrackSelect(item.id)}
                       type="checkbox"
                     />
@@ -710,7 +735,7 @@ function RoomLibraryPlaylistDetail({
                   ) : canManageLibrary && item.providerTrack ? (
                     <Button
                       className="h-6.5 rounded-md px-2 text-[11px] font-medium"
-                      disabled={isImporting || isImportingSelected}
+                      disabled={isImporting || isImportBusy}
                       onClick={() => void importSingleTrack(item)}
                       size="sm"
                       type="button"

@@ -42,6 +42,7 @@ import {
   resolveImportedLyrics
 } from "./upload-import-helpers";
 import { importProviderTracks } from "./provider-import-pipeline";
+import { importTaskStore } from "./import-task-store";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -162,115 +163,161 @@ export function useUploadPipelineActions({
         return;
       }
 
-      const roomId = roomSnapshot.room.id;
-      const result = await processSelectedTrackFiles({
-        files: Array.from(files),
-        activeSession,
-        roomId,
-        roomTracks: roomSnapshot.tracks,
-        inFlightUploadHashes: inFlightUploadHashesRef.current,
-        createObjectUrl: (file) => URL.createObjectURL(file),
-        revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
-        buildTrackMeta: async (file, objectUrl) => {
-          const cachedMetadata = files.length === 1 && metadataByFileHash?.size === 1
-            ? metadataByFileHash.values().next().value
-            : undefined;
-          const reusedAssets = cachedMetadata
-            ? await getReusableAudioAssets({
-                fileHash: cachedMetadata.fileHash,
-                sizeBytes: cachedMetadata.sizeBytes
-              })
-            : null;
-          const assets = reusedAssets ?? await prepareAudioAssets({
-              file,
-              onProgress: ({ stage, completed, total }) => {
-                const labels = {
-                  inspecting: "正在检查音频资源",
-                  hashing: "正在校验源文件",
-                  "persisting-original": "正在保存源文件",
-                  decoding: "正在解码音频",
-                  encoding: "正在生成播放分片",
-                  "persisting-playback": "正在保存播放分片"
-                } as const;
-                const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-                setStatusMessage(`${labels[stage]} ${percent}%`);
-              }
-  });
-          const resolvedCachedMetadata = metadataByFileHash?.get(assets.fileHash);
-          const provider = resolvedCachedMetadata?.provider;
-          const providerTrackId = resolvedCachedMetadata?.providerTrackId;
-          let sourceType: TrackSourceType = "local_upload";
-          let sourceRef: RemoteTrackSourceRef | undefined;
-          if (
-            (provider === "netease" || provider === "qqmusic") &&
-            providerTrackId
-          ) {
-            sourceType = provider;
-            sourceRef = { provider, trackId: providerTrackId };
-          }
-          const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, resolvedCachedMetadata
-            ? {
-                type: sourceType,
-                metadata: {
-                  title: resolvedCachedMetadata.title,
-                  artist: resolvedCachedMetadata.artist,
-                  album: resolvedCachedMetadata.album ?? null,
-                  artworkUrl: resolvedCachedMetadata.artworkUrl ?? null
-                },
-                ...(sourceRef ? { sourceRef } : {}),
-                ...(resolvedCachedMetadata?.loudness
-                  ? { loudness: resolvedCachedMetadata.loudness }
-                  : {})
-              }
-            : undefined);
-          const lyrics = draft.lyrics?.trim()
-            || resolvedCachedMetadata?.lyrics?.trim()
-            || await resolveImportedLyrics({
-              title: draft.title,
-              artist: draft.artist,
-              sourceType,
-              sourceTrackId: sourceRef?.trackId
-            });
-          return {
-            ...draft,
-            lyrics: lyrics || null,
-            translatedLyrics: resolvedCachedMetadata?.translatedLyrics ?? null,
-            romanizedLyrics: resolvedCachedMetadata?.romanizedLyrics ?? null
-          };
-        },
-        buildRegisterTrackPayload,
-        registerTrack: (registerRoomId, payload) =>
-          musicRoomApi.registerTrack(
-            registerRoomId,
-            payload as Parameters<typeof musicRoomApi.registerTrack>[1]
-          ),
-        deleteTrack: (registerRoomId, trackId) =>
-          musicRoomApi.deleteTrack(registerRoomId, trackId),
-        deleteLocalTrackData: deleteLocalTrackDataForTracks,
-        persistTrackIntoLibrary,
-        onTrackReady: (trackId, upload, registeredTrack) => {
-          setUploadedTracks((current) => ({
-            ...current,
-            [trackId]: upload
-          }));
-          if (registeredTrack.originalAsset && registeredTrack.playbackAsset) {
-            void linkTrackAssets({
-              trackId,
-              originalAssetId: registeredTrack.originalAsset.assetId,
-              playbackAssetId: registeredTrack.playbackAsset.assetId
-            });
-          }
-        }
+      const selectedFiles = Array.from(files);
+      if (selectedFiles.length === 0) return;
+
+      const isCachedImport = Boolean(metadataByFileHash && metadataByFileHash.size > 0);
+      const firstCachedTitle = metadataByFileHash?.values().next().value?.title;
+      const taskTitle = isCachedImport && firstCachedTitle
+        ? `导入缓存音频《${firstCachedTitle}》`
+        : selectedFiles.length === 1
+          ? `导入本地音频《${selectedFiles[0].name}》`
+          : `导入本地音频 (${selectedFiles.length} 个文件)`;
+
+      const itemKeys = selectedFiles.flatMap((f) => [
+        f.name,
+        ...(metadataByFileHash ? Array.from(metadataByFileHash.keys()) : []),
+        ...(metadataByFileHash ? Array.from(metadataByFileHash.values()).map((v) => v.title) : [])
+      ]);
+
+      const taskId = importTaskStore.startTask({
+        type: isCachedImport ? "cached_track" : "local_files",
+        title: taskTitle,
+        totalCount: selectedFiles.length,
+        itemKeys,
+        currentTitle: firstCachedTitle ?? selectedFiles[0].name,
+        currentStage: "正在校验源文件"
       });
 
-      await applySelectedTrackFilesResult({
-        roomId,
-        result,
-        setUploadedTracks,
-        syncRoomSnapshot,
-        setStatusMessage
-      });
-      void refreshCacheLibrary();
+      const roomId = roomSnapshot.room.id;
+      let hasError = false;
+      try {
+        const result = await processSelectedTrackFiles({
+          files: selectedFiles,
+          activeSession,
+          roomId,
+          roomTracks: roomSnapshot.tracks,
+          inFlightUploadHashes: inFlightUploadHashesRef.current,
+          createObjectUrl: (file) => URL.createObjectURL(file),
+          revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
+          buildTrackMeta: async (file, objectUrl) => {
+            const cachedMetadata = selectedFiles.length === 1 && metadataByFileHash?.size === 1
+              ? metadataByFileHash.values().next().value
+              : undefined;
+            const reusedAssets = cachedMetadata
+              ? await getReusableAudioAssets({
+                  fileHash: cachedMetadata.fileHash,
+                  sizeBytes: cachedMetadata.sizeBytes
+                })
+              : null;
+            const assets = reusedAssets ?? await prepareAudioAssets({
+                file,
+                onProgress: ({ stage, completed, total }) => {
+                  const labels = {
+                    inspecting: "正在检查音频资源",
+                    hashing: "正在校验源文件",
+                    "persisting-original": "正在保存源文件",
+                    decoding: "正在解码音频",
+                    encoding: "正在生成播放分片",
+                    "persisting-playback": "正在保存播放分片"
+                  } as const;
+                  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  setStatusMessage(`${labels[stage]} ${percent}%`);
+                  importTaskStore.updateTaskProgress(taskId, {
+                    currentTitle: cachedMetadata?.title ?? file.name,
+                    currentStage: labels[stage],
+                    currentStagePercent: percent,
+                    activeItemKey: file.name
+                  });
+                }
+    });
+            const resolvedCachedMetadata = metadataByFileHash?.get(assets.fileHash);
+            const provider = resolvedCachedMetadata?.provider;
+            const providerTrackId = resolvedCachedMetadata?.providerTrackId;
+            let sourceType: TrackSourceType = "local_upload";
+            let sourceRef: RemoteTrackSourceRef | undefined;
+            if (
+              (provider === "netease" || provider === "qqmusic") &&
+              providerTrackId
+            ) {
+              sourceType = provider;
+              sourceRef = { provider, trackId: providerTrackId };
+            }
+            const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, resolvedCachedMetadata
+              ? {
+                  type: sourceType,
+                  metadata: {
+                    title: resolvedCachedMetadata.title,
+                    artist: resolvedCachedMetadata.artist,
+                    album: resolvedCachedMetadata.album ?? null,
+                    artworkUrl: resolvedCachedMetadata.artworkUrl ?? null
+                  },
+                  ...(sourceRef ? { sourceRef } : {}),
+                  ...(resolvedCachedMetadata?.loudness
+                    ? { loudness: resolvedCachedMetadata.loudness }
+                    : {})
+                }
+              : undefined);
+            const lyrics = draft.lyrics?.trim()
+              || resolvedCachedMetadata?.lyrics?.trim()
+              || await resolveImportedLyrics({
+                title: draft.title,
+                artist: draft.artist,
+                sourceType,
+                sourceTrackId: sourceRef?.trackId
+              });
+            return {
+              ...draft,
+              lyrics: lyrics || null,
+              translatedLyrics: resolvedCachedMetadata?.translatedLyrics ?? null,
+              romanizedLyrics: resolvedCachedMetadata?.romanizedLyrics ?? null
+            };
+          },
+          buildRegisterTrackPayload,
+          registerTrack: (registerRoomId, payload) =>
+            musicRoomApi.registerTrack(
+              registerRoomId,
+              payload as Parameters<typeof musicRoomApi.registerTrack>[1]
+            ),
+          deleteTrack: (registerRoomId, trackId) =>
+            musicRoomApi.deleteTrack(registerRoomId, trackId),
+          deleteLocalTrackData: deleteLocalTrackDataForTracks,
+          persistTrackIntoLibrary,
+          onTrackReady: (trackId, upload, registeredTrack) => {
+            setUploadedTracks((current) => ({
+              ...current,
+              [trackId]: upload
+            }));
+            if (registeredTrack.originalAsset && registeredTrack.playbackAsset) {
+              void linkTrackAssets({
+                trackId,
+                originalAssetId: registeredTrack.originalAsset.assetId,
+                playbackAssetId: registeredTrack.playbackAsset.assetId
+              });
+            }
+            importTaskStore.completeItem(taskId, registeredTrack.title || registeredTrack.id);
+          }
+        });
+
+        await applySelectedTrackFilesResult({
+          roomId,
+          result,
+          setUploadedTracks,
+          syncRoomSnapshot,
+          setStatusMessage
+        });
+        void refreshCacheLibrary();
+        if (result.importedCount === 0 && selectedFiles.length > 0) {
+          hasError = true;
+        }
+      } catch (error) {
+        hasError = true;
+        throw error;
+      } finally {
+        importTaskStore.finishTask(taskId, {
+          error: hasError ? "导入失败" : undefined
+        });
+      }
     },
     [
       activeSession,

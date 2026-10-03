@@ -17,6 +17,7 @@ import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { hasRoomPermission } from "@/features/room/room-permissions";
 import { closeDesktopLyricsNative } from "@/features/playback/desktop-lyrics-context";
+import { importTaskStore } from "@/features/upload/import-task-store";
 
 type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
@@ -659,14 +660,32 @@ export function useRoomActions({
         return;
       }
 
+      const targetPlaylist = roomSnapshot.playlists.find((p) => p.id === playlistId);
+      const title = targetPlaylist ? `加载歌单《${targetPlaylist.title}》到队列` : "加载歌单曲目到队列";
+      const taskId = importTaskStore.startTask({
+        type: "playlist_load",
+        title,
+        totalCount: targetPlaylist?.trackIds.length || 1,
+        itemKeys: [playlistId, `playlist:${playlistId}`],
+        currentTitle: targetPlaylist?.title,
+        currentStage: "正在请求服务器加载曲目"
+      });
+
       try {
         await musicRoomApi.importPlaylistToRoom(playlistId, {
           roomId: roomSnapshot.room.id
         });
+        importTaskStore.updateTaskProgress(taskId, {
+          currentStage: "加载完成，正在同步队列",
+          currentStagePercent: 90
+        });
         void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌单已加入当前房间队列。");
+        importTaskStore.finishTask(taskId);
       } catch (error) {
-        setStatusMessage(toUserFacingError(error));
+        const errMsg = toUserFacingError(error);
+        setStatusMessage(errMsg);
+        importTaskStore.finishTask(taskId, { error: errMsg });
       }
     },
     [activeSession, roomSnapshot, setStatusMessage, syncRoomSnapshot]

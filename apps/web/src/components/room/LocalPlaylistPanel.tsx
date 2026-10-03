@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
+import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 import type { CachedLibraryTrack } from "@/features/library/audio-utils";
 import type { LocalPlaylistRecord } from "@/features/playlist/local-playlist";
 import type { LocalPlaylistTrackRecord } from "@/features/playlist/local-playlist";
@@ -52,10 +53,18 @@ export function LocalPlaylistPanel({
     );
   };
 
+  const activeTasks = useVisibleImportTasks();
   const handleAddToLibrary = async (playlist: LocalPlaylistRecord) => {
     if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
     setAddingToLibraryId(playlist.id);
     setLibraryFeedback(null);
+    const taskId = importTaskStore.startTask({
+      type: "playlist_load",
+      title: `添加本地歌单《${playlist.title}》到曲库`,
+      totalCount: 1,
+      itemKeys: [playlist.id, `local_playlist:${playlist.id}`],
+      currentStage: "正在创建曲库歌单"
+    });
     try {
       const tags = ["local_playlist", `source_playlist:${playlist.id}`]
         .map((t) => t.trim().slice(0, 100))
@@ -78,8 +87,11 @@ export function LocalPlaylistPanel({
       }
 
       setLibraryFeedback(`已将本地歌单《${playlist.title}》加入曲库，歌曲可在曲库歌单中按需加载。`);
+      importTaskStore.finishTask(taskId);
     } catch (error) {
-      setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
+      const errMsg = error instanceof Error ? error.message : "添加到曲库失败。";
+      setLibraryFeedback(errMsg);
+      importTaskStore.finishTask(taskId, { error: errMsg });
     } finally {
       setAddingToLibraryId(null);
     }
@@ -96,7 +108,11 @@ export function LocalPlaylistPanel({
       <LocalPlaylistDetail
         canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
         isInLibrary={isPlaylistInRoom(selectedPlaylist)}
-        isAddingToLibrary={addingToLibraryId === selectedPlaylist.id}
+        isAddingToLibrary={
+          addingToLibraryId === selectedPlaylist.id ||
+          importTaskStore.isItemImporting(selectedPlaylist.id) ||
+          importTaskStore.isItemImporting(`local_playlist:${selectedPlaylist.id}`)
+        }
         onAddToLibrary={() => void handleAddToLibrary(selectedPlaylist)}
         localFolderName={localFolderName}
         canManageLibrary={canManageLibrary}
@@ -138,7 +154,11 @@ export function LocalPlaylistPanel({
                 key={playlist.id}
                 canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
                 isInLibrary={isPlaylistInRoom(playlist)}
-                isAddingToLibrary={addingToLibraryId === playlist.id}
+                isAddingToLibrary={
+                  addingToLibraryId === playlist.id ||
+                  importTaskStore.isItemImporting(playlist.id) ||
+                  importTaskStore.isItemImporting(`local_playlist:${playlist.id}`)
+                }
                 onAddToLibrary={() => void handleAddToLibrary(playlist)}
                 onOpen={() => setSelectedPlaylistId(playlist.id)}
                 playlist={playlist}
@@ -250,6 +270,7 @@ function LocalPlaylistDetail({
   onImportCachedTrack: (track: CachedLibraryTrack) => Promise<void>;
   pendingCachedImport: string | null;
 }) {
+  useVisibleImportTasks();
   const roomFileHashes = new Set(roomTracks.map((track) => track.fileHash));
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
   const [isImportingSelected, setIsImportingSelected] = useState(false);
@@ -261,7 +282,10 @@ function LocalPlaylistDetail({
   const selectableTrackIdsKey = JSON.stringify(selectableTrackIds);
   const selectedTracks = selectableTracks.filter((track) => selectedTrackIds.includes(track.id));
   const allSelectableSelected = selectableTracks.length > 0 && selectedTracks.length === selectableTracks.length;
-  const isImportBusy = isImportingSelected || pendingCachedImport !== null;
+  const isAnySelectableImporting = selectableTracks.some(
+    (t) => (t.fileHash && importTaskStore.isItemImporting(t.fileHash)) || importTaskStore.isItemImporting(t.title)
+  );
+  const isImportBusy = isImportingSelected || pendingCachedImport !== null || isAnySelectableImporting;
 
   useEffect(() => {
     const availableIds = new Set(JSON.parse(selectableTrackIdsKey) as string[]);
@@ -374,7 +398,8 @@ function LocalPlaylistDetail({
             {tracks.map((track) => {
               const cachedTrack = toCachedLibraryTrack(track);
               const isInRoom = !!track.fileHash && roomFileHashes.has(track.fileHash);
-              const isPending = !!track.fileHash && pendingCachedImport === track.fileHash;
+              const isTaskImporting = (!!track.fileHash && importTaskStore.isItemImporting(track.fileHash)) || importTaskStore.isItemImporting(track.title);
+              const isPending = (!!track.fileHash && pendingCachedImport === track.fileHash) || isTaskImporting;
               const canImport = !!cachedTrack && !isInRoom;
               return (
                 <article key={track.id} className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">

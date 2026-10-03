@@ -10,6 +10,7 @@ import { PlayerQueueList } from "@/components/bottom-player";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { RoomControlHeader } from "./RoomControlHeader";
+import { RoomImportProgressBar } from "./RoomImportProgressBar";
 import type { RoomDashboardViewProps } from "./RoomDashboardView";
 import { useRadioAutopilot, type RadioAutopilotNextTrack } from "@/features/room/hooks/use-radio-autopilot";
 import {
@@ -173,6 +174,9 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
             onChange={(tab) => setLeftTab(tab)}
             tabs={isHost ? hostLeftTabs : listenerLeftTabs}
           />
+          <div className="px-2 shrink-0">
+            <RoomImportProgressBar />
+          </div>
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
             {panelsReady ? (
               leftTab === "queue" ? (
@@ -283,6 +287,7 @@ export function RadioRoomView(props: RoomDashboardViewProps) {
               );
             })}
           </div>
+          <RoomImportProgressBar />
         </div>
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">

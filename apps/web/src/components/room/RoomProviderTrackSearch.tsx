@@ -17,6 +17,7 @@ import { SearchBar } from "@/components/ui/search-bar";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
 import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features/library/bilibili-collection";
+import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 
 type Provider = "netease" | "qqmusic" | "bilibili";
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
@@ -143,6 +144,19 @@ export function RoomProviderTrackSearch({
   const isInteractingWithDropdownRef = useRef(false);
   const actionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useRef(true);
+
+  const activeTasks = useVisibleImportTasks();
+  const isTrackItemImporting = useCallback((trackId: string, providerName?: string) => {
+    if (pendingTrackIds.has(trackId)) return true;
+    if (importTaskStore.isItemImporting(trackId)) return true;
+    if (providerName && importTaskStore.isItemImporting(`${providerName}:${trackId}`)) return true;
+    return false;
+  }, [pendingTrackIds]);
+
+  const isPartsImporting = useMemo(() => {
+    if (!bilibiliPartDetail) return false;
+    return bilibiliPartDetail.parts.some((p) => isTrackItemImporting(p.providerTrackId, "bilibili"));
+  }, [bilibiliPartDetail, isTrackItemImporting, activeTasks]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -570,11 +584,11 @@ export function RoomProviderTrackSearch({
               {isManagedImport && canManageLibrary && (onImportBilibiliTracks || onImportBilibiliTrack) && bilibiliPartDetail.parts.length > 1 ? (
                 <button
                   type="button"
-                  disabled={pending === "import-all-parts" || bilibiliPartDetail.parts.every((p) => libraryTrackIds.has(p.providerTrackId))}
+                  disabled={pending === "import-all-parts" || isPartsImporting || bilibiliPartDetail.parts.every((p) => libraryTrackIds.has(p.providerTrackId))}
                   onClick={() => void handleImportAllParts(bilibiliPartDetail.parts)}
                   className="shrink-0 rounded-md border border-accent/40 bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent hover:border-accent hover:bg-accent hover:text-white transition-all disabled:opacity-50"
                 >
-                  {pending === "import-all-parts" ? "导入中…" : "全部导入"}
+                  {pending === "import-all-parts" || isPartsImporting ? "导入中…" : "全部导入"}
                 </button>
               ) : null}
             </div>
@@ -583,8 +597,8 @@ export function RoomProviderTrackSearch({
           <div className="custom-scrollbar max-h-[380px] divide-y divide-surface-border/40 overflow-y-auto rounded-md border border-surface-border/40 bg-surface/40">
             {bilibiliPartDetail.parts.map((part, index) => {
               const isInLibrary = libraryTrackIds.has(part.providerTrackId);
-              const isPending = pendingTrackIds.has(part.providerTrackId);
-              const disabled = isPending || pending === "import-all-parts" || (isManagedImport && (!canManageLibrary || isInLibrary));
+              const isPending = isTrackItemImporting(part.providerTrackId, "bilibili");
+              const disabled = isPending || pending === "import-all-parts" || isPartsImporting || (isManagedImport && (!canManageLibrary || isInLibrary));
 
               return (
                 <article
@@ -633,7 +647,8 @@ export function RoomProviderTrackSearch({
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {bilibiliCollections.map((item) => {
-                  const isCollPending = pending === `coll:${item.providerPlaylistId}` || pending === `import-coll:${item.providerPlaylistId}`;
+                  const isCollImporting = pending === `import-coll:${item.providerPlaylistId}` || importTaskStore.isItemImporting(item.providerPlaylistId);
+                  const isCollPending = pending === `coll:${item.providerPlaylistId}` || isCollImporting;
                   return (
                     <div
                       key={item.providerPlaylistId}
@@ -682,7 +697,7 @@ export function RoomProviderTrackSearch({
                             onClick={() => void handleImportCollectionDirectly(item)}
                             className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-accent bg-accent/10 hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
                           >
-                            {pending === `import-coll:${item.providerPlaylistId}` ? "导入中…" : "加入曲库"}
+                            {isCollImporting ? "导入中…" : "加入曲库"}
                           </button>
                         ) : null}
                       </div>
@@ -704,7 +719,7 @@ export function RoomProviderTrackSearch({
               <div className="divide-y divide-surface-border/40 overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
           {results.map((track) => {
             const isInLibrary = libraryTrackIds.has(track.providerTrackId);
-            const isPending = pendingTrackIds.has(track.providerTrackId);
+            const isPending = isTrackItemImporting(track.providerTrackId, track.provider);
             const disabled = isPending || pending === "import-all-parts" || (isManagedImport && (!canManageLibrary || isInLibrary));
             const bilibiliTrack = track.provider === "bilibili" ? (track as BilibiliTrackCandidate) : null;
             const isMultiPart =

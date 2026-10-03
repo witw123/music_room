@@ -18,6 +18,7 @@ import type {
   UpdateRoomRequest
 } from "@music-room/shared";
 import { RoomControlHeader } from "./RoomControlHeader";
+import { RoomImportProgressBar } from "./RoomImportProgressBar";
 import { RoomStage } from "./RoomStage";
 import { RoomPanelSkeleton } from "./RoomPanelSkeleton";
 import { RoomTabPanelPlaceholder, preloadRoomPanelChunks } from "./RoomTabPanelPlaceholder";
@@ -242,6 +243,7 @@ function InteractiveRoomLayout(props: RoomLayoutProps) {
               );
             })}
           </div>
+          <RoomImportProgressBar />
         </div>
         <div aria-labelledby={`room-tab-${activeTab}`} className="custom-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 pb-8 pt-2.5 sm:px-5 sm:pt-4 md:pb-24 lg:pb-24" id={`room-panel-${activeTab}`} role="tabpanel">
           {panelsReady ? (

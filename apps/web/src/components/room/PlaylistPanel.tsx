@@ -26,6 +26,7 @@ import { getArtworkSourceUrl } from "@/components/bottom-player/artwork-colors";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
 
 import { CheckIcon } from "@/components/icons/DiscoverIcons";
+import { importTaskStore, useVisibleImportTasks } from "@/features/upload/import-task-store";
 
 type ProviderTrack = ProviderTrackCandidate;
 type NetworkPlaylistSource = { provider: "netease" | "qqmusic" | "bilibili"; playlistId: string };
@@ -294,10 +295,18 @@ export function PlaylistPanel({
     });
   }, [roomPlaylists]);
 
+  const activeTasks = useVisibleImportTasks();
   const handleAddToLibrary = async (playlist: Playlist) => {
     if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
     setAddingToLibraryId(playlist.id);
     setLibraryFeedback(null);
+    const taskId = importTaskStore.startTask({
+      type: "playlist_load",
+      title: `添加歌单《${playlist.title}》到曲库`,
+      totalCount: 1,
+      itemKeys: [playlist.id, `playlist:${playlist.id}`],
+      currentStage: "正在解析曲目并添加"
+    });
     try {
       const source = getNetworkPlaylistSource(playlist);
       let allCandidates: ProviderTrack[] = [];
@@ -361,8 +370,11 @@ export function PlaylistPanel({
       }
 
       setLibraryFeedback(`已将歌单《${playlist.title}》加入曲库，可在曲库歌单中按需加载歌曲。`);
+      importTaskStore.finishTask(taskId);
     } catch (error) {
-      setLibraryFeedback(error instanceof Error ? error.message : "添加到曲库失败。");
+      const errMsg = error instanceof Error ? error.message : "添加到曲库失败。";
+      setLibraryFeedback(errMsg);
+      importTaskStore.finishTask(taskId, { error: errMsg });
     } finally {
       setAddingToLibraryId(null);
     }
@@ -428,7 +440,11 @@ export function PlaylistPanel({
               artworkUrls={networkArtworkById[playlist.id] ?? []}
               canAddToLibrary={Boolean(currentRoomId && canManageLibrary)}
               isInLibrary={isPlaylistInRoom(playlist)}
-              isAddingToLibrary={addingToLibraryId === playlist.id}
+              isAddingToLibrary={
+                addingToLibraryId === playlist.id ||
+                importTaskStore.isItemImporting(playlist.id) ||
+                importTaskStore.isItemImporting(`playlist:${playlist.id}`)
+              }
               onAddToLibrary={() => void handleAddToLibrary(playlist)}
               onOpen={() => setSelectedPlaylistId(playlist.id)}
               playlist={playlist}
@@ -610,7 +626,10 @@ function PlaylistDetail({
   }, [selectedTrackKeys, trackKeyToInfo]);
 
   const allSelectableSelected = selectableKeys.length > 0 && selectedTrackKeys.length >= selectableKeys.length;
-  const isImportBusy = pendingTrackIds.size > 0 || isImportingSelected;
+  const isImportBusy =
+    pendingTrackIds.size > 0 ||
+    isImportingSelected ||
+    selectableKeys.some((k) => importTaskStore.isItemImporting(k));
 
   useEffect(() => {
     const validKeys = new Set(selectableKeys);
@@ -709,7 +728,10 @@ function PlaylistDetail({
     },
     isImporting: (track: ProviderTrack) => {
       const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
-      return info ? pendingTrackIds.has(info.id) : false;
+      if (info && pendingTrackIds.has(info.id)) return true;
+      if (importTaskStore.isItemImporting(`${track.provider}:${track.providerTrackId}`)) return true;
+      if (importTaskStore.isItemImporting(track.providerTrackId)) return true;
+      return false;
     },
     onImport: canManageLibrary ? (track: ProviderTrack) => {
       const info = trackKeyToInfo.get(`${track.provider}:${track.providerTrackId}`);
