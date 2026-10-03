@@ -53,7 +53,7 @@ export function LocalPlaylistPanel({
     );
   };
 
-  const activeTasks = useVisibleImportTasks();
+  useVisibleImportTasks();
   const handleAddToLibrary = async (playlist: LocalPlaylistRecord) => {
     if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
     setAddingToLibraryId(playlist.id);

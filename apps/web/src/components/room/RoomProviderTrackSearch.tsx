@@ -145,7 +145,7 @@ export function RoomProviderTrackSearch({
   const actionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useRef(true);
 
-  const activeTasks = useVisibleImportTasks();
+  useVisibleImportTasks();
   const isTrackItemImporting = useCallback((trackId: string, providerName?: string) => {
     if (pendingTrackIds.has(trackId)) return true;
     if (importTaskStore.isItemImporting(trackId)) return true;
@@ -153,10 +153,9 @@ export function RoomProviderTrackSearch({
     return false;
   }, [pendingTrackIds]);
 
-  const isPartsImporting = useMemo(() => {
-    if (!bilibiliPartDetail) return false;
-    return bilibiliPartDetail.parts.some((p) => isTrackItemImporting(p.providerTrackId, "bilibili"));
-  }, [bilibiliPartDetail, isTrackItemImporting, activeTasks]);
+  const isPartsImporting = bilibiliPartDetail
+    ? bilibiliPartDetail.parts.some((p) => isTrackItemImporting(p.providerTrackId, "bilibili"))
+    : false;
 
   useEffect(() => {
     mountedRef.current = true;

@@ -154,7 +154,7 @@ export function FavoriteAlbumsPanel({
     });
   }, [roomPlaylists]);
 
-  const activeTasks = useVisibleImportTasks();
+  useVisibleImportTasks();
   const handleAddToLibrary = async (album: ProviderAlbumFavorite) => {
     if (!currentRoomId || !canManageLibrary || addingToLibraryId !== null) return;
     setAddingToLibraryId(album.id);
