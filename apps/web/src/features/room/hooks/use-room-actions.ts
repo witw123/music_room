@@ -665,16 +665,28 @@ export function useRoomActions({
       const taskId = importTaskStore.startTask({
         type: "playlist_load",
         title,
-        totalCount: targetPlaylist?.trackIds.length || 1,
+        totalCount: 1,
         itemKeys: [playlistId, `playlist:${playlistId}`],
         currentTitle: targetPlaylist?.title,
         currentStage: "正在请求服务器加载曲目"
       });
 
+      let stagePercent = 20;
+      const progressTimer = setInterval(() => {
+        if (stagePercent < 75) {
+          stagePercent += Math.max(1, Math.round((75 - stagePercent) * 0.15));
+          importTaskStore.updateTaskProgress(taskId, {
+            currentStage: "正在加载歌单曲目到队列",
+            currentStagePercent: stagePercent
+          });
+        }
+      }, 250);
+
       try {
         await musicRoomApi.importPlaylistToRoom(playlistId, {
           roomId: roomSnapshot.room.id
         });
+        clearInterval(progressTimer);
         importTaskStore.updateTaskProgress(taskId, {
           currentStage: "加载完成，正在同步队列",
           currentStagePercent: 90
@@ -683,6 +695,7 @@ export function useRoomActions({
         setStatusMessage("歌单已加入当前房间队列。");
         importTaskStore.finishTask(taskId);
       } catch (error) {
+        clearInterval(progressTimer);
         const errMsg = toUserFacingError(error);
         setStatusMessage(errMsg);
         importTaskStore.finishTask(taskId, { error: errMsg });

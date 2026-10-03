@@ -187,7 +187,8 @@ class ImportTaskStore {
     // Recalculate overall percentage
     const stagePortion = (task.currentStagePercent ?? 0) / 100;
     const progressCount = task.completedCount + stagePortion;
-    task.overallPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
+    const calculatedPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
+    task.overallPercent = Math.max(task.overallPercent, calculatedPercent);
 
     // Update active item status
     if (update.activeItemKey) {
@@ -214,7 +215,8 @@ class ImportTaskStore {
     if (task) {
       task.completedCount += 1;
       const progressCount = task.completedCount;
-      task.overallPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
+      const calculatedPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
+      task.overallPercent = Math.max(task.overallPercent, calculatedPercent);
     }
 
     const item = this.itemKeyIndex.get(itemKey);
@@ -269,7 +271,9 @@ class ImportTaskStore {
       task.error = options?.error ?? "导入失败";
     } else {
       task.status = "completed";
+      task.completedCount = task.totalCount;
       task.overallPercent = 100;
+      task.currentStagePercent = 100;
     }
 
     // Clean item index for this task's items
@@ -394,3 +398,26 @@ export function isCandidateImporting(candidate: {
   if (candidate.title && importTaskStore.isItemImporting(candidate.title)) return true;
   return false;
 }
+
+export function mapAssetPreparationProgress(
+  stage: string,
+  completed: number,
+  total: number
+): { stageLabel: string; percent: number } {
+  const fraction = total > 0 ? Math.min(1, Math.max(0, completed / total)) : 0;
+  switch (stage) {
+    case "inspecting":
+      return { stageLabel: "检查音频资源", percent: 45 + Math.round(fraction * 4) }; // 45% ~ 49%
+    case "hashing":
+    case "persisting-original":
+      return { stageLabel: "校验源文件", percent: 49 + Math.round(fraction * 15) }; // 49% ~ 64%
+    case "decoding":
+      return { stageLabel: "解码音频采样", percent: 64 + Math.round(fraction * 11) }; // 64% ~ 75%
+    case "encoding":
+    case "persisting-playback":
+      return { stageLabel: "生成播放分片", percent: 75 + Math.round(fraction * 12) }; // 75% ~ 87%
+    default:
+      return { stageLabel: "处理音频数据", percent: 60 };
+  }
+}
+

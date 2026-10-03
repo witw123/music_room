@@ -16,7 +16,7 @@ import {
   getReusableAudioAssets,
   prepareAudioAssets
 } from "@/features/library/audio-asset-builder";
-import { importTaskStore } from "./import-task-store";
+import { importTaskStore, mapAssetPreparationProgress } from "./import-task-store";
 import { buildRegisterTrackPayload } from "./upload-pipeline";
 import { toCachedLibraryFile } from "@/features/library/cache-library";
 import { resolveLocalArtworkUrl } from "@/features/library/audio-metadata";
@@ -53,7 +53,8 @@ export type PrefetchedProviderAudioResult =
 
 export async function prefetchProviderAudio(
   candidate: ProviderTrackCandidate,
-  sourceType: Exclude<TrackSourceType, "local_upload">
+  sourceType: Exclude<TrackSourceType, "local_upload">,
+  onProgress?: (progress: { loaded: number; total: number | null; percent?: number }) => void
 ): Promise<PrefetchedProviderAudio> {
   const cachedTrack: Awaited<ReturnType<typeof getCachedLibraryTrackByProviderTrack>> | null = (
     await getCachedLibraryTrackByProviderTrack(sourceType, candidate.providerTrackId)
@@ -73,18 +74,25 @@ export async function prefetchProviderAudio(
         fileHash: cachedTrack.fileHash,
         sizeBytes: cachedTrack.sizeBytes
       });
+      onProgress?.({ loaded: 1, total: 1, percent: 100 });
       return { cachedTrack, file, assets };
     } catch {
       // Ignore an unreadable cache entry and download a fresh provider copy.
     }
   }
 
+  const handleDownloadProgress = (loaded: number, total: number | null) => {
+    const percent = total && total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : undefined;
+    onProgress?.({ loaded, total, percent });
+  };
+
   const source = sourceType === "netease"
-    ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh")
+    ? await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress)
     : sourceType === "bilibili"
-      ? await musicRoomApi.downloadBilibiliTrack(candidate.providerTrackId)
-      : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh");
+      ? await musicRoomApi.downloadBilibiliTrack(candidate.providerTrackId, undefined, handleDownloadProgress)
+      : await musicRoomApi.downloadQqMusicTrack(candidate.providerTrackId, "exhigh", undefined, handleDownloadProgress);
   const extension = extensionForImportedMimeType(source.contentType);
+  onProgress?.({ loaded: source.blob.size, total: source.blob.size, percent: 100 });
   return {
     cachedTrack: null,
     file: new File(
@@ -192,20 +200,47 @@ export async function importProviderTracks(input: {
         input.setStatusMessage(`正在按顺序导入 ${index + 1} / ${pendingCandidates.length}：《${candidate.title}》…`);
         importTaskStore.updateTaskProgress(taskId, {
           currentTitle: candidate.title,
-          currentStage: "获取音频数据",
-          currentStagePercent: 15,
+          currentStage: "正在连接音频服务器",
+          currentStagePercent: 5,
           activeItemKey,
           activeItemAliasKeys: aliasKeys
         });
 
-        const prefetchPromise = prefetchedAudio.get(index);
-        if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
-        const prefetchResult = await prefetchPromise;
+        let currentDlPercent = 5;
+        const downloadTimer = setInterval(() => {
+          if (currentDlPercent < 42) {
+            currentDlPercent += Math.max(1, Math.round((42 - currentDlPercent) * 0.12));
+            importTaskStore.updateTaskProgress(taskId, {
+              currentTitle: candidate.title,
+              currentStage: `正在下载音频 (${currentDlPercent}%)`,
+              currentStagePercent: currentDlPercent,
+              activeItemKey,
+              activeItemAliasKeys: aliasKeys
+            });
+          }
+        }, 250);
+
+        let prefetchResult: PrefetchedProviderAudioResult;
+        try {
+          const prefetchPromise = prefetchedAudio.get(index);
+          if (!prefetchPromise) throw new Error(`歌曲预取任务不存在：${candidate.title}`);
+          prefetchResult = await prefetchPromise;
+        } finally {
+          clearInterval(downloadTimer);
+        }
         prefetchedAudio.delete(index);
         fillPrefetchWindow(index + 2);
         if (!prefetchResult.ok) throw prefetchResult.error;
         const prefetched = prefetchResult.audio;
         if (!prefetched) throw new Error(`歌曲预取结果无效：${candidate.title}`);
+
+        importTaskStore.updateTaskProgress(taskId, {
+          currentTitle: candidate.title,
+          currentStage: "音频下载完成",
+          currentStagePercent: 45,
+          activeItemKey,
+          activeItemAliasKeys: aliasKeys
+        });
 
         const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
         const lyricsPayloadPromise = requestProviderLyricsPayload(sourceType, candidate.providerTrackId);
@@ -217,18 +252,21 @@ export async function importProviderTracks(input: {
         const localArtworkPromise = artworkPromise.then((artworkBlob) =>
           resolveLocalArtworkUrl(prefetched.file, candidate.artworkUrl, artworkBlob)
         );
+
+        if (prefetched.assets) {
+          importTaskStore.updateTaskProgress(taskId, {
+            currentTitle: candidate.title,
+            currentStage: "音频分片已就绪",
+            currentStagePercent: 87,
+            activeItemKey,
+            activeItemAliasKeys: aliasKeys
+          });
+        }
+
         const assets = prefetched.assets ?? await prepareAudioAssets({
           file: prefetched.file,
           onProgress: ({ stage, completed, total }) => {
-            const stageLabel = {
-              inspecting: "检查音频",
-              hashing: "校验音频",
-              "persisting-original": "缓存源文件",
-              decoding: "解码音频",
-              encoding: "生成播放分片",
-              "persisting-playback": "缓存播放分片"
-            }[stage];
-            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+            const { stageLabel, percent } = mapAssetPreparationProgress(stage, completed, total);
             input.setStatusMessage(`${index + 1} / ${pendingCandidates.length}《${candidate.title}》· ${stageLabel} ${percent}%`);
             importTaskStore.updateTaskProgress(taskId, {
               currentTitle: candidate.title,
@@ -249,6 +287,15 @@ export async function importProviderTracks(input: {
         const lyrics = lyricsPayload?.lyrics?.trim() || null;
         const translatedLyrics = lyricsPayload?.translatedLyrics?.trim() || null;
         const romanizedLyrics = lyricsPayload?.romanizedLyrics?.trim() || null;
+
+        importTaskStore.updateTaskProgress(taskId, {
+          currentTitle: candidate.title,
+          currentStage: "解析歌词与封面",
+          currentStagePercent: 92,
+          activeItemKey,
+          activeItemAliasKeys: aliasKeys
+        });
+
         prepared.push({
           candidate,
           file: prefetched.file,
@@ -263,6 +310,15 @@ export async function importProviderTracks(input: {
           localArtworkUrl,
           lyrics
         });
+
+        importTaskStore.updateTaskProgress(taskId, {
+          currentTitle: candidate.title,
+          currentStage: "正在提交到房间曲库",
+          currentStagePercent: 95,
+          activeItemKey,
+          activeItemAliasKeys: aliasKeys
+        });
+
         // The candidate is still being committed below; keep the marker until
         // the whole import finishes so a concurrent run cannot duplicate it.
         heldInFlightKeys.push(key);

@@ -42,7 +42,7 @@ import {
   resolveImportedLyrics
 } from "./upload-import-helpers";
 import { importProviderTracks } from "./provider-import-pipeline";
-import { importTaskStore } from "./import-task-store";
+import { importTaskStore, mapAssetPreparationProgress } from "./import-task-store";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -210,27 +210,27 @@ export function useUploadPipelineActions({
                   sizeBytes: cachedMetadata.sizeBytes
                 })
               : null;
+            if (reusedAssets) {
+              importTaskStore.updateTaskProgress(taskId, {
+                currentTitle: cachedMetadata?.title ?? file.name,
+                currentStage: "音频资源已就绪",
+                currentStagePercent: 87,
+                activeItemKey: file.name
+              });
+            }
             const assets = reusedAssets ?? await prepareAudioAssets({
                 file,
                 onProgress: ({ stage, completed, total }) => {
-                  const labels = {
-                    inspecting: "正在检查音频资源",
-                    hashing: "正在校验源文件",
-                    "persisting-original": "正在保存源文件",
-                    decoding: "正在解码音频",
-                    encoding: "正在生成播放分片",
-                    "persisting-playback": "正在保存播放分片"
-                  } as const;
-                  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-                  setStatusMessage(`${labels[stage]} ${percent}%`);
+                  const { stageLabel, percent } = mapAssetPreparationProgress(stage, completed, total);
+                  setStatusMessage(`${stageLabel} ${percent}%`);
                   importTaskStore.updateTaskProgress(taskId, {
                     currentTitle: cachedMetadata?.title ?? file.name,
-                    currentStage: labels[stage],
+                    currentStage: stageLabel,
                     currentStagePercent: percent,
                     activeItemKey: file.name
                   });
                 }
-    });
+            });
             const resolvedCachedMetadata = metadataByFileHash?.get(assets.fileHash);
             const provider = resolvedCachedMetadata?.provider;
             const providerTrackId = resolvedCachedMetadata?.providerTrackId;
@@ -295,7 +295,11 @@ export function useUploadPipelineActions({
                 playbackAssetId: registeredTrack.playbackAsset.assetId
               });
             }
-            importTaskStore.completeItem(taskId, registeredTrack.title || registeredTrack.id);
+            importTaskStore.completeItem(
+              taskId,
+              registeredTrack.title || registeredTrack.id,
+              [registeredTrack.fileHash, registeredTrack.id]
+            );
           }
         });
 

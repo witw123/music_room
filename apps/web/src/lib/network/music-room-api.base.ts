@@ -174,7 +174,8 @@ export async function request<T>(
 
 export async function requestBlob(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  onProgress?: (loaded: number, total: number | null) => void
 ) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
@@ -207,9 +208,30 @@ export async function requestBlob(
     );
   }
 
+  const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+  if (response.body && typeof response.body.getReader === "function" && onProgress) {
+    const reader = response.body.getReader();
+    const contentLength = Number(response.headers.get("content-length")) || null;
+    let receivedLength = 0;
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        receivedLength += value.length;
+        onProgress(receivedLength, contentLength);
+      }
+    }
+    return {
+      blob: new Blob(chunks as BlobPart[]),
+      contentType
+    };
+  }
+
   return {
     blob: await response.blob(),
-    contentType: response.headers.get("content-type") ?? "application/octet-stream"
+    contentType
   };
 }
 
@@ -437,13 +459,33 @@ async function fetchDirectWithHeaderTimeout(
   }
 }
 
-async function downloadDirectBlob(directUrl: string, outerSignal?: AbortSignal): Promise<Blob> {
+async function downloadDirectBlob(
+  directUrl: string,
+  outerSignal?: AbortSignal,
+  onProgress?: (loaded: number, total: number | null) => void
+): Promise<Blob> {
   const response = await fetchDirectWithHeaderTimeout(directUrl, outerSignal);
   if (!response.ok) {
     void response.body?.cancel().catch(() => undefined);
     throw new Error(`CDN 直链返回 HTTP ${response.status}`);
   }
   // 响应头已到达，此处不再有下载总时长限制（仅受外部 signal 约束）。
+  if (response.body && typeof response.body.getReader === "function" && onProgress) {
+    const reader = response.body.getReader();
+    const contentLength = Number(response.headers.get("content-length")) || null;
+    let receivedLength = 0;
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        receivedLength += value.length;
+        onProgress(receivedLength, contentLength);
+      }
+    }
+    return new Blob(chunks as BlobPart[]);
+  }
   return response.blob();
 }
 
@@ -489,6 +531,7 @@ export async function downloadWithDirectFallback(input: {
   resolve: () => Promise<ProviderAudioResolveResponse | DirectAudioResolveResult>;
   fallback: () => Promise<{ blob: Blob; contentType: string }>;
   signal?: AbortSignal;
+  onProgress?: (loaded: number, total: number | null) => void;
 }) {
   try {
     const resolved = await input.resolve();
@@ -515,7 +558,7 @@ export async function downloadWithDirectFallback(input: {
         blob = await downloadDirectBlobInParallelRanges(winner.url, winner.contentLength, input.signal);
       }
       if (!blob && !input.signal?.aborted) {
-        blob = await downloadDirectBlob(winner.url, input.signal);
+        blob = await downloadDirectBlob(winner.url, input.signal, input.onProgress);
       }
       if (input.signal?.aborted) throw new Error("Download aborted");
       if (blob && blob.size > 0) {

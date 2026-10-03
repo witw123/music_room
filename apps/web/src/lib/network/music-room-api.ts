@@ -121,13 +121,15 @@ async function downloadQualityProviderTrack(
   provider: QualityProvider,
   trackId: string,
   quality: ProviderAudioQuality,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (loaded: number, total: number | null) => void
 ) {
   return downloadWithDirectFallback({
     resolve: () => resolveQualityProviderAudio(provider, trackId, quality, signal),
     fallback: () =>
-      requestBlob(`${providerTrackPath(provider, trackId)}/audio?quality=${quality}`, { signal }),
-    signal
+      requestBlob(`${providerTrackPath(provider, trackId)}/audio?quality=${quality}`, { signal }, onProgress),
+    signal,
+    onProgress
   });
 }
 
@@ -406,8 +408,9 @@ export const musicRoomApi = {
   downloadNeteaseTrack: (
     trackId: string,
     quality: ProviderAudioQuality = "exhigh",
-    signal?: AbortSignal
-  ) => downloadQualityProviderTrack("netease", trackId, quality, signal),
+    signal?: AbortSignal,
+    onProgress?: (loaded: number, total: number | null) => void
+  ) => downloadQualityProviderTrack("netease", trackId, quality, signal, onProgress),
   getQqMusicAccount: () => request<QqMusicAccountStatus>("/v1/providers/qqmusic/account"),
   startQqMusicQrLogin: () => request<QqMusicQrStartResponse>("/v1/providers/qqmusic/account/qr/start", { method: "POST" }),
   getQqMusicQrStatus: (attemptId: string) => request<QqMusicQrStatusResponse>(`/v1/providers/qqmusic/account/qr/${encodeURIComponent(attemptId)}/status`),
@@ -491,8 +494,9 @@ export const musicRoomApi = {
   downloadQqMusicTrack: (
     trackId: string,
     quality: ProviderAudioQuality = "exhigh",
-    signal?: AbortSignal
-  ) => downloadQualityProviderTrack("qqmusic", trackId, quality, signal),
+    signal?: AbortSignal,
+    onProgress?: (loaded: number, total: number | null) => void
+  ) => downloadQualityProviderTrack("qqmusic", trackId, quality, signal, onProgress),
   downloadQqMusicArtwork: (artworkUrl: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ url: artworkUrl });
     return requestBlob(`/v1/providers/qqmusic/artwork?${params.toString()}`, { signal });
@@ -605,10 +609,15 @@ export const musicRoomApi = {
       `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio-url`,
       { signal }
     ),
-  downloadBilibiliTrack: (trackId: string, signal?: AbortSignal) =>
+  downloadBilibiliTrack: (
+    trackId: string,
+    signal?: AbortSignal,
+    onProgress?: (loaded: number, total: number | null) => void
+  ) =>
     requestBlob(
       `/v1/providers/bilibili/tracks/${encodeURIComponent(trackId)}/audio`,
-      { signal }
+      { signal },
+      onProgress
     ),
   testAlistConnection: (config: { url: string; mountPath: string; token?: string }) =>
     request<AlistTestResponse>("/v1/storage/alist/test", {
