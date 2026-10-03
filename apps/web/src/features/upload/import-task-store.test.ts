@@ -125,4 +125,40 @@ describe("importTaskStore", () => {
     expect(importTaskStore.isItemImporting("12345")).toBe(true);
     expect(importTaskStore.getItemStatus("12345").stage).toBe("下载音频");
   });
+
+  it("produces new snapshot and task references on update for useSyncExternalStore", () => {
+    const taskId = importTaskStore.startTask({
+      type: "provider_track",
+      title: "测试单曲",
+      totalCount: 1
+    });
+
+    const snapshot1 = importTaskStore.getVisibleSnapshot();
+    const task1 = snapshot1[0];
+    expect(task1.overallPercent).toBe(0);
+
+    // Snapshot reference is stable if nothing changed
+    expect(importTaskStore.getVisibleSnapshot()).toBe(snapshot1);
+
+    // Update progress
+    importTaskStore.updateTaskProgress(taskId, {
+      currentStagePercent: 30,
+      currentStage: "下载中"
+    });
+
+    const snapshot2 = importTaskStore.getVisibleSnapshot();
+    const task2 = snapshot2[0];
+
+    // Array reference must be brand new
+    expect(snapshot2).not.toBe(snapshot1);
+    // Task object reference must be brand new
+    expect(task2).not.toBe(task1);
+    expect(task2.overallPercent).toBe(30);
+    expect(task2.currentStage).toBe("下载中");
+
+    // Item status referential stability
+    const status1 = importTaskStore.getItemStatus("test-key");
+    const status2 = importTaskStore.getItemStatus("test-key");
+    expect(status1).toBe(status2);
+  });
 });

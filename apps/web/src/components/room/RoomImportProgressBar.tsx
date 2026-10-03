@@ -106,7 +106,7 @@ function RoomImportProgressBarBase() {
 
       <div className="h-1 w-full overflow-hidden rounded-full bg-surface-border/40">
         <div
-          className={`h-full rounded-full transition-all duration-200 ${
+          className={`h-full rounded-full transition-all duration-300 ease-out ${
             isFailed ? "bg-red-500" : isCompleted ? "bg-emerald-500" : "bg-accent"
           }`}
           style={{ width: `${Math.max(2, activeTask.overallPercent)}%` }}

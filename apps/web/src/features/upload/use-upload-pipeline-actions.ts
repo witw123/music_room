@@ -221,7 +221,7 @@ export function useUploadPipelineActions({
             const assets = reusedAssets ?? await prepareAudioAssets({
                 file,
                 onProgress: ({ stage, completed, total }) => {
-                  const { stageLabel, percent } = mapAssetPreparationProgress(stage, completed, total);
+                  const { stageLabel, percent } = mapAssetPreparationProgress(stage, completed, total, "local");
                   setStatusMessage(`${stageLabel} ${percent}%`);
                   importTaskStore.updateTaskProgress(taskId, {
                     currentTitle: cachedMetadata?.title ?? file.name,

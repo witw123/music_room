@@ -46,16 +46,22 @@ export interface ItemImportStatus {
 
 type TaskListener = () => void;
 
+const IDLE_ITEM_STATUS: ItemImportStatus = Object.freeze({ isImporting: false });
+
 class ImportTaskStore {
   private tasks = new Map<string, ImportTaskGroup>();
   private itemKeyIndex = new Map<string, ImportTaskItemInfo>();
   private listeners = new Set<TaskListener>();
   private cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private visibleSnapshot: ImportTaskGroup[] = [];
+  private itemStatusCache = new Map<string, ItemImportStatus>();
 
   // Cooldown time before a completed/failed task is removed from active tasks
   private readonly finishCooldownMs = 2500;
 
   private notify() {
+    this.visibleSnapshot = Array.from(this.tasks.values());
+    this.itemStatusCache.clear();
     for (const listener of this.listeners) {
       try {
         listener();
@@ -73,43 +79,53 @@ class ImportTaskStore {
   };
 
   public getTasks(): ImportTaskGroup[] {
-    return Array.from(this.tasks.values());
+    return this.visibleSnapshot;
   }
 
   public getActiveTasks(): ImportTaskGroup[] {
-    return Array.from(this.tasks.values()).filter((t) => t.status === "running");
+    return this.visibleSnapshot.filter((t) => t.status === "running");
   }
 
   public getVisibleTasks(): ImportTaskGroup[] {
-    // Returns running tasks, or recently finished tasks within cooldown
-    return Array.from(this.tasks.values());
+    return this.visibleSnapshot;
   }
 
-  public getItemStatus(itemKey: string | null | undefined): ItemImportStatus {
-    if (!itemKey) return { isImporting: false };
+  public getVisibleSnapshot = (): ImportTaskGroup[] => {
+    return this.visibleSnapshot;
+  };
+
+  public getItemStatus = (itemKey: string | null | undefined): ItemImportStatus => {
+    if (!itemKey) return IDLE_ITEM_STATUS;
+    const cached = this.itemStatusCache.get(itemKey);
+    if (cached) return cached;
+
     const item = this.itemKeyIndex.get(itemKey);
-    if (!item) return { isImporting: false };
-    return {
-      isImporting: item.status === "pending" || item.status === "running",
-      title: item.title,
-      stage: item.stage,
-      percent: item.percent,
-      status: item.status
-    };
-  }
+    const status: ItemImportStatus = item
+      ? {
+          isImporting: item.status === "pending" || item.status === "running",
+          title: item.title,
+          stage: item.stage,
+          percent: item.percent,
+          status: item.status
+        }
+      : IDLE_ITEM_STATUS;
 
-  public isItemImporting(itemKey: string | null | undefined): boolean {
+    this.itemStatusCache.set(itemKey, status);
+    return status;
+  };
+
+  public isItemImporting = (itemKey: string | null | undefined): boolean => {
     if (!itemKey) return false;
     const item = this.itemKeyIndex.get(itemKey);
     return item ? item.status === "pending" || item.status === "running" : false;
-  }
+  };
 
-  public areAnyItemsImporting(itemKeys: readonly string[]): boolean {
+  public areAnyItemsImporting = (itemKeys: readonly string[]): boolean => {
     for (const key of itemKeys) {
       if (this.isItemImporting(key)) return true;
     }
     return false;
-  }
+  };
 
   public startTask(input: {
     id?: string;
@@ -176,27 +192,38 @@ class ImportTaskStore {
     const task = this.tasks.get(taskId);
     if (!task || task.status !== "running") return;
 
-    if (update.currentTitle !== undefined) task.currentTitle = update.currentTitle;
-    if (update.currentStage !== undefined) task.currentStage = update.currentStage;
-    if (update.currentStagePercent !== undefined) {
-      task.currentStagePercent = Math.min(100, Math.max(0, Math.round(update.currentStagePercent)));
-    }
-    if (update.completedCount !== undefined) task.completedCount = update.completedCount;
-    if (update.failedCount !== undefined) task.failedCount = update.failedCount;
+    const currentTitle = update.currentTitle !== undefined ? update.currentTitle : task.currentTitle;
+    const currentStage = update.currentStage !== undefined ? update.currentStage : task.currentStage;
+    const currentStagePercent = update.currentStagePercent !== undefined
+      ? Math.min(100, Math.max(0, Math.round(update.currentStagePercent)))
+      : (task.currentStagePercent ?? 0);
+    const completedCount = update.completedCount !== undefined ? update.completedCount : task.completedCount;
+    const failedCount = update.failedCount !== undefined ? update.failedCount : task.failedCount;
 
     // Recalculate overall percentage
-    const stagePortion = (task.currentStagePercent ?? 0) / 100;
-    const progressCount = task.completedCount + stagePortion;
+    const stagePortion = currentStagePercent / 100;
+    const progressCount = completedCount + stagePortion;
     const calculatedPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
-    task.overallPercent = Math.max(task.overallPercent, calculatedPercent);
+    const overallPercent = Math.max(task.overallPercent, calculatedPercent);
+
+    const updatedTask: ImportTaskGroup = {
+      ...task,
+      currentTitle,
+      currentStage,
+      currentStagePercent,
+      completedCount,
+      failedCount,
+      overallPercent
+    };
+    this.tasks.set(taskId, updatedTask);
 
     // Update active item status
     if (update.activeItemKey) {
       const itemInfo: ImportTaskItemInfo = {
         key: update.activeItemKey,
-        title: task.currentTitle ?? task.title,
-        stage: task.currentStage,
-        percent: task.currentStagePercent,
+        title: updatedTask.currentTitle ?? updatedTask.title,
+        stage: updatedTask.currentStage,
+        percent: updatedTask.currentStagePercent,
         status: "running"
       };
       this.itemKeyIndex.set(update.activeItemKey, itemInfo);
@@ -213,23 +240,36 @@ class ImportTaskStore {
   public completeItem(taskId: string, itemKey: string, aliasKeys?: string[]) {
     const task = this.tasks.get(taskId);
     if (task) {
-      task.completedCount += 1;
-      const progressCount = task.completedCount;
+      const completedCount = task.completedCount + 1;
+      const progressCount = completedCount;
       const calculatedPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
-      task.overallPercent = Math.max(task.overallPercent, calculatedPercent);
+      const overallPercent = Math.max(task.overallPercent, calculatedPercent);
+      const updatedTask: ImportTaskGroup = {
+        ...task,
+        completedCount,
+        overallPercent,
+        currentStagePercent: 100
+      };
+      this.tasks.set(taskId, updatedTask);
     }
 
     const item = this.itemKeyIndex.get(itemKey);
     if (item) {
-      item.status = "completed";
-      item.percent = 100;
+      this.itemKeyIndex.set(itemKey, {
+        ...item,
+        status: "completed",
+        percent: 100
+      });
     }
     if (aliasKeys) {
       for (const alias of aliasKeys) {
         const aliasItem = this.itemKeyIndex.get(alias);
         if (aliasItem) {
-          aliasItem.status = "completed";
-          aliasItem.percent = 100;
+          this.itemKeyIndex.set(alias, {
+            ...aliasItem,
+            status: "completed",
+            percent: 100
+          });
         }
       }
     }
@@ -239,22 +279,35 @@ class ImportTaskStore {
   public failItem(taskId: string, itemKey: string, error?: string, aliasKeys?: string[]) {
     const task = this.tasks.get(taskId);
     if (task) {
-      task.failedCount += 1;
+      const failedCount = task.failedCount + 1;
       const progressCount = task.completedCount;
-      task.overallPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
+      const calculatedPercent = Math.min(100, Math.max(0, Math.round((progressCount / task.totalCount) * 100)));
+      const overallPercent = Math.min(100, Math.max(task.overallPercent, calculatedPercent));
+      const updatedTask: ImportTaskGroup = {
+        ...task,
+        failedCount,
+        overallPercent
+      };
+      this.tasks.set(taskId, updatedTask);
     }
 
     const item = this.itemKeyIndex.get(itemKey);
     if (item) {
-      item.status = "failed";
-      item.error = error;
+      this.itemKeyIndex.set(itemKey, {
+        ...item,
+        status: "failed",
+        error
+      });
     }
     if (aliasKeys) {
       for (const alias of aliasKeys) {
         const aliasItem = this.itemKeyIndex.get(alias);
         if (aliasItem) {
-          aliasItem.status = "failed";
-          aliasItem.error = error;
+          this.itemKeyIndex.set(alias, {
+            ...aliasItem,
+            status: "failed",
+            error
+          });
         }
       }
     }
@@ -265,16 +318,22 @@ class ImportTaskStore {
     const task = this.tasks.get(taskId);
     if (!task) return;
 
-    task.finishedAt = Date.now();
-    if (options?.error || (task.failedCount > 0 && task.completedCount === 0)) {
-      task.status = "failed";
-      task.error = options?.error ?? "导入失败";
-    } else {
-      task.status = "completed";
-      task.completedCount = task.totalCount;
-      task.overallPercent = 100;
-      task.currentStagePercent = 100;
-    }
+    const finishedAt = Date.now();
+    const isFailed = Boolean(options?.error || (task.failedCount > 0 && task.completedCount === 0));
+    const status: ImportTaskStatus = isFailed ? "failed" : "completed";
+    const error = isFailed ? (options?.error ?? "导入失败") : undefined;
+    const completedCount = isFailed ? task.completedCount : task.totalCount;
+
+    const updatedTask: ImportTaskGroup = {
+      ...task,
+      finishedAt,
+      status,
+      error,
+      completedCount,
+      overallPercent: 100,
+      currentStagePercent: 100
+    };
+    this.tasks.set(taskId, updatedTask);
 
     // Clean item index for this task's items
     for (const key of task.itemKeys) {
@@ -321,46 +380,10 @@ class ImportTaskStore {
 
 export const importTaskStore = new ImportTaskStore();
 
-// React hooks
-let cachedVisibleSnapshot: ImportTaskGroup[] = [];
-let lastVisibleTasks: ImportTaskGroup[] = [];
-
-function areTaskArraysEqual(a: ImportTaskGroup[], b: ImportTaskGroup[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const ta = a[i];
-    const tb = b[i];
-    if (
-      ta.id !== tb.id ||
-      ta.status !== tb.status ||
-      ta.overallPercent !== tb.overallPercent ||
-      ta.currentStage !== tb.currentStage ||
-      ta.currentStagePercent !== tb.currentStagePercent ||
-      ta.currentTitle !== tb.currentTitle ||
-      ta.completedCount !== tb.completedCount ||
-      ta.failedCount !== tb.failedCount ||
-      ta.error !== tb.error
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function getVisibleTasksSnapshot(): ImportTaskGroup[] {
-  const current = importTaskStore.getVisibleTasks();
-  if (areTaskArraysEqual(current, lastVisibleTasks)) {
-    return cachedVisibleSnapshot;
-  }
-  lastVisibleTasks = current;
-  cachedVisibleSnapshot = [...current];
-  return cachedVisibleSnapshot;
-}
-
 export function useVisibleImportTasks(): ImportTaskGroup[] {
   return useSyncExternalStore(
     importTaskStore.subscribe,
-    getVisibleTasksSnapshot,
+    importTaskStore.getVisibleSnapshot,
     () => []
   );
 }
@@ -369,7 +392,7 @@ export function useItemImportStatus(itemKey: string | null | undefined): ItemImp
   return useSyncExternalStore(
     importTaskStore.subscribe,
     () => importTaskStore.getItemStatus(itemKey),
-    () => ({ isImporting: false })
+    () => IDLE_ITEM_STATUS
   );
 }
 
@@ -402,9 +425,28 @@ export function isCandidateImporting(candidate: {
 export function mapAssetPreparationProgress(
   stage: string,
   completed: number,
-  total: number
+  total: number,
+  mode: "provider" | "local" = "provider"
 ): { stageLabel: string; percent: number } {
   const fraction = total > 0 ? Math.min(1, Math.max(0, completed / total)) : 0;
+  if (mode === "local") {
+    switch (stage) {
+      case "inspecting":
+        return { stageLabel: "检查音频资源", percent: 5 + Math.round(fraction * 10) }; // 5% ~ 15%
+      case "hashing":
+      case "persisting-original":
+        return { stageLabel: "校验源文件", percent: 15 + Math.round(fraction * 25) }; // 15% ~ 40%
+      case "decoding":
+        return { stageLabel: "解码音频采样", percent: 40 + Math.round(fraction * 30) }; // 40% ~ 70%
+      case "encoding":
+      case "persisting-playback":
+        return { stageLabel: "生成播放分片", percent: 70 + Math.round(fraction * 20) }; // 70% ~ 90%
+      default:
+        return { stageLabel: "处理音频数据", percent: 50 };
+    }
+  }
+
+  // Provider mode: network download occupied 5% ~ 45%
   switch (stage) {
     case "inspecting":
       return { stageLabel: "检查音频资源", percent: 45 + Math.round(fraction * 4) }; // 45% ~ 49%

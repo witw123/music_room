@@ -496,9 +496,11 @@ async function downloadDirectBlob(
 async function downloadDirectBlobInParallelRanges(
   directUrl: string,
   contentLength: number,
-  outerSignal?: AbortSignal
+  outerSignal?: AbortSignal,
+  onProgress?: (loaded: number, total: number | null) => void
 ): Promise<Blob | null> {
   const partSize = Math.ceil(contentLength / DIRECT_PARALLEL_RANGE_PARTS);
+  const partLoaded = new Array(DIRECT_PARALLEL_RANGE_PARTS).fill(0);
   try {
     const parts = await Promise.all(
       Array.from({ length: DIRECT_PARALLEL_RANGE_PARTS }, (_, index) => {
@@ -513,9 +515,33 @@ async function downloadDirectBlobInParallelRanges(
             void response.body?.cancel().catch(() => undefined);
             throw new Error(`CDN 分段请求返回 HTTP ${response.status}`);
           }
+          if (response.body && typeof response.body.getReader === "function" && onProgress) {
+            const reader = response.body.getReader();
+            const chunks: Uint8Array[] = [];
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                partLoaded[index] += value.length;
+                const totalLoaded = partLoaded.reduce((acc, curr) => acc + curr, 0);
+                onProgress(totalLoaded, contentLength);
+              }
+            }
+            const part = new Blob(chunks as BlobPart[]);
+            if (part.size !== expectedSize) {
+              throw new Error(`CDN 分段长度不符：${part.size} != ${expectedSize}`);
+            }
+            return part;
+          }
           const part = await response.blob();
           if (part.size !== expectedSize) {
             throw new Error(`CDN 分段长度不符：${part.size} != ${expectedSize}`);
+          }
+          partLoaded[index] = part.size;
+          if (onProgress) {
+            const totalLoaded = partLoaded.reduce((acc, curr) => acc + curr, 0);
+            onProgress(totalLoaded, contentLength);
           }
           return part;
         });
@@ -555,7 +581,7 @@ export async function downloadWithDirectFallback(input: {
         winner.contentLength >= DIRECT_PARALLEL_RANGE_THRESHOLD_BYTES &&
         winner.contentLength <= DIRECT_PARALLEL_RANGE_MAX_BYTES
       ) {
-        blob = await downloadDirectBlobInParallelRanges(winner.url, winner.contentLength, input.signal);
+        blob = await downloadDirectBlobInParallelRanges(winner.url, winner.contentLength, input.signal, input.onProgress);
       }
       if (!blob && !input.signal?.aborted) {
         blob = await downloadDirectBlob(winner.url, input.signal, input.onProgress);
