@@ -13,6 +13,7 @@ import type {
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/library/audio-utils";
 import { TrackListSection } from "./TrackListSection";
 import { RoomLibraryPlaylistsSection } from "./RoomLibraryPlaylistsSection";
+import { RoomProviderTrackSearch } from "./RoomProviderTrackSearch";
 import { FolderIcon, MusicIcon } from "@/components/icons/DiscoverIcons";
 
 export type LibraryTabPanelProps = {
@@ -46,6 +47,7 @@ export type LibraryTabPanelProps = {
   onImportCachedTrack?: (track: CachedLibraryTrack) => Promise<void>;
   onSwitchToDesk?: () => void;
   hideLocalAudioImport?: boolean;
+  showProviderSearch?: boolean;
 };
 
 function LibraryTabPanelBase({
@@ -77,7 +79,8 @@ function LibraryTabPanelBase({
   onImportBilibiliTracks,
   onImportCachedTrack,
   onSwitchToDesk,
-  hideLocalAudioImport
+  hideLocalAudioImport,
+  showProviderSearch
 }: LibraryTabPanelProps) {
   const [subTab, setSubTab] = useState<"tracks" | "playlists">("tracks");
 
@@ -121,26 +124,42 @@ function LibraryTabPanelBase({
       ) : null}
 
       {subTab === "tracks" || roomPlaylists === undefined ? (
-        <TrackListSection
-          activeSession={activeSession}
-          canAddToQueue={canAddToQueue}
-          canControlPlayback={canControlPlayback}
-          canManageAllTracks={canManageAllTracks}
-          canManageLibrary={canManageLibrary}
-          hideLocalAudioImport={hideLocalAudioImport}
-          localFolderName={localFolderName}
-          localSavedFileHashes={localSavedFileHashes}
-          members={members}
-          onAddToQueue={onAddToQueue}
-          onDeleteTrack={onDeleteTrack}
-          onFilesSelected={onFilesSelected}
-          onPlayTrack={onPlayTrack}
-          onReorderTracks={onReorderTracks}
-          onSaveTrackToLocal={onSaveTrackToLocal}
-          roomId={roomId}
-          tracks={tracks}
-          uploadedTracks={uploadedTracks}
-        />
+        <>
+          {showProviderSearch && onImportNeteaseTrack ? (
+            <RoomProviderTrackSearch
+              canManageLibrary={canManageLibrary}
+              hideUnavailableProvidersNotice
+              mode="import"
+              onImportNeteaseTrack={onImportNeteaseTrack}
+              onImportQqMusicTrack={onImportQqMusicTrack}
+              onImportBilibiliTrack={onImportBilibiliTrack}
+              onImportBilibiliTracks={onImportBilibiliTracks}
+              roomTracks={tracks}
+              surface="plain"
+              testId="room-library-provider-search"
+            />
+          ) : null}
+          <TrackListSection
+            activeSession={activeSession}
+            canAddToQueue={canAddToQueue}
+            canControlPlayback={canControlPlayback}
+            canManageAllTracks={canManageAllTracks}
+            canManageLibrary={canManageLibrary}
+            hideLocalAudioImport={hideLocalAudioImport}
+            localFolderName={localFolderName}
+            localSavedFileHashes={localSavedFileHashes}
+            members={members}
+            onAddToQueue={onAddToQueue}
+            onDeleteTrack={onDeleteTrack}
+            onFilesSelected={onFilesSelected}
+            onPlayTrack={onPlayTrack}
+            onReorderTracks={onReorderTracks}
+            onSaveTrackToLocal={onSaveTrackToLocal}
+            roomId={roomId}
+            tracks={tracks}
+            uploadedTracks={uploadedTracks}
+          />
+        </>
       ) : (
         <RoomLibraryPlaylistsSection
           canAddToQueue={canAddToQueue}

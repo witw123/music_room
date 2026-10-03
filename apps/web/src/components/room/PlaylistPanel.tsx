@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AuthSession,
   BilibiliTrackCandidate,
@@ -11,7 +10,6 @@ import type {
   QqMusicTrackCandidate,
   TrackMeta
 } from "@music-room/shared";
-import { normalizePlaylistTitle } from "@/lib/domain/music-room-ui";
 import { Button } from "@/components/ui/button";
 import {
   ProviderAlbumTrackTable,
@@ -61,10 +59,10 @@ type PlaylistPanelProps = {
 export function PlaylistPanel({
   playlists,
   tracks,
-  activeSession,
+  activeSession: _activeSession,
   canManageLibrary,
-  canCreatePlaylist,
-  onSavePlaylistFromQueue,
+  canCreatePlaylist: _canCreatePlaylist,
+  onSavePlaylistFromQueue: _onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
   onImportNeteaseTrack,
   onImportQqMusicTrack,
@@ -72,7 +70,7 @@ export function PlaylistPanel({
   onImportNeteaseTracks,
   onImportQqMusicTracks,
   onImportBilibiliTracks,
-  onDeletePlaylist,
+  onDeletePlaylist: _onDeletePlaylist,
   currentRoomId,
   roomPlaylists,
   onRefreshRoom
@@ -82,9 +80,6 @@ export function PlaylistPanel({
   const [loadingPlaylistId, setLoadingPlaylistId] = useState<string | null>(null);
   const [addingToLibraryId, setAddingToLibraryId] = useState<string | null>(null);
   const [libraryFeedback, setLibraryFeedback] = useState<string | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
-  const [isPending, startTransition] = useTransition();
   const [remoteTracks, setRemoteTracks] = useState<ProviderTrack[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -283,24 +278,6 @@ export function PlaylistPanel({
     };
   }, [selectedPlaylistId, selectedProvider, selectedProviderPlaylistId]);
 
-  const saveCurrentQueue = () => {
-    if (!activeSession || !canCreatePlaylist || isPending) return;
-    const nextTitle = normalizePlaylistTitle(playlistTitle);
-    startTransition(async () => {
-      await onSavePlaylistFromQueue(nextTitle);
-      setPlaylistTitle(nextTitle);
-      setIsCreateOpen(false);
-    });
-  };
-
-  const deletePlaylist = (playlistId: string) => {
-    if (isPending) return;
-    startTransition(async () => {
-      await onDeletePlaylist(playlistId);
-      setSelectedPlaylistId(null);
-    });
-  };
-
   const isPlaylistInRoom = useCallback((targetPlaylist: Playlist) => {
     if (!roomPlaylists || roomPlaylists.length === 0) return false;
     const targetSource = getNetworkPlaylistSource(targetPlaylist);
@@ -440,18 +417,6 @@ export function PlaylistPanel({
             <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
           ) : null}
           <span className="font-mono text-[10px] text-foreground-muted">{displayPlaylists.length} 个歌单</span>
-          <Button
-            aria-label="保存当前队列为歌单"
-            className="h-10 w-10 sm:h-8 sm:w-8"
-            disabled={!activeSession || !canCreatePlaylist || isPending}
-            onClick={() => setIsCreateOpen(true)}
-            size="icon"
-            title="保存当前队列为歌单"
-            type="button"
-            variant="outline"
-          >
-            <PlusIcon />
-          </Button>
         </div>
       </div>
 
@@ -465,39 +430,16 @@ export function PlaylistPanel({
               isInLibrary={isPlaylistInRoom(playlist)}
               isAddingToLibrary={addingToLibraryId === playlist.id}
               onAddToLibrary={() => void handleAddToLibrary(playlist)}
-              onDelete={() => deletePlaylist(playlist.id)}
               onOpen={() => setSelectedPlaylistId(playlist.id)}
-              onPlay={() => void handleLoadAndPlayPlaylist(playlist.id)}
-              isLoading={loadingPlaylistId === playlist.id}
               playlist={playlist}
             />
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-surface-border px-4 py-4">
-          <p className="text-xs text-foreground-muted">当前房间还没有网络歌单。</p>
-          <Button
-            className="mt-3"
-            disabled={!activeSession || !canCreatePlaylist || isPending}
-            onClick={() => setIsCreateOpen(true)}
-            size="sm"
-            type="button"
-          >
-            <PlusIcon />
-            保存当前队列
-          </Button>
+        <div className="rounded-lg border border-dashed border-surface-border px-4 py-4 text-xs text-foreground-muted">
+          当前房间还没有网络歌单。
         </div>
       )}
-
-      {isCreateOpen ? (
-        <SavePlaylistDialog
-          isPending={isPending}
-          onCancel={() => setIsCreateOpen(false)}
-          onSubmit={saveCurrentQueue}
-          onTitleChange={setPlaylistTitle}
-          title={playlistTitle}
-        />
-      ) : null}
     </section>
   );
 }
@@ -506,9 +448,6 @@ function PlaylistCard({
   playlist,
   artworkUrls,
   onOpen,
-  onDelete,
-  onPlay,
-  isLoading,
   canAddToLibrary,
   isInLibrary,
   isAddingToLibrary,
@@ -517,9 +456,6 @@ function PlaylistCard({
   playlist: Playlist;
   artworkUrls: readonly string[];
   onOpen: () => void;
-  onDelete: () => void;
-  onPlay?: () => void;
-  isLoading?: boolean;
   canAddToLibrary?: boolean;
   isInLibrary?: boolean;
   isAddingToLibrary?: boolean;
@@ -536,12 +472,7 @@ function PlaylistCard({
         onClick={onOpen}
         type="button"
       >
-        <div className="relative shrink-0">
-          <Artwork artworkUrls={artworkUrls} title={playlist.title} size="sm" />
-          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 backdrop-blur-[1px] transition-opacity group-hover:opacity-100">
-            <PlayIcon className="h-4 w-4 text-white fill-white" />
-          </div>
-        </div>
+        <Artwork artworkUrls={artworkUrls} size="sm" title={playlist.title} />
         <div className="min-w-0 flex-1 space-y-1">
           <strong className="block truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
             {playlist.title}
@@ -549,82 +480,34 @@ function PlaylistCard({
           <p className="truncate text-[10px] text-foreground-muted">{providerName} · {playlist.trackIds.length} 首歌曲</p>
         </div>
       </button>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2">
         {canAddToLibrary ? (
-          isInLibrary ? (
-            <span className="flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-              <CheckIcon className="h-3 w-3" />
-              <span>已在曲库</span>
-            </span>
-          ) : (
-            <Button
-              aria-label={`将歌单 ${playlist.title} 加入曲库`}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-foreground hover:bg-surface-hover active:scale-95 disabled:cursor-wait"
-              disabled={isAddingToLibrary}
-              onClick={(event) => {
-                event.stopPropagation();
-                onAddToLibrary?.();
-              }}
-              size="sm"
-              title="添加到曲库"
-              type="button"
-              variant="outline"
-            >
-              {isAddingToLibrary ? (
-                <>
-                  <LoadingSpinner className="h-3 w-3 animate-spin" />
-                  <span className="text-[11px]">添加中…</span>
-                </>
-              ) : (
-                <>
-                  <PlusIcon />
-                  <span className="text-[11px]">加入曲库</span>
-                </>
-              )}
-            </Button>
-          )
-        ) : null}
-        {onPlay ? (
-          <Button
-            aria-label={`在房间播放歌单 ${playlist.title}`}
-            variant="outline"
-            className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-foreground hover:bg-surface-hover active:scale-95 disabled:cursor-wait disabled:opacity-50"
-            disabled={isLoading}
-            onClick={(event) => {
-              event.stopPropagation();
-              onPlay();
-            }}
-            size="sm"
-            title="载入并在房间播放"
+          <button
             type="button"
+            disabled={isInLibrary || isAddingToLibrary}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToLibrary?.();
+            }}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+              isInLibrary
+                ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                : "border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+            }`}
           >
-            {isLoading ? (
+            {isInLibrary ? (
               <>
-                <LoadingSpinner className="h-3 w-3 animate-spin" />
-                <span className="text-[11px]">载入中…</span>
+                <CheckIcon className="h-3 w-3" />
+                <span>已在曲库</span>
               </>
+            ) : isAddingToLibrary ? (
+              "添加中…"
             ) : (
-              <>
-                <PlayIcon className="h-3 w-3 fill-current text-foreground-muted" />
-                <span className="text-[11px]">播放</span>
-              </>
+              "加入曲库"
             )}
-          </Button>
+          </button>
         ) : null}
-        <Button
-          aria-label={`删除歌单 ${playlist.title}`}
-          className="h-8 w-8 shrink-0 text-foreground-muted transition-colors hover:bg-red-500/15 hover:text-red-400"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete();
-          }}
-          size="icon"
-          title="删除歌单"
-          type="button"
-          variant="ghost"
-        >
-          <TrashIcon />
-        </Button>
+        <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
       </div>
     </article>
   );
@@ -937,56 +820,6 @@ function PlaylistDetail({
   );
 }
 
-function SavePlaylistDialog({ title, isPending, onTitleChange, onSubmit, onCancel }: { title: string; isPending: boolean; onTitleChange: (value: string) => void; onSubmit: () => void; onCancel: () => void }) {
-  return createPortal(
-    <div
-      className="light-modal-scrim z-[var(--z-modal)]"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onCancel();
-        }
-      }}
-      role="presentation"
-    >
-      <form
-        aria-labelledby="room-save-playlist-title"
-        className="light-dialog-surface custom-scrollbar my-auto max-h-[calc(100*var(--app-dvh)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-surface-border bg-surface p-4 shadow-2xl sm:p-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground" id="room-save-playlist-title">保存当前队列</h2>
-            <p className="mt-1 text-xs text-foreground-muted">把当前房间队列保存成网络歌单，之后可以再次载入房间。</p>
-          </div>
-          <Button aria-label="关闭" onClick={onCancel} size="icon" type="button" variant="ghost">
-            <CloseIcon />
-          </Button>
-        </div>
-        <label className="mt-5 block text-xs font-medium text-foreground-muted" htmlFor="room-new-playlist-title">歌单名称</label>
-        <input
-          className="mt-2 w-full rounded-lg border border-surface-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-          id="room-new-playlist-title"
-          maxLength={160}
-          onChange={(event) => onTitleChange(event.target.value)}
-          placeholder="例如：Tonight Selects"
-          required
-          value={title}
-        />
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button disabled={isPending} onClick={onCancel} type="button" variant="ghost">取消</Button>
-          <Button disabled={isPending || !title.trim()} type="submit">{isPending ? "保存中…" : "保存歌单"}</Button>
-        </div>
-      </form>
-    </div>,
-    document.body
-  );
-}
-
 function Artwork({ artworkUrl, artworkUrls, title, size = "sm" }: {
   artworkUrl?: string | null;
   artworkUrls?: readonly (string | null | undefined)[];
@@ -1095,20 +928,8 @@ function toPlaylistTrackInfo(
   };
 }
 
-function PlusIcon() {
-  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M12 5v14M5 12h14" /></svg>;
-}
-
 function ArrowLeftIcon() {
   return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /></svg>;
-}
-
-function TrashIcon() {
-  return <svg aria-hidden="true" fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15"><path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" /></svg>;
-}
-
-function CloseIcon() {
-  return <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18" /></svg>;
 }
 
 function PlayIcon({ className }: { className?: string }) {

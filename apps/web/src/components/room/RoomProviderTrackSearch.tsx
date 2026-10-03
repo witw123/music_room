@@ -7,6 +7,7 @@ import type {
   BilibiliTrackCandidate,
   NeteaseAccountStatus,
   NeteaseTrackCandidate,
+  ProviderPlaylistSummary,
   QqMusicAccountStatus,
   QqMusicTrackCandidate,
   TrackMeta
@@ -15,6 +16,7 @@ import { SearchSuggestions, type SearchSuggestionItem } from "@/components/provi
 import { SearchBar } from "@/components/ui/search-bar";
 import { formatDuration } from "@/lib/domain/music-room-ui";
 import { musicRoomApi } from "@/lib/network/music-room-api";
+import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features/library/bilibili-collection";
 
 type Provider = "netease" | "qqmusic" | "bilibili";
 export type ProviderTrack = NeteaseTrackCandidate | QqMusicTrackCandidate | BilibiliTrackCandidate;
@@ -125,6 +127,7 @@ export function RoomProviderTrackSearch({
   const [account, setAccount] = useState<ProviderAccount | null>(null);
   const [keywords, setKeywords] = useState("");
   const [results, setResults] = useState<ProviderTrack[]>([]);
+  const [bilibiliCollections, setBilibiliCollections] = useState<ProviderPlaylistSummary[]>([]);
   const [bilibiliPartDetail, setBilibiliPartDetail] = useState<BilibiliPartDetail | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [pendingTrackIds, setPendingTrackIds] = useState<Set<string>>(() => new Set());
@@ -154,6 +157,7 @@ export function RoomProviderTrackSearch({
     searchRequestRef.current += 1;
     setAccount(null);
     setResults([]);
+    setBilibiliCollections([]);
     setBilibiliPartDetail(null);
     setErrorMessage(null);
     setSearchSuggestionsOpen(false);
@@ -249,11 +253,22 @@ export function RoomProviderTrackSearch({
     setBilibiliPartDetail(null);
     try {
       if (provider === "bilibili") {
-        const response = await musicRoomApi.searchBilibiliTracks(query, { pageSize: 10 });
+        const response = await musicRoomApi.searchBilibiliTracks(query, { pageSize: 15 });
         if (searchRequestRef.current !== requestId) return;
-        setResults(response.items);
-        if (response.items.length === 0) setMessage("没有找到匹配的 B 站音频/视频。");
+        const collections: ProviderPlaylistSummary[] = [];
+        const singles: BilibiliTrackCandidate[] = [];
+        for (const item of response.items) {
+          if (isBilibiliCollection(item)) {
+            collections.push(bilibiliTrackToPlaylistSummary(item));
+          } else {
+            singles.push(item);
+          }
+        }
+        setBilibiliCollections(collections);
+        setResults(singles);
+        if (collections.length === 0 && singles.length === 0) setMessage("没有找到匹配的 B 站音频/视频。");
       } else {
+        setBilibiliCollections([]);
         const response = provider === "netease"
           ? await musicRoomApi.searchNeteaseTracks(query)
           : await musicRoomApi.searchQqMusicTracks(query);
@@ -278,6 +293,7 @@ export function RoomProviderTrackSearch({
     }
     searchRequestRef.current += 1;
     setResults([]);
+    setBilibiliCollections([]);
     setBilibiliPartDetail(null);
     setMessage(null);
     setPending((current) => current === "search" ? null : current);
@@ -337,6 +353,34 @@ export function RoomProviderTrackSearch({
 
     actionQueueRef.current = actionQueueRef.current.then(runTask, runTask);
   }, [libraryTrackIds, onImportBilibiliTrack, onImportBilibiliTracks]);
+
+  const handleOpenCollection = useCallback(async (collection: ProviderPlaylistSummary) => {
+    const actionKey = `coll:${collection.providerPlaylistId}`;
+    setPending(actionKey);
+    setErrorMessage(null);
+    try {
+      const detail = await musicRoomApi.getBilibiliVideoParts(collection.providerPlaylistId);
+      setBilibiliPartDetail(detail);
+    } catch (error) {
+      setErrorMessage(toSearchErrorMessage(error));
+    } finally {
+      setPending((current) => (current === actionKey ? null : current));
+    }
+  }, []);
+
+  const handleImportCollectionDirectly = useCallback(async (collection: ProviderPlaylistSummary) => {
+    const actionKey = `import-coll:${collection.providerPlaylistId}`;
+    setPending(actionKey);
+    setErrorMessage(null);
+    try {
+      const detail = await musicRoomApi.getBilibiliVideoParts(collection.providerPlaylistId);
+      await handleImportAllParts(detail.parts);
+    } catch (error) {
+      setErrorMessage(toSearchErrorMessage(error));
+    } finally {
+      setPending((current) => (current === actionKey ? null : current));
+    }
+  }, [handleImportAllParts]);
 
   const handleTrackAction = useCallback(async (candidate: ProviderTrack) => {
     const trackId = candidate.providerTrackId;
@@ -579,8 +623,85 @@ export function RoomProviderTrackSearch({
             })}
           </div>
         </div>
-      ) : results.length > 0 ? (
-        <div className="divide-y divide-surface-border/40 overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
+      ) : (
+        <>
+          {provider === "bilibili" && bilibiliCollections.length > 0 ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-surface-border/60 bg-surface/40 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">音乐合集 / 歌单</span>
+                <span className="text-[10px] text-foreground-muted">{bilibiliCollections.length} 个合集</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {bilibiliCollections.map((item) => {
+                  const isCollPending = pending === `coll:${item.providerPlaylistId}` || pending === `import-coll:${item.providerPlaylistId}`;
+                  return (
+                    <div
+                      key={item.providerPlaylistId}
+                      className="group relative flex flex-col overflow-hidden rounded-xl border border-surface-border/60 bg-surface/60 p-2 text-left transition hover:border-accent/40 hover:bg-surface-hover/80"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenCollection(item)}
+                        className="flex flex-col text-left w-full focus-visible:outline-none"
+                      >
+                        <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface border border-surface-border/40">
+                          {item.artworkUrl ? (
+                            <img
+                              src={item.artworkUrl}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs text-foreground-muted">歌单</div>
+                          )}
+                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white/90 backdrop-blur-xs">
+                            {item.trackCount} 首
+                          </span>
+                        </div>
+                        <p className="mt-1.5 line-clamp-1 text-xs font-medium text-foreground group-hover:text-accent transition-colors" title={item.title}>
+                          {item.title}
+                        </p>
+                        <p className="truncate text-[10px] text-foreground-muted">
+                          {item.creatorName ?? "合集"}
+                        </p>
+                      </button>
+                      <div className="mt-2 flex items-center justify-between gap-1 pt-1.5 border-t border-surface-border/30">
+                        <button
+                          type="button"
+                          disabled={isCollPending}
+                          onClick={() => void handleOpenCollection(item)}
+                          className="text-[10px] text-foreground-muted hover:text-accent font-medium transition-colors"
+                        >
+                          {pending === `coll:${item.providerPlaylistId}` ? "加载中…" : "查看单曲"}
+                        </button>
+                        {isManagedImport && canManageLibrary && (onImportBilibiliTracks || onImportBilibiliTrack) ? (
+                          <button
+                            type="button"
+                            disabled={isCollPending}
+                            onClick={() => void handleImportCollectionDirectly(item)}
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-accent bg-accent/10 hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
+                          >
+                            {pending === `import-coll:${item.providerPlaylistId}` ? "导入中…" : "加入曲库"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {results.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {provider === "bilibili" && bilibiliCollections.length > 0 ? (
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs font-semibold text-foreground">单曲列表</span>
+                  <span className="text-[10px] text-foreground-muted">{results.length} 首单曲</span>
+                </div>
+              ) : null}
+              <div className="divide-y divide-surface-border/40 overflow-hidden rounded-lg border border-surface-border/60 bg-surface/50">
           {results.map((track) => {
             const isInLibrary = libraryTrackIds.has(track.providerTrackId);
             const isPending = pendingTrackIds.has(track.providerTrackId);
@@ -676,7 +797,10 @@ export function RoomProviderTrackSearch({
             </article>;
           })}
         </div>
-      ) : null}
+      </div>
+          ) : null}
+        </>
+      )}
     </div>
   </section>;
 }

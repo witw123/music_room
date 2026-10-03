@@ -114,11 +114,19 @@ export function LocalPlaylistPanel({
 
   return (
     <section className="flex w-full flex-col gap-3" data-testid="local-playlist-panel">
-      {libraryFeedback ? (
-        <p className="text-xs text-accent truncate" role="status">
-          {libraryFeedback}
-        </p>
-      ) : null}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-foreground">本地歌单</p>
+          <p className="mt-1 truncate text-[10px] text-foreground-muted">本地创建与保存的歌单</p>
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          {libraryFeedback ? (
+            <span className="text-xs text-accent truncate max-w-xs">{libraryFeedback}</span>
+          ) : null}
+          <span className="font-mono text-[10px] text-foreground-muted">{localPlaylists.length} 个本地歌单</span>
+        </div>
+      </div>
+
       {localPlaylists.length > 0 ? (
         <div className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-surface/40">
           {localPlaylists.map((playlist) => {
@@ -184,30 +192,32 @@ function LocalPlaylistCard({
       </button>
       <div className="flex shrink-0 items-center gap-2">
         {canAddToLibrary ? (
-          isInLibrary ? (
-            <span className="flex h-7.5 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-              <CheckIcon className="h-3 w-3" />
-              <span>已在曲库</span>
-            </span>
-          ) : (
-            <Button
-              aria-label={`将歌单 ${playlist.title} 加入曲库`}
-              className="flex h-7.5 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-foreground hover:bg-surface-hover active:scale-95 disabled:cursor-wait"
-              disabled={isAddingToLibrary}
-              onClick={(event) => {
-                event.stopPropagation();
-                onAddToLibrary?.();
-              }}
-              size="sm"
-              title="添加到曲库"
-              type="button"
-              variant="outline"
-            >
-              {isAddingToLibrary ? "添加中…" : "加入曲库"}
-            </Button>
-          )
+          <button
+            type="button"
+            disabled={isInLibrary || isAddingToLibrary}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToLibrary?.();
+            }}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+              isInLibrary
+                ? "cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                : "border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+            }`}
+          >
+            {isInLibrary ? (
+              <>
+                <CheckIcon className="h-3 w-3" />
+                <span>已在曲库</span>
+              </>
+            ) : isAddingToLibrary ? (
+              "添加中…"
+            ) : (
+              "加入曲库"
+            )}
+          </button>
         ) : null}
-        <span className="text-[10px] text-foreground-muted">查看</span>
+        <span className="shrink-0 text-[10px] text-foreground-muted">查看</span>
       </div>
     </article>
   );

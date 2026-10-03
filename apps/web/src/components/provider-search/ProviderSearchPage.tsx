@@ -58,6 +58,7 @@ import {
 } from "./index";
 import { BilibiliPartDetailView, type BilibiliPartDetail } from "./BilibiliPartDetailView";
 import { useBackHandler } from "@/lib/desktop/use-back-handler";
+import { isBilibiliCollection, bilibiliTrackToPlaylistSummary } from "@/features/library/bilibili-collection";
 
 type Account = NeteaseAccountStatus | QqMusicAccountStatus;
 type ContentTab = "songs" | "playlists" | "albums";
@@ -136,6 +137,8 @@ export function ProviderSearchPage({
   const [pending, setPending] = useState<string | null>(null);
   const [localTracks, setLocalTracks] = useState<LocalPlaylistTrackRecord[]>([]);
   const [playbackTracks, setPlaybackTracks] = useState<LocalPlaylistTrackRecord[]>([]);
+  const [bilibiliCollections, setBilibiliCollections] = useState<ProviderPlaylistSummary[]>([]);
+  const previousTabRef = useRef<ContentTab>("songs");
   const searchRequestRef = useRef(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -247,6 +250,7 @@ export function ProviderSearchPage({
     );
     searchRequestRef.current += 1;
     setResults([]);
+    setBilibiliCollections([]);
     setPlaylists([]);
     setPlaylist(null);
     setAlbums([]);
@@ -309,13 +313,36 @@ export function ProviderSearchPage({
         ? await musicRoomApi.searchNeteaseTracks(query)
         : provider === "qqmusic"
           ? await musicRoomApi.searchQqMusicTracks(query)
-          : await musicRoomApi.searchBilibiliTracks(query, { tid: activeTid, page, pageSize: 10 });
-      const ranked = await rankSearchResultsWithPersonalization(response.items);
-      if (searchRequestRef.current === requestId) {
-        setResults(ranked);
-        const total = "total" in response && typeof response.total === "number" ? response.total : (response.items.length >= 10 ? 100 : response.items.length);
-        setTotalTracks(total);
-        setStatusMessage(null);
+          : await musicRoomApi.searchBilibiliTracks(query, { tid: activeTid, page, pageSize: 15 });
+
+      if (provider === "bilibili") {
+        const collections: ProviderPlaylistSummary[] = [];
+        const singles: Track[] = [];
+        for (const item of response.items) {
+          const biliItem = item as import("@music-room/shared").BilibiliTrackCandidate;
+          if (isBilibiliCollection(biliItem)) {
+            collections.push(bilibiliTrackToPlaylistSummary(biliItem));
+          } else {
+            singles.push(biliItem);
+          }
+        }
+        const ranked = await rankSearchResultsWithPersonalization(singles);
+        if (searchRequestRef.current === requestId) {
+          setBilibiliCollections(collections);
+          setResults(ranked);
+          const total = "total" in response && typeof response.total === "number" ? response.total : (response.items.length >= 10 ? 100 : response.items.length);
+          setTotalTracks(total);
+          setStatusMessage(null);
+        }
+      } else {
+        const ranked = await rankSearchResultsWithPersonalization(response.items);
+        if (searchRequestRef.current === requestId) {
+          setBilibiliCollections([]);
+          setResults(ranked);
+          const total = "total" in response && typeof response.total === "number" ? response.total : (response.items.length >= 10 ? 100 : response.items.length);
+          setTotalTracks(total);
+          setStatusMessage(null);
+        }
       }
     } catch (error) {
       if (searchRequestRef.current === requestId) {
@@ -420,16 +447,9 @@ export function ProviderSearchPage({
       } else {
         const searchKeyword = query.includes("歌单") || query.includes("合集") ? query : `${query} 歌单`;
         const response = await musicRoomApi.searchBilibiliTracks(searchKeyword, { pageSize: 20 });
-        const summaries: ProviderPlaylistSummary[] = response.items.map((item) => ({
-          provider: "bilibili" as const,
-          providerPlaylistId: item.bvid || item.providerTrackId,
-          title: item.title,
-          description: item.artist,
-          tags: ["bilibili"],
-          artworkUrl: item.artworkUrl,
-          creatorName: item.artist,
-          trackCount: item.pageCount && item.pageCount > 1 ? item.pageCount : 1
-        }));
+        const summaries: ProviderPlaylistSummary[] = response.items.map((item) =>
+          bilibiliTrackToPlaylistSummary(item)
+        );
         setPlaylists(summaries);
       }
       setPlaylist(null);
@@ -632,6 +652,8 @@ export function ProviderSearchPage({
               trackCount: partsDetail.parts.length,
               tracks: partsDetail.parts
             }));
+      previousTabRef.current = contentTab;
+      setContentTab("playlists");
       setPlaylist(detail);
     } catch (error) {
       setErrorMessage(toProviderErrorMessage(error, item.provider));
@@ -1044,6 +1066,56 @@ export function ProviderSearchPage({
             />
           ) : contentTab === "songs" && (hasSearched || Boolean(keywords.trim())) ? (
             <>
+              {provider === "bilibili" && bilibiliCollections.length > 0 ? (
+                <section className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs sm:text-sm font-semibold text-foreground">音乐合集 / 歌单</h3>
+                    <span className="text-[11px] text-foreground-muted">{bilibiliCollections.length} 个合集</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    {bilibiliCollections.map((item) => (
+                      <button
+                        key={item.providerPlaylistId}
+                        type="button"
+                        onClick={() => void loadPlaylist(item)}
+                        className="group flex flex-col overflow-hidden rounded-xl border border-surface-border/60 bg-surface/40 p-2 sm:p-2.5 text-left transition duration-200 hover:border-accent/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      >
+                        <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface border border-surface-border/40">
+                          {item.artworkUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt={item.title}
+                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              src={item.artworkUrl}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs text-foreground-muted">歌单</div>
+                          )}
+                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-mono text-white/90 backdrop-blur-xs">
+                            {item.trackCount} 首
+                          </span>
+                        </div>
+                        <span className="mt-2 block truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-accent transition-colors" title={item.title}>
+                          {item.title}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] text-foreground-muted">
+                          {item.creatorName ?? "合集"} · {item.trackCount} 首
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {provider === "bilibili" && bilibiliCollections.length > 0 && results.length > 0 ? (
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs sm:text-sm font-semibold text-foreground">单曲列表</h3>
+                  <span className="text-[11px] text-foreground-muted">{results.length} 首单曲</span>
+                </div>
+              ) : null}
+
               <SongsResults
                 results={results}
                 pending={pending}
@@ -1079,7 +1151,10 @@ export function ProviderSearchPage({
               playlists={playlists}
               playlist={playlist}
               pending={pending}
-              onBack={() => setPlaylist(null)}
+              onBack={() => {
+                setPlaylist(null);
+                if (previousTabRef.current) setContentTab(previousTabRef.current);
+              }}
               onOpen={loadPlaylist}
               onSave={saveProviderPlaylist}
               isFavorite={playlist ? favoriteAlbumIds.has(albumKey(playlist.provider, playlist.providerPlaylistId)) : false}

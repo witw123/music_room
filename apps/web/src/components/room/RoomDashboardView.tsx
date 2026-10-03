@@ -276,6 +276,8 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         onImportNeteaseTracks={props.onImportNeteaseTracks}
         onImportQqMusicTrack={props.onImportQqMusicTrack}
         onImportQqMusicTracks={props.onImportQqMusicTracks}
+        onImportBilibiliTrack={props.onImportBilibiliTrack}
+        onImportBilibiliTracks={props.onImportBilibiliTracks}
         onLoadPlaylistIntoRoom={props.onLoadPlaylistIntoRoom}
         onPlayTrack={props.onPlayTrack}
         onReorderTracks={props.onReorderTracks}
@@ -284,6 +286,7 @@ function RoomManagementContent(props: RoomLayoutProps & { activeTab: ManagementT
         roomPlaylists={props.roomSnapshot.playlists}
         tracks={props.roomSnapshot.tracks}
         uploadedTracks={props.uploadedTracks}
+        showProviderSearch={true}
       />
     );
   }
