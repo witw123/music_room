@@ -962,4 +962,117 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.roomRevision).toBe(8);
     expect(state.snapshot?.room.playback.status).toBe("playing");
   });
+
+  it("does not wipe out existing playlists when an authoritative snapshot arrives with empty playlists at the same room revision", () => {
+    const existingPlaylist = {
+      id: "playlist_1",
+      title: "Favorites",
+      ownerId: "host",
+      description: null,
+      coverUrl: null,
+      tags: [],
+      isCollaborative: false,
+      trackIds: [],
+      createdAt: "2026-04-04T00:00:00.000Z",
+      updatedAt: "2026-04-04T00:00:00.000Z"
+    };
+
+    const initialSnapshot = createRoomSnapshot({
+      room: { roomRevision: 5 },
+      playlists: [existingPlaylist]
+    });
+
+    const currentState: RoomStateStore = {
+      snapshot: initialSnapshot,
+      source: "authoritative"
+    };
+
+    const incomingSnapshotWithEmptyPlaylists = createRoomSnapshot({
+      room: { roomRevision: 5 },
+      playlists: []
+    });
+
+    const state = roomStateReducer(currentState, {
+      type: "server-snapshot",
+      snapshot: incomingSnapshotWithEmptyPlaylists
+    });
+
+    expect(state.snapshot?.playlists).toHaveLength(1);
+    expect(state.snapshot?.playlists[0]?.id).toBe("playlist_1");
+  });
+
+  it("updates playlists when an authoritative snapshot arrives with non-empty playlists", () => {
+    const initialSnapshot = createRoomSnapshot({
+      room: { roomRevision: 5 },
+      playlists: []
+    });
+
+    const currentState: RoomStateStore = {
+      snapshot: initialSnapshot,
+      source: "authoritative"
+    };
+
+    const newPlaylist = {
+      id: "playlist_new",
+      title: "New Playlist",
+      ownerId: "host",
+      description: null,
+      coverUrl: null,
+      tags: [],
+      isCollaborative: false,
+      trackIds: [],
+      createdAt: "2026-04-04T00:00:00.000Z",
+      updatedAt: "2026-04-04T00:00:00.000Z"
+    };
+
+    const incomingSnapshotWithPlaylists = createRoomSnapshot({
+      room: { roomRevision: 5 },
+      playlists: [newPlaylist]
+    });
+
+    const state = roomStateReducer(currentState, {
+      type: "server-snapshot",
+      snapshot: incomingSnapshotWithPlaylists
+    });
+
+    expect(state.snapshot?.playlists).toHaveLength(1);
+    expect(state.snapshot?.playlists[0]?.id).toBe("playlist_new");
+  });
+
+  it("accepts empty playlists when an authoritative snapshot arrives with advanced room revision", () => {
+    const existingPlaylist = {
+      id: "playlist_1",
+      title: "Favorites",
+      ownerId: "host",
+      description: null,
+      coverUrl: null,
+      tags: [],
+      isCollaborative: false,
+      trackIds: [],
+      createdAt: "2026-04-04T00:00:00.000Z",
+      updatedAt: "2026-04-04T00:00:00.000Z"
+    };
+
+    const initialSnapshot = createRoomSnapshot({
+      room: { roomRevision: 5 },
+      playlists: [existingPlaylist]
+    });
+
+    const currentState: RoomStateStore = {
+      snapshot: initialSnapshot,
+      source: "authoritative"
+    };
+
+    const incomingSnapshotWithDeletedPlaylists = createRoomSnapshot({
+      room: { roomRevision: 6 },
+      playlists: []
+    });
+
+    const state = roomStateReducer(currentState, {
+      type: "server-snapshot",
+      snapshot: incomingSnapshotWithDeletedPlaylists
+    });
+
+    expect(state.snapshot?.playlists).toHaveLength(0);
+  });
 });

@@ -194,7 +194,8 @@ export class RoomService {
   async syncRoom(
     roomId: string,
     sessionId: string,
-    sinceRevision = 0
+    sinceRevision = 0,
+    playlists: Playlist[] = []
   ): Promise<RoomSyncResponse> {
     const termination = await this.roomRecordRepository.getRoomTermination(roomId);
     if (termination) {
@@ -239,7 +240,7 @@ export class RoomService {
       };
     }
 
-    const snapshot = await this.roomSnapshotService.buildSnapshot(record, []);
+    const snapshot = await this.roomSnapshotService.buildSnapshot(record, playlists);
     const deletedTracks = await this.roomRecordRepository.listTrackDeletions(
       roomId,
       Math.max(0, Math.floor(sinceRevision))

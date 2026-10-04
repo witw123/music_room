@@ -386,7 +386,7 @@ describe("RoomController", () => {
     expect(roomService.updateRadioAutopilot).toHaveBeenCalledWith("room_1", "guest_host", {
       enabled: true
     });
-    expect(roomRealtimePublisher.emitSnapshot).toHaveBeenCalledWith("room_1");
+    expect(roomRealtimePublisher.emitSnapshot).toHaveBeenCalledWith("room_1", []);
   });
 
   it("returns persisted radio chat history for the current member", async () => {
@@ -620,5 +620,37 @@ describe("RoomController", () => {
       reason: "source-missing",
       roomRevision: 6
     });
+  });
+
+  it("fetches room playlists and passes them to roomService.syncRoom", async () => {
+    const playlists = [{ id: "playlist_1", title: "Test Playlist" }];
+    const syncResponse = {
+      roomId: "room_1",
+      roomDeleted: false,
+      roomRevision: 3,
+      snapshot: buildSnapshot(),
+      deletedTracks: []
+    };
+    const roomService = {
+      syncRoom: jest.fn().mockResolvedValue(syncResponse)
+    };
+    const playlistService = {
+      ...createPlaylistServiceMock(),
+      listPlaylistsForRoom: jest.fn().mockResolvedValue(playlists)
+    };
+    const controller = new RoomController(
+      roomService as never,
+      createRoomRealtimePublisherMock() as never,
+      createAuthServiceMock() as never,
+      playlistService as never,
+      undefined as never,
+      undefined as never
+    );
+
+    const result = await controller.syncRoom("room_1", "token", "2", undefined);
+
+    expect(playlistService.listPlaylistsForRoom).toHaveBeenCalledWith("room_1");
+    expect(roomService.syncRoom).toHaveBeenCalledWith("room_1", "guest_host", 2, playlists);
+    expect(result).toEqual(syncResponse);
   });
 });

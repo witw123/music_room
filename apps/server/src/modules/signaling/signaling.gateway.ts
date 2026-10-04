@@ -14,6 +14,7 @@ import {
 import type { Server, Socket } from "socket.io";
 import type {
   PeerSignalMessage,
+  Playlist,
   RoomSubscribeAckPayload,
   RoomChatInputPayload,
   RoomClockInputPayload,
@@ -46,6 +47,7 @@ import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher"
 import { RoomChatService } from "../room/services/room-chat.service";
 import { RoomService } from "../room/room.service";
 import { RoomRealtimeBroadcaster } from "../realtime/room-realtime.broadcaster";
+import { PlaylistService } from "../playlist/playlist.service";
 import {
   peerSignalChannel,
   sessionReplacementChannel
@@ -89,7 +91,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     private readonly readiness: RoomPlaybackReadinessService,
     private readonly registry: RoomSessionRegistryService,
     private readonly subscriber: RealtimeRedisSubscriber,
-    private readonly roomChatService: RoomChatService
+    private readonly roomChatService: RoomChatService,
+    private readonly playlistService: PlaylistService
   ) {}
 
   @WebSocketServer()
@@ -496,7 +499,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayConnection, OnG
       await this.registry.rememberRecentRoom(message.roomId, message.sessionId);
       let snapshot: RoomSnapshot;
       try {
-        snapshot = await this.roomService.getAccessibleRoomSnapshot(message.roomId, [], message.sessionId);
+        let playlists: Playlist[] = [];
+        try {
+          playlists = await this.playlistService.listPlaylistsForRoom(message.roomId);
+        } catch {
+          playlists = [];
+        }
+        snapshot = await this.roomService.getAccessibleRoomSnapshot(message.roomId, playlists, message.sessionId);
       } catch {
         await this.cleanupFailedRoomSubscribe(
           client,

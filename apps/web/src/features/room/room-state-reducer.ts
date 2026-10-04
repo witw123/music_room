@@ -115,8 +115,9 @@ function shouldReplaceAuthoritativeSnapshot(
   const currentPlaylists = current.snapshot.playlists ?? [];
   const incomingPlaylists = incoming.playlists ?? [];
   if (
-    incomingPlaylists.length !== currentPlaylists.length ||
-    incomingPlaylists.some((p, i) => p.id !== currentPlaylists[i]?.id)
+    !(incomingPlaylists.length === 0 && currentPlaylists.length > 0) &&
+    (incomingPlaylists.length !== currentPlaylists.length ||
+      incomingPlaylists.some((p, i) => p.id !== currentPlaylists[i]?.id))
   ) {
     return true;
   }
@@ -221,6 +222,15 @@ function normalizeSnapshot(
       incomingSnapshot.room.presenceRevision
     );
 
+  const incomingPlaylists = incomingSnapshot.playlists;
+  const currentPlaylists = currentSnapshot.playlists ?? [];
+  const playlists =
+    incomingPlaylists && incomingPlaylists.length > 0
+      ? incomingPlaylists
+      : incomingPlaylists && getRoomRevision(incomingSnapshot) > getRoomRevision(currentSnapshot)
+        ? incomingPlaylists
+        : currentPlaylists;
+
   return {
     ...incomingSnapshot,
     tracks: ensurePlaybackTrackMetadata(
@@ -229,6 +239,7 @@ function normalizeSnapshot(
       incomingSnapshot.tracks,
       playback.currentTrackId
     ),
+    playlists,
     room: {
       ...incomingSnapshot.room,
       roomRevision: getRoomRevision(incomingSnapshot),

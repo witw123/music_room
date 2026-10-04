@@ -308,6 +308,9 @@ export function useRoomRuntime({
             roomId
           );
         }
+        if (sync.unchanged && currentRoomRef.current?.room.id === roomId) {
+          return currentRoomRef.current;
+        }
         return sync.snapshot ?? musicRoomApi.getRoom(roomId);
       },
       applySnapshot: (_roomId, snapshot) => {

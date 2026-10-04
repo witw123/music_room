@@ -180,10 +180,12 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const sinceRevision = Number.parseInt(roomRevisionHeader ?? sinceQuery ?? "0", 10);
+    const playlists = await this.getPlaylistsForRoom(roomId);
     return this.roomService.syncRoom(
       roomId,
       userId,
-      Number.isFinite(sinceRevision) ? sinceRevision : 0
+      Number.isFinite(sinceRevision) ? sinceRevision : 0,
+      playlists
     );
   }
 
@@ -427,7 +429,8 @@ export class RoomController {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(updateRadioAutopilotRequestSchema, body);
     await this.roomService.updateRadioAutopilot(roomId, userId, payload);
-    return this.roomRealtimePublisher.emitSnapshot(roomId);
+    const playlists = await this.getPlaylistsForRoom(roomId);
+    return this.roomRealtimePublisher.emitSnapshot(roomId, playlists);
   }
 
   @Post(":roomId/radio-autopilot/next")
